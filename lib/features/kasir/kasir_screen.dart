@@ -9,10 +9,19 @@ import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'cart_provider.dart';
 import 'widgets/cart_sheet.dart';
+import 'widgets/held_orders_sheet.dart';
+import 'widgets/tx_history_sheet.dart';
 import 'widgets/variant_sheet.dart';
 
 final _kasirSearchProvider = StateProvider<String>((ref) => '');
 final _kasirGridProvider = StateProvider<bool>((ref) => true);
+
+final _heldCountProvider = StreamProvider<int>((ref) {
+  return ref
+      .watch(databaseProvider)
+      .watchHeldOrders()
+      .map((list) => list.length);
+});
 
 final _kasirProductsProvider =
     StreamProvider.family<List<Product>, String>((ref, query) {
@@ -157,6 +166,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       );
     }
 
+    final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kasir'),
@@ -165,6 +176,28 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             icon: const Icon(Icons.qr_code_scanner),
             tooltip: 'Scan Barcode',
             onPressed: _openScanner,
+          ),
+          IconButton(
+            icon: Badge(
+              isLabelVisible: heldCount > 0,
+              label: Text('$heldCount'),
+              child: const Icon(Icons.pause_circle_outline),
+            ),
+            tooltip: 'Pesanan Ditahan',
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => const HeldOrdersSheet(),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Riwayat Transaksi',
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => const TxHistorySheet(),
+            ),
           ),
           IconButton(
             icon: Icon(isGrid ? Icons.view_list : Icons.grid_view),

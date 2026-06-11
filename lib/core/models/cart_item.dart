@@ -49,4 +49,32 @@ class CartItem {
         itemNote: itemNote ?? this.itemNote,
         barcode: barcode,
       );
+
+  Map<String, dynamic> toJson() => {
+        'productId': productId,
+        'productUnitId': productUnitId,
+        'productName': productName,
+        'unitName': unitName,
+        'qty': qty,
+        'price': price,
+        'originalPrice': originalPrice,
+        'costPrice': costPrice,
+        'priceOverridden': priceOverridden,
+        'itemNote': itemNote,
+        'barcode': barcode,
+      };
+
+  factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
+        productId: json['productId'] as String,
+        productUnitId: json['productUnitId'] as String,
+        productName: json['productName'] as String,
+        unitName: json['unitName'] as String,
+        qty: (json['qty'] as num).toDouble(),
+        price: json['price'] as int,
+        originalPrice: json['originalPrice'] as int,
+        costPrice: json['costPrice'] as int,
+        priceOverridden: json['priceOverridden'] as bool? ?? false,
+        itemNote: json['itemNote'] as String?,
+        barcode: json['barcode'] as String?,
+      );
 }

@@ -1,7 +1,13 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
@@ -204,6 +210,94 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     return (name, address, phone);
   }
 
+  Future<void> _showShareSheet() async {
+    final prefs = await _getStorePrefs();
+    final device = ref.read(deviceProvider);
+    if (!mounted) return;
+
+    final boundaryKey = GlobalKey();
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text('Bagikan Struk',
+                  style: Theme.of(ctx).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: RepaintBoundary(
+                    key: boundaryKey,
+                    child: _ReceiptPaper(
+                      tx: _tx!,
+                      items: _items,
+                      productNames: _productNames,
+                      unitNames: _unitNames,
+                      customerName: _customerDisplay(_tx!),
+                      storeName: prefs.$1.isNotEmpty
+                          ? prefs.$1
+                          : device.storeName,
+                      storeAddress: prefs.$2,
+                      storePhone: prefs.$3,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => _captureAndShare(ctx, boundaryKey),
+                icon: const Icon(Icons.share),
+                label: const Text('Bagikan Gambar'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _captureAndShare(
+      BuildContext sheetCtx, GlobalKey boundaryKey) async {
+    try {
+      final boundary = boundaryKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/struk_${_tx!.localId}.png');
+      await file.writeAsBytes(byteData.buffer.asUint8List());
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'image/png')],
+        text: 'Struk ${_tx!.localId}',
+      );
+      if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+    } catch (e) {
+      if (sheetCtx.mounted) {
+        ScaffoldMessenger.of(sheetCtx).showSnackBar(
+          SnackBar(content: Text('Gagal membagikan: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final device = ref.watch(deviceProvider);
@@ -231,6 +325,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           onPressed: () => context.go('/kasir'),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            tooltip: 'Bagikan Struk',
+            onPressed: _tx == null ? null : () => _showShareSheet(),
+          ),
           IconButton(
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cetak Struk',
@@ -458,6 +557,187 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         '${dt.year} '
         '${dt.hour.toString().padLeft(2, '0')}:'
         '${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Tampilan struk gaya kertas thermal (putih, monospace) untuk
+/// di-capture sebagai gambar dan dibagikan.
+class _ReceiptPaper extends StatelessWidget {
+  const _ReceiptPaper({
+    required this.tx,
+    required this.items,
+    required this.productNames,
+    required this.unitNames,
+    required this.customerName,
+    required this.storeName,
+    required this.storeAddress,
+    required this.storePhone,
+  });
+
+  final Transaction tx;
+  final List<TransactionItem> items;
+  final Map<String, String> productNames;
+  final Map<String, String> unitNames;
+  final String customerName;
+  final String storeName;
+  final String storeAddress;
+  final String storePhone;
+
+  static const _ink = Color(0xFF111111);
+  static const _mono = TextStyle(
+      fontFamily: 'monospace', fontSize: 12, color: _ink, height: 1.4);
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = tx.total - tx.paid;
+    final date =
+        '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year} '
+        '${tx.createdAt.hour.toString().padLeft(2, '0')}:${tx.createdAt.minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      width: 300,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(storeName.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: _mono.copyWith(
+                  fontSize: 16, fontWeight: FontWeight.w900)),
+          if (storeAddress.isNotEmpty)
+            Text(storeAddress,
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 11)),
+          if (storePhone.isNotEmpty)
+            Text('WA: $storePhone',
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 11)),
+          const _DashedLine(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(date, style: _mono),
+              Text('#${tx.localId}', style: _mono),
+            ],
+          ),
+          Text(customerName,
+              style: _mono.copyWith(
+                  fontSize: 16, fontWeight: FontWeight.w900)),
+          const _DashedLine(),
+          ...items.expand((item) {
+            final qtyStr = item.qty % 1 == 0
+                ? item.qty.toInt().toString()
+                : item.qty.toString();
+            return [
+              Text(productNames[item.productId] ?? '',
+                  style: _mono.copyWith(fontWeight: FontWeight.w700)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                      '$qtyStr ${unitNames[item.productUnitId] ?? ''} x ${_fmtNum(item.priceAtSale)}',
+                      style: _mono),
+                  Text(_fmtNum(item.subtotal), style: _mono),
+                ],
+              ),
+              if (item.itemNote != null)
+                Text('* ${item.itemNote}',
+                    style: _mono.copyWith(
+                        fontSize: 11, fontStyle: FontStyle.italic)),
+            ];
+          }),
+          const _DashedLine(),
+          Text('Produk: ${items.length}', style: _mono),
+          const _DashedLine(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Total',
+                  style: _mono.copyWith(
+                      fontSize: 14, fontWeight: FontWeight.w900)),
+              Text('Rp ${_fmtNum(tx.total)}',
+                  style: _mono.copyWith(
+                      fontSize: 14, fontWeight: FontWeight.w900)),
+            ],
+          ),
+          if (tx.paid > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Bayar..', style: _mono),
+                Text('Rp ${_fmtNum(tx.paid)}', style: _mono),
+              ],
+            ),
+          if (tx.changeAmount > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Kembali',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+                Text('Rp ${_fmtNum(tx.changeAmount)}',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              remaining <= 0
+                  ? 'Sudah bayar'
+                  : 'Sisa hutang Rp ${_fmtNum(remaining)}',
+              style: _mono,
+            ),
+          ),
+          if (tx.strukNote != null) ...[
+            const _DashedLine(),
+            Text(tx.strukNote!,
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 11)),
+          ],
+          const _DashedLine(),
+          Text('Terima kasih!',
+              textAlign: TextAlign.center,
+              style: _mono.copyWith(fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  String _fmtNum(int v) {
+    final s = v.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+}
+
+class _DashedLine extends StatelessWidget {
+  const _DashedLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: LayoutBuilder(
+        builder: (_, constraints) {
+          final count = (constraints.maxWidth / 7).floor();
+          return Text(
+            List.filled(count, '-').join(),
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+            style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: Color(0xFF777777)),
+          );
+        },
+      ),
+    );
   }
 }
 

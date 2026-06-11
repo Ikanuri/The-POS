@@ -61,6 +61,9 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
 
   void clear() => state = [];
 
+  /// Ganti seluruh isi keranjang (dipakai saat melanjutkan pesanan ditahan).
+  void replaceAll(List<CartItem> items) => state = items;
+
   int get totalAmount =>
       state.fold(0, (sum, item) => sum + item.subtotal);
 
@@ -70,3 +73,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
 final cartProvider = StateNotifierProvider<CartNotifier, List<CartItem>>(
   (ref) => CartNotifier(),
 );
+
+/// Nama pelanggan yang di-prefill di layar pembayaran
+/// (di-set oleh aksi "Tambah Item" pada riwayat transaksi).
+final prefillCustomerProvider = StateProvider<String?>((ref) => null);

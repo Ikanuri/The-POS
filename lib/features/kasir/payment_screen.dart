@@ -20,10 +20,14 @@ class PaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
-  final _paidCtrl = TextEditingController();
   String _selectedMethodId = 'pm-tunai';
   String _selectedMethodType = 'tunai';
-  bool _isPartial = false;
+
+  /// Uang diterima (tunai), diinput via keypad.
+  int _tendered = 0;
+
+  /// Override total (diskon manual / pembulatan). null = pakai total keranjang.
+  int? _totalOverride;
 
   // Customer state
   Customer? _selectedCustomer;
@@ -39,6 +43,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   void initState() {
     super.initState();
     _load();
+    // Prefill dari aksi "Tambah Item" di riwayat transaksi
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final prefill = ref.read(prefillCustomerProvider);
+      if (prefill != null && prefill.isNotEmpty) {
+        setState(() {
+          _custNameManual = prefill;
+          _custCtrl.text = prefill;
+        });
+        ref.read(prefillCustomerProvider.notifier).state = null;
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -76,25 +91,93 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
   }
 
-  int get _total =>
-      ref.read(cartProvider.notifier).totalAmount;
+  int get _cartTotal => ref.read(cartProvider.notifier).totalAmount;
 
-  int get _paid {
-    if (_selectedMethodType == 'tunai') {
-      return int.tryParse(_paidCtrl.text.replaceAll('.', '')) ?? 0;
-    }
-    return _total;
-  }
+  int get _total => _totalOverride ?? _cartTotal;
+
+  int get _paid =>
+      _selectedMethodType == 'tunai' ? _tendered : _total;
 
   int get _change => (_paid - _total).clamp(0, double.maxFinite.toInt());
+
+  int get _shortfall =>
+      _selectedMethodType == 'tunai' && _tendered > 0 && _tendered < _total
+          ? _total - _tendered
+          : 0;
 
   bool get _canConfirm {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) return false;
-    if (_selectedMethodType == 'tunai') {
-      return _paid >= _total || _isPartial;
-    }
+    if (_selectedMethodType == 'tunai') return _tendered > 0;
     return true;
+  }
+
+  void _keypadPress(String key) {
+    setState(() {
+      switch (key) {
+        case 'C':
+          _tendered = 0;
+        case '⌫':
+          _tendered = _tendered ~/ 10;
+        case '00':
+          _tendered = (_tendered * 100).clamp(0, 99999999);
+        case '000':
+          _tendered = (_tendered * 1000).clamp(0, 99999999);
+        default:
+          final d = int.tryParse(key);
+          if (d != null) {
+            _tendered = (_tendered * 10 + d).clamp(0, 99999999);
+          }
+      }
+    });
+  }
+
+  Future<void> _editTotal() async {
+    final ctrl = TextEditingController(text: _total.toString());
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ubah Total'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Total keranjang: ${formatRupiah(_cartTotal)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 4),
+            const Text('Untuk diskon manual / pembulatan.',
+                style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                  prefixText: 'Rp ', border: OutlineInputBorder()),
+              onTap: () => ctrl.selection = TextSelection(
+                  baseOffset: 0, extentOffset: ctrl.text.length),
+            ),
+          ],
+        ),
+        actions: [
+          if (_totalOverride != null)
+            TextButton(
+              onPressed: () => ctx.pop(-1),
+              child: const Text('Reset'),
+            ),
+          TextButton(onPressed: () => ctx.pop(), child: const Text('Batal')),
+          FilledButton(
+            onPressed: () => ctx.pop(int.tryParse(ctrl.text)),
+            child: const Text('Terapkan'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      _totalOverride = result == -1 ? null : result.clamp(0, 99999999);
+    });
   }
 
   Future<void> _confirm() async {
@@ -111,11 +194,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final localId =
           '${device.deviceCode}-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${(txCount + 1).toString().padLeft(4, '0')}';
 
-      final paidAmount = _selectedMethodType == 'tempo'
-          ? 0
-          : _isPartial
-              ? _paid
-              : (_selectedMethodType == 'tunai' ? _paid : _total);
+      final paidAmount = _selectedMethodType == 'tempo' ? 0 : _paid;
       final status = paidAmount < _total ? 'kurang_bayar' : 'lunas';
 
       // Customer resolution
@@ -231,7 +310,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   @override
   void dispose() {
-    _paidCtrl.dispose();
     _custCtrl.dispose();
     super.dispose();
   }
@@ -277,22 +355,47 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               fontSize: 13, fontWeight: FontWeight.w600)),
                     )),
                 const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      const Text('Total',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      const Spacer(),
-                      Text(
-                        formatRupiah(_total),
-                        style: TextStyle(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16),
-                      ),
-                    ],
+                InkWell(
+                  onTap: _editTotal,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            const Text('Total',
+                                style:
+                                    TextStyle(fontWeight: FontWeight.w700)),
+                            const SizedBox(width: 6),
+                            Icon(Icons.edit, size: 13, color: scheme.tertiary),
+                            const Spacer(),
+                            Text(
+                              formatRupiah(_total),
+                              style: TextStyle(
+                                  color: _totalOverride != null
+                                      ? scheme.tertiary
+                                      : scheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16),
+                            ),
+                          ],
+                        ),
+                        if (_totalOverride != null)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Asli ${formatRupiah(_cartTotal)} · diubah manual',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant,
+                                    fontStyle: FontStyle.italic),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -428,64 +531,100 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Cash input
+          // Cash input — keypad ala mockup
           if (_selectedMethodType == 'tunai') ...[
-            Text('Jumlah Bayar',
-                style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _paidCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              autofocus: true,
-              decoration: const InputDecoration(
-                prefixText: 'Rp ',
-                hintText: '0',
-                border: OutlineInputBorder(),
+            Card(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Diterima',
+                            style:
+                                TextStyle(color: scheme.onSurfaceVariant)),
+                        Text(
+                          formatRupiah(_tendered),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 20),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: {_total, _total + 1000, _total + 2000, _total + 5000}
-                  .toList()
-                  .map((v) => ActionChip(
-                        label: Text(formatRupiah(v)),
-                        onPressed: () {
-                          _paidCtrl.text = v.toString();
-                          setState(() {});
-                        },
-                      ))
-                  .toList(),
-            ),
-            if (_paid >= _total) ...[
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Kembalian',
-                      style: TextStyle(color: scheme.onSurfaceVariant)),
-                  Text(
-                    formatRupiah(_change),
-                    style: TextStyle(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18),
-                  ),
-                ],
+            if (_tendered > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _change > 0
+                      ? scheme.primaryContainer
+                      : _shortfall > 0
+                          ? scheme.errorContainer
+                          : scheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _change > 0
+                          ? 'Kembalian'
+                          : _shortfall > 0
+                              ? 'Sisa / Hutang'
+                              : '✓ Uang Pas',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _change > 0
+                            ? scheme.onPrimaryContainer
+                            : _shortfall > 0
+                                ? scheme.onErrorContainer
+                                : scheme.onTertiaryContainer,
+                      ),
+                    ),
+                    if (_change > 0 || _shortfall > 0)
+                      Text(
+                        formatRupiah(_change > 0 ? _change : _shortfall),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: _change > 0
+                              ? scheme.onPrimaryContainer
+                              : scheme.onErrorContainer,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
             const SizedBox(height: 8),
-            CheckboxListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text('Bayar sebagian (kurang bayar)',
-                  style: TextStyle(
-                      fontSize: 13, color: scheme.onSurfaceVariant)),
-              value: _isPartial,
-              onChanged: (v) => setState(() => _isPartial = v ?? false),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ActionChip(
+                  label: const Text('Uang Pas'),
+                  backgroundColor: scheme.primaryContainer,
+                  side: BorderSide.none,
+                  onPressed: () => setState(() => _tendered = _total),
+                ),
+                ...{10000, 20000, 50000, 100000}
+                    .where((d) => d >= _total)
+                    .take(3)
+                    .map((d) => ActionChip(
+                          label: Text(formatRupiah(d)),
+                          onPressed: () =>
+                              setState(() => _tendered = d),
+                        )),
+              ],
             ),
+            const SizedBox(height: 8),
+            _Keypad(onPress: _keypadPress),
           ],
 
           if (_selectedMethodType == 'qris') ...[
@@ -531,10 +670,78 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white),
                 )
-              : const Text('Konfirmasi Transaksi',
-                  style: TextStyle(fontSize: 16)),
+              : Text(_confirmLabel(), style: const TextStyle(fontSize: 16)),
         ),
       ),
+    );
+  }
+
+  String _confirmLabel() {
+    if (_selectedMethodType != 'tunai') return 'Konfirmasi Transaksi';
+    if (_change > 0) return 'Kembali ${formatRupiah(_change)}';
+    if (_shortfall > 0) return 'Catat Hutang ${formatRupiah(_shortfall)}';
+    if (_tendered > 0) return 'Konfirmasi Bayar';
+    return 'Masukkan Jumlah Bayar';
+  }
+}
+
+class _Keypad extends StatelessWidget {
+  const _Keypad({required this.onPress});
+  final ValueChanged<String> onPress;
+
+  static const _rows = [
+    ['1', '2', '3', '⌫'],
+    ['4', '5', '6', 'C'],
+    ['7', '8', '9', '00'],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget key(String k, {int flex = 1}) {
+      final isAction = k == 'C' || k == '⌫';
+      return Expanded(
+        flex: flex,
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Material(
+            color: isAction
+                ? scheme.surfaceContainerHighest
+                : scheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: scheme.outlineVariant, width: 0.5),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => onPress(k),
+              child: SizedBox(
+                height: 52,
+                child: Center(
+                  child: Text(
+                    k,
+                    style: TextStyle(
+                      fontSize: k.length > 1 && !isAction ? 16 : 20,
+                      fontWeight: FontWeight.w600,
+                      color: isAction
+                          ? scheme.onSurfaceVariant
+                          : scheme.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final row in _rows)
+          Row(children: [for (final k in row) key(k)]),
+        Row(children: [key('0', flex: 2), key('000', flex: 2)]),
+      ],
     );
   }
 }

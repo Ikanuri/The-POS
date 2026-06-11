@@ -386,6 +386,26 @@ class AppDatabase extends _$AppDatabase {
     return q.watch();
   }
 
+  // ───────────────────────── Held orders ─────────────────────────
+
+  Stream<List<HeldOrder>> watchHeldOrders() =>
+      (select(heldOrders)..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          .watch();
+
+  Future<void> holdOrder({
+    required String id,
+    required String label,
+    required String cartJson,
+  }) =>
+      into(heldOrders).insert(HeldOrdersCompanion.insert(
+        id: id,
+        label: label,
+        cartJson: cartJson,
+      ));
+
+  Future<void> deleteHeldOrder(String id) =>
+      (delete(heldOrders)..where((t) => t.id.equals(id))).go();
+
   // ───────────────────────── Backup / Restore ─────────────────────────
 
   static const _allTables = [
