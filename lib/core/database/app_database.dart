@@ -520,18 +520,20 @@ List<Variable<Object>> _rowToVars(Map<String, Object?> row) {
   }).toList();
 }
 
+// Top-level function — wajib untuk bisa dikirim ke background isolate Dart.
+// Lambda closure TIDAK reliable saat di-serialize lintas isolate; named
+// top-level function selalu bisa dikirim.
+void _sqlcipherIsolateSetup() {
+  open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
+}
+
 QueryExecutor _openConnection(String encryptionKey) {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'the_pos.db'));
     return NativeDatabase.createInBackground(
       file,
-      // DB berjalan di isolate terpisah — override library harus dilakukan
-      // DI DALAM isolate itu, bukan di isolate utama. Tanpa ini Android
-      // mencoba dlopen libsqlite3.so (tidak dibundel) dan crash.
-      isolateSetup: () {
-        open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
-      },
+      isolateSetup: _sqlcipherIsolateSetup,
       setup: (rawDb) {
         // Guard: pastikan benar-benar SQLCipher, bukan sqlite3 polos —
         // sqlite3 polos akan menulis DB tanpa enkripsi secara diam-diam.
