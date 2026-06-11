@@ -21,6 +21,8 @@ class ReceiptScreen extends ConsumerStatefulWidget {
 class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Transaction? _tx;
   List<TransactionItem> _items = [];
+  Map<String, String> _productNames = {};
+  Map<String, String> _unitNames = {};
   Customer? _customer;
   bool _loading = true;
 
@@ -50,10 +52,35 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           .getSingleOrNull();
     }
 
+    // Load product + unit names
+    final productNames = <String, String>{};
+    final unitNames = <String, String>{};
+    for (final item in items) {
+      if (!productNames.containsKey(item.productId)) {
+        final p = await (db.select(db.products)
+              ..where((t) => t.id.equals(item.productId)))
+            .getSingleOrNull();
+        productNames[item.productId] = p?.name ?? item.productId;
+      }
+      if (!unitNames.containsKey(item.productUnitId)) {
+        final u = await (db.select(db.productUnits)
+              ..where((t) => t.id.equals(item.productUnitId)))
+            .getSingleOrNull();
+        if (u?.unitTypeId != null) {
+          final ut = await (db.select(db.unitTypes)
+                ..where((t) => t.id.equals(u!.unitTypeId!)))
+              .getSingleOrNull();
+          unitNames[item.productUnitId] = ut?.name ?? '';
+        }
+      }
+    }
+
     if (mounted) {
       setState(() {
         _tx = tx;
         _items = items;
+        _productNames = productNames;
+        _unitNames = unitNames;
         _customer = customer;
         _loading = false;
       });
@@ -304,7 +331,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ..._items.map((item) => ListTile(
                       dense: true,
                       title: Text(
-                        item.productId, // TODO: join nama produk
+                        _productNames[item.productId] ?? item.productId,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13),
@@ -321,7 +348,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} × ${formatRupiah(item.priceAtSale)}',
+                            '${_unitNames[item.productUnitId] ?? ''} ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} × ${formatRupiah(item.priceAtSale)}',
                             style: TextStyle(
                                 fontSize: 11,
                                 color: scheme.onSurfaceVariant),

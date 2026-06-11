@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/produk/barcode_screen.dart';
 import '../../features/kasir/kasir_screen.dart';
 import '../../features/kasir/payment_screen.dart';
 import '../../features/kasir/receipt_screen.dart';
@@ -70,6 +71,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: ':id',
                 builder: (_, state) =>
                     ProdukFormScreen(productId: state.pathParameters['id']),
+              ),
+              GoRoute(
+                path: ':id/barcode',
+                builder: (_, state) =>
+                    BarcodeScreen(productId: state.pathParameters['id']!),
               ),
             ],
           ),

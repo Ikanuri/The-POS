@@ -196,7 +196,8 @@ class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
                           : _qrCtrl.text.trim()),
                     ),
                   );
-              if (mounted) Navigator.of(context).pop();
+              if (!mounted) return;
+              Navigator.of(context).pop();
             },
             child: const Text('Tambah'),
           ),
