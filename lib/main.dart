@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 
 import 'core/providers/device_provider.dart';
 import 'core/providers/theme_provider.dart';
@@ -8,6 +11,11 @@ import 'core/theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Beberapa versi Android gagal dlopen libsqlcipher tanpa workaround ini.
+  if (Platform.isAndroid) {
+    await applyWorkaroundToOpenSqlCipherOnOldAndroidVersions();
+  }
 
   final container = ProviderContainer();
   // Identitas device harus dimuat sebelum router memutuskan redirect /setup.

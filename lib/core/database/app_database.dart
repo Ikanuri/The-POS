@@ -522,14 +522,25 @@ List<Variable<Object>> _rowToVars(Map<String, Object?> row) {
 
 QueryExecutor _openConnection(String encryptionKey) {
   return LazyDatabase(() async {
-    // Pastikan native library SQLCipher yang terpakai, bukan sqlite3 polos.
-    open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
-
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'the_pos.db'));
     return NativeDatabase.createInBackground(
       file,
+      // DB berjalan di isolate terpisah — override library harus dilakukan
+      // DI DALAM isolate itu, bukan di isolate utama. Tanpa ini Android
+      // mencoba dlopen libsqlite3.so (tidak dibundel) dan crash.
+      isolateSetup: () {
+        open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
+      },
       setup: (rawDb) {
+        // Guard: pastikan benar-benar SQLCipher, bukan sqlite3 polos —
+        // sqlite3 polos akan menulis DB tanpa enkripsi secara diam-diam.
+        final cipherVersion =
+            rawDb.select('PRAGMA cipher_version;');
+        if (cipherVersion.isEmpty) {
+          throw StateError(
+              'SQLCipher tidak termuat — database tidak akan terenkripsi');
+        }
         final escaped = encryptionKey.replaceAll("'", "''");
         rawDb.execute("PRAGMA key = '$escaped';");
       },
