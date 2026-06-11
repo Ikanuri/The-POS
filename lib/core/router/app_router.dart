@@ -7,7 +7,11 @@ import '../../features/kasir/receipt_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
+import '../../features/pengaturan/kasir_permissions_screen.dart';
+import '../../features/pengaturan/pair_device_screen.dart';
+import '../../features/pengaturan/payment_methods_screen.dart';
 import '../../features/pengaturan/pengaturan_screen.dart';
+import '../../features/pengaturan/store_info_screen.dart';
 import '../../features/produk/produk_form_screen.dart';
 import '../../features/produk/produk_list_screen.dart';
 import '../../features/ringkasan/ringkasan_screen.dart';
@@ -81,7 +85,24 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/laporan', builder: (_, __) => const LaporanScreen()),
-          GoRoute(path: '/pengaturan', builder: (_, __) => const PengaturanScreen()),
+          GoRoute(
+            path: '/pengaturan',
+            builder: (_, __) => const PengaturanScreen(),
+            routes: [
+              GoRoute(
+                  path: 'toko',
+                  builder: (_, __) => const StoreInfoScreen()),
+              GoRoute(
+                  path: 'metode-bayar',
+                  builder: (_, __) => const PaymentMethodsScreen()),
+              GoRoute(
+                  path: 'izin-kasir',
+                  builder: (_, __) => const KasirPermissionsScreen()),
+              GoRoute(
+                  path: 'pair',
+                  builder: (_, __) => const PairDeviceScreen()),
+            ],
+          ),
         ],
       ),
     ],

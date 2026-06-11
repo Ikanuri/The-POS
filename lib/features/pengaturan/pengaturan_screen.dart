@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/theme_provider.dart';
@@ -50,27 +51,31 @@ class PengaturanScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           const _SectionHeader('Toko'),
-          const Card(
+          Card(
             child: Column(
               children: [
-                _PendingTile(
-                  icon: Icons.store_outlined,
-                  title: 'Informasi Toko',
-                  subtitle: 'Nama, alamat, telepon, catatan struk',
-                  phase: 'Phase 2',
+                ListTile(
+                  leading: const Icon(Icons.store_outlined),
+                  title: const Text('Informasi Toko'),
+                  subtitle: const Text('Nama, alamat, telepon, catatan struk'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pengaturan/toko'),
                 ),
-                _PendingTile(
-                  icon: Icons.payments_outlined,
-                  title: 'Metode Pembayaran',
-                  subtitle: 'QRIS, transfer bank, e-wallet',
-                  phase: 'Phase 2',
+                ListTile(
+                  leading: const Icon(Icons.payments_outlined),
+                  title: const Text('Metode Pembayaran'),
+                  subtitle: const Text('QRIS, transfer bank, e-wallet'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pengaturan/metode-bayar'),
                 ),
-                _PendingTile(
-                  icon: Icons.tune_outlined,
-                  title: 'Izin Kasir',
-                  subtitle: 'Override harga, input stok, dll',
-                  phase: 'Phase 2',
-                ),
+                if (device.isOwner)
+                  ListTile(
+                    leading: const Icon(Icons.tune_outlined),
+                    title: const Text('Izin Kasir'),
+                    subtitle: const Text('Override harga, input stok, dll'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/izin-kasir'),
+                  ),
               ],
             ),
           ),
@@ -92,11 +97,12 @@ class PengaturanScreen extends ConsumerWidget {
                   phase: 'Phase 4',
                 ),
                 if (device.isOwner)
-                  const _PendingTile(
-                    icon: Icons.qr_code_2_outlined,
-                    title: 'Pair Device Baru',
-                    subtitle: 'Tambah HP kasir / asisten via QR',
-                    phase: 'Phase 4',
+                  ListTile(
+                    leading: const Icon(Icons.qr_code_2_outlined),
+                    title: const Text('Pair Device Baru'),
+                    subtitle: const Text('Tambah HP kasir / asisten via QR'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/pair'),
                   ),
               ],
             ),
@@ -110,7 +116,7 @@ class PengaturanScreen extends ConsumerWidget {
                   icon: Icons.print_outlined,
                   title: 'Printer Bluetooth',
                   subtitle: 'Pilih printer & test cetak',
-                  phase: 'Phase 2',
+                  phase: 'Phase 4',
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.dark_mode_outlined),
