@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The POS — Phase 6 Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; gap: 24px; min-height: 100vh; }
+  h1 { color: #e0e0e0; font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+  p.sub { color: #888; font-size: 13px; }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; width: 100%; max-width: 1200px; }
+  .phone { width: 360px; background: #fef7ff; border-radius: 28px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); flex-shrink: 0; }
+  .phone-label { text-align: center; color: #aaa; font-size: 12px; margin-top: 8px; }
+
+  /* Material 3 tokens */
+  :root {
+    --md-primary: #6750a4;
+    --md-on-primary: #ffffff;
+    --md-primary-container: #eaddff;
+    --md-on-primary-container: #21005d;
+    --md-secondary: #625b71;
+    --md-secondary-container: #e8def8;
+    --md-surface: #fef7ff;
+    --md-surface-variant: #e7e0ec;
+    --md-on-surface: #1c1b1f;
+    --md-on-surface-variant: #49454f;
+    --md-outline: #79747e;
+    --md-outline-variant: #cac4d0;
+    --md-error: #b3261e;
+    --md-error-container: #f9dedc;
+    --md-tertiary: #7d5260;
+    --md-tertiary-container: #ffd8e4;
+  }
+
+  /* App structure */
+  .appbar { background: var(--md-surface); padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--md-outline-variant); }
+  .appbar .back { width: 24px; height: 24px; color: var(--md-on-surface); font-size: 20px; cursor: pointer; flex-shrink: 0; }
+  .appbar .title { font-size: 16px; font-weight: 500; color: var(--md-on-surface); flex: 1; }
+  .appbar .action { color: var(--md-on-surface); font-size: 20px; cursor: pointer; }
+  .body { padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #fffbfe; min-height: 420px; }
+
+  /* Cards / Surfaces */
+  .card { background: var(--md-surface); border-radius: 12px; padding: 16px; border: 1px solid var(--md-outline-variant); }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--md-primary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Chips */
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; }
+  .chip-success { background: #d4f0dc; color: #1a6b35; }
+  .chip-warn { background: #fff3cd; color: #856404; }
+  .chip-error { background: var(--md-error-container); color: var(--md-error); }
+  .chip-info { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+
+  /* Buttons */
+  .btn-filled { background: var(--md-primary); color: var(--md-on-primary); border: none; border-radius: 20px; padding: 10px 24px; font-size: 14px; font-weight: 500; cursor: pointer; width: 100%; }
+  .btn-tonal { background: var(--md-secondary-container); color: var(--md-on-primary-container); border: none; border-radius: 20px; padding: 10px 24px; font-size: 14px; font-weight: 500; cursor: pointer; width: 100%; }
+  .btn-outline { background: transparent; color: var(--md-primary); border: 1px solid var(--md-outline); border-radius: 20px; padding: 10px 24px; font-size: 14px; font-weight: 500; cursor: pointer; width: 100%; }
+
+  /* List tile */
+  .list-tile { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--md-outline-variant); }
+  .list-tile:last-child { border-bottom: none; }
+  .tile-icon { width: 40px; height: 40px; border-radius: 20px; background: var(--md-primary-container); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .tile-content { flex: 1; }
+  .tile-title { font-size: 14px; color: var(--md-on-surface); font-weight: 500; }
+  .tile-sub { font-size: 12px; color: var(--md-on-surface-variant); margin-top: 2px; }
+  .tile-trail { font-size: 18px; color: var(--md-on-surface-variant); }
+
+  /* Text field */
+  .tf { border: 1px solid var(--md-outline); border-radius: 4px; padding: 10px 12px; font-size: 14px; color: var(--md-on-surface); background: var(--md-surface); width: 100%; }
+  .tf-label { font-size: 11px; color: var(--md-primary); margin-bottom: 4px; font-weight: 500; }
+
+  /* Switch */
+  .sw { width: 36px; height: 20px; background: var(--md-outline); border-radius: 10px; position: relative; flex-shrink: 0; }
+  .sw.on { background: var(--md-primary); }
+  .sw::after { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 8px; top: 2px; left: 2px; transition: left .2s; }
+  .sw.on::after { left: 18px; }
+
+  /* Big token display */
+  .token-box { background: var(--md-primary-container); border-radius: 16px; padding: 20px; text-align: center; }
+  .token-value { font-size: 36px; font-weight: 700; letter-spacing: 8px; color: var(--md-on-primary-container); font-family: monospace; }
+  .token-label { font-size: 12px; color: var(--md-on-primary-container); opacity: 0.7; margin-top: 4px; }
+
+  /* IP display */
+  .ip-box { background: var(--md-surface-variant); border-radius: 8px; padding: 10px 14px; font-family: monospace; font-size: 14px; color: var(--md-on-surface); display: flex; justify-content: space-between; align-items: center; }
+
+  /* Progress */
+  .progress-bar { height: 4px; background: var(--md-outline-variant); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--md-primary); border-radius: 2px; }
+
+  /* Barcode mock */
+  .barcode-mock { display: flex; gap: 2px; height: 48px; align-items: flex-end; justify-content: center; padding: 0 8px; }
+  .barcode-mock span { background: #1c1b1f; border-radius: 1px; }
+
+  /* Banner */
+  .banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--md-secondary-container); }
+  .banner-icon { font-size: 16px; }
+  .banner-text { font-size: 12px; color: var(--md-on-surface-variant); }
+
+  /* Device list */
+  .device-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--md-outline-variant); margin-bottom: 8px; cursor: pointer; }
+  .device-item.selected { border-color: var(--md-primary); background: var(--md-primary-container); }
+  .device-name { font-size: 14px; font-weight: 500; color: var(--md-on-surface); }
+  .device-mac { font-size: 11px; color: var(--md-on-surface-variant); font-family: monospace; }
+
+  /* Segmented button */
+  .seg { display: flex; border: 1px solid var(--md-outline); border-radius: 20px; overflow: hidden; }
+  .seg-btn { flex: 1; padding: 8px; text-align: center; font-size: 13px; font-weight: 500; cursor: pointer; background: transparent; color: var(--md-on-surface-variant); border: none; }
+  .seg-btn.active { background: var(--md-secondary-container); color: var(--md-on-primary-container); }
+
+  /* Stat row */
+  .stat-row { display: flex; gap: 8px; }
+  .stat-card { flex: 1; background: var(--md-primary-container); border-radius: 10px; padding: 10px 12px; }
+  .stat-val { font-size: 20px; font-weight: 700; color: var(--md-on-primary-container); }
+  .stat-lbl { font-size: 10px; color: var(--md-on-primary-container); opacity: 0.7; margin-top: 2px; }
+
+  /* Snackbar */
+  .snackbar { background: #313033; color: white; border-radius: 4px; padding: 10px 16px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+  .snackbar-action { color: #d0bcff; font-weight: 500; font-size: 13px; }
+
+  /* Read-only banner */
+  .readonly-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: #e8def8; margin-bottom: 8px; }
+  .readonly-icon { font-size: 14px; }
+  .readonly-text { font-size: 12px; color: var(--md-on-primary-container); }
+
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface); }
+  .tab { flex: 1; padding: 10px 4px; text-align: center; font-size: 12px; font-weight: 500; color: var(--md-on-surface-variant); border-bottom: 2px solid transparent; cursor: pointer; }
+  .tab.active { color: var(--md-primary); border-bottom-color: var(--md-primary); }
+</style>
+</head>
+<body>
+
+<h1>The POS — Fitur Lanjutan (Phase 6)</h1>
+<p class="sub">WiFi Sync · Bluetooth Printer · Export · Backup · CSV Import · Izin Kasir</p>
+
+<!-- ROW 1 -->
+<div class="row">
+
+  <!-- SCREEN 1: WiFi Sync — Host Mode -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Sinkronisasi WiFi</span>
+      </div>
+      <div class="tabs">
+        <div class="tab active">Jadi Host</div>
+        <div class="tab">Hubungkan</div>
+      </div>
+      <div class="body">
+        <div class="card">
+          <div class="card-title">Status Server</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="width:10px;height:10px;border-radius:5px;background:#1a6b35;flex-shrink:0"></span>
+            <span style="font-size:14px;color:var(--md-on-surface)">Server aktif — port 8625</span>
+          </div>
+          <div class="tf-label">Alamat IP Toko</div>
+          <div class="ip-box">192.168.1.101:8625 <span style="font-size:18px;cursor:pointer">⧉</span></div>
+        </div>
+        <div class="token-box">
+          <div class="token-label">Token Sync (berlaku 10 mnt)</div>
+          <div class="token-value">H3K7P2</div>
+          <div class="token-label">Berikan ke perangkat kasir</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-val">12</div>
+            <div class="stat-lbl">Transaksi dikirim</div>
+          </div>
+          <div class="stat-card" style="background:var(--md-tertiary-container)">
+            <div class="stat-val" style="color:var(--md-tertiary)">8</div>
+            <div class="stat-lbl" style="color:var(--md-tertiary)">Diterima</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-outline" style="flex:1">Stop Server</button>
+          <button class="btn-tonal" style="flex:1">Refresh Token</button>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">WiFi Sync — Host (Owner)</div>
+  </div>
+
+  <!-- SCREEN 2: WiFi Sync — Client Mode -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Sinkronisasi WiFi</span>
+      </div>
+      <div class="tabs">
+        <div class="tab">Jadi Host</div>
+        <div class="tab active">Hubungkan</div>
+      </div>
+      <div class="body">
+        <div class="card">
+          <div class="card-title">Koneksi ke Host</div>
+          <div class="tf-label">Alamat IP Host</div>
+          <input class="tf" value="192.168.1.101" style="margin-bottom:10px">
+          <div class="tf-label">Token Sync (6 karakter)</div>
+          <input class="tf" value="H3K7P2" style="letter-spacing:6px;font-family:monospace;font-size:16px">
+        </div>
+        <div class="card" style="border-color:var(--md-primary)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:20px">✅</span>
+            <span style="font-size:14px;font-weight:500;color:var(--md-on-surface)">Sync berhasil</span>
+          </div>
+          <div style="font-size:13px;color:var(--md-on-surface-variant);line-height:1.6">
+            📤 12 transaksi dikirim<br>
+            📥 8 transaksi diterima<br>
+            🛒 3 produk diperbarui<br>
+            👤 1 pelanggan baru
+          </div>
+        </div>
+        <button class="btn-filled">Sync Sekarang</button>
+        <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+        <div style="font-size:12px;color:var(--md-on-surface-variant);text-align:center">Terakhir sync: hari ini 14:32</div>
+      </div>
+    </div>
+    <div class="phone-label">WiFi Sync — Client (Kasir)</div>
+  </div>
+
+  <!-- SCREEN 3: Bluetooth Printer Setup -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Printer Bluetooth</span>
+      </div>
+      <div class="body">
+        <div class="banner">
+          <span class="banner-icon">🖨️</span>
+          <span class="banner-text">Printer aktif: <strong>BlueTooth Printer 58</strong></span>
+        </div>
+        <div class="card">
+          <div class="card-title">Perangkat Terpasang</div>
+          <div class="device-item">
+            <span style="font-size:22px">📱</span>
+            <div>
+              <div class="device-name">Redmi Buds 5</div>
+              <div class="device-mac">AA:BB:CC:11:22:33</div>
+            </div>
+          </div>
+          <div class="device-item selected">
+            <span style="font-size:22px">🖨️</span>
+            <div style="flex:1">
+              <div class="device-name">BlueTooth Printer 58</div>
+              <div class="device-mac">00:11:22:AA:BB:CC</div>
+            </div>
+            <span style="font-size:18px;color:var(--md-primary)">✓</span>
+          </div>
+          <div class="device-item">
+            <span style="font-size:22px">🎧</span>
+            <div>
+              <div class="device-name">WH-1000XM5</div>
+              <div class="device-mac">55:44:33:22:11:00</div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-tonal">🖨️ Test Print</button>
+        <button class="btn-outline">Simpan Pilihan</button>
+        <div class="snackbar">Struk test dikirim ke printer <span class="snackbar-action">OK</span></div>
+      </div>
+    </div>
+    <div class="phone-label">Pengaturan Printer Bluetooth</div>
+  </div>
+
+</div>
+
+<!-- ROW 2 -->
+<div class="row">
+
+  <!-- SCREEN 4: Backup -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Backup & Restore</span>
+      </div>
+      <div class="body">
+        <div class="card">
+          <div class="card-title">Export Backup</div>
+          <div style="font-size:13px;color:var(--md-on-surface-variant);line-height:1.6;margin-bottom:12px">
+            Semua data (produk, transaksi, pelanggan) dienkripsi AES-256 dan disimpan sebagai file <code style="background:#f3edf7;padding:1px 4px;border-radius:3px">.berkahpos</code>.
+          </div>
+          <div class="tf-label">Password Enkripsi</div>
+          <input class="tf" type="password" value="••••••••" style="margin-bottom:8px">
+          <div class="tf-label">Konfirmasi Password</div>
+          <input class="tf" type="password" value="••••••••">
+          <div style="height:12px"></div>
+          <button class="btn-filled">💾 Export Backup</button>
+        </div>
+        <div class="card" style="border-color:#ccc">
+          <div class="card-title">Restore dari File</div>
+          <div style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:10px">
+            ⚠️ Data saat ini akan <strong>ditimpa seluruhnya</strong>.
+          </div>
+          <button class="btn-outline">📂 Pilih File .berkahpos</button>
+        </div>
+        <div style="font-size:11px;color:var(--md-on-surface-variant);text-align:center">
+          Backup terakhir: 11 Jun 2026, 10:15
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">Backup & Restore (.berkahpos)</div>
+  </div>
+
+  <!-- SCREEN 5: CSV Import -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Import Produk CSV</span>
+      </div>
+      <div class="body">
+        <div class="card">
+          <div class="card-title">Format CSV yang Didukung</div>
+          <div style="font-size:12px;color:var(--md-on-surface-variant);line-height:1.8">
+            Kolom yang dikenali:<br>
+            <code style="background:#f3edf7;padding:1px 4px;border-radius:3px;font-size:11px">nama / name / product_name</code><br>
+            <code style="background:#f3edf7;padding:1px 4px;border-radius:3px;font-size:11px">harga_jual / hj / price</code><br>
+            <code style="background:#f3edf7;padding:1px 4px;border-radius:3px;font-size:11px">harga_pokok / hpp / cost</code><br>
+            <code style="background:#f3edf7;padding:1px 4px;border-radius:3px;font-size:11px">barcode / kode_barcode</code><br>
+            <code style="background:#f3edf7;padding:1px 4px;border-radius:3px;font-size:11px">stok / stock / qty</code>
+          </div>
+        </div>
+        <button class="btn-tonal">📄 Pilih File CSV</button>
+        <div class="card" style="border-color:var(--md-primary)">
+          <div class="card-title">Hasil Import</div>
+          <div class="stat-row" style="margin-bottom:8px">
+            <div class="stat-card">
+              <div class="stat-val">247</div>
+              <div class="stat-lbl">Produk diimport</div>
+            </div>
+            <div class="stat-card" style="background:var(--md-secondary-container)">
+              <div class="stat-val" style="color:var(--md-secondary)">18</div>
+              <div class="stat-lbl" style="color:var(--md-secondary)">Duplikat dilewati</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span class="chip chip-warn">32 tanpa barcode</span>
+            <span class="chip chip-info">5 harga 0</span>
+          </div>
+        </div>
+        <button class="btn-filled">✅ Selesai</button>
+      </div>
+    </div>
+    <div class="phone-label">Import Produk CSV</div>
+  </div>
+
+  <!-- SCREEN 6: Export Laporan -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Laporan</span>
+        <span class="action">📅</span>
+        <span class="action">⋮</span>
+      </div>
+      <div class="tabs">
+        <div class="tab active">Ringkasan</div>
+        <div class="tab">Produk</div>
+        <div class="tab">Pelanggan</div>
+        <div class="tab">Transaksi</div>
+      </div>
+      <div class="body" style="min-height:360px">
+        <!-- Popup menu mock -->
+        <div style="position:relative">
+          <div style="position:absolute;right:0;top:-8px;background:white;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);padding:4px 0;z-index:10;min-width:160px">
+            <div style="padding:10px 16px;font-size:14px;color:var(--md-on-surface);display:flex;align-items:center;gap:10px;cursor:pointer">
+              <span>📄</span> Export PDF
+            </div>
+            <div style="padding:10px 16px;font-size:14px;color:var(--md-on-surface);display:flex;align-items:center;gap:10px;cursor:pointer;background:#f3edf7">
+              <span>📊</span> Export Excel
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:60px">
+          <div class="stat-row" style="margin-bottom:8px">
+            <div class="stat-card">
+              <div class="stat-val" style="font-size:14px">Rp 4,2jt</div>
+              <div class="stat-lbl">Omzet</div>
+            </div>
+            <div class="stat-card" style="background:var(--md-tertiary-container)">
+              <div class="stat-val" style="font-size:14px;color:var(--md-tertiary)">Rp 1,1jt</div>
+              <div class="stat-lbl" style="color:var(--md-tertiary)">Laba</div>
+            </div>
+          </div>
+          <div class="snackbar" style="margin-top:12px">
+            PDF dibuat — laporan_jun2026.pdf
+            <span class="snackbar-action">Bagikan</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">Export PDF / Excel dari Laporan</div>
+  </div>
+
+</div>
+
+<!-- ROW 3 -->
+<div class="row">
+
+  <!-- SCREEN 7: Produk Form — Read Only (Kasir tanpa izin) -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Detail Produk</span>
+      </div>
+      <div class="body">
+        <div class="readonly-banner">
+          <span class="readonly-icon">🔒</span>
+          <span class="readonly-text">Mode baca — izin Input Stok belum aktif</span>
+        </div>
+        <div class="tf-label">Nama Produk</div>
+        <input class="tf" value="Indomie Goreng" readonly style="background:#f5f0fb;color:#49454f;margin-bottom:10px">
+        <div class="tf-label">Kode Produk</div>
+        <input class="tf" value="IMI-001" readonly style="background:#f5f0fb;color:#49454f;margin-bottom:10px">
+        <div class="tf-label">Kategori</div>
+        <input class="tf" value="Mie Instan" readonly style="background:#f5f0fb;color:#49454f;margin-bottom:12px">
+        <div class="card">
+          <div style="font-size:13px;font-weight:600;color:var(--md-primary);margin-bottom:8px">Satuan 1 · Dasar</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <div style="flex:1">
+              <div class="tf-label">Harga Jual</div>
+              <input class="tf" value="Rp 3.500" readonly style="background:#f5f0fb;color:#49454f">
+            </div>
+            <div style="flex:1">
+              <div class="tf-label">Harga Pokok</div>
+              <input class="tf" value="Rp 2.800" readonly style="background:#f5f0fb;color:#49454f">
+            </div>
+          </div>
+        </div>
+        <!-- No save button shown -->
+        <div style="text-align:center;font-size:12px;color:var(--md-on-surface-variant);margin-top:4px">
+          Hubungi owner untuk mengubah data produk
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">Produk Form — Kasir (read-only)</div>
+  </div>
+
+  <!-- SCREEN 8: Pengaturan — Semua tile aktif -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Pengaturan</span>
+      </div>
+      <div class="body" style="padding:8px 16px">
+        <div style="font-size:11px;color:var(--md-primary);font-weight:600;padding:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Toko</div>
+        <div class="list-tile">
+          <div class="tile-icon">🏪</div>
+          <div class="tile-content"><div class="tile-title">Info Toko</div><div class="tile-sub">Nama, alamat, telepon</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+        <div class="list-tile">
+          <div class="tile-icon">💳</div>
+          <div class="tile-content"><div class="tile-title">Metode Pembayaran</div><div class="tile-sub">Tunai, QRIS, Transfer</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+        <div class="list-tile">
+          <div class="tile-icon">📄</div>
+          <div class="tile-content"><div class="tile-title">Import Produk CSV</div><div class="tile-sub">Import dari file CSV</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+        <div style="font-size:11px;color:var(--md-primary);font-weight:600;padding:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Sinkronisasi & Perangkat</div>
+        <div class="list-tile">
+          <div class="tile-icon">📶</div>
+          <div class="tile-content"><div class="tile-title">Sinkronisasi WiFi</div><div class="tile-sub">Sync data antar HP via LAN</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+        <div class="list-tile">
+          <div class="tile-icon">💾</div>
+          <div class="tile-content"><div class="tile-title">Backup & Restore</div><div class="tile-sub">File .berkahpos terenkripsi</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+        <div class="list-tile">
+          <div class="tile-icon">🔗</div>
+          <div class="tile-content"><div class="tile-title">Pair Perangkat</div><div class="tile-sub">QR code untuk kasir baru</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+        <div style="font-size:11px;color:var(--md-primary);font-weight:600;padding:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Kasir</div>
+        <div class="list-tile">
+          <div class="tile-icon">🛡️</div>
+          <div class="tile-content"><div class="tile-title">Izin Kasir</div><div class="tile-sub">Override harga, tambah pelanggan…</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+        <div style="font-size:11px;color:var(--md-primary);font-weight:600;padding:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Printer</div>
+        <div class="list-tile" style="border-bottom:none">
+          <div class="tile-icon">🖨️</div>
+          <div class="tile-content"><div class="tile-title">Printer Bluetooth</div><div class="tile-sub">BlueTooth Printer 58</div></div>
+          <span class="tile-trail">›</span>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">Pengaturan — Semua Fitur Aktif</div>
+  </div>
+
+  <!-- SCREEN 9: Izin Kasir -->
+  <div>
+    <div class="phone">
+      <div class="appbar">
+        <span class="back">←</span>
+        <span class="title">Izin Kasir</span>
+      </div>
+      <div class="body" style="padding:8px 16px">
+        <div style="font-size:13px;color:var(--md-on-surface-variant);padding:8px 0 12px;line-height:1.5">
+          Izin berlaku untuk semua perangkat dengan role <strong>Kasir</strong>.
+        </div>
+        <div class="list-tile">
+          <div class="tile-content">
+            <div class="tile-title">Override Harga</div>
+            <div class="tile-sub">Kasir bisa ubah harga saat transaksi</div>
+          </div>
+          <div class="sw on"></div>
+        </div>
+        <div class="list-tile">
+          <div class="tile-content">
+            <div class="tile-title">Tambah Pelanggan</div>
+            <div class="tile-sub">Kasir bisa daftarkan pelanggan baru</div>
+          </div>
+          <div class="sw"></div>
+        </div>
+        <div class="list-tile">
+          <div class="tile-content">
+            <div class="tile-title">Input Stok</div>
+            <div class="tile-sub">Kasir bisa menambah stok produk</div>
+          </div>
+          <div class="sw on"></div>
+        </div>
+        <div class="list-tile">
+          <div class="tile-content">
+            <div class="tile-title">Input Pengeluaran</div>
+            <div class="tile-sub">Kasir bisa mencatat pengeluaran</div>
+          </div>
+          <div class="sw"></div>
+        </div>
+        <div class="list-tile" style="border-bottom:none">
+          <div class="tile-content">
+            <div class="tile-title">Input Pembelian</div>
+            <div class="tile-sub">Kasir bisa mencatat pembelian dari supplier</div>
+          </div>
+          <div class="sw"></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">Izin Kasir</div>
+  </div>
+
+</div>
+
+<p class="sub" style="margin-top:8px">The POS v2.0.0 · Flutter Android · Semua fitur complete</p>
+
+</body>
+</html>
