@@ -38,19 +38,27 @@ class MainShell extends ConsumerWidget {
     var selected = tabs.indexWhere((t) => location.startsWith(t.path));
     if (selected < 0) selected = 0;
 
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selected,
-        onDestinationSelected: (i) => context.go(tabs[i].path),
-        destinations: [
-          for (final t in tabs)
-            NavigationDestination(
-              icon: Icon(t.icon),
-              selectedIcon: Icon(t.selectedIcon),
-              label: t.label,
-            ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: cs.outlineVariant, width: 0.5),
+          ),
+        ),
+        child: NavigationBar(
+          selectedIndex: selected,
+          onDestinationSelected: (i) => context.go(tabs[i].path),
+          destinations: [
+            for (final t in tabs)
+              NavigationDestination(
+                icon: Icon(t.icon),
+                selectedIcon: Icon(t.selectedIcon),
+                label: t.label,
+              ),
+          ],
+        ),
       ),
     );
   }

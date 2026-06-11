@@ -1,109 +1,202 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Claude design language: copper/terracotta seed, warm neutrals, Inter.
 class AppTheme {
   AppTheme._();
 
-  static const seed = Color(0xFFD97757);
+  // Terracotta clay accent — from mockup --accent token
+  static const accent = Color(0xFFC96442);
 
-  // Light
-  static const _lightSurface = Color(0xFFFAF9F5);
-  static const _lightBackground = Color(0xFFF5F0EB);
-  static const _lightOutline = Color(0xFFE8E2DB);
+  // Light palette — exact mockup CSS tokens
+  static const _lCanvas = Color(0xFFEBE8E0);
+  static const _lPanel  = Color(0xFFFBFAF7);
+  static const _lCard   = Color(0xFFFFFFFF);
+  static const _lLine   = Color(0xFFE7E2D7);
+  static const _lField  = Color(0xFFF1EEE7);
+  static const _lInk    = Color(0xFF2A2824);
+  static const _lInk2   = Color(0xFF6C685F);
+  static const _lInk3   = Color(0xFF9D988B);
 
-  // Dark
-  static const _darkSurface = Color(0xFF272320);
-  static const _darkBackground = Color(0xFF1C1917);
-  static const _darkOutline = Color(0xFF3D3833);
+  // Dark palette
+  static const _dCanvas = Color(0xFF161412);
+  static const _dPanel  = Color(0xFF211E1C);
+  static const _dCard   = Color(0xFF2A2623);
+  static const _dLine   = Color(0xFF383330);
+  static const _dField  = Color(0xFF1C1917);
+  static const _dInk    = Color(0xFFECE7DD);
+  static const _dInk2   = Color(0xFFA8A298);
+  static const _dInk3   = Color(0xFF726C63);
 
-  static ThemeData light() => _build(Brightness.light);
-  static ThemeData dark() => _build(Brightness.dark);
+  // Warm-tinted shadows: rgba(48,36,22,…)
+  static const _sh1L = Color(0x0F302416); // light .06
+  static const _sh2L = Color(0x17302416); // light .09
+  static const _sh1D = Color(0x4D000000); // dark  .30
 
-  static ThemeData _build(Brightness brightness) {
-    final isDark = brightness == Brightness.dark;
+  static ThemeData light() => _build(false);
+  static ThemeData dark()  => _build(true);
+
+  /// Newsreader serif style — use for all monetary/numeric values.
+  static TextStyle numStyle(
+    BuildContext context, {
+    double size = 17,
+    FontWeight weight = FontWeight.w600,
+    Color? color,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return GoogleFonts.newsreader(
+      fontSize: size,
+      fontWeight: weight,
+      color: color ?? cs.onSurface,
+      letterSpacing: -0.2,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+  }
+
+  static ThemeData _build(bool isDark) {
+    final canvas = isDark ? _dCanvas : _lCanvas;
+    final panel  = isDark ? _dPanel  : _lPanel;
+    final card   = isDark ? _dCard   : _lCard;
+    final line   = isDark ? _dLine   : _lLine;
+    final field  = isDark ? _dField  : _lField;
+    final ink    = isDark ? _dInk    : _lInk;
+    final ink3   = isDark ? _dInk3   : _lInk3;
+    final sh1    = isDark ? _sh1D    : _sh1L;
+
     final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: brightness,
+      seedColor: accent,
+      brightness: isDark ? Brightness.dark : Brightness.light,
     ).copyWith(
-      surface: isDark ? _darkSurface : _lightSurface,
-      surfaceContainerLowest: isDark ? _darkBackground : _lightBackground,
-      outlineVariant: isDark ? _darkOutline : _lightOutline,
+      primary: accent,
+      surface: panel,
+      surfaceContainerLowest: canvas,
+      onSurface: ink,
+      outlineVariant: line,
     );
 
     final base = ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
-      scaffoldBackgroundColor: scheme.surfaceContainerLowest,
+      scaffoldBackgroundColor: canvas,
     );
 
     return base.copyWith(
-      textTheme: GoogleFonts.interTextTheme(base.textTheme),
+      textTheme: GoogleFonts.hankenGroteskTextTheme(base.textTheme).apply(
+        bodyColor: ink,
+        displayColor: ink,
+      ),
       cardTheme: CardTheme(
-        elevation: 0,
-        color: scheme.surface,
+        elevation: 1.5,
+        shadowColor: sh1,
+        color: card,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: scheme.outlineVariant, width: 0.5),
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: line, width: 0.5),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          backgroundColor: accent,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(11),
+          ),
           minimumSize: const Size(double.infinity, 48),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.hankenGrotesk(
+            fontWeight: FontWeight.w600,
+            fontSize: 14.5,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(11),
+          ),
           minimumSize: const Size(double.infinity, 48),
-          side: BorderSide(color: scheme.outlineVariant),
+          side: BorderSide(color: line),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surface,
+        fillColor: field,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: scheme.primary, width: 1.5),
+          borderRadius: BorderRadius.circular(11),
+          borderSide: const BorderSide(color: accent, width: 1.5),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        hintStyle: TextStyle(color: ink3, fontSize: 13.5),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surface,
-        indicatorColor: scheme.primary.withOpacity(0.14),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        height: 68,
-        labelTextStyle: WidgetStatePropertyAll(
-          GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500),
+        backgroundColor: panel,
+        indicatorColor: accent.withOpacity(0.12),
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
         ),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        height: 64,
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(color: accent, size: 22);
+          }
+          return IconThemeData(color: ink3, size: 22);
+        }),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return GoogleFonts.hankenGrotesk(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: accent,
+            );
+          }
+          return GoogleFonts.hankenGrotesk(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w500,
+            color: ink3,
+          );
+        }),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
+        backgroundColor: panel,
         elevation: 0,
         scrolledUnderElevation: 0.5,
+        shadowColor: sh1,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.inter(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: scheme.onSurface,
+        titleTextStyle: GoogleFonts.hankenGrotesk(
+          fontSize: 19,
+          fontWeight: FontWeight.w700,
+          color: ink,
         ),
+        iconTheme: IconThemeData(color: isDark ? _dInk2 : _lInk2),
       ),
+      dividerTheme: DividerThemeData(color: line, thickness: 0.5),
+      chipTheme: ChipThemeData(
+        shape: const StadiumBorder(),
+        side: BorderSide(color: line, width: 0.75),
+        backgroundColor: field,
+        labelStyle: TextStyle(fontSize: 11.5, color: isDark ? _dInk2 : _lInk2),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: isDark ? _dCard : _lInk,
+        contentTextStyle: GoogleFonts.hankenGrotesk(color: isDark ? _dInk : _lCanvas),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+        behavior: SnackBarBehavior.floating,
+      ),
+      // Preserve warm shadow for all elevated surfaces
+      shadowColor: sh1,
     );
   }
 }
 
-/// Format Rupiah: 1234567 -> "Rp 1.234.567"
+/// Format Rupiah: 1234567 → "Rp 1.234.567"
 String formatRupiah(num value) {
   final s = value.round().abs().toString();
   final buf = StringBuffer();
@@ -111,5 +204,5 @@ String formatRupiah(num value) {
     if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
     buf.write(s[i]);
   }
-  return '${value < 0 ? '-' : ''}Rp $buf';
+  return '${value < 0 ? '-' : ''}Rp $buf';
 }

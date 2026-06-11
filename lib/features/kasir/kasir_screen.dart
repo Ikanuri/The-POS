@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/database/app_database.dart';
@@ -28,6 +29,16 @@ final _kasirProductsProvider =
   final db = ref.watch(databaseProvider);
   return db.watchProducts(query: query);
 });
+
+// Gradient palette for product avatars — cycles by first char code
+const _kAvatarGradients = [
+  [Color(0xFFD97757), Color(0xFFC96442)],
+  [Color(0xFF4F7B5E), Color(0xFF3A6349)],
+  [Color(0xFF4A6E94), Color(0xFF345880)],
+  [Color(0xFF8E6B3E), Color(0xFF7A5A2F)],
+  [Color(0xFF7B5EA7), Color(0xFF654E90)],
+  [Color(0xFF4E8B8B), Color(0xFF3A7474)],
+];
 
 class KasirScreen extends ConsumerStatefulWidget {
   const KasirScreen({super.key});
@@ -84,8 +95,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         .getSingleOrNull();
     if (product == null || !mounted) return;
     final priceService = PriceService(db);
-    final resolved = await priceService.resolvePrice(
-        productUnitId: unit.id, qty: 1);
+    final resolved =
+        await priceService.resolvePrice(productUnitId: unit.id, qty: 1);
     final unitType = await (db.select(db.unitTypes)
           ..where((t) => t.id.equals(unit.unitTypeId ?? 1)))
         .getSingleOrNull();
@@ -121,8 +132,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final unit = units.isNotEmpty ? units.first : null;
     if (unit == null) return;
     final priceService = PriceService(db);
-    final resolved = await priceService.resolvePrice(
-        productUnitId: unit.id, qty: 1);
+    final resolved =
+        await priceService.resolvePrice(productUnitId: unit.id, qty: 1);
     final unitType = await (db.select(db.unitTypes)
           ..where((t) => t.id.equals(unit.unitTypeId ?? 1)))
         .getSingleOrNull();
@@ -140,13 +151,6 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = ref.watch(cartProvider);
-    final cartNotifier = ref.read(cartProvider.notifier);
-    final query = ref.watch(_kasirSearchProvider);
-    final isGrid = ref.watch(_kasirGridProvider);
-    final productsAsync = ref.watch(_kasirProductsProvider(query));
-    final scheme = Theme.of(context).colorScheme;
-
     if (_scannerOpen && _scannerCtrl != null) {
       return Scaffold(
         appBar: AppBar(
@@ -166,83 +170,69 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       );
     }
 
+    final cart = ref.watch(cartProvider);
+    final cartNotifier = ref.read(cartProvider.notifier);
+    final query = ref.watch(_kasirSearchProvider);
+    final isGrid = ref.watch(_kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
+    final productsAsync = ref.watch(_kasirProductsProvider(query));
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kasir'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner),
-            tooltip: 'Scan Barcode',
-            onPressed: _openScanner,
-          ),
-          IconButton(
-            icon: Badge(
-              isLabelVisible: heldCount > 0,
-              label: Text('$heldCount'),
-              child: const Icon(Icons.pause_circle_outline),
-            ),
-            tooltip: 'Pesanan Ditahan',
-            onPressed: () => showModalBottomSheet(
+      body: Column(
+        children: [
+          _KasirTopbar(
+            searchCtrl: _searchCtrl,
+            onSearch: (v) => ref.read(_kasirSearchProvider.notifier).state = v,
+            onScan: _openScanner,
+            onHeld: () => showModalBottomSheet(
               context: context,
               isScrollControlled: true,
               builder: (_) => const HeldOrdersSheet(),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Riwayat Transaksi',
-            onPressed: () => showModalBottomSheet(
+            onHistory: () => showModalBottomSheet(
               context: context,
               isScrollControlled: true,
               builder: (_) => const TxHistorySheet(),
             ),
-          ),
-          IconButton(
-            icon: Icon(isGrid ? Icons.view_list : Icons.grid_view),
-            tooltip: isGrid ? 'Tampilan List' : 'Tampilan Grid',
-            onPressed: () =>
+            heldCount: heldCount,
+            isGrid: isGrid,
+            onToggleGrid: () =>
                 ref.read(_kasirGridProvider.notifier).state = !isGrid,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'Cari produk atau scan barcode…',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          ref.read(_kasirSearchProvider.notifier).state = '';
-                        },
-                      )
-                    : null,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                isDense: true,
-              ),
-              onChanged: (v) =>
-                  ref.read(_kasirSearchProvider.notifier).state = v,
-            ),
           ),
           Expanded(
             child: productsAsync.when(
               data: (prods) {
                 if (prods.isEmpty) {
                   return Center(
-                    child: Text(
-                      query.isEmpty
-                          ? 'Belum ada produk'
-                          : 'Produk tidak ditemukan',
-                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerLowest,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(Icons.inventory_2_outlined,
+                              color: cs.onSurfaceVariant, size: 26),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          query.isEmpty ? 'Belum ada produk' : 'Produk tidak ditemukan',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        if (query.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text('"$query"',
+                              style: TextStyle(
+                                  fontSize: 12, color: cs.onSurfaceVariant)),
+                        ],
+                      ],
                     ),
                   );
                 }
@@ -252,7 +242,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                     gridDelegate:
                         const SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent: 160,
-                      mainAxisExtent: 110,
+                      mainAxisExtent: 118,
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
                     ),
@@ -265,10 +255,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                   );
                 }
                 return ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   itemCount: prods.length,
                   separatorBuilder: (_, __) =>
-                      const Divider(height: 1, indent: 56),
+                      Divider(height: 1, indent: 62, color: cs.outlineVariant),
                   itemBuilder: (_, i) => _ProductListTile(
                     product: prods[i],
                     onTap: () => _addSingleUnit(prods[i]),
@@ -276,8 +266,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                   ),
                 );
               },
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
@@ -288,15 +277,166 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           : _CartBar(
               total: cartNotifier.totalAmount,
               count: cart.length,
-              onTap: () => showModalBottomSheet(
+              onView: () => showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
                 builder: (_) => const CartSheet(),
               ),
+              onPay: () => context.go('/kasir/bayar'),
             ),
     );
   }
 }
+
+// ─── Topbar ──────────────────────────────────────────────────────────────────
+
+class _KasirTopbar extends StatelessWidget {
+  const _KasirTopbar({
+    required this.searchCtrl,
+    required this.onSearch,
+    required this.onScan,
+    required this.onHeld,
+    required this.onHistory,
+    required this.heldCount,
+    required this.isGrid,
+    required this.onToggleGrid,
+  });
+
+  final TextEditingController searchCtrl;
+  final ValueChanged<String> onSearch;
+  final VoidCallback onScan;
+  final VoidCallback onHeld;
+  final VoidCallback onHistory;
+  final int heldCount;
+  final bool isGrid;
+  final VoidCallback onToggleGrid;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Container(
+      color: cs.surface,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(12, topPadding + 8, 12, 10),
+            child: Row(
+              children: [
+                // Brand mark
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFD97757), Color(0xFFC96442)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x1A302416),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.shopping_basket_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Inline search field
+                Expanded(
+                  child: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: searchCtrl,
+                    builder: (context, value, _) {
+                      return TextField(
+                        controller: searchCtrl,
+                        decoration: InputDecoration(
+                          hintText: 'Cari produk…',
+                          prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                          suffixIcon: value.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 16),
+                                  onPressed: () {
+                                    searchCtrl.clear();
+                                    onSearch('');
+                                  },
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10,
+                          ),
+                          isDense: true,
+                        ),
+                        onChanged: onSearch,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _TbBtn(icon: Icons.qr_code_scanner_rounded, onTap: onScan),
+                const SizedBox(width: 4),
+                _TbBtn(
+                  icon: Icons.pause_circle_outline_rounded,
+                  onTap: onHeld,
+                  badgeCount: heldCount,
+                ),
+                const SizedBox(width: 4),
+                _TbBtn(icon: Icons.history_rounded, onTap: onHistory),
+                const SizedBox(width: 4),
+                _TbBtn(
+                  icon: isGrid
+                      ? Icons.view_list_rounded
+                      : Icons.grid_view_rounded,
+                  onTap: onToggleGrid,
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, thickness: 0.5, color: cs.outlineVariant),
+        ],
+      ),
+    );
+  }
+}
+
+class _TbBtn extends StatelessWidget {
+  const _TbBtn({required this.icon, required this.onTap, this.badgeCount = 0});
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final int badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final child = Icon(icon, size: 18, color: cs.onSurfaceVariant);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: cs.outlineVariant, width: 0.75),
+        ),
+        child: badgeCount > 0
+            ? Badge(label: Text('$badgeCount'), child: child)
+            : child,
+      ),
+    );
+  }
+}
+
+// ─── Product grid card ────────────────────────────────────────────────────────
 
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
@@ -311,38 +451,74 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
+    final cs = Theme.of(context).colorScheme;
+    final gradIdx =
+        (product.name.isEmpty ? 0 : product.name.codeUnitAt(0)) %
+            _kAvatarGradients.length;
+    final grad = _kAvatarGradients[gradIdx];
+
+    return Material(
+      color: cs.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      elevation: 0,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        child: Padding(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: cs.outlineVariant, width: 0.5),
+          ),
           padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: scheme.primaryContainer,
-                child: Text(
-                  product.name.isNotEmpty
-                      ? product.name[0].toUpperCase()
-                      : '?',
-                  style: TextStyle(
-                      color: scheme.onPrimaryContainer,
+              // Gradient avatar
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: grad,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text(
+                    product.name.isNotEmpty
+                        ? product.name[0].toUpperCase()
+                        : '?',
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 14),
+                      fontSize: 15,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 6),
+              const Spacer(),
               Text(
                 product.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w500),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                ),
               ),
+              if (product.kodeProduk != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  product.kodeProduk!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+                ),
+              ],
             ],
           ),
         ),
@@ -350,6 +526,8 @@ class _ProductCard extends StatelessWidget {
     );
   }
 }
+
+// ─── Product list tile ────────────────────────────────────────────────────────
 
 class _ProductListTile extends StatelessWidget {
   const _ProductListTile({
@@ -364,67 +542,186 @@ class _ProductListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: scheme.primaryContainer,
-        child: Text(
-          product.name.isNotEmpty ? product.name[0].toUpperCase() : '?',
-          style: TextStyle(
-              color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700),
-        ),
-      ),
-      title: Text(product.name),
-      subtitle: product.kodeProduk != null
-          ? Text(product.kodeProduk!,
-              style:
-                  TextStyle(color: scheme.onSurfaceVariant, fontSize: 11))
-          : null,
+    final cs = Theme.of(context).colorScheme;
+    final gradIdx =
+        (product.name.isEmpty ? 0 : product.name.codeUnitAt(0)) %
+            _kAvatarGradients.length;
+    final grad = _kAvatarGradients[gradIdx];
+
+    return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: grad,
+                ),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Center(
+                child: Text(
+                  product.name.isNotEmpty
+                      ? product.name[0].toUpperCase()
+                      : '?',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  if (product.kodeProduk != null)
+                    Text(
+                      product.kodeProduk!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(Icons.add_circle_outline_rounded,
+                size: 20, color: cs.primary.withOpacity(0.7)),
+          ],
+        ),
+      ),
     );
   }
 }
+
+// ─── Cart bar ─────────────────────────────────────────────────────────────────
 
 class _CartBar extends StatelessWidget {
   const _CartBar({
     required this.total,
     required this.count,
-    required this.onTap,
+    required this.onView,
+    required this.onPay,
   });
 
   final int total;
   final int count;
-  final VoidCallback onTap;
+  final VoidCallback onView;
+  final VoidCallback onPay;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: FilledButton(
-          onPressed: onTap,
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
+    final cs = Theme.of(context).colorScheme;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(
+          top: BorderSide(color: cs.outlineVariant, width: 0.5),
+        ),
+      ),
+      padding: EdgeInsets.fromLTRB(14, 10, 14, 10 + bottomPad),
+      child: Row(
+        children: [
+          // Item count bubble
+          Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(
+              color: AppTheme.accent,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const SizedBox(width: 10),
+          // Total
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Total',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  formatRupiah(total),
+                  style: AppTheme.numStyle(context,
+                      size: 16.5, weight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          // Actions
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Badge(
-                label: Text('$count'),
-                child: const Icon(Icons.shopping_cart_outlined),
+              OutlinedButton(
+                onPressed: onView,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  side: BorderSide(color: cs.outlineVariant),
+                  foregroundColor: cs.onSurface,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Lihat',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
               ),
-              const Text(
-                'Lihat Keranjang',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              Text(
-                formatRupiah(total),
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: onPay,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Bayar',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
