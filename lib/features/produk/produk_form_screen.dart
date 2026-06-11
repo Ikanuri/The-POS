@@ -24,6 +24,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   final _kodeCtrl = TextEditingController();
   bool _isLoading = false;
   bool _isEdit = false;
+  bool _readOnly = false;
 
   List<_UnitEntry> _units = [];
   List<ProductGroup> _groups = [];
@@ -41,6 +42,12 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   Future<void> _load() async {
     final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    if (device.deviceRole == 'kasir') {
+      final allowed = await db.isPermissionEnabled('input_stok');
+      if (mounted) setState(() => _readOnly = !allowed);
+    }
+
     final groups = await db.getAllProductGroups();
     final unitTypes = await db.getAllUnitTypes();
 
@@ -219,9 +226,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? 'Edit Produk' : 'Tambah Produk'),
+        title: Text(_isEdit
+            ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
+            : 'Tambah Produk'),
         actions: [
-          if (_isEdit)
+          if (_isEdit && !_readOnly)
             IconButton(
               icon: const Icon(Icons.delete_outline),
               tooltip: 'Nonaktifkan',
@@ -236,19 +245,57 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  if (_readOnly)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .secondaryContainer
+                            .withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.lock_outline,
+                              size: 16,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondaryContainer),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Mode baca — izin Input Stok belum aktif',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondaryContainer),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   TextFormField(
                     controller: _nameCtrl,
+                    readOnly: _readOnly,
                     decoration: const InputDecoration(
                       labelText: 'Nama Produk *',
                       hintText: 'Contoh: Indomie Goreng',
                     ),
                     textCapitalization: TextCapitalization.words,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Nama wajib diisi' : null,
+                    validator: (v) => _readOnly
+                        ? null
+                        : (v == null || v.trim().isEmpty
+                            ? 'Nama wajib diisi'
+                            : null),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _kodeCtrl,
+                    readOnly: _readOnly,
                     decoration: const InputDecoration(
                       labelText: 'Kode Produk',
                       hintText: 'Contoh: IMI-001 (opsional)',
@@ -268,8 +315,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                   child: Text(g.name!),
                                 )),
                       ],
-                      onChanged: (v) =>
-                          setState(() => _selectedGroupId = v),
+                      onChanged: _readOnly
+                          ? null
+                          : (v) => setState(() => _selectedGroupId = v),
                     ),
                   const SizedBox(height: 20),
                   Row(
@@ -277,11 +325,12 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                       Text('Satuan & Harga',
                           style: Theme.of(context).textTheme.titleSmall),
                       const Spacer(),
-                      TextButton.icon(
-                        onPressed: _addUnit,
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Tambah Satuan'),
-                      ),
+                      if (!_readOnly)
+                        TextButton.icon(
+                          onPressed: _addUnit,
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Tambah Satuan'),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -290,23 +339,28 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                         entry: e.value,
                         index: e.key,
                         unitTypes: _unitTypes,
-                        canRemove: _units.length > 1,
-                        onChanged: (updated) => setState(
-                            () => _units[e.key] = updated),
+                        canRemove: !_readOnly && _units.length > 1,
+                        readOnly: _readOnly,
+                        onChanged: _readOnly
+                            ? (_) {}
+                            : (updated) =>
+                                setState(() => _units[e.key] = updated),
                         onRemove: () => _removeUnit(e.key),
                       )),
                   const SizedBox(height: 80),
                 ],
               ),
             ),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(
-            16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-        child: FilledButton(
-          onPressed: _isLoading ? null : _save,
-          child: const Text('Simpan Produk'),
-        ),
-      ),
+      bottomNavigationBar: _readOnly
+          ? null
+          : Padding(
+              padding: EdgeInsets.fromLTRB(
+                  16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              child: FilledButton(
+                onPressed: _isLoading ? null : _save,
+                child: const Text('Simpan Produk'),
+              ),
+            ),
     );
   }
 
@@ -379,6 +433,7 @@ class _UnitCard extends StatefulWidget {
     required this.index,
     required this.unitTypes,
     required this.canRemove,
+    required this.readOnly,
     required this.onChanged,
     required this.onRemove,
   });
@@ -387,6 +442,7 @@ class _UnitCard extends StatefulWidget {
   final int index;
   final List<UnitType> unitTypes;
   final bool canRemove;
+  final bool readOnly;
   final ValueChanged<_UnitEntry> onChanged;
   final VoidCallback onRemove;
 
@@ -475,11 +531,13 @@ class _UnitCardState extends State<_UnitCard> {
                         child: Text(u.name),
                       ))
                   .toList(),
-              onChanged: (v) {
-                if (v != null) {
-                  widget.onChanged(widget.entry.copyWith(unitTypeId: v));
-                }
-              },
+              onChanged: widget.readOnly
+                  ? null
+                  : (v) {
+                      if (v != null) {
+                        widget.onChanged(widget.entry.copyWith(unitTypeId: v));
+                      }
+                    },
             ),
             const SizedBox(height: 8),
             Row(
@@ -487,6 +545,7 @@ class _UnitCardState extends State<_UnitCard> {
                 Expanded(
                   child: TextFormField(
                     controller: _priceCtrl,
+                    readOnly: widget.readOnly,
                     decoration: const InputDecoration(
                       labelText: 'Harga Jual (Rp)',
                       isDense: true,
@@ -494,16 +553,19 @@ class _UnitCardState extends State<_UnitCard> {
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (v) {
-                      widget.onChanged(
-                          widget.entry.copyWith(price: int.tryParse(v) ?? 0));
-                    },
+                    onChanged: widget.readOnly
+                        ? null
+                        : (v) {
+                            widget.onChanged(widget.entry
+                                .copyWith(price: int.tryParse(v) ?? 0));
+                          },
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextFormField(
                     controller: _costCtrl,
+                    readOnly: widget.readOnly,
                     decoration: const InputDecoration(
                       labelText: 'Harga Pokok (Rp)',
                       isDense: true,
@@ -511,10 +573,12 @@ class _UnitCardState extends State<_UnitCard> {
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (v) {
-                      widget.onChanged(widget.entry
-                          .copyWith(costPrice: int.tryParse(v) ?? 0));
-                    },
+                    onChanged: widget.readOnly
+                        ? null
+                        : (v) {
+                            widget.onChanged(widget.entry
+                                .copyWith(costPrice: int.tryParse(v) ?? 0));
+                          },
                   ),
                 ),
               ],
@@ -525,32 +589,40 @@ class _UnitCardState extends State<_UnitCard> {
                 Expanded(
                   child: TextFormField(
                     controller: _ratioCtrl,
+                    readOnly: widget.readOnly,
                     decoration: const InputDecoration(
                       labelText: 'Isi per Satuan',
                       isDense: true,
                       hintText: 'Contoh: 10, 40',
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (v) {
-                      final r = double.tryParse(v);
-                      if (r != null) {
-                        widget.onChanged(widget.entry.copyWith(ratioToBase: r));
-                      }
-                    },
+                    onChanged: widget.readOnly
+                        ? null
+                        : (v) {
+                            final r = double.tryParse(v);
+                            if (r != null) {
+                              widget.onChanged(
+                                  widget.entry.copyWith(ratioToBase: r));
+                            }
+                          },
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextFormField(
                     controller: _barcodeCtrl,
+                    readOnly: widget.readOnly,
                     decoration: const InputDecoration(
                       labelText: 'Barcode',
                       isDense: true,
                     ),
-                    onChanged: (v) {
-                      widget.onChanged(widget.entry
-                          .copyWith(barcode: v.trim().isEmpty ? null : v.trim()));
-                    },
+                    onChanged: widget.readOnly
+                        ? null
+                        : (v) {
+                            widget.onChanged(widget.entry.copyWith(
+                                barcode:
+                                    v.trim().isEmpty ? null : v.trim()));
+                          },
                   ),
                 ),
               ],
@@ -562,11 +634,14 @@ class _UnitCardState extends State<_UnitCard> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Jadikan Satuan Dasar'),
                 value: widget.entry.isBaseUnit,
-                onChanged: (v) {
-                  if (v == true) {
-                    widget.onChanged(widget.entry.copyWith(isBaseUnit: true));
-                  }
-                },
+                onChanged: widget.readOnly
+                    ? null
+                    : (v) {
+                        if (v == true) {
+                          widget
+                              .onChanged(widget.entry.copyWith(isBaseUnit: true));
+                        }
+                      },
               ),
             ],
           ],

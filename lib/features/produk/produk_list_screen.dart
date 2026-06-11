@@ -20,6 +20,13 @@ final _groupsProvider = FutureProvider<List<ProductGroup>>((ref) {
   return db.getAllProductGroups();
 });
 
+final _canEditProdukProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final device = ref.watch(deviceProvider);
+  if (device.isOwner || device.deviceRole == 'asisten') return true;
+  if (device.deviceRole != 'kasir') return false;
+  return ref.watch(databaseProvider).isPermissionEnabled('input_stok');
+});
+
 class ProdukListScreen extends ConsumerWidget {
   const ProdukListScreen({super.key});
 
@@ -31,7 +38,9 @@ class ProdukListScreen extends ConsumerWidget {
     final productsAsync =
         ref.watch(_productsStreamProvider((query, groupId)));
     final groupsAsync = ref.watch(_groupsProvider);
-    final canEdit = device.isOwner || device.deviceRole == 'asisten';
+    final baseCanEdit = device.isOwner || device.deviceRole == 'asisten';
+    final canEdit =
+        ref.watch(_canEditProdukProvider).valueOrNull ?? baseCanEdit;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
