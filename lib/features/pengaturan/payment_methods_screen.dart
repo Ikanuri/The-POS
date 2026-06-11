@@ -183,6 +183,7 @@ class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
             onPressed: () async {
               if (_nameCtrl.text.trim().isEmpty) return;
               final db = ref.read(databaseProvider);
+              final navigator = Navigator.of(context);
               await db.into(db.paymentMethods).insert(
                     PaymentMethodsCompanion.insert(
                       id: _pmUuid.v4(),
@@ -197,7 +198,7 @@ class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
                     ),
                   );
               if (!mounted) return;
-              Navigator.of(context).pop();
+              navigator.pop();
             },
             child: const Text('Tambah'),
           ),

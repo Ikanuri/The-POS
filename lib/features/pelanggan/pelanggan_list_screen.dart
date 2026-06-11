@@ -8,6 +8,13 @@ import '../../core/theme/app_theme.dart';
 
 final _pelangganQueryProvider = StateProvider<String>((ref) => '');
 
+final _canAddCustomerProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final device = ref.watch(deviceProvider);
+  if (device.isOwner || device.deviceRole == 'asisten') return true;
+  if (device.deviceRole != 'kasir') return false;
+  return ref.watch(databaseProvider).isPermissionEnabled('tambah_pelanggan');
+});
+
 final _pelangganStreamProvider =
     StreamProvider.family<List<Customer>, String>((ref, query) {
   final db = ref.watch(databaseProvider);
@@ -23,13 +30,14 @@ class PelangganListScreen extends ConsumerWidget {
     final query = ref.watch(_pelangganQueryProvider);
     final customersAsync = ref.watch(_pelangganStreamProvider(query));
     final canEdit = device.isOwner || device.deviceRole == 'asisten';
+    final canAdd = ref.watch(_canAddCustomerProvider).valueOrNull ?? canEdit;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pelanggan'),
         actions: [
-          if (canEdit)
+          if (canAdd)
             IconButton(
               icon: const Icon(Icons.add),
               tooltip: 'Tambah Pelanggan',
@@ -80,7 +88,7 @@ class PelangganListScreen extends ConsumerWidget {
                                 color: scheme.onSurfaceVariant,
                               ),
                         ),
-                        if (canEdit && query.isEmpty) ...[
+                        if (canAdd && query.isEmpty) ...[
                           const SizedBox(height: 16),
                           FilledButton.icon(
                             onPressed: () => context.push('/pelanggan/baru'),

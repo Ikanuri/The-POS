@@ -8,11 +8,15 @@ import '../../features/kasir/receipt_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
+import '../../features/pengaturan/backup_screen.dart';
+import '../../features/pengaturan/csv_import_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
 import '../../features/pengaturan/pair_device_screen.dart';
 import '../../features/pengaturan/payment_methods_screen.dart';
 import '../../features/pengaturan/pengaturan_screen.dart';
+import '../../features/pengaturan/printer_screen.dart';
 import '../../features/pengaturan/store_info_screen.dart';
+import '../../features/pengaturan/sync_screen.dart';
 import '../../features/produk/produk_form_screen.dart';
 import '../../features/produk/produk_list_screen.dart';
 import '../../features/ringkasan/ringkasan_screen.dart';
@@ -107,6 +111,18 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: 'pair',
                   builder: (_, __) => const PairDeviceScreen()),
+              GoRoute(
+                  path: 'sync',
+                  builder: (_, __) => const SyncScreen()),
+              GoRoute(
+                  path: 'backup',
+                  builder: (_, __) => const BackupScreen()),
+              GoRoute(
+                  path: 'printer',
+                  builder: (_, __) => const PrinterScreen()),
+              GoRoute(
+                  path: 'import-csv',
+                  builder: (_, __) => const CsvImportScreen()),
             ],
           ),
         ],

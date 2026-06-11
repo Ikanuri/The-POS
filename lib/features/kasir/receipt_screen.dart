@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 
 const _receiptUuid = Uuid();
@@ -161,6 +162,48 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
   }
 
+  Future<void> _printReceipt() async {
+    final mac = await PrinterService.getSavedMac();
+    if (mac == null || mac.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Printer belum dikonfigurasi'),
+          action: SnackBarAction(
+            label: 'Pengaturan',
+            onPressed: () {},
+          ),
+        ),
+      );
+      return;
+    }
+    final prefs = await _getStorePrefs();
+    final ok = await PrinterService.printReceipt(
+      tx: _tx!,
+      items: _items,
+      productNames: _productNames,
+      unitNames: _unitNames,
+      customer: _customer,
+      storeName: prefs.$1,
+      storeAddress: prefs.$2,
+      storePhone: prefs.$3,
+      strukNote: _tx!.strukNote,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok ? 'Struk berhasil dicetak' : 'Gagal mencetak struk'),
+      backgroundColor: ok ? null : Theme.of(context).colorScheme.error,
+    ));
+  }
+
+  Future<(String, String, String)> _getStorePrefs() async {
+    final db = ref.read(databaseProvider);
+    final name = await db.getSetting('store_name') ?? '';
+    final address = await db.getSetting('store_address') ?? '';
+    final phone = await db.getSetting('store_phone') ?? '';
+    return (name, address, phone);
+  }
+
   @override
   Widget build(BuildContext context) {
     final device = ref.watch(deviceProvider);
@@ -191,10 +234,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           IconButton(
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cetak Struk',
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Fitur cetak Bluetooth tersedia setelah printer dikonfigurasi')),
-            ),
+            onPressed: _tx == null ? null : () => _printReceipt(),
           ),
         ],
       ),

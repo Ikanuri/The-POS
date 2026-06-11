@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/cart_item.dart';
+import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_provider.dart';
 
@@ -175,22 +176,30 @@ class _CartItemTile extends ConsumerWidget {
     );
   }
 
-  void _showItemOptions(BuildContext context, WidgetRef ref) {
+  Future<void> _showItemOptions(BuildContext context, WidgetRef ref) async {
     final notifier = ref.read(cartProvider.notifier);
+    final device = ref.read(deviceProvider);
+    bool canOverrideHarga = device.deviceRole != 'kasir';
+    if (!canOverrideHarga) {
+      canOverrideHarga =
+          await ref.read(databaseProvider).isPermissionEnabled('override_harga');
+    }
+    if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.price_change_outlined),
-              title: const Text('Ubah Harga'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _showPriceEdit(context, ref);
-              },
-            ),
+            if (canOverrideHarga)
+              ListTile(
+                leading: const Icon(Icons.price_change_outlined),
+                title: const Text('Ubah Harga'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showPriceEdit(context, ref);
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.note_alt_outlined),
               title: const Text('Catatan Item'),
@@ -200,8 +209,8 @@ class _CartItemTile extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
-              title: Text('Hapus', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
+              title: Text('Hapus', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
               onTap: () {
                 Navigator.of(ctx).pop();
                 notifier.removeItemByIndex(index);

@@ -84,19 +84,28 @@ class PengaturanScreen extends ConsumerWidget {
           Card(
             child: Column(
               children: [
-                const _PendingTile(
-                  icon: Icons.wifi_outlined,
-                  title: 'Sync WiFi',
-                  subtitle: 'Sinkronisasi antar HP via jaringan lokal',
-                  phase: 'Phase 4',
+                ListTile(
+                  leading: const Icon(Icons.wifi_outlined),
+                  title: const Text('Sync WiFi'),
+                  subtitle: const Text('Sinkronisasi antar HP via jaringan lokal'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pengaturan/sync'),
                 ),
-                const _PendingTile(
-                  icon: Icons.save_alt_outlined,
-                  title: 'Export / Import File',
-                  subtitle: 'Backup terenkripsi (.berkahpos)',
-                  phase: 'Phase 4',
+                ListTile(
+                  leading: const Icon(Icons.save_alt_outlined),
+                  title: const Text('Backup & Restore'),
+                  subtitle: const Text('File terenkripsi .berkahpos'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pengaturan/backup'),
                 ),
-                if (device.isOwner)
+                if (device.isOwner) ...[
+                  ListTile(
+                    leading: const Icon(Icons.upload_file_outlined),
+                    title: const Text('Import Produk CSV'),
+                    subtitle: const Text('Impor daftar produk dari file CSV'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/import-csv'),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.qr_code_2_outlined),
                     title: const Text('Pair Device Baru'),
@@ -104,6 +113,7 @@ class PengaturanScreen extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.push('/pengaturan/pair'),
                   ),
+                ],
               ],
             ),
           ),
@@ -112,11 +122,12 @@ class PengaturanScreen extends ConsumerWidget {
           Card(
             child: Column(
               children: [
-                const _PendingTile(
-                  icon: Icons.print_outlined,
-                  title: 'Printer Bluetooth',
-                  subtitle: 'Pilih printer & test cetak',
-                  phase: 'Phase 4',
+                ListTile(
+                  leading: const Icon(Icons.print_outlined),
+                  title: const Text('Printer Bluetooth'),
+                  subtitle: const Text('Pilih printer & test cetak'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pengaturan/printer'),
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.dark_mode_outlined),
@@ -155,33 +166,3 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _PendingTile extends StatelessWidget {
-  const _PendingTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.phase,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String phase;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: Chip(
-        label: Text(phase, style: const TextStyle(fontSize: 10)),
-        visualDensity: VisualDensity.compact,
-        backgroundColor: scheme.surfaceContainerHighest,
-        side: BorderSide.none,
-      ),
-      enabled: false,
-    );
-  }
-}

@@ -1,6 +1,10 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
+import '../../core/providers/device_provider.dart';
+import '../../core/services/export_service.dart';
 import 'tabs/ringkasan_tab.dart';
 import 'tabs/produk_tab.dart';
 import 'tabs/pelanggan_tab.dart';
@@ -36,6 +40,15 @@ class LaporanScreen extends ConsumerWidget {
               ),
               onPressed: () => _pickRange(context, ref, range),
             ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.download_outlined),
+              tooltip: 'Export',
+              onSelected: (v) => _export(context, ref, range, v),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'pdf', child: Text('Export PDF')),
+                PopupMenuItem(value: 'xlsx', child: Text('Export Excel (.xlsx)')),
+              ],
+            ),
           ],
           bottom: const TabBar(
             tabs: [
@@ -60,6 +73,42 @@ class LaporanScreen extends ConsumerWidget {
 
   String _fmt(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+
+  Future<void> _export(
+      BuildContext context, WidgetRef ref, DateTimeRange range, String format) async {
+    final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    try {
+      if (format == 'pdf') {
+        await ExportService.exportPdf(
+          db: db,
+          range: range,
+          storeName: device.storeName,
+        );
+      } else {
+        final bytes = await ExportService.exportXlsx(db: db, range: range);
+        final fmtDate = DateFormat('yyyyMMdd');
+        final fname = 'laporan_${fmtDate.format(range.start)}-${fmtDate.format(range.end)}.xlsx';
+        await FilePicker.platform.saveFile(
+          fileName: fname,
+          bytes: bytes,
+          type: FileType.any,
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File Excel berhasil disimpan')),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal export: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
 
   Future<void> _pickRange(
       BuildContext context, WidgetRef ref, DateTimeRange current) async {

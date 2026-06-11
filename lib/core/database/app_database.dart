@@ -385,6 +385,119 @@ class AppDatabase extends _$AppDatabase {
     q.orderBy([(t) => OrderingTerm.asc(t.name)]);
     return q.watch();
   }
+
+  // ───────────────────────── Backup / Restore ─────────────────────────
+
+  static const _allTables = [
+    'app_settings', 'products', 'product_groups', 'unit_types',
+    'product_units', 'product_barcodes', 'price_tiers',
+    'customer_groups', 'customer_group_prices', 'customers',
+    'transactions', 'transaction_items', 'transaction_payments', 'held_orders',
+    'stock_ledger', 'expenses', 'loyalty_point_ledger',
+    'suppliers', 'purchases', 'purchase_items',
+    'kasir_permissions', 'payment_methods',
+  ];
+
+  Future<Map<String, List<Map<String, Object?>>>> dumpAllTables() async {
+    final dump = <String, List<Map<String, Object?>>>{};
+    for (final name in _allTables) {
+      final rows = await customSelect('SELECT * FROM "$name"').get();
+      dump[name] = rows.map((r) => r.data).toList();
+    }
+    return dump;
+  }
+
+  Future<void> restoreFromDump(
+      Map<String, List<Map<String, Object?>>> dump) async {
+    await transaction(() async {
+      for (final tableName in _allTables) {
+        await customStatement('DELETE FROM "$tableName"');
+        final rows = dump[tableName] ?? [];
+        for (final row in rows) {
+          if (row.isEmpty) continue;
+          final cols = row.keys.map((k) => '"$k"').join(', ');
+          final placeholders = row.values.map((_) => '?').join(', ');
+          final variables = _rowToVars(row);
+          await customInsert(
+            'INSERT OR REPLACE INTO "$tableName" ($cols) VALUES ($placeholders)',
+            variables: variables,
+          );
+        }
+      }
+    });
+  }
+
+  // ───────────────────────── Sync helpers ─────────────────────────
+
+  /// Dump only syncable rows since [since] for WiFi sync.
+  Future<Map<String, List<Map<String, Object?>>>> dumpSince(
+      DateTime since) async {
+    const appendOnly = [
+      'transactions', 'transaction_items', 'transaction_payments',
+      'stock_ledger', 'loyalty_point_ledger', 'expenses',
+    ];
+    const masterData = [
+      'products', 'product_units', 'price_tiers', 'product_barcodes',
+      'customers', 'customer_groups', 'customer_group_prices',
+    ];
+
+    final dump = <String, List<Map<String, Object?>>>{};
+    final sinceMs = since.millisecondsSinceEpoch;
+
+    for (final t in appendOnly) {
+      final rows = await customSelect(
+        'SELECT * FROM "$t" WHERE created_at >= ?',
+        variables: [Variable.withInt(sinceMs)],
+      ).get();
+      dump[t] = rows.map((r) => r.data).toList();
+    }
+    for (final t in masterData) {
+      final hasUpdated = t == 'products' || t == 'product_units' || t == 'customers';
+      if (hasUpdated) {
+        final rows = await customSelect(
+          'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
+          variables: [Variable.withInt(sinceMs), Variable.withInt(sinceMs)],
+        ).get();
+        dump[t] = rows.map((r) => r.data).toList();
+      } else {
+        final rows = await customSelect('SELECT * FROM "$t"').get();
+        dump[t] = rows.map((r) => r.data).toList();
+      }
+    }
+    return dump;
+  }
+
+  /// Merge rows from sync payload (INSERT OR IGNORE for ledger, INSERT OR REPLACE for master).
+  Future<int> mergeRows(
+      String tableName, List<Map<String, Object?>> rows, bool isAppendOnly) async {
+    var count = 0;
+    await transaction(() async {
+      for (final row in rows) {
+        if (row.isEmpty) continue;
+        final cols = row.keys.map((k) => '"$k"').join(', ');
+        final placeholders = row.values.map((_) => '?').join(', ');
+        final variables = _rowToVars(row);
+        final mode = isAppendOnly ? 'INSERT OR IGNORE' : 'INSERT OR REPLACE';
+        final inserted = await customInsert(
+          '$mode INTO "$tableName" ($cols) VALUES ($placeholders)',
+          variables: variables,
+        );
+        if (inserted > 0) count++;
+      }
+    });
+    return count;
+  }
+}
+
+/// Build typed variable list for raw SQL queries.
+/// Uses Variable<Object> for all values — SQLite will infer the type from the
+/// runtime Dart type passed through DriftSqlType.any.
+List<Variable<Object>> _rowToVars(Map<String, Object?> row) {
+  return row.values.map<Variable<Object>>((v) {
+    if (v == null) return const Variable<Object>(null);
+    if (v is bool) return Variable<Object>(v ? 1 : 0);
+    return Variable<Object>(v);
+  }).toList();
 }
 
 QueryExecutor _openConnection(String encryptionKey) {
