@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../../core/services/printer_service.dart';
@@ -16,6 +17,10 @@ class _PrinterScreenState extends State<PrinterScreen> {
   bool _loading = true;
   String? _testingMac;
 
+  /// null = belum dicek, false = ditolak, true = diberikan
+  bool? _permGranted;
+  bool _btOff = false;
+
   @override
   void initState() {
     super.initState();
@@ -24,7 +29,22 @@ class _PrinterScreenState extends State<PrinterScreen> {
 
   Future<void> _load() async {
     final savedMac = await PrinterService.getSavedMac();
-    final btEnabled = await PrintBluetoothThermal.bluetoothEnabled;
+
+    // Minta izin Bluetooth runtime DULU. Tanpa ini, plugin menggantung di
+    // Android 12+ (Future tidak pernah selesai → layar loading selamanya).
+    final granted = await PrinterService.ensurePermissions();
+    if (!granted) {
+      if (!mounted) return;
+      setState(() {
+        _savedMac = savedMac;
+        _permGranted = false;
+        _devices = [];
+        _loading = false;
+      });
+      return;
+    }
+
+    final btEnabled = await PrinterService.isBluetoothOn();
     List<BluetoothInfo> devices = [];
     if (btEnabled) {
       devices = await PrinterService.getPairedDevices();
@@ -32,6 +52,8 @@ class _PrinterScreenState extends State<PrinterScreen> {
     if (!mounted) return;
     setState(() {
       _savedMac = savedMac;
+      _permGranted = true;
+      _btOff = !btEnabled;
       _devices = devices;
       _loading = false;
     });
@@ -85,23 +107,45 @@ class _PrinterScreenState extends State<PrinterScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _devices.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.bluetooth_disabled, size: 64, color: scheme.outlineVariant),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Tidak ada printer Bluetooth yang dipasangkan.\n'
-                        'Pasangkan printer terlebih dahulu di Pengaturan Bluetooth HP.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: scheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
+          : _permGranted == false
+              ? _MessageState(
+                  icon: Icons.lock_outline,
+                  message:
+                      'Izin Bluetooth belum diberikan.\nAplikasi butuh izin '
+                      '"Perangkat di sekitar" untuk menyambung ke printer.',
+                  actionLabel: 'Buka Pengaturan Izin',
+                  onAction: () => openAppSettings(),
+                  secondaryLabel: 'Coba Lagi',
+                  onSecondary: () {
+                    setState(() => _loading = true);
+                    _load();
+                  },
                 )
-              : Column(
+              : _btOff
+                  ? _MessageState(
+                      icon: Icons.bluetooth_disabled,
+                      message:
+                          'Bluetooth mati.\nAktifkan Bluetooth HP lalu coba lagi.',
+                      actionLabel: 'Coba Lagi',
+                      onAction: () {
+                        setState(() => _loading = true);
+                        _load();
+                      },
+                    )
+                  : _devices.isEmpty
+                      ? _MessageState(
+                          icon: Icons.print_disabled_outlined,
+                          message:
+                              'Tidak ada printer Bluetooth yang dipasangkan.\n'
+                              'Pasangkan printer dulu di Pengaturan Bluetooth HP, '
+                              'lalu kembali dan tekan Coba Lagi.',
+                          actionLabel: 'Coba Lagi',
+                          onAction: () {
+                            setState(() => _loading = true);
+                            _load();
+                          },
+                        )
+                      : Column(
                   children: [
                     if (_savedMac != null)
                       Container(
@@ -185,6 +229,52 @@ class _PrinterScreenState extends State<PrinterScreen> {
                     ),
                   ],
                 ),
+    );
+  }
+}
+
+class _MessageState extends StatelessWidget {
+  const _MessageState({
+    required this.icon,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+    this.secondaryLabel,
+    this.onSecondary,
+  });
+
+  final IconData icon;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 64, color: scheme.outlineVariant),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 20),
+            FilledButton(onPressed: onAction, child: Text(actionLabel)),
+            if (secondaryLabel != null && onSecondary != null) ...[
+              const SizedBox(height: 8),
+              TextButton(onPressed: onSecondary, child: Text(secondaryLabel!)),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

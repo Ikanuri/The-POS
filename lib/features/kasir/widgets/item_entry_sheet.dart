@@ -210,14 +210,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 10),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: scheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(2),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: scheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   Padding(
@@ -227,11 +228,34 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                       children: [
                         Text(widget.product.name,
                             style: Theme.of(context).textTheme.titleMedium),
-                        if (widget.product.kodeProduk != null)
-                          Text(widget.product.kodeProduk!,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant)),
+                        const SizedBox(height: 2),
+                        Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (_sel != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: scheme.secondaryContainer,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Satuan: ${_sel!.unitName}',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: scheme.onSecondaryContainer),
+                                ),
+                              ),
+                            if (widget.product.kodeProduk != null)
+                              Text('Kode: ${widget.product.kodeProduk!}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant)),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -320,9 +344,12 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  _StepBtn(
-                                    icon: Icons.remove,
-                                    onTap: () => _setQty(_qty - 1),
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                        size: 24),
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => _setQty(_qty - 1),
                                   ),
                                   Expanded(
                                     child: TextField(
@@ -344,9 +371,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       },
                                     ),
                                   ),
-                                  _StepBtn(
-                                    icon: Icons.add,
-                                    onTap: () => _setQty(_qty + 1),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline,
+                                        size: 24),
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => _setQty(_qty + 1),
                                   ),
                                 ],
                               ),
@@ -507,26 +536,3 @@ class _PriceChip extends StatelessWidget {
   }
 }
 
-class _StepBtn extends StatelessWidget {
-  const _StepBtn({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: scheme.outlineVariant, width: 0.75),
-        ),
-        child: Icon(icon, size: 18, color: scheme.onSurface),
-      ),
-    );
-  }
-}

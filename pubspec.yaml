@@ -34,6 +34,7 @@ dependencies:
   # Printer thermal Bluetooth
   print_bluetooth_thermal: ^1.0.9
   esc_pos_utils_plus: ^2.0.4
+  permission_handler: ^11.3.1
 
   # WiFi LAN sync
   shelf: ^1.4.0

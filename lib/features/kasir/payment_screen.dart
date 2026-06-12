@@ -191,8 +191,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final localId =
           '${device.deviceCode}-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${(txCount + 1).toString().padLeft(4, '0')}';
 
-      final paidAmount = _selectedMethodType == 'tempo' ? 0 : _paid;
-      final status = paidAmount < _total ? 'kurang_bayar' : 'lunas';
+      final isTempo = _selectedMethodType == 'tempo';
+      final paidAmount = isTempo ? 0 : _paid;
+      final status = isTempo
+          ? 'tempo'
+          : (paidAmount < _total ? 'kurang_bayar' : 'lunas');
 
       // Customer resolution
       final customerId = _selectedCustomer?.id;
@@ -635,20 +638,40 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _methods.map((m) {
-              final selected = m.id == _selectedMethodId;
-              return ChoiceChip(
-                label: Text(m.name),
-                selected: selected,
+            children: [
+              ..._methods.map((m) {
+                final selected = m.id == _selectedMethodId;
+                return ChoiceChip(
+                  label: Text(m.name),
+                  selected: selected,
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedMethodId = m.id;
+                      _selectedMethodType = m.type;
+                    });
+                  },
+                  selectedColor: scheme.primaryContainer,
+                );
+              }),
+              // Bayar Nanti (tempo / pre-order) — selalu tersedia.
+              ChoiceChip(
+                avatar: Icon(Icons.schedule,
+                    size: 16,
+                    color: _selectedMethodType == 'tempo'
+                        ? scheme.onTertiaryContainer
+                        : scheme.onSurfaceVariant),
+                label: const Text('Bayar Nanti'),
+                selected: _selectedMethodType == 'tempo',
                 onSelected: (_) {
                   setState(() {
-                    _selectedMethodId = m.id;
-                    _selectedMethodType = m.type;
+                    _selectedMethodId = 'pm-tempo';
+                    _selectedMethodType = 'tempo';
+                    _tendered = 0;
                   });
                 },
-                selectedColor: scheme.primaryContainer,
-              );
-            }).toList(),
+                selectedColor: scheme.tertiaryContainer,
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -658,32 +681,61 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
           if (_selectedMethodType == 'tempo') ...[
             Card(
-              color: scheme.errorContainer,
+              color: scheme.tertiaryContainer,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: scheme.onErrorContainer),
+                    Icon(Icons.schedule, color: scheme.onTertiaryContainer),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Transaksi tempo: pembayaran dicatat 0, status kurang_bayar. Tagih via Riwayat Transaksi.',
+                        'Bayar Nanti: barang diserahkan / dipesan sekarang, '
+                        'dibayar belakangan. Dicatat sebagai hutang penuh '
+                        '(${formatRupiah(_total)}). Tagih lewat Riwayat Transaksi.',
                         style: TextStyle(
-                            color: scheme.onErrorContainer, fontSize: 12),
+                            color: scheme.onTertiaryContainer, fontSize: 12),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+            if (_selectedCustomer == null) ...[
+              const SizedBox(height: 8),
+              Card(
+                color: scheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded,
+                          color: scheme.onErrorContainer, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Pilih pelanggan terdaftar agar hutang bisa dilacak '
+                          'akumulatif. Tanpa pelanggan, hutang hanya tercatat di nota ini.',
+                          style: TextStyle(
+                              color: scheme.onErrorContainer, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
 
                 const SizedBox(height: 16),
               ],
             ),
           ),
-          // Keypad tunai sticky — selalu terlihat tanpa scroll.
-          if (_selectedMethodType == 'tunai') _buildCashPanel(scheme),
+          // Keypad tunai sticky — disembunyikan saat keyboard sistem muncul
+          // (mis. sedang mengetik nama pelanggan) agar tidak menghalangi.
+          if (_selectedMethodType == 'tunai' &&
+              MediaQuery.of(context).viewInsets.bottom == 0)
+            _buildCashPanel(scheme),
         ],
       ),
       bottomNavigationBar: Padding(
@@ -707,6 +759,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   String _confirmLabel() {
+    if (_selectedMethodType == 'tempo') {
+      return 'Simpan Hutang ${formatRupiah(_total)}';
+    }
     if (_selectedMethodType != 'tunai') return 'Konfirmasi Transaksi';
     if (_change > 0) return 'Kembali ${formatRupiah(_change)}';
     if (_shortfall > 0) return 'Catat Hutang ${formatRupiah(_shortfall)}';

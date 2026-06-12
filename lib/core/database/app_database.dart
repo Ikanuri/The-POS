@@ -798,6 +798,16 @@ class AppDatabase extends _$AppDatabase {
     return q.watch();
   }
 
+  /// Soft-delete pelanggan (set isActive=false). Transaksi & riwayat historis
+  /// tetap utuh karena hanya menyembunyikan dari daftar aktif.
+  Future<void> deactivateCustomer(String id) =>
+      (update(customers)..where((t) => t.id.equals(id))).write(
+        CustomersCompanion(
+          isActive: const Value(false),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
   // ───────────────────────── Held orders ─────────────────────────
 
   Stream<List<HeldOrder>> watchHeldOrders() =>

@@ -121,6 +121,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       };
 
   Future<void> _showTambahBayar(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
     final ctrl = TextEditingController();
     final remaining = _tx!.total - _tx!.paid;
     final result = await showDialog<int>(
@@ -157,27 +158,36 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       final db = ref.read(databaseProvider);
       final device = ref.read(deviceProvider);
       final now = DateTime.now();
+      final tx = _tx!;
+      // Uang diterima boleh melebihi sisa → kelebihan jadi kembalian.
+      final applied = result.clamp(1, remaining);
+      final change = result > remaining ? result - remaining : 0;
+
       await db.into(db.transactionPayments).insert(
             TransactionPaymentsCompanion.insert(
               id: _receiptUuid.v4(),
               transactionId: widget.transactionId,
-              amount: result,
+              amount: applied,
               method: 'tunai',
               paidAt: Value(now),
               kasirId: Value(device.deviceCode),
             ),
           );
 
-      final tx = _tx!;
-      final newPaid = tx.paid + result;
-      final newStatus = newPaid >= tx.total ? 'lunas' : 'kurang_bayar';
+      final newPaid = tx.paid + applied;
+      final lunas = newPaid >= tx.total;
       await (db.update(db.transactions)
             ..where((t) => t.id.equals(widget.transactionId)))
           .write(TransactionsCompanion(
         paid: Value(newPaid),
-        status: Value(newStatus),
+        status: Value(lunas ? 'lunas' : 'kurang_bayar'),
+        changeAmount: Value(tx.changeAmount + change),
       ));
       await _load();
+      if (change > 0) {
+        messenger.showSnackBar(SnackBar(
+            content: Text('Kembalian ${formatRupiah(change)}')));
+      }
     }
   }
 
@@ -341,7 +351,22 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           content: const Text('Printer belum dikonfigurasi'),
           action: SnackBarAction(
             label: 'Pengaturan',
-            onPressed: () {},
+            onPressed: () => context.push('/pengaturan/printer'),
+          ),
+        ),
+      );
+      return;
+    }
+    // Pastikan izin Bluetooth runtime sudah ada agar tidak menggantung.
+    final granted = await PrinterService.ensurePermissions();
+    if (!granted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Izin Bluetooth ditolak'),
+          action: SnackBarAction(
+            label: 'Pengaturan',
+            onPressed: () => context.push('/pengaturan/printer'),
           ),
         ),
       );

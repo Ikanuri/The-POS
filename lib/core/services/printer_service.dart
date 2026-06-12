@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,14 +22,45 @@ class PrinterService {
     await prefs.setString(_prefMac, mac);
   }
 
+  /// Minta izin Bluetooth runtime (Android 12+). WAJIB dipanggil sebelum
+  /// memakai plugin: tanpa izin, plugin print_bluetooth_thermal tidak pernah
+  /// menyelesaikan Future-nya (layar menggantung "loading" selamanya).
+  ///
+  /// Mengembalikan true bila izin lengkap.
+  static Future<bool> ensurePermissions() async {
+    final statuses = await [
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+    ].request();
+    // bluetoothScan kadang tidak relevan (mis. iOS); cukup connect yang granted.
+    final connect = statuses[Permission.bluetoothConnect];
+    return connect == null || connect.isGranted || connect.isLimited;
+  }
+
+  /// Cek izin tanpa meminta. Untuk membedakan "belum diminta" vs "ditolak".
+  static Future<bool> hasPermissions() async {
+    final connect = await Permission.bluetoothConnect.status;
+    return connect.isGranted || connect.isLimited;
+  }
+
+  static Future<bool> isBluetoothOn() => PrintBluetoothThermal.bluetoothEnabled
+      .timeout(const Duration(seconds: 6), onTimeout: () => false);
+
   static Future<List<BluetoothInfo>> getPairedDevices() async =>
-      PrintBluetoothThermal.pairedBluetooths;
+      PrintBluetoothThermal.pairedBluetooths.timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => <BluetoothInfo>[],
+      );
 
   static Future<bool> connect(String mac) async =>
-      PrintBluetoothThermal.connect(macPrinterAddress: mac);
+      PrintBluetoothThermal.connect(macPrinterAddress: mac).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => false,
+      );
 
   static Future<bool> get isConnected async =>
-      PrintBluetoothThermal.connectionStatus;
+      PrintBluetoothThermal.connectionStatus
+          .timeout(const Duration(seconds: 6), onTimeout: () => false);
 
   static Future<bool> disconnect() async =>
       PrintBluetoothThermal.disconnect;

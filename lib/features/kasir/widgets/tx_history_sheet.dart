@@ -523,7 +523,9 @@ class _TxDetail extends ConsumerWidget {
     );
 
     if (result == null || result <= 0 || !context.mounted) return;
-    final payment = result.clamp(1, remaining);
+    // Uang yang diterima boleh melebihi sisa tagihan → sisanya jadi kembalian.
+    final applied = result.clamp(1, remaining); // yang masuk ke tagihan
+    final change = result > remaining ? result - remaining : 0; // kembalian
 
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
@@ -531,24 +533,29 @@ class _TxDetail extends ConsumerWidget {
           TransactionPaymentsCompanion.insert(
             id: _txUuid.v4(),
             transactionId: tx.id,
-            amount: payment,
+            amount: applied,
             method: 'tunai',
             paidAt: Value(DateTime.now()),
             kasirId: Value(device.deviceCode),
           ),
         );
-    final newPaid = tx.paid + payment;
+    final newPaid = tx.paid + applied;
+    final lunas = newPaid >= tx.total;
     await (db.update(db.transactions)..where((t) => t.id.equals(tx.id)))
         .write(TransactionsCompanion(
       paid: Value(newPaid),
-      status: Value(newPaid >= tx.total ? 'lunas' : 'kurang_bayar'),
+      status: Value(lunas ? 'lunas' : 'kurang_bayar'),
+      // Akumulasi kembalian agar tercatat di struk.
+      changeAmount: Value(tx.changeAmount + change),
     ));
     onChanged();
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(newPaid >= tx.total
-              ? '${tx.localId} lunas'
-              : 'Pembayaran dicatat, sisa ${formatRupiah(tx.total - newPaid)}')));
+      final msg = lunas
+          ? (change > 0
+              ? '${tx.localId} lunas · kembalian ${formatRupiah(change)}'
+              : '${tx.localId} lunas')
+          : 'Pembayaran dicatat, sisa ${formatRupiah(tx.total - newPaid)}';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 

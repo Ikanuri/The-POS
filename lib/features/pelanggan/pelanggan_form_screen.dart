@@ -107,6 +107,79 @@ class _PelangganFormScreenState
     }
   }
 
+  Future<void> _delete() async {
+    final c = _existing;
+    if (c == null) return;
+    final hasDebt = c.outstandingDebt > 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Pelanggan'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Hapus "${c.name}" dari daftar pelanggan?'),
+            const SizedBox(height: 8),
+            Text(
+              'Riwayat transaksi lama tetap tersimpan. Pelanggan hanya '
+              'disembunyikan dari daftar aktif.',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+            ),
+            if (hasDebt) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 18,
+                        color: Theme.of(ctx).colorScheme.onErrorContainer),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Masih punya hutang ${formatRupiah(c.outstandingDebt)}. '
+                        'Pastikan sudah dilunasi / dicatat.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(ctx).colorScheme.onErrorContainer),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final db = ref.read(databaseProvider);
+    await db.deactivateCustomer(c.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Pelanggan "${c.name}" dihapus')));
+      context.pop();
+    }
+  }
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -122,6 +195,14 @@ class _PelangganFormScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Pelanggan' : 'Tambah Pelanggan'),
+        actions: [
+          if (_isEdit && _existing != null)
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: scheme.error),
+              tooltip: 'Hapus Pelanggan',
+              onPressed: _isLoading ? null : _delete,
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
