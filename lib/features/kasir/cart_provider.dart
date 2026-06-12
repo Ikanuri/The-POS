@@ -103,6 +103,23 @@ final cartProvider = StateNotifierProvider<CartNotifier, List<CartItem>>(
   (ref) => CartNotifier(),
 );
 
+/// Susun keranjang: induk diikuti varian-variannya (tampilan bersarang).
+List<CartItem> orderCartItems(List<CartItem> cart) {
+  final out = <CartItem>[];
+  for (final it in cart) {
+    if (!it.isVariant) {
+      out.add(it);
+      for (final c in cart) {
+        if (c.isVariant && c.parentProductId == it.productId) out.add(c);
+      }
+    }
+  }
+  for (final it in cart) {
+    if (it.isVariant && !out.contains(it)) out.add(it);
+  }
+  return out;
+}
+
 /// Pilihan tampilan katalog kasir (grid/list) yang disimpan ke prefs
 /// sehingga tidak ter-reset saat aplikasi dibuka ulang.
 class KasirGridNotifier extends StateNotifier<bool> {

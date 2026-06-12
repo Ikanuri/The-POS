@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/utils/input_formatters.dart';
 
 const _uuid = Uuid();
 
@@ -31,6 +32,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   List<UnitType> _unitTypes = [];
   int? _selectedGroupId;
   String? _productId;
+  Stream<List<Product>>? _variantStream;
 
   @override
   void initState() {
@@ -390,6 +392,98 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                 setState(() => _units[e.key] = updated),
                         onRemove: () => _removeUnit(e.key),
                       )),
+
+                  // ── Varian (produk anak / add-on) ────────────────────
+                  if (_isEdit && _productId != null) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Text('Varian',
+                            style: Theme.of(context).textTheme.titleSmall),
+                        const Spacer(),
+                        if (!_readOnly)
+                          TextButton.icon(
+                            onPressed: _addVariant,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Tambah Varian'),
+                          ),
+                      ],
+                    ),
+                    Text(
+                      'Sub-item seperti rasa / tipe (mis. Pop Ice → Coklat). '
+                      'Muncul saat tap produk di kasir & bersarang di struk.',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    StreamBuilder<List<Product>>(
+                      stream: _variantStream ??= ref
+                          .read(databaseProvider)
+                          .watchVariants(_productId!),
+                      builder: (ctx, snap) {
+                        final vs = snap.data ?? const <Product>[];
+                        if (vs.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Text('Belum ada varian.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant)),
+                          );
+                        }
+                        return Column(
+                          children: vs
+                              .map((v) => Card(
+                                    margin:
+                                        const EdgeInsets.only(bottom: 6),
+                                    child: ListTile(
+                                      dense: true,
+                                      leading: const Icon(
+                                          Icons.subdirectory_arrow_right,
+                                          size: 18),
+                                      title: Text(v.name),
+                                      subtitle: v.kodeProduk != null
+                                          ? Text('Kode: ${v.kodeProduk}',
+                                              style: const TextStyle(
+                                                  fontSize: 11))
+                                          : null,
+                                      trailing: _readOnly
+                                          ? null
+                                          : IconButton(
+                                              icon: Icon(
+                                                  Icons.delete_outline,
+                                                  size: 20,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .error),
+                                              onPressed: () =>
+                                                  _deleteVariant(v),
+                                            ),
+                                    ),
+                                  ))
+                              .toList(),
+                        );
+                      },
+                    ),
+                  ],
+                  if (_isEdit == false)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        'Simpan produk dulu untuk menambahkan varian.',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant),
+                      ),
+                    ),
                   const SizedBox(height: 80),
                 ],
               ),
@@ -405,6 +499,110 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               ),
             ),
     );
+  }
+
+  Future<void> _addVariant() async {
+    final base = _units.firstWhere((u) => u.isBaseUnit,
+        orElse: () => _units.isNotEmpty
+            ? _units.first
+            : _UnitEntry(
+                id: '',
+                unitTypeId: 1,
+                isBaseUnit: true,
+                ratioToBase: 1,
+                price: 0,
+                costPrice: 0));
+    final nameCtrl = TextEditingController();
+    // Harga default mengikuti induk.
+    final priceCtrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(base.price));
+    final barcodeCtrl = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tambah Varian'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                  labelText: 'Nama Varian *', hintText: 'Contoh: Coklat'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: priceCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [ThousandsSeparatorFormatter()],
+              decoration: const InputDecoration(
+                  labelText: 'Harga', prefixText: 'Rp '),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: barcodeCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                  labelText: 'Barcode (opsional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+            onPressed: () {
+              if (nameCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Tambah'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final db = ref.read(databaseProvider);
+    await db.createVariant(
+      parentProductId: _productId!,
+      name: nameCtrl.text.trim(),
+      price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
+      costPrice: base.costPrice,
+      unitTypeId: base.unitTypeId,
+      barcode: barcodeCtrl.text.trim().isEmpty
+          ? null
+          : barcodeCtrl.text.trim(),
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Varian "${nameCtrl.text.trim()}" ditambahkan')),
+      );
+    }
+  }
+
+  Future<void> _deleteVariant(Product v) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Varian'),
+        content: Text('Hapus varian "${v.name}"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(databaseProvider).deleteVariant(v.id);
   }
 
   Future<void> _confirmDeactivate() async {

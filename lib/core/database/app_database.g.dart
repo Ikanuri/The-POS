@@ -258,6 +258,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> kodeProduk = GeneratedColumn<String>(
       'kode_produk', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _parentProductIdMeta =
+      const VerificationMeta('parentProductId');
+  @override
+  late final GeneratedColumn<String> parentProductId = GeneratedColumn<String>(
+      'parent_product_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _isActiveMeta =
       const VerificationMeta('isActive');
   @override
@@ -285,8 +291,16 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, name, productGroupId, kodeProduk, isActive, createdAt, updatedAt];
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        productGroupId,
+        kodeProduk,
+        parentProductId,
+        isActive,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -320,6 +334,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           kodeProduk.isAcceptableOrUnknown(
               data['kode_produk']!, _kodeProdukMeta));
     }
+    if (data.containsKey('parent_product_id')) {
+      context.handle(
+          _parentProductIdMeta,
+          parentProductId.isAcceptableOrUnknown(
+              data['parent_product_id']!, _parentProductIdMeta));
+    }
     if (data.containsKey('is_active')) {
       context.handle(_isActiveMeta,
           isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta));
@@ -349,6 +369,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.int, data['${effectivePrefix}product_group_id']),
       kodeProduk: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}kode_produk']),
+      parentProductId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}parent_product_id']),
       isActive: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
       createdAt: attachedDatabase.typeMapping
@@ -369,6 +391,11 @@ class Product extends DataClass implements Insertable<Product> {
   final String name;
   final int? productGroupId;
   final String? kodeProduk;
+
+  /// Bila terisi, produk ini adalah VARIAN dari produk induk (mis. Pop Ice →
+  /// Coklat). Varian disembunyikan dari katalog utama dan muncul sebagai
+  /// pilihan add-on di modal entri item induk.
+  final String? parentProductId;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -377,6 +404,7 @@ class Product extends DataClass implements Insertable<Product> {
       required this.name,
       this.productGroupId,
       this.kodeProduk,
+      this.parentProductId,
       required this.isActive,
       required this.createdAt,
       required this.updatedAt});
@@ -390,6 +418,9 @@ class Product extends DataClass implements Insertable<Product> {
     }
     if (!nullToAbsent || kodeProduk != null) {
       map['kode_produk'] = Variable<String>(kodeProduk);
+    }
+    if (!nullToAbsent || parentProductId != null) {
+      map['parent_product_id'] = Variable<String>(parentProductId);
     }
     map['is_active'] = Variable<bool>(isActive);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -407,6 +438,9 @@ class Product extends DataClass implements Insertable<Product> {
       kodeProduk: kodeProduk == null && nullToAbsent
           ? const Value.absent()
           : Value(kodeProduk),
+      parentProductId: parentProductId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentProductId),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -421,6 +455,7 @@ class Product extends DataClass implements Insertable<Product> {
       name: serializer.fromJson<String>(json['name']),
       productGroupId: serializer.fromJson<int?>(json['productGroupId']),
       kodeProduk: serializer.fromJson<String?>(json['kodeProduk']),
+      parentProductId: serializer.fromJson<String?>(json['parentProductId']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -434,6 +469,7 @@ class Product extends DataClass implements Insertable<Product> {
       'name': serializer.toJson<String>(name),
       'productGroupId': serializer.toJson<int?>(productGroupId),
       'kodeProduk': serializer.toJson<String?>(kodeProduk),
+      'parentProductId': serializer.toJson<String?>(parentProductId),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -445,6 +481,7 @@ class Product extends DataClass implements Insertable<Product> {
           String? name,
           Value<int?> productGroupId = const Value.absent(),
           Value<String?> kodeProduk = const Value.absent(),
+          Value<String?> parentProductId = const Value.absent(),
           bool? isActive,
           DateTime? createdAt,
           DateTime? updatedAt}) =>
@@ -454,6 +491,9 @@ class Product extends DataClass implements Insertable<Product> {
         productGroupId:
             productGroupId.present ? productGroupId.value : this.productGroupId,
         kodeProduk: kodeProduk.present ? kodeProduk.value : this.kodeProduk,
+        parentProductId: parentProductId.present
+            ? parentProductId.value
+            : this.parentProductId,
         isActive: isActive ?? this.isActive,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -467,6 +507,9 @@ class Product extends DataClass implements Insertable<Product> {
           : this.productGroupId,
       kodeProduk:
           data.kodeProduk.present ? data.kodeProduk.value : this.kodeProduk,
+      parentProductId: data.parentProductId.present
+          ? data.parentProductId.value
+          : this.parentProductId,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -480,6 +523,7 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('name: $name, ')
           ..write('productGroupId: $productGroupId, ')
           ..write('kodeProduk: $kodeProduk, ')
+          ..write('parentProductId: $parentProductId, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -488,8 +532,8 @@ class Product extends DataClass implements Insertable<Product> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, name, productGroupId, kodeProduk, isActive, createdAt, updatedAt);
+  int get hashCode => Object.hash(id, name, productGroupId, kodeProduk,
+      parentProductId, isActive, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -498,6 +542,7 @@ class Product extends DataClass implements Insertable<Product> {
           other.name == this.name &&
           other.productGroupId == this.productGroupId &&
           other.kodeProduk == this.kodeProduk &&
+          other.parentProductId == this.parentProductId &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -508,6 +553,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<String> name;
   final Value<int?> productGroupId;
   final Value<String?> kodeProduk;
+  final Value<String?> parentProductId;
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -517,6 +563,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.name = const Value.absent(),
     this.productGroupId = const Value.absent(),
     this.kodeProduk = const Value.absent(),
+    this.parentProductId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -527,6 +574,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     required String name,
     this.productGroupId = const Value.absent(),
     this.kodeProduk = const Value.absent(),
+    this.parentProductId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -538,6 +586,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<String>? name,
     Expression<int>? productGroupId,
     Expression<String>? kodeProduk,
+    Expression<String>? parentProductId,
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -548,6 +597,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (name != null) 'name': name,
       if (productGroupId != null) 'product_group_id': productGroupId,
       if (kodeProduk != null) 'kode_produk': kodeProduk,
+      if (parentProductId != null) 'parent_product_id': parentProductId,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -560,6 +610,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<String>? name,
       Value<int?>? productGroupId,
       Value<String?>? kodeProduk,
+      Value<String?>? parentProductId,
       Value<bool>? isActive,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
@@ -569,6 +620,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       name: name ?? this.name,
       productGroupId: productGroupId ?? this.productGroupId,
       kodeProduk: kodeProduk ?? this.kodeProduk,
+      parentProductId: parentProductId ?? this.parentProductId,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -590,6 +642,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     }
     if (kodeProduk.present) {
       map['kode_produk'] = Variable<String>(kodeProduk.value);
+    }
+    if (parentProductId.present) {
+      map['parent_product_id'] = Variable<String>(parentProductId.value);
     }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
@@ -613,6 +668,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('name: $name, ')
           ..write('productGroupId: $productGroupId, ')
           ..write('kodeProduk: $kodeProduk, ')
+          ..write('parentProductId: $parentProductId, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -9192,6 +9248,7 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   required String name,
   Value<int?> productGroupId,
   Value<String?> kodeProduk,
+  Value<String?> parentProductId,
   Value<bool> isActive,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -9202,6 +9259,7 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<String> name,
   Value<int?> productGroupId,
   Value<String?> kodeProduk,
+  Value<String?> parentProductId,
   Value<bool> isActive,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -9249,6 +9307,10 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get kodeProduk => $composableBuilder(
       column: $table.kodeProduk, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get parentProductId => $composableBuilder(
+      column: $table.parentProductId,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnFilters(column));
@@ -9303,6 +9365,10 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get kodeProduk => $composableBuilder(
       column: $table.kodeProduk, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get parentProductId => $composableBuilder(
+      column: $table.parentProductId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnOrderings(column));
 
@@ -9333,6 +9399,9 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get kodeProduk => $composableBuilder(
       column: $table.kodeProduk, builder: (column) => column);
+
+  GeneratedColumn<String> get parentProductId => $composableBuilder(
+      column: $table.parentProductId, builder: (column) => column);
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
@@ -9392,6 +9461,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<String> name = const Value.absent(),
             Value<int?> productGroupId = const Value.absent(),
             Value<String?> kodeProduk = const Value.absent(),
+            Value<String?> parentProductId = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -9402,6 +9472,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             name: name,
             productGroupId: productGroupId,
             kodeProduk: kodeProduk,
+            parentProductId: parentProductId,
             isActive: isActive,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -9412,6 +9483,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             required String name,
             Value<int?> productGroupId = const Value.absent(),
             Value<String?> kodeProduk = const Value.absent(),
+            Value<String?> parentProductId = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -9422,6 +9494,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             name: name,
             productGroupId: productGroupId,
             kodeProduk: kodeProduk,
+            parentProductId: parentProductId,
             isActive: isActive,
             createdAt: createdAt,
             updatedAt: updatedAt,

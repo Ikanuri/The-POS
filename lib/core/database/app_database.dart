@@ -88,7 +88,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -119,6 +119,10 @@ class AppDatabase extends _$AppDatabase {
             for (final stmt in _performanceIndexes) {
               await customStatement(stmt);
             }
+          }
+          if (from < 3) {
+            // Varian produk via kolom parent_product_id.
+            await m.addColumn(products, products.parentProductId);
           }
         },
         beforeOpen: (details) async {
@@ -256,7 +260,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<List<Product>> watchProducts({String query = '', int? groupId}) {
-    final q = (select(products)..where((t) => t.isActive.equals(true)));
+    final q = (select(products)
+      ..where((t) => t.isActive.equals(true))
+      // Sembunyikan varian (produk anak) dari katalog utama.
+      ..where((t) => t.parentProductId.isNull()));
     if (query.isNotEmpty) {
       q.where((t) => t.name.lower().contains(query.toLowerCase()));
     }
@@ -266,6 +273,93 @@ class AppDatabase extends _$AppDatabase {
     q.orderBy([(t) => OrderingTerm.asc(t.name)]);
     return q.watch();
   }
+
+  /// Varian (produk anak) aktif milik [parentProductId], urut nama.
+  Future<List<Product>> getVariants(String parentProductId) =>
+      (select(products)
+            ..where((t) =>
+                t.parentProductId.equals(parentProductId) &
+                t.isActive.equals(true))
+            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          .get();
+
+  Stream<List<Product>> watchVariants(String parentProductId) =>
+      (select(products)
+            ..where((t) =>
+                t.parentProductId.equals(parentProductId) &
+                t.isActive.equals(true))
+            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          .watch();
+
+  /// Map productId → parentProductId untuk daftar produk tertentu (dipakai
+  /// struk untuk menyusun varian di bawah induk). Hanya yang punya induk.
+  Future<Map<String, String>> getParentMap(List<String> productIds) async {
+    if (productIds.isEmpty) return {};
+    final rows = await (select(products)
+          ..where((t) =>
+              t.id.isIn(productIds) & t.parentProductId.isNotNull()))
+        .get();
+    return {for (final r in rows) r.id: r.parentProductId!};
+  }
+
+  /// Buat varian baru: produk anak + satu satuan dasar + tier harga + barcode
+  /// opsional. Harga default mengikuti induk (di-pass oleh pemanggil).
+  Future<void> createVariant({
+    required String parentProductId,
+    required String name,
+    required int price,
+    required int costPrice,
+    int? unitTypeId,
+    String? barcode,
+    String? kodeProduk,
+  }) async {
+    final now = DateTime.now();
+    final productId = const Uuid().v4();
+    final unitId = const Uuid().v4();
+    await transaction(() async {
+      await into(products).insert(ProductsCompanion.insert(
+        id: productId,
+        name: name,
+        parentProductId: Value(parentProductId),
+        kodeProduk: Value(kodeProduk),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ));
+      await into(productUnits).insert(ProductUnitsCompanion.insert(
+        id: unitId,
+        productId: productId,
+        unitTypeId: Value(unitTypeId),
+        isBaseUnit: const Value(true),
+        ratioToBase: const Value(1.0),
+        isNonStock: const Value(true),
+      ));
+      await into(priceTiers).insert(PriceTiersCompanion.insert(
+        id: const Uuid().v4(),
+        productUnitId: unitId,
+        minQty: const Value(1),
+        price: price,
+        costPrice: Value(costPrice),
+        createdAt: Value(now),
+      ));
+      if (barcode != null && barcode.trim().isNotEmpty) {
+        await into(productBarcodes).insert(ProductBarcodesCompanion.insert(
+          id: const Uuid().v4(),
+          productUnitId: unitId,
+          barcode: barcode.trim(),
+          isPrimary: const Value(true),
+        ));
+      }
+    });
+  }
+
+  /// Soft-delete varian (set isActive=false).
+  Future<void> deleteVariant(String variantProductId) =>
+      (update(products)..where((t) => t.id.equals(variantProductId))).write(
+        ProductsCompanion(
+          isActive: const Value(false),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
   Future<List<ProductUnit>> getProductUnits(String productId) =>
       (select(productUnits)..where((t) => t.productId.equals(productId))).get();

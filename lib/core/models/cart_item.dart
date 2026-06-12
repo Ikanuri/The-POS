@@ -14,6 +14,8 @@ class CartItem {
     this.priceOverridden = false,
     this.itemNote,
     this.barcode,
+    this.parentProductId,
+    this.isVariant = false,
   });
 
   final String productId;
@@ -27,6 +29,11 @@ class CartItem {
   final bool priceOverridden;
   final String? itemNote;
   final String? barcode;
+
+  /// Bila item ini varian (produk anak), berisi id produk induk agar di
+  /// keranjang & struk tampil bersarang di bawah induknya.
+  final String? parentProductId;
+  final bool isVariant;
 
   int get subtotal => (price * qty).round();
 
@@ -48,6 +55,8 @@ class CartItem {
         priceOverridden: priceOverridden ?? this.priceOverridden,
         itemNote: itemNote ?? this.itemNote,
         barcode: barcode,
+        parentProductId: parentProductId,
+        isVariant: isVariant,
       );
 
   Map<String, dynamic> toJson() => {
@@ -62,6 +71,8 @@ class CartItem {
         'priceOverridden': priceOverridden,
         'itemNote': itemNote,
         'barcode': barcode,
+        'parentProductId': parentProductId,
+        'isVariant': isVariant,
       };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
@@ -76,5 +87,7 @@ class CartItem {
         priceOverridden: json['priceOverridden'] as bool? ?? false,
         itemNote: json['itemNote'] as String?,
         barcode: json['barcode'] as String?,
+        parentProductId: json['parentProductId'] as String?,
+        isVariant: json['isVariant'] as bool? ?? false,
       );
 }

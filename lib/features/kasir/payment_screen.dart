@@ -434,12 +434,30 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     ],
                   ),
                 ),
-                ...cart.map((item) => ListTile(
+                ...orderCartItems(cart).map((item) => ListTile(
                       dense: true,
-                      title: Text(item.productName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13)),
+                      contentPadding: EdgeInsets.only(
+                          left: item.isVariant ? 32 : 16, right: 16),
+                      title: Row(
+                        children: [
+                          if (item.isVariant)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(Icons.subdirectory_arrow_right,
+                                  size: 13, color: scheme.onSurfaceVariant),
+                            ),
+                          Expanded(
+                            child: Text(item.productName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: item.isVariant
+                                        ? scheme.onSurfaceVariant
+                                        : null)),
+                          ),
+                        ],
+                      ),
                       subtitle: Text(
                           '${item.unitName} × ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty}',
                           style: const TextStyle(fontSize: 11)),

@@ -62,15 +62,21 @@ class CartSheet extends ConsumerWidget {
                       style: TextStyle(color: scheme.onSurfaceVariant),
                     ),
                   )
-                : ListView.separated(
-                    controller: scrollCtrl,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: cart.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 1, indent: 56),
-                    itemBuilder: (ctx2, i) =>
-                        _CartItemTile(index: i, item: cart[i]),
-                  ),
+                : Builder(builder: (_) {
+                    final ordered = orderCartItems(cart);
+                    return ListView.separated(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: ordered.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, indent: 56),
+                      itemBuilder: (ctx2, i) => _CartItemTile(
+                        index: i,
+                        item: ordered[i],
+                        isVariant: ordered[i].isVariant,
+                      ),
+                    );
+                  }),
           ),
           const Divider(height: 1),
           Padding(
@@ -117,9 +123,11 @@ class CartSheet extends ConsumerWidget {
 }
 
 class _CartItemTile extends ConsumerWidget {
-  const _CartItemTile({required this.index, required this.item});
+  const _CartItemTile(
+      {required this.index, required this.item, this.isVariant = false});
   final int index;
   final CartItem item;
+  final bool isVariant;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -128,7 +136,25 @@ class _CartItemTile extends ConsumerWidget {
 
     return ListTile(
       dense: true,
-      title: Text(item.productName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      contentPadding: EdgeInsets.only(left: isVariant ? 32 : 16, right: 4),
+      title: Row(
+        children: [
+          if (isVariant)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(Icons.subdirectory_arrow_right,
+                  size: 14, color: scheme.onSurfaceVariant),
+            ),
+          Expanded(
+            child: Text(item.productName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: isVariant ? 13 : null,
+                    color: isVariant ? scheme.onSurfaceVariant : null)),
+          ),
+        ],
+      ),
       subtitle: Row(
         children: [
           Text(item.unitName,

@@ -46,11 +46,33 @@ class _UnitOption {
   final String? barcode;
 }
 
+/// Varian (produk anak) yang bisa ditambahkan sebagai item add-on bersarang.
+class _VariantOption {
+  _VariantOption({
+    required this.product,
+    required this.unitId,
+    required this.unitName,
+    required this.price,
+    required this.costPrice,
+    this.barcode,
+  });
+
+  final Product product;
+  final String unitId;
+  final String unitName;
+  final int price;
+  final int costPrice;
+  final String? barcode;
+}
+
 class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   bool _loading = true;
   bool _canOverride = false;
   List<_UnitOption> _options = [];
   int _selectedIdx = 0;
+
+  List<_VariantOption> _variants = [];
+  final Map<String, double> _variantQty = {}; // variant productId → qty
 
   double _qty = 1;
   int _price = 0;
@@ -110,10 +132,45 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       ));
     }
 
+    // Varian (produk anak) — tiap varian punya satuan dasar sendiri.
+    final variantProducts = await db.getVariants(widget.product.id);
+    final variants = <_VariantOption>[];
+    for (final vp in variantProducts) {
+      final vUnits = await db.getProductUnits(vp.id);
+      if (vUnits.isEmpty) continue;
+      final base =
+          vUnits.firstWhere((u) => u.isBaseUnit, orElse: () => vUnits.first);
+      final vType = await (db.select(db.unitTypes)
+            ..where((t) => t.id.equals(base.unitTypeId ?? 1)))
+          .getSingleOrNull();
+      final vResolved = await priceService.resolvePrice(
+        productUnitId: base.id,
+        qty: 1,
+        customerGroupId: widget.customerGroupId,
+      );
+      final vBarcodes = await db.getProductBarcodes(base.id);
+      variants.add(_VariantOption(
+        product: vp,
+        unitId: base.id,
+        unitName: vType?.name ?? 'Satuan',
+        price: vResolved.price,
+        costPrice: vResolved.costPrice,
+        barcode: vBarcodes
+            .where((b) => b.isPrimary)
+            .map((b) => b.barcode)
+            .firstOrNull,
+      ));
+    }
+
     if (!mounted) return;
 
     // Jika item ini sudah ada di keranjang, prefill qty & harga-nya.
     final cart = ref.read(cartProvider);
+    // Prefill qty varian yang sudah ada di keranjang.
+    for (final v in variants) {
+      final ex = cart.where((c) => c.productUnitId == v.unitId).firstOrNull;
+      if (ex != null) _variantQty[v.product.id] = ex.qty;
+    }
     var selIdx = 0;
     double qty = 1;
     int price = opts.isNotEmpty ? opts.first.basePrice : 0;
@@ -133,6 +190,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
 
     setState(() {
       _options = opts;
+      _variants = variants;
       _canOverride = canOverride;
       _selectedIdx = selIdx;
       _qty = qty;
@@ -142,6 +200,18 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
       _qtyCtrl.text = _fmtQty(qty);
     });
+  }
+
+  void _setVariantQty(String variantId, double q) {
+    setState(() => _variantQty[variantId] = q.clamp(0, 9999));
+  }
+
+  int get _variantTotal {
+    var total = 0;
+    for (final v in _variants) {
+      total += (v.price * (_variantQty[v.product.id] ?? 0)).round();
+    }
+    return total;
   }
 
   String _fmtQty(double q) => q % 1 == 0 ? q.toInt().toString() : q.toString();
@@ -189,6 +259,24 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       priceOverridden: _priceOverridden,
       barcode: sel.barcode,
     ));
+
+    // Varian terpilih → item add-on bersarang di bawah induk.
+    for (final v in _variants) {
+      final vq = _variantQty[v.product.id] ?? 0;
+      notifier.setItem(CartItem(
+        productId: v.product.id,
+        productUnitId: v.unitId,
+        productName: v.product.name,
+        unitName: v.unitName,
+        qty: vq,
+        price: v.price,
+        originalPrice: v.price,
+        costPrice: v.costPrice,
+        barcode: v.barcode,
+        parentProductId: widget.product.id,
+        isVariant: true,
+      ));
+    }
     Navigator.of(context).pop();
   }
 
@@ -435,6 +523,47 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                       ],
                     ),
                   ),
+
+                  // ── Varian (add-on bersarang) ─────────────────────────
+                  if (_variants.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_tree_outlined,
+                              size: 15, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text('Varian',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 196),
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          for (final v in _variants)
+                            _VariantRow(
+                              name: v.product.name,
+                              unitName: v.unitName,
+                              price: v.price,
+                              qty: _variantQty[v.product.id] ?? 0,
+                              onMinus: () => _setVariantQty(v.product.id,
+                                  (_variantQty[v.product.id] ?? 0) - 1),
+                              onPlus: () => _setVariantQty(v.product.id,
+                                  (_variantQty[v.product.id] ?? 0) + 1),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
 
                   // ── Subtotal + submit ─────────────────────────────────
@@ -446,12 +575,13 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Subtotal',
+                            Text(_variantTotal > 0 ? 'Total' : 'Subtotal',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: scheme.onSurfaceVariant)),
                             Text(
-                              formatRupiah((_price * _qty).round()),
+                              formatRupiah(
+                                  (_price * _qty).round() + _variantTotal),
                               style: AppTheme.numStyle(context,
                                   size: 18, weight: FontWeight.w700),
                             ),
@@ -471,6 +601,82 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _VariantRow extends StatelessWidget {
+  const _VariantRow({
+    required this.name,
+    required this.unitName,
+    required this.price,
+    required this.qty,
+    required this.onMinus,
+    required this.onPlus,
+  });
+
+  final String name;
+  final String unitName;
+  final int price;
+  final double qty;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final active = qty > 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: active
+            ? scheme.secondaryContainer.withOpacity(0.5)
+            : scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: active ? scheme.secondary : scheme.outlineVariant,
+          width: active ? 1.2 : 0.75,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                Text('$unitName · ${formatRupiah(price)}',
+                    style: TextStyle(
+                        fontSize: 10.5, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, size: 22),
+            visualDensity: VisualDensity.compact,
+            onPressed: qty <= 0 ? null : onMinus,
+          ),
+          SizedBox(
+            width: 24,
+            child: Text(
+              qty % 1 == 0 ? qty.toInt().toString() : qty.toString(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, size: 22),
+            visualDensity: VisualDensity.compact,
+            onPressed: onPlus,
+          ),
+        ],
       ),
     );
   }

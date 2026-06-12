@@ -76,6 +76,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    Map<String, String?> parentOf = const {},
     Set<String> checkedIds = const {},
   }) async {
     final mac = await getSavedMac();
@@ -94,6 +95,7 @@ class PrinterService {
       storeAddress: storeAddress,
       storePhone: storePhone,
       strukNote: strukNote,
+      parentOf: parentOf,
       checkedIds: checkedIds,
     );
 
@@ -121,6 +123,34 @@ class PrinterService {
     return PrintBluetoothThermal.writeBytes(Uint8List.fromList(bytes));
   }
 
+  /// Item induk dari sebuah baris (null bila bukan varian / induk tak ada).
+  static TransactionItem? _parentItemOf(
+      TransactionItem item, List<TransactionItem> items,
+      Map<String, String?> parentOf) {
+    final pid = parentOf[item.productId];
+    if (pid == null) return null;
+    for (final it in items) {
+      if (it.productId == pid && parentOf[it.productId] == null) return it;
+    }
+    return null;
+  }
+
+  /// Urutkan item: induk diikuti varian-variannya.
+  static List<TransactionItem> _orderItems(
+      List<TransactionItem> items, Map<String, String?> parentOf) {
+    if (parentOf.isEmpty) return items;
+    final out = <TransactionItem>[];
+    for (final it in items) {
+      if (_parentItemOf(it, items, parentOf) == null) {
+        out.add(it);
+        for (final c in items) {
+          if (_parentItemOf(c, items, parentOf)?.id == it.id) out.add(c);
+        }
+      }
+    }
+    return out;
+  }
+
   static Future<Uint8List> _buildBytes({
     required Transaction tx,
     required List<TransactionItem> items,
@@ -131,6 +161,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    Map<String, String?> parentOf = const {},
     Set<String> checkedIds = const {},
   }) async {
     final profile = await CapabilityProfile.load();
@@ -171,17 +202,20 @@ class PrinterService {
     }
     out.addAll(gen.hr());
 
-    // Item
-    for (final item in items) {
+    // Item (varian bersarang di bawah induk dengan indentasi)
+    for (final item in _orderItems(items, parentOf)) {
+      final isVar = _parentItemOf(item, items, parentOf) != null;
+      final pad = isVar ? '  ' : '';
       final rawName = productNames[item.productId] ?? 'Produk';
-      final pName = checkedIds.contains(item.id) ? '[v] $rawName' : rawName;
+      final marked = checkedIds.contains(item.id) ? '[v] $rawName' : rawName;
+      final pName = isVar ? '$pad> $marked' : marked;
       final uName = unitNames[item.productUnitId] ?? '';
       out.addAll(gen.text('$pName ($uName)',
           styles: const PosStyles(), linesAfter: 0));
       final qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
       out.addAll(gen.row([
         PosColumn(
-            text: '  $qtyStr x ${_fmtRp(item.priceAtSale)}',
+            text: '$pad  $qtyStr x ${_fmtRp(item.priceAtSale)}',
             width: 8),
         PosColumn(
             text: _fmtRp(item.subtotal),
@@ -189,7 +223,7 @@ class PrinterService {
             styles: const PosStyles(align: PosAlign.right)),
       ]));
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-        out.addAll(gen.text('  * ${item.itemNote}',
+        out.addAll(gen.text('$pad  * ${item.itemNote}',
             styles: const PosStyles(fontType: PosFontType.fontB)));
       }
     }

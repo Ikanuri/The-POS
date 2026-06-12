@@ -287,6 +287,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         originalPrice: resolved.price,
         costPrice: resolved.costPrice,
         barcode: barcode,
+        // Bila barcode milik varian (produk anak), tandai agar tampil
+        // bersarang di bawah induknya di keranjang & struk.
+        parentProductId: product.parentProductId,
+        isVariant: product.parentProductId != null,
       ),
     );
   }
@@ -882,12 +886,13 @@ class _ProductCard extends ConsumerWidget {
                       qty: qty,
                       size: 32,
                       onTap: () {
-                        // Satuan tunggal: tap selalu menambah 1 (counter naik).
-                        // Multi-satuan: buka modal untuk pilih satuan/harga.
-                        if (d.unitCount <= 1) {
-                          onQuickAdd(product, d);
-                        } else {
+                        // "+" selalu menambah 1 satuan dasar agar selalu
+                        // berfungsi. Untuk pilih satuan lain / varian, ketuk
+                        // badan kartu (buka modal).
+                        if (d.baseUnitId.isEmpty) {
                           onOpenEntry();
+                        } else {
+                          onQuickAdd(product, d);
                         }
                       },
                     ),
@@ -1022,10 +1027,10 @@ class _ProductListTile extends ConsumerWidget {
               data: (d) => _AddControl(
                 qty: qty,
                 onTap: () {
-                  if (d.unitCount <= 1) {
-                    onQuickAdd(product, d);
-                  } else {
+                  if (d.baseUnitId.isEmpty) {
                     onOpenEntry();
+                  } else {
+                    onQuickAdd(product, d);
                   }
                 },
               ),

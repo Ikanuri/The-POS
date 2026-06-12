@@ -32,6 +32,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   List<TransactionItem> _items = [];
   Map<String, String> _productNames = {};
   Map<String, String> _unitNames = {};
+  Map<String, String?> _parentOf = {}; // productId → parentProductId
   Customer? _customer;
   bool _loading = true;
 
@@ -43,6 +44,100 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       .where((e) => e.value)
       .map((e) => e.key)
       .toSet();
+
+  /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
+  /// induknya tidak ada di transaksi ini).
+  TransactionItem? _parentItemOf(TransactionItem item) {
+    final pid = _parentOf[item.productId];
+    if (pid == null) return null;
+    for (final it in _items) {
+      if (it.productId == pid && _parentOf[it.productId] == null) return it;
+    }
+    return null;
+  }
+
+  List<TransactionItem> get _topLevelItems =>
+      _items.where((i) => _parentItemOf(i) == null).toList();
+
+  List<TransactionItem> _childrenOf(TransactionItem parent) =>
+      _items.where((i) => _parentItemOf(i)?.id == parent.id).toList();
+
+  void _setParentChecked(TransactionItem parent, bool v) {
+    setState(() {
+      _checked[parent.id] = v;
+      for (final c in _childrenOf(parent)) {
+        _checked[c.id] = v;
+      }
+    });
+  }
+
+  void _setChildChecked(TransactionItem parent, TransactionItem child, bool v) {
+    setState(() {
+      _checked[child.id] = v;
+      final kids = _childrenOf(parent);
+      _checked[parent.id] = kids.every((c) => _checked[c.id] == true);
+    });
+  }
+
+  Widget _itemCheckRow(TransactionItem item, ColorScheme scheme,
+      {required bool isVariant, TransactionItem? parent}) {
+    final checked = _checked[item.id] ?? false;
+    final hasChildren = !isVariant && _childrenOf(item).isNotEmpty;
+    return CheckboxListTile(
+      dense: true,
+      controlAffinity: ListTileControlAffinity.leading,
+      value: checked,
+      contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 4),
+      onChanged: (v) {
+        final nv = v ?? false;
+        if (isVariant && parent != null) {
+          _setChildChecked(parent, item, nv);
+        } else if (hasChildren) {
+          _setParentChecked(item, nv);
+        } else {
+          setState(() => _checked[item.id] = nv);
+        }
+      },
+      title: Row(
+        children: [
+          if (isVariant)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(Icons.subdirectory_arrow_right,
+                  size: 13, color: scheme.onSurfaceVariant),
+            ),
+          Expanded(
+            child: Text(
+              _productNames[item.productId] ?? item.productId,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: isVariant ? 12 : 13,
+                fontWeight: isVariant ? FontWeight.w400 : FontWeight.w500,
+                decoration: checked ? TextDecoration.lineThrough : null,
+                color: checked
+                    ? scheme.onSurfaceVariant
+                    : (isVariant ? scheme.onSurfaceVariant : null),
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Padding(
+        padding: EdgeInsets.only(left: isVariant ? 17 : 0),
+        child: Text(
+          '${_unitNames[item.productUnitId] ?? ''} ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} × ${formatRupiah(item.priceAtSale)}'
+          '${item.itemNote != null ? '\n${item.itemNote}' : ''}',
+          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+        ),
+      ),
+      secondary: Text(
+        formatRupiah(item.subtotal),
+        style: TextStyle(
+            fontSize: isVariant ? 12 : 13, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -73,12 +168,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // Load product + unit names
     final productNames = <String, String>{};
     final unitNames = <String, String>{};
+    final parentOf = <String, String?>{};
     for (final item in items) {
       if (!productNames.containsKey(item.productId)) {
         final p = await (db.select(db.products)
               ..where((t) => t.id.equals(item.productId)))
             .getSingleOrNull();
         productNames[item.productId] = p?.name ?? item.productId;
+        parentOf[item.productId] = p?.parentProductId;
       }
       if (!unitNames.containsKey(item.productUnitId)) {
         final u = await (db.select(db.productUnits)
@@ -99,6 +196,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _items = items;
         _productNames = productNames;
         _unitNames = unitNames;
+        _parentOf = parentOf;
         _customer = customer;
         _loading = false;
       });
@@ -383,6 +481,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       storeAddress: prefs.$2,
       storePhone: prefs.$3,
       strukNote: _tx!.strukNote,
+      parentOf: _parentOf,
       checkedIds: _checkedIds,
     );
     if (!mounted) return;
@@ -442,6 +541,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           : device.storeName,
                       storeAddress: prefs.$2,
                       storePhone: prefs.$3,
+                      parentOf: _parentOf,
                       checkedIds: _checkedIds,
                     ),
                   ),
@@ -677,42 +777,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               ),
             ),
 
-          // Items
+          // Items (varian bersarang di bawah induk)
           Card(
             child: Column(
               children: [
-                ..._items.map((item) {
-                  final checked = _checked[item.id] ?? false;
-                  return CheckboxListTile(
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    value: checked,
-                    onChanged: (v) =>
-                        setState(() => _checked[item.id] = v ?? false),
-                    title: Text(
-                      _productNames[item.productId] ?? item.productId,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        decoration:
-                            checked ? TextDecoration.lineThrough : null,
-                        color: checked ? scheme.onSurfaceVariant : null,
-                      ),
-                    ),
-                    subtitle: Text(
-                      '${_unitNames[item.productUnitId] ?? ''} ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} × ${formatRupiah(item.priceAtSale)}'
-                      '${item.itemNote != null ? '\n${item.itemNote}' : ''}',
-                      style: TextStyle(
-                          fontSize: 11, color: scheme.onSurfaceVariant),
-                    ),
-                    secondary: Text(
-                      formatRupiah(item.subtotal),
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                  );
-                }),
+                for (final parent in _topLevelItems) ...[
+                  _itemCheckRow(parent, scheme, isVariant: false),
+                  for (final child in _childrenOf(parent))
+                    _itemCheckRow(child, scheme,
+                        isVariant: true, parent: parent),
+                ],
                 const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -824,6 +898,7 @@ class _ReceiptPaper extends StatelessWidget {
     required this.storeName,
     required this.storeAddress,
     required this.storePhone,
+    this.parentOf = const {},
     this.checkedIds = const {},
   });
 
@@ -831,6 +906,7 @@ class _ReceiptPaper extends StatelessWidget {
   final List<TransactionItem> items;
   final Map<String, String> productNames;
   final Map<String, String> unitNames;
+  final Map<String, String?> parentOf;
   final String customerName;
   final String storeName;
   final String storeAddress;
@@ -840,6 +916,29 @@ class _ReceiptPaper extends StatelessWidget {
   static const _ink = Color(0xFF111111);
   static const _mono = TextStyle(
       fontFamily: 'monospace', fontSize: 12, color: _ink, height: 1.4);
+
+  TransactionItem? _parentItemOf(TransactionItem item) {
+    final pid = parentOf[item.productId];
+    if (pid == null) return null;
+    for (final it in items) {
+      if (it.productId == pid && parentOf[it.productId] == null) return it;
+    }
+    return null;
+  }
+
+  /// Item terurut: induk diikuti varian-variannya.
+  List<TransactionItem> get _ordered {
+    final out = <TransactionItem>[];
+    for (final it in items) {
+      if (_parentItemOf(it) == null) {
+        out.add(it);
+        for (final c in items) {
+          if (_parentItemOf(c)?.id == it.id) out.add(c);
+        }
+      }
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -879,25 +978,30 @@ class _ReceiptPaper extends StatelessWidget {
               style: _mono.copyWith(
                   fontSize: 16, fontWeight: FontWeight.w900)),
           const _DashedLine(),
-          ...items.expand((item) {
+          ..._ordered.expand((item) {
+            final isVar = _parentItemOf(item) != null;
+            final pad = isVar ? '  ' : '';
             final qtyStr = item.qty % 1 == 0
                 ? item.qty.toInt().toString()
                 : item.qty.toString();
             final mark = checkedIds.contains(item.id) ? '✓ ' : '';
+            final namePrefix = isVar ? '$pad└ ' : '';
             return [
-              Text('$mark${productNames[item.productId] ?? ''}',
-                  style: _mono.copyWith(fontWeight: FontWeight.w700)),
+              Text('$mark$namePrefix${productNames[item.productId] ?? ''}',
+                  style: _mono.copyWith(
+                      fontWeight:
+                          isVar ? FontWeight.w400 : FontWeight.w700)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                      '$qtyStr ${unitNames[item.productUnitId] ?? ''} x ${_fmtNum(item.priceAtSale)}',
+                      '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''} x ${_fmtNum(item.priceAtSale)}',
                       style: _mono),
                   Text(_fmtNum(item.subtotal), style: _mono),
                 ],
               ),
               if (item.itemNote != null)
-                Text('* ${item.itemNote}',
+                Text('$pad* ${item.itemNote}',
                     style: _mono.copyWith(
                         fontSize: 11, fontStyle: FontStyle.italic)),
             ];
