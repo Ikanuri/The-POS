@@ -29,7 +29,6 @@ class AppTheme {
 
   // Warm-tinted shadows: rgba(48,36,22,…)
   static const _sh1L = Color(0x0F302416); // light .06
-  static const _sh2L = Color(0x17302416); // light .09
   static const _sh1D = Color(0x4D000000); // dark  .30
 
   static ThemeData light() => _build(false);

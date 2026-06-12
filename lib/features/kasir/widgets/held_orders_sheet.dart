@@ -8,6 +8,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/top_toast.dart';
 import '../cart_provider.dart';
 
 const _heldUuid = Uuid();
@@ -223,9 +224,8 @@ class _HeldTile extends ConsumerWidget {
     await ref.read(databaseProvider).deleteHeldOrder(order.id);
     if (context.mounted) {
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Melanjutkan: ${order.label}')),
-      );
+      showTopToast(context, 'Melanjutkan pesanan: ${order.label}',
+          icon: Icons.play_circle_fill_rounded);
     }
   }
 

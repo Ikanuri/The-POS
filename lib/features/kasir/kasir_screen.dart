@@ -11,11 +11,10 @@ import '../../core/theme/app_theme.dart';
 import 'cart_provider.dart';
 import 'widgets/cart_sheet.dart';
 import 'widgets/held_orders_sheet.dart';
+import 'widgets/item_entry_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
-import 'widgets/variant_sheet.dart';
 
 final _kasirSearchProvider = StateProvider<String>((ref) => '');
-final _kasirGridProvider = StateProvider<bool>((ref) => true);
 
 final _heldCountProvider = StreamProvider<int>((ref) {
   return ref
@@ -30,6 +29,57 @@ final _kasirProductsProvider =
   return db.watchProducts(query: query);
 });
 
+/// Detail katalog per produk: harga satuan dasar + jumlah satuan.
+class CatalogDetail {
+  const CatalogDetail({
+    required this.baseUnitId,
+    required this.baseUnitName,
+    required this.basePrice,
+    required this.costPrice,
+    required this.unitCount,
+    this.barcode,
+  });
+
+  final String baseUnitId;
+  final String baseUnitName;
+  final int basePrice;
+  final int costPrice;
+  final int unitCount;
+  final String? barcode;
+}
+
+final _catalogDetailProvider =
+    FutureProvider.family<CatalogDetail, String>((ref, productId) async {
+  final db = ref.watch(databaseProvider);
+  final units = await db.getProductUnits(productId);
+  if (units.isEmpty) {
+    return const CatalogDetail(
+      baseUnitId: '',
+      baseUnitName: 'Satuan',
+      basePrice: 0,
+      costPrice: 0,
+      unitCount: 0,
+    );
+  }
+  final base =
+      units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+  final resolved =
+      await PriceService(db).resolvePrice(productUnitId: base.id, qty: 1);
+  final unitType = await (db.select(db.unitTypes)
+        ..where((t) => t.id.equals(base.unitTypeId ?? 1)))
+      .getSingleOrNull();
+  final barcodes = await db.getProductBarcodes(base.id);
+  return CatalogDetail(
+    baseUnitId: base.id,
+    baseUnitName: unitType?.name ?? 'Satuan',
+    basePrice: resolved.price,
+    costPrice: resolved.costPrice,
+    unitCount: units.length,
+    barcode:
+        barcodes.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull,
+  );
+});
+
 // Gradient palette for product avatars — cycles by first char code
 const _kAvatarGradients = [
   [Color(0xFFD97757), Color(0xFFC96442)],
@@ -39,6 +89,10 @@ const _kAvatarGradients = [
   [Color(0xFF7B5EA7), Color(0xFF654E90)],
   [Color(0xFF4E8B8B), Color(0xFF3A7474)],
 ];
+
+List<Color> _gradFor(String name) =>
+    _kAvatarGradients[(name.isEmpty ? 0 : name.codeUnitAt(0)) %
+        _kAvatarGradients.length];
 
 class KasirScreen extends ConsumerStatefulWidget {
   const KasirScreen({super.key});
@@ -94,9 +148,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           ..where((t) => t.id.equals(unit.productId)))
         .getSingleOrNull();
     if (product == null || !mounted) return;
-    final priceService = PriceService(db);
     final resolved =
-        await priceService.resolvePrice(productUnitId: unit.id, qty: 1);
+        await PriceService(db).resolvePrice(productUnitId: unit.id, qty: 1);
     final unitType = await (db.select(db.unitTypes)
           ..where((t) => t.id.equals(unit.unitTypeId ?? 1)))
         .getSingleOrNull();
@@ -113,39 +166,26 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         ));
   }
 
-  void _showVariantSheet(Product product) {
+  void _openEntry(Product product) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => VariantSheet(product: product),
+      builder: (_) => ItemEntrySheet(product: product),
     );
   }
 
-  Future<void> _addSingleUnit(Product product) async {
-    final db = ref.read(databaseProvider);
-    final units = await db.getProductUnits(product.id);
-    if (!mounted) return;
-    if (units.length > 1) {
-      _showVariantSheet(product);
-      return;
-    }
-    final unit = units.isNotEmpty ? units.first : null;
-    if (unit == null) return;
-    final priceService = PriceService(db);
-    final resolved =
-        await priceService.resolvePrice(productUnitId: unit.id, qty: 1);
-    final unitType = await (db.select(db.unitTypes)
-          ..where((t) => t.id.equals(unit.unitTypeId ?? 1)))
-        .getSingleOrNull();
+  /// Tambah cepat 1 satuan dasar (produk satuan tunggal).
+  void _quickAdd(Product product, CatalogDetail detail) {
     ref.read(cartProvider.notifier).addItem(CartItem(
           productId: product.id,
-          productUnitId: unit.id,
+          productUnitId: detail.baseUnitId,
           productName: product.name,
-          unitName: unitType?.name ?? 'Satuan',
+          unitName: detail.baseUnitName,
           qty: 1,
-          price: resolved.price,
-          originalPrice: resolved.price,
-          costPrice: resolved.costPrice,
+          price: detail.basePrice,
+          originalPrice: detail.basePrice,
+          costPrice: detail.costPrice,
+          barcode: detail.barcode,
         ));
   }
 
@@ -173,7 +213,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final cart = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
     final query = ref.watch(_kasirSearchProvider);
-    final isGrid = ref.watch(_kasirGridProvider);
+    final isGrid = ref.watch(kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
     final productsAsync = ref.watch(_kasirProductsProvider(query));
     final cs = Theme.of(context).colorScheme;
@@ -197,8 +237,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             ),
             heldCount: heldCount,
             isGrid: isGrid,
-            onToggleGrid: () =>
-                ref.read(_kasirGridProvider.notifier).state = !isGrid,
+            onToggleGrid: () => ref.read(kasirGridProvider.notifier).toggle(),
           ),
           Expanded(
             child: productsAsync.when(
@@ -220,18 +259,14 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          query.isEmpty ? 'Belum ada produk' : 'Produk tidak ditemukan',
+                          query.isEmpty
+                              ? 'Belum ada produk'
+                              : 'Produk tidak ditemukan',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: cs.onSurfaceVariant,
                           ),
                         ),
-                        if (query.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text('"$query"',
-                              style: TextStyle(
-                                  fontSize: 12, color: cs.onSurfaceVariant)),
-                        ],
                       ],
                     ),
                   );
@@ -241,16 +276,17 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                     padding: const EdgeInsets.all(12),
                     gridDelegate:
                         const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 160,
-                      mainAxisExtent: 118,
+                      maxCrossAxisExtent: 180,
+                      mainAxisExtent: 138,
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
                     ),
                     itemCount: prods.length,
                     itemBuilder: (_, i) => _ProductCard(
                       product: prods[i],
-                      onTap: () => _addSingleUnit(prods[i]),
-                      onLongPress: () => _showVariantSheet(prods[i]),
+                      onTapBody: () => _openEntry(prods[i]),
+                      onQuickAdd: _quickAdd,
+                      onOpenEntry: () => _openEntry(prods[i]),
                     ),
                   );
                 }
@@ -261,8 +297,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                       Divider(height: 1, indent: 62, color: cs.outlineVariant),
                   itemBuilder: (_, i) => _ProductListTile(
                     product: prods[i],
-                    onTap: () => _addSingleUnit(prods[i]),
-                    onLongPress: () => _showVariantSheet(prods[i]),
+                    onTapBody: () => _openEntry(prods[i]),
+                    onQuickAdd: _quickAdd,
+                    onOpenEntry: () => _openEntry(prods[i]),
                   ),
                 );
               },
@@ -325,7 +362,6 @@ class _KasirTopbar extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(12, topPadding + 8, 12, 10),
             child: Row(
               children: [
-                // Brand mark
                 Container(
                   width: 36,
                   height: 36,
@@ -351,7 +387,6 @@ class _KasirTopbar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Inline search field
                 Expanded(
                   child: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: searchCtrl,
@@ -363,7 +398,8 @@ class _KasirTopbar extends StatelessWidget {
                           prefixIcon: const Icon(Icons.search_rounded, size: 18),
                           suffixIcon: value.text.isNotEmpty
                               ? IconButton(
-                                  icon: const Icon(Icons.clear_rounded, size: 16),
+                                  icon:
+                                      const Icon(Icons.clear_rounded, size: 16),
                                   onPressed: () {
                                     searchCtrl.clear();
                                     onSearch('');
@@ -371,7 +407,8 @@ class _KasirTopbar extends StatelessWidget {
                                 )
                               : null,
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10,
+                            horizontal: 12,
+                            vertical: 10,
                           ),
                           isDense: true,
                         ),
@@ -392,9 +429,8 @@ class _KasirTopbar extends StatelessWidget {
                 _TbBtn(icon: Icons.history_rounded, onTap: onHistory),
                 const SizedBox(width: 4),
                 _TbBtn(
-                  icon: isGrid
-                      ? Icons.view_list_rounded
-                      : Icons.grid_view_rounded,
+                  icon:
+                      isGrid ? Icons.view_list_rounded : Icons.grid_view_rounded,
                   onTap: onToggleGrid,
                 ),
               ],
@@ -436,34 +472,90 @@ class _TbBtn extends StatelessWidget {
   }
 }
 
-// ─── Product grid card ────────────────────────────────────────────────────────
+// ─── Add / counter control ────────────────────────────────────────────────────
 
-class _ProductCard extends StatelessWidget {
-  const _ProductCard({
-    required this.product,
+/// Tombol "+" yang berubah jadi lingkaran berisi jumlah saat produk ada di
+/// keranjang. Tap menambah 1 (produk satuan tunggal) atau membuka modal
+/// (produk multi-satuan).
+class _AddControl extends StatelessWidget {
+  const _AddControl({
+    required this.qty,
     required this.onTap,
-    required this.onLongPress,
+    this.size = 34,
   });
 
-  final Product product;
+  final double qty;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    final inCart = qty > 0;
+    final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          color: AppTheme.accent,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x33C96442),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Center(
+          child: inCart
+              ? Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: size * 0.42,
+                  ),
+                )
+              : Icon(Icons.add_rounded, color: Colors.white, size: size * 0.6),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Product grid card ────────────────────────────────────────────────────────
+
+class _ProductCard extends ConsumerWidget {
+  const _ProductCard({
+    required this.product,
+    required this.onTapBody,
+    required this.onQuickAdd,
+    required this.onOpenEntry,
+  });
+
+  final Product product;
+  final VoidCallback onTapBody;
+  final void Function(Product, CatalogDetail) onQuickAdd;
+  final VoidCallback onOpenEntry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    final gradIdx =
-        (product.name.isEmpty ? 0 : product.name.codeUnitAt(0)) %
-            _kAvatarGradients.length;
-    final grad = _kAvatarGradients[gradIdx];
+    final grad = _gradFor(product.name);
+    final detailAsync = ref.watch(_catalogDetailProvider(product.id));
+    final cart = ref.watch(cartProvider);
+    final qty = cart
+        .where((c) => c.productId == product.id)
+        .fold<double>(0, (s, c) => s + c.qty);
 
     return Material(
       color: cs.surfaceContainerLow,
       borderRadius: BorderRadius.circular(14),
-      elevation: 0,
       child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
+        onTap: onTapBody,
         borderRadius: BorderRadius.circular(14),
         child: Container(
           decoration: BoxDecoration(
@@ -474,10 +566,9 @@ class _ProductCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Gradient avatar
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -494,12 +585,12 @@ class _ProductCard extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 15,
+                      fontSize: 14,
                     ),
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: 6),
               Text(
                 product.name,
                 maxLines: 2,
@@ -507,18 +598,48 @@ class _ProductCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
-                  height: 1.3,
+                  height: 1.25,
                 ),
               ),
-              if (product.kodeProduk != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  product.kodeProduk!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
-                ),
-              ],
+              const Spacer(),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: detailAsync.when(
+                      data: (d) => Text(
+                        formatRupiah(d.basePrice),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.numStyle(context,
+                            size: 14, weight: FontWeight.w700),
+                      ),
+                      loading: () => const SizedBox(
+                        height: 14,
+                        width: 40,
+                        child: _PriceShimmer(),
+                      ),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  detailAsync.maybeWhen(
+                    data: (d) => _AddControl(
+                      qty: qty,
+                      size: 32,
+                      onTap: () {
+                        // Satuan tunggal: tap selalu menambah 1 (counter naik).
+                        // Multi-satuan: buka modal untuk pilih satuan/harga.
+                        if (d.unitCount <= 1) {
+                          onQuickAdd(product, d);
+                        } else {
+                          onOpenEntry();
+                        }
+                      },
+                    ),
+                    orElse: () => const SizedBox(width: 32, height: 32),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -527,32 +648,48 @@ class _ProductCard extends StatelessWidget {
   }
 }
 
+class _PriceShimmer extends StatelessWidget {
+  const _PriceShimmer();
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(4),
+      ),
+    );
+  }
+}
+
 // ─── Product list tile ────────────────────────────────────────────────────────
 
-class _ProductListTile extends StatelessWidget {
+class _ProductListTile extends ConsumerWidget {
   const _ProductListTile({
     required this.product,
-    required this.onTap,
-    required this.onLongPress,
+    required this.onTapBody,
+    required this.onQuickAdd,
+    required this.onOpenEntry,
   });
 
   final Product product;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback onTapBody;
+  final void Function(Product, CatalogDetail) onQuickAdd;
+  final VoidCallback onOpenEntry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    final gradIdx =
-        (product.name.isEmpty ? 0 : product.name.codeUnitAt(0)) %
-            _kAvatarGradients.length;
-    final grad = _kAvatarGradients[gradIdx];
+    final grad = _gradFor(product.name);
+    final detailAsync = ref.watch(_catalogDetailProvider(product.id));
+    final cart = ref.watch(cartProvider);
+    final qty = cart
+        .where((c) => c.productId == product.id)
+        .fold<double>(0, (s, c) => s + c.qty);
 
     return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
+      onTap: onTapBody,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         child: Row(
           children: [
             Container(
@@ -586,24 +723,59 @@ class _ProductListTile extends StatelessWidget {
                 children: [
                   Text(
                     product.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 13.5,
                     ),
                   ),
-                  if (product.kodeProduk != null)
-                    Text(
-                      product.kodeProduk!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant,
-                      ),
+                  const SizedBox(height: 2),
+                  detailAsync.when(
+                    data: (d) => Row(
+                      children: [
+                        Text(
+                          formatRupiah(d.basePrice),
+                          style: AppTheme.numStyle(context,
+                              size: 13.5,
+                              weight: FontWeight.w700,
+                              color: cs.primary),
+                        ),
+                        Text(
+                          ' /${d.baseUnitName}',
+                          style: TextStyle(
+                              fontSize: 11, color: cs.onSurfaceVariant),
+                        ),
+                        if (d.unitCount > 1)
+                          Text(
+                            '  +${d.unitCount - 1} satuan',
+                            style: TextStyle(
+                                fontSize: 11, color: cs.onSurfaceVariant),
+                          ),
+                      ],
                     ),
+                    loading: () => Text('…',
+                        style: TextStyle(
+                            fontSize: 12, color: cs.onSurfaceVariant)),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
                 ],
               ),
             ),
-            Icon(Icons.add_circle_outline_rounded,
-                size: 20, color: cs.primary.withOpacity(0.7)),
+            const SizedBox(width: 8),
+            detailAsync.maybeWhen(
+              data: (d) => _AddControl(
+                qty: qty,
+                onTap: () {
+                  if (d.unitCount <= 1) {
+                    onQuickAdd(product, d);
+                  } else {
+                    onOpenEntry();
+                  }
+                },
+              ),
+              orElse: () => const SizedBox(width: 34, height: 34),
+            ),
           ],
         ),
       ),
@@ -641,7 +813,6 @@ class _CartBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(14, 10, 14, 10 + bottomPad),
       child: Row(
         children: [
-          // Item count bubble
           Container(
             width: 40,
             height: 40,
@@ -661,7 +832,6 @@ class _CartBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          // Total
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -682,7 +852,6 @@ class _CartBar extends StatelessWidget {
               ],
             ),
           ),
-          // Actions
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [

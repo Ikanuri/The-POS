@@ -273,8 +273,22 @@ class AppDatabase extends _$AppDatabase {
         }
 
         final barcodes = barcodesByUnitTempId[unitId] ?? [];
+        // Form hanya mengelola barcode utama; hapus yang lama agar tidak
+        // menumpuk baris baru dengan id berbeda. Barcode hasil generate
+        // (isPrimary=false) dibiarkan.
+        await (delete(productBarcodes)
+              ..where((t) =>
+                  t.productUnitId.equals(unitId) & t.isPrimary.equals(true)))
+            .go();
         for (final bc in barcodes) {
-          await into(productBarcodes).insertOnConflictUpdate(bc);
+          // Cegah tabrakan UNIQUE(barcode): nilai barcode yang sama bisa
+          // sudah ada di baris lain (id berbeda). insertOnConflictUpdate
+          // hanya menangani konflik PK id, bukan unique barcode — jadi
+          // hapus dulu baris mana pun yang memegang nilai itu.
+          await (delete(productBarcodes)
+                ..where((t) => t.barcode.equals(bc.barcode.value)))
+              .go();
+          await into(productBarcodes).insert(bc);
         }
       }
       return productId;

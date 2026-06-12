@@ -63,6 +63,13 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
     }
   }
 
+  void _copy(String value, String label) {
+    Clipboard.setData(ClipboardData(text: value));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label disalin: $value')),
+    );
+  }
+
   Future<void> _sync() async {
     final ip = _ipCtrl.text.trim();
     final token = _tokenCtrl.text.trim().toUpperCase();
@@ -129,27 +136,22 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                     ),
                     const SizedBox(height: 12),
                     if (_hostRunning) ...[
-                      _InfoRow(label: 'IP', value: '$_hostIp:8625'),
-                      const SizedBox(height: 4),
-                      _InfoRow(label: 'Token', value: _hostToken),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: _hostToken));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Token disalin')),
-                            );
-                          },
-                          icon: const Icon(Icons.copy, size: 16),
-                          label: const Text('Salin Token'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton.tonal(
-                          onPressed: _toggleHost,
-                          child: const Text('Stop Server'),
-                        ),
-                      ]),
+                      _InfoRow(
+                        label: 'IP',
+                        value: '$_hostIp:8625',
+                        onCopy: () => _copy('$_hostIp:8625', 'IP'),
+                      ),
+                      const SizedBox(height: 6),
+                      _InfoRow(
+                        label: 'Token',
+                        value: _hostToken,
+                        onCopy: () => _copy(_hostToken, 'Token'),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(
+                        onPressed: _toggleHost,
+                        child: const Text('Stop Server'),
+                      ),
                     ] else
                       FilledButton.icon(
                         onPressed: _toggleHost,
@@ -248,26 +250,44 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({required this.label, required this.value, this.onCopy});
   final String label;
   final String value;
+  final VoidCallback? onCopy;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.only(left: 10, top: 2, bottom: 2, right: 2),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          Text('$label: ',
-              style: TextStyle(
-                  fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
-          Text(value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          SizedBox(
+            width: 44,
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5)),
+          ),
+          if (onCopy != null)
+            IconButton(
+              icon: const Icon(Icons.copy_rounded, size: 18),
+              tooltip: 'Salin',
+              visualDensity: VisualDensity.compact,
+              onPressed: onCopy,
+            ),
         ],
       ),
     );
