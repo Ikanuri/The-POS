@@ -69,17 +69,33 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       for (final u in units) {
         final tiers = await db.getPriceTiers(u.id);
         final barcodes = await db.getProductBarcodes(u.id);
-        final basePrice = tiers.isNotEmpty
-            ? tiers.lastWhere((t) => t.minQty == 1,
-                orElse: () => tiers.last)
-            : null;
+        // tiers ordered DESC minQty — base tier is the one with minQty == 1
+        final baseTier = tiers.firstWhere(
+          (t) => t.minQty == 1,
+          orElse: () => tiers.isNotEmpty ? tiers.last : PriceTier(
+            id: '', productUnitId: u.id, minQty: 1, price: 0, costPrice: 0,
+            createdAt: DateTime.now(),
+          ),
+        );
+        final extraTiers = tiers
+            .where((t) => t.minQty != 1)
+            .map((t) => _TierEntry(
+                  id: t.id,
+                  minQty: t.minQty,
+                  price: t.price,
+                  costPrice: t.costPrice,
+                ))
+            .toList()
+          ..sort((a, b) => a.minQty.compareTo(b.minQty));
+
         entries.add(_UnitEntry(
           id: u.id,
           unitTypeId: u.unitTypeId ?? 1,
           isBaseUnit: u.isBaseUnit,
           ratioToBase: u.ratioToBase,
-          price: basePrice?.price ?? 0,
-          costPrice: basePrice?.costPrice ?? 0,
+          price: baseTier.price,
+          costPrice: baseTier.costPrice,
+          extraTiers: extraTiers,
           barcode: barcodes
               .where((b) => b.isPrimary)
               .map((b) => b.barcode)
@@ -148,6 +164,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       final tiers = <String, List<PriceTiersCompanion>>{};
       for (final u in _units) {
         tiers[u.id] = [
+          // Base price (minQty defaults to 1)
           PriceTiersCompanion.insert(
             id: _uuid.v4(),
             productUnitId: u.id,
@@ -155,6 +172,15 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             costPrice: Value(u.costPrice),
             createdAt: Value(now),
           ),
+          // Grosir tiers
+          ...u.extraTiers.map((t) => PriceTiersCompanion.insert(
+                id: _uuid.v4(),
+                productUnitId: u.id,
+                minQty: Value(t.minQty),
+                price: t.price,
+                costPrice: Value(t.costPrice),
+                createdAt: Value(now),
+              )),
         ];
       }
 
@@ -388,6 +414,22 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   }
 }
 
+// ─── Data classes ────────────────────────────────────────────────────────────
+
+class _TierEntry {
+  _TierEntry({
+    required this.id,
+    required this.minQty,
+    required this.price,
+    required this.costPrice,
+  });
+
+  final String id;
+  int minQty;
+  int price;
+  int costPrice;
+}
+
 class _UnitEntry {
   _UnitEntry({
     required this.id,
@@ -396,8 +438,9 @@ class _UnitEntry {
     required this.ratioToBase,
     required this.price,
     required this.costPrice,
+    List<_TierEntry>? extraTiers,
     this.barcode,
-  });
+  }) : extraTiers = extraTiers ?? [];
 
   final String id;
   int unitTypeId;
@@ -405,6 +448,7 @@ class _UnitEntry {
   double ratioToBase;
   int price;
   int costPrice;
+  List<_TierEntry> extraTiers;
   String? barcode;
 
   _UnitEntry copyWith({
@@ -413,6 +457,7 @@ class _UnitEntry {
     double? ratioToBase,
     int? price,
     int? costPrice,
+    List<_TierEntry>? extraTiers,
     String? barcode,
   }) =>
       _UnitEntry(
@@ -422,9 +467,12 @@ class _UnitEntry {
         ratioToBase: ratioToBase ?? this.ratioToBase,
         price: price ?? this.price,
         costPrice: costPrice ?? this.costPrice,
+        extraTiers: extraTiers ?? this.extraTiers,
         barcode: barcode ?? this.barcode,
       );
 }
+
+// ─── Unit Card ───────────────────────────────────────────────────────────────
 
 class _UnitCard extends StatefulWidget {
   const _UnitCard({
@@ -456,6 +504,10 @@ class _UnitCardState extends State<_UnitCard> {
   late final TextEditingController _ratioCtrl;
   late final TextEditingController _barcodeCtrl;
 
+  late List<_TierEntry> _extraTiers;
+  late List<TextEditingController> _tierMinCtrl;
+  late List<TextEditingController> _tierPriceCtrl;
+
   @override
   void initState() {
     super.initState();
@@ -471,6 +523,15 @@ class _UnitCardState extends State<_UnitCard> {
             : '1');
     _barcodeCtrl =
         TextEditingController(text: widget.entry.barcode ?? '');
+
+    _extraTiers = List.from(widget.entry.extraTiers);
+    _tierMinCtrl = _extraTiers
+        .map((t) => TextEditingController(text: t.minQty.toString()))
+        .toList();
+    _tierPriceCtrl = _extraTiers
+        .map((t) => TextEditingController(
+            text: t.price > 0 ? t.price.toString() : ''))
+        .toList();
   }
 
   @override
@@ -479,7 +540,52 @@ class _UnitCardState extends State<_UnitCard> {
     _costCtrl.dispose();
     _ratioCtrl.dispose();
     _barcodeCtrl.dispose();
+    for (final c in _tierMinCtrl) {
+      c.dispose();
+    }
+    for (final c in _tierPriceCtrl) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _addTier() {
+    final newTier = _TierEntry(
+      id: _uuid.v4(),
+      minQty: _extraTiers.isNotEmpty
+          ? (_extraTiers.last.minQty + 10)
+          : 10,
+      price: 0,
+      costPrice: 0,
+    );
+    setState(() {
+      _extraTiers.add(newTier);
+      _tierMinCtrl
+          .add(TextEditingController(text: newTier.minQty.toString()));
+      _tierPriceCtrl.add(TextEditingController(text: ''));
+    });
+    widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
+  }
+
+  void _removeTier(int i) {
+    _tierMinCtrl[i].dispose();
+    _tierPriceCtrl[i].dispose();
+    setState(() {
+      _extraTiers.removeAt(i);
+      _tierMinCtrl.removeAt(i);
+      _tierPriceCtrl.removeAt(i);
+    });
+    widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
+  }
+
+  void _syncTier(int i) {
+    _extraTiers[i] = _TierEntry(
+      id: _extraTiers[i].id,
+      minQty: int.tryParse(_tierMinCtrl[i].text) ?? 2,
+      price: int.tryParse(_tierPriceCtrl[i].text) ?? 0,
+      costPrice: _extraTiers[i].costPrice,
+    );
+    widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
   }
 
   @override
@@ -492,6 +598,7 @@ class _UnitCardState extends State<_UnitCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Header row ──────────────────────────────────────────────────
             Row(
               children: [
                 Text(
@@ -521,6 +628,8 @@ class _UnitCardState extends State<_UnitCard> {
               ],
             ),
             const SizedBox(height: 8),
+
+            // ── Unit type dropdown ───────────────────────────────────────────
             DropdownButtonFormField<int>(
               value: widget.entry.unitTypeId,
               decoration: const InputDecoration(
@@ -540,6 +649,8 @@ class _UnitCardState extends State<_UnitCard> {
                     },
             ),
             const SizedBox(height: 8),
+
+            // ── Base price row ───────────────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -584,6 +695,8 @@ class _UnitCardState extends State<_UnitCard> {
               ],
             ),
             const SizedBox(height: 8),
+
+            // ── Ratio & barcode row ──────────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -595,7 +708,8 @@ class _UnitCardState extends State<_UnitCard> {
                       isDense: true,
                       hintText: 'Contoh: 10, 40',
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     onChanged: widget.readOnly
                         ? null
                         : (v) {
@@ -627,6 +741,90 @@ class _UnitCardState extends State<_UnitCard> {
                 ),
               ],
             ),
+
+            // ── Grosir tiers ─────────────────────────────────────────────────
+            if (_extraTiers.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Harga Grosir',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              for (var i = 0; i < _extraTiers.length; i++) ...[
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 76,
+                      child: TextFormField(
+                        controller: _tierMinCtrl[i],
+                        readOnly: widget.readOnly,
+                        decoration: const InputDecoration(
+                          labelText: '≥ Qty',
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        onChanged: widget.readOnly
+                            ? null
+                            : (_) => _syncTier(i),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _tierPriceCtrl[i],
+                        readOnly: widget.readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'Harga Grosir',
+                          isDense: true,
+                          prefixText: 'Rp ',
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        onChanged: widget.readOnly
+                            ? null
+                            : (_) => _syncTier(i),
+                      ),
+                    ),
+                    if (!widget.readOnly) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(Icons.remove_circle_outline,
+                            size: 18, color: scheme.error),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _removeTier(i),
+                        tooltip: 'Hapus tier',
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+
+            if (!widget.readOnly) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _addTier,
+                icon: const Icon(Icons.add, size: 15),
+                label: const Text('Tambah Harga Grosir'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+            ],
+
+            // ── Base unit toggle ─────────────────────────────────────────────
             if (!widget.entry.isBaseUnit) ...[
               const SizedBox(height: 4),
               CheckboxListTile(
@@ -638,8 +836,8 @@ class _UnitCardState extends State<_UnitCard> {
                     ? null
                     : (v) {
                         if (v == true) {
-                          widget
-                              .onChanged(widget.entry.copyWith(isBaseUnit: true));
+                          widget.onChanged(
+                              widget.entry.copyWith(isBaseUnit: true));
                         }
                       },
               ),
