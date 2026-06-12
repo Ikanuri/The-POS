@@ -8,7 +8,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
 
   void addItem(CartItem item) {
     final idx = state.indexWhere(
-        (c) => c.productUnitId == item.productUnitId && !c.priceOverridden);
+        (c) => c.productUnitId == item.productUnitId);
     if (idx >= 0) {
       state = [
         for (var i = 0; i < state.length; i++)
@@ -43,20 +43,20 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     state = s;
   }
 
-  void overridePrice(int index, int newPrice) {
+  void overridePrice(String productUnitId, int newPrice) {
     state = [
-      for (var i = 0; i < state.length; i++)
-        if (i == index)
-          state[i].copyWith(price: newPrice, priceOverridden: true)
+      for (final c in state)
+        if (c.productUnitId == productUnitId)
+          c.copyWith(price: newPrice, priceOverridden: true)
         else
-          state[i],
+          c,
     ];
   }
 
-  void setNote(int index, String? note) {
+  void setNote(String productUnitId, String? note) {
     state = [
-      for (var i = 0; i < state.length; i++)
-        if (i == index) state[i].copyWith(itemNote: note) else state[i],
+      for (final c in state)
+        if (c.productUnitId == productUnitId) c.copyWith(itemNote: note) else c,
     ];
   }
 

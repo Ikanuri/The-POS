@@ -1,12 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
 import '../services/crypto_service.dart';
 
-/// Identitas device disimpan di SharedPreferences (bukan di DB terenkripsi,
-/// karena store_key dibutuhkan SEBELUM DB bisa dibuka).
+/// Identitas device: store_key di FlutterSecureStorage (hardware-backed
+/// keystore), identitas lain di SharedPreferences.
+/// SharedPreferences tetap dipakai karena store_key dibutuhkan sebelum DB
+/// bisa dibuka, tapi store_key sendiri sudah dipindah ke secure storage.
 class DeviceIdentity {
   const DeviceIdentity({
     this.storeUuid,
@@ -32,6 +35,10 @@ class DeviceIdentity {
 class DeviceNotifier extends StateNotifier<DeviceIdentity> {
   DeviceNotifier() : super(const DeviceIdentity());
 
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
   static const _keys = (
     storeUuid: 'store_uuid',
     storeKey: 'store_key',
@@ -43,9 +50,19 @@ class DeviceNotifier extends StateNotifier<DeviceIdentity> {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Migrate store_key from SharedPreferences to FlutterSecureStorage if needed.
+    final legacyKey = prefs.getString(_keys.storeKey);
+    String? storeKey = await _secureStorage.read(key: _keys.storeKey);
+    if (storeKey == null && legacyKey != null) {
+      await _secureStorage.write(key: _keys.storeKey, value: legacyKey);
+      await prefs.remove(_keys.storeKey);
+      storeKey = legacyKey;
+    }
+
     state = DeviceIdentity(
       storeUuid: prefs.getString(_keys.storeUuid),
-      storeKey: prefs.getString(_keys.storeKey),
+      storeKey: storeKey,
       storeName: prefs.getString(_keys.storeName) ?? '',
       deviceName: prefs.getString(_keys.deviceName) ?? '',
       deviceCode: prefs.getString(_keys.deviceCode) ?? '',
@@ -90,8 +107,11 @@ class DeviceNotifier extends StateNotifier<DeviceIdentity> {
 
   Future<void> _persist(DeviceIdentity identity) async {
     final prefs = await SharedPreferences.getInstance();
+    // store_key goes to hardware-backed secure storage.
+    await _secureStorage.write(key: _keys.storeKey, value: identity.storeKey!);
+    // Ensure no legacy plaintext copy remains.
+    await prefs.remove(_keys.storeKey);
     await prefs.setString(_keys.storeUuid, identity.storeUuid!);
-    await prefs.setString(_keys.storeKey, identity.storeKey!);
     await prefs.setString(_keys.storeName, identity.storeName);
     await prefs.setString(_keys.deviceName, identity.deviceName);
     await prefs.setString(_keys.deviceCode, identity.deviceCode);

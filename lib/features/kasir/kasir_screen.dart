@@ -51,6 +51,8 @@ class CatalogDetail {
 final _catalogDetailProvider =
     FutureProvider.family<CatalogDetail, String>((ref, productId) async {
   final db = ref.watch(databaseProvider);
+  // Watch the product list so this provider re-runs when any product changes.
+  ref.watch(_kasirProductsProvider(''));
   final units = await db.getProductUnits(productId);
   if (units.isEmpty) {
     return const CatalogDetail(

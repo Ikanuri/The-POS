@@ -134,6 +134,23 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       return;
     }
 
+    // Validate extra tiers: no duplicate minQty, ratioToBase > 0.
+    for (final u in _units) {
+      if (u.ratioToBase <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rasio satuan harus > 0')),
+        );
+        return;
+      }
+      final minQtys = u.extraTiers.map((t) => t.minQty).toList();
+      if (minQtys.toSet().length != minQtys.length) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Minimum qty pada tier harga tidak boleh duplikat')),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
     try {
       final db = ref.read(databaseProvider);
@@ -579,9 +596,10 @@ class _UnitCardState extends State<_UnitCard> {
   }
 
   void _syncTier(int i) {
+    final rawMin = int.tryParse(_tierMinCtrl[i].text) ?? 2;
     _extraTiers[i] = _TierEntry(
       id: _extraTiers[i].id,
-      minQty: int.tryParse(_tierMinCtrl[i].text) ?? 2,
+      minQty: rawMin < 2 ? 2 : rawMin,
       price: int.tryParse(_tierPriceCtrl[i].text) ?? 0,
       costPrice: _extraTiers[i].costPrice,
     );

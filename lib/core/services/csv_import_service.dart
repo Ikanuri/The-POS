@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:uuid/uuid.dart';
 
@@ -37,7 +39,8 @@ class CsvImportService {
     required List<int> bytes,
     required AppDatabase db,
   }) async {
-    final content = String.fromCharCodes(bytes);
+    var content = utf8.decode(bytes, allowMalformed: true);
+    if (content.startsWith('﻿')) content = content.substring(1);
     final rows = _parseCsv(content);
     if (rows.isEmpty) {
       return const CsvImportResult(imported: 0, duplicates: 0, noBarcode: 0, errors: []);

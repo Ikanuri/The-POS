@@ -177,7 +177,10 @@ class AppDatabase extends _$AppDatabase {
   Future<double> currentStock(String productUnitId) async {
     final row = await (select(stockLedger)
           ..where((t) => t.productUnitId.equals(productUnitId))
-          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.createdAt),
+            (t) => OrderingTerm.desc(t.id),
+          ])
           ..limit(1))
         .getSingleOrNull();
     return row?.stockAfter ?? 0;
@@ -260,15 +263,34 @@ class AppDatabase extends _$AppDatabase {
       final productId = product.id.value;
       await into(products).insertOnConflictUpdate(product);
 
+      // Delete units removed during edit (cascades their tiers and barcodes).
+      final existingUnits = await (select(productUnits)
+            ..where((t) => t.productId.equals(productId)))
+          .get();
+      final newUnitIds = units.map((u) => u.id.value).toSet();
+      for (final existing in existingUnits) {
+        if (!newUnitIds.contains(existing.id)) {
+          await (delete(priceTiers)
+                ..where((t) => t.productUnitId.equals(existing.id)))
+              .go();
+          await (delete(productBarcodes)
+                ..where((t) => t.productUnitId.equals(existing.id)))
+              .go();
+          await (delete(productUnits)..where((t) => t.id.equals(existing.id)))
+              .go();
+        }
+      }
+
       for (final unit in units) {
         final unitId = unit.id.value;
         await into(productUnits).insertOnConflictUpdate(unit);
 
+        // Always replace tiers to keep them in sync with the form.
+        await (delete(priceTiers)
+              ..where((t) => t.productUnitId.equals(unitId)))
+            .go();
         final tiers = tiersByUnitTempId[unitId] ?? [];
         if (tiers.isNotEmpty) {
-          await (delete(priceTiers)
-                ..where((t) => t.productUnitId.equals(unitId)))
-              .go();
           await batch((b) => b.insertAll(priceTiers, tiers));
         }
 
@@ -305,19 +327,33 @@ class AppDatabase extends _$AppDatabase {
     required TransactionsCompanion tx,
     required List<TransactionItemsCompanion> items,
     required List<TransactionPaymentsCompanion> payments,
-    required List<StockLedgerCompanion> stockEntries,
+    required List<({String productUnitId, double qty, String note})> stockItems,
+    DateTime? now,
     LoyaltyPointLedgerCompanion? loyaltyEntry,
   }) async {
+    final ts = now ?? DateTime.now();
     await transaction(() async {
       await into(transactions).insert(tx);
       await batch((b) {
         b.insertAll(transactionItems, items);
         if (payments.isNotEmpty) b.insertAll(transactionPayments, payments);
-        b.insertAll(stockLedger, stockEntries);
         if (loyaltyEntry != null) {
           b.insert(loyaltyPointLedger, loyaltyEntry);
         }
       });
+      // Compute stockAfter inside the transaction for consistency.
+      for (final s in stockItems) {
+        final prev = await currentStock(s.productUnitId);
+        await into(stockLedger).insert(StockLedgerCompanion.insert(
+          id: const Uuid().v4(),
+          productUnitId: s.productUnitId,
+          type: 'sale',
+          qtyChange: -s.qty,
+          stockAfter: prev - s.qty,
+          note: Value(s.note),
+          createdAt: Value(ts),
+        ));
+      }
       // Update loyalty balance untuk pelanggan.
       final cid = tx.customerId.value;
       if (cid != null && loyaltyEntry != null) {
@@ -458,8 +494,12 @@ class AppDatabase extends _$AppDatabase {
   Future<void> restoreFromDump(
       Map<String, List<Map<String, Object?>>> dump) async {
     await transaction(() async {
-      for (final tableName in _allTables) {
+      // Delete children before parents to avoid FK violations.
+      for (final tableName in _allTables.reversed) {
         await customStatement('DELETE FROM "$tableName"');
+      }
+      // Insert in forward (parent-first) order.
+      for (final tableName in _allTables) {
         final rows = dump[tableName] ?? [];
         for (final row in rows) {
           if (row.isEmpty) continue;
@@ -515,13 +555,28 @@ class AppDatabase extends _$AppDatabase {
     return dump;
   }
 
-  /// Merge rows from sync payload (INSERT OR IGNORE for ledger, INSERT OR REPLACE for master).
+  /// Merge rows from sync payload (INSERT OR IGNORE for ledger, last-write-wins for master).
   Future<int> mergeRows(
       String tableName, List<Map<String, Object?>> rows, bool isAppendOnly) async {
     var count = 0;
     await transaction(() async {
       for (final row in rows) {
         if (row.isEmpty) continue;
+        // Last-write-wins for master tables with updated_at.
+        if (!isAppendOnly && row.containsKey('updated_at')) {
+          final id = row['id'];
+          final incomingTs = row['updated_at'];
+          if (id != null && incomingTs is int) {
+            final existing = await customSelect(
+              'SELECT updated_at FROM "$tableName" WHERE id = ?',
+              variables: [Variable<Object>(id)],
+            ).getSingleOrNull();
+            if (existing != null) {
+              final existingTs = existing.data['updated_at'];
+              if (existingTs is int && incomingTs < existingTs) continue;
+            }
+          }
+        }
         final cols = row.keys.map((k) => '"$k"').join(', ');
         final placeholders = row.values.map((_) => '?').join(', ');
         final variables = _rowToVars(row);

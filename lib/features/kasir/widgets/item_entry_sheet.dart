@@ -168,7 +168,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
 
   void _setQty(double q) {
     setState(() {
-      _qty = q < 0 ? 0 : q;
+      _qty = q.clamp(0, 9999);
       _qtyCtrl.text = _fmtQty(_qty);
     });
   }
@@ -337,8 +337,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                             EdgeInsets.symmetric(vertical: 8),
                                       ),
                                       onChanged: (v) {
-                                        final q = double.tryParse(v);
-                                        if (q != null) _qty = q;
+                                        final q = double.tryParse(v.trim());
+                                        setState(() {
+                                          _qty = (q != null && q >= 0) ? q.clamp(0, 9999) : 0;
+                                        });
                                       },
                                     ),
                                   ),

@@ -15,7 +15,7 @@ final dateRangeProvider =
   final now = DateTime.now();
   return DateTimeRange(
     start: DateTime(now.year, now.month, now.day),
-    end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+    end: DateTime(now.year, now.month, now.day, 23, 59, 59, 999),
   );
 });
 
@@ -121,7 +121,7 @@ class LaporanScreen extends ConsumerWidget {
     if (picked != null) {
       ref.read(dateRangeProvider.notifier).state = DateTimeRange(
         start: DateTime(picked.start.year, picked.start.month, picked.start.day),
-        end: DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59),
+        end: DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59, 999),
       );
     }
   }

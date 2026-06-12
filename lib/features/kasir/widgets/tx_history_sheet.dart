@@ -351,6 +351,7 @@ class _TxDetail extends ConsumerWidget {
     );
 
     if (result == null || result <= 0 || !context.mounted) return;
+    final payment = result.clamp(1, remaining);
 
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
@@ -358,13 +359,13 @@ class _TxDetail extends ConsumerWidget {
           TransactionPaymentsCompanion.insert(
             id: _txUuid.v4(),
             transactionId: tx.id,
-            amount: result,
+            amount: payment,
             method: 'tunai',
             paidAt: Value(DateTime.now()),
             kasirId: Value(device.deviceCode),
           ),
         );
-    final newPaid = tx.paid + result;
+    final newPaid = tx.paid + payment;
     await (db.update(db.transactions)..where((t) => t.id.equals(tx.id)))
         .write(TransactionsCompanion(
       paid: Value(newPaid),

@@ -197,6 +197,13 @@ class _HeldTile extends ConsumerWidget {
 
   Future<void> _resume(
       BuildContext context, WidgetRef ref, List<CartItem> items) async {
+    if (items.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Data pesanan rusak — tidak ada item yang bisa dipulihkan')));
+      }
+      return;
+    }
     final cart = ref.read(cartProvider);
     if (cart.isNotEmpty) {
       final ok = await showDialog<bool>(

@@ -181,6 +181,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   Future<void> _confirm() async {
+    if (_isSaving) return;
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) return;
 
@@ -257,22 +258,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ]
           : <TransactionPaymentsCompanion>[];
 
-      // Stock ledger entries
-      final stockEntries = <StockLedgerCompanion>[];
-      for (final item in cart) {
-        if (item.qty > 0) {
-          final currentStock = await db.currentStock(item.productUnitId);
-          stockEntries.add(StockLedgerCompanion.insert(
-            id: _uuid.v4(),
-            productUnitId: item.productUnitId,
-            type: 'sale',
-            qtyChange: -item.qty,
-            stockAfter: currentStock - item.qty,
-            note: Value(localId),
-            createdAt: Value(now),
-          ));
-        }
-      }
+      // Stock items — stockAfter computed inside saveTransaction's DB transaction.
+      final stockItems = cart
+          .where((item) => item.qty > 0)
+          .map((item) => (
+                productUnitId: item.productUnitId,
+                qty: item.qty,
+                note: localId,
+              ))
+          .toList();
 
       LoyaltyPointLedgerCompanion? loyaltyEntry;
       if (customerId != null && pointsEarned > 0) {
@@ -290,7 +284,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         tx: txCompanion,
         items: itemCompanions,
         payments: paymentCompanions,
-        stockEntries: stockEntries,
+        stockItems: stockItems,
+        now: now,
         loyaltyEntry: loyaltyEntry,
       );
 

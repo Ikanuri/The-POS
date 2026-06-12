@@ -21,10 +21,10 @@ class CryptoService {
     return base64UrlEncode(bytes);
   }
 
-  /// Token sync 6 karakter alfanumerik.
+  /// Token sync 8 karakter alfanumerik (~40-bit entropy).
   static String generateSyncToken() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    return List.generate(6, (_) => chars[_rng.nextInt(chars.length)]).join();
+    return List.generate(8, (_) => chars[_rng.nextInt(chars.length)]).join();
   }
 
   static Uint8List randomIV() =>

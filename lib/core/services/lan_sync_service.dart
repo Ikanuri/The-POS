@@ -10,6 +10,8 @@ import '../database/app_database.dart';
 import 'crypto_service.dart';
 
 const _kSyncPort = 8625;
+// 50 MB max payload — protects the host from memory-exhaustion DoS.
+const _kMaxPayloadBytes = 50 * 1024 * 1024;
 
 /// Hasil sync satu arah (diterima dari remote).
 class SyncResult {
@@ -26,6 +28,12 @@ class LanSyncService {
   static String? _storeKey;
   static AppDatabase? _db;
 
+  // Simple per-IP brute-force protection: 5 failures → 5-min lockout.
+  static final _failedAttempts = <String, int>{};
+  static final _lockoutUntil = <String, DateTime>{};
+  static const _kMaxFailures = 5;
+  static const _kLockoutDuration = Duration(minutes: 5);
+
   // ─── Host (server) side ──────────────────────────────────────────────────
 
   /// Start shelf server. Returns (ip, token) pair.
@@ -37,9 +45,10 @@ class LanSyncService {
     _db = db;
     _storeKey = storeKey;
     _syncToken = CryptoService.generateSyncToken();
+    _failedAttempts.clear();
+    _lockoutUntil.clear();
 
     final handler = const shelf.Pipeline()
-        .addMiddleware(shelf.logRequests())
         .addHandler(_handleRequest);
 
     _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, _kSyncPort);
@@ -53,6 +62,8 @@ class LanSyncService {
     await _server?.close(force: true);
     _server = null;
     _syncToken = null;
+    _failedAttempts.clear();
+    _lockoutUntil.clear();
   }
 
   static bool get isHostRunning => _server != null;
@@ -61,12 +72,43 @@ class LanSyncService {
     if (request.method != 'POST' || request.url.path != 'sync') {
       return shelf.Response.notFound('Not found');
     }
+
+    final ip = (request.context['shelf.io.connection_info']
+            as HttpConnectionInfo?)
+        ?.remoteAddress
+        .address ?? 'unknown';
+
+    // Rate-limiting: check lockout before reading body.
+    final lockedUntil = _lockoutUntil[ip];
+    if (lockedUntil != null && lockedUntil.isAfter(DateTime.now())) {
+      return shelf.Response(429, body: 'Too many attempts. Try again later.');
+    }
+
+    // Reject oversized payloads before buffering (DoS protection).
+    final declaredLength =
+        int.tryParse(request.headers['content-length'] ?? '') ?? 0;
+    if (declaredLength > _kMaxPayloadBytes) {
+      return shelf.Response(413, body: 'Payload too large');
+    }
+
     try {
       final bodyBytes = await request.read().expand((c) => c).toList();
+      if (bodyBytes.length > _kMaxPayloadBytes) {
+        return shelf.Response(413, body: 'Payload too large');
+      }
+
       final token = request.headers['x-sync-token'] ?? '';
-      if (token != _syncToken) {
+      if (!_constantTimeEqual(token, _syncToken ?? '')) {
+        // Track failures for rate limiting.
+        _failedAttempts[ip] = (_failedAttempts[ip] ?? 0) + 1;
+        if ((_failedAttempts[ip] ?? 0) >= _kMaxFailures) {
+          _lockoutUntil[ip] = DateTime.now().add(_kLockoutDuration);
+          _failedAttempts.remove(ip);
+        }
         return shelf.Response.forbidden('Invalid token');
       }
+      // Reset failure count on success.
+      _failedAttempts.remove(ip);
 
       final key = CryptoService.deriveSyncKey(_storeKey!, _syncToken!);
       final payloadJson = CryptoService.decryptText(
@@ -100,8 +142,19 @@ class LanSyncService {
         headers: {'content-type': 'application/octet-stream'},
       );
     } catch (e) {
-      return shelf.Response.internalServerError(body: 'Error: $e');
+      // Scrub internal exception details from the response.
+      return shelf.Response.internalServerError(body: 'Sync failed');
     }
+  }
+
+  /// Constant-time string comparison — prevents timing side-channel on token.
+  static bool _constantTimeEqual(String a, String b) {
+    if (a.length != b.length) return false;
+    var result = 0;
+    for (var i = 0; i < a.length; i++) {
+      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return result == 0;
   }
 
   // ─── Client side ─────────────────────────────────────────────────────────

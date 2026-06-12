@@ -213,7 +213,7 @@ class _CartItemTile extends ConsumerWidget {
               title: Text('Hapus', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
               onTap: () {
                 Navigator.of(ctx).pop();
-                notifier.removeItemByIndex(index);
+                notifier.removeItem(item.productUnitId);
               },
             ),
           ],
@@ -242,7 +242,7 @@ class _CartItemTile extends ConsumerWidget {
           FilledButton(
             onPressed: () {
               final price = int.tryParse(ctrl.text) ?? item.price;
-              ref.read(cartProvider.notifier).overridePrice(index, price);
+              ref.read(cartProvider.notifier).overridePrice(item.productUnitId, price);
               ctx.pop();
             },
             child: const Text('Simpan'),
@@ -271,7 +271,7 @@ class _CartItemTile extends ConsumerWidget {
           FilledButton(
             onPressed: () {
               final note = ctrl.text.trim().isEmpty ? null : ctrl.text.trim();
-              ref.read(cartProvider.notifier).setNote(index, note);
+              ref.read(cartProvider.notifier).setNote(item.productUnitId, note);
               ctx.pop();
             },
             child: const Text('Simpan'),
