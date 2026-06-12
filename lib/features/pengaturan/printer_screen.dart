@@ -296,6 +296,17 @@ class _PrinterScreenState extends State<PrinterScreen> {
   Widget _deviceTile(BuildContext context, BluetoothInfo d) {
     final scheme = Theme.of(context).colorScheme;
     final isSelected = d.macAdress == _savedMac;
+
+    // NB: FilledButton.tonal di dalam trailing ListTile HARUS meng-override
+    // minimumSize — theme global pakai double.infinity sehingga tombol mencoba
+    // merebut seluruh lebar dan menekan title menjadi lebar nol (teks vertikal).
+    final btnStyle = FilledButton.styleFrom(
+      minimumSize: const Size(62, 34),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      textStyle: const TextStyle(fontSize: 12),
+    );
+
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: isSelected
@@ -303,8 +314,9 @@ class _PrinterScreenState extends State<PrinterScreen> {
             : scheme.surfaceContainerHighest,
         child: Icon(
           Icons.print_outlined,
-          color:
-              isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+          color: isSelected
+              ? scheme.onPrimaryContainer
+              : scheme.onSurfaceVariant,
         ),
       ),
       title: Text(d.name.isEmpty ? 'Printer' : d.name),
@@ -315,20 +327,22 @@ class _PrinterScreenState extends State<PrinterScreen> {
         children: [
           if (_testingMac == d.macAdress)
             const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2))
           else
             IconButton(
               icon: const Icon(Icons.print_outlined, size: 20),
               tooltip: 'Test Print',
+              visualDensity: VisualDensity.compact,
               onPressed: () => _testPrint(d.macAdress),
             ),
+          const SizedBox(width: 4),
           if (!isSelected)
             FilledButton.tonal(
               onPressed: () => _select(d),
-              child: const Text('Pilih', style: TextStyle(fontSize: 12)),
+              style: btnStyle,
+              child: const Text('Pilih'),
             )
           else
             Chip(
@@ -336,6 +350,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
               backgroundColor: scheme.primaryContainer,
               side: BorderSide.none,
               visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
             ),
         ],
       ),
