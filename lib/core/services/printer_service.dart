@@ -52,11 +52,20 @@ class PrinterService {
         onTimeout: () => <BluetoothInfo>[],
       );
 
-  static Future<bool> connect(String mac) async =>
-      PrintBluetoothThermal.connect(macPrinterAddress: mac).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => false,
-      );
+  static Future<bool> connect(String mac) async {
+    // Bila sudah tersambung ke printer yang sama, lewati reconnect.
+    try {
+      if (await isConnected) return true;
+    } catch (_) {}
+    // Coba beberapa kali — koneksi SPP awal kerap gagal di percobaan pertama.
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final ok = await PrintBluetoothThermal.connect(macPrinterAddress: mac)
+          .timeout(const Duration(seconds: 12), onTimeout: () => false);
+      if (ok) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    }
+    return false;
+  }
 
   static Future<bool> get isConnected async =>
       PrintBluetoothThermal.connectionStatus

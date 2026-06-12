@@ -96,38 +96,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   int get _change => (_paid - _total).clamp(0, double.maxFinite.toInt());
 
-  int get _shortfall =>
-      _selectedMethodType == 'tunai' && _tendered > 0 && _tendered < _total
-          ? _total - _tendered
-          : 0;
-
-  bool get _canConfirm {
-    final cart = ref.read(cartProvider);
-    if (cart.isEmpty) return false;
-    if (_selectedMethodType == 'tunai') return _tendered > 0;
-    return true;
-  }
-
-  void _keypadPress(String key) {
-    setState(() {
-      switch (key) {
-        case 'C':
-          _tendered = 0;
-        case '⌫':
-          _tendered = _tendered ~/ 10;
-        case '00':
-          _tendered = (_tendered * 100).clamp(0, 99999999);
-        case '000':
-          _tendered = (_tendered * 1000).clamp(0, 99999999);
-        default:
-          final d = int.tryParse(key);
-          if (d != null) {
-            _tendered = (_tendered * 10 + d).clamp(0, 99999999);
-          }
-      }
-    });
-  }
-
   Future<void> _editTotal() async {
     final ctrl = TextEditingController(
         text: ThousandsSeparatorFormatter.format(_total));
@@ -306,102 +274,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   void dispose() {
     _custCtrl.dispose();
     super.dispose();
-  }
-
-  /// Panel tunai sticky: ringkasan diterima/kembalian, chip uang pas, keypad.
-  Widget _buildCashPanel(ColorScheme scheme) {
-    return Material(
-      elevation: 8,
-      color: scheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Diterima',
-                    style: TextStyle(color: scheme.onSurfaceVariant)),
-                Text(
-                  formatRupiah(_tendered),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 20),
-                ),
-              ],
-            ),
-            if (_tendered > 0) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: _change > 0
-                      ? scheme.primaryContainer
-                      : _shortfall > 0
-                          ? scheme.errorContainer
-                          : scheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _change > 0
-                          ? 'Kembalian'
-                          : _shortfall > 0
-                              ? 'Sisa / Hutang'
-                              : '✓ Uang Pas',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _change > 0
-                            ? scheme.onPrimaryContainer
-                            : _shortfall > 0
-                                ? scheme.onErrorContainer
-                                : scheme.onTertiaryContainer,
-                      ),
-                    ),
-                    if (_change > 0 || _shortfall > 0)
-                      Text(
-                        formatRupiah(_change > 0 ? _change : _shortfall),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: _change > 0
-                              ? scheme.onPrimaryContainer
-                              : scheme.onErrorContainer,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                ActionChip(
-                  label: const Text('Uang Pas'),
-                  backgroundColor: scheme.primaryContainer,
-                  side: BorderSide.none,
-                  onPressed: () => setState(() => _tendered = _total),
-                ),
-                ...{10000, 20000, 50000, 100000}
-                    .where((d) => d >= _total)
-                    .take(3)
-                    .map((d) => ActionChip(
-                          label: Text(formatRupiah(d)),
-                          onPressed: () => setState(() => _tendered = d),
-                        )),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _Keypad(onPress: _keypadPress),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -672,7 +544,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 );
               }),
               // Bayar Nanti (tempo / pre-order) — selalu tersedia.
+              // showCheckmark:false agar ikon jam & centang tidak tumpang tindih
+              // saat chip terpilih.
               ChoiceChip(
+                showCheckmark: false,
                 avatar: Icon(Icons.schedule,
                     size: 16,
                     color: _selectedMethodType == 'tempo'
@@ -749,18 +624,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               ],
             ),
           ),
-          // Keypad tunai sticky — disembunyikan saat keyboard sistem muncul
-          // (mis. sedang mengetik nama pelanggan) agar tidak menghalangi.
-          if (_selectedMethodType == 'tunai' &&
-              MediaQuery.of(context).viewInsets.bottom == 0)
-            _buildCashPanel(scheme),
         ],
       ),
       bottomNavigationBar: Padding(
         padding: EdgeInsets.fromLTRB(
             16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
         child: FilledButton(
-          onPressed: (_isSaving || !_canConfirm) ? null : _confirm,
+          onPressed: (_isSaving || !_bayarEnabled) ? null : _onBayarPressed,
           style:
               FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
           child: _isSaving
@@ -770,21 +640,238 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white),
                 )
-              : Text(_confirmLabel(), style: const TextStyle(fontSize: 16)),
+              : Text(_bayarLabel(), style: const TextStyle(fontSize: 16)),
         ),
       ),
     );
   }
 
-  String _confirmLabel() {
+  /// Tombol "Bayar" aktif: keranjang tidak kosong. Untuk tunai, jumlah uang
+  /// diinput nanti di sheet keypad — jadi tidak butuh _tendered di sini.
+  bool get _bayarEnabled => ref.read(cartProvider).isNotEmpty;
+
+  String _bayarLabel() {
     if (_selectedMethodType == 'tempo') {
       return 'Simpan Hutang ${formatRupiah(_total)}';
     }
-    if (_selectedMethodType != 'tunai') return 'Konfirmasi Transaksi';
-    if (_change > 0) return 'Kembali ${formatRupiah(_change)}';
-    if (_shortfall > 0) return 'Catat Hutang ${formatRupiah(_shortfall)}';
-    if (_tendered > 0) return 'Konfirmasi Bayar';
-    return 'Masukkan Jumlah Bayar';
+    if (_selectedMethodType == 'tunai') {
+      return 'Bayar ${formatRupiah(_total)}';
+    }
+    return 'Konfirmasi ${formatRupiah(_total)}';
+  }
+
+  /// Tap "Bayar": untuk tunai buka sheet keypad (slide-up) lalu konfirmasi
+  /// dengan tombol ✓; untuk metode lain langsung konfirmasi.
+  Future<void> _onBayarPressed() async {
+    FocusScope.of(context).unfocus();
+    if (_selectedMethodType == 'tunai') {
+      final result = await showModalBottomSheet<int>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _CashKeypadSheet(total: _total, initial: _tendered),
+      );
+      if (result == null) return; // dibatalkan
+      setState(() => _tendered = result);
+    }
+    await _confirm();
+  }
+
+}
+
+/// Sheet keypad tunai yang slide-up saat tombol "Bayar" ditekan.
+/// Input jumlah uang lalu konfirmasi dengan tombol ✓ di pojok kanan bawah.
+/// Pop mengembalikan jumlah uang diterima; null bila dibatalkan.
+class _CashKeypadSheet extends StatefulWidget {
+  const _CashKeypadSheet({required this.total, required this.initial});
+  final int total;
+  final int initial;
+
+  @override
+  State<_CashKeypadSheet> createState() => _CashKeypadSheetState();
+}
+
+class _CashKeypadSheetState extends State<_CashKeypadSheet> {
+  late int _tendered = widget.initial;
+
+  int get _change =>
+      (_tendered - widget.total).clamp(0, double.maxFinite.toInt());
+  int get _shortfall =>
+      _tendered > 0 && _tendered < widget.total ? widget.total - _tendered : 0;
+
+  void _press(String key) {
+    setState(() {
+      switch (key) {
+        case 'C':
+          _tendered = 0;
+        case '⌫':
+          _tendered = _tendered ~/ 10;
+        case '00':
+          _tendered = (_tendered * 100).clamp(0, 99999999);
+        case '000':
+          _tendered = (_tendered * 1000).clamp(0, 99999999);
+        default:
+          final d = int.tryParse(key);
+          if (d != null) {
+            _tendered = (_tendered * 10 + d).clamp(0, 99999999);
+          }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final Color pillBg;
+    final Color pillFg;
+    final String pillLabel;
+    if (_change > 0) {
+      pillBg = AppTheme.changeBg(isDark);
+      pillFg = AppTheme.changeFg(isDark);
+      pillLabel = 'Kembalian';
+    } else if (_shortfall > 0) {
+      pillBg = AppTheme.debtBg(isDark);
+      pillFg = AppTheme.debtFg(isDark);
+      pillLabel = 'Sisa / Hutang';
+    } else {
+      pillBg = AppTheme.changeBg(isDark);
+      pillFg = AppTheme.changeFg(isDark);
+      pillLabel = '✓ Uang Pas';
+    }
+
+    return Material(
+      color: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 8,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Total ${formatRupiah(widget.total)}',
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant, fontSize: 13)),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Diterima',
+                      style: TextStyle(color: scheme.onSurfaceVariant)),
+                  Text(
+                    formatRupiah(_tendered),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 22),
+                  ),
+                ],
+              ),
+              if (_tendered > 0) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: pillBg,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(pillLabel,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, color: pillFg)),
+                      if (_change > 0 || _shortfall > 0)
+                        Text(
+                          formatRupiah(_change > 0 ? _change : _shortfall),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: pillFg),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  ActionChip(
+                    label: const Text('Uang Pas'),
+                    backgroundColor: scheme.primaryContainer,
+                    side: BorderSide.none,
+                    onPressed: () => setState(() => _tendered = widget.total),
+                  ),
+                  ...{10000, 20000, 50000, 100000}
+                      .where((d) => d >= widget.total)
+                      .take(3)
+                      .map((d) => ActionChip(
+                            label: Text(formatRupiah(d)),
+                            onPressed: () => setState(() => _tendered = d),
+                          )),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _Keypad(onPress: _press),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 56,
+                child: FilledButton(
+                  onPressed: _tendered > 0
+                      ? () => Navigator.of(context).pop(_tendered)
+                      : null,
+                  style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(56)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _shortfall > 0
+                            ? 'Catat Hutang ${formatRupiah(_shortfall)}'
+                            : _change > 0
+                                ? 'Bayar · Kembali ${formatRupiah(_change)}'
+                                : 'Bayar',
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.check_circle, size: 22),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

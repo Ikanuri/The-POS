@@ -7,6 +7,43 @@ class AppTheme {
   // Terracotta clay accent — from mockup --accent token
   static const accent = Color(0xFFC96442);
 
+  // ── Warna semantik kasir (konsisten light & dark) ──────────────────
+  // Hutang / sisa bayar → MERAH di semua mode.
+  // Kembalian → HIJAU soft di semua mode.
+  static Color debtFg(bool isDark) =>
+      isDark ? const Color(0xFFFF6B6B) : const Color(0xFFD64545);
+  static Color debtBg(bool isDark) =>
+      isDark ? const Color(0x33FF6B6B) : const Color(0xFFFCE9E9);
+  static Color changeFg(bool isDark) =>
+      isDark ? const Color(0xFF5FD39A) : const Color(0xFF1E7E4F);
+  static Color changeBg(bool isDark) =>
+      isDark ? const Color(0x335FD39A) : const Color(0xFFE3F4EA);
+
+  /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
+  /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).
+  static void showSnack(BuildContext context, String message,
+      {bool isError = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? _dCard : _lInk;
+    final fg = isDark ? _dInk : _lCanvas;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        backgroundColor: bg,
+        content: Row(
+          children: [
+            if (isError) ...[
+              Icon(Icons.error_outline, size: 18, color: debtFg(isDark)),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Text(message, style: TextStyle(color: fg)),
+            ),
+          ],
+        ),
+      ));
+  }
+
   // Light palette — exact mockup CSS tokens
   static const _lCanvas = Color(0xFFEBE8E0);
   static const _lPanel  = Color(0xFFFBFAF7);

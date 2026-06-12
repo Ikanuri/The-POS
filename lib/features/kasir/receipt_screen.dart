@@ -485,10 +485,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       checkedIds: _checkedIds,
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok ? 'Struk berhasil dicetak' : 'Gagal mencetak struk'),
-      backgroundColor: ok ? null : Theme.of(context).colorScheme.error,
-    ));
+    AppTheme.showSnack(
+        context, ok ? 'Struk berhasil dicetak' : 'Gagal mencetak struk',
+        isError: !ok);
   }
 
   Future<(String, String, String)> _getStorePrefs() async {
