@@ -103,10 +103,6 @@ final cartProvider = StateNotifierProvider<CartNotifier, List<CartItem>>(
   (ref) => CartNotifier(),
 );
 
-/// Nama pelanggan yang di-prefill di layar pembayaran
-/// (di-set oleh aksi "Tambah Item" pada riwayat transaksi).
-final prefillCustomerProvider = StateProvider<String?>((ref) => null);
-
 /// Pilihan tampilan katalog kasir (grid/list) yang disimpan ke prefs
 /// sehingga tidak ter-reset saat aplikasi dibuka ulang.
 class KasirGridNotifier extends StateNotifier<bool> {

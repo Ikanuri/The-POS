@@ -48,6 +48,7 @@ dependencies:
 
   # UI
   google_fonts: ^6.0.0
+  fl_chart: ^0.68.0
 
   # Utils
   shared_preferences: ^2.2.0

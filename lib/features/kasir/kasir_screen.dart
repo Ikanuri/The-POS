@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
@@ -15,6 +18,87 @@ import 'widgets/item_entry_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
 
 final _kasirSearchProvider = StateProvider<String>((ref) => '');
+
+/// State toast melayang saat scan mode berulang.
+class _ScanToast {
+  _ScanToast({
+    required this.productUnitId,
+    required this.productName,
+    required this.unitName,
+    required this.qty,
+    required this.price,
+  });
+
+  final String productUnitId;
+  final String productName;
+  final String unitName;
+  int qty;
+  final int price;
+  Timer? timer;
+}
+
+/// Kartu toast melayang di atas kamera scanner. Tombol ± identik gaya keranjang.
+class _ScanToastCard extends StatelessWidget {
+  const _ScanToastCard({
+    required this.toast,
+    required this.onInc,
+    required this.onDec,
+  });
+
+  final _ScanToast toast;
+  final VoidCallback onInc;
+  final VoidCallback onDec;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(14),
+      color: cs.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(toast.productName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('${toast.unitName} · ${formatRupiah(toast.price)}',
+                      style:
+                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline),
+              visualDensity: VisualDensity.compact,
+              onPressed: onDec,
+            ),
+            SizedBox(
+              width: 28,
+              child: Text('${toast.qty}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 16)),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              visualDensity: VisualDensity.compact,
+              onPressed: onInc,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 final _heldCountProvider = StreamProvider<int>((ref) {
   return ref
@@ -104,13 +188,55 @@ class KasirScreen extends ConsumerStatefulWidget {
 }
 
 class _KasirScreenState extends ConsumerState<KasirScreen> {
+  static const _prefContinuous = 'scanner_continuous';
+  static const _prefToastDuration = 'scanner_toast_duration';
+
   final _searchCtrl = TextEditingController();
   bool _scannerOpen = false;
   MobileScannerController? _scannerCtrl;
 
+  // Mode scanner
+  bool _continuousScan = false;
+  int _toastDurationSeconds = 5;
+
+  // Toast melayang (mode continuous)
+  _ScanToast? _activeToast;
+
+  // Debounce deteksi berulang barcode yang sama
+  String? _lastScan;
+  int _lastScanMs = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadScannerPrefs();
+  }
+
+  Future<void> _loadScannerPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _continuousScan = prefs.getBool(_prefContinuous) ?? false;
+      _toastDurationSeconds = prefs.getInt(_prefToastDuration) ?? 5;
+    });
+  }
+
+  Future<void> _setContinuous(bool v) async {
+    setState(() => _continuousScan = v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefContinuous, v);
+  }
+
+  Future<void> _setToastDuration(int s) async {
+    setState(() => _toastDurationSeconds = s);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefToastDuration, s);
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _activeToast?.timer?.cancel();
     _scannerCtrl?.dispose();
     super.dispose();
   }
@@ -123,49 +249,134 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   }
 
   void _closeScanner() {
+    _activeToast?.timer?.cancel();
     _scannerCtrl?.dispose();
     setState(() {
       _scannerOpen = false;
       _scannerCtrl = null;
+      _activeToast = null;
     });
   }
 
-  Future<void> _handleBarcode(String barcode) async {
-    _closeScanner();
+  /// Resolusi barcode → data produk siap-tambah, atau null bila tidak ada.
+  Future<({CartItem item})?> _resolveBarcode(String barcode) async {
     final db = ref.read(databaseProvider);
     final bc = await db.lookupBarcode(barcode);
-    if (bc == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Barcode tidak ditemukan: $barcode')),
-        );
-      }
-      return;
-    }
+    if (bc == null) return null;
     final unit = await (db.select(db.productUnits)
           ..where((t) => t.id.equals(bc.productUnitId)))
         .getSingleOrNull();
-    if (unit == null || !mounted) return;
+    if (unit == null) return null;
     final product = await (db.select(db.products)
           ..where((t) => t.id.equals(unit.productId)))
         .getSingleOrNull();
-    if (product == null || !mounted) return;
+    if (product == null) return null;
     final resolved =
         await PriceService(db).resolvePrice(productUnitId: unit.id, qty: 1);
     final unitType = await (db.select(db.unitTypes)
           ..where((t) => t.id.equals(unit.unitTypeId ?? 1)))
         .getSingleOrNull();
-    ref.read(cartProvider.notifier).addItem(CartItem(
-          productId: product.id,
-          productUnitId: unit.id,
-          productName: product.name,
-          unitName: unitType?.name ?? 'Satuan',
-          qty: 1,
-          price: resolved.price,
-          originalPrice: resolved.price,
-          costPrice: resolved.costPrice,
-          barcode: barcode,
-        ));
+    return (
+      item: CartItem(
+        productId: product.id,
+        productUnitId: unit.id,
+        productName: product.name,
+        unitName: unitType?.name ?? 'Satuan',
+        qty: 1,
+        price: resolved.price,
+        originalPrice: resolved.price,
+        costPrice: resolved.costPrice,
+        barcode: barcode,
+      ),
+    );
+  }
+
+  Future<void> _handleBarcode(String barcode) async {
+    // Debounce: abaikan deteksi berulang barcode sama dalam 1.5 detik.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (barcode == _lastScan && nowMs - _lastScanMs < 1500) return;
+    _lastScan = barcode;
+    _lastScanMs = nowMs;
+
+    if (!_continuousScan) {
+      _closeScanner();
+      final resolved = await _resolveBarcode(barcode);
+      if (resolved == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Barcode tidak ditemukan: $barcode')),
+          );
+        }
+        return;
+      }
+      ref.read(cartProvider.notifier).addItem(resolved.item);
+      return;
+    }
+
+    // Mode continuous — scanner tetap terbuka, tampilkan/perbarui toast.
+    final resolved = await _resolveBarcode(barcode);
+    if (!mounted) return;
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Barcode tidak ditemukan: $barcode'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+    final item = resolved.item;
+    final notifier = ref.read(cartProvider.notifier);
+    notifier.addItem(item);
+    final newQty = notifier.qtyForUnit(item.productUnitId).round();
+    _showOrUpdateToast(item, newQty);
+  }
+
+  void _showOrUpdateToast(CartItem item, int qty) {
+    _activeToast?.timer?.cancel();
+    final toast = _ScanToast(
+      productUnitId: item.productUnitId,
+      productName: item.productName,
+      unitName: item.unitName,
+      qty: qty,
+      price: item.price,
+    );
+    toast.timer = Timer(Duration(seconds: _toastDurationSeconds), () {
+      if (mounted) setState(() => _activeToast = null);
+    });
+    setState(() => _activeToast = toast);
+  }
+
+  void _toastInc() {
+    final t = _activeToast;
+    if (t == null) return;
+    final notifier = ref.read(cartProvider.notifier);
+    final q = t.qty + 1;
+    notifier.setQty(t.productUnitId, q.toDouble());
+    setState(() => t.qty = q);
+    t.timer?.cancel();
+    t.timer = Timer(Duration(seconds: _toastDurationSeconds), () {
+      if (mounted) setState(() => _activeToast = null);
+    });
+  }
+
+  void _toastDec() {
+    final t = _activeToast;
+    if (t == null) return;
+    final notifier = ref.read(cartProvider.notifier);
+    final q = t.qty - 1;
+    if (q <= 0) {
+      notifier.removeItem(t.productUnitId);
+      t.timer?.cancel();
+      setState(() => _activeToast = null);
+      return;
+    }
+    notifier.setQty(t.productUnitId, q.toDouble());
+    setState(() => t.qty = q);
+    t.timer?.cancel();
+    t.timer = Timer(Duration(seconds: _toastDurationSeconds), () {
+      if (mounted) setState(() => _activeToast = null);
+    });
   }
 
   void _openEntry(Product product) {
@@ -196,18 +407,60 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (_scannerOpen && _scannerCtrl != null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Scan Barcode'),
+          title: Text(_continuousScan ? 'Scan Berulang' : 'Scan Sekali'),
           leading: IconButton(
             icon: const Icon(Icons.close),
             onPressed: _closeScanner,
           ),
+          actions: [
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Pengaturan Scanner',
+              onSelected: (v) {
+                if (v == 'mode') {
+                  _setContinuous(!_continuousScan);
+                } else if (v.startsWith('dur:')) {
+                  _setToastDuration(int.parse(v.substring(4)));
+                }
+              },
+              itemBuilder: (ctx) => [
+                CheckedPopupMenuItem(
+                  value: 'mode',
+                  checked: _continuousScan,
+                  child: const Text('Scan Berulang'),
+                ),
+                const PopupMenuDivider(),
+                for (final s in [3, 5, 10])
+                  CheckedPopupMenuItem(
+                    value: 'dur:$s',
+                    checked: _toastDurationSeconds == s,
+                    child: Text('Durasi Pesan: ${s}s'),
+                  ),
+              ],
+            ),
+          ],
         ),
-        body: MobileScanner(
-          controller: _scannerCtrl!,
-          onDetect: (capture) {
-            final barcode = capture.barcodes.firstOrNull?.rawValue;
-            if (barcode != null) _handleBarcode(barcode);
-          },
+        body: Stack(
+          children: [
+            MobileScanner(
+              controller: _scannerCtrl!,
+              onDetect: (capture) {
+                final barcode = capture.barcodes.firstOrNull?.rawValue;
+                if (barcode != null) _handleBarcode(barcode);
+              },
+            ),
+            if (_activeToast != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 16,
+                child: _ScanToastCard(
+                  toast: _activeToast!,
+                  onInc: _toastInc,
+                  onDec: _toastDec,
+                ),
+              ),
+          ],
         ),
       );
     }

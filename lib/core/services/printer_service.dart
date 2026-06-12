@@ -44,6 +44,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    Set<String> checkedIds = const {},
   }) async {
     final mac = await getSavedMac();
     if (mac == null || mac.isEmpty) return false;
@@ -61,6 +62,7 @@ class PrinterService {
       storeAddress: storeAddress,
       storePhone: storePhone,
       strukNote: strukNote,
+      checkedIds: checkedIds,
     );
 
     return PrintBluetoothThermal.writeBytes(bytes);
@@ -97,6 +99,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    Set<String> checkedIds = const {},
   }) async {
     final profile = await CapabilityProfile.load();
     final gen = Generator(PaperSize.mm58, profile);
@@ -138,7 +141,8 @@ class PrinterService {
 
     // Item
     for (final item in items) {
-      final pName = productNames[item.productId] ?? 'Produk';
+      final rawName = productNames[item.productId] ?? 'Produk';
+      final pName = checkedIds.contains(item.id) ? '[v] $rawName' : rawName;
       final uName = unitNames[item.productUnitId] ?? '';
       out.addAll(gen.text('$pName ($uName)',
           styles: const PosStyles(), linesAfter: 0));

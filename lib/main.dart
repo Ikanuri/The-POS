@@ -21,6 +21,16 @@ Future<void> main() async {
   // Identitas device harus dimuat sebelum router memutuskan redirect /setup.
   await container.read(deviceProvider.notifier).load();
 
+  // Catch-up ringkasan harian yang belum ter-materialisasi (mis. data dari
+  // versi lama atau hari yang terlewat). Hanya bila DB sudah bisa dibuka.
+  if (container.read(deviceProvider).isConfigured) {
+    try {
+      await container.read(databaseProvider).backfillMissingSummaries();
+    } catch (_) {
+      // Non-fatal — laporan tetap berfungsi tanpa pre-aggregate.
+    }
+  }
+
   runApp(
     UncontrolledProviderScope(
       container: container,

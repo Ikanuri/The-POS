@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,21 +9,70 @@ import 'package:uuid/uuid.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../cart_provider.dart';
+import '../../../core/utils/input_formatters.dart';
 
 const _txUuid = Uuid();
 
-final _recentTxProvider = StreamProvider<List<Transaction>>((ref) {
+/// Parameter query riwayat. Saat tidak ada filter aktif → 100 terakhir;
+/// saat ada filter aktif → sampai 1000 agar pencarian menjangkau data lama.
+class _HistoryQuery {
+  const _HistoryQuery({this.date, this.product = '', this.loadAll = false});
+  final DateTimeRange? date;
+  final String product;
+  final bool loadAll;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _HistoryQuery &&
+      other.date == date &&
+      other.product == product &&
+      other.loadAll == loadAll;
+
+  @override
+  int get hashCode => Object.hash(date, product, loadAll);
+}
+
+final _txHistoryProvider =
+    FutureProvider.family<List<Transaction>, _HistoryQuery>((ref, q) async {
   final db = ref.watch(databaseProvider);
-  return (db.select(db.transactions)
-        ..where((t) => t.status.isNotValue('void'))
-        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-        ..limit(100))
-      .watch();
+
+  Set<String>? productTxIds;
+  if (q.product.trim().isNotEmpty) {
+    productTxIds = await db.findTxIdsWithProduct(q.product);
+    if (productTxIds.isEmpty) return const [];
+  }
+
+  final sel = db.select(db.transactions)
+    ..where((t) => t.status.isNotValue('void'));
+  if (q.date != null) {
+    final start = DateTime(
+        q.date!.start.year, q.date!.start.month, q.date!.start.day);
+    final end = DateTime(
+        q.date!.end.year, q.date!.end.month, q.date!.end.day, 23, 59, 59, 999);
+    sel.where((t) =>
+        t.createdAt.isBiggerOrEqualValue(start) &
+        t.createdAt.isSmallerOrEqualValue(end));
+  }
+  sel
+    ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+    ..limit(q.loadAll ? 1000 : 100);
+
+  var rows = await sel.get();
+  if (productTxIds != null) {
+    rows = rows.where((t) => productTxIds!.contains(t.id)).toList();
+  }
+  return rows;
 });
 
-/// Sheet riwayat transaksi di kasir: cari, filter Lunas/Belum Lunas,
-/// aksi Lunasi · Tambah Item · Struk.
+/// Nama pelanggan terdaftar (id → nama) untuk accent & label di riwayat.
+final _custNamesProvider = FutureProvider<Map<String, String>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final cs = await db.searchCustomers('');
+  return {for (final c in cs) c.id: c.name};
+});
+
+/// Sheet riwayat transaksi di kasir: cari, filter status/tanggal/produk,
+/// aksi Lunasi · Batalkan · Struk.
 class TxHistorySheet extends ConsumerStatefulWidget {
   const TxHistorySheet({super.key});
 
@@ -33,10 +84,50 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   String _query = '';
   String _filter = 'semua'; // semua | lunas | hutang
   String? _expandedId;
+  DateTimeRange? _dateFilter;
+  String _productQuery = '';
+  Timer? _productDebounce;
+
+  bool get _hasActiveFilter =>
+      _query.isNotEmpty ||
+      _filter != 'semua' ||
+      _dateFilter != null ||
+      _productQuery.isNotEmpty;
+
+  @override
+  void dispose() {
+    _productDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _onProductChanged(String v) {
+    _productDebounce?.cancel();
+    _productDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _productQuery = v.trim());
+    });
+  }
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: now,
+      initialDateRange: _dateFilter,
+    );
+    if (picked != null) setState(() => _dateFilter = picked);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final txAsync = ref.watch(_recentTxProvider);
+    final query = _HistoryQuery(
+      date: _dateFilter,
+      product: _productQuery,
+      loadAll: _hasActiveFilter,
+    );
+    final txAsync = ref.watch(_txHistoryProvider(query));
+    final namesAsync = ref.watch(_custNamesProvider);
+    final names = namesAsync.valueOrNull ?? const <String, String>{};
     final scheme = Theme.of(context).colorScheme;
 
     return DraggableScrollableSheet(
@@ -63,6 +154,11 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                     style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
                 IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  tooltip: 'Muat ulang',
+                  onPressed: () => ref.invalidate(_txHistoryProvider),
+                ),
+                IconButton(
                   icon: const Icon(Icons.close, size: 20),
                   onPressed: () => Navigator.of(ctx).pop(),
                 ),
@@ -81,6 +177,18 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
             ),
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Filter produk…',
+                prefixIcon: Icon(Icons.inventory_2_outlined, size: 18),
+                isDense: true,
+              ),
+              onChanged: _onProductChanged,
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
@@ -100,6 +208,24 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                       side: BorderSide.none,
                     ),
                   ),
+                InputChip(
+                  avatar: const Icon(Icons.date_range, size: 16),
+                  label: Text(
+                    _dateFilter == null
+                        ? 'Semua Tanggal'
+                        : '${_dateFilter!.start.day}/${_dateFilter!.start.month} – ${_dateFilter!.end.day}/${_dateFilter!.end.month}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  selected: _dateFilter != null,
+                  showCheckmark: false,
+                  onSelected: (_) => _pickDateRange(),
+                  onDeleted: _dateFilter != null
+                      ? () => setState(() => _dateFilter = null)
+                      : null,
+                  visualDensity: VisualDensity.compact,
+                  selectedColor: scheme.primaryContainer,
+                  side: BorderSide.none,
+                ),
               ],
             ),
           ),
@@ -117,8 +243,12 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                   }
                   if (_query.isEmpty) return true;
                   final q = _query.toLowerCase();
+                  final name = tx.customerName ??
+                      (tx.customerId != null
+                          ? (names[tx.customerId] ?? '')
+                          : '');
                   return tx.localId.toLowerCase().contains(q) ||
-                      (tx.customerName?.toLowerCase().contains(q) ?? false);
+                      name.toLowerCase().contains(q);
                 }).toList();
 
                 if (filtered.isEmpty) {
@@ -134,9 +264,11 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) => _TxRow(
                     tx: filtered[i],
+                    names: names,
                     expanded: _expandedId == filtered[i].id,
                     onToggle: () => setState(() => _expandedId =
                         _expandedId == filtered[i].id ? null : filtered[i].id),
+                    onChanged: () => ref.invalidate(_txHistoryProvider),
                   ),
                 );
               },
@@ -154,18 +286,25 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
 class _TxRow extends ConsumerWidget {
   const _TxRow({
     required this.tx,
+    required this.names,
     required this.expanded,
     required this.onToggle,
+    required this.onChanged,
   });
 
   final Transaction tx;
+  final Map<String, String> names;
   final bool expanded;
   final VoidCallback onToggle;
+  final VoidCallback onChanged;
+
+  bool get _isRetur => tx.internalNote?.startsWith('RETUR:') ?? false;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isHutang = tx.status == 'kurang_bayar' || tx.status == 'tempo';
+    final isRegistered = tx.customerId != null;
     final time =
         '${tx.createdAt.hour.toString().padLeft(2, '0')}:${tx.createdAt.minute.toString().padLeft(2, '0')}';
 
@@ -180,14 +319,32 @@ class _TxRow extends ConsumerWidget {
                       fontSize: 11,
                       fontFamily: 'monospace',
                       color: scheme.onSurfaceVariant)),
+              if (_isRetur) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: scheme.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('Retur',
+                      style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onTertiaryContainer)),
+                ),
+              ],
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   _customerLabel(tx),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isRegistered ? scheme.primary : null),
                 ),
               ),
             ],
@@ -198,47 +355,57 @@ class _TxRow extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(formatRupiah(tx.total),
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w700)),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isHutang
-                      ? scheme.errorContainer
-                      : scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  isHutang ? 'Belum Lunas' : 'Lunas',
                   style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: tx.total < 0 ? scheme.error : null)),
+              if (!_isRetur)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
                     color: isHutang
-                        ? scheme.onErrorContainer
-                        : scheme.onPrimaryContainer,
+                        ? scheme.errorContainer
+                        : scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isHutang ? 'Belum Lunas' : 'Lunas',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: isHutang
+                          ? scheme.onErrorContainer
+                          : scheme.onPrimaryContainer,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           onTap: onToggle,
         ),
-        if (expanded) _TxDetail(tx: tx),
+        if (expanded)
+          _TxDetail(tx: tx, isRetur: _isRetur, onChanged: onChanged),
       ],
     );
   }
 
   String _customerLabel(Transaction tx) {
     if (tx.customerName != null) return tx.customerName!;
-    if (tx.customerId != null) return 'Pelanggan';
+    if (tx.customerId != null) return names[tx.customerId] ?? 'Pelanggan';
     return 'Umum';
   }
 }
 
 class _TxDetail extends ConsumerWidget {
-  const _TxDetail({required this.tx});
+  const _TxDetail({
+    required this.tx,
+    required this.isRetur,
+    required this.onChanged,
+  });
   final Transaction tx;
+  final bool isRetur;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -283,17 +450,20 @@ class _TxDetail extends ConsumerWidget {
                 ),
                 const SizedBox(width: 6),
               ],
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _tambahItem(context, ref),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Tambah Item',
-                      style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact),
+              if (!isRetur) ...[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showVoidConfirm(context, ref),
+                    icon: const Icon(Icons.cancel_outlined, size: 16),
+                    label: const Text('Batalkan',
+                        style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: scheme.error),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
+                const SizedBox(width: 6),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
@@ -316,7 +486,8 @@ class _TxDetail extends ConsumerWidget {
 
   Future<void> _lunasi(BuildContext context, WidgetRef ref) async {
     final remaining = tx.total - tx.paid;
-    final ctrl = TextEditingController(text: remaining.toString());
+    final ctrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(remaining));
     final result = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -332,6 +503,7 @@ class _TxDetail extends ConsumerWidget {
               controller: ctrl,
               autofocus: true,
               keyboardType: TextInputType.number,
+              inputFormatters: const [ThousandsSeparatorFormatter()],
               decoration: const InputDecoration(
                   prefixText: 'Rp ', border: OutlineInputBorder()),
             ),
@@ -342,8 +514,8 @@ class _TxDetail extends ConsumerWidget {
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('Batal')),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(ctx).pop(int.tryParse(ctrl.text)),
+            onPressed: () => Navigator.of(ctx)
+                .pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
             child: const Text('Bayar'),
           ),
         ],
@@ -371,6 +543,7 @@ class _TxDetail extends ConsumerWidget {
       paid: Value(newPaid),
       status: Value(newPaid >= tx.total ? 'lunas' : 'kurang_bayar'),
     ));
+    onChanged();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(newPaid >= tx.total
@@ -379,13 +552,85 @@ class _TxDetail extends ConsumerWidget {
     }
   }
 
-  void _tambahItem(BuildContext context, WidgetRef ref) {
-    final name = tx.customerName ?? (tx.customerId != null ? null : 'Umum');
-    ref.read(prefillCustomerProvider.notifier).state =
-        name == 'Umum' ? null : name;
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            'Tambahkan item untuk ${name ?? 'pelanggan'} — pelanggan terisi otomatis saat bayar')));
+  Future<void> _showVoidConfirm(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showVoidTransactionDialog(context, ref, tx);
+    if (confirmed) onChanged();
   }
+}
+
+/// Konfirmasi & eksekusi pembatalan transaksi. Mengembalikan true jika benar
+/// dibatalkan. Dipakai bersama oleh riwayat & struk.
+///
+/// Kasir/asisten wajib punya izin `batal_transaksi`; owner selalu boleh.
+Future<bool> showVoidTransactionDialog(
+    BuildContext context, WidgetRef ref, Transaction tx) async {
+  final device = ref.read(deviceProvider);
+  final db = ref.read(databaseProvider);
+
+  if (device.deviceRole == 'kasir') {
+    final allowed = await db.isPermissionEnabled('batal_transaksi');
+    if (!allowed) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Tidak punya izin membatalkan transaksi')));
+      }
+      return false;
+    }
+  }
+  if (!context.mounted) return false;
+
+  final scheme = Theme.of(context).colorScheme;
+  final isKurangBayar = tx.status == 'kurang_bayar' || tx.status == 'tempo';
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Batalkan Transaksi?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Transaksi ${tx.localId} akan dibatalkan.',
+              style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          const Text('• Stok barang akan dikembalikan',
+              style: TextStyle(fontSize: 12)),
+          const Text('• Poin loyalitas akan dibalik',
+              style: TextStyle(fontSize: 12)),
+          if (tx.paid > 0 && !isKurangBayar)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                  '• Kembalikan ${formatRupiah(tx.paid)} ke pelanggan secara manual',
+                  style: TextStyle(fontSize: 12, color: scheme.error)),
+            ),
+          if (isKurangBayar && tx.paid > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                  '• Uang ${formatRupiah(tx.paid)} yang sudah masuk dianggap hangus',
+                  style: TextStyle(fontSize: 12, color: scheme.error)),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Tidak Jadi')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: scheme.error),
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Batalkan Transaksi'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true) return false;
+  await db.voidTransaction(tx.id, device.deviceCode);
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Transaksi ${tx.localId} dibatalkan')));
+  }
+  return true;
 }

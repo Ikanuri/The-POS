@@ -74,6 +74,7 @@ class _PermissionTile extends ConsumerWidget {
         'input_pengeluaran' => 'Input Pengeluaran',
         'input_pembelian' => 'Input Pembelian',
         'override_harga' => 'Override Harga',
+        'batal_transaksi' => 'Batalkan Transaksi',
         _ => key,
       };
 
@@ -83,6 +84,7 @@ class _PermissionTile extends ConsumerWidget {
         'input_pengeluaran' => 'Kasir bisa mencatat pengeluaran',
         'input_pembelian' => 'Kasir bisa mencatat pembelian dari supplier',
         'override_harga' => 'Kasir bisa mengubah harga di kasir',
+        'batal_transaksi' => 'Kasir bisa membatalkan / void transaksi',
         _ => '',
       };
 }

@@ -124,12 +124,16 @@ class LanSyncService {
       const appendOnly = {'transactions', 'transaction_items', 'transaction_payments',
           'stock_ledger', 'loyalty_point_ledger', 'expenses'};
       final tables = payload['tables'] as Map<String, dynamic>? ?? {};
+      List<Map<String, Object?>> mergedTxRows = const [];
       for (final entry in tables.entries) {
         final rows = (entry.value as List).cast<Map<String, dynamic>>().map((r) {
           return r.map<String, Object?>((k, v) => MapEntry(k, v));
         }).toList();
         await _db!.mergeRows(entry.key, rows, appendOnly.contains(entry.key));
+        if (entry.key == 'transactions') mergedTxRows = rows;
       }
+      // Refresh ringkasan harian untuk tanggal yang tersentuh transaksi masuk.
+      await _db!.rebuildSummariesForMergedTransactions(mergedTxRows);
 
       // Send back rows since.
       final outDump = await _db!.dumpSince(since);
@@ -198,6 +202,7 @@ class LanSyncService {
 
       int received = 0;
       final tables = respPayload['tables'] as Map<String, dynamic>? ?? {};
+      List<Map<String, Object?>> mergedTxRows = const [];
       for (final entry in tables.entries) {
         final rows = (entry.value as List).cast<Map<String, dynamic>>().map((r) {
           return r.map<String, Object?>((k, v) => MapEntry(k, v));
@@ -205,7 +210,10 @@ class LanSyncService {
         const appendOnly = {'transactions', 'transaction_items', 'transaction_payments',
             'stock_ledger', 'loyalty_point_ledger', 'expenses'};
         received += await db.mergeRows(entry.key, rows, appendOnly.contains(entry.key));
+        if (entry.key == 'transactions') mergedTxRows = rows;
       }
+      // Refresh ringkasan harian untuk tanggal yang tersentuh transaksi masuk.
+      await db.rebuildSummariesForMergedTransactions(mergedTxRows);
 
       final sent = outDump.values.fold<int>(0, (s, r) => s + r.length);
       return SyncResult(received: received, sent: sent);

@@ -14,6 +14,8 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/input_formatters.dart';
+import 'widgets/tx_history_sheet.dart';
 
 const _receiptUuid = Uuid();
 
@@ -32,6 +34,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Map<String, String> _unitNames = {};
   Customer? _customer;
   bool _loading = true;
+
+  /// Checklist verifikasi serah-terima barang. Murni lokal (tidak disimpan).
+  final Map<String, bool> _checked = {};
+  bool get _allChecked =>
+      _items.isNotEmpty && _items.every((i) => _checked[i.id] == true);
+  Set<String> get _checkedIds => _checked.entries
+      .where((e) => e.value)
+      .map((e) => e.key)
+      .toSet();
 
   @override
   void initState() {
@@ -125,6 +136,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               controller: ctrl,
               autofocus: true,
               keyboardType: TextInputType.number,
+              inputFormatters: const [ThousandsSeparatorFormatter()],
               decoration:
                   const InputDecoration(prefixText: 'Rp ', border: OutlineInputBorder()),
             ),
@@ -133,7 +145,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         actions: [
           TextButton(onPressed: () => ctx.pop(), child: const Text('Batal')),
           FilledButton(
-            onPressed: () => ctx.pop(int.tryParse(ctrl.text)),
+            onPressed: () =>
+                ctx.pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
             child: const Text('Bayar'),
           ),
         ],
@@ -168,6 +181,157 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
   }
 
+  Future<void> _showVoid(BuildContext context) async {
+    final ok = await showVoidTransactionDialog(context, ref, _tx!);
+    if (ok && mounted) await _load();
+  }
+
+  Future<void> _showReturSheet(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final returnQty = <String, double>{for (final i in _items) i.id: 0};
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setSheet) {
+            int refund = 0;
+            for (final i in _items) {
+              refund += (i.priceAtSale * (returnQty[i.id] ?? 0)).round();
+            }
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                    16, 12, 16, MediaQuery.of(ctx).viewInsets.bottom + 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Retur Barang',
+                        style: Theme.of(ctx).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text('Pilih jumlah barang yang dikembalikan.',
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: _items.map((item) {
+                          final maxQty = item.qty;
+                          final q = returnQty[item.id] ?? 0;
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                                _productNames[item.productId] ??
+                                    item.productId,
+                                style: const TextStyle(fontSize: 13)),
+                            subtitle: Text(
+                                'Maks ${maxQty % 1 == 0 ? maxQty.toInt() : maxQty} · ${formatRupiah(item.priceAtSale)}',
+                                style: const TextStyle(fontSize: 11)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                      size: 20),
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: q <= 0
+                                      ? null
+                                      : () => setSheet(() =>
+                                          returnQty[item.id] = q - 1),
+                                ),
+                                SizedBox(
+                                  width: 28,
+                                  child: Text(
+                                    q % 1 == 0 ? q.toInt().toString() : '$q',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline,
+                                      size: 20),
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: q >= maxQty
+                                      ? null
+                                      : () => setSheet(() =>
+                                          returnQty[item.id] = q + 1),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total Refund',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        Text(formatRupiah(refund),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.error)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: refund <= 0
+                          ? null
+                          : () => Navigator.of(ctx).pop(true),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: scheme.error),
+                      child: const Text('Konfirmasi Retur'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true || !mounted) return;
+
+    final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    final now = DateTime.now();
+    final txCount = await db.countTodayTransactions(device.deviceCode);
+    final localId =
+        '${device.deviceCode}-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${(txCount + 1).toString().padLeft(4, '0')}';
+
+    final returnItems = [
+      for (final item in _items)
+        if ((returnQty[item.id] ?? 0) > 0)
+          (
+            productUnitId: item.productUnitId,
+            productId: item.productId,
+            qty: returnQty[item.id]!,
+            price: item.priceAtSale,
+            costPrice: item.costAtSale,
+          ),
+    ];
+    if (returnItems.isEmpty) return;
+
+    await db.addReturnTransaction(
+      originalTxId: _tx!.id,
+      localId: localId,
+      returnItems: returnItems,
+      kasirId: device.deviceCode,
+    );
+    if (mounted) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Retur dicatat, stok dikembalikan')));
+    }
+  }
+
   Future<void> _printReceipt() async {
     final mac = await PrinterService.getSavedMac();
     if (mac == null || mac.isEmpty) {
@@ -194,6 +358,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       storeAddress: prefs.$2,
       storePhone: prefs.$3,
       strukNote: _tx!.strukNote,
+      checkedIds: _checkedIds,
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -252,6 +417,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           : device.storeName,
                       storeAddress: prefs.$2,
                       storePhone: prefs.$3,
+                      checkedIds: _checkedIds,
                     ),
                   ),
                 ),
@@ -316,6 +482,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final tx = _tx!;
     final isKurangBayar =
         tx.status == 'kurang_bayar' || tx.status == 'tempo';
+    final isVoid = tx.status == 'void';
+    final isRetur = tx.internalNote?.startsWith('RETUR:') ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -463,44 +631,63 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ),
           const SizedBox(height: 8),
 
+          // Verifikasi serah-terima barang
+          if (_items.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  final target = !_allChecked;
+                  for (final i in _items) {
+                    _checked[i.id] = target;
+                  }
+                }),
+                icon: Icon(
+                    _allChecked
+                        ? Icons.remove_done
+                        : Icons.done_all,
+                    size: 18),
+                label: Text(_allChecked ? 'Hapus Tanda' : 'Tandai Semua',
+                    style: const TextStyle(fontSize: 12)),
+              ),
+            ),
+
           // Items
           Card(
             child: Column(
               children: [
-                ..._items.map((item) => ListTile(
-                      dense: true,
-                      title: Text(
-                        _productNames[item.productId] ?? item.productId,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13),
+                ..._items.map((item) {
+                  final checked = _checked[item.id] ?? false;
+                  return CheckboxListTile(
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: checked,
+                    onChanged: (v) =>
+                        setState(() => _checked[item.id] = v ?? false),
+                    title: Text(
+                      _productNames[item.productId] ?? item.productId,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        decoration:
+                            checked ? TextDecoration.lineThrough : null,
+                        color: checked ? scheme.onSurfaceVariant : null,
                       ),
-                      subtitle: item.itemNote != null
-                          ? Text(item.itemNote!,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: scheme.onSurfaceVariant,
-                                  fontStyle: FontStyle.italic))
-                          : null,
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '${_unitNames[item.productUnitId] ?? ''} ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} × ${formatRupiah(item.priceAtSale)}',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: scheme.onSurfaceVariant),
-                          ),
-                          Text(
-                            formatRupiah(item.subtotal),
-                            style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    )),
+                    ),
+                    subtitle: Text(
+                      '${_unitNames[item.productUnitId] ?? ''} ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} × ${formatRupiah(item.priceAtSale)}'
+                      '${item.itemNote != null ? '\n${item.itemNote}' : ''}',
+                      style: TextStyle(
+                          fontSize: 11, color: scheme.onSurfaceVariant),
+                    ),
+                    secondary: Text(
+                      formatRupiah(item.subtotal),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  );
+                }),
                 const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -534,13 +721,53 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ),
           const SizedBox(height: 20),
 
-          if (isKurangBayar) ...[
+          if (isKurangBayar && !isVoid) ...[
             FilledButton.tonal(
               onPressed: () => _showTambahBayar(context),
               child: const Text('Tambah Bayar'),
             ),
             const SizedBox(height: 8),
           ],
+          if (!isVoid && !isRetur)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showVoid(context),
+                    icon: const Icon(Icons.cancel_outlined, size: 18),
+                    label: const Text('Batalkan'),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: scheme.error),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showReturSheet(context),
+                    icon: const Icon(Icons.assignment_return_outlined,
+                        size: 18),
+                    label: const Text('Retur'),
+                  ),
+                ),
+              ],
+            ),
+          if (isVoid)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.errorContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.block, color: scheme.onErrorContainer, size: 18),
+                  const SizedBox(width: 8),
+                  Text('Transaksi ini telah dibatalkan',
+                      style: TextStyle(color: scheme.onErrorContainer)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => context.go('/kasir'),
             child: const Text('Transaksi Baru'),
@@ -572,6 +799,7 @@ class _ReceiptPaper extends StatelessWidget {
     required this.storeName,
     required this.storeAddress,
     required this.storePhone,
+    this.checkedIds = const {},
   });
 
   final Transaction tx;
@@ -582,6 +810,7 @@ class _ReceiptPaper extends StatelessWidget {
   final String storeName;
   final String storeAddress;
   final String storePhone;
+  final Set<String> checkedIds;
 
   static const _ink = Color(0xFF111111);
   static const _mono = TextStyle(
@@ -629,8 +858,9 @@ class _ReceiptPaper extends StatelessWidget {
             final qtyStr = item.qty % 1 == 0
                 ? item.qty.toInt().toString()
                 : item.qty.toString();
+            final mark = checkedIds.contains(item.id) ? '✓ ' : '';
             return [
-              Text(productNames[item.productId] ?? '',
+              Text('$mark${productNames[item.productId] ?? ''}',
                   style: _mono.copyWith(fontWeight: FontWeight.w700)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/input_formatters.dart';
 import '../cart_provider.dart';
 
 class CartSheet extends ConsumerWidget {
@@ -148,16 +148,7 @@ class _CartItemTile extends ConsumerWidget {
             onPressed: () => notifier.setQty(
                 item.productUnitId, item.qty - 1),
           ),
-          SizedBox(
-            width: 32,
-            child: Text(
-              item.qty % 1 == 0
-                  ? item.qty.toInt().toString()
-                  : item.qty.toString(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
+          _QtyField(item: item),
           IconButton(
             icon: const Icon(Icons.add_circle_outline, size: 20),
             visualDensity: VisualDensity.compact,
@@ -223,7 +214,8 @@ class _CartItemTile extends ConsumerWidget {
   }
 
   void _showPriceEdit(BuildContext context, WidgetRef ref) {
-    final ctrl = TextEditingController(text: item.price.toString());
+    final ctrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(item.price));
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -232,7 +224,7 @@ class _CartItemTile extends ConsumerWidget {
           controller: ctrl,
           autofocus: true,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: const [ThousandsSeparatorFormatter()],
           decoration: const InputDecoration(prefixText: 'Rp '),
         ),
         actions: [
@@ -241,7 +233,8 @@ class _CartItemTile extends ConsumerWidget {
               child: const Text('Batal')),
           FilledButton(
             onPressed: () {
-              final price = int.tryParse(ctrl.text) ?? item.price;
+              final parsed = ThousandsSeparatorFormatter.parseValue(ctrl.text);
+              final price = parsed > 0 ? parsed : item.price;
               ref.read(cartProvider.notifier).overridePrice(item.productUnitId, price);
               ctx.pop();
             },
@@ -277,6 +270,91 @@ class _CartItemTile extends ConsumerWidget {
             child: const Text('Simpan'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Qty yang bisa di-tap untuk inline edit. Tap → TextField kecil di tempat;
+/// blur/submit → setQty. Desain tombol ± di sekitarnya tidak berubah.
+class _QtyField extends ConsumerStatefulWidget {
+  const _QtyField({required this.item});
+  final CartItem item;
+
+  @override
+  ConsumerState<_QtyField> createState() => _QtyFieldState();
+}
+
+class _QtyFieldState extends ConsumerState<_QtyField> {
+  bool _editing = false;
+  late final TextEditingController _ctrl = TextEditingController();
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus && _editing) _commit();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  String _fmt(double q) =>
+      q % 1 == 0 ? q.toInt().toString() : q.toString();
+
+  void _startEdit() {
+    setState(() {
+      _editing = true;
+      _ctrl.text = _fmt(widget.item.qty);
+      _ctrl.selection =
+          TextSelection(baseOffset: 0, extentOffset: _ctrl.text.length);
+    });
+    _focus.requestFocus();
+  }
+
+  void _commit() {
+    final parsed = double.tryParse(_ctrl.text.replaceAll(',', '.'));
+    if (parsed != null) {
+      ref.read(cartProvider.notifier).setQty(widget.item.productUnitId, parsed);
+    }
+    if (mounted) setState(() => _editing = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_editing) {
+      return SizedBox(
+        width: 48,
+        child: TextField(
+          controller: _ctrl,
+          focusNode: _focus,
+          autofocus: true,
+          textAlign: TextAlign.center,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 4),
+          ),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+          onSubmitted: (_) => _commit(),
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: _startEdit,
+      child: SizedBox(
+        width: 32,
+        child: Text(
+          _fmt(widget.item.qty),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }

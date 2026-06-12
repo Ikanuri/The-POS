@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart' hide Column;
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,45 +8,41 @@ import '../../../core/theme/app_theme.dart';
 final _ringkasanTabProvider =
     FutureProvider.family<_RingkasanTabData, DateTimeRange>((ref, range) async {
   final db = ref.watch(databaseProvider);
-  final txList = await (db.select(db.transactions)
-        ..where((t) =>
-            t.status.isNotValue('void') &
-            t.createdAt.isBiggerOrEqualValue(range.start) &
-            t.createdAt.isSmallerOrEqualValue(range.end))
-        ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-      .get();
+  // Baca dari ringkasan harian ter-materialisasi (O(hari)) alih-alih memindai
+  // seluruh transaksi + item (O(transaksi)).
+  final summaries = await db.getDailySummaries(range.start, range.end);
 
-  final revenue = txList.fold(0, (s, t) => s + t.total);
-  final txCount = txList.length;
-
-  // Payment method breakdown
+  var revenue = 0;
+  var cogs = 0;
+  var txCount = 0;
   final byMethod = <String, int>{};
-  for (final tx in txList) {
-    byMethod[tx.paymentMethod] = (byMethod[tx.paymentMethod] ?? 0) + tx.total;
-  }
-
-  // COGS
-  int totalCogs = 0;
-  for (final tx in txList) {
-    final items = await (db.select(db.transactionItems)
-          ..where((t) => t.transactionId.equals(tx.id)))
-        .get();
-    totalCogs += items.fold<int>(0, (s, i) => s + (i.costAtSale * i.qty).round());
-  }
-
-  // Daily breakdown for chart
   final daily = <DateTime, int>{};
-  for (final tx in txList) {
-    final day = DateTime(
-        tx.createdAt.year, tx.createdAt.month, tx.createdAt.day);
-    daily[day] = (daily[day] ?? 0) + tx.total;
+
+  for (final s in summaries) {
+    revenue += s.omzet;
+    cogs += s.hpp;
+    txCount += s.jumlahTransaksi;
+    if (s.pembayaranTunai > 0) {
+      byMethod['tunai'] = (byMethod['tunai'] ?? 0) + s.pembayaranTunai;
+    }
+    if (s.pembayaranQris > 0) {
+      byMethod['qris'] = (byMethod['qris'] ?? 0) + s.pembayaranQris;
+    }
+    if (s.pembayaranTransfer > 0) {
+      byMethod['transfer'] = (byMethod['transfer'] ?? 0) + s.pembayaranTransfer;
+    }
+    if (s.pembayaranLainnya > 0) {
+      byMethod['lainnya'] = (byMethod['lainnya'] ?? 0) + s.pembayaranLainnya;
+    }
+    final parts = s.date.split('-').map(int.parse).toList();
+    daily[DateTime(parts[0], parts[1], parts[2])] = s.omzet;
   }
 
   return _RingkasanTabData(
     revenue: revenue,
     txCount: txCount,
-    cogs: totalCogs,
-    profit: revenue - totalCogs,
+    cogs: cogs,
+    profit: revenue - cogs,
     byMethod: byMethod,
     daily: daily,
   );
@@ -87,6 +83,8 @@ class RingkasanTab extends ConsumerWidget {
             Text('Metode Pembayaran',
                 style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
+            if (data.byMethod.length >= 2)
+              _PaymentDonut(byMethod: data.byMethod, total: data.revenue),
             Card(
               child: Column(
                 children: data.byMethod.entries.map((e) {
@@ -95,6 +93,14 @@ class RingkasanTab extends ConsumerWidget {
                       : 0;
                   return ListTile(
                     dense: true,
+                    leading: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: _methodColor(e.key, scheme),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     title: Text(_methodLabel(e.key)),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -132,15 +138,58 @@ class RingkasanTab extends ConsumerWidget {
       error: (e, _) => Center(child: Text('Error: $e')),
     );
   }
+}
 
-  String _methodLabel(String m) => switch (m) {
-        'tunai' => 'Tunai',
-        'transfer' => 'Transfer Bank',
-        'qris' => 'QRIS',
-        'ewallet' => 'E-Wallet',
-        'tempo' => 'Tempo',
-        _ => m,
-      };
+String _methodLabel(String m) => switch (m) {
+      'tunai' => 'Tunai',
+      'transfer' => 'Transfer Bank',
+      'qris' => 'QRIS',
+      'ewallet' => 'E-Wallet',
+      'tempo' => 'Tempo',
+      'lainnya' => 'Lainnya',
+      _ => m,
+    };
+
+Color _methodColor(String m, ColorScheme scheme) => switch (m) {
+      'tunai' => scheme.primary,
+      'qris' => scheme.secondary,
+      'transfer' => scheme.tertiary,
+      _ => scheme.surfaceContainerHighest,
+    };
+
+class _PaymentDonut extends StatelessWidget {
+  const _PaymentDonut({required this.byMethod, required this.total});
+  final Map<String, int> byMethod;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final entries = byMethod.entries.toList();
+    return SizedBox(
+      height: 180,
+      child: PieChart(
+        PieChartData(
+          centerSpaceRadius: 40,
+          sectionsSpace: 2,
+          sections: entries.map((e) {
+            final pct = total > 0 ? (e.value / total * 100) : 0.0;
+            return PieChartSectionData(
+              value: e.value.toDouble(),
+              color: _methodColor(e.key, scheme),
+              title: '${pct.round()}%',
+              radius: 50,
+              titleStyle: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: scheme.onPrimary,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
 }
 
 class _KpiRow extends StatelessWidget {

@@ -15,6 +15,7 @@ import 'tables/ledger_tables.dart';
 import 'tables/pricing_tables.dart';
 import 'tables/product_tables.dart';
 import 'tables/settings_tables.dart';
+import 'tables/summary_tables.dart';
 import 'tables/supplier_tables.dart';
 import 'tables/transaction_tables.dart';
 
@@ -52,6 +53,7 @@ const kKasirPermissionKeys = <String>[
   'input_pengeluaran',
   'input_pembelian',
   'override_harga',
+  'batal_transaksi',
 ];
 
 @DriftDatabase(tables: [
@@ -77,6 +79,7 @@ const kKasirPermissionKeys = <String>[
   PurchaseItems,
   KasirPermissions,
   PaymentMethods,
+  DailySummaries,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
@@ -85,23 +88,55 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
+  /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
+  /// onUpgrade.
+  static const _performanceIndexes = <String>[
+    'CREATE INDEX IF NOT EXISTS idx_tx_created_at ON transactions(created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_tx_customer ON transactions(customer_id, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_tx_kasir ON transactions(kasir_id, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_tx_status ON transactions(status, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_ti_transaction ON transaction_items(transaction_id)',
+    'CREATE INDEX IF NOT EXISTS idx_ti_product ON transaction_items(product_id)',
+    'CREATE INDEX IF NOT EXISTS idx_stock_ledger_unit ON stock_ledger(product_unit_id, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_stock_ledger_created ON stock_ledger(created_at DESC)',
+  ];
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
+          for (final stmt in _performanceIndexes) {
+            await customStatement(stmt);
+          }
           await _seedDefaults();
         },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.createTable(dailySummaries);
+            for (final stmt in _performanceIndexes) {
+              await customStatement(stmt);
+            }
+          }
+        },
         beforeOpen: (details) async {
-          // Sisipkan unit type baru (insertOrIgnore) agar DB lama turut mendapat
-          // entri yang ditambahkan setelah instalasi pertama.
+          // Sisipkan unit type & permission key baru (insertOrIgnore) agar DB
+          // lama turut mendapat entri yang ditambahkan setelah instalasi
+          // pertama (mis. permission 'batal_transaksi' di v2).
           await batch((b) {
             b.insertAll(
               unitTypes,
               _kDefaultUnitTypes.entries.map(
                 (e) => UnitTypesCompanion.insert(id: Value(e.key), name: e.value),
               ),
+              mode: InsertMode.insertOrIgnore,
+            );
+            b.insertAll(
+              kasirPermissions,
+              kKasirPermissionKeys
+                  .map((k) => KasirPermissionsCompanion.insert(permissionKey: k)),
               mode: InsertMode.insertOrIgnore,
             );
           });
@@ -364,6 +399,8 @@ class AppDatabase extends _$AppDatabase {
           updates: {customers},
         );
       }
+      // Materialisasi ringkasan harian (di dalam transaksi → atomik).
+      await _rebuildDailySummaryFor(_dateKey(ts));
     });
   }
 
@@ -415,7 +452,318 @@ class AppDatabase extends _$AppDatabase {
 
       await (update(transactions)..where((t) => t.id.equals(txId)))
           .write(const TransactionsCompanion(status: Value('void')));
+
+      // Perbarui ringkasan harian untuk tanggal transaksi yang dibatalkan.
+      await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
     });
+  }
+
+  // ───────────────────────── Retur ─────────────────────────
+
+  /// Buat transaksi retur (total negatif = refund) dan kembalikan stok.
+  /// Ditandai lewat `internalNote = 'RETUR:<originalTxId>'`.
+  Future<void> addReturnTransaction({
+    required String originalTxId,
+    required String localId,
+    required List<
+            ({
+              String productUnitId,
+              String productId,
+              double qty,
+              int price,
+              int costPrice
+            })>
+        returnItems,
+    required String kasirId,
+  }) async {
+    final now = DateTime.now();
+    await transaction(() async {
+      // Kembalikan stok untuk tiap item.
+      for (final item in returnItems) {
+        final prev = await currentStock(item.productUnitId);
+        await into(stockLedger).insert(StockLedgerCompanion.insert(
+          id: const Uuid().v4(),
+          productUnitId: item.productUnitId,
+          type: 'return_in',
+          qtyChange: item.qty,
+          stockAfter: prev + item.qty,
+          referenceId: Value(originalTxId),
+          kasirId: Value(kasirId),
+          note: const Value('Retur'),
+          createdAt: Value(now),
+        ));
+      }
+
+      final refundTotal =
+          returnItems.fold<int>(0, (s, i) => s + (i.price * i.qty).round());
+      final txId = const Uuid().v4();
+      await into(transactions).insert(TransactionsCompanion.insert(
+        id: txId,
+        localId: localId,
+        kasirId: Value(kasirId),
+        status: 'lunas',
+        total: -refundTotal,
+        paid: -refundTotal,
+        changeAmount: 0,
+        paymentMethod: 'tunai',
+        internalNote: Value('RETUR:$originalTxId'),
+        createdAt: Value(now),
+      ));
+      for (final item in returnItems) {
+        final sub = (item.price * item.qty).round();
+        // Qty negatif → revenue, HPP, dan jumlah terjual ternetto dengan benar
+        // di laporan. Stok dikembalikan lewat ledger di atas (qtyChange positif).
+        await into(transactionItems).insert(TransactionItemsCompanion.insert(
+          id: const Uuid().v4(),
+          transactionId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: -item.qty,
+          priceAtSale: item.price,
+          originalPrice: item.price,
+          costAtSale: Value(item.costPrice),
+          subtotal: -sub,
+        ));
+      }
+
+      await _rebuildDailySummaryFor(_dateKey(now));
+    });
+  }
+
+  // ───────────────────────── Customer debt ─────────────────────────
+
+  /// Total hutang akumulatif pelanggan + jumlah nota yang belum lunas.
+  Future<(int debtTotal, int debtCount)> getCustomerOutstandingDebt(
+      String customerId) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(total - paid), 0) AS total, COUNT(*) AS cnt '
+      "FROM transactions WHERE customer_id = ? AND status IN ('kurang_bayar', 'tempo')",
+      variables: [Variable.withString(customerId)],
+      readsFrom: {transactions},
+    ).getSingleOrNull();
+    final total = (row?.data['total'] as int?) ?? 0;
+    final cnt = (row?.data['cnt'] as int?) ?? 0;
+    return (total, cnt);
+  }
+
+  // ───────────────────────── History filter ─────────────────────────
+
+  /// Set id transaksi yang memuat produk dengan nama mengandung [q].
+  Future<Set<String>> findTxIdsWithProduct(String q) async {
+    if (q.trim().isEmpty) return <String>{};
+    final rows = await customSelect(
+      'SELECT DISTINCT ti.transaction_id AS tid FROM transaction_items ti '
+      'JOIN products p ON p.id = ti.product_id '
+      'WHERE LOWER(p.name) LIKE ?',
+      variables: [Variable.withString('%${q.toLowerCase()}%')],
+      readsFrom: {transactionItems, products},
+    ).get();
+    return rows.map((r) => r.data['tid'] as String).toSet();
+  }
+
+  // ───────────────────────── Daily summary ─────────────────────────
+
+  static String _dateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  static int _paymentBucket(String method, Map<int, int> buckets, int total) {
+    // 0=tunai 1=qris 2=transfer 3=lainnya
+    final idx = switch (method) {
+      'tunai' => 0,
+      'qris' => 1,
+      'transfer' => 2,
+      _ => 3,
+    };
+    buckets[idx] = (buckets[idx] ?? 0) + total;
+    return idx;
+  }
+
+  /// Hitung ulang ringkasan satu hari dari data mentah lalu simpan (upsert).
+  /// Dipanggil di dalam transaksi penulisan agar atomik.
+  Future<void> _rebuildDailySummaryFor(String date) async {
+    final parts = date.split('-').map(int.parse).toList();
+    final start = DateTime(parts[0], parts[1], parts[2]);
+    final end = DateTime(parts[0], parts[1], parts[2], 23, 59, 59, 999);
+
+    final txRows = await (select(transactions)
+          ..where((t) =>
+              t.status.isNotValue('void') &
+              t.createdAt.isBiggerOrEqualValue(start) &
+              t.createdAt.isSmallerOrEqualValue(end)))
+        .get();
+
+    if (txRows.isEmpty) {
+      // Tidak ada transaksi valid → hapus baris ringkasan bila ada.
+      await (delete(dailySummaries)..where((t) => t.date.equals(date))).go();
+      return;
+    }
+
+    var omzet = 0;
+    final buckets = <int, int>{};
+    for (final t in txRows) {
+      omzet += t.total;
+      _paymentBucket(t.paymentMethod, buckets, t.total);
+    }
+
+    final txIds = txRows.map((t) => t.id).toList();
+    final itemRows = await (select(transactionItems)
+          ..where((t) => t.transactionId.isIn(txIds)))
+        .get();
+    var hpp = 0;
+    var jumlahItem = 0;
+    for (final i in itemRows) {
+      hpp += (i.costAtSale * i.qty).round();
+      jumlahItem += i.qty.round();
+    }
+
+    await into(dailySummaries).insertOnConflictUpdate(
+      DailySummariesCompanion.insert(
+        date: date,
+        omzet: Value(omzet),
+        hpp: Value(hpp),
+        labaKotor: Value(omzet - hpp),
+        jumlahTransaksi: Value(txRows.length),
+        jumlahItem: Value(jumlahItem),
+        pembayaranTunai: Value(buckets[0] ?? 0),
+        pembayaranQris: Value(buckets[1] ?? 0),
+        pembayaranTransfer: Value(buckets[2] ?? 0),
+        pembayaranLainnya: Value(buckets[3] ?? 0),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Catch-up: bangun ringkasan untuk tanggal yang punya transaksi tapi belum
+  /// ada entri di [dailySummaries]. Dipanggil sekali saat app init — ringan
+  /// karena hanya memindai daftar tanggal unik.
+  Future<void> backfillMissingSummaries() async {
+    final rows = await customSelect(
+      "SELECT DISTINCT strftime('%Y-%m-%d', datetime(created_at, 'unixepoch', 'localtime')) AS d "
+      "FROM transactions WHERE status != 'void'",
+      readsFrom: {transactions},
+    ).get();
+    final allDates = rows
+        .map((r) => r.data['d'] as String?)
+        .whereType<String>()
+        .toSet();
+
+    final existing = await (selectOnly(dailySummaries)
+          ..addColumns([dailySummaries.date]))
+        .get();
+    final have = existing.map((r) => r.read(dailySummaries.date)!).toSet();
+
+    for (final d in allDates.difference(have)) {
+      await _rebuildDailySummaryFor(d);
+    }
+  }
+
+  /// Bangun ulang ringkasan untuk tanggal yang tersentuh oleh transaksi hasil
+  /// sync. Dipanggil SETELAH semua tabel (termasuk transaction_items) di-merge,
+  /// agar HPP terhitung benar. `created_at` pada baris mentah = unix detik.
+  Future<void> rebuildSummariesForMergedTransactions(
+      List<Map<String, Object?>> txRows) async {
+    final dates = <String>{};
+    for (final r in txRows) {
+      final ca = r['created_at'];
+      if (ca is int) {
+        dates.add(_dateKey(
+            DateTime.fromMillisecondsSinceEpoch(ca * 1000)));
+      }
+    }
+    for (final d in dates) {
+      await _rebuildDailySummaryFor(d);
+    }
+  }
+
+  /// Ringkasan harian untuk rentang tanggal (inklusif). Sumber cepat untuk
+  /// laporan — maksimum 1 baris per hari.
+  Future<List<DailySummary>> getDailySummaries(
+      DateTime from, DateTime to) async {
+    final fromKey = _dateKey(from);
+    final toKey = _dateKey(to);
+    return (select(dailySummaries)
+          ..where((t) => t.date.isBetweenValues(fromKey, toKey))
+          ..orderBy([(t) => OrderingTerm.asc(t.date)]))
+        .get();
+  }
+
+  // ───────────── Laporan agregat (JOIN, bukan N+1) ─────────────
+
+  /// Top produk berdasarkan revenue dalam rentang waktu — satu query JOIN.
+  Future<List<ProductRevenueStat>> getTopProductsByRevenue(
+    DateTime from,
+    DateTime to, {
+    int limit = 50,
+  }) async {
+    final revenue = transactionItems.subtotal.sum();
+    final qtySold = transactionItems.qty.sum();
+    const cogs = CustomExpression<double>(
+        'SUM(transaction_items.cost_at_sale * transaction_items.qty)');
+
+    final query = select(transactionItems).join([
+      innerJoin(transactions,
+          transactions.id.equalsExp(transactionItems.transactionId)),
+      innerJoin(products, products.id.equalsExp(transactionItems.productId)),
+    ])
+      ..addColumns([products.id, products.name, revenue, qtySold, cogs])
+      ..where(transactions.status.isNotValue('void') &
+          transactions.createdAt.isBiggerOrEqualValue(from) &
+          transactions.createdAt.isSmallerOrEqualValue(to))
+      ..groupBy([transactionItems.productId])
+      ..orderBy([OrderingTerm.desc(revenue)])
+      ..limit(limit);
+
+    final rows = await query.get();
+    return rows.map((r) {
+      return ProductRevenueStat(
+        productId: r.read(products.id) ?? '',
+        name: r.read(products.name) ?? '',
+        revenue: (r.read(revenue) ?? 0),
+        qtySold: r.read(qtySold) ?? 0,
+        cogs: (r.read(cogs) ?? 0).round(),
+      );
+    }).toList();
+  }
+
+  /// Top pelanggan terdaftar berdasarkan total belanja — satu query JOIN.
+  Future<List<CustomerRevenueStat>> getTopCustomersByRevenue(
+    DateTime from,
+    DateTime to, {
+    int limit = 50,
+  }) async {
+    final spent = transactions.total.sum();
+    final txCount = transactions.id.count();
+
+    final query = select(transactions).join([
+      innerJoin(customers, customers.id.equalsExp(transactions.customerId)),
+    ])
+      ..addColumns([
+        customers.id,
+        customers.name,
+        customers.loyaltyPoints,
+        spent,
+        txCount,
+      ])
+      ..where(transactions.status.isNotValue('void') &
+          transactions.customerId.isNotNull() &
+          transactions.createdAt.isBiggerOrEqualValue(from) &
+          transactions.createdAt.isSmallerOrEqualValue(to))
+      ..groupBy([transactions.customerId])
+      ..orderBy([OrderingTerm.desc(spent)])
+      ..limit(limit);
+
+    final rows = await query.get();
+    return rows.map((r) {
+      return CustomerRevenueStat(
+        customerId: r.read(customers.id) ?? '',
+        name: r.read(customers.name) ?? '',
+        loyaltyPoints: r.read(customers.loyaltyPoints) ?? 0,
+        totalSpent: r.read(spent) ?? 0,
+        txCount: r.read(txCount) ?? 0,
+      );
+    }).toList();
   }
 
   // ───────────────────────── Laporan queries ─────────────────────────
@@ -479,7 +827,7 @@ class AppDatabase extends _$AppDatabase {
     'transactions', 'transaction_items', 'transaction_payments', 'held_orders',
     'stock_ledger', 'expenses', 'loyalty_point_ledger',
     'suppliers', 'purchases', 'purchase_items',
-    'kasir_permissions', 'payment_methods',
+    'kasir_permissions', 'payment_methods', 'daily_summaries',
   ];
 
   Future<Map<String, List<Map<String, Object?>>>> dumpAllTables() async {
@@ -592,6 +940,42 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
+/// Hasil agregat top-produk untuk laporan (JOIN query).
+class ProductRevenueStat {
+  const ProductRevenueStat({
+    required this.productId,
+    required this.name,
+    required this.revenue,
+    required this.qtySold,
+    required this.cogs,
+  });
+
+  final String productId;
+  final String name;
+  final int revenue;
+  final double qtySold;
+  final int cogs;
+
+  int get profit => revenue - cogs;
+}
+
+/// Hasil agregat top-pelanggan untuk laporan (JOIN query).
+class CustomerRevenueStat {
+  const CustomerRevenueStat({
+    required this.customerId,
+    required this.name,
+    required this.loyaltyPoints,
+    required this.totalSpent,
+    required this.txCount,
+  });
+
+  final String customerId;
+  final String name;
+  final int loyaltyPoints;
+  final int totalSpent;
+  final int txCount;
+}
+
 /// Build typed variable list for raw SQL queries.
 /// Uses Variable<Object> for all values — SQLite will infer the type from the
 /// runtime Dart type passed through DriftSqlType.any.
@@ -628,6 +1012,14 @@ QueryExecutor _openConnection(String encryptionKey) {
         }
         final escaped = encryptionKey.replaceAll("'", "''");
         rawDb.execute("PRAGMA key = '$escaped';");
+        // Performance tuning — dipasang setiap koneksi dibuka. WAL + cache
+        // besar + mmap menjaga query tetap cepat walau data menumpuk.
+        rawDb.execute('PRAGMA journal_mode = WAL;');
+        rawDb.execute('PRAGMA synchronous = NORMAL;');
+        rawDb.execute('PRAGMA cache_size = -65536;'); // 64 MB page cache
+        rawDb.execute('PRAGMA mmap_size = 268435456;'); // 256 MB mmap
+        rawDb.execute('PRAGMA temp_store = MEMORY;');
+        rawDb.execute('PRAGMA foreign_keys = ON;');
       },
     );
   });

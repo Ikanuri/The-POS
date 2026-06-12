@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
@@ -8,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/input_formatters.dart';
 import 'cart_provider.dart';
 
 const _uuid = Uuid();
@@ -34,6 +34,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   String _custNameManual = '';
   bool _custDropdownOpen = false;
   List<Customer> _custSuggestions = [];
+  Map<String, (int, int)> _custDebts = {};
   final _custCtrl = TextEditingController();
 
   List<PaymentMethod> _methods = [];
@@ -43,17 +44,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   void initState() {
     super.initState();
     _load();
-    // Prefill dari aksi "Tambah Item" di riwayat transaksi
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final prefill = ref.read(prefillCustomerProvider);
-      if (prefill != null && prefill.isNotEmpty) {
-        setState(() {
-          _custNameManual = prefill;
-          _custCtrl.text = prefill;
-        });
-        ref.read(prefillCustomerProvider.notifier).state = null;
-      }
-    });
   }
 
   Future<void> _load() async {
@@ -83,9 +73,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
     final db = ref.read(databaseProvider);
     final results = await db.searchCustomers(q);
+    // Ambil hutang akumulatif per pelanggan untuk ditampilkan di dropdown.
+    final debts = <String, (int, int)>{};
+    for (final c in results) {
+      debts[c.id] = await db.getCustomerOutstandingDebt(c.id);
+    }
     if (mounted) {
       setState(() {
         _custSuggestions = results;
+        _custDebts = debts;
         _custDropdownOpen = results.isNotEmpty;
       });
     }
@@ -133,7 +129,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   Future<void> _editTotal() async {
-    final ctrl = TextEditingController(text: _total.toString());
+    final ctrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(_total));
     final result = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -152,11 +149,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               controller: ctrl,
               autofocus: true,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: const [ThousandsSeparatorFormatter()],
               decoration: const InputDecoration(
                   prefixText: 'Rp ', border: OutlineInputBorder()),
-              onTap: () => ctrl.selection = TextSelection(
-                  baseOffset: 0, extentOffset: ctrl.text.length),
             ),
           ],
         ),
@@ -168,7 +163,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           TextButton(onPressed: () => ctx.pop(), child: const Text('Batal')),
           FilledButton(
-            onPressed: () => ctx.pop(int.tryParse(ctrl.text)),
+            onPressed: () =>
+                ctx.pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
             child: const Text('Terapkan'),
           ),
         ],
@@ -309,6 +305,102 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     super.dispose();
   }
 
+  /// Panel tunai sticky: ringkasan diterima/kembalian, chip uang pas, keypad.
+  Widget _buildCashPanel(ColorScheme scheme) {
+    return Material(
+      elevation: 8,
+      color: scheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Diterima',
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
+                Text(
+                  formatRupiah(_tendered),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 20),
+                ),
+              ],
+            ),
+            if (_tendered > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _change > 0
+                      ? scheme.primaryContainer
+                      : _shortfall > 0
+                          ? scheme.errorContainer
+                          : scheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _change > 0
+                          ? 'Kembalian'
+                          : _shortfall > 0
+                              ? 'Sisa / Hutang'
+                              : '✓ Uang Pas',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _change > 0
+                            ? scheme.onPrimaryContainer
+                            : _shortfall > 0
+                                ? scheme.onErrorContainer
+                                : scheme.onTertiaryContainer,
+                      ),
+                    ),
+                    if (_change > 0 || _shortfall > 0)
+                      Text(
+                        formatRupiah(_change > 0 ? _change : _shortfall),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: _change > 0
+                              ? scheme.onPrimaryContainer
+                              : scheme.onErrorContainer,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ActionChip(
+                  label: const Text('Uang Pas'),
+                  backgroundColor: scheme.primaryContainer,
+                  side: BorderSide.none,
+                  onPressed: () => setState(() => _tendered = _total),
+                ),
+                ...{10000, 20000, 50000, 100000}
+                    .where((d) => d >= _total)
+                    .take(3)
+                    .map((d) => ActionChip(
+                          label: Text(formatRupiah(d)),
+                          onPressed: () => setState(() => _tendered = d),
+                        )),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _Keypad(onPress: _keypadPress),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
@@ -316,9 +408,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pembayaran')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
           // Order summary
           Card(
             child: Column(
@@ -439,6 +534,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         ),
                       ],
                     ),
+                    if ((_custDebts[_selectedCustomer!.id]?.$1 ?? 0) > 0)
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: scheme.errorContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded,
+                                size: 16, color: scheme.onErrorContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Pelanggan ini memiliki hutang ${formatRupiah(_custDebts[_selectedCustomer!.id]!.$1)} di ${_custDebts[_selectedCustomer!.id]!.$2} nota',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onErrorContainer),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                   ] else ...[
                     TextField(
                       controller: _custCtrl,
@@ -469,30 +589,36 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           border: Border.all(color: scheme.outlineVariant),
                         ),
                         child: Column(
-                          children: _custSuggestions
-                              .take(5)
-                              .map((c) => ListTile(
-                                    dense: true,
-                                    leading: CircleAvatar(
-                                      radius: 12,
-                                      backgroundColor: scheme.primaryContainer,
-                                      child: Text(c.name[0].toUpperCase(),
-                                          style: TextStyle(
-                                              color: scheme.onPrimaryContainer,
-                                              fontSize: 10)),
-                                    ),
-                                    title: Text(c.name,
-                                        style:
-                                            const TextStyle(fontSize: 13)),
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedCustomer = c;
-                                        _custCtrl.text = c.name;
-                                        _custDropdownOpen = false;
-                                      });
-                                    },
-                                  ))
-                              .toList(),
+                          children: _custSuggestions.take(5).map((c) {
+                            final debt = _custDebts[c.id];
+                            final hasDebt = debt != null && debt.$1 > 0;
+                            return ListTile(
+                              dense: true,
+                              leading: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: scheme.primaryContainer,
+                                child: Text(c.name[0].toUpperCase(),
+                                    style: TextStyle(
+                                        color: scheme.onPrimaryContainer,
+                                        fontSize: 10)),
+                              ),
+                              title: Text(c.name,
+                                  style: const TextStyle(fontSize: 13)),
+                              subtitle: hasDebt
+                                  ? Text(
+                                      'Hutang: ${formatRupiah(debt.$1)} (${debt.$2} nota)',
+                                      style: TextStyle(
+                                          fontSize: 11, color: scheme.error))
+                                  : null,
+                              onTap: () {
+                                setState(() {
+                                  _selectedCustomer = c;
+                                  _custCtrl.text = c.name;
+                                  _custDropdownOpen = false;
+                                });
+                              },
+                            );
+                          }).toList(),
                         ),
                       ),
                   ],
@@ -526,102 +652,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Cash input — keypad ala mockup
-          if (_selectedMethodType == 'tunai') ...[
-            Card(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Diterima',
-                            style:
-                                TextStyle(color: scheme.onSurfaceVariant)),
-                        Text(
-                          formatRupiah(_tendered),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 20),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_tendered > 0) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _change > 0
-                      ? scheme.primaryContainer
-                      : _shortfall > 0
-                          ? scheme.errorContainer
-                          : scheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _change > 0
-                          ? 'Kembalian'
-                          : _shortfall > 0
-                              ? 'Sisa / Hutang'
-                              : '✓ Uang Pas',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _change > 0
-                            ? scheme.onPrimaryContainer
-                            : _shortfall > 0
-                                ? scheme.onErrorContainer
-                                : scheme.onTertiaryContainer,
-                      ),
-                    ),
-                    if (_change > 0 || _shortfall > 0)
-                      Text(
-                        formatRupiah(_change > 0 ? _change : _shortfall),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: _change > 0
-                              ? scheme.onPrimaryContainer
-                              : scheme.onErrorContainer,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                ActionChip(
-                  label: const Text('Uang Pas'),
-                  backgroundColor: scheme.primaryContainer,
-                  side: BorderSide.none,
-                  onPressed: () => setState(() => _tendered = _total),
-                ),
-                ...{10000, 20000, 50000, 100000}
-                    .where((d) => d >= _total)
-                    .take(3)
-                    .map((d) => ActionChip(
-                          label: Text(formatRupiah(d)),
-                          onPressed: () =>
-                              setState(() => _tendered = d),
-                        )),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _Keypad(onPress: _keypadPress),
-          ],
-
           if (_selectedMethodType == 'qris') ...[
             _QrisDisplay(methods: _methods, selectedId: _selectedMethodId),
           ],
@@ -648,7 +678,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ],
 
-          const SizedBox(height: 80),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+          // Keypad tunai sticky — selalu terlihat tanpa scroll.
+          if (_selectedMethodType == 'tunai') _buildCashPanel(scheme),
         ],
       ),
       bottomNavigationBar: Padding(

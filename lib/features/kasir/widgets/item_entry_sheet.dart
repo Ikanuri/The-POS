@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
@@ -7,6 +6,7 @@ import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/input_formatters.dart';
 import '../cart_provider.dart';
 
 /// Modal entri item: pilih satuan (harga lain), atur qty & harga, lalu
@@ -139,7 +139,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _price = price;
       _priceOverridden = overridden;
       _loading = false;
-      _priceCtrl.text = price.toString();
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
       _qtyCtrl.text = _fmtQty(qty);
     });
   }
@@ -154,7 +154,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _selectedIdx = idx;
       _priceOverridden = false;
       _price = _options[idx].basePrice;
-      _priceCtrl.text = _price.toString();
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(_price);
     });
   }
 
@@ -162,7 +162,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     setState(() {
       _price = price;
       _priceOverridden = price != _sel!.basePrice;
-      _priceCtrl.text = price.toString();
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
     });
   }
 
@@ -377,8 +377,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                 controller: _priceCtrl,
                                 readOnly: !_canOverride,
                                 keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly
+                                inputFormatters: const [
+                                  ThousandsSeparatorFormatter()
                                 ],
                                 decoration: InputDecoration(
                                   isDense: true,
@@ -392,7 +392,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       : null,
                                 ),
                                 onChanged: (v) {
-                                  final p = int.tryParse(v) ?? 0;
+                                  final p =
+                                      ThousandsSeparatorFormatter.parseValue(v);
                                   _price = p;
                                   _priceOverridden =
                                       _sel != null && p != _sel!.basePrice;
