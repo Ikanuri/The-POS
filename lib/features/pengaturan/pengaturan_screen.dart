@@ -117,6 +117,30 @@ class PengaturanScreen extends ConsumerWidget {
               ],
             ),
           ),
+          if (device.isOwner) ...[
+            const SizedBox(height: 8),
+            const _SectionHeader('Manajemen Data'),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.archive_outlined),
+                    title: const Text('Tutup Buku'),
+                    subtitle: const Text('Arsipkan transaksi tahun lalu'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/tutup-buku'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.folder_zip_outlined),
+                    title: const Text('Buka Arsip'),
+                    subtitle: const Text('Lihat laporan tahun yang sudah diarsipkan'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/arsip'),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           const _SectionHeader('Perangkat'),
           Card(

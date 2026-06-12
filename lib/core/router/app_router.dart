@@ -8,6 +8,7 @@ import '../../features/kasir/receipt_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
+import '../../features/pengaturan/arsip_screen.dart';
 import '../../features/pengaturan/backup_screen.dart';
 import '../../features/pengaturan/csv_import_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
@@ -17,6 +18,7 @@ import '../../features/pengaturan/pengaturan_screen.dart';
 import '../../features/pengaturan/printer_screen.dart';
 import '../../features/pengaturan/store_info_screen.dart';
 import '../../features/pengaturan/sync_screen.dart';
+import '../../features/pengaturan/tutup_buku_screen.dart';
 import '../../features/produk/produk_form_screen.dart';
 import '../../features/produk/produk_list_screen.dart';
 import '../../features/ringkasan/ringkasan_screen.dart';
@@ -123,6 +125,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: 'import-csv',
                   builder: (_, __) => const CsvImportScreen()),
+              GoRoute(
+                  path: 'tutup-buku',
+                  builder: (_, __) => const TutupBukuScreen()),
+              GoRoute(
+                  path: 'arsip',
+                  builder: (_, __) => const ArsipScreen()),
             ],
           ),
         ],
