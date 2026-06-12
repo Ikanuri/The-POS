@@ -7,12 +7,16 @@ import 'crypto_service.dart';
 
 /// Format file .berkahpos:
 ///   "BPOS1" (5 bytes) + IV (16 bytes) + AES-256-CBC(gzip(JSON dump))
+///   "BPOSP" — varian portable: key hanya dari password (tanpa store_key),
+///             bisa di-restore di toko mana pun (dataset contoh / migrasi).
 ///
-/// Key: CryptoService.deriveFileKey(storeKey, password, storeUuid)
+/// Key BPOS1: CryptoService.deriveFileKey(storeKey, password, storeUuid)
+/// Key BPOSP: CryptoService.derivePortableKey(password)
 class DbExportService {
   DbExportService._();
 
   static const _magic = [0x42, 0x50, 0x4F, 0x53, 0x31]; // "BPOS1"
+  static const _magicPortable = [0x42, 0x50, 0x4F, 0x53, 0x50]; // "BPOSP"
 
   /// Export semua tabel ke bytes terenkripsi.
   static Future<Uint8List> export({
@@ -46,12 +50,15 @@ class DbExportService {
       throw BackupException('File terlalu kecil atau rusak');
     }
     final magic = fileBytes.sublist(0, 5);
-    if (!_listEquals(magic, Uint8List.fromList(_magic))) {
+    final isPortable = _listEquals(magic, Uint8List.fromList(_magicPortable));
+    if (!isPortable && !_listEquals(magic, Uint8List.fromList(_magic))) {
       throw BackupException('Bukan file backup .berkahpos yang valid');
     }
     final iv = fileBytes.sublist(5, 21);
     final cipher = fileBytes.sublist(21);
-    final key = CryptoService.deriveFileKey(storeKey, password, storeUuid);
+    final key = isPortable
+        ? CryptoService.derivePortableKey(password)
+        : CryptoService.deriveFileKey(storeKey, password, storeUuid);
     late List<int> compressed;
     try {
       compressed = CryptoService.decryptBytes(Uint8List.fromList(cipher), key, Uint8List.fromList(iv));
@@ -61,7 +68,8 @@ class DbExportService {
     final jsonBytes = GZipCodec().decode(compressed);
     final payload = jsonDecode(utf8.decode(jsonBytes)) as Map<String, dynamic>;
     final payloadUuid = payload['storeUuid'] as String?;
-    if (payloadUuid != null && payloadUuid != storeUuid) {
+    // File portable sengaja lintas-toko — lewati pengecekan asal toko.
+    if (!isPortable && payloadUuid != null && payloadUuid != storeUuid) {
       throw BackupException('File backup berasal dari toko yang berbeda');
     }
     return payload;

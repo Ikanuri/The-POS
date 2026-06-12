@@ -73,6 +73,11 @@ class CryptoService {
           String storeKeyBase64, String password, String storeUuid) =>
       pbkdf2(utf8.encode(storeKeyBase64 + password), utf8.encode(storeUuid));
 
+  /// Key file backup portable (BPOSP): hanya dari password — bisa dibuka di
+  /// toko/device mana pun. Dipakai untuk dataset contoh & migrasi antar toko.
+  static Uint8List derivePortableKey(String password) =>
+      pbkdf2(utf8.encode(password), utf8.encode('the-pos-portable-v1'));
+
   /// AES-256-CBC. Output: base64(IV + ciphertext) jika [iv] tidak diberikan.
   static String encryptText(String plain, Uint8List keyBytes, {Uint8List? iv}) {
     final key = enc.Key(keyBytes);
