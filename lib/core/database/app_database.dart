@@ -43,6 +43,7 @@ const _kDefaultUnitTypes = <int, String>{
   22: 'Pasang',
   23: 'Lembar',
   24: 'Ikat',
+  25: 'Slop',
 };
 
 const kKasirPermissionKeys = <String>[
@@ -91,6 +92,19 @@ class AppDatabase extends _$AppDatabase {
         onCreate: (m) async {
           await m.createAll();
           await _seedDefaults();
+        },
+        beforeOpen: (details) async {
+          // Sisipkan unit type baru (insertOrIgnore) agar DB lama turut mendapat
+          // entri yang ditambahkan setelah instalasi pertama.
+          await batch((b) {
+            b.insertAll(
+              unitTypes,
+              _kDefaultUnitTypes.entries.map(
+                (e) => UnitTypesCompanion.insert(id: Value(e.key), name: e.value),
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+          });
         },
       );
 
