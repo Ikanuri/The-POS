@@ -4,7 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../../core/services/printer_service.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class PrinterScreen extends StatefulWidget {
   const PrinterScreen({super.key});
@@ -13,7 +13,8 @@ class PrinterScreen extends StatefulWidget {
   State<PrinterScreen> createState() => _PrinterScreenState();
 }
 
-class _PrinterScreenState extends State<PrinterScreen> {
+class _PrinterScreenState extends State<PrinterScreen>
+    with InlineBannerStateMixin<PrinterScreen> {
   List<BluetoothInfo> _devices = [];
   String? _savedMac;
   bool _loading = true;
@@ -93,7 +94,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
     await PrinterService.saveMac(device.macAdress);
     if (!mounted) return;
     setState(() => _savedMac = device.macAdress);
-    AppTheme.showSnack(context, 'Printer dipilih: ${device.name}');
+    showSuccess('Printer dipilih: ${device.name}');
   }
 
   Future<void> _testPrint(String mac) async {
@@ -116,12 +117,14 @@ class _PrinterScreenState extends State<PrinterScreen> {
         }
       });
       if (!mounted) return;
-      AppTheme.showSnack(
-          context, ok ? 'Test print berhasil!' : 'Gagal — lihat log di bawah',
-          isError: !ok);
+      if (ok) {
+        showSuccess('Test print berhasil!');
+      } else {
+        showError('Gagal — lihat log di bawah');
+      }
     } catch (e) {
       if (!mounted) return;
-      AppTheme.showSnack(context, 'Exception: $e', isError: true);
+      showError('Exception: $e');
     } finally {
       if (mounted) setState(() => _testingMac = null);
     }
@@ -177,7 +180,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
     if (result != true) return;
     final mac = macCtrl.text.trim().toUpperCase();
     if (mac.length < 11) {
-      if (mounted) AppTheme.showSnack(context, 'MAC tidak valid', isError: true);
+      if (mounted) showError('MAC tidak valid');
       return;
     }
     await PrinterService.saveMac(mac);
@@ -196,7 +199,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
         ];
       }
     });
-    AppTheme.showSnack(context, 'Printer disimpan: $mac');
+    showSuccess('Printer disimpan: $mac');
   }
 
   Future<void> _updateSettings(PrinterSettings updated) async {
@@ -208,7 +211,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
   void _copyLog() {
     final text = _log.map((e) => e.toString()).join('\n');
     Clipboard.setData(ClipboardData(text: text));
-    AppTheme.showSnack(context, 'Log disalin ke clipboard');
+    showSuccess('Log disalin ke clipboard');
   }
 
   @override
@@ -229,7 +232,14 @@ class _PrinterScreenState extends State<PrinterScreen> {
           ),
         ],
       ),
-      body: SafeArea(child: _buildBody(context)),
+      body: SafeArea(
+        child: Column(
+          children: [
+            inlineBanner(),
+            Expanded(child: _buildBody(context)),
+          ],
+        ),
+      ),
     );
   }
 

@@ -3,6 +3,39 @@ import 'package:flutter/material.dart';
 
 enum InlineBannerType { success, error, warning, info }
 
+/// Mixin agar layar mudah memakai banner inline tanpa boilerplate.
+/// Pakai: `with InlineBannerStateMixin<MyScreen>`, panggil [showBanner]/
+/// [showError]/[showSuccess], lalu sisipkan [inlineBanner] di paling atas
+/// body Column.
+mixin InlineBannerStateMixin<T extends StatefulWidget> on State<T> {
+  String? _ibMsg;
+  InlineBannerType _ibType = InlineBannerType.info;
+
+  void showBanner(String message,
+      {InlineBannerType type = InlineBannerType.info}) {
+    if (!mounted) return;
+    setState(() {
+      _ibMsg = message;
+      _ibType = type;
+    });
+  }
+
+  void showError(String message) =>
+      showBanner(message, type: InlineBannerType.error);
+  void showSuccess(String message) =>
+      showBanner(message, type: InlineBannerType.success);
+
+  void hideBanner() {
+    if (mounted) setState(() => _ibMsg = null);
+  }
+
+  Widget inlineBanner() => InlineBanner(
+        message: _ibMsg,
+        type: _ibType,
+        onDismiss: hideBanner,
+      );
+}
+
 /// Banner animasi yang menyatu dengan konten halaman (bukan overlay).
 /// Saat [message] non-null: muncul dengan AnimatedSize (push content down).
 /// Auto-dismiss setelah [duration]. Tap ✕ untuk dismiss manual.

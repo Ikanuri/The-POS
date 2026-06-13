@@ -283,10 +283,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEdit ? 'Produk diperbarui' : 'Produk disimpan')),
-        );
-        context.pop();
+        // Banner sukses ditampilkan di layar daftar produk setelah kembali
+        // (layar ini akan ditutup, jadi banner inline di sini tak terlihat).
+        context.pop(_isEdit ? 'Produk diperbarui' : 'Produk disimpan');
       }
     } catch (e) {
       if (mounted) _showBanner('Error: $e');
@@ -650,9 +649,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           : barcodeCtrl.text.trim(),
     );
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Varian "${nameCtrl.text.trim()}" ditambahkan')),
-      );
+      _showBanner('Varian "${nameCtrl.text.trim()}" ditambahkan',
+          InlineBannerType.success);
     }
   }
 
