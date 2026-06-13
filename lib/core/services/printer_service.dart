@@ -29,11 +29,55 @@ class PrintLogEntry {
       '${detail != null ? ': $detail' : ''}';
 }
 
+/// Pengaturan format nota yang disimpan di SharedPreferences.
+class PrinterSettings {
+  const PrinterSettings({
+    this.paperSize = '58',
+    this.showDateHeader = true,
+    this.showTxNumber = true,
+    this.showCustomer = true,
+    this.showProductCount = true,
+    this.showPaymentDetail = true,
+    this.showStatusText = true,
+  });
+
+  final String paperSize;       // '58' | '80'
+  final bool showDateHeader;    // baris tanggal berdiri sendiri sebelum separator
+  final bool showTxNumber;      // "#localId" di baris datetime
+  final bool showCustomer;      // nama pelanggan
+  final bool showProductCount;  // "Produk: N"
+  final bool showPaymentDetail; // baris Bayar + Kembali/Kurang
+  final bool showStatusText;    // "Sudah bayar" / "Kurang bayar" dll
+
+  int get charWidth => paperSize == '80' ? 42 : 32;
+
+  PrinterSettings copyWith({
+    String? paperSize,
+    bool? showDateHeader,
+    bool? showTxNumber,
+    bool? showCustomer,
+    bool? showProductCount,
+    bool? showPaymentDetail,
+    bool? showStatusText,
+  }) =>
+      PrinterSettings(
+        paperSize: paperSize ?? this.paperSize,
+        showDateHeader: showDateHeader ?? this.showDateHeader,
+        showTxNumber: showTxNumber ?? this.showTxNumber,
+        showCustomer: showCustomer ?? this.showCustomer,
+        showProductCount: showProductCount ?? this.showProductCount,
+        showPaymentDetail: showPaymentDetail ?? this.showPaymentDetail,
+        showStatusText: showStatusText ?? this.showStatusText,
+      );
+}
+
 class PrinterService {
   PrinterService._();
 
   static const _channel = MethodChannel('com.thepos/bt_print');
   static const _prefMac = 'printer_mac';
+
+  // ── Preferensi ───────────────────────────────────────────────────────────
 
   static Future<String?> getSavedMac() async {
     final prefs = await SharedPreferences.getInstance();
@@ -44,6 +88,32 @@ class PrinterService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefMac, mac);
   }
+
+  static Future<PrinterSettings> loadSettings() async {
+    final p = await SharedPreferences.getInstance();
+    return PrinterSettings(
+      paperSize: p.getString('printer_paper_size') ?? '58',
+      showDateHeader: p.getBool('printer_show_date_header') ?? true,
+      showTxNumber: p.getBool('printer_show_tx_number') ?? true,
+      showCustomer: p.getBool('printer_show_customer') ?? true,
+      showProductCount: p.getBool('printer_show_product_count') ?? true,
+      showPaymentDetail: p.getBool('printer_show_payment_detail') ?? true,
+      showStatusText: p.getBool('printer_show_status_text') ?? true,
+    );
+  }
+
+  static Future<void> saveSettings(PrinterSettings s) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('printer_paper_size', s.paperSize);
+    await p.setBool('printer_show_date_header', s.showDateHeader);
+    await p.setBool('printer_show_tx_number', s.showTxNumber);
+    await p.setBool('printer_show_customer', s.showCustomer);
+    await p.setBool('printer_show_product_count', s.showProductCount);
+    await p.setBool('printer_show_payment_detail', s.showPaymentDetail);
+    await p.setBool('printer_show_status_text', s.showStatusText);
+  }
+
+  // ── Bluetooth helpers ────────────────────────────────────────────────────
 
   static Future<bool> ensurePermissions() async {
     final statuses = await [
@@ -68,6 +138,8 @@ class PrinterService {
         onTimeout: () => <BluetoothInfo>[],
       );
 
+  // ── Koneksi (native channel) ─────────────────────────────────────────────
+
   static Future<bool> connect(String mac) async {
     try {
       if (await isConnected) return true;
@@ -90,9 +162,10 @@ class PrinterService {
 
   static Future<bool> get isConnected async {
     try {
-      return await _channel.invokeMethod<bool>('status')
-              .timeout(const Duration(seconds: 4), onTimeout: () => false)
-          ?? false;
+      return await _channel
+              .invokeMethod<bool>('status')
+              .timeout(const Duration(seconds: 4), onTimeout: () => false) ??
+          false;
     } catch (_) {
       return false;
     }
@@ -100,7 +173,8 @@ class PrinterService {
 
   static Future<bool> disconnect() async {
     try {
-      await _channel.invokeMethod<void>('disconnect')
+      await _channel
+          .invokeMethod<void>('disconnect')
           .timeout(const Duration(seconds: 4));
     } catch (_) {}
     return true;
@@ -108,8 +182,6 @@ class PrinterService {
 
   // ── Test print dengan log detail ─────────────────────────────────────────
 
-  /// Test print sambil mengumpulkan log setiap langkah.
-  /// Cocok untuk tombol debug; mengembalikan (sukses, log).
   static Future<(bool, List<PrintLogEntry>)> testPrintDetailed(
       String mac) async {
     final log = <PrintLogEntry>[];
@@ -162,8 +234,8 @@ class PrinterService {
       }
       add('Perangkat terpasang ditemukan: ${paired.length}',
           detail: paired.map((d) => '${d.name}(${d.macAdress})').join(', '));
-      final found = paired.any(
-          (d) => d.macAdress.toUpperCase() == mac.toUpperCase());
+      final found =
+          paired.any((d) => d.macAdress.toUpperCase() == mac.toUpperCase());
       add('Printer "$mac" ada di daftar', ok: found);
       if (!found) {
         add('Printer tidak ditemukan di daftar paired. '
@@ -175,18 +247,21 @@ class PrinterService {
       add('Cek status koneksi sebelumnya…');
       bool wasConnected = false;
       try {
-        wasConnected = await _channel.invokeMethod<bool>('status')
-                .timeout(const Duration(seconds: 4), onTimeout: () => false)
-            ?? false;
+        wasConnected = await _channel
+                .invokeMethod<bool>('status')
+                .timeout(const Duration(seconds: 4), onTimeout: () => false) ??
+            false;
       } catch (e) {
         add('status exception', ok: false, detail: '$e');
       }
-      add('Status sebelumnya', detail: wasConnected ? 'terhubung' : 'terputus');
+      add('Status sebelumnya',
+          detail: wasConnected ? 'terhubung' : 'terputus');
 
       if (wasConnected) {
         add('Putuskan koneksi lama sebelum reconnect…');
         try {
-          await _channel.invokeMethod<void>('disconnect')
+          await _channel
+              .invokeMethod<void>('disconnect')
               .timeout(const Duration(seconds: 4));
           add('Disconnect', ok: true);
         } catch (e) {
@@ -235,9 +310,10 @@ class PrinterService {
       add('Verifikasi status koneksi setelah connect…');
       bool connStatus = false;
       try {
-        connStatus = await _channel.invokeMethod<bool>('status')
-                .timeout(const Duration(seconds: 4), onTimeout: () => false)
-            ?? false;
+        connStatus = await _channel
+                .invokeMethod<bool>('status')
+                .timeout(const Duration(seconds: 4), onTimeout: () => false) ??
+            false;
       } catch (e) {
         add('Verifikasi exception', ok: false, detail: '$e');
       }
@@ -266,7 +342,8 @@ class PrinterService {
           add('Warm-up write retry', ok: wOk2,
               detail: wOk2 ? null : (wErr2 ?? 'masih gagal'));
           if (!wOk2) {
-            add('Stream tidak bisa ditulis. Error: ${wErr2 ?? wErr ?? "tidak diketahui"}',
+            add('Stream tidak bisa ditulis. '
+                'Error: ${wErr2 ?? wErr ?? "tidak diketahui"}',
                 ok: false);
             return (false, log);
           }
@@ -280,8 +357,12 @@ class PrinterService {
       add('Membangun data ESC/POS…');
       Uint8List bytes;
       try {
+        final settings = await loadSettings();
         final profile = await CapabilityProfile.load();
-        final gen = Generator(PaperSize.mm58, profile);
+        final paperSize =
+            settings.paperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
+        final gen = Generator(paperSize, profile);
+        final w = settings.charWidth;
         final now = DateTime.now();
         bytes = Uint8List.fromList(<int>[
           ...gen.text('TEST PRINT',
@@ -292,15 +373,14 @@ class PrinterService {
                   width: PosTextSize.size2)),
           ...gen.text('The-POS - Printer OK',
               styles: const PosStyles(align: PosAlign.center)),
-          ...gen.text(
-              '${now.day}/${now.month}/${now.year} '
-              '${now.hour}:${now.minute.toString().padLeft(2, '0')}',
+          ...gen.text(_sep(w)),
+          ...gen.text(_fmtDateTimeFull(now),
               styles: const PosStyles(align: PosAlign.center)),
+          ...gen.text(_sep(w)),
           ...gen.feed(3),
           ...gen.cut(),
         ]);
-        add('Data ESC/POS siap', ok: true,
-            detail: '${bytes.length} bytes');
+        add('Data ESC/POS siap', ok: true, detail: '${bytes.length} bytes');
       } catch (e) {
         add('Build ESC/POS exception', ok: false, detail: '$e');
         return (false, log);
@@ -319,7 +399,9 @@ class PrinterService {
         writeOk = writeRes?['ok'] as bool? ?? false;
         final writeErr = writeRes?['err'] as String?;
         add('Kirim data', ok: writeOk,
-            detail: writeOk ? '${bytes.length} bytes terkirim' : (writeErr ?? 'tidak ada detail'));
+            detail: writeOk
+                ? '${bytes.length} bytes terkirim'
+                : (writeErr ?? 'tidak ada detail'));
         if (!writeOk && writeErr != null) {
           add('Error detail: $writeErr', ok: false);
         }
@@ -329,7 +411,8 @@ class PrinterService {
       }
 
       if (writeOk) {
-        add('Test print BERHASIL — kertas harus keluar dari printer.', ok: true);
+        add('Test print BERHASIL — kertas harus keluar dari printer.',
+            ok: true);
       } else {
         add('Data tidak terkirim — lihat error detail di atas.', ok: false);
         add('Tips: coba matikan/nyalakan printer lalu test lagi.', ok: false);
@@ -368,6 +451,7 @@ class PrinterService {
     final connected = await connect(mac);
     if (!connected) return false;
 
+    final settings = await loadSettings();
     final bytes = await _buildBytes(
       tx: tx,
       items: items,
@@ -380,6 +464,7 @@ class PrinterService {
       strukNote: strukNote,
       parentOf: parentOf,
       checkedIds: checkedIds,
+      settings: settings,
     );
 
     try {
@@ -392,11 +477,10 @@ class PrinterService {
     }
   }
 
+  // ── Item ordering helpers ────────────────────────────────────────────────
 
-  /// Item induk dari sebuah baris (null bila bukan varian / induk tak ada).
-  static TransactionItem? _parentItemOf(
-      TransactionItem item, List<TransactionItem> items,
-      Map<String, String?> parentOf) {
+  static TransactionItem? _parentItemOf(TransactionItem item,
+      List<TransactionItem> items, Map<String, String?> parentOf) {
     final pid = parentOf[item.productId];
     if (pid == null) return null;
     for (final it in items) {
@@ -405,7 +489,6 @@ class PrinterService {
     return null;
   }
 
-  /// Urutkan item: induk diikuti varian-variannya.
   static List<TransactionItem> _orderItems(
       List<TransactionItem> items, Map<String, String?> parentOf) {
     if (parentOf.isEmpty) return items;
@@ -421,6 +504,8 @@ class PrinterService {
     return out;
   }
 
+  // ── Build ESC/POS bytes ──────────────────────────────────────────────────
+
   static Future<Uint8List> _buildBytes({
     required Transaction tx,
     required List<TransactionItem> items,
@@ -433,110 +518,113 @@ class PrinterService {
     required String? strukNote,
     Map<String, String?> parentOf = const {},
     Set<String> checkedIds = const {},
+    required PrinterSettings settings,
   }) async {
+    final w = settings.charWidth;
     final profile = await CapabilityProfile.load();
-    final gen = Generator(PaperSize.mm58, profile);
+    final paperSize =
+        settings.paperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
+    final gen = Generator(paperSize, profile);
     final out = <int>[];
 
-    // Header toko — semua string di-sanitize ke ASCII agar tidak throw exception
-    out.addAll(gen.text(
-        _toAscii(storeName.isEmpty ? 'Toko' : storeName),
-        styles: const PosStyles(bold: true, align: PosAlign.center, height: PosTextSize.size2, width: PosTextSize.size2)));
+    // ── Header toko ──────────────────────────────────────────────────────────
+    if (storeName.isNotEmpty) {
+      out.addAll(gen.text(
+        _toAscii(storeName),
+        styles: const PosStyles(
+            bold: true,
+            align: PosAlign.center,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2),
+      ));
+    }
     if (storeAddress.isNotEmpty) {
-      out.addAll(gen.text(_toAscii(storeAddress), styles: const PosStyles(align: PosAlign.center)));
+      out.addAll(gen.text(_toAscii(storeAddress),
+          styles: const PosStyles(align: PosAlign.center)));
     }
     if (storePhone.isNotEmpty) {
-      out.addAll(gen.text('Telp: ${_toAscii(storePhone)}', styles: const PosStyles(align: PosAlign.center)));
+      out.addAll(gen.text('Telp: ${_toAscii(storePhone)}',
+          styles: const PosStyles(align: PosAlign.center)));
     }
-    out.addAll(gen.hr());
+    out.addAll(gen.text(_sep(w)));
 
-    // Info transaksi
-    final tanggal = _fmtDateTime(tx.createdAt);
-    out.addAll(gen.row([
-      PosColumn(text: 'No', width: 3),
-      PosColumn(text: tx.localId, width: 9),
-    ]));
-    out.addAll(gen.row([
-      PosColumn(text: 'Tgl', width: 3),
-      PosColumn(text: tanggal, width: 9),
-    ]));
-    if (customer != null) {
-      out.addAll(gen.row([
-        PosColumn(text: 'Cust', width: 3),
-        PosColumn(text: _toAscii(customer.name), width: 9),
-      ]));
-    } else if (tx.customerName != null) {
-      out.addAll(gen.row([
-        PosColumn(text: 'Cust', width: 3),
-        PosColumn(text: _toAscii(tx.customerName!), width: 9),
-      ]));
+    // ── Baris tanggal ─────────────────────────────────────────────────────
+    if (settings.showDateHeader) {
+      out.addAll(gen.text(_fmtDate(tx.createdAt)));
     }
-    out.addAll(gen.hr());
+    out.addAll(gen.text(_sep(w)));
 
-    // Item (varian bersarang di bawah induk dengan indentasi)
-    for (final item in _orderItems(items, parentOf)) {
-      final isVar = _parentItemOf(item, items, parentOf) != null;
-      final pad = isVar ? '  ' : '';
-      final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
-      final marked = checkedIds.contains(item.id) ? '[v] $rawName' : rawName;
-      final pName = isVar ? '$pad> $marked' : marked;
-      final uName = _toAscii(unitNames[item.productUnitId] ?? '');
-      out.addAll(gen.text('$pName ($uName)',
-          styles: const PosStyles(), linesAfter: 0));
-      final qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
-      out.addAll(gen.row([
-        PosColumn(
-            text: '$pad  $qtyStr x ${_fmtRp(item.priceAtSale)}',
-            width: 8),
-        PosColumn(
-            text: _fmtRp(item.subtotal),
-            width: 4,
-            styles: const PosStyles(align: PosAlign.right)),
-      ]));
-      if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-        out.addAll(gen.text('$pad  * ${_toAscii(item.itemNote!)}',
-            styles: const PosStyles(fontType: PosFontType.fontB)));
+    // ── Info transaksi ────────────────────────────────────────────────────
+    final dtStr = _fmtDateTimeFull(tx.createdAt);
+    if (settings.showTxNumber) {
+      out.addAll(gen.text(_rowLR(dtStr, '#${tx.localId}', w)));
+    } else {
+      out.addAll(gen.text(dtStr));
+    }
+
+    if (settings.showCustomer) {
+      final custName = customer?.name ?? tx.customerName;
+      if (custName != null && custName.isNotEmpty) {
+        out.addAll(gen.text(_toAscii(custName)));
       }
     }
-    out.addAll(gen.hr());
+    out.addAll(gen.text(_sep(w)));
 
-    // Total
-    out.addAll(gen.row([
-      PosColumn(text: 'TOTAL', width: 6, styles: const PosStyles(bold: true)),
-      PosColumn(
-          text: _fmtRp(tx.total),
-          width: 6,
-          styles: const PosStyles(bold: true, align: PosAlign.right)),
-    ]));
-    out.addAll(gen.row([
-      PosColumn(text: 'Bayar', width: 6),
-      PosColumn(
-          text: _fmtRp(tx.paid),
-          width: 6,
-          styles: const PosStyles(align: PosAlign.right)),
-    ]));
-    if (tx.changeAmount > 0) {
-      out.addAll(gen.row([
-        PosColumn(text: 'Kembali', width: 6),
-        PosColumn(
-            text: _fmtRp(tx.changeAmount),
-            width: 6,
-            styles: const PosStyles(align: PosAlign.right)),
-      ]));
+    // ── Item ─────────────────────────────────────────────────────────────
+    int productCount = 0;
+    for (final item in _orderItems(items, parentOf)) {
+      final isVar = _parentItemOf(item, items, parentOf) != null;
+      if (!isVar) productCount++;
+
+      final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
+      final marked = checkedIds.contains(item.id) ? '[v] $rawName' : rawName;
+      final prefix = isVar ? '  > ' : '';
+      out.addAll(gen.text('$prefix$marked'));
+
+      if (item.itemNote != null && item.itemNote!.isNotEmpty) {
+        out.addAll(gen.text(_toAscii(item.itemNote!)));
+      }
+
+      final uName = _toAscii(unitNames[item.productUnitId] ?? 'pcs');
+      final qtyStr = item.qty % 1 == 0
+          ? item.qty.toInt().toString()
+          : item.qty.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '');
+      final qtyLine = '  $qtyStr $uName x ${_fmtNum(item.priceAtSale)}';
+      out.addAll(gen.text(_rowLR(qtyLine, _fmtNum(item.subtotal), w)));
     }
-    if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
-      final remaining = tx.total - tx.paid;
-      out.addAll(gen.row([
-        PosColumn(text: 'Sisa', width: 6, styles: const PosStyles(bold: true)),
-        PosColumn(
-            text: _fmtRp(remaining),
-            width: 6,
-            styles: const PosStyles(bold: true, align: PosAlign.right)),
-      ]));
+    out.addAll(gen.text(_sep(w)));
+
+    // ── Jumlah produk ─────────────────────────────────────────────────────
+    if (settings.showProductCount) {
+      out.addAll(gen.text('Produk: $productCount'));
+      out.addAll(gen.text(_sep(w)));
     }
 
+    // ── Total ─────────────────────────────────────────────────────────────
+    out.addAll(gen.text(
+        _rowLR('Total', 'Rp ${_fmtNum(tx.total)}', w),
+        styles: const PosStyles(bold: true)));
+
+    if (settings.showPaymentDetail) {
+      out.addAll(gen.text(_rowLR('  Bayar..', 'Rp ${_fmtNum(tx.paid)}', w)));
+
+      if (tx.changeAmount > 0) {
+        out.addAll(gen.text(
+            _rowLR('Kembali', 'Rp ${_fmtNum(tx.changeAmount)}', w)));
+      } else if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
+        final remaining = tx.total - tx.paid;
+        out.addAll(gen.text(
+            _rowLR('Kurang', 'Rp ${_fmtNum(remaining)}', w)));
+      }
+    }
+
+    if (settings.showStatusText) {
+      out.addAll(gen.text(_rowLR('', _statusLabel(tx), w)));
+    }
+
+    // ── Footer ────────────────────────────────────────────────────────────
     if (strukNote != null && strukNote.isNotEmpty) {
-      out.addAll(gen.hr());
+      out.addAll(gen.text(_sep(w)));
       out.addAll(gen.text(_toAscii(strukNote),
           styles: const PosStyles(align: PosAlign.center)));
     }
@@ -546,26 +634,65 @@ class PrinterService {
     return Uint8List.fromList(out);
   }
 
-  /// Bersihkan string agar hanya berisi karakter yang bisa dicetak printer
-  /// ESC/POS (ASCII 0x20–0x7E). Karakter non-ASCII umum dikonversi ke padanan
-  /// ASCII; sisanya dihapus. Tanpa ini, gen.text() / gen.row() throw exception.
+  // ── Format helpers ───────────────────────────────────────────────────────
+
+  static String _sep(int width) => '-' * width;
+
+  static String _rowLR(String left, String right, int width) {
+    final space = width - left.length - right.length;
+    if (space <= 0) return '$left $right';
+    return '$left${' ' * space}$right';
+  }
+
+  static String _fmtNum(int amount) {
+    final s = amount.abs().toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return amount < 0 ? '-$buf' : '$buf';
+  }
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+
+  static String _fmtDate(DateTime dt) =>
+      '${dt.day} ${_months[dt.month - 1]} ${dt.year}';
+
+  static String _fmtDateTimeFull(DateTime dt) {
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${_months[dt.month - 1]} ${dt.year} $hh:$mm';
+  }
+
+  static String _statusLabel(Transaction tx) {
+    switch (tx.status) {
+      case 'lunas':
+        return tx.changeAmount > 0 ? 'Sudah bayar' : 'Lunas';
+      case 'kurang_bayar':
+        return 'Kurang bayar';
+      case 'tempo':
+        return 'Bayar tempo';
+      case 'void':
+        return 'DIBATALKAN';
+      default:
+        return tx.status;
+    }
+  }
+
+  // ── ASCII sanitizer ──────────────────────────────────────────────────────
+
   static String _toAscii(String s) {
-    final map = {
-      '—': '-',  // em dash —
-      '–': '-',  // en dash –
-      '‘': "'",  // left single quote '
-      '’': "'",  // right single quote '
-      '“': '"',  // left double quote "
-      '”': '"',  // right double quote "
-      '…': '...', // ellipsis …
-      '×': 'x',  // ×
-      '·': '.',  // middle dot ·
-      '«': '"',  // «
-      '»': '"',  // »
-      '•': '*',  // bullet •
-      '❤': '<3', // ❤
-      '°': 'deg',// °
-      // Vowels with diacritics (e.g. café)
+    const map = {
+      '—': '-', '–': '-',
+      '‘': "'", '’': "'",
+      '“': '"', '”': '"',
+      '…': '...', '×': 'x', '·': '.',
+      '«': '"', '»': '"', '•': '*',
+      '❤': '<3', '°': 'deg',
       'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
       'à': 'a', 'â': 'a', 'ä': 'a', 'á': 'a',
       'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o',
@@ -575,11 +702,10 @@ class PrinterService {
       'À': 'A', 'Â': 'A', 'Ä': 'A',
       'Ó': 'O', 'Ô': 'O', 'Ö': 'O',
       'Ú': 'U', 'Û': 'U', 'Ü': 'U',
-      'ñ': 'n', 'Ñ': 'N', // ñ Ñ
-      'ç': 'c', 'Ç': 'C', // ç Ç
+      'ñ': 'n', 'Ñ': 'N',
+      'ç': 'c', 'Ç': 'C',
     };
     final buf = StringBuffer();
-    // Iterasi per grapheme cluster via runes (menangani surrogate pair dgn benar)
     for (final rune in s.runes) {
       final ch = String.fromCharCode(rune);
       final mapped = map[ch];
@@ -588,23 +714,7 @@ class PrinterService {
       } else if (rune >= 0x20 && rune <= 0x7E) {
         buf.write(ch);
       }
-      // karakter di luar range ASCII printable: dihapus (tidak error)
     }
     return buf.toString();
-  }
-
-  static String _fmtRp(int amount) {
-    final s = amount.abs().toString();
-    final buf = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
-      buf.write(s[i]);
-    }
-    return 'Rp${amount < 0 ? '-' : ''}$buf';
-  }
-
-  static String _fmtDateTime(DateTime dt) {
-    String p(int n) => n.toString().padLeft(2, '0');
-    return '${p(dt.day)}/${p(dt.month)}/${dt.year} ${p(dt.hour)}:${p(dt.minute)}';
   }
 }

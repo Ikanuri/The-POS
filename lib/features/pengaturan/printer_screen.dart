@@ -23,6 +23,8 @@ class _PrinterScreenState extends State<PrinterScreen> {
   bool? _permGranted;
   bool _btOff = false;
 
+  PrinterSettings _settings = const PrinterSettings();
+
   // ── Log debug ─────────────────────────────────────────────────────────────
   final List<PrintLogEntry> _log = [];
   bool _logExpanded = false;
@@ -43,12 +45,14 @@ class _PrinterScreenState extends State<PrinterScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final savedMac = await PrinterService.getSavedMac();
+    final settings = await PrinterService.loadSettings();
 
     final granted = await PrinterService.ensurePermissions();
     if (!granted) {
       if (!mounted) return;
       setState(() {
         _savedMac = savedMac;
+        _settings = settings;
         _permGranted = false;
         _devices = [];
         _loading = false;
@@ -64,6 +68,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
     if (!mounted) return;
     setState(() {
       _savedMac = savedMac;
+      _settings = settings;
       _permGranted = true;
       _btOff = !btEnabled;
       _devices = devices;
@@ -101,7 +106,6 @@ class _PrinterScreenState extends State<PrinterScreen> {
       final (ok, entries) = await PrinterService.testPrintDetailed(mac);
       if (!mounted) return;
       setState(() => _log.addAll(entries));
-      // Scroll ke bawah log setelah frame render
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_logScrollCtrl.hasClients) {
           _logScrollCtrl.animateTo(
@@ -195,6 +199,12 @@ class _PrinterScreenState extends State<PrinterScreen> {
     AppTheme.showSnack(context, 'Printer disimpan: $mac');
   }
 
+  Future<void> _updateSettings(PrinterSettings updated) async {
+    await PrinterService.saveSettings(updated);
+    if (!mounted) return;
+    setState(() => _settings = updated);
+  }
+
   void _copyLog() {
     final text = _log.map((e) => e.toString()).join('\n');
     Clipboard.setData(ClipboardData(text: text));
@@ -278,6 +288,9 @@ class _PrinterScreenState extends State<PrinterScreen> {
             ),
           ),
 
+        // Format Nota settings
+        _buildFormatSection(context, scheme),
+
         // Header daftar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -322,9 +335,106 @@ class _PrinterScreenState extends State<PrinterScreen> {
                 ),
         ),
 
-        // Panel log debug (bisa dilipat)
+        // Panel log debug
         if (_log.isNotEmpty) _buildLogPanel(context, scheme),
       ],
+    );
+  }
+
+  Widget _buildFormatSection(BuildContext context, ColorScheme scheme) {
+    final s = _settings;
+    final subtitle = '${s.paperSize}mm · '
+        '${[
+          if (s.showDateHeader) 'Tanggal',
+          if (s.showTxNumber) 'No. Nota',
+          if (s.showCustomer) 'Pelanggan',
+          if (s.showProductCount) 'Jml. Produk',
+          if (s.showPaymentDetail) 'Detail Bayar',
+          if (s.showStatusText) 'Status',
+        ].join(', ')}';
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          leading: Icon(Icons.receipt_long_outlined,
+              size: 20, color: scheme.onSurfaceVariant),
+          title: const Text('Format Nota',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          subtitle: Text(subtitle,
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          children: [
+            const Divider(height: 1, indent: 16, endIndent: 16),
+
+            // Ukuran kertas
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Text('Ukuran kertas',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                  const Spacer(),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: '58', label: Text('58 mm')),
+                      ButtonSegment(value: '80', label: Text('80 mm')),
+                    ],
+                    selected: {s.paperSize},
+                    showSelectedIcon: false,
+                    style: ButtonStyle(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                      textStyle: WidgetStateProperty.all(
+                          const TextStyle(fontSize: 12)),
+                      padding: WidgetStateProperty.all(
+                          const EdgeInsets.symmetric(horizontal: 12)),
+                    ),
+                    onSelectionChanged: (sel) => _updateSettings(
+                        s.copyWith(paperSize: sel.first)),
+                  ),
+                ],
+              ),
+            ),
+
+            // Toggle tiles
+            _toggleTile('Baris tanggal', s.showDateHeader,
+                (v) => _updateSettings(s.copyWith(showDateHeader: v))),
+            _toggleTile('Nomor transaksi', s.showTxNumber,
+                (v) => _updateSettings(s.copyWith(showTxNumber: v))),
+            _toggleTile('Nama pelanggan', s.showCustomer,
+                (v) => _updateSettings(s.copyWith(showCustomer: v))),
+            _toggleTile('Jumlah produk', s.showProductCount,
+                (v) => _updateSettings(s.copyWith(showProductCount: v))),
+            _toggleTile('Detail pembayaran (Bayar + Kembali)',
+                s.showPaymentDetail,
+                (v) => _updateSettings(s.copyWith(showPaymentDetail: v))),
+            _toggleTile('Status nota (Sudah bayar dll)', s.showStatusText,
+                (v) => _updateSettings(s.copyWith(showStatusText: v))),
+
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _toggleTile(String label, bool value, ValueChanged<bool> onChanged) {
+    return SwitchListTile.adaptive(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+      title: Text(label, style: const TextStyle(fontSize: 13)),
+      value: value,
+      onChanged: onChanged,
     );
   }
 
@@ -397,9 +507,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
-      constraints: BoxConstraints(
-        maxHeight: _logExpanded ? 240 : 44,
-      ),
+      constraints: BoxConstraints(maxHeight: _logExpanded ? 240 : 44),
       decoration: BoxDecoration(
         color: logBg,
         border: Border(top: BorderSide(color: scheme.outlineVariant)),
@@ -407,15 +515,14 @@ class _PrinterScreenState extends State<PrinterScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header bar
           InkWell(
             onTap: () => setState(() => _logExpanded = !_logExpanded),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
-                  Icon(Icons.terminal,
-                      size: 16, color: logFg.withOpacity(0.7)),
+                  Icon(Icons.terminal, size: 16, color: logFg.withOpacity(0.7)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -426,7 +533,6 @@ class _PrinterScreenState extends State<PrinterScreen> {
                           color: logFg.withOpacity(0.8)),
                     ),
                   ),
-                  // Status ringkas — ikon hasil akhir
                   if (_log.isNotEmpty)
                     Icon(
                       _log.last.ok == true
@@ -453,9 +559,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
                   ),
                   const SizedBox(width: 4),
                   Icon(
-                    _logExpanded
-                        ? Icons.expand_more
-                        : Icons.chevron_right,
+                    _logExpanded ? Icons.expand_more : Icons.chevron_right,
                     size: 18,
                     color: logFg.withOpacity(0.6),
                   ),
@@ -463,8 +567,6 @@ class _PrinterScreenState extends State<PrinterScreen> {
               ),
             ),
           ),
-
-          // Log lines
           if (_logExpanded)
             Expanded(
               child: ListView.builder(
@@ -503,7 +605,8 @@ class _PrinterScreenState extends State<PrinterScreen> {
                           if (e.ok == true)
                             TextSpan(
                                 text: ' ✓',
-                                style: TextStyle(color: Colors.green.shade400)),
+                                style:
+                                    TextStyle(color: Colors.green.shade400)),
                           if (e.ok == false)
                             TextSpan(
                                 text: ' ✗',
