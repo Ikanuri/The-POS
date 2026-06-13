@@ -73,8 +73,13 @@ class PrinterService {
     for (var attempt = 0; attempt < 3; attempt++) {
       final ok = await PrintBluetoothThermal.connect(macPrinterAddress: mac)
           .timeout(const Duration(seconds: 12), onTimeout: () => false);
-      if (ok) return true;
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (ok) {
+        // RFCOMM socket sering belum siap tulis meski sudah "connected".
+        // Tunggu 600ms agar output stream stabil sebelum writeBytes.
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 800));
     }
     return false;
   }
@@ -215,6 +220,38 @@ class PrinterService {
         add('Verifikasi exception', ok: false, detail: '$e');
       }
       add('Status terverifikasi', ok: connStatus);
+
+      // ── 6b. Stabilisasi RFCOMM ───────────────────────────────────────────
+      // writeBytes gagal dalam 1ms berarti output stream belum siap.
+      // Tunggu 600ms (sama dengan connect()) lalu kirim ESC @ (init) sebagai
+      // warm-up sebelum data nyata.
+      add('Tunggu 600ms stabilisasi RFCOMM output stream…');
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      add('Kirim warm-up ESC @ (init printer)…');
+      try {
+        // ESC @ = 0x1B 0x40 — reset printer, aman dikirim sebelum data
+        final warmup = Uint8List.fromList([0x1B, 0x40]);
+        final wOk = await PrintBluetoothThermal.writeBytes(warmup)
+            .timeout(const Duration(seconds: 4), onTimeout: () => false);
+        add('Warm-up write', ok: wOk,
+            detail: wOk ? 'stream siap' : 'masih belum siap, lanjut coba…');
+        if (!wOk) {
+          // Satu kali retry setelah 500ms tambahan
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+          final wOk2 = await PrintBluetoothThermal.writeBytes(warmup)
+              .timeout(const Duration(seconds: 4), onTimeout: () => false);
+          add('Warm-up write retry', ok: wOk2);
+          if (!wOk2) {
+            add('Stream tidak bisa ditulis setelah 1,7 detik. '
+                'Matikan/nyalakan printer lalu coba lagi.',
+                ok: false);
+            return (false, log);
+          }
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      } catch (e) {
+        add('Warm-up exception', ok: false, detail: '$e');
+      }
 
       // ── 7. Build ESC/POS bytes ───────────────────────────────────────────
       add('Membangun data ESC/POS…');
