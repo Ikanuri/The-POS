@@ -230,7 +230,7 @@ class PrinterService {
                   align: PosAlign.center,
                   height: PosTextSize.size2,
                   width: PosTextSize.size2)),
-          ...gen.text('The-POS — Printer OK',
+          ...gen.text('The-POS - Printer OK',
               styles: const PosStyles(align: PosAlign.center)),
           ...gen.text(
               '${now.day}/${now.month}/${now.year} '
@@ -364,14 +364,15 @@ class PrinterService {
     final gen = Generator(PaperSize.mm58, profile);
     final out = <int>[];
 
-    // Header toko
-    out.addAll(gen.text(storeName.isEmpty ? 'Toko' : storeName,
+    // Header toko — semua string di-sanitize ke ASCII agar tidak throw exception
+    out.addAll(gen.text(
+        _toAscii(storeName.isEmpty ? 'Toko' : storeName),
         styles: const PosStyles(bold: true, align: PosAlign.center, height: PosTextSize.size2, width: PosTextSize.size2)));
     if (storeAddress.isNotEmpty) {
-      out.addAll(gen.text(storeAddress, styles: const PosStyles(align: PosAlign.center)));
+      out.addAll(gen.text(_toAscii(storeAddress), styles: const PosStyles(align: PosAlign.center)));
     }
     if (storePhone.isNotEmpty) {
-      out.addAll(gen.text('Telp: $storePhone', styles: const PosStyles(align: PosAlign.center)));
+      out.addAll(gen.text('Telp: ${_toAscii(storePhone)}', styles: const PosStyles(align: PosAlign.center)));
     }
     out.addAll(gen.hr());
 
@@ -388,12 +389,12 @@ class PrinterService {
     if (customer != null) {
       out.addAll(gen.row([
         PosColumn(text: 'Cust', width: 3),
-        PosColumn(text: customer.name, width: 9),
+        PosColumn(text: _toAscii(customer.name), width: 9),
       ]));
     } else if (tx.customerName != null) {
       out.addAll(gen.row([
         PosColumn(text: 'Cust', width: 3),
-        PosColumn(text: tx.customerName!, width: 9),
+        PosColumn(text: _toAscii(tx.customerName!), width: 9),
       ]));
     }
     out.addAll(gen.hr());
@@ -402,10 +403,10 @@ class PrinterService {
     for (final item in _orderItems(items, parentOf)) {
       final isVar = _parentItemOf(item, items, parentOf) != null;
       final pad = isVar ? '  ' : '';
-      final rawName = productNames[item.productId] ?? 'Produk';
+      final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
       final marked = checkedIds.contains(item.id) ? '[v] $rawName' : rawName;
       final pName = isVar ? '$pad> $marked' : marked;
-      final uName = unitNames[item.productUnitId] ?? '';
+      final uName = _toAscii(unitNames[item.productUnitId] ?? '');
       out.addAll(gen.text('$pName ($uName)',
           styles: const PosStyles(), linesAfter: 0));
       final qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
@@ -419,7 +420,7 @@ class PrinterService {
             styles: const PosStyles(align: PosAlign.right)),
       ]));
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-        out.addAll(gen.text('$pad  * ${item.itemNote}',
+        out.addAll(gen.text('$pad  * ${_toAscii(item.itemNote!)}',
             styles: const PosStyles(fontType: PosFontType.fontB)));
       }
     }
@@ -462,12 +463,60 @@ class PrinterService {
 
     if (strukNote != null && strukNote.isNotEmpty) {
       out.addAll(gen.hr());
-      out.addAll(gen.text(strukNote, styles: const PosStyles(align: PosAlign.center)));
+      out.addAll(gen.text(_toAscii(strukNote),
+          styles: const PosStyles(align: PosAlign.center)));
     }
 
     out.addAll(gen.feed(3));
     out.addAll(gen.cut());
     return Uint8List.fromList(out);
+  }
+
+  /// Bersihkan string agar hanya berisi karakter yang bisa dicetak printer
+  /// ESC/POS (ASCII 0x20–0x7E). Karakter non-ASCII umum dikonversi ke padanan
+  /// ASCII; sisanya dihapus. Tanpa ini, gen.text() / gen.row() throw exception.
+  static String _toAscii(String s) {
+    final map = {
+      '—': '-',  // em dash —
+      '–': '-',  // en dash –
+      '‘': "'",  // left single quote '
+      '’': "'",  // right single quote '
+      '“': '"',  // left double quote "
+      '”': '"',  // right double quote "
+      '…': '...', // ellipsis …
+      '×': 'x',  // ×
+      '·': '.',  // middle dot ·
+      '«': '"',  // «
+      '»': '"',  // »
+      '•': '*',  // bullet •
+      '❤': '<3', // ❤
+      '°': 'deg',// °
+      // Vowels with diacritics (e.g. café)
+      'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+      'à': 'a', 'â': 'a', 'ä': 'a', 'á': 'a',
+      'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o',
+      'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+      'í': 'i', 'î': 'i', 'ï': 'i',
+      'É': 'E', 'È': 'E', 'Ê': 'E',
+      'À': 'A', 'Â': 'A', 'Ä': 'A',
+      'Ó': 'O', 'Ô': 'O', 'Ö': 'O',
+      'Ú': 'U', 'Û': 'U', 'Ü': 'U',
+      'ñ': 'n', 'Ñ': 'N', // ñ Ñ
+      'ç': 'c', 'Ç': 'C', // ç Ç
+    };
+    final buf = StringBuffer();
+    // Iterasi per grapheme cluster via runes (menangani surrogate pair dgn benar)
+    for (final rune in s.runes) {
+      final ch = String.fromCharCode(rune);
+      final mapped = map[ch];
+      if (mapped != null) {
+        buf.write(mapped);
+      } else if (rune >= 0x20 && rune <= 0x7E) {
+        buf.write(ch);
+      }
+      // karakter di luar range ASCII printable: dihapus (tidak error)
+    }
+    return buf.toString();
   }
 
   static String _fmtRp(int amount) {
