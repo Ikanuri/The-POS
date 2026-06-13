@@ -33,6 +33,38 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     ];
   }
 
+  /// Ubah effective qty sebuah item.
+  /// Untuk item induk: stored qty = effectiveQty + totalVariantQty.
+  /// Saat effectiveQty = 0 dan ada varian, induk tetap di cart sebagai placeholder.
+  void setEffectiveQty(String productUnitId, double effectiveQty) {
+    final idx = state.indexWhere((c) => c.productUnitId == productUnitId);
+    if (idx < 0) return;
+    final item = state[idx];
+    if (item.isVariant) {
+      setQty(productUnitId, effectiveQty);
+      return;
+    }
+    final variantTotal = state
+        .where((c) => c.isVariant && c.parentProductId == item.productId)
+        .fold(0.0, (s, c) => s + c.qty);
+    final newStored = effectiveQty + variantTotal;
+    if (newStored <= 0) {
+      removeItem(productUnitId);
+    } else {
+      setQty(productUnitId, newStored);
+    }
+  }
+
+  /// Effective qty untuk sebuah item.
+  /// Induk: storedQty − totalVariantQty (min 0). Varian: storedQty.
+  double effectiveQtyFor(CartItem item) {
+    if (item.isVariant) return item.qty;
+    final variantTotal = state
+        .where((c) => c.isVariant && c.parentProductId == item.productId)
+        .fold(0.0, (s, c) => s + c.qty);
+    return (item.qty - variantTotal).clamp(0.0, double.infinity);
+  }
+
   void removeItem(String productUnitId) {
     state = state.where((c) => c.productUnitId != productUnitId).toList();
   }
@@ -93,10 +125,14 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   /// Ganti seluruh isi keranjang (dipakai saat melanjutkan pesanan ditahan).
   void replaceAll(List<CartItem> items) => state = items;
 
-  int get totalAmount =>
-      state.fold(0, (sum, item) => sum + item.subtotal);
+  int get totalAmount => state.fold(0, (sum, item) {
+    final effQty = effectiveQtyFor(item);
+    return sum + (item.price * effQty).round();
+  });
 
-  int get itemCount => state.fold(0, (sum, item) => sum + item.qty.ceil());
+  int get itemCount => state.fold(0, (sum, item) {
+    return sum + effectiveQtyFor(item).ceil();
+  });
 }
 
 final cartProvider = StateNotifierProvider<CartNotifier, List<CartItem>>(

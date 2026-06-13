@@ -3,11 +3,66 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/utils/input_formatters.dart';
+
+/// Buka dialog scanner kamera untuk mengisi field barcode secara otomatis.
+/// Mengembalikan nilai barcode yang ter-scan, atau null jika dibatalkan.
+Future<String?> _scanBarcodeDialog(BuildContext context) async {
+  String? result;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: SizedBox(
+        width: 300,
+        height: 340,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 4, 0),
+              child: Row(
+                children: [
+                  Text('Scan Barcode',
+                      style: Theme.of(ctx).textTheme.titleMedium),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(12)),
+                child: MobileScanner(
+                  onDetect: (capture) {
+                    final barcode =
+                        capture.barcodes.firstOrNull?.rawValue;
+                    if (barcode != null && barcode.isNotEmpty) {
+                      result = barcode;
+                      Navigator.of(ctx).pop();
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return result;
+}
 
 const _uuid = Uuid();
 
@@ -544,8 +599,17 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             TextField(
               controller: barcodeCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                  labelText: 'Barcode (opsional)'),
+              decoration: InputDecoration(
+                labelText: 'Barcode (opsional)',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.qr_code_scanner, size: 20),
+                  tooltip: 'Scan barcode',
+                  onPressed: () async {
+                    final bc = await _scanBarcodeDialog(context);
+                    if (bc != null) barcodeCtrl.text = bc;
+                  },
+                ),
+              ),
             ),
           ],
         ),
@@ -942,9 +1006,26 @@ class _UnitCardState extends State<_UnitCard> {
                   child: TextFormField(
                     controller: _barcodeCtrl,
                     readOnly: widget.readOnly,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Barcode',
                       isDense: true,
+                      suffixIcon: widget.readOnly
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.qr_code_scanner,
+                                  size: 18),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Scan barcode',
+                              onPressed: () async {
+                                final bc =
+                                    await _scanBarcodeDialog(context);
+                                if (bc != null && mounted) {
+                                  _barcodeCtrl.text = bc;
+                                  widget.onChanged(widget.entry
+                                      .copyWith(barcode: bc));
+                                }
+                              },
+                            ),
                     ),
                     onChanged: widget.readOnly
                         ? null

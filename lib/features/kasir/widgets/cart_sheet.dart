@@ -70,11 +70,16 @@ class CartSheet extends ConsumerWidget {
                       itemCount: ordered.length,
                       separatorBuilder: (_, __) =>
                           const Divider(height: 1, indent: 56),
-                      itemBuilder: (ctx2, i) => _CartItemTile(
-                        index: i,
-                        item: ordered[i],
-                        isVariant: ordered[i].isVariant,
-                      ),
+                      itemBuilder: (ctx2, i) {
+                        final item = ordered[i];
+                        final effQty = notifier.effectiveQtyFor(item);
+                        return _CartItemTile(
+                          index: i,
+                          item: item,
+                          isVariant: item.isVariant,
+                          effectiveQty: effQty,
+                        );
+                      },
                     );
                   }),
           ),
@@ -123,73 +128,95 @@ class CartSheet extends ConsumerWidget {
 }
 
 class _CartItemTile extends ConsumerWidget {
-  const _CartItemTile(
-      {required this.index, required this.item, this.isVariant = false});
+  const _CartItemTile({
+    required this.index,
+    required this.item,
+    this.isVariant = false,
+    required this.effectiveQty,
+  });
   final int index;
   final CartItem item;
   final bool isVariant;
+  final double effectiveQty;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(cartProvider.notifier);
     final scheme = Theme.of(context).colorScheme;
+    final isZeroed = !isVariant && effectiveQty == 0;
+    final subtotal = (item.price * effectiveQty).round();
 
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.only(left: isVariant ? 32 : 16, right: 4),
-      title: Row(
-        children: [
-          if (isVariant)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.subdirectory_arrow_right,
-                  size: 14, color: scheme.onSurfaceVariant),
+    return Opacity(
+      opacity: isZeroed ? 0.45 : 1.0,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.only(left: isVariant ? 32 : 16, right: 4),
+        title: Row(
+          children: [
+            if (isVariant)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(Icons.subdirectory_arrow_right,
+                    size: 14, color: scheme.onSurfaceVariant),
+              ),
+            Expanded(
+              child: Text(item.productName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: isVariant ? 13 : null,
+                      color: isVariant ? scheme.onSurfaceVariant : null)),
             ),
-          Expanded(
-            child: Text(item.productName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: isVariant ? 13 : null,
-                    color: isVariant ? scheme.onSurfaceVariant : null)),
-          ),
-        ],
-      ),
-      subtitle: Row(
-        children: [
-          Text(item.unitName,
-              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-          if (item.priceOverridden) ...[
-            const SizedBox(width: 4),
-            Icon(Icons.edit, size: 10, color: scheme.tertiary),
           ],
-        ],
+        ),
+        subtitle: Row(
+          children: [
+            Text(item.unitName,
+                style:
+                    TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+            if (item.priceOverridden) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.edit, size: 10, color: scheme.tertiary),
+            ],
+            if (isZeroed) ...[
+              const SizedBox(width: 4),
+              Text('via varian',
+                  style: TextStyle(fontSize: 10, color: scheme.primary)),
+            ],
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline, size: 20),
+              visualDensity: VisualDensity.compact,
+              onPressed: isZeroed
+                  ? null
+                  : () => notifier.setEffectiveQty(
+                      item.productUnitId, effectiveQty - 1),
+            ),
+            _QtyField(item: item, effectiveQty: effectiveQty),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => notifier.setEffectiveQty(
+                  item.productUnitId, effectiveQty + 1),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              formatRupiah(subtotal),
+              style: TextStyle(
+                  color: isZeroed
+                      ? scheme.onSurfaceVariant
+                      : scheme.primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13),
+            ),
+          ],
+        ),
+        onLongPress: () => _showItemOptions(context, ref),
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.remove_circle_outline, size: 20),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => notifier.setQty(
-                item.productUnitId, item.qty - 1),
-          ),
-          _QtyField(item: item),
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline, size: 20),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => notifier.setQty(
-                item.productUnitId, item.qty + 1),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            formatRupiah(item.subtotal),
-            style: TextStyle(
-                color: scheme.primary, fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-        ],
-      ),
-      onLongPress: () => _showItemOptions(context, ref),
     );
   }
 
@@ -302,10 +329,11 @@ class _CartItemTile extends ConsumerWidget {
 }
 
 /// Qty yang bisa di-tap untuk inline edit. Tap → TextField kecil di tempat;
-/// blur/submit → setQty. Desain tombol ± di sekitarnya tidak berubah.
+/// blur/submit → setEffectiveQty. Desain tombol ± di sekitarnya tidak berubah.
 class _QtyField extends ConsumerStatefulWidget {
-  const _QtyField({required this.item});
+  const _QtyField({required this.item, required this.effectiveQty});
   final CartItem item;
+  final double effectiveQty;
 
   @override
   ConsumerState<_QtyField> createState() => _QtyFieldState();
@@ -337,7 +365,7 @@ class _QtyFieldState extends ConsumerState<_QtyField> {
   void _startEdit() {
     setState(() {
       _editing = true;
-      _ctrl.text = _fmt(widget.item.qty);
+      _ctrl.text = _fmt(widget.effectiveQty);
       _ctrl.selection =
           TextSelection(baseOffset: 0, extentOffset: _ctrl.text.length);
     });
@@ -347,7 +375,8 @@ class _QtyFieldState extends ConsumerState<_QtyField> {
   void _commit() {
     final parsed = double.tryParse(_ctrl.text.replaceAll(',', '.'));
     if (parsed != null) {
-      ref.read(cartProvider.notifier).setQty(widget.item.productUnitId, parsed);
+      ref.read(cartProvider.notifier)
+          .setEffectiveQty(widget.item.productUnitId, parsed);
     }
     if (mounted) setState(() => _editing = false);
   }
@@ -377,7 +406,7 @@ class _QtyFieldState extends ConsumerState<_QtyField> {
       child: SizedBox(
         width: 32,
         child: Text(
-          _fmt(widget.item.qty),
+          _fmt(widget.effectiveQty),
           textAlign: TextAlign.center,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
