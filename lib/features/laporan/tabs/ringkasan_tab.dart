@@ -248,31 +248,60 @@ class _DailyChart extends StatelessWidget {
       ..sort((a, b) => a.key.compareTo(b.key));
     final max = sorted.map((e) => e.value).reduce((a, b) => a > b ? a : b);
     final scheme = Theme.of(context).colorScheme;
+    final total = sorted.length;
 
-    return SizedBox(
-      height: 80,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: sorted.map((e) {
-          final h = max > 0 ? (e.value / max * 70) : 2.0;
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Tooltip(
-                message:
-                    '${e.key.day}/${e.key.month}\n${formatRupiah(e.value)}',
-                child: Container(
-                  height: h,
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    borderRadius: BorderRadius.circular(3),
+    return Column(
+      children: [
+        SizedBox(
+          height: 80,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: sorted.map((e) {
+              final h = max > 0 ? (e.value / max * 70) : 2.0;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Tooltip(
+                    message:
+                        '${e.key.day}/${e.key.month}\n${formatRupiah(e.value)}',
+                    child: Container(
+                      height: h,
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
                   ),
                 ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Row(
+          children: sorted.asMap().entries.map((entry) {
+            final i = entry.key;
+            final date = entry.value.key;
+            final bool show = total <= 7
+                ? true
+                : total <= 14
+                    ? i % 2 == 0
+                    : total <= 31
+                        ? i % 3 == 0 || i == total - 1
+                        : i % 7 == 0 || i == total - 1;
+            return Expanded(
+              child: Text(
+                show ? '${date.day}/${date.month}' : '',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 8, color: scheme.onSurfaceVariant),
+                overflow: TextOverflow.visible,
+                softWrap: false,
               ),
-            ),
-          );
-        }).toList(),
-      ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }

@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/widgets/inline_banner.dart';
 
 /// Buka dialog scanner kamera untuk mengisi field barcode secara otomatis.
 /// Mengembalikan nilai barcode yang ter-scan, atau null jika dibatalkan.
@@ -81,6 +82,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   bool _isLoading = false;
   bool _isEdit = false;
   bool _readOnly = false;
+
+  String? _bannerMsg;
+  InlineBannerType _bannerType = InlineBannerType.error;
+
+  void _showBanner(String msg, [InlineBannerType type = InlineBannerType.error]) {
+    setState(() { _bannerMsg = msg; _bannerType = type; });
+  }
 
   List<_UnitEntry> _units = [];
   List<ProductGroup> _groups = [];
@@ -185,25 +193,19 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_units.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tambahkan minimal 1 satuan')),
-      );
+      _showBanner('Tambahkan minimal 1 satuan');
       return;
     }
 
     // Validate extra tiers: no duplicate minQty, ratioToBase > 0.
     for (final u in _units) {
       if (u.ratioToBase <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rasio satuan harus > 0')),
-        );
+        _showBanner('Rasio satuan harus > 0');
         return;
       }
       final minQtys = u.extraTiers.map((t) => t.minQty).toList();
       if (minQtys.toSet().length != minQtys.length) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Minimum qty pada tier harga tidak boleh duplikat')),
-        );
+        _showBanner('Minimum qty pada tier harga tidak boleh duplikat');
         return;
       }
     }
@@ -287,10 +289,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         context.pop();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) _showBanner('Error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -340,9 +339,17 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Form(
-              key: _formKey,
-              child: ListView(
+          : Column(
+              children: [
+                InlineBanner(
+                  message: _bannerMsg,
+                  type: _bannerType,
+                  onDismiss: () => setState(() => _bannerMsg = null),
+                ),
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (_readOnly)
@@ -542,6 +549,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   const SizedBox(height: 80),
                 ],
               ),
+            ),
+                ),
+              ],
             ),
       bottomNavigationBar: _readOnly
           ? null

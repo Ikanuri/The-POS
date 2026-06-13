@@ -11,6 +11,7 @@ import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/inline_banner.dart';
 import 'cart_provider.dart';
 import 'widgets/cart_sheet.dart';
 import 'widgets/held_orders_sheet.dart';
@@ -206,6 +207,14 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   String? _lastScan;
   int _lastScanMs = 0;
 
+  // Banner notifikasi inline (bukan SnackBar overlay)
+  String? _bannerMsg;
+  InlineBannerType _bannerType = InlineBannerType.error;
+
+  void _showBanner(String msg, [InlineBannerType type = InlineBannerType.error]) {
+    setState(() { _bannerMsg = msg; _bannerType = type; });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -306,11 +315,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       _closeScanner();
       final resolved = await _resolveBarcode(barcode);
       if (resolved == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Barcode tidak ditemukan: $barcode')),
-          );
-        }
+        if (mounted) _showBanner('Barcode tidak ditemukan: $barcode');
         return;
       }
       ref.read(cartProvider.notifier).addItem(resolved.item);
@@ -497,6 +502,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             heldCount: heldCount,
             isGrid: isGrid,
             onToggleGrid: () => ref.read(kasirGridProvider.notifier).toggle(),
+          ),
+          InlineBanner(
+            message: _bannerMsg,
+            type: _bannerType,
+            onDismiss: () => setState(() => _bannerMsg = null),
           ),
           Expanded(
             child: productsAsync.when(
