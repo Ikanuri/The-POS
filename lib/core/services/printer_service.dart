@@ -1,5 +1,6 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +32,7 @@ class PrintLogEntry {
 class PrinterService {
   PrinterService._();
 
+  static const _channel = MethodChannel('com.thepos/bt_print');
   static const _prefMac = 'printer_mac';
 
   static Future<String?> getSavedMac() async {
@@ -71,25 +73,38 @@ class PrinterService {
       if (await isConnected) return true;
     } catch (_) {}
     for (var attempt = 0; attempt < 3; attempt++) {
-      final ok = await PrintBluetoothThermal.connect(macPrinterAddress: mac)
-          .timeout(const Duration(seconds: 12), onTimeout: () => false);
-      if (ok) {
-        // RFCOMM socket sering belum siap tulis meski sudah "connected".
-        // Tunggu 600ms agar output stream stabil sebelum writeBytes.
-        await Future<void>.delayed(const Duration(milliseconds: 600));
-        return true;
-      }
+      try {
+        final res = await _channel.invokeMapMethod<String, dynamic>(
+          'connect', {'mac': mac},
+        ).timeout(const Duration(seconds: 12), onTimeout: () => null);
+        final ok = res?['ok'] as bool? ?? false;
+        if (ok) {
+          await Future<void>.delayed(const Duration(milliseconds: 600));
+          return true;
+        }
+      } catch (_) {}
       await Future<void>.delayed(const Duration(milliseconds: 800));
     }
     return false;
   }
 
-  static Future<bool> get isConnected async =>
-      PrintBluetoothThermal.connectionStatus
-          .timeout(const Duration(seconds: 6), onTimeout: () => false);
+  static Future<bool> get isConnected async {
+    try {
+      return await _channel.invokeMethod<bool>('status')
+              .timeout(const Duration(seconds: 4), onTimeout: () => false)
+          ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 
-  static Future<bool> disconnect() async =>
-      PrintBluetoothThermal.disconnect;
+  static Future<bool> disconnect() async {
+    try {
+      await _channel.invokeMethod<void>('disconnect')
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    return true;
+  }
 
   // ── Test print dengan log detail ─────────────────────────────────────────
 
@@ -160,17 +175,18 @@ class PrinterService {
       add('Cek status koneksi sebelumnya…');
       bool wasConnected = false;
       try {
-        wasConnected = await PrintBluetoothThermal.connectionStatus
-            .timeout(const Duration(seconds: 4), onTimeout: () => false);
+        wasConnected = await _channel.invokeMethod<bool>('status')
+                .timeout(const Duration(seconds: 4), onTimeout: () => false)
+            ?? false;
       } catch (e) {
-        add('connectionStatus exception', ok: false, detail: '$e');
+        add('status exception', ok: false, detail: '$e');
       }
       add('Status sebelumnya', detail: wasConnected ? 'terhubung' : 'terputus');
 
       if (wasConnected) {
         add('Putuskan koneksi lama sebelum reconnect…');
         try {
-          await PrintBluetoothThermal.disconnect
+          await _channel.invokeMethod<void>('disconnect')
               .timeout(const Duration(seconds: 4));
           add('Disconnect', ok: true);
         } catch (e) {
@@ -181,20 +197,25 @@ class PrinterService {
 
       // ── 5. Koneksi ───────────────────────────────────────────────────────
       bool connected = false;
+      String? connectErr;
       for (var i = 1; i <= 3; i++) {
         add('Percobaan koneksi $i/3 ke $mac…');
         try {
-          connected = await PrintBluetoothThermal.connect(
-                  macPrinterAddress: mac)
-              .timeout(const Duration(seconds: 12), onTimeout: () {
+          final res = await _channel.invokeMapMethod<String, dynamic>(
+            'connect', {'mac': mac},
+          ).timeout(const Duration(seconds: 12), onTimeout: () {
             add('Percobaan $i timeout (12 dtk)', ok: false);
-            return false;
+            return null;
           });
+          connected = res?['ok'] as bool? ?? false;
+          connectErr = res?['err'] as String?;
         } catch (e) {
           add('Percobaan $i exception', ok: false, detail: '$e');
           connected = false;
+          connectErr = '$e';
         }
-        add('Hasil percobaan $i', ok: connected);
+        add('Hasil percobaan $i', ok: connected,
+            detail: connected ? null : connectErr);
         if (connected) break;
         if (i < 3) {
           add('Tunggu 800ms sebelum percobaan berikutnya…');
@@ -214,36 +235,38 @@ class PrinterService {
       add('Verifikasi status koneksi setelah connect…');
       bool connStatus = false;
       try {
-        connStatus = await PrintBluetoothThermal.connectionStatus
-            .timeout(const Duration(seconds: 4), onTimeout: () => false);
+        connStatus = await _channel.invokeMethod<bool>('status')
+                .timeout(const Duration(seconds: 4), onTimeout: () => false)
+            ?? false;
       } catch (e) {
         add('Verifikasi exception', ok: false, detail: '$e');
       }
       add('Status terverifikasi', ok: connStatus);
 
       // ── 6b. Stabilisasi RFCOMM ───────────────────────────────────────────
-      // writeBytes gagal dalam 1ms berarti output stream belum siap.
-      // Tunggu 600ms (sama dengan connect()) lalu kirim ESC @ (init) sebagai
-      // warm-up sebelum data nyata.
       add('Tunggu 600ms stabilisasi RFCOMM output stream…');
       await Future<void>.delayed(const Duration(milliseconds: 600));
       add('Kirim warm-up ESC @ (init printer)…');
       try {
-        // ESC @ = 0x1B 0x40 — reset printer, aman dikirim sebelum data
         final warmup = Uint8List.fromList([0x1B, 0x40]);
-        final wOk = await PrintBluetoothThermal.writeBytes(warmup)
-            .timeout(const Duration(seconds: 4), onTimeout: () => false);
+        final wRes = await _channel.invokeMapMethod<String, dynamic>(
+          'write', {'bytes': warmup},
+        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
+        final wOk = wRes?['ok'] as bool? ?? false;
+        final wErr = wRes?['err'] as String?;
         add('Warm-up write', ok: wOk,
-            detail: wOk ? 'stream siap' : 'masih belum siap, lanjut coba…');
+            detail: wOk ? 'stream siap' : (wErr ?? 'belum siap'));
         if (!wOk) {
-          // Satu kali retry setelah 500ms tambahan
           await Future<void>.delayed(const Duration(milliseconds: 500));
-          final wOk2 = await PrintBluetoothThermal.writeBytes(warmup)
-              .timeout(const Duration(seconds: 4), onTimeout: () => false);
-          add('Warm-up write retry', ok: wOk2);
+          final wRes2 = await _channel.invokeMapMethod<String, dynamic>(
+            'write', {'bytes': warmup},
+          ).timeout(const Duration(seconds: 4), onTimeout: () => null);
+          final wOk2 = wRes2?['ok'] as bool? ?? false;
+          final wErr2 = wRes2?['err'] as String?;
+          add('Warm-up write retry', ok: wOk2,
+              detail: wOk2 ? null : (wErr2 ?? 'masih gagal'));
           if (!wOk2) {
-            add('Stream tidak bisa ditulis setelah 1,7 detik. '
-                'Matikan/nyalakan printer lalu coba lagi.',
+            add('Stream tidak bisa ditulis. Error: ${wErr2 ?? wErr ?? "tidak diketahui"}',
                 ok: false);
             return (false, log);
           }
@@ -287,21 +310,28 @@ class PrinterService {
       add('Mengirim ${bytes.length} bytes ke printer…');
       bool writeOk = false;
       try {
-        writeOk = await PrintBluetoothThermal.writeBytes(bytes)
-            .timeout(const Duration(seconds: 10), onTimeout: () {
+        final writeRes = await _channel.invokeMapMethod<String, dynamic>(
+          'write', {'bytes': bytes},
+        ).timeout(const Duration(seconds: 10), onTimeout: () {
           add('Write timeout (10 dtk)', ok: false);
-          return false;
+          return null;
         });
+        writeOk = writeRes?['ok'] as bool? ?? false;
+        final writeErr = writeRes?['err'] as String?;
+        add('Kirim data', ok: writeOk,
+            detail: writeOk ? '${bytes.length} bytes terkirim' : (writeErr ?? 'tidak ada detail'));
+        if (!writeOk && writeErr != null) {
+          add('Error detail: $writeErr', ok: false);
+        }
       } catch (e) {
         add('Write exception', ok: false, detail: '$e');
         return (false, log);
       }
-      add('Kirim data', ok: writeOk);
 
       if (writeOk) {
         add('Test print BERHASIL — kertas harus keluar dari printer.', ok: true);
       } else {
-        add('writeBytes mengembalikan false — data tidak terkirim.', ok: false);
+        add('Data tidak terkirim — lihat error detail di atas.', ok: false);
         add('Tips: coba matikan/nyalakan printer lalu test lagi.', ok: false);
       }
       return (writeOk, log);
@@ -352,7 +382,14 @@ class PrinterService {
       checkedIds: checkedIds,
     );
 
-    return PrintBluetoothThermal.writeBytes(bytes);
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>(
+        'write', {'bytes': bytes},
+      ).timeout(const Duration(seconds: 10), onTimeout: () => null);
+      return res?['ok'] as bool? ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
 
