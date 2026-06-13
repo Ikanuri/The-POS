@@ -304,6 +304,46 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     );
   }
 
+  /// Jika [item] adalah varian dan parentnya belum ada di keranjang,
+  /// tambahkan item induk sebagai placeholder (storedQty = variantQty
+  /// sehingga effectiveQty = 0, tampil "via varian").
+  Future<void> _ensureParentInCart(CartItem variantItem) async {
+    if (!variantItem.isVariant || variantItem.parentProductId == null) return;
+    final cart = ref.read(cartProvider);
+    final hasParent = cart.any(
+        (c) => c.productId == variantItem.parentProductId && !c.isVariant);
+    if (hasParent) return;
+
+    final db = ref.read(databaseProvider);
+    final parent = await (db.select(db.products)
+          ..where((t) => t.id.equals(variantItem.parentProductId!)))
+        .getSingleOrNull();
+    if (parent == null || !mounted) return;
+
+    final units = await db.getProductUnits(parent.id);
+    if (units.isEmpty || !mounted) return;
+    final base =
+        units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+    final resolved =
+        await PriceService(db).resolvePrice(productUnitId: base.id, qty: 1);
+    final unitType = await (db.select(db.unitTypes)
+          ..where((t) => t.id.equals(base.unitTypeId ?? 1)))
+        .getSingleOrNull();
+    if (!mounted) return;
+
+    ref.read(cartProvider.notifier).addItem(CartItem(
+          productId: parent.id,
+          productUnitId: base.id,
+          productName: parent.name,
+          unitName: unitType?.name ?? 'Satuan',
+          // storedQty = variantQty → effectiveQty = 0 → tampil "via varian"
+          qty: variantItem.qty,
+          price: resolved.price,
+          originalPrice: resolved.price,
+          costPrice: resolved.costPrice,
+        ));
+  }
+
   Future<void> _handleBarcode(String barcode) async {
     // Debounce: abaikan deteksi berulang barcode sama dalam 1.5 detik.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -318,6 +358,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         if (mounted) _showBanner('Barcode tidak ditemukan: $barcode');
         return;
       }
+      await _ensureParentInCart(resolved.item);
       ref.read(cartProvider.notifier).addItem(resolved.item);
       return;
     }
@@ -336,6 +377,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     }
     final item = resolved.item;
     final notifier = ref.read(cartProvider.notifier);
+    await _ensureParentInCart(item);
     notifier.addItem(item);
     final newQty = notifier.qtyForUnit(item.productUnitId).round();
     _showOrUpdateToast(item, newQty);

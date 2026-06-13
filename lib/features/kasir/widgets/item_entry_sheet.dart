@@ -175,12 +175,14 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     double qty = 1;
     int price = opts.isNotEmpty ? opts.first.basePrice : 0;
     bool overridden = false;
+    final notifier = ref.read(cartProvider.notifier);
     for (var i = 0; i < opts.length; i++) {
       final existing =
           cart.where((c) => c.productUnitId == opts[i].unit.id).firstOrNull;
       if (existing != null) {
         selIdx = i;
-        qty = existing.qty;
+        // Prefill dengan effectiveQty agar konsisten dengan tampilan keranjang.
+        qty = notifier.effectiveQtyFor(existing);
         price = existing.price;
         overridden = existing.priceOverridden;
         break;
@@ -213,6 +215,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     }
     return total;
   }
+
+  double get _totalVariantQty =>
+      _variants.fold(0.0, (s, v) => s + (_variantQty[v.product.id] ?? 0));
+
+  bool get _canSubmit => _qty > 0 || _totalVariantQty > 0;
 
   String _fmtQty(double q) => q % 1 == 0 ? q.toInt().toString() : q.toString();
 
@@ -247,18 +254,27 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     final sel = _sel;
     if (sel == null) return;
     final notifier = ref.read(cartProvider.notifier);
-    notifier.setItem(CartItem(
-      productId: widget.product.id,
-      productUnitId: sel.unit.id,
-      productName: widget.product.name,
-      unitName: sel.unitName,
-      qty: _qty,
-      price: _price,
-      originalPrice: sel.basePrice,
-      costPrice: sel.costPrice,
-      priceOverridden: _priceOverridden,
-      barcode: sel.barcode,
-    ));
+
+    // storedQty = effectiveQty + variantTotal agar offset math benar.
+    // Kalau _qty == 0 tapi ada varian, simpan parent sebagai placeholder
+    // (effectiveQty = 0 → tampil "via varian").
+    final variantQtySum = _totalVariantQty;
+    final storedQty = _qty + variantQtySum;
+
+    if (storedQty > 0) {
+      notifier.setItem(CartItem(
+        productId: widget.product.id,
+        productUnitId: sel.unit.id,
+        productName: widget.product.name,
+        unitName: sel.unitName,
+        qty: storedQty,
+        price: _price,
+        originalPrice: sel.basePrice,
+        costPrice: sel.costPrice,
+        priceOverridden: _priceOverridden,
+        barcode: sel.barcode,
+      ));
+    }
 
     // Varian terpilih → item add-on bersarang di bawah induk.
     for (final v in _variants) {
@@ -590,8 +606,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: FilledButton(
-                            onPressed: _qty > 0 ? _submit : null,
-                            child: Text(_qty > 0
+                            onPressed: _canSubmit ? _submit : null,
+                            child: Text(_canSubmit
                                 ? 'Tambah ke Keranjang'
                                 : 'Atur jumlah'),
                           ),
