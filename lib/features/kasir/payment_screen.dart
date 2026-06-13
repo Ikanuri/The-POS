@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
+import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
@@ -196,20 +197,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         createdAt: Value(now),
       );
 
+      // Helper: compute effective qty (parent = stored − variantSum; variant = stored).
+      double effQty(CartItem item) {
+        if (item.isVariant) return item.qty;
+        final varSum = cart
+            .where((c) => c.isVariant && c.parentProductId == item.productId)
+            .fold(0.0, (s, c) => s + c.qty);
+        return (item.qty - varSum).clamp(0.0, double.infinity);
+      }
+
       final itemCompanions = cart
-          .map((item) => TransactionItemsCompanion.insert(
-                id: _uuid.v4(),
-                transactionId: txId,
-                productId: item.productId,
-                productUnitId: item.productUnitId,
-                qty: item.qty,
-                priceAtSale: item.price,
-                originalPrice: item.originalPrice,
-                priceOverridden: Value(item.priceOverridden),
-                costAtSale: Value(item.costPrice),
-                itemNote: Value(item.itemNote),
-                subtotal: item.subtotal,
-              ))
+          .map((item) {
+            final eq = effQty(item);
+            return TransactionItemsCompanion.insert(
+              id: _uuid.v4(),
+              transactionId: txId,
+              productId: item.productId,
+              productUnitId: item.productUnitId,
+              qty: eq,
+              priceAtSale: item.price,
+              originalPrice: item.originalPrice,
+              priceOverridden: Value(item.priceOverridden),
+              costAtSale: Value(item.costPrice),
+              itemNote: Value(item.itemNote),
+              subtotal: (item.price * eq).round(),
+            );
+          })
           .toList();
 
       final paymentCompanions = paidAmount > 0
@@ -225,12 +238,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ]
           : <TransactionPaymentsCompanion>[];
 
-      // Stock items — stockAfter computed inside saveTransaction's DB transaction.
+      // Stock items — only deduct stock for items with effective qty > 0.
       final stockItems = cart
-          .where((item) => item.qty > 0)
+          .where((item) => effQty(item) > 0)
           .map((item) => (
                 productUnitId: item.productUnitId,
-                qty: item.qty,
+                qty: effQty(item),
                 note: localId,
               ))
           .toList();
@@ -306,37 +319,66 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     ],
                   ),
                 ),
-                ...orderCartItems(cart).map((item) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.only(
-                          left: item.isVariant ? 32 : 16, right: 16),
-                      title: Row(
-                        children: [
-                          if (item.isVariant)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(Icons.subdirectory_arrow_right,
-                                  size: 13, color: scheme.onSurfaceVariant),
+                ...() {
+                    // effectiveQty helper for display (same logic as transaction save)
+                    double itemEffQty(CartItem item) {
+                      if (item.isVariant) return item.qty;
+                      final varSum = cart
+                          .where((c) =>
+                              c.isVariant &&
+                              c.parentProductId == item.productId)
+                          .fold(0.0, (s, c) => s + c.qty);
+                      return (item.qty - varSum)
+                          .clamp(0.0, double.infinity);
+                    }
+
+                    return orderCartItems(cart).map((item) {
+                      final eq = itemEffQty(item);
+                      final isPlaceholder = !item.isVariant && eq == 0;
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.only(
+                            left: item.isVariant ? 32 : 16, right: 16),
+                        title: Row(
+                          children: [
+                            if (item.isVariant)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Icon(
+                                    Icons.subdirectory_arrow_right,
+                                    size: 13,
+                                    color: scheme.onSurfaceVariant),
+                              ),
+                            Expanded(
+                              child: Text(item.productName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: item.isVariant
+                                          ? scheme.onSurfaceVariant
+                                          : null)),
                             ),
-                          Expanded(
-                            child: Text(item.productName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                          ],
+                        ),
+                        subtitle: isPlaceholder
+                            ? Text('via varian',
                                 style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.primary))
+                            : Text(
+                                '${item.unitName} × ${eq % 1 == 0 ? eq.toInt() : eq}',
+                                style: const TextStyle(fontSize: 11)),
+                        trailing: isPlaceholder
+                            ? null
+                            : Text(
+                                formatRupiah((item.price * eq).round()),
+                                style: const TextStyle(
                                     fontSize: 13,
-                                    color: item.isVariant
-                                        ? scheme.onSurfaceVariant
-                                        : null)),
-                          ),
-                        ],
-                      ),
-                      subtitle: Text(
-                          '${item.unitName} × ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty}',
-                          style: const TextStyle(fontSize: 11)),
-                      trailing: Text(formatRupiah(item.subtotal),
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600)),
-                    )),
+                                    fontWeight: FontWeight.w600)),
+                      );
+                    });
+                  }(),
                 const Divider(height: 1),
                 InkWell(
                   onTap: _editTotal,

@@ -79,10 +79,22 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     });
   }
 
+  /// Effective qty untuk sebuah item di receipt, compatible dengan data
+  /// lama (storedQty) maupun baru (effectiveQty=0 untuk placeholder induk).
+  double _itemEffQty(TransactionItem item) {
+    final parentItem = _parentItemOf(item);
+    if (parentItem != null) return item.qty; // varian: langsung
+    final childSum = _childrenOf(item).fold(0.0, (s, c) => s + c.qty);
+    return (item.qty - childSum).clamp(0.0, double.infinity);
+  }
+
   Widget _itemCheckRow(TransactionItem item, ColorScheme scheme,
       {required bool isVariant, TransactionItem? parent}) {
     final checked = _checked[item.id] ?? false;
     final hasChildren = !isVariant && _childrenOf(item).isNotEmpty;
+    final effQty = _itemEffQty(item);
+    final isPlaceholder = !isVariant && effQty == 0 && hasChildren;
+
     return CheckboxListTile(
       dense: true,
       controlAffinity: ListTileControlAffinity.leading,
@@ -123,19 +135,33 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ),
         ],
       ),
-      subtitle: Padding(
-        padding: EdgeInsets.only(left: isVariant ? 17 : 0),
-        child: Text(
-          '${_unitNames[item.productUnitId] ?? ''} ${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} × ${formatRupiah(item.priceAtSale)}'
-          '${item.itemNote != null ? '\n${item.itemNote}' : ''}',
-          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-        ),
-      ),
-      secondary: Text(
-        formatRupiah(item.subtotal),
-        style: TextStyle(
-            fontSize: isVariant ? 12 : 13, fontWeight: FontWeight.w600),
-      ),
+      subtitle: isPlaceholder
+          ? Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                'via varian',
+                style: TextStyle(fontSize: 11, color: scheme.primary),
+              ),
+            )
+          : Padding(
+              padding: EdgeInsets.only(left: isVariant ? 17 : 0),
+              child: Text(
+                '${_unitNames[item.productUnitId] ?? ''} '
+                '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
+                '${formatRupiah(item.priceAtSale)}'
+                '${item.itemNote != null ? '\n${item.itemNote}' : ''}',
+                style:
+                    TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              ),
+            ),
+      secondary: isPlaceholder
+          ? null
+          : Text(
+              formatRupiah((item.priceAtSale * effQty).round()),
+              style: TextStyle(
+                  fontSize: isVariant ? 12 : 13,
+                  fontWeight: FontWeight.w600),
+            ),
     );
   }
 
@@ -979,25 +1005,36 @@ class _ReceiptPaper extends StatelessWidget {
           ..._ordered.expand((item) {
             final isVar = _parentItemOf(item) != null;
             final pad = isVar ? '  ' : '';
-            final qtyStr = item.qty % 1 == 0
-                ? item.qty.toInt().toString()
-                : item.qty.toString();
             final mark = checkedIds.contains(item.id) ? '✓ ' : '';
             final namePrefix = isVar ? '$pad└ ' : '';
+            // Effective qty: for parents = storedQty − sum(children), for variants = qty.
+            final childSum = isVar
+                ? 0.0
+                : items
+                    .where((c) => _parentItemOf(c)?.id == item.id)
+                    .fold(0.0, (s, c) => s + c.qty);
+            final effQty =
+                isVar ? item.qty : (item.qty - childSum).clamp(0.0, double.infinity);
+            final isPlaceholder = !isVar && effQty == 0 && childSum > 0;
+            final qtyStr = effQty % 1 == 0
+                ? effQty.toInt().toString()
+                : effQty.toString();
             return [
               Text('$mark$namePrefix${productNames[item.productId] ?? ''}',
                   style: _mono.copyWith(
                       fontWeight:
                           isVar ? FontWeight.w400 : FontWeight.w700)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                      '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''} x ${_fmtNum(item.priceAtSale)}',
-                      style: _mono),
-                  Text(_fmtNum(item.subtotal), style: _mono),
-                ],
-              ),
+              if (!isPlaceholder)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                        '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''} x ${_fmtNum(item.priceAtSale)}',
+                        style: _mono),
+                    Text(_fmtNum((item.priceAtSale * effQty).round()),
+                        style: _mono),
+                  ],
+                ),
               if (item.itemNote != null)
                 Text('$pad* ${item.itemNote}',
                     style: _mono.copyWith(

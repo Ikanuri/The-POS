@@ -123,6 +123,7 @@ class CatalogDetail {
     required this.costPrice,
     required this.unitCount,
     this.barcode,
+    this.hasVariants = false,
   });
 
   final String baseUnitId;
@@ -131,6 +132,7 @@ class CatalogDetail {
   final int costPrice;
   final int unitCount;
   final String? barcode;
+  final bool hasVariants;
 }
 
 final _catalogDetailProvider =
@@ -156,6 +158,7 @@ final _catalogDetailProvider =
         ..where((t) => t.id.equals(base.unitTypeId ?? 1)))
       .getSingleOrNull();
   final barcodes = await db.getProductBarcodes(base.id);
+  final variants = await db.getVariants(productId);
   return CatalogDetail(
     baseUnitId: base.id,
     baseUnitName: unitType?.name ?? 'Satuan',
@@ -164,6 +167,7 @@ final _catalogDetailProvider =
     unitCount: units.length,
     barcode:
         barcodes.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull,
+    hasVariants: variants.isNotEmpty,
   );
 });
 
@@ -941,7 +945,7 @@ class _ProductCard extends ConsumerWidget {
                         // "+" selalu menambah 1 satuan dasar agar selalu
                         // berfungsi. Untuk pilih satuan lain / varian, ketuk
                         // badan kartu (buka modal).
-                        if (d.baseUnitId.isEmpty) {
+                        if (d.baseUnitId.isEmpty || d.hasVariants) {
                           onOpenEntry();
                         } else {
                           onQuickAdd(product, d);
@@ -1079,7 +1083,7 @@ class _ProductListTile extends ConsumerWidget {
               data: (d) => _AddControl(
                 qty: qty,
                 onTap: () {
-                  if (d.baseUnitId.isEmpty) {
+                  if (d.baseUnitId.isEmpty || d.hasVariants) {
                     onOpenEntry();
                   } else {
                     onQuickAdd(product, d);

@@ -186,9 +186,7 @@ class PrinterService {
       String mac) async {
     final log = <PrintLogEntry>[];
     void add(String step, {bool? ok, String? detail}) {
-      final e = PrintLogEntry(step, ok: ok, detail: detail);
-      log.add(e);
-      debugPrint(e.toString());
+      log.add(PrintLogEntry(step, ok: ok, detail: detail));
     }
 
     try {
@@ -420,7 +418,6 @@ class PrinterService {
       return (writeOk, log);
     } catch (e, st) {
       log.add(PrintLogEntry('Error tak terduga', ok: false, detail: '$e\n$st'));
-      debugPrint('PrinterService.testPrintDetailed error: $e\n$st');
       return (false, log);
     }
   }
