@@ -67,17 +67,27 @@ class CsvImportService {
       return '';
     }
 
+    // Netralkan CSV formula injection: buang prefix =,+,-,@ di awal teks
+    // agar tidak tereksekusi bila data diekspor & dibuka di Excel/Sheets.
+    String sanitize(String s) {
+      var out = s;
+      while (out.isNotEmpty && '=+-@'.contains(out[0])) {
+        out = out.substring(1).trimLeft();
+      }
+      return out;
+    }
+
     for (var rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
       final row = dataRows[rowIdx];
       if (row.isEmpty || row.every((c) => c.trim().isEmpty)) continue;
 
-      final name = col(['nama', 'name', 'product_name', 'nama_produk'], row);
+      final name = sanitize(col(['nama', 'name', 'product_name', 'nama_produk'], row));
       if (name.isEmpty) {
         errors.add('Baris ${rowIdx + 2}: nama produk kosong');
         continue;
       }
 
-      final kode = col(['kode', 'kode_produk', 'code', 'sku'], row);
+      final kode = sanitize(col(['kode', 'kode_produk', 'code', 'sku'], row));
       final grupName = col(['grup', 'group', 'kategori', 'category', 'group_name'], row);
       final satuanName = col(['satuan', 'unit', 'uom', 'unit_type'], row);
       final hargaJual = int.tryParse(col(['harga_jual', 'harga', 'sell_price', 'price'], row)) ?? 0;

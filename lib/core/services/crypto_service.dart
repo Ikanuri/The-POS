@@ -21,10 +21,12 @@ class CryptoService {
     return base64UrlEncode(bytes);
   }
 
-  /// Token sync 8 karakter alfanumerik (~40-bit entropy).
+  /// Token sync 12 karakter alfanumerik (~60-bit entropy). Perangkat yang
+  /// sudah pairing menyimpan tokennya sendiri, jadi menaikkan panjang ini
+  /// hanya berlaku untuk pairing baru (tidak memutus pasangan lama).
   static String generateSyncToken() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    return List.generate(8, (_) => chars[_rng.nextInt(chars.length)]).join();
+    return List.generate(12, (_) => chars[_rng.nextInt(chars.length)]).join();
   }
 
   static Uint8List randomIV() =>

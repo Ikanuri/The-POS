@@ -46,8 +46,12 @@ class ArchiveService {
     final executor = NativeDatabase(
       File(path),
       setup: (rawDb) {
-        final escaped = encryptionKey.replaceAll("'", "''");
-        rawDb.execute("PRAGMA key = '$escaped';");
+        // Key arsip selalu hex murni; validasi mencegah injeksi via PRAGMA.
+        if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(encryptionKey)) {
+          throw ArgumentError(
+              'Encryption key harus hex murni; nilai tidak valid ditolak.');
+        }
+        rawDb.execute("PRAGMA key = '$encryptionKey';");
         rawDb.execute('PRAGMA query_only = ON;');
         rawDb.execute('PRAGMA cache_size = -8192;');
         rawDb.execute('PRAGMA temp_store = MEMORY;');

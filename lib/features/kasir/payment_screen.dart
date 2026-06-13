@@ -154,11 +154,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     try {
       final db = ref.read(databaseProvider);
       final device = ref.read(deviceProvider);
+      final notifier = ref.read(cartProvider.notifier);
       final now = DateTime.now();
 
-      final txCount = await db.countTodayTransactions(device.deviceCode);
-      final localId =
-          '${device.deviceCode}-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${(txCount + 1).toString().padLeft(4, '0')}';
+      // Nomor nota dijamin unik (penjualan & retur berbagi ruang sequence).
+      final localId = await db.generateUniqueLocalId(device.deviceCode, now);
 
       final isTempo = _selectedMethodType == 'tempo';
       final paidAmount = isTempo ? 0 : _paid;
@@ -172,12 +172,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ? (_custNameManual.trim().isEmpty ? null : _custNameManual.trim())
           : null;
 
-      // Loyalty points
+      // Loyalty points — tidak diberikan untuk transaksi tempo (belum dibayar).
       int pointsEarned = 0;
       final loyaltyThresholdStr =
           await db.getSetting('loyalty_point_threshold');
       final loyaltyThreshold = int.tryParse(loyaltyThresholdStr ?? '') ?? 0;
-      if (customerId != null && loyaltyThreshold > 0) {
+      if (customerId != null && loyaltyThreshold > 0 && !isTempo) {
         pointsEarned = (_total / loyaltyThreshold).floor();
       }
 
@@ -197,33 +197,56 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         createdAt: Value(now),
       );
 
-      // Helper: compute effective qty (parent = stored − variantSum; variant = stored).
-      double effQty(CartItem item) {
-        if (item.isVariant) return item.qty;
-        final varSum = cart
-            .where((c) => c.isVariant && c.parentProductId == item.productId)
-            .fold(0.0, (s, c) => s + c.qty);
-        return (item.qty - varSum).clamp(0.0, double.infinity);
-      }
+      // Effective qty memakai satu sumber kebenaran di cart provider (A-13).
+      double effQty(CartItem item) => notifier.effectiveQtyFor(item);
 
-      final itemCompanions = cart
+      // Bila total di-override manual (diskon), alokasikan selisihnya secara
+      // proporsional ke tiap baris agar Σ subtotal == total tersimpan dan
+      // struk konsisten. HPP (costAtSale) tidak diutak-atik → laba akurat.
+      final discountFactor =
+          (_totalOverride != null && _cartTotal > 0) ? _total / _cartTotal : 1.0;
+      final applyDiscount = discountFactor != 1.0;
+
+      final lines = cart
           .map((item) {
             final eq = effQty(item);
-            return TransactionItemsCompanion.insert(
-              id: _uuid.v4(),
-              transactionId: txId,
-              productId: item.productId,
-              productUnitId: item.productUnitId,
-              qty: eq,
-              priceAtSale: item.price,
-              originalPrice: item.originalPrice,
-              priceOverridden: Value(item.priceOverridden),
-              costAtSale: Value(item.costPrice),
-              itemNote: Value(item.itemNote),
-              subtotal: (item.price * eq).round(),
-            );
+            return (item: item, eq: eq, base: (item.price * eq).round());
           })
           .toList();
+      var lastQtyIdx = -1;
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].eq > 0) lastQtyIdx = i;
+      }
+
+      final itemCompanions = <TransactionItemsCompanion>[];
+      var allocated = 0;
+      for (var i = 0; i < lines.length; i++) {
+        final l = lines[i];
+        int sub;
+        if (!applyDiscount) {
+          sub = l.base;
+        } else if (i == lastQtyIdx) {
+          sub = _total - allocated; // baris terakhir menyerap sisa pembulatan
+        } else {
+          sub = (l.base * discountFactor).round();
+          allocated += sub;
+        }
+        final unitPrice =
+            (applyDiscount && l.eq > 0) ? (sub / l.eq).round() : l.item.price;
+        itemCompanions.add(TransactionItemsCompanion.insert(
+          id: _uuid.v4(),
+          transactionId: txId,
+          productId: l.item.productId,
+          productUnitId: l.item.productUnitId,
+          qty: l.eq,
+          priceAtSale: unitPrice,
+          originalPrice: l.item.originalPrice,
+          priceOverridden: Value(l.item.priceOverridden || applyDiscount),
+          costAtSale: Value(l.item.costPrice),
+          itemNote: Value(l.item.itemNote),
+          subtotal: sub,
+        ));
+      }
 
       final paymentCompanions = paidAmount > 0
           ? [

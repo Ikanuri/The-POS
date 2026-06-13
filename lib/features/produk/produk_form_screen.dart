@@ -293,6 +293,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       );
 
       if (mounted) {
+        // Tandai bersih agar PopScope tidak menahan navigasi programatik ini.
+        _isDirty = false;
         // Banner sukses ditampilkan di layar daftar produk setelah kembali
         // (layar ini akan ditutup, jadi banner inline di sini tak terlihat).
         context.pop(_isEdit ? 'Produk diperbarui' : 'Produk disimpan');
@@ -447,7 +449,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int?>(
-                      value: _selectedGroupId,
+                      // Guard: bila kategori terpilih sudah dihapus di layar
+                      // lain, jatuhkan ke null agar dropdown tidak crash
+                      // (assert "exactly one item with value").
+                      value: _groups.any((g) =>
+                              g.name != null && g.id == _selectedGroupId)
+                          ? _selectedGroupId
+                          : null,
                       decoration: const InputDecoration(labelText: 'Kategori'),
                       items: [
                         const DropdownMenuItem(
@@ -649,59 +657,74 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     final priceCtrl = TextEditingController(
         text: ThousandsSeparatorFormatter.format(base.price));
     final barcodeCtrl = TextEditingController();
+    var trackStock = false; // default: varian tidak melacak stok
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tambah Varian'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                  labelText: 'Nama Varian *', hintText: 'Contoh: Coklat'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: priceCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [ThousandsSeparatorFormatter()],
-              decoration: const InputDecoration(
-                  labelText: 'Harga', prefixText: 'Rp '),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: barcodeCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Barcode (opsional)',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.qr_code_scanner, size: 20),
-                  tooltip: 'Scan barcode',
-                  onPressed: () async {
-                    final bc = await _scanBarcodeDialog(context);
-                    if (bc != null) barcodeCtrl.text = bc;
-                  },
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: const Text('Tambah Varian'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                    labelText: 'Nama Varian *', hintText: 'Contoh: Coklat'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: priceCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: const [ThousandsSeparatorFormatter()],
+                decoration: const InputDecoration(
+                    labelText: 'Harga', prefixText: 'Rp '),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: barcodeCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Barcode (opsional)',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.qr_code_scanner, size: 20),
+                    tooltip: 'Scan barcode',
+                    onPressed: () async {
+                      final bc = await _scanBarcodeDialog(context);
+                      if (bc != null) barcodeCtrl.text = bc;
+                    },
+                  ),
                 ),
               ),
+              const SizedBox(height: 4),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: trackStock,
+                onChanged: (v) => setDialog(() => trackStock = v),
+                title: const Text('Lacak stok varian',
+                    style: TextStyle(fontSize: 14)),
+                subtitle: const Text(
+                    'Aktifkan bila varian punya stok terpisah',
+                    style: TextStyle(fontSize: 11)),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                if (nameCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Tambah'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
-          FilledButton(
-            onPressed: () {
-              if (nameCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Tambah'),
-          ),
-        ],
       ),
     );
     if (ok != true) return;
@@ -715,6 +738,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       barcode: barcodeCtrl.text.trim().isEmpty
           ? null
           : barcodeCtrl.text.trim(),
+      isNonStock: !trackStock,
     );
     if (mounted) {
       _showBanner('Varian "${nameCtrl.text.trim()}" ditambahkan',

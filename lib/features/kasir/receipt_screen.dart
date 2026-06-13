@@ -323,6 +323,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Future<void> _showReturSheet(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final returnQty = <String, double>{for (final i in _items) i.id: 0};
+    // Qty yang sudah pernah diretur sebelumnya (cegah double-retur).
+    final alreadyReturned =
+        await ref.read(databaseProvider).getReturnedQtyByUnit(_tx!.id);
+    if (!context.mounted) return;
+    // Sisa qty yang masih boleh diretur per baris item.
+    double remainingFor(TransactionItem item) =>
+        (item.qty - (alreadyReturned[item.productUnitId] ?? 0))
+            .clamp(0.0, item.qty);
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -353,7 +361,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       child: ListView(
                         shrinkWrap: true,
                         children: _items.map((item) {
-                          final maxQty = item.qty;
+                          final maxQty = remainingFor(item);
                           final q = returnQty[item.id] ?? 0;
                           return ListTile(
                             dense: true,
@@ -436,10 +444,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
-    final now = DateTime.now();
-    final txCount = await db.countTodayTransactions(device.deviceCode);
-    final localId =
-        '${device.deviceCode}-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${(txCount + 1).toString().padLeft(4, '0')}';
+    final localId = await db.generateUniqueLocalId(device.deviceCode);
 
     final returnItems = [
       for (final item in _items)
@@ -450,6 +455,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             qty: returnQty[item.id]!,
             price: item.priceAtSale,
             costPrice: item.costAtSale,
+            itemNote: item.itemNote,
           ),
     ];
     if (returnItems.isEmpty) return;

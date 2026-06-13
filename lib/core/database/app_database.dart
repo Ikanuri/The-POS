@@ -239,6 +239,49 @@ class AppDatabase extends _$AppDatabase {
     return row.read(c) ?? 0;
   }
 
+  /// Nomor nota harian yang dijamin unik. Penjualan dan retur berbagi ruang
+  /// penghitung yang sama, sehingga memakai countTodayTransactions+1 mentah
+  /// bisa bertabrakan. Method ini mencari sequence bebas berikutnya dengan
+  /// memeriksa localId yang sudah ada.
+  Future<String> generateUniqueLocalId(String deviceCode, [DateTime? at]) async {
+    final now = at ?? DateTime.now();
+    final datePart = '${now.year}'
+        '${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}';
+    final prefix = '$deviceCode-$datePart-';
+    final existing = await (select(transactions)
+          ..where((t) => t.localId.like('$prefix%')))
+        .get();
+    final used = existing.map((t) => t.localId).toSet();
+    var seq = used.length + 1;
+    var candidate = '$prefix${seq.toString().padLeft(4, '0')}';
+    while (used.contains(candidate)) {
+      seq++;
+      candidate = '$prefix${seq.toString().padLeft(4, '0')}';
+    }
+    return candidate;
+  }
+
+  /// Qty yang sudah diretur per productUnitId untuk transaksi asal [originalTxId].
+  /// Dipakai untuk mencegah retur melebihi jumlah pembelian (double-retur).
+  Future<Map<String, double>> getReturnedQtyByUnit(String originalTxId) async {
+    final rows = await customSelect(
+      'SELECT ti.product_unit_id AS uid, '
+      'COALESCE(SUM(-ti.qty), 0) AS qty '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'WHERE t.internal_note = ? '
+      'GROUP BY ti.product_unit_id',
+      variables: [Variable.withString('RETUR:$originalTxId')],
+      readsFrom: {transactionItems, transactions},
+    ).get();
+    final out = <String, double>{};
+    for (final r in rows) {
+      out[r.data['uid'] as String] = (r.data['qty'] as num).toDouble();
+    }
+    return out;
+  }
+
   Future<bool> isPermissionEnabled(String key) async {
     final row = await (select(kasirPermissions)
           ..where((t) => t.permissionKey.equals(key)))
@@ -312,6 +355,7 @@ class AppDatabase extends _$AppDatabase {
     int? unitTypeId,
     String? barcode,
     String? kodeProduk,
+    bool isNonStock = true,
   }) async {
     final now = DateTime.now();
     final productId = const Uuid().v4();
@@ -331,7 +375,7 @@ class AppDatabase extends _$AppDatabase {
         unitTypeId: Value(unitTypeId),
         isBaseUnit: const Value(true),
         ratioToBase: const Value(1.0),
-        isNonStock: const Value(true),
+        isNonStock: Value(isNonStock),
       ));
       await into(priceTiers).insert(PriceTiersCompanion.insert(
         id: const Uuid().v4(),
@@ -442,6 +486,9 @@ class AppDatabase extends _$AppDatabase {
                 ..where((t) => t.productUnitId.equals(existing.id)))
               .go();
           await (delete(productBarcodes)
+                ..where((t) => t.productUnitId.equals(existing.id)))
+              .go();
+          await (delete(customerGroupPrices)
                 ..where((t) => t.productUnitId.equals(existing.id)))
               .go();
           await (delete(productUnits)..where((t) => t.id.equals(existing.id)))
@@ -604,7 +651,8 @@ class AppDatabase extends _$AppDatabase {
               String productId,
               double qty,
               int price,
-              int costPrice
+              int costPrice,
+              String? itemNote,
             })>
         returnItems,
     required String kasirId,
@@ -655,8 +703,41 @@ class AppDatabase extends _$AppDatabase {
           priceAtSale: item.price,
           originalPrice: item.price,
           costAtSale: Value(item.costPrice),
+          itemNote: Value(item.itemNote),
           subtotal: -sub,
         ));
+      }
+
+      // Kembalikan poin loyalty proporsional terhadap nilai refund.
+      final orig = await (select(transactions)
+            ..where((t) => t.id.equals(originalTxId)))
+          .getSingleOrNull();
+      if (orig != null &&
+          orig.customerId != null &&
+          orig.pointsEarned > 0 &&
+          orig.total > 0) {
+        final proportion = (refundTotal / orig.total).clamp(0.0, 1.0);
+        final pointsToReverse =
+            (orig.pointsEarned * proportion).round().clamp(0, orig.pointsEarned);
+        if (pointsToReverse > 0) {
+          await customUpdate(
+            'UPDATE customers SET loyalty_points = loyalty_points - ? WHERE id = ?',
+            variables: [
+              Variable.withInt(pointsToReverse),
+              Variable.withString(orig.customerId!),
+            ],
+            updates: {customers},
+          );
+          await into(loyaltyPointLedger).insert(
+              LoyaltyPointLedgerCompanion.insert(
+            id: const Uuid().v4(),
+            customerId: orig.customerId!,
+            type: 'adjust',
+            points: -pointsToReverse,
+            note: Value('Retur ${orig.localId}'),
+            createdAt: Value(now),
+          ));
+        }
       }
 
       await _rebuildDailySummaryFor(_dateKey(now));
@@ -1153,8 +1234,15 @@ QueryExecutor _openConnection(String encryptionKey) {
           throw StateError(
               'SQLCipher tidak termuat — database tidak akan terenkripsi');
         }
-        final escaped = encryptionKey.replaceAll("'", "''");
-        rawDb.execute("PRAGMA key = '$escaped';");
+        // Key turunan (deriveDbKeyHex) selalu hex 64-char. Validasi ketat
+        // memastikan tidak ada karakter kutip/escape yang bisa menyusup ke
+        // PRAGMA (passphrase mode SQLCipher dipertahankan agar DB lama tetap
+        // bisa dibuka — JANGAN ubah ke format raw-key x'...').
+        if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(encryptionKey)) {
+          throw ArgumentError(
+              'Encryption key harus hex murni; nilai tidak valid ditolak.');
+        }
+        rawDb.execute("PRAGMA key = '$encryptionKey';");
         // Performance tuning — dipasang setiap koneksi dibuka. WAL + cache
         // besar + mmap menjaga query tetap cepat walau data menumpuk.
         rawDb.execute('PRAGMA journal_mode = WAL;');
