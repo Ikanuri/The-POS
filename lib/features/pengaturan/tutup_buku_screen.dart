@@ -251,11 +251,14 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
                             : 'Pindahkan semua transaksi $prevYear ke arsip'),
                         trailing: alreadyArchived
                             ? null
-                            : FilledButton.tonal(
-                                onPressed: _busy
-                                    ? null
-                                    : () => _startTutupBuku(prevYear),
-                                child: const Text('Mulai'),
+                            : SizedBox(
+                                width: 76,
+                                child: FilledButton.tonal(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _startTutupBuku(prevYear),
+                                  child: const Text('Mulai'),
+                                ),
                               ),
                       ),
                     ),
