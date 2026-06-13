@@ -443,7 +443,6 @@ class PrinterService {
     required String storePhone,
     required String? strukNote,
     Map<String, String?> parentOf = const {},
-    Set<String> checkedIds = const {},
   }) async {
     final mac = await getSavedMac();
     if (mac == null || mac.isEmpty) return false;
@@ -463,7 +462,6 @@ class PrinterService {
       storePhone: storePhone,
       strukNote: strukNote,
       parentOf: parentOf,
-      checkedIds: checkedIds,
       settings: settings,
     );
 
@@ -517,7 +515,6 @@ class PrinterService {
     required String storePhone,
     required String? strukNote,
     Map<String, String?> parentOf = const {},
-    Set<String> checkedIds = const {},
     required PrinterSettings settings,
   }) async {
     final w = settings.charWidth;
@@ -577,9 +574,9 @@ class PrinterService {
       if (!isVar) productCount++;
 
       final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
-      final marked = checkedIds.contains(item.id) ? '[v] $rawName' : rawName;
       final prefix = isVar ? '  > ' : '';
-      out.addAll(gen.text('$prefix$marked'));
+      out.addAll(gen.text('$prefix$rawName',
+          styles: const PosStyles(bold: true)));
 
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
         out.addAll(gen.text(_toAscii(item.itemNote!)));

@@ -482,7 +482,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       storePhone: prefs.$3,
       strukNote: _tx!.strukNote,
       parentOf: _parentOf,
-      checkedIds: _checkedIds,
     );
     if (!mounted) return;
     AppTheme.showSnack(
