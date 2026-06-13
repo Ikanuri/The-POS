@@ -5,6 +5,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/services/archive_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/inline_banner.dart';
 
 final _archiveListProvider = FutureProvider.autoDispose
     .family<List<ArchiveInfo>, String>((ref, encryptionKey) {
@@ -88,7 +89,8 @@ class _ArchiveCard extends ConsumerStatefulWidget {
   ConsumerState<_ArchiveCard> createState() => _ArchiveCardState();
 }
 
-class _ArchiveCardState extends ConsumerState<_ArchiveCard> {
+class _ArchiveCardState extends ConsumerState<_ArchiveCard>
+    with InlineBannerStateMixin<_ArchiveCard> {
   bool _expanded = false;
   AppDatabase? _archiveDb;
   bool _opening = false;
@@ -104,9 +106,7 @@ class _ArchiveCardState extends ConsumerState<_ArchiveCard> {
       if (mounted) setState(() { _archiveDb = db; _expanded = true; });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal membuka arsip: $e')),
-      );
+      showError('Gagal membuka arsip: $e');
     } finally {
       if (mounted) setState(() => _opening = false);
     }
@@ -130,6 +130,7 @@ class _ArchiveCardState extends ConsumerState<_ArchiveCard> {
     return Card(
       child: Column(
         children: [
+          inlineBanner(),
           ListTile(
             leading: CircleAvatar(
               backgroundColor: scheme.secondaryContainer,

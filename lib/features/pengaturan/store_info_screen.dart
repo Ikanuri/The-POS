@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class StoreInfoScreen extends ConsumerStatefulWidget {
   const StoreInfoScreen({super.key});
@@ -11,7 +12,8 @@ class StoreInfoScreen extends ConsumerStatefulWidget {
   ConsumerState<StoreInfoScreen> createState() => _StoreInfoScreenState();
 }
 
-class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
+class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
+    with InlineBannerStateMixin<StoreInfoScreen> {
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -36,9 +38,7 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
 
   Future<void> _save() async {
     if (_nameCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nama toko wajib diisi')),
-      );
+      showError('Nama toko wajib diisi');
       return;
     }
     setState(() => _saving = true);
@@ -46,10 +46,10 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
     // For now we update the store name via device notifier
     setState(() => _saving = false);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informasi toko disimpan')),
-      );
-      context.pop();
+      showSuccess('Informasi toko disimpan');
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) context.pop();
+      });
     }
   }
 
@@ -57,7 +57,10 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Informasi Toko')),
-      body: ListView(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextFormField(
@@ -96,6 +99,8 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
             maxLines: 3,
           ),
           const SizedBox(height: 80),
+        ],
+      )),
         ],
       ),
       bottomNavigationBar: Padding(

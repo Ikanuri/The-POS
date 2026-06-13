@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/tutup_buku_service.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class TutupBukuScreen extends ConsumerStatefulWidget {
   const TutupBukuScreen({super.key});
@@ -11,7 +12,8 @@ class TutupBukuScreen extends ConsumerStatefulWidget {
   ConsumerState<TutupBukuScreen> createState() => _TutupBukuScreenState();
 }
 
-class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen> {
+class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
+    with InlineBannerStateMixin<TutupBukuScreen> {
   bool _loading = true;
   bool _busy = false;
   List<int> _archivedYears = [];
@@ -129,20 +131,10 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen> {
       await _load();
     } on TutupBukuException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      showError(e.message);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      showError('Error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -166,9 +158,13 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen> {
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : Stack(
               children: [
                 ListView(
                   padding: const EdgeInsets.all(16),
@@ -318,6 +314,9 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen> {
                   ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 }

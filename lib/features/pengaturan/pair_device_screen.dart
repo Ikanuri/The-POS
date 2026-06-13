@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/pairing_service.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class PairDeviceScreen extends ConsumerStatefulWidget {
   const PairDeviceScreen({super.key});
@@ -13,7 +14,8 @@ class PairDeviceScreen extends ConsumerStatefulWidget {
   ConsumerState<PairDeviceScreen> createState() => _PairDeviceScreenState();
 }
 
-class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen> {
+class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen>
+    with InlineBannerStateMixin<PairDeviceScreen> {
   String? _qrData;
   DateTime? _expiresAt;
   bool _generating = false;
@@ -36,10 +38,7 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen> {
         _expiresAt = payload.expiresAt;
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) showError('Error: $e');
     } finally {
       if (mounted) setState(() => _generating = false);
     }
@@ -61,7 +60,10 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pair Device Baru')),
-      body: Padding(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -124,9 +126,7 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen> {
               OutlinedButton.icon(
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: _qrData!));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Kode disalin ke clipboard')),
-                  );
+                  showSuccess('Kode disalin ke clipboard');
                 },
                 icon: const Icon(Icons.copy_outlined, size: 16),
                 label: const Text('Salin Kode'),
@@ -158,6 +158,8 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen> {
             ),
           ],
         ),
+      )),
+        ],
       ),
     );
   }

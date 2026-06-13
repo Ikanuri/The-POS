@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/lan_sync_service.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class SyncScreen extends ConsumerStatefulWidget {
   const SyncScreen({super.key});
@@ -12,7 +13,8 @@ class SyncScreen extends ConsumerStatefulWidget {
   ConsumerState<SyncScreen> createState() => _SyncScreenState();
 }
 
-class _SyncScreenState extends ConsumerState<SyncScreen> {
+class _SyncScreenState extends ConsumerState<SyncScreen>
+    with InlineBannerStateMixin<SyncScreen> {
   // Host state
   bool _hostRunning = false;
   String _hostIp = '';
@@ -56,27 +58,20 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal start server: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error),
-      );
+      showError('Gagal start server: $e');
     }
   }
 
   void _copy(String value, String label) {
     Clipboard.setData(ClipboardData(text: value));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label disalin: $value')),
-    );
+    showSuccess('$label disalin: $value');
   }
 
   Future<void> _sync() async {
     final ip = _ipCtrl.text.trim();
     final token = _tokenCtrl.text.trim().toUpperCase();
     if (ip.isEmpty || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Masukkan IP dan Token host')),
-      );
+      showError('Masukkan IP dan Token host');
       return;
     }
     setState(() {
@@ -112,7 +107,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sync WiFi')),
-      body: ListView(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Host mode (owner/asisten)
@@ -243,6 +241,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
               ),
             ),
           ),
+        ],
+      )),
         ],
       ),
     );
