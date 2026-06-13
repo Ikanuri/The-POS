@@ -382,6 +382,45 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.name)]))
           .get();
 
+  Future<void> addProductGroup(String name) async {
+    final emptySlot = await (select(productGroups)
+          ..where((t) => t.name.isNull())
+          ..limit(1))
+        .getSingleOrNull();
+    if (emptySlot != null) {
+      await (update(productGroups)..where((t) => t.id.equals(emptySlot.id)))
+          .write(ProductGroupsCompanion(name: Value(name)));
+    } else {
+      final rows = await customSelect(
+              'SELECT MAX(id) as mx FROM product_groups')
+          .getSingleOrNull();
+      final nextId = (rows?.data['mx'] as int? ?? 20) + 1;
+      await into(productGroups).insert(
+          ProductGroupsCompanion.insert(id: Value(nextId), name: Value(name)));
+    }
+  }
+
+  Future<void> renameProductGroup(int id, String newName) =>
+      (update(productGroups)..where((t) => t.id.equals(id)))
+          .write(ProductGroupsCompanion(name: Value(newName)));
+
+  Future<void> deleteProductGroup(int id) async {
+    await (update(products)
+          ..where((t) => t.productGroupId.equals(id)))
+        .write(const ProductsCompanion(productGroupId: Value(null)));
+    await (update(productGroups)..where((t) => t.id.equals(id)))
+        .write(const ProductGroupsCompanion(name: Value(null)));
+  }
+
+  Future<int> countProductsInGroup(int groupId) async {
+    final row = await customSelect(
+      'SELECT COUNT(*) as cnt FROM products '
+      'WHERE product_group_id = ? AND is_active = 1',
+      variables: [Variable.withInt(groupId)],
+    ).getSingleOrNull();
+    return row?.data['cnt'] as int? ?? 0;
+  }
+
   Future<String> saveProduct({
     required ProductsCompanion product,
     required List<ProductUnitsCompanion> units,

@@ -19,6 +19,7 @@ import '../../features/pengaturan/printer_screen.dart';
 import '../../features/pengaturan/store_info_screen.dart';
 import '../../features/pengaturan/sync_screen.dart';
 import '../../features/pengaturan/tutup_buku_screen.dart';
+import '../../features/produk/product_group_screen.dart';
 import '../../features/produk/produk_form_screen.dart';
 import '../../features/produk/produk_list_screen.dart';
 import '../../features/ringkasan/ringkasan_screen.dart';
@@ -73,6 +74,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/produk',
             builder: (_, __) => const ProdukListScreen(),
             routes: [
+              GoRoute(
+                path: 'kategori',
+                builder: (_, __) => const ProductGroupScreen(),
+              ),
               GoRoute(
                 path: ':id',
                 builder: (_, state) =>

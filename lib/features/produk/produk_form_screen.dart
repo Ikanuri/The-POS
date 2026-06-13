@@ -82,6 +82,14 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   bool _isLoading = false;
   bool _isEdit = false;
   bool _readOnly = false;
+  bool _isDirty = false;
+  bool _initialLoaded = false;
+
+  void _markDirty() {
+    if (_initialLoaded && !_isDirty && !_readOnly) {
+      setState(() => _isDirty = true);
+    }
+  }
 
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
@@ -171,6 +179,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         setState(() {
           _selectedGroupId = product.productGroupId;
           _units = entries;
+          _initialLoaded = true;
         });
       }
     } else {
@@ -186,6 +195,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             costPrice: 0,
           ),
         ];
+        _initialLoaded = true;
       });
     }
   }
@@ -306,11 +316,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         costPrice: 0,
       ));
     });
+    _markDirty();
   }
 
   void _removeUnit(int index) {
     if (_units.length <= 1) return;
     setState(() => _units.removeAt(index));
+    _markDirty();
   }
 
   @override
@@ -322,7 +334,31 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope<Object?>(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final leave = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Buang perubahan?'),
+            content: const Text(
+                'Perubahan yang belum disimpan akan hilang.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Kembali'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Buang'),
+              ),
+            ],
+          ),
+        );
+        if (leave == true && context.mounted) context.pop();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_isEdit
             ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
@@ -392,6 +428,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                       hintText: 'Contoh: Indomie Goreng',
                     ),
                     textCapitalization: TextCapitalization.words,
+                    onChanged: (_) => _markDirty(),
                     validator: (v) => _readOnly
                         ? null
                         : (v == null || v.trim().isEmpty
@@ -402,28 +439,56 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   TextFormField(
                     controller: _kodeCtrl,
                     readOnly: _readOnly,
+                    onChanged: (_) => _markDirty(),
                     decoration: const InputDecoration(
                       labelText: 'Kode Produk',
                       hintText: 'Contoh: IMI-001 (opsional)',
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (_groups.where((g) => g.name != null).isNotEmpty)
-                    DropdownButtonFormField<int?>(
+                  DropdownButtonFormField<int?>(
                       value: _selectedGroupId,
                       decoration: const InputDecoration(labelText: 'Kategori'),
                       items: [
-                        const DropdownMenuItem(value: null, child: Text('Tanpa Kategori')),
+                        const DropdownMenuItem(
+                            value: null, child: Text('Tanpa Kategori')),
                         ..._groups
                             .where((g) => g.name != null)
                             .map((g) => DropdownMenuItem(
                                   value: g.id,
                                   child: Text(g.name!),
                                 )),
+                        DropdownMenuItem(
+                          value: -1,
+                          child: Row(children: [
+                            Icon(Icons.add,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Text('+ Tambah Kategori Baru…',
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary)),
+                          ]),
+                        ),
                       ],
                       onChanged: _readOnly
                           ? null
-                          : (v) => setState(() => _selectedGroupId = v),
+                          : (v) async {
+                              if (v == -1) {
+                                await context.push('/produk/kategori');
+                                final fresh = await ref
+                                    .read(databaseProvider)
+                                    .getAllProductGroups();
+                                if (mounted) {
+                                  setState(() => _groups = fresh);
+                                }
+                                return;
+                              }
+                              setState(() => _selectedGroupId = v);
+                              _markDirty();
+                            },
                     ),
                   const SizedBox(height: 20),
                   Row(
@@ -449,8 +514,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                         readOnly: _readOnly,
                         onChanged: _readOnly
                             ? (_) {}
-                            : (updated) =>
-                                setState(() => _units[e.key] = updated),
+                            : (updated) {
+                                setState(() => _units[e.key] = updated);
+                                _markDirty();
+                              },
                         onRemove: () => _removeUnit(e.key),
                       )),
 
@@ -562,6 +629,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 child: const Text('Simpan Produk'),
               ),
             ),
+      ),
     );
   }
 

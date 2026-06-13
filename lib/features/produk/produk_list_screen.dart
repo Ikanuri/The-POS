@@ -61,6 +61,11 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
       appBar: AppBar(
         title: const Text('Produk'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.label_outline),
+            tooltip: 'Kelola Kategori',
+            onPressed: () => context.push('/produk/kategori'),
+          ),
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.add),
