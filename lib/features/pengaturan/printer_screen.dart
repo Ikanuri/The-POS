@@ -20,9 +20,13 @@ class _PrinterScreenState extends State<PrinterScreen> {
   bool _scanning = false;
   String? _testingMac;
 
-  /// null = belum dicek, false = ditolak, true = diberikan
   bool? _permGranted;
   bool _btOff = false;
+
+  // ── Log debug ─────────────────────────────────────────────────────────────
+  final List<PrintLogEntry> _log = [];
+  bool _logExpanded = false;
+  final _logScrollCtrl = ScrollController();
 
   @override
   void initState() {
@@ -30,12 +34,16 @@ class _PrinterScreenState extends State<PrinterScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _logScrollCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     final savedMac = await PrinterService.getSavedMac();
 
-    // Minta izin Bluetooth runtime DULU. Tanpa ini, plugin menggantung di
-    // Android 12+ (Future tidak pernah selesai → layar loading selamanya).
     final granted = await PrinterService.ensurePermissions();
     if (!granted) {
       if (!mounted) return;
@@ -63,9 +71,6 @@ class _PrinterScreenState extends State<PrinterScreen> {
     });
   }
 
-  /// "Scan ulang" — segarkan daftar perangkat Bluetooth yang terpasang.
-  /// Catatan: printer thermal (Bluetooth Classic/SPP) harus dipasangkan dulu
-  /// lewat Pengaturan Bluetooth HP agar bisa muncul & disambung di sini.
   Future<void> _rescan() async {
     setState(() => _scanning = true);
     final btEnabled = await PrinterService.isBluetoothOn();
@@ -87,22 +92,37 @@ class _PrinterScreenState extends State<PrinterScreen> {
   }
 
   Future<void> _testPrint(String mac) async {
-    setState(() => _testingMac = mac);
+    setState(() {
+      _testingMac = mac;
+      _log.clear();
+      _logExpanded = true;
+    });
     try {
-      final ok = await PrinterService.testPrint(mac);
+      final (ok, entries) = await PrinterService.testPrintDetailed(mac);
+      if (!mounted) return;
+      setState(() => _log.addAll(entries));
+      // Scroll ke bawah log setelah frame render
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_logScrollCtrl.hasClients) {
+          _logScrollCtrl.animateTo(
+            _logScrollCtrl.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
       if (!mounted) return;
       AppTheme.showSnack(
-          context, ok ? 'Test print berhasil!' : 'Gagal menghubungi printer',
+          context, ok ? 'Test print berhasil!' : 'Gagal — lihat log di bawah',
           isError: !ok);
     } catch (e) {
       if (!mounted) return;
-      AppTheme.showSnack(context, 'Error: $e', isError: true);
+      AppTheme.showSnack(context, 'Exception: $e', isError: true);
     } finally {
       if (mounted) setState(() => _testingMac = null);
     }
   }
 
-  /// Input MAC manual — jalan pintas bila printer tidak muncul di daftar.
   Future<void> _addManual() async {
     final nameCtrl = TextEditingController();
     final macCtrl = TextEditingController();
@@ -114,7 +134,8 @@ class _PrinterScreenState extends State<PrinterScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Masukkan alamat MAC printer (lihat di Pengaturan Bluetooth HP).',
+              'Masukkan alamat MAC printer.\n'
+              'Lihat di Pengaturan Bluetooth HP → nama printer → detail.',
               style: TextStyle(fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -132,7 +153,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
                 FilteringTextInputFormatter.allow(RegExp('[0-9A-Fa-f:]')),
               ],
               decoration: const InputDecoration(
-                labelText: 'MAC',
+                labelText: 'MAC Address',
                 hintText: '00:11:22:33:44:55',
                 border: OutlineInputBorder(),
               ),
@@ -171,7 +192,13 @@ class _PrinterScreenState extends State<PrinterScreen> {
         ];
       }
     });
-    AppTheme.showSnack(context, 'Printer manual disimpan: $mac');
+    AppTheme.showSnack(context, 'Printer disimpan: $mac');
+  }
+
+  void _copyLog() {
+    final text = _log.map((e) => e.toString()).join('\n');
+    Clipboard.setData(ClipboardData(text: text));
+    AppTheme.showSnack(context, 'Log disalin ke clipboard');
   }
 
   @override
@@ -227,6 +254,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Banner printer aktif
         if (_savedMac != null)
           Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -249,6 +277,8 @@ class _PrinterScreenState extends State<PrinterScreen> {
               ],
             ),
           ),
+
+        // Header daftar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
@@ -269,13 +299,15 @@ class _PrinterScreenState extends State<PrinterScreen> {
             ],
           ),
         ),
+
+        // Daftar perangkat
         Expanded(
           child: _devices.isEmpty
               ? _MessageState(
                   icon: Icons.print_disabled_outlined,
                   message: 'Belum ada printer terpasang.\n'
-                      'Pasangkan printer di Pengaturan Bluetooth HP, lalu tekan '
-                      'Scan. Atau masukkan alamat MAC printer secara manual.',
+                      'Pasangkan printer di Pengaturan Bluetooth HP, '
+                      'lalu tekan Scan. Atau masukkan alamat MAC printer secara manual.',
                   actionLabel: 'Tambah MAC Manual',
                   onAction: _addManual,
                   secondaryLabel: 'Scan Ulang',
@@ -289,6 +321,9 @@ class _PrinterScreenState extends State<PrinterScreen> {
                   itemBuilder: (_, i) => _deviceTile(context, _devices[i]),
                 ),
         ),
+
+        // Panel log debug (bisa dilipat)
+        if (_log.isNotEmpty) _buildLogPanel(context, scheme),
       ],
     );
   }
@@ -296,10 +331,8 @@ class _PrinterScreenState extends State<PrinterScreen> {
   Widget _deviceTile(BuildContext context, BluetoothInfo d) {
     final scheme = Theme.of(context).colorScheme;
     final isSelected = d.macAdress == _savedMac;
+    final isTesting = _testingMac == d.macAdress;
 
-    // NB: FilledButton.tonal di dalam trailing ListTile HARUS meng-override
-    // minimumSize — theme global pakai double.infinity sehingga tombol mencoba
-    // merebut seluruh lebar dan menekan title menjadi lebar nol (teks vertikal).
     final btnStyle = FilledButton.styleFrom(
       minimumSize: const Size(62, 34),
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -325,7 +358,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_testingMac == d.macAdress)
+          if (isTesting)
             const SizedBox(
                 width: 20,
                 height: 20,
@@ -333,7 +366,7 @@ class _PrinterScreenState extends State<PrinterScreen> {
           else
             IconButton(
               icon: const Icon(Icons.print_outlined, size: 20),
-              tooltip: 'Test Print',
+              tooltip: 'Test Print + Lihat Log',
               visualDensity: VisualDensity.compact,
               onPressed: () => _testPrint(d.macAdress),
             ),
@@ -351,6 +384,143 @@ class _PrinterScreenState extends State<PrinterScreen> {
               side: BorderSide.none,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogPanel(BuildContext context, ColorScheme scheme) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final logBg = isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF0F0F8);
+    final logFg = isDark ? const Color(0xFFE0E0F0) : const Color(0xFF1A1A3E);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      constraints: BoxConstraints(
+        maxHeight: _logExpanded ? 240 : 44,
+      ),
+      decoration: BoxDecoration(
+        color: logBg,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header bar
+          InkWell(
+            onTap: () => setState(() => _logExpanded = !_logExpanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.terminal,
+                      size: 16, color: logFg.withOpacity(0.7)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Log Debug (${_log.length} langkah)',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                          color: logFg.withOpacity(0.8)),
+                    ),
+                  ),
+                  // Status ringkas — ikon hasil akhir
+                  if (_log.isNotEmpty)
+                    Icon(
+                      _log.last.ok == true
+                          ? Icons.check_circle
+                          : _log.last.ok == false
+                              ? Icons.cancel
+                              : Icons.info_outline,
+                      size: 16,
+                      color: _log.last.ok == true
+                          ? Colors.green
+                          : _log.last.ok == false
+                              ? Colors.red
+                              : logFg.withOpacity(0.6),
+                    ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 16),
+                    tooltip: 'Salin log',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _copyLog,
+                    color: logFg.withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _logExpanded
+                        ? Icons.expand_more
+                        : Icons.chevron_right,
+                    size: 18,
+                    color: logFg.withOpacity(0.6),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Log lines
+          if (_logExpanded)
+            Expanded(
+              child: ListView.builder(
+                controller: _logScrollCtrl,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                itemCount: _log.length,
+                itemBuilder: (_, i) {
+                  final e = _log[i];
+                  final Color lineColor;
+                  if (e.ok == true) {
+                    lineColor = Colors.green.shade400;
+                  } else if (e.ok == false) {
+                    lineColor = Colors.red.shade400;
+                  } else {
+                    lineColor = logFg.withOpacity(0.7);
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            color: logFg.withOpacity(0.5)),
+                        children: [
+                          TextSpan(text: '[${e.timeStr}] '),
+                          TextSpan(
+                            text: e.step,
+                            style: TextStyle(
+                                color: lineColor,
+                                fontWeight: e.ok != null
+                                    ? FontWeight.w600
+                                    : FontWeight.normal),
+                          ),
+                          if (e.ok == true)
+                            TextSpan(
+                                text: ' ✓',
+                                style: TextStyle(color: Colors.green.shade400)),
+                          if (e.ok == false)
+                            TextSpan(
+                                text: ' ✗',
+                                style: TextStyle(color: Colors.red.shade400)),
+                          if (e.detail != null)
+                            TextSpan(
+                              text: ': ${e.detail}',
+                              style: TextStyle(
+                                  color: logFg.withOpacity(0.5),
+                                  fontSize: 10),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
         ],
       ),
