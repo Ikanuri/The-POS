@@ -270,7 +270,7 @@ class ExportService {
             ..where((t) => t.transactionId.equals(tx.id)))
           .get();
       for (final item in items) {
-        totalCogs += item.costAtSale * item.qty ~/ 1;
+        totalCogs += (item.costAtSale * item.qty).round();
         prodAgg.update(
           item.productId,
           (p) => p.copyWith(

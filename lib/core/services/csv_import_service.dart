@@ -90,8 +90,8 @@ class CsvImportService {
       final kode = sanitize(col(['kode', 'kode_produk', 'code', 'sku'], row));
       final grupName = col(['grup', 'group', 'kategori', 'category', 'group_name'], row);
       final satuanName = col(['satuan', 'unit', 'uom', 'unit_type'], row);
-      final hargaJual = int.tryParse(col(['harga_jual', 'harga', 'sell_price', 'price'], row)) ?? 0;
-      final hargaBeli = int.tryParse(col(['harga_beli', 'cost', 'buy_price', 'cogs'], row)) ?? 0;
+      final hargaJual = _parseIntPrice(col(['harga_jual', 'harga', 'sell_price', 'price'], row));
+      final hargaBeli = _parseIntPrice(col(['harga_beli', 'cost', 'buy_price', 'cogs'], row));
       final stok = double.tryParse(col(['stok', 'stock', 'qty', 'quantity'], row)) ?? 0;
       final barcodeStr = col(['barcode', 'kode_barcode', 'ean', 'upc'], row);
 
@@ -197,6 +197,22 @@ class CsvImportService {
       noBarcode: noBarcode,
       errors: errors,
     );
+  }
+
+  /// Parse harga dari berbagai format: "10000", "10.000" (titik ribuan),
+  /// "10,000" (koma ribuan barat). Mengembalikan 0 jika tidak dapat di-parse.
+  static int _parseIntPrice(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return 0;
+    final direct = int.tryParse(s);
+    if (direct != null) return direct;
+    final noThousands = s.replaceAll('.', '');
+    final noDots = int.tryParse(noThousands);
+    if (noDots != null) return noDots;
+    final noCommas = s.replaceAll(',', '');
+    final noCommaInt = int.tryParse(noCommas);
+    if (noCommaInt != null) return noCommaInt;
+    return (double.tryParse(s) ?? 0).round();
   }
 
   /// Exposed for testing.

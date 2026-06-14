@@ -266,65 +266,73 @@ class _CartItemTile extends ConsumerWidget {
     );
   }
 
-  void _showPriceEdit(BuildContext context, WidgetRef ref) {
+  Future<void> _showPriceEdit(BuildContext context, WidgetRef ref) async {
     final ctrl = TextEditingController(
         text: ThousandsSeparatorFormatter.format(item.price));
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ubah Harga'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          inputFormatters: const [ThousandsSeparatorFormatter()],
-          decoration: const InputDecoration(prefixText: 'Rp '),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => ctx.pop(),
-              child: const Text('Batal')),
-          FilledButton(
-            onPressed: () {
-              final parsed = ThousandsSeparatorFormatter.parseValue(ctrl.text);
-              final price = parsed > 0 ? parsed : item.price;
-              ref.read(cartProvider.notifier).overridePrice(item.productUnitId, price);
-              ctx.pop();
-            },
-            child: const Text('Simpan'),
+    try {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Ubah Harga'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: const [ThousandsSeparatorFormatter()],
+            decoration: const InputDecoration(prefixText: 'Rp '),
           ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(
+                onPressed: () => ctx.pop(),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                final parsed = ThousandsSeparatorFormatter.parseValue(ctrl.text);
+                final price = parsed > 0 ? parsed : item.price;
+                ref.read(cartProvider.notifier).overridePrice(item.productUnitId, price);
+                ctx.pop();
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      ctrl.dispose();
+    }
   }
 
-  void _showNoteEdit(BuildContext context, WidgetRef ref) {
+  Future<void> _showNoteEdit(BuildContext context, WidgetRef ref) async {
     final ctrl = TextEditingController(text: item.itemNote ?? '');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Catatan Item'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLines: 2,
-          decoration: const InputDecoration(hintText: 'Contoh: tanpa saus'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => ctx.pop(),
-              child: const Text('Batal')),
-          FilledButton(
-            onPressed: () {
-              final note = ctrl.text.trim().isEmpty ? null : ctrl.text.trim();
-              ref.read(cartProvider.notifier).setNote(item.productUnitId, note);
-              ctx.pop();
-            },
-            child: const Text('Simpan'),
+    try {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Catatan Item'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            maxLines: 2,
+            decoration: const InputDecoration(hintText: 'Contoh: tanpa saus'),
           ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(
+                onPressed: () => ctx.pop(),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                final note = ctrl.text.trim().isEmpty ? null : ctrl.text.trim();
+                ref.read(cartProvider.notifier).setNote(item.productUnitId, note);
+                ctx.pop();
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      ctrl.dispose();
+    }
   }
 }
 

@@ -16,20 +16,27 @@ const _txUuid = Uuid();
 /// Parameter query riwayat. Saat tidak ada filter aktif → 100 terakhir;
 /// saat ada filter aktif → sampai 1000 agar pencarian menjangkau data lama.
 class _HistoryQuery {
-  const _HistoryQuery({this.date, this.product = '', this.loadAll = false});
+  const _HistoryQuery({
+    this.date,
+    this.product = '',
+    this.loadAll = false,
+    this.status = 'semua',
+  });
   final DateTimeRange? date;
   final String product;
   final bool loadAll;
+  final String status; // 'semua' | 'lunas' | 'hutang'
 
   @override
   bool operator ==(Object other) =>
       other is _HistoryQuery &&
       other.date == date &&
       other.product == product &&
-      other.loadAll == loadAll;
+      other.loadAll == loadAll &&
+      other.status == status;
 
   @override
-  int get hashCode => Object.hash(date, product, loadAll);
+  int get hashCode => Object.hash(date, product, loadAll, status);
 }
 
 final _txHistoryProvider =
@@ -44,6 +51,12 @@ final _txHistoryProvider =
 
   final sel = db.select(db.transactions)
     ..where((t) => t.status.isNotValue('void'));
+  if (q.status == 'lunas') {
+    sel.where((t) => t.status.equals('lunas'));
+  } else if (q.status == 'hutang') {
+    sel.where((t) =>
+        t.status.equals('kurang_bayar') | t.status.equals('tempo'));
+  }
   if (q.date != null) {
     final start = DateTime(
         q.date!.start.year, q.date!.start.month, q.date!.start.day);
@@ -124,6 +137,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
       date: _dateFilter,
       product: _productQuery,
       loadAll: _hasActiveFilter,
+      status: _filter,
     );
     final txAsync = ref.watch(_txHistoryProvider(query));
     final namesAsync = ref.watch(_custNamesProvider);
@@ -235,12 +249,6 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
             child: txAsync.when(
               data: (txs) {
                 final filtered = txs.where((tx) {
-                  if (_filter == 'lunas' && tx.status != 'lunas') return false;
-                  if (_filter == 'hutang' &&
-                      tx.status != 'kurang_bayar' &&
-                      tx.status != 'tempo') {
-                    return false;
-                  }
                   if (_query.isEmpty) return true;
                   final q = _query.toLowerCase();
                   final name = tx.customerName ??
@@ -486,6 +494,7 @@ class _TxDetail extends ConsumerWidget {
 
   Future<void> _lunasi(BuildContext context, WidgetRef ref) async {
     final remaining = tx.total - tx.paid;
+    if (remaining <= 0) return;
     final ctrl = TextEditingController(
         text: ThousandsSeparatorFormatter.format(remaining));
     final result = await showDialog<int>(
@@ -522,6 +531,7 @@ class _TxDetail extends ConsumerWidget {
       ),
     );
 
+    ctrl.dispose();
     if (result == null || result <= 0 || !context.mounted) return;
     // Uang yang diterima boleh melebihi sisa tagihan → sisanya jadi kembalian.
     final applied = result.clamp(1, remaining); // yang masuk ke tagihan

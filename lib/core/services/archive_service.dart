@@ -90,8 +90,10 @@ class ArchiveService {
             .customSelect('SELECT COUNT(*) AS cnt FROM transactions')
             .getSingle();
         txCount = (tRow.data['cnt'] as int?) ?? 0;
+      } catch (_) {
+      } finally {
         await close();
-      } catch (_) {}
+      }
       infos.add(ArchiveInfo(
         year: year,
         path: path,

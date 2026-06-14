@@ -237,7 +237,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           (_totalOverride != null && _cartTotal > 0) ? _total / _cartTotal : 1.0;
       final applyDiscount = discountFactor != 1.0;
 
+      // Lewati item induk placeholder (effectiveQty == 0) agar tidak masuk
+      // ke transaction_items. Induk yang hanya dipakai sebagai header varian
+      // di UI tidak perlu dicatat sebagai baris terpisah.
       final lines = cart
+          .where((item) => effQty(item) > 0)
           .map((item) {
             final eq = effQty(item);
             return (item: item, eq: eq, base: (item.price * eq).round());

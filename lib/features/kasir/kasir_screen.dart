@@ -865,9 +865,10 @@ class _ProductCard extends ConsumerWidget {
     final grad = _gradFor(product.name);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
     final cart = ref.watch(cartProvider);
+    final notifier = ref.read(cartProvider.notifier);
     final qty = cart
         .where((c) => c.productId == product.id)
-        .fold<double>(0, (s, c) => s + c.qty);
+        .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
 
     return Material(
       color: cs.surfaceContainerLow,
@@ -1001,9 +1002,10 @@ class _ProductListTile extends ConsumerWidget {
     final grad = _gradFor(product.name);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
     final cart = ref.watch(cartProvider);
+    final notifier = ref.read(cartProvider.notifier);
     final qty = cart
         .where((c) => c.productId == product.id)
-        .fold<double>(0, (s, c) => s + c.qty);
+        .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
 
     return InkWell(
       onTap: onTapBody,

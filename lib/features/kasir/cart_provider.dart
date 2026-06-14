@@ -17,6 +17,21 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
           else
             state[i],
       ];
+      // Bila varian di-restock (sudah ada di cart), naikkan storedQty induk
+      // agar invariant storedQty == effectiveQty + Σvariant tetap terjaga.
+      if (item.isVariant && item.parentProductId != null) {
+        final pIdx = state.indexWhere(
+            (c) => !c.isVariant && c.productId == item.parentProductId);
+        if (pIdx >= 0) {
+          state = [
+            for (var i = 0; i < state.length; i++)
+              if (i == pIdx)
+                state[i].copyWith(qty: state[i].qty + item.qty)
+              else
+                state[i],
+          ];
+        }
+      }
     } else {
       state = [...state, item];
     }
@@ -66,6 +81,56 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   }
 
   void removeItem(String productUnitId) {
+    // Bila yang dihapus adalah varian, perbarui storedQty induk agar konsisten.
+    CartItem? removed;
+    for (final c in state) {
+      if (c.productUnitId == productUnitId) {
+        removed = c;
+        break;
+      }
+    }
+    if (removed != null && removed.isVariant && removed.parentProductId != null) {
+      CartItem? parent;
+      for (final c in state) {
+        if (!c.isVariant && c.productId == removed.parentProductId) {
+          parent = c;
+          break;
+        }
+      }
+      if (parent != null) {
+        // Sisa varian lain yang masih ada (selain yang dihapus).
+        final remainingVariantTotal = state
+            .where((c) =>
+                c.isVariant &&
+                c.parentProductId == removed!.parentProductId &&
+                c.productUnitId != productUnitId)
+            .fold(0.0, (s, c) => s + c.qty);
+        // Effective qty induk = storedQty - Σ(semua varian saat ini).
+        final allVariantTotal = state
+            .where((c) =>
+                c.isVariant && c.parentProductId == removed!.parentProductId)
+            .fold(0.0, (s, c) => s + c.qty);
+        final parentEffective =
+            (parent.qty - allVariantTotal).clamp(0.0, double.infinity);
+        final newParentStored = parentEffective + remainingVariantTotal;
+        if (newParentStored <= 0) {
+          // Tidak ada base qty dan tidak ada varian lain → hapus induk juga.
+          state = state
+              .where((c) =>
+                  c.productUnitId != productUnitId &&
+                  c.productUnitId != parent!.productUnitId)
+              .toList();
+          return;
+        }
+        state = state
+            .where((c) => c.productUnitId != productUnitId)
+            .map((c) => c.productUnitId == parent!.productUnitId
+                ? c.copyWith(qty: newParentStored)
+                : c)
+            .toList();
+        return;
+      }
+    }
     state = state.where((c) => c.productUnitId != productUnitId).toList();
   }
 
