@@ -105,6 +105,17 @@ class DeviceNotifier extends StateNotifier<DeviceIdentity> {
     ));
   }
 
+  Future<void> updateStoreName(String storeName) async {
+    await _persist(DeviceIdentity(
+      storeUuid: state.storeUuid,
+      storeKey: state.storeKey,
+      storeName: storeName,
+      deviceName: state.deviceName,
+      deviceCode: state.deviceCode,
+      deviceRole: state.deviceRole,
+    ));
+  }
+
   Future<void> _persist(DeviceIdentity identity) async {
     final prefs = await SharedPreferences.getInstance();
     // store_key goes to hardware-backed secure storage.

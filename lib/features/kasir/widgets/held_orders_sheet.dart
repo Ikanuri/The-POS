@@ -227,8 +227,8 @@ class _HeldTile extends ConsumerWidget {
     }
     if (!context.mounted) return;
 
-    ref.read(cartProvider.notifier).replaceAll(items);
     await ref.read(databaseProvider).deleteHeldOrder(order.id);
+    ref.read(cartProvider.notifier).replaceAll(items);
     if (context.mounted) {
       Navigator.of(context).pop();
       showTopToast(context, 'Melanjutkan pesanan: ${order.label}',

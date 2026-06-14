@@ -245,7 +245,7 @@ class _ProductTile extends ConsumerWidget {
               onPressed: () => onOpen('/produk/${product.id}'),
             )
           : null,
-      onTap: () => onOpen('/produk/${product.id}'),
+      onTap: canEdit ? () => onOpen('/produk/${product.id}') : null,
     );
   }
 }

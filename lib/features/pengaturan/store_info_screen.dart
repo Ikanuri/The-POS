@@ -23,8 +23,22 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
   @override
   void initState() {
     super.initState();
-    final device = ref.read(deviceProvider);
-    _nameCtrl.text = device.storeName;
+    _nameCtrl.text = ref.read(deviceProvider).storeName;
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final db = ref.read(databaseProvider);
+    final address = await db.getSetting('store_address') ?? '';
+    final phone = await db.getSetting('store_phone') ?? '';
+    final note = await db.getSetting('receipt_note') ?? '';
+    if (mounted) {
+      setState(() {
+        _addressCtrl.text = address;
+        _phoneCtrl.text = phone;
+        _strukturCtrl.text = note;
+      });
+    }
   }
 
   @override
@@ -42,14 +56,24 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
       return;
     }
     setState(() => _saving = true);
-    // Store info in SharedPreferences (non-encrypted fields)
-    // For now we update the store name via device notifier
-    setState(() => _saving = false);
-    if (mounted) {
-      showSuccess('Informasi toko disimpan');
-      Future.delayed(const Duration(milliseconds: 900), () {
-        if (mounted) context.pop();
-      });
+    try {
+      final db = ref.read(databaseProvider);
+      final name = _nameCtrl.text.trim();
+      await db.setSetting('store_name', name);
+      await db.setSetting('store_address', _addressCtrl.text.trim());
+      await db.setSetting('store_phone', _phoneCtrl.text.trim());
+      await db.setSetting('receipt_note', _strukturCtrl.text.trim());
+      await ref.read(deviceProvider.notifier).updateStoreName(name);
+      if (mounted) {
+        showSuccess('Informasi toko disimpan');
+        Future.delayed(const Duration(milliseconds: 900), () {
+          if (mounted) context.pop();
+        });
+      }
+    } catch (e) {
+      if (mounted) showError('Gagal menyimpan: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 

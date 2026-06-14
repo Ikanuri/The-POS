@@ -176,10 +176,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final tx = await (db.select(db.transactions)
           ..where((t) => t.id.equals(widget.transactionId)))
         .getSingleOrNull();
-    if (tx == null || !mounted) {
-      setState(() => _loading = false);
+    if (tx == null) {
+      if (mounted) setState(() => _loading = false);
       return;
     }
+    if (!mounted) return;
     final items = await (db.select(db.transactionItems)
           ..where((t) => t.transactionId.equals(widget.transactionId)))
         .get();
@@ -494,6 +495,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     final device = ref.read(deviceProvider);
     final localId = await db.generateUniqueLocalId(device.deviceCode);
+    if (!mounted) return;
 
     final returnItems = [
       for (final item in _items)

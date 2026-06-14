@@ -825,7 +825,13 @@ class AppDatabase extends _$AppDatabase {
     final buckets = <int, int>{};
     for (final t in txRows) {
       omzet += t.total;
-      _paymentBucket(t.paymentMethod, buckets, t.total);
+      // Retur transactions (internalNote = 'RETUR:...') carry negative totals.
+      // Excluding them from payment buckets prevents negative bucket values
+      // that break the pie chart in ringkasan_tab.
+      final isRetur = t.internalNote?.startsWith('RETUR:') == true;
+      if (!isRetur) {
+        _paymentBucket(t.paymentMethod, buckets, t.total);
+      }
     }
 
     final txIds = txRows.map((t) => t.id).toList();
