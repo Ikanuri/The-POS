@@ -37,11 +37,16 @@ class CartItem {
 
   int get subtotal => (price * qty).round();
 
+  /// Sentinel agar [copyWith] bisa membedakan "tidak diubah" (parameter
+  /// dihilangkan) dari "set ke null" (hapus catatan). Tanpa ini, mengirim
+  /// `itemNote: null` tak bisa menghapus catatan yang sudah ada.
+  static const Object _unset = Object();
+
   CartItem copyWith({
     double? qty,
     int? price,
     bool? priceOverridden,
-    String? itemNote,
+    Object? itemNote = _unset,
   }) =>
       CartItem(
         productId: productId,
@@ -53,7 +58,9 @@ class CartItem {
         originalPrice: originalPrice,
         costPrice: costPrice,
         priceOverridden: priceOverridden ?? this.priceOverridden,
-        itemNote: itemNote ?? this.itemNote,
+        itemNote: identical(itemNote, _unset)
+            ? this.itemNote
+            : itemNote as String?,
         barcode: barcode,
         parentProductId: parentProductId,
         isVariant: isVariant,

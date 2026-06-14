@@ -312,8 +312,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   }
 
   /// Jika [item] adalah varian dan parentnya belum ada di keranjang,
-  /// tambahkan item induk sebagai placeholder (storedQty = variantQty
-  /// sehingga effectiveQty = 0, tampil "via varian").
+  /// tambahkan item induk sebagai placeholder dengan storedQty = 0.
+  /// Setelah ini, [addItem] varian akan menaikkan storedQty induk sebesar
+  /// qty varian → effective base = 0 ("via varian"). Bila induk sudah ada
+  /// dengan qty dasar, biarkan apa adanya agar qty dasar tidak hilang.
   Future<void> _ensureParentInCart(CartItem variantItem) async {
     if (!variantItem.isVariant || variantItem.parentProductId == null) return;
     final cart = ref.read(cartProvider);
@@ -343,8 +345,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           productUnitId: base.id,
           productName: parent.name,
           unitName: unitType?.name ?? 'Satuan',
-          // storedQty = variantQty → effectiveQty = 0 → tampil "via varian"
-          qty: variantItem.qty,
+          // Placeholder qty 0; addItem(varian) berikutnya menaikkan storedQty
+          // induk sebesar qty varian sehingga effective base = 0.
+          qty: 0,
           price: resolved.price,
           originalPrice: resolved.price,
           costPrice: resolved.costPrice,
@@ -410,7 +413,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (t == null) return;
     final notifier = ref.read(cartProvider.notifier);
     final q = t.qty + 1;
-    notifier.setQty(t.productUnitId, q.toDouble());
+    // setEffectiveQty agar varian menaikkan qty sambil menjaga qty dasar induk.
+    notifier.setEffectiveQty(t.productUnitId, q.toDouble());
     setState(() => t.qty = q);
     t.timer?.cancel();
     t.timer = Timer(Duration(seconds: _toastDurationSeconds), () {
@@ -429,7 +433,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       setState(() => _activeToast = null);
       return;
     }
-    notifier.setQty(t.productUnitId, q.toDouble());
+    notifier.setEffectiveQty(t.productUnitId, q.toDouble());
     setState(() => t.qty = q);
     t.timer?.cancel();
     t.timer = Timer(Duration(seconds: _toastDurationSeconds), () {

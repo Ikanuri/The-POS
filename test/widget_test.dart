@@ -3,10 +3,39 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/services/crypto_service.dart';
 import 'package:the_pos/core/services/csv_import_service.dart';
 import 'package:the_pos/core/services/db_export_service.dart';
 import 'package:the_pos/core/services/pairing_service.dart';
+import 'package:the_pos/features/kasir/cart_provider.dart';
+
+CartItem _parent({double qty = 1}) => CartItem(
+      productId: 'P',
+      productUnitId: 'P-base',
+      productName: 'Induk',
+      unitName: 'Pcs',
+      qty: qty,
+      price: 1000,
+      originalPrice: 1000,
+      costPrice: 500,
+    );
+
+CartItem _variant(String id, {double qty = 1}) => CartItem(
+      productId: 'V$id',
+      productUnitId: 'V$id-base',
+      productName: 'Varian $id',
+      unitName: 'Pcs',
+      qty: qty,
+      price: 1200,
+      originalPrice: 1200,
+      costPrice: 600,
+      parentProductId: 'P',
+      isVariant: true,
+    );
+
+double _effParent(CartNotifier n) =>
+    n.effectiveQtyFor(n.state.firstWhere((c) => !c.isVariant));
 
 void main() {
   group('CryptoService', () {
@@ -212,6 +241,78 @@ void main() {
         ),
         throwsA(isA<BackupException>()),
       );
+    });
+  });
+
+  group('CartItem.copyWith', () {
+    test('mengirim null ke itemNote menghapus catatan', () {
+      final item = _parent().copyWith(itemNote: 'tanpa saus');
+      expect(item.itemNote, 'tanpa saus');
+      final cleared = item.copyWith(itemNote: null);
+      expect(cleared.itemNote, isNull);
+    });
+
+    test('tidak menyebut itemNote mempertahankan catatan', () {
+      final item = _parent().copyWith(itemNote: 'pedas');
+      final bumped = item.copyWith(qty: 5);
+      expect(bumped.itemNote, 'pedas');
+      expect(bumped.qty, 5);
+    });
+  });
+
+  group('CartNotifier varian/induk', () {
+    test('scan 1 varian saja → induk placeholder, effective base 0', () {
+      final n = CartNotifier();
+      n.addItem(_parent(qty: 0)); // _ensureParentInCart: placeholder qty 0
+      n.addItem(_variant('A')); // bump varian + induk
+      expect(_effParent(n), 0);
+      expect(n.totalAmount, 1200); // hanya varian yang ditagih
+    });
+
+    test('campur qty dasar + varian: base tidak tertelan', () {
+      final n = CartNotifier();
+      n.addItem(_parent(qty: 2)); // 2 qty dasar
+      n.addItem(_variant('A')); // scan varian pertama kali
+      expect(_effParent(n), 2); // qty dasar tetap 2
+      expect(n.totalAmount, 2 * 1000 + 1200);
+    });
+
+    test('hapus varian terakhir tanpa base → induk ikut hilang', () {
+      final n = CartNotifier();
+      n.addItem(_parent(qty: 0));
+      n.addItem(_variant('A'));
+      n.removeItem('VA-base');
+      expect(n.state, isEmpty); // induk hilang, sesuai aturan
+    });
+
+    test('hapus varian saat masih ada qty dasar → induk tetap', () {
+      final n = CartNotifier();
+      n.addItem(_parent(qty: 2));
+      n.addItem(_variant('A'));
+      n.removeItem('VA-base');
+      expect(n.state.length, 1);
+      expect(_effParent(n), 2);
+    });
+
+    test('dua varian: hapus satu, sisanya & induk konsisten', () {
+      final n = CartNotifier();
+      n.addItem(_parent(qty: 0));
+      n.addItem(_variant('A'));
+      n.addItem(_variant('B'));
+      expect(_effParent(n), 0);
+      n.removeItem('VA-base');
+      expect(_effParent(n), 0);
+      expect(n.state.where((c) => c.isVariant).length, 1);
+    });
+
+    test('setEffectiveQty varian menjaga qty dasar induk', () {
+      final n = CartNotifier();
+      n.addItem(_parent(qty: 2));
+      n.addItem(_variant('A'));
+      n.setEffectiveQty('VA-base', 3); // varian 1 → 3
+      expect(_effParent(n), 2); // base tetap 2
+      final variant = n.state.firstWhere((c) => c.isVariant);
+      expect(variant.qty, 3);
     });
   });
 }

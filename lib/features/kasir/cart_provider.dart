@@ -17,23 +17,27 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
           else
             state[i],
       ];
-      // Bila varian di-restock (sudah ada di cart), naikkan storedQty induk
-      // agar invariant storedQty == effectiveQty + Σvariant tetap terjaga.
-      if (item.isVariant && item.parentProductId != null) {
-        final pIdx = state.indexWhere(
-            (c) => !c.isVariant && c.productId == item.parentProductId);
-        if (pIdx >= 0) {
-          state = [
-            for (var i = 0; i < state.length; i++)
-              if (i == pIdx)
-                state[i].copyWith(qty: state[i].qty + item.qty)
-              else
-                state[i],
-          ];
-        }
-      }
     } else {
       state = [...state, item];
+    }
+    // Saat menambah varian (baru maupun akumulasi), naikkan storedQty induk
+    // sebesar qty yang ditambahkan. Ini menjaga invariant
+    //   storedQty induk = effectiveBase + Σ(qty varian)
+    // sehingga qty dasar induk tidak "tertelan" saat varian ditambah —
+    // campur qty dasar + varian tetap akurat. Induk wajib sudah ada di cart
+    // (dipasang lebih dulu oleh _ensureParentInCart sebagai placeholder qty 0).
+    if (item.isVariant && item.parentProductId != null) {
+      final pIdx = state.indexWhere(
+          (c) => !c.isVariant && c.productId == item.parentProductId);
+      if (pIdx >= 0) {
+        state = [
+          for (var i = 0; i < state.length; i++)
+            if (i == pIdx)
+              state[i].copyWith(qty: state[i].qty + item.qty)
+            else
+              state[i],
+        ];
+      }
     }
   }
 
@@ -56,7 +60,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     if (idx < 0) return;
     final item = state[idx];
     if (item.isVariant) {
-      setQty(productUnitId, effectiveQty);
+      _setVariantQty(item, effectiveQty);
       return;
     }
     final variantTotal = state
@@ -68,6 +72,27 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     } else {
       setQty(productUnitId, newStored);
     }
+  }
+
+  /// Ubah qty sebuah varian ke [newQty] sambil mempertahankan qty dasar
+  /// (effective base) induknya. Selisihnya diteruskan ke storedQty induk
+  /// agar invariant storedQty = base + Σvarian tetap utuh. Bila newQty <= 0,
+  /// varian dihapus (dan induk ikut disesuaikan via [removeItem]).
+  void _setVariantQty(CartItem variant, double newQty) {
+    if (newQty <= 0) {
+      removeItem(variant.productUnitId);
+      return;
+    }
+    final delta = newQty - variant.qty;
+    state = [
+      for (final c in state)
+        if (c.productUnitId == variant.productUnitId)
+          c.copyWith(qty: newQty)
+        else if (!c.isVariant && c.productId == variant.parentProductId)
+          c.copyWith(qty: (c.qty + delta).clamp(0.0, double.infinity))
+        else
+          c,
+    ];
   }
 
   /// Effective qty untuk sebuah item.
