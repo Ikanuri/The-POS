@@ -30,8 +30,6 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen>
         storeKey: device.storeKey!,
         storeName: device.storeName,
         role: _selectedRole,
-        deviceName: device.deviceName,
-        deviceCode: device.deviceCode,
       );
       setState(() {
         _qrData = payload.encode();

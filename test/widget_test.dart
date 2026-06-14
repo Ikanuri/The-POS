@@ -48,14 +48,12 @@ void main() {
         storeKey: 'key-base64',
         storeName: 'Berkah Grosir',
         role: 'kasir',
-        deviceName: 'Kasir 1',
-        deviceCode: 'K1',
       );
       final decoded = PairingService.validate(payload.encode());
       expect(decoded, isNotNull);
       expect(decoded!.storeUuid, 'uuid-1234');
+      expect(decoded.storeKey, 'key-base64');
       expect(decoded.role, 'kasir');
-      expect(decoded.deviceCode, 'K1');
     });
 
     test('QR sampah ditolak', () {
@@ -68,8 +66,6 @@ void main() {
         storeKey: 'k',
         storeName: 's',
         role: 'kasir',
-        deviceName: 'd',
-        deviceCode: 'K1',
         expiresAt: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
       );
       expect(() => PairingService.validate(expired.encode()),
@@ -82,8 +78,6 @@ void main() {
         storeKey: 'k',
         storeName: 's',
         role: 'owner', // owner tidak boleh di-pair via QR
-        deviceName: 'd',
-        deviceCode: 'O2',
         expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
       );
       expect(PairingService.validate(bad.encode()), isNull);

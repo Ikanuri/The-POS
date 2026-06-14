@@ -9,8 +9,6 @@ class PairingPayload {
     required this.storeKey,
     required this.storeName,
     required this.role,
-    required this.deviceName,
-    required this.deviceCode,
     required this.expiresAt,
   });
 
@@ -18,19 +16,18 @@ class PairingPayload {
   final String storeKey;
   final String storeName;
   final String role; // kasir | asisten
-  final String deviceName;
-  final String deviceCode;
   final DateTime expiresAt;
 
   bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt);
 
+  // Catatan: payload TIDAK membawa nama/kode device. Identitas perangkat
+  // (prefix nomor nota + penanda kasir) diisi sendiri oleh perangkat yang
+  // bergabung, agar tiap device punya kode unik dan nomor nota tidak bentrok.
   String encode() => base64UrlEncode(utf8.encode(jsonEncode({
         'store_uuid': storeUuid,
         'store_key': storeKey,
         'store_name': storeName,
         'role': role,
-        'device_name': deviceName,
-        'device_code': deviceCode,
         'expires_at': expiresAt.toIso8601String(),
       })));
 
@@ -44,8 +41,6 @@ class PairingPayload {
         storeKey: json['store_key'] as String,
         storeName: json['store_name'] as String? ?? '',
         role: json['role'] as String,
-        deviceName: json['device_name'] as String,
-        deviceCode: json['device_code'] as String,
         expiresAt: DateTime.parse(json['expires_at'] as String).toUtc(),
       );
     } catch (_) {
@@ -65,8 +60,6 @@ class PairingService {
     required String storeKey,
     required String storeName,
     required String role,
-    required String deviceName,
-    required String deviceCode,
   }) {
     assert(validRoles.contains(role));
     return PairingPayload(
@@ -74,8 +67,6 @@ class PairingService {
       storeKey: storeKey,
       storeName: storeName,
       role: role,
-      deviceName: deviceName,
-      deviceCode: deviceCode,
       expiresAt: DateTime.now().toUtc().add(ttl),
     );
   }
