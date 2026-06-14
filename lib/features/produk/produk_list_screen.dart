@@ -245,7 +245,9 @@ class _ProductTile extends ConsumerWidget {
               onPressed: () => onOpen('/produk/${product.id}'),
             )
           : null,
-      onTap: canEdit ? () => onOpen('/produk/${product.id}') : null,
+      // Tetap bisa di-tap walau !canEdit: form membuka mode read-only
+      // ("Detail Produk") untuk kasir tanpa izin input_stok.
+      onTap: () => onOpen('/produk/${product.id}'),
     );
   }
 }
