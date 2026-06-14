@@ -57,22 +57,13 @@ class CryptoService {
     return Uint8List.fromList(out.toBytes().sublist(0, keyLength));
   }
 
-  /// Key SQLCipher v1: PBKDF2(store_key, 10 000 iter) → hex 64 char.
+  /// Key SQLCipher: PBKDF2(store_key) → hex 64 char.
+  /// store_key sudah 256-bit acak, jadi 10 000 iterasi sudah aman; menaikkan
+  /// iterasi tidak menambah keamanan untuk input ber-entropi tinggi.
   static String deriveDbKeyHex(String storeKeyBase64) {
     final key = pbkdf2(
       utf8.encode(storeKeyBase64),
       utf8.encode('the-pos-db-v1'),
-    );
-    return key.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
-
-  /// Key SQLCipher v2: PBKDF2(store_key, 210 000 iter) → hex 64 char.
-  /// Migrasi otomatis dari v1 saat app dibuka pertama kali setelah upgrade.
-  static String deriveDbKeyHexV2(String storeKeyBase64) {
-    final key = pbkdf2(
-      utf8.encode(storeKeyBase64),
-      utf8.encode('the-pos-db-v1'),
-      iterations: 210000,
     );
     return key.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
@@ -104,8 +95,12 @@ class CryptoService {
       pbkdf2(utf8.encode(password), utf8.encode('the-pos-portable-v1'));
 
   /// Key file backup portable v2 (BPOP2): salt acak tersimpan di header file.
+  /// Di sini input HANYA password (low-entropy), jadi iterasi tinggi (210k)
+  /// benar-benar berguna melawan brute-force — beda dari kunci DB yang
+  /// inputnya store_key acak. Hanya jalan saat backup/restore manual, bukan
+  /// startup, jadi biayanya tidak terasa.
   static Uint8List derivePortableKeyV2(String password, List<int> salt) =>
-      pbkdf2(utf8.encode(password), salt);
+      pbkdf2(utf8.encode(password), salt, iterations: 210000);
 
   /// AES-256-CBC. Output: base64(IV + ciphertext) jika [iv] tidak diberikan.
   static String encryptText(String plain, Uint8List keyBytes, {Uint8List? iv}) {

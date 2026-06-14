@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,7 +18,6 @@ class DeviceIdentity {
     this.deviceName = '',
     this.deviceCode = '',
     this.deviceRole = '',
-    this.kdfDbVersion = 1,
   });
 
   final String? storeUuid;
@@ -28,8 +26,6 @@ class DeviceIdentity {
   final String deviceName;
   final String deviceCode;
   final String deviceRole; // owner | kasir | asisten
-  /// Versi KDF yang dipakai DB ini. 1 = 10k iter, 2 = 210k iter.
-  final int kdfDbVersion;
 
   bool get isConfigured => storeUuid != null && storeKey != null;
   bool get isOwner => deviceRole == 'owner';
@@ -71,22 +67,6 @@ class DeviceNotifier extends StateNotifier<DeviceIdentity> {
       deviceName: prefs.getString(_keys.deviceName) ?? '',
       deviceCode: prefs.getString(_keys.deviceCode) ?? '',
       deviceRole: prefs.getString(_keys.deviceRole) ?? '',
-      kdfDbVersion: prefs.getInt('kdf_db_version') ?? 1,
-    );
-  }
-
-  /// Dipanggil oleh databaseProvider setelah migrasi KDF berhasil.
-  Future<void> markKdfMigrated() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('kdf_db_version', 2);
-    state = DeviceIdentity(
-      storeUuid: state.storeUuid,
-      storeKey: state.storeKey,
-      storeName: state.storeName,
-      deviceName: state.deviceName,
-      deviceCode: state.deviceCode,
-      deviceRole: state.deviceRole,
-      kdfDbVersion: 2,
     );
   }
 
@@ -146,32 +126,15 @@ final deviceProvider =
 });
 
 /// Database dibuka lazily setelah device terkonfigurasi.
-/// B-5: saat kdf_db_version < 2, DB dibuka dengan key lama lalu di-rekey ke
-/// key baru (210k iter). Proses ini transparan dan hanya sekali per device.
+/// Kunci DB diturunkan dari store_key (256-bit acak), sehingga 10k iterasi
+/// PBKDF2 sudah lebih dari cukup — menaikkan iterasi tidak menambah keamanan
+/// untuk input ber-entropi tinggi, hanya memperlambat startup.
 final databaseProvider = Provider<AppDatabase>((ref) {
   final device = ref.watch(deviceProvider);
   if (!device.isConfigured) {
     throw StateError('Database diakses sebelum setup selesai');
   }
-
-  final storeKey = device.storeKey!;
-  final newKey = CryptoService.deriveDbKeyHexV2(storeKey);
-  final needsMigration = device.kdfDbVersion < 2;
-
-  final db = AppDatabase.open(
-    newKey,
-    oldKeyForMigration: needsMigration ? deriveDatabaseKey(storeKey) : null,
-  );
-
-  if (needsMigration) {
-    // Tandai migrasi selesai setelah DB berhasil dibuka.
-    // Jika app crash sebelum ini, pada buka berikutnya migrasi diulang
-    // (PRAGMA rekey idempotent karena key baru == key lama di DB yang sudah di-rekey).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(deviceProvider.notifier).markKdfMigrated();
-    });
-  }
-
+  final db = AppDatabase.open(deriveDatabaseKey(device.storeKey!));
   ref.onDispose(db.close);
   return db;
 });

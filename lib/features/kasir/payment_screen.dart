@@ -163,6 +163,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         for (final item in cart) {
           final effQty = notifier.effectiveQtyFor(item);
           if (effQty <= 0) continue;
+          // Lewati unit non-stok (varian/jasa) — stoknya memang tidak dilacak.
+          final unit = await (db.select(db.productUnits)
+                ..where((t) => t.id.equals(item.productUnitId)))
+              .getSingleOrNull();
+          if (unit?.isNonStock ?? false) continue;
           final stock = await db.currentStock(item.productUnitId);
           if (stock < effQty) {
             shortages.add(
@@ -256,7 +261,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           sub = (l.base * discountFactor).round();
           allocated += sub;
         }
-        final unitPrice = l.item.price;
+        final unitPrice =
+            (applyDiscount && l.eq > 0) ? (sub / l.eq).round() : l.item.price;
         itemCompanions.add(TransactionItemsCompanion.insert(
           id: _uuid.v4(),
           transactionId: txId,
