@@ -1103,12 +1103,13 @@ class AppDatabase extends _$AppDatabase {
     ];
 
     final dump = <String, List<Map<String, Object?>>>{};
-    final sinceMs = since.millisecondsSinceEpoch;
+    // Drift stores DateTimeColumn as unix seconds; raw SQL must compare in the same unit.
+    final sinceSec = since.millisecondsSinceEpoch ~/ 1000;
 
     for (final t in appendOnly) {
       final rows = await customSelect(
         'SELECT * FROM "$t" WHERE created_at >= ?',
-        variables: [Variable.withInt(sinceMs)],
+        variables: [Variable.withInt(sinceSec)],
       ).get();
       dump[t] = rows.map((r) => r.data).toList();
     }
@@ -1117,7 +1118,7 @@ class AppDatabase extends _$AppDatabase {
       if (hasUpdated) {
         final rows = await customSelect(
           'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
-          variables: [Variable.withInt(sinceMs), Variable.withInt(sinceMs)],
+          variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
         ).get();
         dump[t] = rows.map((r) => r.data).toList();
       } else {

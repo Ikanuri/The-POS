@@ -498,7 +498,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           radius: 14,
                           backgroundColor: scheme.primaryContainer,
                           child: Text(
-                            _selectedCustomer!.name[0].toUpperCase(),
+                            (_selectedCustomer!.name.isEmpty ? '?' : _selectedCustomer!.name[0]).toUpperCase(),
                             style: TextStyle(
                                 color: scheme.onPrimaryContainer,
                                 fontSize: 12,
@@ -585,7 +585,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               leading: CircleAvatar(
                                 radius: 12,
                                 backgroundColor: scheme.primaryContainer,
-                                child: Text(c.name[0].toUpperCase(),
+                                child: Text((c.name.isEmpty ? '?' : c.name[0]).toUpperCase(),
                                     style: TextStyle(
                                         color: scheme.onPrimaryContainer,
                                         fontSize: 10)),
