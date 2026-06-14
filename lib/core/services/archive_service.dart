@@ -57,7 +57,7 @@ class ArchiveService {
         rawDb.execute('PRAGMA temp_store = MEMORY;');
       },
     );
-    _current = AppDatabase(executor);
+    _current = AppDatabase(executor, readOnly: true);
     _currentYear = year;
     return _current!;
   }

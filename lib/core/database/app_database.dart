@@ -82,7 +82,11 @@ const kKasirPermissionKeys = <String>[
   DailySummaries,
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase(super.e);
+  AppDatabase(super.e, {this.readOnly = false});
+
+  /// true untuk koneksi arsip (PRAGMA query_only = ON). Saat read-only,
+  /// `beforeOpen` tidak boleh menulis (seed batch) karena DB tidak bisa ditulis.
+  final bool readOnly;
 
   static AppDatabase open(String encryptionKey) =>
       AppDatabase(_openConnection(encryptionKey));
@@ -126,6 +130,8 @@ class AppDatabase extends _$AppDatabase {
           }
         },
         beforeOpen: (details) async {
+          // Arsip dibuka read-only (query_only = ON) — jangan menulis apa pun.
+          if (readOnly) return;
           // Sisipkan unit type & permission key baru (insertOrIgnore) agar DB
           // lama turut mendapat entri yang ditambahkan setelah instalasi
           // pertama (mis. permission 'batal_transaksi' di v2).

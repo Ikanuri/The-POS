@@ -291,11 +291,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                   TextFormField(
                     controller: _tokenCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'Token (6 karakter)',
+                      labelText: 'Token (12 karakter)',
                       isDense: true,
                     ),
                     textCapitalization: TextCapitalization.characters,
-                    maxLength: 6,
+                    maxLength: 12,
                   ),
                   const SizedBox(height: 4),
                   if (_syncing)
