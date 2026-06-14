@@ -84,8 +84,9 @@ const kKasirPermissionKeys = <String>[
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
-  static AppDatabase open(String encryptionKey) =>
-      AppDatabase(_openConnection(encryptionKey));
+  static AppDatabase open(String encryptionKey, {String? oldKeyForMigration}) =>
+      AppDatabase(_openConnection(encryptionKey,
+          oldKeyForMigration: oldKeyForMigration));
 
   @override
   int get schemaVersion => 3;
@@ -656,6 +657,7 @@ class AppDatabase extends _$AppDatabase {
             })>
         returnItems,
     required String kasirId,
+    String refundMethod = 'tunai',
   }) async {
     final now = DateTime.now();
     await transaction(() async {
@@ -686,7 +688,7 @@ class AppDatabase extends _$AppDatabase {
         total: -refundTotal,
         paid: -refundTotal,
         changeAmount: 0,
-        paymentMethod: 'tunai',
+        paymentMethod: refundMethod,
         internalNote: Value('RETUR:$originalTxId'),
         createdAt: Value(now),
       ));
@@ -1218,37 +1220,49 @@ void _sqlcipherIsolateSetup() {
   open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
 }
 
-QueryExecutor _openConnection(String encryptionKey) {
+/// Buka koneksi SQLCipher. [encryptionKey] = kunci aktif.
+/// [oldKeyForMigration] ada bila perlu PRAGMA rekey (B-5 migration).
+QueryExecutor _openConnection(String encryptionKey,
+    {String? oldKeyForMigration}) {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'the_pos.db'));
+    final openKey = oldKeyForMigration ?? encryptionKey;
+    final needsRekey = oldKeyForMigration != null;
+
     return NativeDatabase.createInBackground(
       file,
       isolateSetup: _sqlcipherIsolateSetup,
       setup: (rawDb) {
         // Guard: pastikan benar-benar SQLCipher, bukan sqlite3 polos —
         // sqlite3 polos akan menulis DB tanpa enkripsi secara diam-diam.
-        final cipherVersion =
-            rawDb.select('PRAGMA cipher_version;');
+        final cipherVersion = rawDb.select('PRAGMA cipher_version;');
         if (cipherVersion.isEmpty) {
           throw StateError(
               'SQLCipher tidak termuat — database tidak akan terenkripsi');
         }
-        // Key turunan (deriveDbKeyHex) selalu hex 64-char. Validasi ketat
-        // memastikan tidak ada karakter kutip/escape yang bisa menyusup ke
-        // PRAGMA (passphrase mode SQLCipher dipertahankan agar DB lama tetap
-        // bisa dibuka — JANGAN ubah ke format raw-key x'...').
-        if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(encryptionKey)) {
+        // Key turunan selalu hex 64-char. Validasi ketat memastikan tidak ada
+        // karakter kutip/escape yang bisa menyusup ke PRAGMA.
+        final hexRe = RegExp(r'^[0-9a-fA-F]+$');
+        if (!hexRe.hasMatch(openKey)) {
           throw ArgumentError(
               'Encryption key harus hex murni; nilai tidak valid ditolak.');
         }
-        rawDb.execute("PRAGMA key = '$encryptionKey';");
-        // Performance tuning — dipasang setiap koneksi dibuka. WAL + cache
-        // besar + mmap menjaga query tetap cepat walau data menumpuk.
+        rawDb.execute("PRAGMA key = '$openKey';");
+
+        if (needsRekey) {
+          // B-5: Upgrade ke 210 000 iterasi. PRAGMA rekey berjalan atomik.
+          if (!hexRe.hasMatch(encryptionKey)) {
+            throw ArgumentError('New encryption key harus hex murni.');
+          }
+          rawDb.execute("PRAGMA rekey = '$encryptionKey';");
+        }
+
+        // Performance tuning — dipasang setiap koneksi dibuka.
         rawDb.execute('PRAGMA journal_mode = WAL;');
         rawDb.execute('PRAGMA synchronous = NORMAL;');
-        rawDb.execute('PRAGMA cache_size = -65536;'); // 64 MB page cache
-        rawDb.execute('PRAGMA mmap_size = 268435456;'); // 256 MB mmap
+        rawDb.execute('PRAGMA cache_size = -65536;'); // 64 MB
+        rawDb.execute('PRAGMA mmap_size = 268435456;'); // 256 MB
         rawDb.execute('PRAGMA temp_store = MEMORY;');
         rawDb.execute('PRAGMA foreign_keys = ON;');
       },
@@ -1256,6 +1270,6 @@ QueryExecutor _openConnection(String encryptionKey) {
   });
 }
 
-/// Turunkan key DB dari store_key. Dipanggil sebelum [AppDatabase.open].
+/// Turunkan key DB v1 dari store_key (10 000 iter). Backward-compat.
 String deriveDatabaseKey(String storeKeyBase64) =>
     CryptoService.deriveDbKeyHex(storeKeyBase64);

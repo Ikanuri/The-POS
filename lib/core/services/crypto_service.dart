@@ -57,7 +57,7 @@ class CryptoService {
     return Uint8List.fromList(out.toBytes().sublist(0, keyLength));
   }
 
-  /// Key SQLCipher: PBKDF2(store_key) → hex 64 char.
+  /// Key SQLCipher v1: PBKDF2(store_key, 10 000 iter) → hex 64 char.
   static String deriveDbKeyHex(String storeKeyBase64) {
     final key = pbkdf2(
       utf8.encode(storeKeyBase64),
@@ -66,19 +66,46 @@ class CryptoService {
     return key.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
+  /// Key SQLCipher v2: PBKDF2(store_key, 210 000 iter) → hex 64 char.
+  /// Migrasi otomatis dari v1 saat app dibuka pertama kali setelah upgrade.
+  static String deriveDbKeyHexV2(String storeKeyBase64) {
+    final key = pbkdf2(
+      utf8.encode(storeKeyBase64),
+      utf8.encode('the-pos-db-v1'),
+      iterations: 210000,
+    );
+    return key.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
   /// Key WiFi sync: PBKDF2(store_key + sync_token).
   static Uint8List deriveSyncKey(String storeKeyBase64, String syncToken) =>
       pbkdf2(utf8.encode(storeKeyBase64 + syncToken), utf8.encode('the-pos-sync-v1'));
+
+  /// HMAC-SHA256 key untuk validasi payload sync (anti-tamper + anti-replay).
+  static Uint8List deriveSyncHmacKey(String storeKeyBase64, String syncToken) =>
+      pbkdf2(
+        utf8.encode(storeKeyBase64 + syncToken),
+        utf8.encode('the-pos-hmac-v1'),
+        iterations: 1000,
+      );
+
+  /// Hitung HMAC-SHA256 dari [data] menggunakan [keyBytes].
+  static List<int> hmacSha256(List<int> data, List<int> keyBytes) =>
+      Hmac(sha256, keyBytes).convert(data).bytes;
 
   /// Key file backup: PBKDF2(store_key + password, salt = store_uuid).
   static Uint8List deriveFileKey(
           String storeKeyBase64, String password, String storeUuid) =>
       pbkdf2(utf8.encode(storeKeyBase64 + password), utf8.encode(storeUuid));
 
-  /// Key file backup portable (BPOSP): hanya dari password — bisa dibuka di
-  /// toko/device mana pun. Dipakai untuk dataset contoh & migrasi antar toko.
+  /// Key file backup portable v1 (BPOSP): salt hardcoded. Hanya untuk baca
+  /// file lama — export baru pakai derivePortableKeyV2.
   static Uint8List derivePortableKey(String password) =>
       pbkdf2(utf8.encode(password), utf8.encode('the-pos-portable-v1'));
+
+  /// Key file backup portable v2 (BPOP2): salt acak tersimpan di header file.
+  static Uint8List derivePortableKeyV2(String password, List<int> salt) =>
+      pbkdf2(utf8.encode(password), salt);
 
   /// AES-256-CBC. Output: base64(IV + ciphertext) jika [iv] tidak diberikan.
   static String encryptText(String plain, Uint8List keyBytes, {Uint8List? iv}) {

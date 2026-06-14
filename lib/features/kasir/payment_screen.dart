@@ -153,6 +153,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     setState(() => _isSaving = true);
     try {
       final db = ref.read(databaseProvider);
+
+      // C-5: Cek stok sebelum transaksi jika setting "izinkan stok minus" OFF.
+      final allowNegative =
+          (await db.getSetting('allow_negative_stock')) == '1';
+      if (!allowNegative) {
+        final notifier = ref.read(cartProvider.notifier);
+        final shortages = <String>[];
+        for (final item in cart) {
+          final effQty = notifier.effectiveQtyFor(item);
+          if (effQty <= 0) continue;
+          final stock = await db.currentStock(item.productUnitId);
+          if (stock < effQty) {
+            shortages.add(
+                '${item.productName}: stok ${stock % 1 == 0 ? stock.toInt() : stock}, butuh ${effQty % 1 == 0 ? effQty.toInt() : effQty}');
+          }
+        }
+        if (shortages.isNotEmpty && mounted) {
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Stok tidak cukup:\n${shortages.join('\n')}'),
+            duration: const Duration(seconds: 4),
+          ));
+          return;
+        }
+      }
       final device = ref.read(deviceProvider);
       final notifier = ref.read(cartProvider.notifier);
       final now = DateTime.now();
@@ -231,8 +256,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           sub = (l.base * discountFactor).round();
           allocated += sub;
         }
-        final unitPrice =
-            (applyDiscount && l.eq > 0) ? (sub / l.eq).round() : l.item.price;
+        final unitPrice = l.item.price;
         itemCompanions.add(TransactionItemsCompanion.insert(
           id: _uuid.v4(),
           transactionId: txId,

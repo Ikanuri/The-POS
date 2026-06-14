@@ -322,15 +322,28 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _showReturSheet(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final db = ref.read(databaseProvider);
     final returnQty = <String, double>{for (final i in _items) i.id: 0};
+
     // Qty yang sudah pernah diretur sebelumnya (cegah double-retur).
-    final alreadyReturned =
-        await ref.read(databaseProvider).getReturnedQtyByUnit(_tx!.id);
+    final alreadyReturned = await db.getReturnedQtyByUnit(_tx!.id);
+
+    // Load metode pembayaran untuk pilihan refund.
+    final paymentMethods = await (db.select(db.paymentMethods)
+          ..where((t) => t.isActive.equals(true))
+          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+        .get();
+
     if (!context.mounted) return;
+
     // Sisa qty yang masih boleh diretur per baris item.
     double remainingFor(TransactionItem item) =>
         (item.qty - (alreadyReturned[item.productUnitId] ?? 0))
             .clamp(0.0, item.qty);
+
+    // Default refund method = metode transaksi asal.
+    var refundMethod = _tx!.paymentMethod;
+
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -411,6 +424,43 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       ),
                     ),
                     const Divider(),
+                    // Pilihan metode refund
+                    Row(
+                      children: [
+                        Text('Kembalikan via',
+                            style: TextStyle(
+                                fontSize: 13, color: scheme.onSurfaceVariant)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              isDense: true,
+                              value: paymentMethods
+                                      .any((m) => m.type == refundMethod)
+                                  ? refundMethod
+                                  : 'tunai',
+                              items: [
+                                ...paymentMethods.map((m) => DropdownMenuItem(
+                                      value: m.type,
+                                      child: Text(m.name,
+                                          style: const TextStyle(fontSize: 13)),
+                                    )),
+                                if (!paymentMethods
+                                    .any((m) => m.type == 'tunai'))
+                                  const DropdownMenuItem(
+                                    value: 'tunai',
+                                    child: Text('Tunai',
+                                        style: TextStyle(fontSize: 13)),
+                                  ),
+                              ],
+                              onChanged: (v) =>
+                                  setSheet(() => refundMethod = v ?? 'tunai'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -442,7 +492,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     if (saved != true || !mounted) return;
 
-    final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
     final localId = await db.generateUniqueLocalId(device.deviceCode);
 
@@ -465,6 +514,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       localId: localId,
       returnItems: returnItems,
       kasirId: device.deviceCode,
+      refundMethod: refundMethod,
     );
     if (mounted) {
       messenger.showSnackBar(const SnackBar(

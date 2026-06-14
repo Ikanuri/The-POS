@@ -5,6 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/theme_provider.dart';
 
+final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final v = await db.getSetting('allow_negative_stock');
+  return v == '1';
+});
+
 class PengaturanScreen extends ConsumerWidget {
   const PengaturanScreen({super.key});
 
@@ -12,6 +18,7 @@ class PengaturanScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final device = ref.watch(deviceProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final allowNegStock = ref.watch(_allowNegativeStockProvider).valueOrNull ?? false;
     final scheme = Theme.of(context).colorScheme;
 
     String roleLabel(String role) => switch (role) {
@@ -68,7 +75,7 @@ class PengaturanScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pengaturan/metode-bayar'),
                 ),
-                if (device.isOwner)
+                if (device.isOwner) ...[
                   ListTile(
                     leading: const Icon(Icons.tune_outlined),
                     title: const Text('Izin Kasir'),
@@ -76,6 +83,18 @@ class PengaturanScreen extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.push('/pengaturan/izin-kasir'),
                   ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.remove_shopping_cart_outlined),
+                    title: const Text('Izinkan Stok Minus'),
+                    subtitle: const Text('Kasir bisa jual meski stok 0 (pre-order)'),
+                    value: allowNegStock,
+                    onChanged: (v) async {
+                      final db = ref.read(databaseProvider);
+                      await db.setSetting('allow_negative_stock', v ? '1' : '0');
+                      ref.invalidate(_allowNegativeStockProvider);
+                    },
+                  ),
+                ],
               ],
             ),
           ),

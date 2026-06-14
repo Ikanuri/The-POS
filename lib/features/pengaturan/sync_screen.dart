@@ -19,6 +19,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   bool _hostRunning = false;
   String _hostIp = '';
   String _hostToken = '';
+  List<PendingSyncItem> _queue = [];
 
   // Client state
   final _ipCtrl = TextEditingController();
@@ -27,7 +28,17 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   String? _syncResult;
 
   @override
+  void initState() {
+    super.initState();
+    // Listen for queue changes while screen is open.
+    LanSyncService.onQueueChanged = () {
+      if (mounted) setState(() => _queue = LanSyncService.pendingQueue.toList());
+    };
+  }
+
+  @override
   void dispose() {
+    LanSyncService.onQueueChanged = null;
     LanSyncService.stopHost();
     _ipCtrl.dispose();
     _tokenCtrl.dispose();
@@ -41,6 +52,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
         _hostRunning = false;
         _hostIp = '';
         _hostToken = '';
+        _queue = [];
       });
       return;
     }
@@ -55,11 +67,26 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
         _hostRunning = true;
         _hostIp = ip;
         _hostToken = token;
+        _queue = LanSyncService.pendingQueue.toList();
       });
     } catch (e) {
       if (!mounted) return;
       showError('Gagal start server: $e');
     }
+  }
+
+  Future<void> _approve(PendingSyncItem item) async {
+    try {
+      final received = await LanSyncService.approveSync(item.id);
+      if (mounted) showSuccess('Sync disetujui · $received baris diterima');
+    } catch (e) {
+      if (mounted) showError('Gagal merge: $e');
+    }
+  }
+
+  void _reject(PendingSyncItem item) {
+    LanSyncService.rejectSync(item.id);
+    if (mounted) showSuccess('Sync dari ${item.fromIp} ditolak');
   }
 
   void _copy(String value, String label) {
@@ -89,8 +116,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
       );
       if (!mounted) return;
       setState(() {
-        _syncResult =
-            'Selesai! Diterima: ${result.received} baris, Dikirim: ${result.sent} baris';
+        _syncResult = result.pendingApproval
+            ? 'Data terkirim, menunggu persetujuan owner di perangkat host.\n'
+                'Diterima dari host: ${result.received} baris.'
+            : 'Selesai! Diterima: ${result.received} baris, Dikirim: ${result.sent} baris';
       });
     } catch (e) {
       if (!mounted) return;
@@ -161,6 +190,74 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
               ),
             ),
             const SizedBox(height: 12),
+
+            // B-4: Antrian persetujuan sync dari perangkat kasir.
+            if (_queue.isNotEmpty) ...[
+              Row(children: [
+                Icon(Icons.pending_actions_outlined,
+                    color: scheme.tertiary, size: 18),
+                const SizedBox(width: 6),
+                Text('Menunggu Persetujuan (${_queue.length})',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ]),
+              const SizedBox(height: 6),
+              ..._queue.map((item) {
+                final mins = DateTime.now()
+                    .difference(item.arrivedAt)
+                    .inMinutes;
+                return Card(
+                  color: scheme.tertiaryContainer,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item.fromIp,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.onTertiaryContainer)),
+                              Text(item.tablesSummary,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onTertiaryContainer
+                                          .withOpacity(0.8))),
+                              Text(
+                                  mins == 0
+                                      ? 'Baru saja'
+                                      : '$mins menit lalu',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: scheme.onTertiaryContainer
+                                          .withOpacity(0.6))),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _reject(item),
+                          style: TextButton.styleFrom(
+                              foregroundColor: scheme.error),
+                          child: const Text('Tolak'),
+                        ),
+                        FilledButton(
+                          onPressed: () => _approve(item),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: scheme.tertiary,
+                              foregroundColor: scheme.onTertiary,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14)),
+                          child: const Text('Setuju'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
           ],
 
           // Client mode (semua device bisa sync)

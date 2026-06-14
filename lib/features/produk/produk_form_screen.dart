@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/product_providers.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/widgets/inline_banner.dart';
 
@@ -291,6 +292,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         tiersByUnitTempId: tiers,
         barcodesByUnitTempId: barcodes,
       );
+
+      // Invalidate catalog detail cache (price tiers don't trigger watchProducts).
+      ref.read(productUpdateCountProvider.notifier).state++;
 
       if (mounted) {
         // Tandai bersih agar PopScope tidak menahan navigasi programatik ini.

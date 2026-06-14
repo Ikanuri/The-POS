@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/product_providers.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
@@ -138,8 +139,10 @@ class CatalogDetail {
 final _catalogDetailProvider =
     FutureProvider.family<CatalogDetail, String>((ref, productId) async {
   final db = ref.watch(databaseProvider);
-  // Watch the product list so this provider re-runs when any product changes.
+  // Watch product list (name/group changes) AND explicit update counter
+  // (price/barcode changes don't touch the products table).
   ref.watch(_kasirProductsProvider(''));
+  ref.watch(productUpdateCountProvider);
   final units = await db.getProductUnits(productId);
   if (units.isEmpty) {
     return const CatalogDetail(
