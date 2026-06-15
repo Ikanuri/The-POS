@@ -44,9 +44,29 @@ class CartSheet extends ConsumerWidget {
                 TextButton(
                   onPressed: cart.isEmpty
                       ? null
-                      : () {
-                          notifier.clear();
-                          Navigator.of(ctx).pop();
+                      : () async {
+                          final ok = await showDialog<bool>(
+                            context: ctx,
+                            builder: (dCtx) => AlertDialog(
+                              title: const Text('Kosongkan Keranjang?'),
+                              content: const Text(
+                                  'Semua item akan dihapus dari keranjang.'),
+                              actions: [
+                                TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dCtx).pop(false),
+                                    child: const Text('Batal')),
+                                FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(dCtx).pop(true),
+                                    child: const Text('Kosongkan')),
+                              ],
+                            ),
+                          );
+                          if (ok == true) {
+                            notifier.clear();
+                            if (ctx.mounted) Navigator.of(ctx).pop();
+                          }
                         },
                   child: const Text('Kosongkan'),
                 ),

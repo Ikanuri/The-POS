@@ -819,21 +819,22 @@ class _AddControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final inCart = qty > 0;
     final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
+    final cs = Theme.of(context).colorScheme;
+    final bgColor = inCart ? cs.primary : AppTheme.accent;
+    final shadowColor = inCart
+        ? cs.primary.withOpacity(0.30)
+        : const Color(0x33C96442);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: size,
         height: size,
-        decoration: const BoxDecoration(
-          color: AppTheme.accent,
+        decoration: BoxDecoration(
+          color: bgColor,
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(
-              color: Color(0x33C96442),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
+            BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
           ],
         ),
         child: Center(

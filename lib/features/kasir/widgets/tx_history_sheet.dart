@@ -419,6 +419,9 @@ class _TxDetail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isHutang = tx.status == 'kurang_bayar' || tx.status == 'tempo';
+    final names = ref.watch(_custNamesProvider).valueOrNull ?? const <String, String>{};
+    final custLabel = tx.customerName ??
+        (tx.customerId != null ? (names[tx.customerId] ?? 'Pelanggan') : 'Umum');
 
     return Container(
       color: scheme.surfaceContainerLowest,
@@ -426,6 +429,32 @@ class _TxDetail extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Baris pelanggan — ketuk untuk edit
+          InkWell(
+            onTap: () => _editCustomer(context, ref),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.person_outline,
+                      size: 15, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      custLabel,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: tx.customerId != null || tx.customerName != null
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant),
+                    ),
+                  ),
+                  Icon(Icons.edit_outlined, size: 13, color: scheme.primary),
+                ],
+              ),
+            ),
+          ),
           if (isHutang)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -490,6 +519,100 @@ class _TxDetail extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _editCustomer(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(databaseProvider);
+    final ctrl = TextEditingController(text: tx.customerName ?? '');
+    String? selId = tx.customerId;
+    List<Customer> suggestions = [];
+
+    try {
+      final result = await showDialog<({String? name, String? id})>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setSt) => AlertDialog(
+            title: const Text('Pelanggan'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Nama pelanggan',
+                    hintText: 'Ketik nama atau cari dari daftar',
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    isDense: true,
+                  ),
+                  onChanged: (v) async {
+                    selId = null;
+                    final found = await db.searchCustomers(v.trim());
+                    setSt(() => suggestions = found.take(5).toList());
+                  },
+                ),
+                if (suggestions.isNotEmpty)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: suggestions.length,
+                      itemBuilder: (_, i) {
+                        final c = suggestions[i];
+                        return ListTile(
+                          dense: true,
+                          leading:
+                              const Icon(Icons.person_outline, size: 18),
+                          title: Text(c.name,
+                              style: const TextStyle(fontSize: 13)),
+                          selected: selId == c.id,
+                          onTap: () {
+                            ctrl.text = c.name;
+                            setSt(() {
+                              selId = c.id;
+                              suggestions = [];
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(null),
+                  child: const Text('Batal')),
+              if (tx.customerId != null || tx.customerName != null)
+                TextButton(
+                  onPressed: () => Navigator.of(ctx)
+                      .pop((name: null, id: null)),
+                  child: const Text('Umum'),
+                ),
+              FilledButton(
+                onPressed: () {
+                  final name = ctrl.text.trim();
+                  Navigator.of(ctx).pop(
+                      (name: name.isEmpty ? null : name, id: selId));
+                },
+                child: const Text('Simpan'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (result == null || !context.mounted) return;
+      await (db.update(db.transactions)..where((t) => t.id.equals(tx.id)))
+          .write(TransactionsCompanion(
+        customerName: Value(result.name),
+        customerId: Value(result.id),
+      ));
+      onChanged();
+    } finally {
+      ctrl.dispose();
+    }
   }
 
   Future<void> _lunasi(BuildContext context, WidgetRef ref) async {

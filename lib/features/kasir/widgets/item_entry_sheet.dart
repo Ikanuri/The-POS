@@ -467,6 +467,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                         contentPadding:
                                             EdgeInsets.symmetric(vertical: 8),
                                       ),
+                                      onTap: () => _qtyCtrl.selection =
+                                          TextSelection(
+                                              baseOffset: 0,
+                                              extentOffset:
+                                                  _qtyCtrl.text.length),
                                       onChanged: (v) {
                                         final q = double.tryParse(v.trim());
                                         setState(() {
@@ -524,6 +529,13 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                           color: scheme.onSurfaceVariant)
                                       : null,
                                 ),
+                                onTap: _canOverride
+                                    ? () => _priceCtrl.selection =
+                                        TextSelection(
+                                            baseOffset: 0,
+                                            extentOffset:
+                                                _priceCtrl.text.length)
+                                    : null,
                                 onChanged: (v) {
                                   final p =
                                       ThousandsSeparatorFormatter.parseValue(v);
