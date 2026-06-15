@@ -819,10 +819,12 @@ class _AddControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final inCart = qty > 0;
     final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
-    final cs = Theme.of(context).colorScheme;
-    final bgColor = inCart ? cs.primary : AppTheme.accent;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Saat ada di keranjang → hijau "sudah masuk" (warna kembalian). Saat
+    // kosong → terracotta accent. Beda warna agar status terlihat jelas.
+    final bgColor = inCart ? AppTheme.changeFg(isDark) : AppTheme.accent;
     final shadowColor = inCart
-        ? cs.primary.withOpacity(0.30)
+        ? AppTheme.changeFg(isDark).withOpacity(0.30)
         : const Color(0x33C96442);
     return GestureDetector(
       onTap: onTap,
