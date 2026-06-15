@@ -36,6 +36,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Customer? _customer;
   bool _loading = true;
 
+  // Store settings — loaded in _load() agar header on-screen konsisten dgn print.
+  String _storeAddress = '';
+  String _storePhone = '';
+  String _storeWhatsapp = '';
+  String _storeTelegram = '';
+  String _receiptHeader = '';
+
   /// Inline edit nama pembeli langsung di struk.
   bool _editingCustomer = false;
   final TextEditingController _custCtrl = TextEditingController();
@@ -104,7 +111,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       dense: true,
       controlAffinity: ListTileControlAffinity.leading,
       value: checked,
-      contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 4),
+      contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 12),
       onChanged: (v) {
         final nv = v ?? false;
         if (isVariant && parent != null) {
@@ -290,6 +297,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       }
     }
 
+    final storeAddress = await db.getSetting('store_address') ?? '';
+    final storePhone = await db.getSetting('store_phone') ?? '';
+    final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
+    final storeTelegram = await db.getSetting('store_telegram') ?? '';
+    final receiptHeader = await db.getSetting('receipt_header') ?? '';
+
     if (mounted) {
       setState(() {
         _tx = tx;
@@ -298,6 +311,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customer = customer;
+        _storeAddress = storeAddress;
+        _storePhone = storePhone;
+        _storeWhatsapp = storeWhatsapp;
+        _storeTelegram = storeTelegram;
+        _receiptHeader = receiptHeader;
         _loading = false;
       });
     }
@@ -318,24 +336,39 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: _custCtrl,
-            autofocus: true,
-            style: const TextStyle(fontSize: 12),
-            decoration: const InputDecoration(
-              isDense: true,
-              prefixText: 'Pelanggan: ',
-              hintText: 'Nama pembeli',
-              contentPadding: EdgeInsets.symmetric(vertical: 6),
-            ),
-            onChanged: _onCustQueryChanged,
-            onTap: () => _custCtrl.selection = TextSelection(
-                baseOffset: 0, extentOffset: _custCtrl.text.length),
+          Row(
+            children: [
+              Icon(Icons.person_outline, size: 14, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(
+                child: TextField(
+                  controller: _custCtrl,
+                  autofocus: true,
+                  style: const TextStyle(fontSize: 12),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Nama pembeli',
+                    hintStyle: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    prefixText: 'Pelanggan: ',
+                    prefixStyle: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    border: UnderlineInputBorder(
+                        borderSide: BorderSide(color: scheme.outlineVariant)),
+                    focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: scheme.primary, width: 1.5)),
+                    contentPadding: const EdgeInsets.only(bottom: 2),
+                  ),
+                  onChanged: _onCustQueryChanged,
+                  onTap: () => _custCtrl.selection = TextSelection(
+                      baseOffset: 0, extentOffset: _custCtrl.text.length),
+                ),
+              ),
+            ],
           ),
           if (_custSuggestions.isNotEmpty)
             Container(
               margin: const EdgeInsets.only(top: 4),
               decoration: BoxDecoration(
+                color: scheme.surfaceContainer,
                 border: Border.all(color: scheme.outlineVariant),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -346,12 +379,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     InkWell(
                       onTap: () => _saveCustomer(id: c.id, name: null),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                         child: Row(
                           children: [
-                            Icon(Icons.person_outline,
-                                size: 14, color: scheme.onSurfaceVariant),
+                            Icon(Icons.person_outline, size: 14, color: scheme.onSurfaceVariant),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(c.name,
@@ -923,96 +954,113 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Store & customer info
+          // Struk header — desain cermin dari nota cetak
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Identitas toko — centered, seperti header nota cetak
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  child: Column(
                     children: [
                       Text(
-                        device.storeName,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                        device.storeName.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 0.5),
                       ),
-                      const Spacer(),
-                      Text(
-                        _formatDateTime(tx.createdAt),
-                        style: TextStyle(
-                            fontSize: 11, color: scheme.onSurfaceVariant),
-                      ),
+                      if (_storeAddress.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(_storeAddress,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                      ],
+                      if (_storePhone.isNotEmpty || _storeWhatsapp.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          [
+                            if (_storePhone.isNotEmpty) 'Telp: $_storePhone',
+                            if (_storeWhatsapp.isNotEmpty) 'WA: $_storeWhatsapp',
+                          ].join('   '),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                      if (_storeTelegram.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text('Telegram: $_storeTelegram',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                      ],
+                      if (_receiptHeader.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(_receiptHeader,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Row(
+                ),
+                Divider(height: 1, color: scheme.outlineVariant),
+                // Info transaksi
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text('Kasir: ${device.deviceName}',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: scheme.onSurfaceVariant)),
+                      Row(
+                        children: [
+                          Icon(Icons.badge_outlined, size: 14, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text('Kasir: ${device.deviceName}',
+                              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                          const Spacer(),
+                          Text(_formatDateTime(tx.createdAt),
+                              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _editingCustomer
-                            ? _buildCustomerEditor(scheme)
-                            : GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: _enterEditCustomer,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: 'Pelanggan: ',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: scheme.onSurfaceVariant),
-                                        ),
-                                        TextSpan(
-                                          text: _customerDisplay(tx),
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: _customer != null
-                                                ? scheme.primary
-                                                : scheme.onSurfaceVariant,
-                                            fontWeight: _customer != null
-                                                ? FontWeight.w600
-                                                : FontWeight.normal,
-                                            fontStyle: (_customer == null &&
-                                                    tx.customerName == null)
-                                                ? FontStyle.italic
-                                                : FontStyle.normal,
-                                          ),
-                                        ),
-                                        WidgetSpan(
-                                          alignment:
-                                              PlaceholderAlignment.middle,
-                                          child: Padding(
-                                            padding: const EdgeInsets.only(
-                                                left: 4),
-                                            child: Icon(Icons.edit_outlined,
-                                                size: 12,
-                                                color: scheme.primary),
-                                          ),
-                                        ),
-                                      ],
+                      const SizedBox(height: 6),
+                      // Pelanggan — tap untuk inline edit
+                      _editingCustomer
+                          ? _buildCustomerEditor(scheme)
+                          : GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: _enterEditCustomer,
+                              child: Row(
+                                children: [
+                                  Icon(Icons.person_outline, size: 14, color: scheme.onSurfaceVariant),
+                                  const SizedBox(width: 6),
+                                  Text('Pelanggan: ',
+                                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                                  Expanded(
+                                    child: Text(
+                                      _customerDisplay(tx),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: _customer != null || tx.customerName != null
+                                            ? scheme.primary
+                                            : scheme.onSurfaceVariant,
+                                        fontWeight: _customer != null || tx.customerName != null
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                        fontStyle: (_customer == null && tx.customerName == null)
+                                            ? FontStyle.italic
+                                            : FontStyle.normal,
+                                      ),
                                     ),
                                   ),
-                                ),
+                                  Icon(Icons.edit_outlined, size: 12, color: scheme.primary),
+                                ],
                               ),
-                      ),
+                            ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),

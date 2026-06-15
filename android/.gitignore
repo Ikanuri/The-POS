@@ -6,8 +6,7 @@ gradle-wrapper.jar
 /local.properties
 GeneratedPluginRegistrant.java
 
-# Remember to never publicly share your keystore.
-# See https://flutter.dev/to/reference-keystore
-key.properties
-**/*.keystore
-**/*.jks
+# Keystore dikelola di repo ini (project privat, bukan Play Store).
+# Gunakan !force-include agar tidak terblok rule *.jks di bawah.
+!key.properties
+!app/release-key.jks
