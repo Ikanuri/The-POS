@@ -86,6 +86,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   bool _isDirty = false;
   bool _initialLoaded = false;
 
+  /// Varian yang ditambahkan selama sesi edit ini. Varian tersimpan langsung
+  /// ke DB saat dibuat, jadi bila pengguna membuang perubahan (Buang), varian
+  /// sesi ini harus ikut diurungkan agar "data tidak terlanjur tertambah".
+  final Set<String> _sessionVariantIds = {};
+
   void _markDirty() {
     if (_initialLoaded && !_isDirty && !_readOnly) {
       setState(() => _isDirty = true);
@@ -297,6 +302,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       ref.read(productUpdateCountProvider.notifier).state++;
 
       if (mounted) {
+        // Varian sesi ini sudah ikut "dikomit" lewat Simpan → jangan diurungkan.
+        _sessionVariantIds.clear();
         // Tandai bersih agar PopScope tidak menahan navigasi programatik ini.
         _isDirty = false;
         // Banner sukses ditampilkan di layar daftar produk setelah kembali
@@ -344,12 +351,15 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       canPop: !_isDirty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
+        final hasVariantAdds = _sessionVariantIds.isNotEmpty;
         final leave = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Buang perubahan?'),
-            content: const Text(
-                'Perubahan yang belum disimpan akan hilang.'),
+            content: Text(hasVariantAdds
+                ? 'Perubahan yang belum disimpan akan hilang, termasuk '
+                    '${_sessionVariantIds.length} varian yang baru ditambahkan.'
+                : 'Perubahan yang belum disimpan akan hilang.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -362,7 +372,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             ],
           ),
         );
-        if (leave == true && context.mounted) context.pop();
+        if (leave == true) {
+          // Urungkan varian yang ditambah selama sesi ini sebelum keluar.
+          await _discardSessionVariants();
+          if (context.mounted) context.pop();
+        }
       },
       child: Scaffold(
       appBar: AppBar(
@@ -733,7 +747,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     );
     if (ok != true) return;
     final db = ref.read(databaseProvider);
-    await db.createVariant(
+    final variantId = await db.createVariant(
       parentProductId: _productId!,
       name: nameCtrl.text.trim(),
       price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
@@ -744,6 +758,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           : barcodeCtrl.text.trim(),
       isNonStock: !trackStock,
     );
+    // Lacak agar bisa diurungkan bila edit dibatalkan; tandai dirty supaya
+    // dialog konfirmasi muncul saat menekan kembali.
+    _sessionVariantIds.add(variantId);
+    _markDirty();
     if (mounted) {
       _showBanner('Varian "${nameCtrl.text.trim()}" ditambahkan',
           InlineBannerType.success);
@@ -771,6 +789,20 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     );
     if (ok != true) return;
     await ref.read(databaseProvider).deleteVariant(v.id);
+    // Sudah dihapus manual → tak perlu diurungkan lagi saat discard.
+    _sessionVariantIds.remove(v.id);
+  }
+
+  /// Hapus varian yang ditambahkan selama sesi edit ini (dipanggil saat
+  /// pengguna memilih "Buang"). Varian dibuat langsung di DB, jadi tanpa ini
+  /// varian akan tetap tertambah meski perubahan dibatalkan.
+  Future<void> _discardSessionVariants() async {
+    if (_sessionVariantIds.isEmpty) return;
+    final db = ref.read(databaseProvider);
+    for (final id in _sessionVariantIds) {
+      await db.deleteVariant(id);
+    }
+    _sessionVariantIds.clear();
   }
 
   Future<void> _confirmDeactivate() async {

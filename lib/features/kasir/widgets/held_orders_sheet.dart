@@ -8,7 +8,6 @@ import '../../../core/database/app_database.dart';
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/top_toast.dart';
 import '../cart_provider.dart';
 
 const _heldUuid = Uuid();
@@ -102,33 +101,38 @@ class HeldOrdersSheet extends ConsumerWidget {
     if (cart.isEmpty) return;
 
     final labelCtrl = TextEditingController();
-    final label = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tahan Pesanan'),
-        content: TextField(
-          controller: labelCtrl,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            labelText: 'Nama / penanda',
-            hintText: 'Contoh: Bu Sari',
+    String? label;
+    try {
+      label = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Tahan Pesanan'),
+          content: TextField(
+            controller: labelCtrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Nama / penanda',
+              hintText: 'Contoh: Bu Sari',
+            ),
           ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(
+                  labelCtrl.text.trim().isEmpty
+                      ? 'Pesanan'
+                      : labelCtrl.text.trim()),
+              child: const Text('Tahan'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Batal')),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(
-                labelCtrl.text.trim().isEmpty
-                    ? 'Pesanan'
-                    : labelCtrl.text.trim()),
-            child: const Text('Tahan'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      labelCtrl.dispose();
+    }
     if (label == null) return;
 
     final db = ref.read(databaseProvider);
@@ -139,10 +143,9 @@ class HeldOrdersSheet extends ConsumerWidget {
     );
     ref.read(cartProvider.notifier).clear();
     if (context.mounted) {
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pesanan "$label" ditahan')),
-      );
+      // Pop dengan pesan agar kasir menampilkannya sebagai banner inline
+      // (bukan SnackBar/toast melayang).
+      Navigator.of(context).pop('Pesanan "$label" ditahan');
     }
   }
 }
@@ -230,9 +233,8 @@ class _HeldTile extends ConsumerWidget {
     await ref.read(databaseProvider).deleteHeldOrder(order.id);
     ref.read(cartProvider.notifier).replaceAll(items);
     if (context.mounted) {
-      Navigator.of(context).pop();
-      showTopToast(context, 'Melanjutkan pesanan: ${order.label}',
-          icon: Icons.play_circle_fill_rounded);
+      // Pop dengan pesan agar kasir menampilkannya sebagai banner inline.
+      Navigator.of(context).pop('Melanjutkan pesanan: ${order.label}');
     }
   }
 

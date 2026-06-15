@@ -353,7 +353,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Buat varian baru: produk anak + satu satuan dasar + tier harga + barcode
   /// opsional. Harga default mengikuti induk (di-pass oleh pemanggil).
-  Future<void> createVariant({
+  /// Buat varian (produk anak). Mengembalikan id produk varian baru agar
+  /// pemanggil bisa melacaknya (mis. untuk undo bila edit dibatalkan).
+  Future<String> createVariant({
     required String parentProductId,
     required String name,
     required int price,
@@ -400,6 +402,7 @@ class AppDatabase extends _$AppDatabase {
         ));
       }
     });
+    return productId;
   }
 
   /// Soft-delete varian (set isActive=false).

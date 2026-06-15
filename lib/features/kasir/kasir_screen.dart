@@ -542,11 +542,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             searchCtrl: _searchCtrl,
             onSearch: (v) => ref.read(_kasirSearchProvider.notifier).state = v,
             onScan: _openScanner,
-            onHeld: () => showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              builder: (_) => const HeldOrdersSheet(),
-            ),
+            onHeld: () async {
+              final msg = await showModalBottomSheet<String>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => const HeldOrdersSheet(),
+              );
+              if (msg != null && msg.isNotEmpty && mounted) {
+                _showBanner(msg, InlineBannerType.success);
+              }
+            },
             onHistory: () => showModalBottomSheet(
               context: context,
               isScrollControlled: true,
