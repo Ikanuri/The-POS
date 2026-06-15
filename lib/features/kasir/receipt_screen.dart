@@ -1147,6 +1147,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             ),
           ),
 
+          // Laba per item + total — hanya owner/asisten, tidak ikut share/print.
+          if (device.canSeeReports) ...[
+            const SizedBox(height: 8),
+            _buildProfitCard(scheme),
+          ],
+
           // Timeline pembayaran — kapan tiap cicilan/pelunasan masuk.
           if (_showPaymentTimeline) ...[
             const SizedBox(height: 8),
@@ -1217,6 +1223,93 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         '${dt.year} '
         '${dt.hour.toString().padLeft(2, '0')}:'
         '${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Kartu laba: laba per baris item + total. Hanya tampil untuk owner/asisten
+  /// (lihat gating di build) dan sengaja TIDAK ada di _ReceiptPaper (share/print)
+  /// agar HPP tidak bocor ke pelanggan.
+  Widget _buildProfitCard(ColorScheme scheme) {
+    final rows = <Widget>[];
+    var totalLaba = 0;
+
+    void addRow(TransactionItem item, {required bool isVariant}) {
+      final effQty = _itemEffQty(item);
+      if (effQty <= 0) return; // induk placeholder (qty pindah ke varian)
+      final laba = ((item.priceAtSale - item.costAtSale) * effQty).round();
+      totalLaba += laba;
+      rows.add(Padding(
+        padding: EdgeInsets.only(left: isVariant ? 16 : 0, top: 2, bottom: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _productNames[item.productId] ?? item.productId,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: isVariant ? 11 : 12,
+                    color: isVariant ? scheme.onSurfaceVariant : null),
+              ),
+            ),
+            Text(
+              formatRupiah(laba),
+              style: TextStyle(
+                  fontSize: isVariant ? 11 : 12,
+                  fontWeight: FontWeight.w500,
+                  color: laba >= 0 ? scheme.tertiary : scheme.error),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    for (final parent in _topLevelItems) {
+      addRow(parent, isVariant: false);
+      for (final child in _childrenOf(parent)) {
+        addRow(child, isVariant: true);
+      }
+    }
+
+    return Card(
+      color: scheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.insights_outlined, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text('Laba (internal)',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.primary)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ...rows,
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total Laba',
+                    style: TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700)),
+                Text(
+                  formatRupiah(totalLaba),
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: totalLaba >= 0 ? scheme.tertiary : scheme.error),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Kartu riwayat pembayaran: tiap baris = waktu + metode + nominal.

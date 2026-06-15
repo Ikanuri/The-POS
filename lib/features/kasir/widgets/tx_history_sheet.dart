@@ -85,15 +85,6 @@ final _custNamesProvider = FutureProvider<Map<String, String>>((ref) async {
   return {for (final c in cs) c.id: c.name};
 });
 
-/// Item satu transaksi — untuk tampilan laba di detail (owner/asisten saja).
-final _txItemsDetailProvider =
-    FutureProvider.family<List<TransactionItem>, String>((ref, txId) async {
-  final db = ref.watch(databaseProvider);
-  return (db.select(db.transactionItems)
-        ..where((t) => t.transactionId.equals(txId)))
-      .get();
-});
-
 /// Sheet riwayat transaksi di kasir: cari, filter status/tanggal/produk,
 /// aksi Lunasi · Batalkan · Struk.
 class TxHistorySheet extends ConsumerStatefulWidget {
@@ -708,10 +699,6 @@ class _TxDetail extends ConsumerWidget {
     final names = ref.watch(_custNamesProvider).valueOrNull ?? const <String, String>{};
     final custLabel = tx.customerName ??
         (tx.customerId != null ? (names[tx.customerId] ?? 'Pelanggan') : 'Umum');
-    final device = ref.watch(deviceProvider);
-    final canSeeProfit = device.canSeeReports;
-    final itemsAsync =
-        canSeeProfit ? ref.watch(_txItemsDetailProvider(tx.id)) : null;
 
     return Container(
       color: scheme.surfaceContainerLowest,
@@ -735,7 +722,7 @@ class _TxDetail extends ConsumerWidget {
                       custLabel,
                       style: TextStyle(
                           fontSize: 12,
-                          color: tx.customerId != null || tx.customerName != null
+                          color: tx.customerId != null
                               ? scheme.primary
                               : scheme.onSurfaceVariant),
                     ),
@@ -762,71 +749,6 @@ class _TxDetail extends ConsumerWidget {
                 ],
               ),
             ),
-          if (canSeeProfit && itemsAsync != null)
-            itemsAsync.whenOrNull(
-              data: (items) {
-                if (items.isEmpty) return const SizedBox.shrink();
-                final totalProfit = items.fold<int>(
-                    0,
-                    (s, it) =>
-                        s + ((it.priceAtSale - it.costAtSale) * it.qty).round());
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Divider(height: 12),
-                      for (final it in items)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 1),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${it.qty % 1 == 0 ? it.qty.toInt() : it.qty}× item',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: scheme.onSurfaceVariant),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Text(
-                                'Laba ${formatRupiah(((it.priceAtSale - it.costAtSale) * it.qty).round())}',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: totalProfit >= 0
-                                        ? scheme.tertiary
-                                        : scheme.error),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const Divider(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Total Laba',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: scheme.onSurface)),
-                          Text(
-                            formatRupiah(totalProfit),
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: totalProfit >= 0
-                                    ? scheme.tertiary
-                                    : scheme.error),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ) ?? const SizedBox.shrink(),
           Row(
             children: [
               if (isHutang) ...[
