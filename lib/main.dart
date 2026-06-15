@@ -25,9 +25,13 @@ Future<void> main() async {
   // versi lama atau hari yang terlewat). Hanya bila DB sudah bisa dibuka.
   if (container.read(deviceProvider).isConfigured) {
     try {
-      await container.read(databaseProvider).backfillMissingSummaries();
+      final db = container.read(databaseProvider);
+      await db.backfillMissingSummaries();
+      // Lengkapi buku pembayaran untuk nota lama (data pra-fitur / import) agar
+      // timeline pembayaran di struk tetap muncul.
+      await db.backfillMissingPayments();
     } catch (_) {
-      // Non-fatal — laporan tetap berfungsi tanpa pre-aggregate.
+      // Non-fatal — laporan & struk tetap berfungsi tanpa pre-aggregate.
     }
   }
 

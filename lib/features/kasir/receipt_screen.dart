@@ -30,6 +30,7 @@ class ReceiptScreen extends ConsumerStatefulWidget {
 class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Transaction? _tx;
   List<TransactionItem> _items = [];
+  List<TransactionPayment> _payments = [];
   Map<String, String> _productNames = {};
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
@@ -56,6 +57,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       .where((e) => e.value)
       .map((e) => e.key)
       .toSet();
+
+  /// Timeline pembayaran ditampilkan hanya bila informatif: ada >1 pembayaran
+  /// (cicilan), atau satu pembayaran yang waktunya jauh dari waktu nota dibuat
+  /// (hutang dilunasi belakangan). Penjualan tunai seketika → disembunyikan
+  /// agar tidak mengulang info yang sudah ada di baris tanggal.
+  bool get _showPaymentTimeline {
+    final tx = _tx;
+    if (tx == null || _payments.isEmpty) return false;
+    if (_payments.length > 1) return true;
+    return _payments.first.paidAt.difference(tx.createdAt).abs() >
+        const Duration(minutes: 1);
+  }
 
   /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
   /// induknya tidak ada di transaksi ini).
@@ -264,6 +277,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final items = await (db.select(db.transactionItems)
           ..where((t) => t.transactionId.equals(widget.transactionId)))
         .get();
+    final payments = await db.getPaymentsForTx(widget.transactionId);
 
     Customer? customer;
     if (tx.customerId != null) {
@@ -307,6 +321,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       setState(() {
         _tx = tx;
         _items = items;
+        _payments = payments;
         _productNames = productNames;
         _unitNames = unitNames;
         _parentOf = parentOf;
@@ -724,6 +739,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final ok = await PrinterService.printReceipt(
       tx: _tx!,
       items: _items,
+      payments: _payments,
       productNames: _productNames,
       unitNames: _unitNames,
       customer: _customer,
@@ -796,6 +812,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     child: _ReceiptPaper(
                       tx: _tx!,
                       items: _items,
+                      payments: _payments,
                       productNames: _productNames,
                       unitNames: _unitNames,
                       customerName: _customerDisplay(_tx!),
@@ -1127,6 +1144,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               ],
             ),
           ),
+
+          // Timeline pembayaran — kapan tiap cicilan/pelunasan masuk.
+          if (_showPaymentTimeline) ...[
+            const SizedBox(height: 8),
+            _buildPaymentTimeline(scheme),
+          ],
           const SizedBox(height: 20),
 
           if (isKurangBayar && !isVoid) ...[
@@ -1193,6 +1216,51 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         '${dt.hour.toString().padLeft(2, '0')}:'
         '${dt.minute.toString().padLeft(2, '0')}';
   }
+
+  /// Kartu riwayat pembayaran: tiap baris = waktu + metode + nominal.
+  Widget _buildPaymentTimeline(ColorScheme scheme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history, size: 15, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text('Riwayat Pembayaran',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            for (final p in _payments)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Text(_formatDateTime(p.paidAt),
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                    const SizedBox(width: 8),
+                    Text(_methodLabel(p.method),
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                    const Spacer(),
+                    Text(formatRupiah(p.amount),
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Tampilan struk gaya kertas thermal (putih, monospace) untuk
@@ -1201,6 +1269,7 @@ class _ReceiptPaper extends StatelessWidget {
   const _ReceiptPaper({
     required this.tx,
     required this.items,
+    required this.payments,
     required this.productNames,
     required this.unitNames,
     required this.customerName,
@@ -1216,6 +1285,7 @@ class _ReceiptPaper extends StatelessWidget {
 
   final Transaction tx;
   final List<TransactionItem> items;
+  final List<TransactionPayment> payments;
   final Map<String, String> productNames;
   final Map<String, String> unitNames;
   final Map<String, String?> parentOf;
@@ -1387,6 +1457,21 @@ class _ReceiptPaper extends StatelessWidget {
               style: _mono,
             ),
           ),
+          // Timeline pembayaran (mis. hutang dilunasi belakangan / dicicil).
+          if (_showTimeline) ...[
+            const _DashedLine(),
+            Text('Pembayaran:',
+                style: _mono.copyWith(fontWeight: FontWeight.w700)),
+            ...payments.map((p) => Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('${_fmtDateTime(p.paidAt)} ${_methodShort(p.method)}',
+                        style: _mono.copyWith(fontSize: 11)),
+                    Text('Rp ${_fmtNum(p.amount)}',
+                        style: _mono.copyWith(fontSize: 11)),
+                  ],
+                )),
+          ],
           if (tx.strukNote != null) ...[
             const _DashedLine(),
             Text(tx.strukNote!,
@@ -1401,6 +1486,28 @@ class _ReceiptPaper extends StatelessWidget {
       ),
     );
   }
+
+  /// Sama dgn aturan in-app: tampilkan timeline hanya bila informatif.
+  bool get _showTimeline {
+    if (payments.length > 1) return true;
+    if (payments.length == 1) {
+      return payments.first.paidAt.difference(tx.createdAt).abs() >
+          const Duration(minutes: 1);
+    }
+    return false;
+  }
+
+  String _fmtDateTime(DateTime dt) =>
+      '${dt.day}/${dt.month} '
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  String _methodShort(String m) => switch (m) {
+        'tunai' => 'Tunai',
+        'transfer' => 'Transfer',
+        'qris' => 'QRIS',
+        'ewallet' => 'E-Wallet',
+        _ => m,
+      };
 
   String _fmtNum(int v) {
     final s = v.toString();

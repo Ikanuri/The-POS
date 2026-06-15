@@ -438,6 +438,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    List<TransactionPayment> payments = const [],
     String storeWhatsapp = '',
     String storeTelegram = '',
     String receiptHeader = '',
@@ -453,6 +454,7 @@ class PrinterService {
     final bytes = await _buildBytes(
       tx: tx,
       items: items,
+      payments: payments,
       productNames: productNames,
       unitNames: unitNames,
       customer: customer,
@@ -516,6 +518,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    List<TransactionPayment> payments = const [],
     String storeWhatsapp = '',
     String storeTelegram = '',
     String receiptHeader = '',
@@ -643,6 +646,22 @@ class PrinterService {
       out.addAll(gen.text(_rowLR('', _statusLabel(tx), w)));
     }
 
+    // ── Timeline pembayaran ───────────────────────────────────────────────
+    // Tampilkan hanya bila informatif: dicicil (>1) atau dilunasi belakangan
+    // (1 pembayaran yang waktunya jauh dari waktu nota dibuat).
+    final showTimeline = payments.length > 1 ||
+        (payments.length == 1 &&
+            payments.first.paidAt.difference(tx.createdAt).abs() >
+                const Duration(minutes: 1));
+    if (showTimeline) {
+      out.addAll(gen.text(_sep(w)));
+      out.addAll(gen.text('Pembayaran:', styles: const PosStyles(bold: true)));
+      for (final p in payments) {
+        final left = '${_fmtDateTimeFull(p.paidAt)} ${_methodShort(p.method)}';
+        out.addAll(gen.text(_rowLR(left, 'Rp ${_fmtNum(p.amount)}', w)));
+      }
+    }
+
     // ── Footer ────────────────────────────────────────────────────────────
     if (strukNote != null && strukNote.isNotEmpty) {
       out.addAll(gen.text(_sep(w)));
@@ -708,6 +727,194 @@ class PrinterService {
       default:
         return tx.status;
     }
+  }
+
+  static String _methodShort(String m) {
+    switch (m) {
+      case 'tunai':
+        return 'Tunai';
+      case 'transfer':
+        return 'Transfer';
+      case 'qris':
+        return 'QRIS';
+      case 'ewallet':
+        return 'E-Wallet';
+      default:
+        return m;
+    }
+  }
+
+  // ── Print struk gabungan (gabung nota) ────────────────────────────────────
+
+  /// Cetak struk gabungan beberapa nota: header toko sekali, item per-nota
+  /// (terpisah dengan separator), lalu total akumulatif di footer.
+  static Future<bool> printMergedReceipt({
+    required List<Transaction> txs,
+    required Map<String, List<TransactionItem>> itemsByTx,
+    required Map<String, String> productNames,
+    required Map<String, String> unitNames,
+    required String customerName,
+    required String storeName,
+    required String storeAddress,
+    required String storePhone,
+    String storeWhatsapp = '',
+    String storeTelegram = '',
+    String receiptHeader = '',
+    Map<String, String?> parentOf = const {},
+    DateTime? lastPaymentAt,
+  }) async {
+    final mac = await getSavedMac();
+    if (mac == null || mac.isEmpty) return false;
+    final connected = await connect(mac);
+    if (!connected) return false;
+
+    final settings = await loadSettings();
+    final bytes = await _buildMergedBytes(
+      txs: txs,
+      itemsByTx: itemsByTx,
+      productNames: productNames,
+      unitNames: unitNames,
+      customerName: customerName,
+      storeName: storeName,
+      storeAddress: storeAddress,
+      storePhone: storePhone,
+      storeWhatsapp: storeWhatsapp,
+      storeTelegram: storeTelegram,
+      receiptHeader: receiptHeader,
+      parentOf: parentOf,
+      lastPaymentAt: lastPaymentAt,
+      settings: settings,
+    );
+
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>(
+        'write', {'bytes': bytes},
+      ).timeout(const Duration(seconds: 10), onTimeout: () => null);
+      return res?['ok'] as bool? ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<Uint8List> _buildMergedBytes({
+    required List<Transaction> txs,
+    required Map<String, List<TransactionItem>> itemsByTx,
+    required Map<String, String> productNames,
+    required Map<String, String> unitNames,
+    required String customerName,
+    required String storeName,
+    required String storeAddress,
+    required String storePhone,
+    String storeWhatsapp = '',
+    String storeTelegram = '',
+    String receiptHeader = '',
+    Map<String, String?> parentOf = const {},
+    DateTime? lastPaymentAt,
+    required PrinterSettings settings,
+  }) async {
+    final w = settings.charWidth;
+    final profile = await CapabilityProfile.load();
+    final paperSize =
+        settings.paperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
+    final gen = Generator(paperSize, profile);
+    final out = <int>[];
+
+    // ── Header toko (sekali) ──────────────────────────────────────────────
+    if (storeName.isNotEmpty) {
+      out.addAll(gen.text(_toAscii(storeName),
+          styles: const PosStyles(
+              bold: true,
+              align: PosAlign.center,
+              height: PosTextSize.size2,
+              width: PosTextSize.size2)));
+    }
+    if (storeAddress.isNotEmpty) {
+      out.addAll(gen.text(_toAscii(storeAddress),
+          styles: const PosStyles(align: PosAlign.center)));
+    }
+    if (storePhone.isNotEmpty) {
+      out.addAll(gen.text('Telp: ${_toAscii(storePhone)}',
+          styles: const PosStyles(align: PosAlign.center)));
+    }
+    if (storeWhatsapp.isNotEmpty) {
+      out.addAll(gen.text('WA: ${_toAscii(storeWhatsapp)}',
+          styles: const PosStyles(align: PosAlign.center)));
+    }
+    if (storeTelegram.isNotEmpty) {
+      out.addAll(gen.text('Telegram: ${_toAscii(storeTelegram)}',
+          styles: const PosStyles(align: PosAlign.center)));
+    }
+    if (receiptHeader.isNotEmpty) {
+      for (final line in receiptHeader.split('\n')) {
+        out.addAll(gen.text(_toAscii(line),
+            styles: const PosStyles(align: PosAlign.center)));
+      }
+    }
+    out.addAll(gen.text(_sep(w)));
+    out.addAll(gen.text('STRUK GABUNGAN',
+        styles: const PosStyles(bold: true, align: PosAlign.center)));
+    out.addAll(gen.text(_toAscii(customerName),
+        styles: const PosStyles(align: PosAlign.center)));
+    out.addAll(gen.text('${txs.length} nota digabung',
+        styles: const PosStyles(align: PosAlign.center)));
+
+    // ── Per-nota (terpisah) ───────────────────────────────────────────────
+    var grandTotal = 0;
+    var grandPaid = 0;
+    for (final tx in txs) {
+      grandTotal += tx.total;
+      grandPaid += tx.paid;
+      final items = itemsByTx[tx.id] ?? const <TransactionItem>[];
+      out.addAll(gen.text(_sep(w)));
+      out.addAll(gen.text(
+          _rowLR('#${tx.localId}', _fmtDate(tx.createdAt), w),
+          styles: const PosStyles(bold: true)));
+      for (final item in _orderItems(items, parentOf)) {
+        final isVar = _parentItemOf(item, items, parentOf) != null;
+        final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
+        final prefix = isVar ? '  > ' : '';
+        out.addAll(
+            gen.text('$prefix$rawName', styles: const PosStyles(bold: true)));
+        if (item.itemNote != null && item.itemNote!.isNotEmpty) {
+          out.addAll(gen.text(_toAscii(item.itemNote!)));
+        }
+        final uName = _toAscii(unitNames[item.productUnitId] ?? 'pcs');
+        final qtyStr = item.qty % 1 == 0
+            ? item.qty.toInt().toString()
+            : item.qty.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '');
+        final qtyLine = '  $qtyStr $uName x ${_fmtNum(item.priceAtSale)}';
+        out.addAll(gen.text(_rowLR(qtyLine, _fmtNum(item.subtotal), w)));
+      }
+      out.addAll(gen.text(
+          _rowLR('Subtotal nota', 'Rp ${_fmtNum(tx.total)}', w)));
+      final sisa = tx.total - tx.paid;
+      if (sisa > 0) {
+        out.addAll(
+            gen.text(_rowLR('  Sisa', 'Rp ${_fmtNum(sisa)}', w)));
+      }
+    }
+
+    // ── Total akumulatif ──────────────────────────────────────────────────
+    out.addAll(gen.text(_sep(w)));
+    out.addAll(gen.text(
+        _rowLR('TOTAL TAGIHAN', 'Rp ${_fmtNum(grandTotal)}', w),
+        styles: const PosStyles(bold: true)));
+    out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandPaid)}', w)));
+    final grandSisa = grandTotal - grandPaid;
+    out.addAll(gen.text(
+        _rowLR('SISA', 'Rp ${_fmtNum(grandSisa)}', w),
+        styles: const PosStyles(bold: true)));
+    if (lastPaymentAt != null) {
+      out.addAll(gen.text(
+          _rowLR('', 'Pelunasan: ${_fmtDateTimeFull(lastPaymentAt)}', w)));
+    }
+
+    out.addAll(gen.text(_sep(w)));
+    out.addAll(gen.text('Terima kasih!',
+        styles: const PosStyles(align: PosAlign.center)));
+    out.addAll(gen.feed(3));
+    out.addAll(gen.cut());
+    return Uint8List.fromList(out);
   }
 
   // ── ASCII sanitizer ──────────────────────────────────────────────────────

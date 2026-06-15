@@ -10,6 +10,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
+import '../merged_receipt_screen.dart';
 
 const _txUuid = Uuid();
 
@@ -101,6 +102,11 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   String _productQuery = '';
   Timer? _productDebounce;
 
+  // ── Mode gabung nota ──────────────────────────────────────────────────
+  bool _selectMode = false;
+  final Set<String> _selectedIds = {};
+  bool _showSum = false; // toggle "Jumlahkan Semua"
+
   bool get _hasActiveFilter =>
       _query.isNotEmpty ||
       _filter != 'semua' ||
@@ -111,6 +117,47 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   void dispose() {
     _productDebounce?.cancel();
     super.dispose();
+  }
+
+  void _exitSelectMode() {
+    setState(() {
+      _selectMode = false;
+      _selectedIds.clear();
+      _showSum = false;
+    });
+  }
+
+  /// Nota retur (total negatif) tidak bisa digabung — tidak ada tagihan untuk
+  /// dijumlahkan/dilunasi. Void sudah tidak muncul di riwayat.
+  bool _isReturTx(Transaction tx) =>
+      tx.internalNote?.startsWith('RETUR:') ?? false;
+
+  /// Toggle seleksi satu nota dengan aturan pelanggan: nota terdaftar hanya
+  /// bisa digabung dengan customerId sama; nota umum (customerId null) hanya
+  /// dengan sesama umum (boleh beda nama). Kesetaraan customerId menegakkan
+  /// kedua aturan sekaligus.
+  void _toggleSelect(Transaction tx, List<Transaction> loaded) {
+    if (_isReturTx(tx)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nota retur tidak bisa digabung')));
+      return;
+    }
+    if (_selectedIds.contains(tx.id)) {
+      setState(() => _selectedIds.remove(tx.id));
+      return;
+    }
+    final selectedTxs =
+        loaded.where((t) => _selectedIds.contains(t.id)).toList();
+    if (selectedTxs.isNotEmpty &&
+        selectedTxs.first.customerId != tx.customerId) {
+      final umum = selectedTxs.first.customerId == null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(umum
+              ? 'Hanya nota pelanggan umum yang bisa digabung di sini'
+              : 'Hanya nota pelanggan yang sama yang bisa digabung')));
+      return;
+    }
+    setState(() => _selectedIds.add(tx.id));
   }
 
   void _onProductChanged(String v) {
@@ -144,6 +191,15 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
     final names = namesAsync.valueOrNull ?? const <String, String>{};
     final scheme = Theme.of(context).colorScheme;
 
+    // Statistik nota terpilih (gabung nota) dari hasil provider, sehingga tetap
+    // utuh meski filter teks menyembunyikan baris yang sudah dipilih.
+    final loadedTxs = txAsync.valueOrNull ?? const <Transaction>[];
+    final selectedTxs =
+        loadedTxs.where((t) => _selectedIds.contains(t.id)).toList();
+    final sumTotal = selectedTxs.fold<int>(0, (s, t) => s + t.total);
+    final sumPaid = selectedTxs.fold<int>(0, (s, t) => s + t.paid);
+    final sumSisa = sumTotal - sumPaid;
+
     return DraggableScrollableSheet(
       initialChildSize: 0.8,
       minChildSize: 0.5,
@@ -164,14 +220,30 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Text('Riwayat Transaksi',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
-                  tooltip: 'Muat ulang',
-                  onPressed: () => ref.invalidate(_txHistoryProvider),
+                Text(
+                  _selectMode
+                      ? '${_selectedIds.length} nota dipilih'
+                      : 'Riwayat Transaksi',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+                const Spacer(),
+                if (_selectMode)
+                  TextButton(
+                    onPressed: _exitSelectMode,
+                    child: const Text('Selesai'),
+                  )
+                else ...[
+                  IconButton(
+                    icon: const Icon(Icons.playlist_add_check, size: 22),
+                    tooltip: 'Gabung Nota',
+                    onPressed: () => setState(() => _selectMode = true),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 20),
+                    tooltip: 'Muat ulang',
+                    onPressed: () => ref.invalidate(_txHistoryProvider),
+                  ),
+                ],
                 IconButton(
                   icon: const Icon(Icons.close, size: 20),
                   onPressed: () => Navigator.of(ctx).pop(),
@@ -270,14 +342,26 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                   controller: scrollCtrl,
                   itemCount: filtered.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) => _TxRow(
-                    tx: filtered[i],
-                    names: names,
-                    expanded: _expandedId == filtered[i].id,
-                    onToggle: () => setState(() => _expandedId =
-                        _expandedId == filtered[i].id ? null : filtered[i].id),
-                    onChanged: () => ref.invalidate(_txHistoryProvider),
-                  ),
+                  itemBuilder: (_, i) {
+                    final t = filtered[i];
+                    return _TxRow(
+                      tx: t,
+                      names: names,
+                      expanded: !_selectMode && _expandedId == t.id,
+                      selectMode: _selectMode,
+                      selected: _selectedIds.contains(t.id),
+                      selectable: !_isReturTx(t),
+                      onToggle: () {
+                        if (_selectMode) {
+                          _toggleSelect(t, loadedTxs);
+                        } else {
+                          setState(() => _expandedId =
+                              _expandedId == t.id ? null : t.id);
+                        }
+                      },
+                      onChanged: () => ref.invalidate(_txHistoryProvider),
+                    );
+                  },
                 );
               },
               loading: () =>
@@ -285,9 +369,189 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
+          if (_selectMode && _selectedIds.isNotEmpty)
+            _buildMergeBar(scheme, selectedTxs.length, sumTotal, sumPaid,
+                sumSisa),
         ],
       ),
     );
+  }
+
+  /// Bar aksi gabung nota: ringkasan akumulatif + cetak/bayar.
+  Widget _buildMergeBar(ColorScheme scheme, int count, int sumTotal,
+      int sumPaid, int sumSisa) {
+    return Material(
+      elevation: 8,
+      color: scheme.surfaceContainerHigh,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text('$count nota dipilih',
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  FilterChip(
+                    label: const Text('Jumlahkan Semua',
+                        style: TextStyle(fontSize: 11)),
+                    selected: _showSum,
+                    onSelected: (v) => setState(() => _showSum = v),
+                    visualDensity: VisualDensity.compact,
+                    selectedColor: scheme.primaryContainer,
+                    side: BorderSide.none,
+                    showCheckmark: true,
+                  ),
+                ],
+              ),
+              if (_showSum) ...[
+                const SizedBox(height: 6),
+                _sumRow('Total Tagihan', sumTotal, scheme.onSurface),
+                _sumRow('Terbayar', sumPaid, scheme.onSurfaceVariant),
+                _sumRow('Sisa', sumSisa,
+                    sumSisa > 0 ? scheme.error : scheme.primary,
+                    bold: true),
+              ] else
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Sisa Bayar',
+                          style: TextStyle(
+                              fontSize: 13, color: scheme.onSurfaceVariant)),
+                      Text(formatRupiah(sumSisa),
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: sumSisa > 0
+                                  ? scheme.error
+                                  : scheme.primary)),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _cetakGabungan(),
+                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: const Text('Cetak Gabungan',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: sumSisa > 0 ? () => _bayarSisa(sumSisa) : null,
+                      icon: const Icon(Icons.payments_outlined, size: 18),
+                      label: const Text('Bayar Sisa',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sumRow(String label, int value, Color color, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: color,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.normal)),
+          Text(formatRupiah(value),
+              style: TextStyle(
+                  fontSize: 13,
+                  color: color,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  void _cetakGabungan() {
+    final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => MergedReceiptScreen(txIds: ids),
+    ));
+  }
+
+  Future<void> _bayarSisa(int sumSisa) async {
+    final ctrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(sumSisa));
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bayar Sisa Gabungan'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Total sisa: ${formatRupiah(sumSisa)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 4),
+            const Text(
+                'Pembayaran dialokasikan ke nota terlama lebih dulu (FIFO).',
+                style: TextStyle(fontSize: 11)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [ThousandsSeparatorFormatter()],
+              decoration: const InputDecoration(
+                  prefixText: 'Rp ', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Batal')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx)
+                .pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
+            child: const Text('Bayar'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null || result <= 0 || !mounted) return;
+
+    final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    final (applied, change) = await db.settleMergedDebt(
+      txIds: _selectedIds.toList(),
+      amount: result,
+      method: 'tunai',
+      kasirId: device.deviceCode,
+    );
+    if (!mounted) return;
+    ref.invalidate(_txHistoryProvider);
+    final msg = change > 0
+        ? 'Dibayar ${formatRupiah(applied)} · kembalian ${formatRupiah(change)}'
+        : 'Dibayar ${formatRupiah(applied)}';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
+    _exitSelectMode();
   }
 }
 
@@ -298,6 +562,9 @@ class _TxRow extends ConsumerWidget {
     required this.expanded,
     required this.onToggle,
     required this.onChanged,
+    this.selectMode = false,
+    this.selected = false,
+    this.selectable = true,
   });
 
   final Transaction tx;
@@ -305,6 +572,9 @@ class _TxRow extends ConsumerWidget {
   final bool expanded;
   final VoidCallback onToggle;
   final VoidCallback onChanged;
+  final bool selectMode;
+  final bool selected;
+  final bool selectable;
 
   bool get _isRetur => tx.internalNote?.startsWith('RETUR:') ?? false;
 
@@ -320,6 +590,13 @@ class _TxRow extends ConsumerWidget {
       children: [
         ListTile(
           dense: true,
+          leading: selectMode
+              ? Checkbox(
+                  value: selected,
+                  onChanged: selectable ? (_) => onToggle() : null,
+                  visualDensity: VisualDensity.compact,
+                )
+              : null,
           title: Row(
             children: [
               Text(tx.localId,

@@ -770,6 +770,125 @@ class AppDatabase extends _$AppDatabase {
     return (total, cnt);
   }
 
+  // ───────────────────────── Pembayaran (buku pembayaran) ─────────────────────────
+
+  /// Riwayat pembayaran satu transaksi, urut waktu (terlama dulu). Sumber
+  /// timeline pembayaran di struk — kapan tiap cicilan/pelunasan masuk.
+  Future<List<TransactionPayment>> getPaymentsForTx(String txId) =>
+      (select(transactionPayments)
+            ..where((t) => t.transactionId.equals(txId))
+            ..orderBy([(t) => OrderingTerm.asc(t.paidAt)]))
+          .get();
+
+  /// Riwayat pembayaran untuk beberapa transaksi (gabung nota), dikelompokkan
+  /// per transactionId, masing-masing urut waktu.
+  Future<Map<String, List<TransactionPayment>>> getPaymentsForTxs(
+      List<String> txIds) async {
+    if (txIds.isEmpty) return {};
+    final rows = await (select(transactionPayments)
+          ..where((t) => t.transactionId.isIn(txIds))
+          ..orderBy([(t) => OrderingTerm.asc(t.paidAt)]))
+        .get();
+    final out = <String, List<TransactionPayment>>{};
+    for (final r in rows) {
+      (out[r.transactionId] ??= []).add(r);
+    }
+    return out;
+  }
+
+  /// Lunasi beberapa nota sekaligus (gabung nota) dengan distribusi FIFO:
+  /// nota terlama dilunasi lebih dulu, sisa uang mengalir ke nota berikutnya.
+  /// Setiap nota mendapat satu entri pembayaran ber-`paidAt` sama → jejak
+  /// audit pelunasan gabungan. Nota yang sudah lunas dilewati.
+  ///
+  /// Tidak menyentuh ringkasan harian: omzet/HPP dihitung dari `total` &
+  /// item, bukan `paid`, jadi pelunasan tidak mengubah laporan.
+  ///
+  /// Mengembalikan (jumlah teralokasi ke tagihan, kembalian/kelebihan).
+  Future<(int applied, int change)> settleMergedDebt({
+    required List<String> txIds,
+    required int amount,
+    required String method,
+    required String kasirId,
+  }) async {
+    if (txIds.isEmpty || amount <= 0) return (0, 0);
+    return transaction(() async {
+      final txs = await (select(transactions)
+            ..where((t) => t.id.isIn(txIds))
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+      final now = DateTime.now();
+      final label = txs.map((t) => t.localId).join(', ');
+      var remaining = amount;
+      var totalApplied = 0;
+      for (final tx in txs) {
+        if (remaining <= 0) break;
+        final sisa = tx.total - tx.paid;
+        if (sisa <= 0) continue; // sudah lunas → lewati
+        final applied = remaining < sisa ? remaining : sisa;
+        await into(transactionPayments).insert(
+          TransactionPaymentsCompanion.insert(
+            id: const Uuid().v4(),
+            transactionId: tx.id,
+            amount: applied,
+            method: method,
+            paidAt: Value(now),
+            kasirId: Value(kasirId),
+            note: Value('Gabung: $label'),
+          ),
+        );
+        final newPaid = tx.paid + applied;
+        await (update(transactions)..where((t) => t.id.equals(tx.id))).write(
+          TransactionsCompanion(
+            paid: Value(newPaid),
+            status: Value(newPaid >= tx.total ? 'lunas' : 'kurang_bayar'),
+          ),
+        );
+        remaining -= applied;
+        totalApplied += applied;
+      }
+      return (totalApplied, remaining);
+    });
+  }
+
+  /// Backfill buku pembayaran: buat entri untuk nota lama yang punya `paid`
+  /// tapi belum punya baris di `transaction_payments` (data dari versi sebelum
+  /// buku pembayaran terisi, atau hasil import). Waktu bayar diasumsikan =
+  /// `createdAt`. Idempotent & ringan — hanya menyentuh nota tanpa pembayaran.
+  /// `paid > 0` sengaja mengecualikan retur (paid negatif) dan tempo (paid 0).
+  Future<void> backfillMissingPayments() async {
+    final rows = await customSelect(
+      'SELECT t.id AS id, t.paid AS paid, t.payment_method AS method, '
+      't.kasir_id AS kasir, t.created_at AS created '
+      'FROM transactions t '
+      "WHERE t.paid > 0 AND t.status != 'void' "
+      'AND NOT EXISTS (SELECT 1 FROM transaction_payments p '
+      'WHERE p.transaction_id = t.id)',
+      readsFrom: {transactions, transactionPayments},
+    ).get();
+    if (rows.isEmpty) return;
+    await batch((b) {
+      for (final r in rows) {
+        final created = r.data['created'];
+        final paidAt = created is int
+            ? DateTime.fromMillisecondsSinceEpoch(created * 1000)
+            : DateTime.now();
+        b.insert(
+          transactionPayments,
+          TransactionPaymentsCompanion.insert(
+            id: const Uuid().v4(),
+            transactionId: r.data['id'] as String,
+            amount: r.data['paid'] as int,
+            method: (r.data['method'] as String?) ?? 'tunai',
+            paidAt: Value(paidAt),
+            kasirId: Value(r.data['kasir'] as String?),
+            note: const Value('Migrasi data lama'),
+          ),
+        );
+      }
+    });
+  }
+
   // ───────────────────────── History filter ─────────────────────────
 
   /// Set id transaksi yang memuat produk dengan nama mengandung [q].
