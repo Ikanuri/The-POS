@@ -36,6 +36,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Customer? _customer;
   bool _loading = true;
 
+  /// Inline edit nama pembeli langsung di struk.
+  bool _editingCustomer = false;
+  final TextEditingController _custCtrl = TextEditingController();
+  List<Customer> _custSuggestions = [];
+
   /// Checklist verifikasi serah-terima barang. Murni lokal (tidak disimpan).
   final Map<String, bool> _checked = {};
   bool get _allChecked =>
@@ -171,6 +176,74 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _custCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── Inline edit pelanggan ──────────────────────────────────────────────
+  void _enterEditCustomer() {
+    final tx = _tx;
+    if (tx == null) return;
+    _custCtrl.text = _customer?.name ?? tx.customerName ?? '';
+    _custCtrl.selection = TextSelection(
+        baseOffset: 0, extentOffset: _custCtrl.text.length);
+    setState(() {
+      _editingCustomer = true;
+      _custSuggestions = [];
+    });
+  }
+
+  Future<void> _onCustQueryChanged(String v) async {
+    final found = await ref.read(databaseProvider).searchCustomers(v.trim());
+    if (mounted) setState(() => _custSuggestions = found.take(5).toList());
+  }
+
+  /// Konfirmasi nama bebas (pembeli umum) — dipanggil saat tap di luar field.
+  void _commitFreeName() {
+    if (!_editingCustomer) return;
+    final tx = _tx;
+    if (tx == null) return;
+    final name = _custCtrl.text.trim();
+    final original = _customer?.name ?? tx.customerName ?? '';
+    // Tidak berubah → tutup tanpa menyentuh data (jaga pelanggan terdaftar).
+    if (name == original) {
+      setState(() {
+        _editingCustomer = false;
+        _custSuggestions = [];
+      });
+      return;
+    }
+    _saveCustomer(name: name.isEmpty ? null : name, id: null);
+  }
+
+  Future<void> _saveCustomer({String? name, String? id}) async {
+    final db = ref.read(databaseProvider);
+    await (db.update(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .write(TransactionsCompanion(
+      customerName: Value(name),
+      customerId: Value(id),
+    ));
+    Customer? customer;
+    if (id != null) {
+      customer = await (db.select(db.customers)..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+    }
+    final updatedTx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .getSingleOrNull();
+    if (mounted) {
+      setState(() {
+        _editingCustomer = false;
+        _custSuggestions = [];
+        _customer = customer;
+        if (updatedTx != null) _tx = updatedTx;
+      });
+    }
+  }
+
   Future<void> _load() async {
     final db = ref.read(databaseProvider);
     final tx = await (db.select(db.transactions)
@@ -234,6 +307,68 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     if (_customer != null) return _customer!.name;
     if (tx.customerName != null) return tx.customerName!;
     return 'Umum';
+  }
+
+  /// Field inline edit pelanggan. Tap di luar → simpan nama bebas (umum);
+  /// tap nama di dropdown → simpan pelanggan terdaftar.
+  Widget _buildCustomerEditor(ColorScheme scheme) {
+    return TapRegion(
+      onTapOutside: (_) => _commitFreeName(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _custCtrl,
+            autofocus: true,
+            style: const TextStyle(fontSize: 12),
+            decoration: const InputDecoration(
+              isDense: true,
+              prefixText: 'Pelanggan: ',
+              hintText: 'Nama pembeli',
+              contentPadding: EdgeInsets.symmetric(vertical: 6),
+            ),
+            onChanged: _onCustQueryChanged,
+            onTap: () => _custCtrl.selection = TextSelection(
+                baseOffset: 0, extentOffset: _custCtrl.text.length),
+          ),
+          if (_custSuggestions.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: scheme.outlineVariant),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final c in _custSuggestions)
+                    InkWell(
+                      onTap: () => _saveCustomer(id: c.id, name: null),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.person_outline,
+                                size: 14, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(c.name,
+                                  style: const TextStyle(fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   String _methodLabel(String method) => switch (method) {
@@ -796,39 +931,65 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   ),
                   const SizedBox(height: 4),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Kasir: ${device.deviceName}',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: scheme.onSurfaceVariant)),
-                      const SizedBox(width: 12),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'Pelanggan: ',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant),
-                            ),
-                            TextSpan(
-                              text: _customerDisplay(tx),
-                              style: TextStyle(
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text('Kasir: ${device.deviceName}',
+                            style: TextStyle(
                                 fontSize: 12,
-                                color: _customer != null
-                                    ? scheme.primary
-                                    : scheme.onSurfaceVariant,
-                                fontWeight: _customer != null
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                fontStyle: (_customer == null &&
-                                        tx.customerName == null)
-                                    ? FontStyle.italic
-                                    : FontStyle.normal,
+                                color: scheme.onSurfaceVariant)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _editingCustomer
+                            ? _buildCustomerEditor(scheme)
+                            : GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _enterEditCustomer,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: 'Pelanggan: ',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: scheme.onSurfaceVariant),
+                                        ),
+                                        TextSpan(
+                                          text: _customerDisplay(tx),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: _customer != null
+                                                ? scheme.primary
+                                                : scheme.onSurfaceVariant,
+                                            fontWeight: _customer != null
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                            fontStyle: (_customer == null &&
+                                                    tx.customerName == null)
+                                                ? FontStyle.italic
+                                                : FontStyle.normal,
+                                          ),
+                                        ),
+                                        WidgetSpan(
+                                          alignment:
+                                              PlaceholderAlignment.middle,
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(
+                                                left: 4),
+                                            child: Icon(Icons.edit_outlined,
+                                                size: 12,
+                                                color: scheme.primary),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ],
                   ),
