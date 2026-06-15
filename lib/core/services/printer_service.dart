@@ -548,7 +548,11 @@ class PrinterService {
     out.addAll(gen.text(_sep(w)));
 
     // ── Info transaksi ────────────────────────────────────────────────────
-    final dtStr = _fmtDateTimeFull(tx.createdAt);
+    // Bila baris tanggal di atas sudah tampil, baris ini cukup jam saja agar
+    // tanggal tidak tercetak dua kali. Bila tidak, tampilkan tanggal+jam penuh.
+    final dtStr = settings.showDateHeader
+        ? _fmtTime(tx.createdAt)
+        : _fmtDateTimeFull(tx.createdAt);
     if (settings.showTxNumber) {
       out.addAll(gen.text(_rowLR(dtStr, '#${tx.localId}', w)));
     } else {
@@ -654,6 +658,12 @@ class PrinterService {
 
   static String _fmtDate(DateTime dt) =>
       '${dt.day} ${_months[dt.month - 1]} ${dt.year}';
+
+  static String _fmtTime(DateTime dt) {
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
 
   static String _fmtDateTimeFull(DateTime dt) {
     final hh = dt.hour.toString().padLeft(2, '0');
