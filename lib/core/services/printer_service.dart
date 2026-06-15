@@ -438,6 +438,9 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    String storeWhatsapp = '',
+    String storeTelegram = '',
+    String receiptHeader = '',
     Map<String, String?> parentOf = const {},
   }) async {
     final mac = await getSavedMac();
@@ -456,6 +459,9 @@ class PrinterService {
       storeName: storeName,
       storeAddress: storeAddress,
       storePhone: storePhone,
+      storeWhatsapp: storeWhatsapp,
+      storeTelegram: storeTelegram,
+      receiptHeader: receiptHeader,
       strukNote: strukNote,
       parentOf: parentOf,
       settings: settings,
@@ -510,6 +516,9 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    String storeWhatsapp = '',
+    String storeTelegram = '',
+    String receiptHeader = '',
     Map<String, String?> parentOf = const {},
     required PrinterSettings settings,
   }) async {
@@ -538,6 +547,21 @@ class PrinterService {
     if (storePhone.isNotEmpty) {
       out.addAll(gen.text('Telp: ${_toAscii(storePhone)}',
           styles: const PosStyles(align: PosAlign.center)));
+    }
+    if (storeWhatsapp.isNotEmpty) {
+      out.addAll(gen.text('WA: ${_toAscii(storeWhatsapp)}',
+          styles: const PosStyles(align: PosAlign.center)));
+    }
+    if (storeTelegram.isNotEmpty) {
+      out.addAll(gen.text('Telegram: ${_toAscii(storeTelegram)}',
+          styles: const PosStyles(align: PosAlign.center)));
+    }
+    // Teks header bebas (bisa multi-baris).
+    if (receiptHeader.isNotEmpty) {
+      for (final line in receiptHeader.split('\n')) {
+        out.addAll(gen.text(_toAscii(line),
+            styles: const PosStyles(align: PosAlign.center)));
+      }
     }
     out.addAll(gen.text(_sep(w)));
 

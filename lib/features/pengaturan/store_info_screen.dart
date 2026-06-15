@@ -17,6 +17,9 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _waCtrl = TextEditingController();
+  final _telegramCtrl = TextEditingController();
+  final _headerCtrl = TextEditingController();
   final _strukturCtrl = TextEditingController();
   bool _saving = false;
 
@@ -31,11 +34,17 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
     final db = ref.read(databaseProvider);
     final address = await db.getSetting('store_address') ?? '';
     final phone = await db.getSetting('store_phone') ?? '';
+    final wa = await db.getSetting('store_whatsapp') ?? '';
+    final telegram = await db.getSetting('store_telegram') ?? '';
+    final header = await db.getSetting('receipt_header') ?? '';
     final note = await db.getSetting('receipt_note') ?? '';
     if (mounted) {
       setState(() {
         _addressCtrl.text = address;
         _phoneCtrl.text = phone;
+        _waCtrl.text = wa;
+        _telegramCtrl.text = telegram;
+        _headerCtrl.text = header;
         _strukturCtrl.text = note;
       });
     }
@@ -46,6 +55,9 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     _phoneCtrl.dispose();
+    _waCtrl.dispose();
+    _telegramCtrl.dispose();
+    _headerCtrl.dispose();
     _strukturCtrl.dispose();
     super.dispose();
   }
@@ -62,6 +74,9 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
       await db.setSetting('store_name', name);
       await db.setSetting('store_address', _addressCtrl.text.trim());
       await db.setSetting('store_phone', _phoneCtrl.text.trim());
+      await db.setSetting('store_whatsapp', _waCtrl.text.trim());
+      await db.setSetting('store_telegram', _telegramCtrl.text.trim());
+      await db.setSetting('receipt_header', _headerCtrl.text.trim());
       await db.setSetting('receipt_note', _strukturCtrl.text.trim());
       await ref.read(deviceProvider.notifier).updateStoreName(name);
       if (mounted) {
@@ -115,10 +130,39 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
           ),
           const SizedBox(height: 12),
           TextFormField(
+            controller: _waCtrl,
+            decoration: const InputDecoration(
+              labelText: 'WhatsApp',
+              hintText: '08xx-xxxx-xxxx',
+            ),
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _telegramCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Telegram',
+              hintText: '@tokoku atau t.me/tokoku',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _headerCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Teks Header Struk',
+              hintText: 'Mis. cabang, slogan, jam buka…',
+              helperText: 'Tampil di bagian atas struk, di bawah info toko',
+            ),
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
             controller: _strukturCtrl,
             decoration: const InputDecoration(
               labelText: 'Catatan di Struk',
               hintText: 'Terima kasih telah berbelanja…',
+              helperText: 'Tampil di bagian bawah struk',
             ),
             maxLines: 3,
           ),

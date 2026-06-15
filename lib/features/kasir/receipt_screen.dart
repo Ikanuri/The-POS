@@ -696,9 +696,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       productNames: _productNames,
       unitNames: _unitNames,
       customer: _customer,
-      storeName: prefs.$1,
-      storeAddress: prefs.$2,
-      storePhone: prefs.$3,
+      storeName: prefs.name,
+      storeAddress: prefs.address,
+      storePhone: prefs.phone,
+      storeWhatsapp: prefs.whatsapp,
+      storeTelegram: prefs.telegram,
+      receiptHeader: prefs.header,
       strukNote: _tx!.strukNote,
       parentOf: _parentOf,
     );
@@ -708,12 +711,24 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         isError: !ok);
   }
 
-  Future<(String, String, String)> _getStorePrefs() async {
+  Future<
+      ({
+        String name,
+        String address,
+        String phone,
+        String whatsapp,
+        String telegram,
+        String header,
+      })> _getStorePrefs() async {
     final db = ref.read(databaseProvider);
-    final name = await db.getSetting('store_name') ?? '';
-    final address = await db.getSetting('store_address') ?? '';
-    final phone = await db.getSetting('store_phone') ?? '';
-    return (name, address, phone);
+    return (
+      name: await db.getSetting('store_name') ?? '',
+      address: await db.getSetting('store_address') ?? '',
+      phone: await db.getSetting('store_phone') ?? '',
+      whatsapp: await db.getSetting('store_whatsapp') ?? '',
+      telegram: await db.getSetting('store_telegram') ?? '',
+      header: await db.getSetting('receipt_header') ?? '',
+    );
   }
 
   Future<void> _showShareSheet() async {
@@ -753,11 +768,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       productNames: _productNames,
                       unitNames: _unitNames,
                       customerName: _customerDisplay(_tx!),
-                      storeName: prefs.$1.isNotEmpty
-                          ? prefs.$1
+                      storeName: prefs.name.isNotEmpty
+                          ? prefs.name
                           : device.storeName,
-                      storeAddress: prefs.$2,
-                      storePhone: prefs.$3,
+                      storeAddress: prefs.address,
+                      storePhone: prefs.phone,
+                      storeWhatsapp: prefs.whatsapp,
+                      storeTelegram: prefs.telegram,
+                      receiptHeader: prefs.header,
                       parentOf: _parentOf,
                       checkedIds: _checkedIds,
                     ),
@@ -1141,6 +1159,9 @@ class _ReceiptPaper extends StatelessWidget {
     required this.storeName,
     required this.storeAddress,
     required this.storePhone,
+    this.storeWhatsapp = '',
+    this.storeTelegram = '',
+    this.receiptHeader = '',
     this.parentOf = const {},
     this.checkedIds = const {},
   });
@@ -1154,6 +1175,9 @@ class _ReceiptPaper extends StatelessWidget {
   final String storeName;
   final String storeAddress;
   final String storePhone;
+  final String storeWhatsapp;
+  final String storeTelegram;
+  final String receiptHeader;
   final Set<String> checkedIds;
 
   static const _ink = Color(0xFF111111);
@@ -1206,7 +1230,19 @@ class _ReceiptPaper extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: _mono.copyWith(fontSize: 11)),
           if (storePhone.isNotEmpty)
-            Text('WA: $storePhone',
+            Text('Telp: $storePhone',
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 11)),
+          if (storeWhatsapp.isNotEmpty)
+            Text('WA: $storeWhatsapp',
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 11)),
+          if (storeTelegram.isNotEmpty)
+            Text('Telegram: $storeTelegram',
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 11)),
+          if (receiptHeader.isNotEmpty)
+            Text(receiptHeader,
                 textAlign: TextAlign.center,
                 style: _mono.copyWith(fontSize: 11)),
           const _DashedLine(),
