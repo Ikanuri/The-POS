@@ -4,10 +4,16 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Keystore rilis dibaca dari key.properties (dibuat CI dari GitHub Secrets,
+// atau disediakan lokal). Bila tidak ada, build jatuh ke debug signing agar
+// `flutter run`/build dev tetap jalan tanpa keystore.
 def keyPropertiesFile = rootProject.file("key.properties")
 def keyProperties = new Properties()
+def hasReleaseKey = false
 if (keyPropertiesFile.exists()) {
     keyPropertiesFile.withReader('UTF-8') { reader -> keyProperties.load(reader) }
+    def storeFileName = keyProperties['storeFile']
+    hasReleaseKey = storeFileName != null && file(storeFileName).exists()
 }
 
 android {
@@ -25,11 +31,13 @@ android {
     }
 
     signingConfigs {
-        release {
-            keyAlias = keyProperties['keyAlias']
-            keyPassword = keyProperties['keyPassword']
-            storeFile = keyProperties['storeFile'] ? file(keyProperties['storeFile']) : null
-            storePassword = keyProperties['storePassword']
+        if (hasReleaseKey) {
+            release {
+                keyAlias = keyProperties['keyAlias']
+                keyPassword = keyProperties['keyPassword']
+                storeFile = file(keyProperties['storeFile'])
+                storePassword = keyProperties['storePassword']
+            }
         }
     }
 
@@ -42,11 +50,12 @@ android {
     }
 
     buildTypes {
-        debug {
-            signingConfig = signingConfigs.release
-        }
         release {
-            signingConfig = signingConfigs.release
+            // Pakai keystore rilis bila tersedia; jika tidak, debug signing
+            // agar `flutter build apk --release` tetap berhasil di dev.
+            signingConfig = hasReleaseKey
+                ? signingConfigs.release
+                : signingConfigs.debug
             minifyEnabled = false
             shrinkResources = false
         }
