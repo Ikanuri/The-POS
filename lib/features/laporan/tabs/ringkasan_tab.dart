@@ -157,6 +157,13 @@ Color _methodColor(String m, ColorScheme scheme) => switch (m) {
       _ => scheme.surfaceContainerHighest,
     };
 
+Color _methodOnColor(String m, ColorScheme scheme) => switch (m) {
+      'tunai' => scheme.onPrimary,
+      'qris' => scheme.onSecondary,
+      'transfer' => scheme.onTertiary,
+      _ => scheme.onSurfaceVariant,
+    };
+
 class _PaymentDonut extends StatelessWidget {
   const _PaymentDonut({required this.byMethod, required this.total});
   final Map<String, int> byMethod;
@@ -182,7 +189,7 @@ class _PaymentDonut extends StatelessWidget {
               titleStyle: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: scheme.onPrimary,
+                color: _methodOnColor(e.key, scheme),
               ),
             );
           }).toList(),

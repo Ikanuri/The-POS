@@ -66,8 +66,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final tx = _tx;
     if (tx == null || _payments.isEmpty) return false;
     if (_payments.length > 1) return true;
-    return _payments.first.paidAt.difference(tx.createdAt).abs() >
-        const Duration(minutes: 1);
+    // Sembunyikan hanya jika bayar tunai seketika (paidAt == createdAt persis).
+    // Hutang yang dilunasi belakangan — meski hanya selisih beberapa detik —
+    // tetap ditampilkan karena waktunya pasti berbeda.
+    return _payments.first.paidAt != tx.createdAt;
   }
 
   /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
@@ -1487,13 +1489,9 @@ class _ReceiptPaper extends StatelessWidget {
     );
   }
 
-  /// Sama dgn aturan in-app: tampilkan timeline hanya bila informatif.
   bool get _showTimeline {
     if (payments.length > 1) return true;
-    if (payments.length == 1) {
-      return payments.first.paidAt.difference(tx.createdAt).abs() >
-          const Duration(minutes: 1);
-    }
+    if (payments.length == 1) return payments.first.paidAt != tx.createdAt;
     return false;
   }
 

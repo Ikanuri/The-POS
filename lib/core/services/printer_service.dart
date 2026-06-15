@@ -647,12 +647,9 @@ class PrinterService {
     }
 
     // ── Timeline pembayaran ───────────────────────────────────────────────
-    // Tampilkan hanya bila informatif: dicicil (>1) atau dilunasi belakangan
-    // (1 pembayaran yang waktunya jauh dari waktu nota dibuat).
+    // Sembunyikan hanya untuk tunai seketika (paidAt == createdAt persis).
     final showTimeline = payments.length > 1 ||
-        (payments.length == 1 &&
-            payments.first.paidAt.difference(tx.createdAt).abs() >
-                const Duration(minutes: 1));
+        (payments.length == 1 && payments.first.paidAt != tx.createdAt);
     if (showTimeline) {
       out.addAll(gen.text(_sep(w)));
       out.addAll(gen.text('Pembayaran:', styles: const PosStyles(bold: true)));

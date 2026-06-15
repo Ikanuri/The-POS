@@ -110,6 +110,13 @@ class _TopDonut extends StatelessWidget {
       scheme.error,
       scheme.surfaceContainerHighest,
     ];
+    final onPalette = [
+      scheme.onPrimary,
+      scheme.onSecondary,
+      scheme.onTertiary,
+      scheme.onError,
+      scheme.onSurfaceVariant,
+    ];
     final all = [
       ...slices,
       if (otherValue > 0) _Slice('Lainnya', otherValue),
@@ -137,7 +144,7 @@ class _TopDonut extends StatelessWidget {
                     titleStyle: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: scheme.onPrimary,
+                      color: onPalette[i % onPalette.length],
                     ),
                   ),
               ],
