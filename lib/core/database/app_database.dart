@@ -1238,8 +1238,22 @@ class AppDatabase extends _$AppDatabase {
     final sinceSec = since.millisecondsSinceEpoch ~/ 1000;
 
     for (final t in appendOnly) {
+      // Tidak semua tabel append-only punya kolom `created_at`:
+      //  • transaction_items  → tanpa timestamp; ikut waktu transaksi induk.
+      //  • transaction_payments→ pakai `paid_at` (cicilan bisa masuk belakangan).
+      //  • sisanya             → `created_at`.
+      final String sql;
+      switch (t) {
+        case 'transaction_items':
+          sql = 'SELECT * FROM "transaction_items" WHERE transaction_id IN '
+              '(SELECT id FROM "transactions" WHERE created_at >= ?)';
+        case 'transaction_payments':
+          sql = 'SELECT * FROM "transaction_payments" WHERE paid_at >= ?';
+        default:
+          sql = 'SELECT * FROM "$t" WHERE created_at >= ?';
+      }
       final rows = await customSelect(
-        'SELECT * FROM "$t" WHERE created_at >= ?',
+        sql,
         variables: [Variable.withInt(sinceSec)],
       ).get();
       dump[t] = rows.map((r) => r.data).toList();

@@ -172,13 +172,33 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             )
           : Padding(
               padding: EdgeInsets.only(left: isVariant ? 17 : 0),
-              child: Text(
-                '${_unitNames[item.productUnitId] ?? ''} '
-                '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
-                '${formatRupiah(item.priceAtSale)}'
-                '${item.itemNote != null ? '\n${item.itemNote}' : ''}',
-                style:
-                    TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              child: Text.rich(
+                TextSpan(
+                  style:
+                      TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                  children: [
+                    TextSpan(
+                      text: '${_unitNames[item.productUnitId] ?? ''} '
+                          '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
+                          '${formatRupiah(item.priceAtSale)}',
+                    ),
+                    // Harga asli (sebelum dibulatkan/override) ditampilkan
+                    // dicoret di sebelahnya agar selisih terlihat jelas.
+                    if (item.priceOverridden &&
+                        item.originalPrice != item.priceAtSale) ...[
+                      const TextSpan(text: '  '),
+                      TextSpan(
+                        text: formatRupiah(item.originalPrice),
+                        style: TextStyle(
+                          decoration: TextDecoration.lineThrough,
+                          color: scheme.onSurfaceVariant.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                    if (item.itemNote != null)
+                      TextSpan(text: '\n${item.itemNote}'),
+                  ],
+                ),
               ),
             ),
       secondary: isPlaceholder
