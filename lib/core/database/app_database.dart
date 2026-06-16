@@ -568,6 +568,79 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
 
+  /// Perbarui varian (produk anak): nama, harga dasar, barcode utama, dan
+  /// pelacakan stok. Mengubah satuan dasar varian beserta tier harga minQty=1
+  /// dan barcode primer. Tidak menyentuh stok yang sudah tercatat.
+  Future<void> updateVariant({
+    required String variantProductId,
+    required String name,
+    required int price,
+    String? barcode,
+    bool? isNonStock,
+  }) async {
+    final now = DateTime.now();
+    await transaction(() async {
+      await (update(products)..where((t) => t.id.equals(variantProductId)))
+          .write(ProductsCompanion(
+        name: Value(name),
+        updatedAt: Value(now),
+      ));
+
+      final units = await (select(productUnits)
+            ..where((t) => t.productId.equals(variantProductId)))
+          .get();
+      if (units.isEmpty) return;
+      final unit = units.firstWhere((u) => u.isBaseUnit,
+          orElse: () => units.first);
+
+      if (isNonStock != null) {
+        await (update(productUnits)..where((t) => t.id.equals(unit.id)))
+            .write(ProductUnitsCompanion(isNonStock: Value(isNonStock)));
+      }
+
+      // Tier harga dasar (minQty == 1): update bila ada, selainnya buat baru.
+      final baseTier = await (select(priceTiers)
+            ..where((t) =>
+                t.productUnitId.equals(unit.id) & t.minQty.equals(1)))
+          .getSingleOrNull();
+      if (baseTier != null) {
+        await (update(priceTiers)..where((t) => t.id.equals(baseTier.id)))
+            .write(PriceTiersCompanion(price: Value(price)));
+      } else {
+        await into(priceTiers).insert(PriceTiersCompanion.insert(
+          id: const Uuid().v4(),
+          productUnitId: unit.id,
+          minQty: const Value(1),
+          price: price,
+          createdAt: Value(now),
+        ));
+      }
+
+      // Barcode utama: update / hapus / buat sesuai input.
+      final existing = await (select(productBarcodes)
+            ..where((t) =>
+                t.productUnitId.equals(unit.id) & t.isPrimary.equals(true)))
+          .getSingleOrNull();
+      final bc = barcode?.trim() ?? '';
+      if (bc.isEmpty) {
+        if (existing != null) {
+          await (delete(productBarcodes)..where((t) => t.id.equals(existing.id)))
+              .go();
+        }
+      } else if (existing != null) {
+        await (update(productBarcodes)..where((t) => t.id.equals(existing.id)))
+            .write(ProductBarcodesCompanion(barcode: Value(bc)));
+      } else {
+        await into(productBarcodes).insert(ProductBarcodesCompanion.insert(
+          id: const Uuid().v4(),
+          productUnitId: unit.id,
+          barcode: bc,
+          isPrimary: const Value(true),
+        ));
+      }
+    });
+  }
+
   Future<List<ProductUnit>> getProductUnits(String productId) =>
       (select(productUnits)..where((t) => t.productId.equals(productId))).get();
 

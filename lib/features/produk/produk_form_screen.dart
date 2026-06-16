@@ -292,22 +292,40 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    final wasNew = !_isEdit;
+    final ok = await _persistProduct();
+    if (!ok) return;
+    if (mounted) {
+      // Varian sesi ini sudah ikut "dikomit" lewat Simpan → jangan diurungkan.
+      _sessionVariantIds.clear();
+      // Tandai bersih agar PopScope tidak menahan navigasi programatik ini.
+      _isDirty = false;
+      // Banner sukses ditampilkan di layar daftar produk setelah kembali
+      // (layar ini akan ditutup, jadi banner inline di sini tak terlihat).
+      context.pop(wasNew ? 'Produk disimpan' : 'Produk diperbarui');
+    }
+  }
+
+  /// Simpan produk + satuan ke DB tanpa menutup layar. Mengembalikan true bila
+  /// berhasil. Dipakai tombol Simpan dan alur "Tambah Varian" pada produk baru
+  /// (varian butuh induk yang sudah tersimpan lebih dulu).
+  Future<bool> _persistProduct() async {
+    if (!_formKey.currentState!.validate()) return false;
     if (_units.isEmpty) {
       _showBanner('Tambahkan minimal 1 satuan');
-      return;
+      return false;
     }
 
     // Validate extra tiers: no duplicate minQty, ratioToBase > 0.
     for (final u in _units) {
       if (u.ratioToBase <= 0) {
         _showBanner('Rasio satuan harus > 0');
-        return;
+        return false;
       }
       final minQtys = u.extraTiers.map((t) => t.minQty).toList();
       if (minQtys.toSet().length != minQtys.length) {
         _showBanner('Minimum qty pada tier harga tidak boleh duplikat');
-        return;
+        return false;
       }
     }
 
@@ -387,16 +405,21 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       ref.read(productUpdateCountProvider.notifier).state++;
 
       if (mounted) {
-        // Varian sesi ini sudah ikut "dikomit" lewat Simpan → jangan diurungkan.
-        _sessionVariantIds.clear();
-        // Tandai bersih agar PopScope tidak menahan navigasi programatik ini.
-        _isDirty = false;
-        // Banner sukses ditampilkan di layar daftar produk setelah kembali
-        // (layar ini akan ditutup, jadi banner inline di sini tak terlihat).
-        context.pop(_isEdit ? 'Produk diperbarui' : 'Produk disimpan');
+        // Produk kini tersimpan: pindah ke mode edit di tempat agar bagian
+        // Varian (yang butuh induk tersimpan) langsung bisa dipakai, dan satuan
+        // baru bisa disesuaikan stoknya.
+        setState(() {
+          _productId = prodId;
+          _isEdit = true;
+          _persistedUnitIds
+            ..clear()
+            ..addAll(_units.map((u) => u.id));
+        });
       }
+      return true;
     } catch (e) {
       if (mounted) _showBanner('Error: $e');
+      return false;
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -648,7 +671,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   }),
 
                   // ── Varian (produk anak / add-on) ────────────────────
-                  if (_isEdit && _productId != null) ...[
+                  if (!_readOnly || _productId != null) ...[
                     const SizedBox(height: 20),
                     Row(
                       children: [
@@ -673,71 +696,103 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                               .onSurfaceVariant),
                     ),
                     const SizedBox(height: 8),
-                    StreamBuilder<List<Product>>(
-                      stream: _variantStream ??= ref
-                          .read(databaseProvider)
-                          .watchVariants(_productId!),
-                      builder: (ctx, snap) {
-                        final vs = snap.data ?? const <Product>[];
-                        if (vs.isEmpty) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Text('Belum ada varian.',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant)),
+                    if (_productId == null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'Tap "Tambah Varian" untuk menyimpan produk ini lalu '
+                          'menambahkan varian.',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
+                        ),
+                      )
+                    else
+                      StreamBuilder<List<Product>>(
+                        stream: _variantStream ??= ref
+                            .read(databaseProvider)
+                            .watchVariants(_productId!),
+                        builder: (ctx, snap) {
+                          final vs = snap.data ?? const <Product>[];
+                          if (vs.isEmpty) {
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 4),
+                              child: Text('Belum ada varian.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant)),
+                            );
+                          }
+                          return Column(
+                            children: vs
+                                .map((v) => Card(
+                                      margin:
+                                          const EdgeInsets.only(bottom: 6),
+                                      child: ListTile(
+                                        dense: true,
+                                        onTap: _readOnly
+                                            ? null
+                                            : () => _editVariant(v),
+                                        leading: const Icon(
+                                            Icons.subdirectory_arrow_right,
+                                            size: 18),
+                                        title: Text(v.name),
+                                        subtitle: v.kodeProduk != null
+                                            ? Text('Kode: ${v.kodeProduk}',
+                                                style: const TextStyle(
+                                                    fontSize: 11))
+                                            : null,
+                                        trailing: _readOnly
+                                            ? null
+                                            : Row(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(),
+                                                    icon: const Icon(
+                                                        Icons.edit_outlined,
+                                                        size: 19),
+                                                    tooltip: 'Edit varian',
+                                                    onPressed: () =>
+                                                        _editVariant(v),
+                                                  ),
+                                                  const SizedBox(width: 14),
+                                                  IconButton(
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(),
+                                                    icon: Icon(
+                                                        Icons.delete_outline,
+                                                        size: 20,
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .error),
+                                                    tooltip: 'Hapus varian',
+                                                    onPressed: () =>
+                                                        _deleteVariant(v),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    ))
+                                .toList(),
                           );
-                        }
-                        return Column(
-                          children: vs
-                              .map((v) => Card(
-                                    margin:
-                                        const EdgeInsets.only(bottom: 6),
-                                    child: ListTile(
-                                      dense: true,
-                                      leading: const Icon(
-                                          Icons.subdirectory_arrow_right,
-                                          size: 18),
-                                      title: Text(v.name),
-                                      subtitle: v.kodeProduk != null
-                                          ? Text('Kode: ${v.kodeProduk}',
-                                              style: const TextStyle(
-                                                  fontSize: 11))
-                                          : null,
-                                      trailing: _readOnly
-                                          ? null
-                                          : IconButton(
-                                              icon: Icon(
-                                                  Icons.delete_outline,
-                                                  size: 20,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .error),
-                                              onPressed: () =>
-                                                  _deleteVariant(v),
-                                            ),
-                                    ),
-                                  ))
-                              .toList(),
-                        );
-                      },
-                    ),
-                  ],
-                  if (_isEdit == false)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        'Simpan produk dulu untuk menambahkan varian.',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant),
+                        },
                       ),
-                    ),
+                  ],
                   const SizedBox(height: 80),
                 ],
               ),
@@ -759,29 +814,28 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     );
   }
 
-  Future<void> _addVariant() async {
-    final base = _units.firstWhere((u) => u.isBaseUnit,
-        orElse: () => _units.isNotEmpty
-            ? _units.first
-            : _UnitEntry(
-                id: '',
-                unitTypeId: 1,
-                isBaseUnit: true,
-                ratioToBase: 1,
-                price: 0,
-                costPrice: 0));
-    final nameCtrl = TextEditingController();
-    // Harga default mengikuti induk.
+  /// Dialog form varian (dipakai Tambah & Edit). Mengembalikan nilai input,
+  /// atau null bila dibatalkan.
+  Future<({String name, int price, String? barcode, bool trackStock})?>
+      _variantDialog({
+    required String title,
+    required String confirmLabel,
+    String name = '',
+    required int price,
+    String? barcode,
+    bool trackStock = false,
+  }) async {
+    final nameCtrl = TextEditingController(text: name);
     final priceCtrl = TextEditingController(
-        text: ThousandsSeparatorFormatter.format(base.price));
-    final barcodeCtrl = TextEditingController();
-    var trackStock = false; // default: varian tidak melacak stok
+        text: ThousandsSeparatorFormatter.format(price));
+    final barcodeCtrl = TextEditingController(text: barcode ?? '');
+    var track = trackStock;
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) => AlertDialog(
-          title: const Text('Tambah Varian'),
+          title: Text(title),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -820,8 +874,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                value: trackStock,
-                onChanged: (v) => setDialog(() => trackStock = v),
+                value: track,
+                onChanged: (v) => setDialog(() => track = v),
                 title: const Text('Lacak stok varian',
                     style: TextStyle(fontSize: 14)),
                 subtitle: const Text(
@@ -839,32 +893,95 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 if (nameCtrl.text.trim().isEmpty) return;
                 Navigator.pop(ctx, true);
               },
-              child: const Text('Tambah'),
+              child: Text(confirmLabel),
             ),
           ],
         ),
       ),
     );
-    if (ok != true) return;
+    if (ok != true) return null;
+    return (
+      name: nameCtrl.text.trim(),
+      price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
+      barcode:
+          barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
+      trackStock: track,
+    );
+  }
+
+  Future<void> _addVariant() async {
+    // Varian butuh induk yang sudah tersimpan. Untuk produk baru, simpan dulu
+    // (di tempat) lalu lanjut menambah varian.
+    if (_productId == null) {
+      final saved = await _persistProduct();
+      if (!saved || !mounted) return;
+    }
+    final base = _units.firstWhere((u) => u.isBaseUnit,
+        orElse: () => _units.first);
+    // Harga default mengikuti induk.
+    final res = await _variantDialog(
+      title: 'Tambah Varian',
+      confirmLabel: 'Tambah',
+      price: base.price,
+    );
+    if (res == null) return;
     final db = ref.read(databaseProvider);
     final variantId = await db.createVariant(
       parentProductId: _productId!,
-      name: nameCtrl.text.trim(),
-      price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
+      name: res.name,
+      price: res.price,
       costPrice: base.costPrice,
       unitTypeId: base.unitTypeId,
-      barcode: barcodeCtrl.text.trim().isEmpty
-          ? null
-          : barcodeCtrl.text.trim(),
-      isNonStock: !trackStock,
+      barcode: res.barcode,
+      isNonStock: !res.trackStock,
     );
     // Lacak agar bisa diurungkan bila edit dibatalkan; tandai dirty supaya
     // dialog konfirmasi muncul saat menekan kembali.
     _sessionVariantIds.add(variantId);
     _markDirty();
     if (mounted) {
-      _showBanner('Varian "${nameCtrl.text.trim()}" ditambahkan',
+      _showBanner('Varian "${res.name}" ditambahkan',
           InlineBannerType.success);
+    }
+  }
+
+  Future<void> _editVariant(Product v) async {
+    final db = ref.read(databaseProvider);
+    // Ambil nilai varian saat ini untuk pra-isi dialog.
+    final units = await db.getProductUnits(v.id);
+    final baseUnit =
+        units.where((u) => u.isBaseUnit).firstOrNull ?? units.firstOrNull;
+    var curPrice = 0;
+    String? curBarcode;
+    var trackStock = false;
+    if (baseUnit != null) {
+      final tiers = await db.getPriceTiers(baseUnit.id);
+      curPrice = tiers.where((t) => t.minQty == 1).map((t) => t.price).firstOrNull ??
+          (tiers.isNotEmpty ? tiers.last.price : 0);
+      final bcs = await db.getProductBarcodes(baseUnit.id);
+      curBarcode = bcs.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull;
+      trackStock = !baseUnit.isNonStock;
+    }
+    if (!mounted) return;
+    final res = await _variantDialog(
+      title: 'Edit Varian',
+      confirmLabel: 'Simpan',
+      name: v.name,
+      price: curPrice,
+      barcode: curBarcode,
+      trackStock: trackStock,
+    );
+    if (res == null) return;
+    await db.updateVariant(
+      variantProductId: v.id,
+      name: res.name,
+      price: res.price,
+      barcode: res.barcode,
+      isNonStock: !res.trackStock,
+    );
+    ref.read(productUpdateCountProvider.notifier).state++;
+    if (mounted) {
+      _showBanner('Varian "${res.name}" diperbarui', InlineBannerType.success);
     }
   }
 

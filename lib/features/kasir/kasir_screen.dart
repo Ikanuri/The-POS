@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -200,8 +201,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   static const _prefToastDuration = 'scanner_toast_duration';
 
   final _searchCtrl = TextEditingController();
+  final _searchFocus = FocusNode();
   bool _scannerOpen = false;
   MobileScannerController? _scannerCtrl;
+
+  // ── Scanner barcode eksternal (HID: USB OTG / Bluetooth HID) ──────────────
+  // Scanner HID mengirim barcode seperti ketikan keyboard sangat cepat yang
+  // diakhiri Enter. Kita kumpulkan karakter di buffer dan proses saat Enter.
+  // Tidak ada konflik dengan printer Bluetooth (printer pakai profil SPP).
+  final StringBuffer _hwScanBuffer = StringBuffer();
+  DateTime _lastKeyTime = DateTime.fromMillisecondsSinceEpoch(0);
+  static const _kHumanGapMs = 200; // jeda antar-tombol manusia > 200ms
+  static const _kMinBarcodeLen = 3;
 
   // Mode scanner
   bool _continuousScan = false;
@@ -226,6 +237,47 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   void initState() {
     super.initState();
     _loadScannerPrefs();
+    HardwareKeyboard.instance.addHandler(_onHardwareKey);
+  }
+
+  /// Handler global untuk scanner barcode eksternal (HID keyboard mode).
+  /// Mengembalikan true (consume) saat karakter/Enter berasal dari scan,
+  /// sehingga tidak memicu aksi lain. Dilewati saat: scanner kamera terbuka,
+  /// layar kasir bukan rute teratas (mis. di dialog/sheet/halaman bayar),
+  /// atau field pencarian sedang fokus (pengguna mengetik manual).
+  bool _onHardwareKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (_scannerOpen) return false;
+    if (_searchFocus.hasFocus) return false;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+
+    final now = DateTime.now();
+    final gapMs = now.difference(_lastKeyTime).inMilliseconds;
+    _lastKeyTime = now;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      final code = _hwScanBuffer.toString().trim();
+      _hwScanBuffer.clear();
+      if (code.length >= _kMinBarcodeLen) {
+        _handleBarcode(code);
+        return true;
+      }
+      return false;
+    }
+
+    // Jeda antar-karakter terlalu lama → bukan scanner, mulai buffer baru.
+    if (gapMs > _kHumanGapMs && _hwScanBuffer.isNotEmpty) {
+      _hwScanBuffer.clear();
+    }
+
+    final ch = event.character;
+    if (ch != null && ch.length == 1 && ch.codeUnitAt(0) >= 0x20) {
+      _hwScanBuffer.write(ch);
+      return true;
+    }
+    return false;
   }
 
   Future<void> _loadScannerPrefs() async {
@@ -251,6 +303,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onHardwareKey);
+    _searchFocus.dispose();
     _searchCtrl.dispose();
     _activeToast?.timer?.cancel();
     _scannerCtrl?.dispose();
@@ -540,6 +594,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         children: [
           _KasirTopbar(
             searchCtrl: _searchCtrl,
+            searchFocus: _searchFocus,
             onSearch: (v) => ref.read(_kasirSearchProvider.notifier).state = v,
             onScan: _openScanner,
             onHeld: () async {
@@ -657,6 +712,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 class _KasirTopbar extends StatelessWidget {
   const _KasirTopbar({
     required this.searchCtrl,
+    required this.searchFocus,
     required this.onSearch,
     required this.onScan,
     required this.onHeld,
@@ -667,6 +723,7 @@ class _KasirTopbar extends StatelessWidget {
   });
 
   final TextEditingController searchCtrl;
+  final FocusNode searchFocus;
   final ValueChanged<String> onSearch;
   final VoidCallback onScan;
   final VoidCallback onHeld;
@@ -720,6 +777,7 @@ class _KasirTopbar extends StatelessWidget {
                     builder: (context, value, _) {
                       return TextField(
                         controller: searchCtrl,
+                        focusNode: searchFocus,
                         decoration: InputDecoration(
                           hintText: 'Cari produk…',
                           prefixIcon: const Icon(Icons.search_rounded, size: 18),

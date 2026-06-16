@@ -37,6 +37,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   List<Customer> _custSuggestions = [];
   Map<String, (int, int)> _custDebts = {};
   final _custCtrl = TextEditingController();
+  // Untuk menggulir field pelanggan ke atas viewport agar dropdown saran tidak
+  // tertutup keyboard saat mengetik.
+  final _custFieldKey = GlobalKey();
 
   List<PaymentMethod> _methods = [];
   bool _isSaving = false;
@@ -85,7 +88,24 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         _custDebts = debts;
         _custDropdownOpen = results.isNotEmpty;
       });
+      if (_custDropdownOpen) _scrollCustIntoView(delayMs: 50);
     }
+  }
+
+  /// Gulir field pelanggan ke atas viewport agar field + dropdown saran tampak
+  /// di atas keyboard. Diberi sedikit delay agar keyboard sempat terpasang.
+  void _scrollCustIntoView({int delayMs = 0}) {
+    Future.delayed(Duration(milliseconds: delayMs), () {
+      if (!mounted) return;
+      final ctx = _custFieldKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   int get _cartTotal => ref.read(cartProvider.notifier).totalAmount;
@@ -553,6 +573,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       ),
                   ] else ...[
                     TextField(
+                      key: _custFieldKey,
                       controller: _custCtrl,
                       decoration: InputDecoration(
                         hintText: 'Cari pelanggan atau ketik nama…',
@@ -565,6 +586,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                             color: scheme.onSurfaceVariant,
                             fontStyle: FontStyle.italic),
                       ),
+                      // Saat field difokus, gulir ke atas agar dropdown saran
+                      // muncul di atas keyboard (beri jeda untuk animasi keyboard).
+                      onTap: () => _scrollCustIntoView(delayMs: 300),
                       onChanged: (v) {
                         setState(() {
                           _custNameManual = v;

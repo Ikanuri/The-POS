@@ -532,6 +532,19 @@ class PrinterService {
     final gen = Generator(paperSize, profile);
     final out = <int>[];
 
+    // Margin kecil kiri-kanan agar isi struk sedikit lebih ke tengah (tidak
+    // menempel di tepi kiri kertas). [innerW] dipakai untuk perhitungan kolom
+    // kiri-kanan supaya angka di kanan tidak melewati tepi kertas.
+    final margin = w >= 42 ? 2 : 1;
+    final innerW = w - margin * 2;
+    final pad = ' ' * margin;
+    List<int> bodyText(String s, {PosStyles styles = const PosStyles()}) =>
+        gen.text('$pad$s', styles: styles);
+    List<int> bodyLR(String l, String r,
+            {PosStyles styles = const PosStyles()}) =>
+        gen.text('$pad${_rowLR(l, r, innerW)}', styles: styles);
+    List<int> bodySep() => gen.text('$pad${'-' * innerW}');
+
     // ── Header toko ──────────────────────────────────────────────────────────
     if (storeName.isNotEmpty) {
       out.addAll(gen.text(
@@ -566,13 +579,13 @@ class PrinterService {
             styles: const PosStyles(align: PosAlign.center)));
       }
     }
-    out.addAll(gen.text(_sep(w)));
+    out.addAll(bodySep());
 
     // ── Baris tanggal ─────────────────────────────────────────────────────
     if (settings.showDateHeader) {
-      out.addAll(gen.text(_fmtDate(tx.createdAt)));
+      out.addAll(bodyText(_fmtDate(tx.createdAt)));
     }
-    out.addAll(gen.text(_sep(w)));
+    out.addAll(bodySep());
 
     // ── Info transaksi ────────────────────────────────────────────────────
     // Bila baris tanggal di atas sudah tampil, baris ini cukup jam saja agar
@@ -581,18 +594,21 @@ class PrinterService {
         ? _fmtTime(tx.createdAt)
         : _fmtDateTimeFull(tx.createdAt);
     if (settings.showTxNumber) {
-      out.addAll(gen.text(_rowLR(dtStr, '#${tx.localId}', w)));
+      out.addAll(bodyLR(dtStr, '#${tx.localId}'));
     } else {
-      out.addAll(gen.text(dtStr));
+      out.addAll(bodyText(dtStr));
     }
 
     if (settings.showCustomer) {
       final custName = customer?.name ?? tx.customerName;
       if (custName != null && custName.isNotEmpty) {
-        out.addAll(gen.text(_toAscii(custName)));
+        // Nama pelanggan ditebalkan & diperbesar (tinggi 2x) agar menonjol.
+        out.addAll(bodyText(_toAscii(custName),
+            styles: const PosStyles(
+                bold: true, height: PosTextSize.size2)));
       }
     }
-    out.addAll(gen.text(_sep(w)));
+    out.addAll(bodySep());
 
     // ── Item ─────────────────────────────────────────────────────────────
     int productCount = 0;
@@ -602,11 +618,11 @@ class PrinterService {
 
       final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
       final prefix = isVar ? '  > ' : '';
-      out.addAll(gen.text('$prefix$rawName',
+      out.addAll(bodyText('$prefix$rawName',
           styles: const PosStyles(bold: true)));
 
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-        out.addAll(gen.text(_toAscii(item.itemNote!)));
+        out.addAll(bodyText(_toAscii(item.itemNote!)));
       }
 
       final uName = _toAscii(unitNames[item.productUnitId] ?? 'pcs');
@@ -614,36 +630,37 @@ class PrinterService {
           ? item.qty.toInt().toString()
           : item.qty.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '');
       final qtyLine = '  $qtyStr $uName x ${_fmtNum(item.priceAtSale)}';
-      out.addAll(gen.text(_rowLR(qtyLine, _fmtNum(item.subtotal), w)));
+      out.addAll(bodyLR(qtyLine, _fmtNum(item.subtotal)));
     }
-    out.addAll(gen.text(_sep(w)));
+    out.addAll(bodySep());
 
     // ── Jumlah produk ─────────────────────────────────────────────────────
     if (settings.showProductCount) {
-      out.addAll(gen.text('Produk: $productCount'));
-      out.addAll(gen.text(_sep(w)));
+      out.addAll(bodyText('Produk: $productCount'));
+      out.addAll(bodySep());
     }
 
     // ── Total ─────────────────────────────────────────────────────────────
-    out.addAll(gen.text(
-        _rowLR('Total', 'Rp ${_fmtNum(tx.total)}', w),
-        styles: const PosStyles(bold: true)));
+    // Footer (total & rincian bayar) diperbesar (tinggi 2x) agar mudah dibaca.
+    out.addAll(bodyLR('Total', 'Rp ${_fmtNum(tx.total)}',
+        styles: const PosStyles(bold: true, height: PosTextSize.size2)));
 
     if (settings.showPaymentDetail) {
-      out.addAll(gen.text(_rowLR('  Bayar..', 'Rp ${_fmtNum(tx.paid)}', w)));
+      out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(tx.paid)}',
+          styles: const PosStyles(height: PosTextSize.size2)));
 
       if (tx.changeAmount > 0) {
-        out.addAll(gen.text(
-            _rowLR('Kembali', 'Rp ${_fmtNum(tx.changeAmount)}', w)));
+        out.addAll(bodyLR('Kembali', 'Rp ${_fmtNum(tx.changeAmount)}',
+            styles: const PosStyles(bold: true, height: PosTextSize.size2)));
       } else if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
         final remaining = tx.total - tx.paid;
-        out.addAll(gen.text(
-            _rowLR('Kurang', 'Rp ${_fmtNum(remaining)}', w)));
+        out.addAll(bodyLR('Kurang', 'Rp ${_fmtNum(remaining)}',
+            styles: const PosStyles(bold: true, height: PosTextSize.size2)));
       }
     }
 
     if (settings.showStatusText) {
-      out.addAll(gen.text(_rowLR('', _statusLabel(tx), w)));
+      out.addAll(bodyLR('', _statusLabel(tx)));
     }
 
     // ── Timeline pembayaran ───────────────────────────────────────────────
@@ -651,17 +668,17 @@ class PrinterService {
     final showTimeline = payments.length > 1 ||
         (payments.length == 1 && payments.first.paidAt != tx.createdAt);
     if (showTimeline) {
-      out.addAll(gen.text(_sep(w)));
-      out.addAll(gen.text('Pembayaran:', styles: const PosStyles(bold: true)));
+      out.addAll(bodySep());
+      out.addAll(bodyText('Pembayaran:', styles: const PosStyles(bold: true)));
       for (final p in payments) {
         final left = '${_fmtDateTimeFull(p.paidAt)} ${_methodShort(p.method)}';
-        out.addAll(gen.text(_rowLR(left, 'Rp ${_fmtNum(p.amount)}', w)));
+        out.addAll(bodyLR(left, 'Rp ${_fmtNum(p.amount)}'));
       }
     }
 
     // ── Footer ────────────────────────────────────────────────────────────
     if (strukNote != null && strukNote.isNotEmpty) {
-      out.addAll(gen.text(_sep(w)));
+      out.addAll(bodySep());
       out.addAll(gen.text(_toAscii(strukNote),
           styles: const PosStyles(align: PosAlign.center)));
     }
