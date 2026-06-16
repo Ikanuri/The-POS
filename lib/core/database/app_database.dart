@@ -1416,6 +1416,15 @@ class AppDatabase extends _$AppDatabase {
         dump[t] = rows.map((r) => r.data).toList();
       }
     }
+    // kasir_permissions — hanya punya updated_at (tanpa created_at).
+    // Ikut tersinkron agar perubahan izin dari owner langsung berlaku di HP kasir.
+    {
+      final rows = await customSelect(
+        'SELECT * FROM "kasir_permissions" WHERE updated_at >= ?',
+        variables: [Variable.withInt(sinceSec)],
+      ).get();
+      dump['kasir_permissions'] = rows.map((r) => r.data).toList();
+    }
     return dump;
   }
 
@@ -1427,13 +1436,20 @@ class AppDatabase extends _$AppDatabase {
       for (final row in rows) {
         if (row.isEmpty) continue;
         // Last-write-wins for master tables with updated_at.
+        // Cari PK: kolom 'id' (UUID) untuk tabel utama, atau 'permission_key'
+        // untuk kasir_permissions (yang tidak punya kolom id).
         if (!isAppendOnly && row.containsKey('updated_at')) {
-          final id = row['id'];
           final incomingTs = row['updated_at'];
-          if (id != null && incomingTs is int) {
+          final pkCol = row.containsKey('id')
+              ? 'id'
+              : row.containsKey('permission_key')
+                  ? 'permission_key'
+                  : null;
+          final pkVal = pkCol != null ? row[pkCol] : null;
+          if (pkVal != null && incomingTs is int) {
             final existing = await customSelect(
-              'SELECT updated_at FROM "$tableName" WHERE id = ?',
-              variables: [Variable<Object>(id)],
+              'SELECT updated_at FROM "$tableName" WHERE "$pkCol" = ?',
+              variables: [Variable<Object>(pkVal)],
             ).getSingleOrNull();
             if (existing != null) {
               final existingTs = existing.data['updated_at'];

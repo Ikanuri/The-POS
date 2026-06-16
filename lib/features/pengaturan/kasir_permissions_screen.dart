@@ -63,7 +63,10 @@ class _PermissionTile extends ConsumerWidget {
         final db = ref.read(databaseProvider);
         await (db.update(db.kasirPermissions)
               ..where((t) => t.permissionKey.equals(permission.permissionKey)))
-            .write(KasirPermissionsCompanion(isEnabled: Value(v)));
+            .write(KasirPermissionsCompanion(
+          isEnabled: Value(v),
+          updatedAt: Value(DateTime.now()),
+        ));
       },
     );
   }
