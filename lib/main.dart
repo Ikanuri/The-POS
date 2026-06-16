@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 
@@ -58,6 +59,21 @@ class ThePosApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       routerConfig: router,
+      // Terapkan warna system navigation bar sesuai tema yang sedang aktif.
+      // Builder dipanggil setelah MaterialApp me-resolve tema, sehingga
+      // Theme.of(context).brightness sudah benar untuk ThemeMode.system.
+      builder: (context, child) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        SystemChrome.setSystemUIOverlayStyle(
+          SystemUiOverlayStyle(
+            systemNavigationBarColor: AppTheme.canvasColor(isDark),
+            systemNavigationBarIconBrightness:
+                isDark ? Brightness.light : Brightness.dark,
+            systemNavigationBarDividerColor: Colors.transparent,
+          ),
+        );
+        return child!;
+      },
     );
   }
 }

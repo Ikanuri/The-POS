@@ -71,6 +71,10 @@ class AppTheme {
   static ThemeData light() => _build(false);
   static ThemeData dark()  => _build(true);
 
+  /// Warna latar terdalam (scaffold background) untuk mode yang diberikan.
+  /// Dipakai untuk mewarnai system navigation bar Android agar mengikuti tema.
+  static Color canvasColor(bool isDark) => isDark ? _dCanvas : _lCanvas;
+
   /// Newsreader serif style — use for all monetary/numeric values.
   static TextStyle numStyle(
     BuildContext context, {
