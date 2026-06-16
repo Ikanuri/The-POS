@@ -105,6 +105,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   }
 
   List<_UnitEntry> _units = [];
+  /// Id satuan yang sudah tersimpan di DB (saat load). Hanya satuan tersimpan
+  /// yang punya stok untuk disesuaikan — satuan baru belum ada di stock_ledger.
+  final Set<String> _persistedUnitIds = {};
   List<ProductGroup> _groups = [];
   List<UnitType> _unitTypes = [];
   int? _selectedGroupId;
@@ -185,6 +188,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         setState(() {
           _selectedGroupId = product.productGroupId;
           _units = entries;
+          _persistedUnitIds
+            ..clear()
+            ..addAll(units.map((u) => u.id));
           _initialLoaded = true;
         });
       }
@@ -204,6 +210,85 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         _initialLoaded = true;
       });
     }
+  }
+
+  /// Dialog penyesuaian stok manual untuk satu satuan. Menulis langsung ke
+  /// `stock_ledger` (terlepas dari tombol Simpan form). Mengembalikan true bila
+  /// stok berubah, sehingga kartu satuan bisa menyegarkan tampilannya.
+  Future<bool> _adjustStockDialog(String unitId, String unitLabel) async {
+    final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    final current = await db.currentStock(unitId);
+    if (!mounted) return false;
+
+    String fmt(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
+    final qtyCtrl = TextEditingController(text: fmt(current));
+    final noteCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sesuaikan Stok'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$unitLabel\nStok saat ini: ${fmt(current)}',
+                style: const TextStyle(fontSize: 12)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyCtrl,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Stok baru',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: noteCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Catatan (opsional)',
+                hintText: 'mis. opname, barang rusak',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => ctx.pop(false), child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => ctx.pop(true), child: const Text('Simpan')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return false;
+    final newQty = double.tryParse(qtyCtrl.text.trim().replaceAll(',', '.'));
+    if (newQty == null || newQty < 0) {
+      if (mounted) _showBanner('Angka stok tidak valid');
+      return false;
+    }
+    final delta = await db.adjustStock(
+      productUnitId: unitId,
+      newQty: newQty,
+      kasirId: device.deviceCode,
+      note: noteCtrl.text.trim().isEmpty
+          ? 'Penyesuaian manual'
+          : noteCtrl.text.trim(),
+    );
+    if (mounted) {
+      _showBanner(
+        'Stok disesuaikan (${delta >= 0 ? '+' : ''}${fmt(delta)})',
+        InlineBannerType.success,
+      );
+    }
+    return delta != 0;
   }
 
   Future<void> _save() async {
@@ -531,21 +616,36 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ..._units.asMap().entries.map((e) => _UnitCard(
-                        key: ValueKey(e.value.id),
-                        entry: e.value,
-                        index: e.key,
-                        unitTypes: _unitTypes,
-                        canRemove: !_readOnly && _units.length > 1,
-                        readOnly: _readOnly,
-                        onChanged: _readOnly
-                            ? (_) {}
-                            : (updated) {
-                                setState(() => _units[e.key] = updated);
-                                _markDirty();
-                              },
-                        onRemove: () => _removeUnit(e.key),
-                      )),
+                  ..._units.asMap().entries.map((e) {
+                    final unitId = e.value.id;
+                    final showStock = _persistedUnitIds.contains(unitId);
+                    final unitLabel = _unitTypes
+                            .where((t) => t.id == e.value.unitTypeId)
+                            .map((t) => t.name)
+                            .firstOrNull ??
+                        'Satuan ${e.key + 1}';
+                    return _UnitCard(
+                      key: ValueKey(unitId),
+                      entry: e.value,
+                      index: e.key,
+                      unitTypes: _unitTypes,
+                      canRemove: !_readOnly && _units.length > 1,
+                      readOnly: _readOnly,
+                      showStock: showStock,
+                      canAdjustStock: showStock && !_readOnly,
+                      loadStock: showStock
+                          ? () => ref.read(databaseProvider).currentStock(unitId)
+                          : null,
+                      onAdjustStock: () => _adjustStockDialog(unitId, unitLabel),
+                      onChanged: _readOnly
+                          ? (_) {}
+                          : (updated) {
+                              setState(() => _units[e.key] = updated);
+                              _markDirty();
+                            },
+                      onRemove: () => _removeUnit(e.key),
+                    );
+                  }),
 
                   // ── Varian (produk anak / add-on) ────────────────────
                   if (_isEdit && _productId != null) ...[
@@ -899,6 +999,10 @@ class _UnitCard extends StatefulWidget {
     required this.readOnly,
     required this.onChanged,
     required this.onRemove,
+    this.showStock = false,
+    this.canAdjustStock = false,
+    this.loadStock,
+    this.onAdjustStock,
   });
 
   final _UnitEntry entry;
@@ -908,6 +1012,13 @@ class _UnitCard extends StatefulWidget {
   final bool readOnly;
   final ValueChanged<_UnitEntry> onChanged;
   final VoidCallback onRemove;
+
+  /// Tampilkan baris stok (hanya untuk satuan yang sudah tersimpan).
+  final bool showStock;
+  final bool canAdjustStock;
+  final Future<double> Function()? loadStock;
+  /// Buka dialog penyesuaian; true bila stok berubah → kartu menyegarkan.
+  final Future<bool> Function()? onAdjustStock;
 
   @override
   State<_UnitCard> createState() => _UnitCardState();
@@ -923,9 +1034,18 @@ class _UnitCardState extends State<_UnitCard> {
   late List<TextEditingController> _tierMinCtrl;
   late List<TextEditingController> _tierPriceCtrl;
 
+  Future<double>? _stockFuture;
+
+  void _refreshStock() {
+    if (widget.loadStock != null) {
+      setState(() => _stockFuture = widget.loadStock!());
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    if (widget.loadStock != null) _stockFuture = widget.loadStock!();
     _priceCtrl = TextEditingController(
         text: widget.entry.price > 0 ? widget.entry.price.toString() : '');
     _costCtrl = TextEditingController(
@@ -1044,6 +1164,57 @@ class _UnitCardState extends State<_UnitCard> {
               ],
             ),
             const SizedBox(height: 8),
+
+            // ── Stok terkini + tombol sesuaikan ──────────────────────────────
+            if (widget.showStock) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined,
+                        size: 16, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text('Stok: ',
+                        style: TextStyle(
+                            fontSize: 13, color: scheme.onSurfaceVariant)),
+                    FutureBuilder<double>(
+                      future: _stockFuture,
+                      builder: (_, snap) {
+                        final s = snap.data;
+                        final txt = s == null
+                            ? '…'
+                            : (s % 1 == 0 ? s.toInt().toString() : s.toString());
+                        return Text(txt,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700));
+                      },
+                    ),
+                    const Spacer(),
+                    if (widget.canAdjustStock)
+                      TextButton.icon(
+                        onPressed: () async {
+                          final changed =
+                              await widget.onAdjustStock?.call() ?? false;
+                          if (changed) _refreshStock();
+                        },
+                        icon: const Icon(Icons.tune, size: 15),
+                        label: const Text('Sesuaikan'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
 
             // ── Unit type dropdown ───────────────────────────────────────────
             DropdownButtonFormField<int>(

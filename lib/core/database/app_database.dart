@@ -231,6 +231,33 @@ class AppDatabase extends _$AppDatabase {
     return row?.stockAfter ?? 0;
   }
 
+  /// Penyesuaian stok manual (opname / koreksi). Menulis satu entry ledger
+  /// bertipe `adjustment` dengan `stockAfter = newQty`. `qtyChange` = selisih
+  /// dari stok sekarang, sehingga laporan pergerakan stok tetap konsisten.
+  /// Mengembalikan selisih yang diterapkan (newQty − stokLama).
+  Future<double> adjustStock({
+    required String productUnitId,
+    required double newQty,
+    String? kasirId,
+    String? note,
+  }) async {
+    return transaction(() async {
+      final prev = await currentStock(productUnitId);
+      final delta = newQty - prev;
+      await into(stockLedger).insert(StockLedgerCompanion.insert(
+        id: const Uuid().v4(),
+        productUnitId: productUnitId,
+        type: 'adjustment',
+        qtyChange: delta,
+        stockAfter: newQty,
+        kasirId: Value(kasirId),
+        note: Value(note),
+        createdAt: Value(DateTime.now()),
+      ));
+      return delta;
+    });
+  }
+
   // ───────────────────────── Transaction helpers ─────────────────────────
 
   Future<int> countTodayTransactions(String deviceCode) async {
