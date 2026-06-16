@@ -92,7 +92,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -127,6 +127,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 3) {
             // Varian produk via kolom parent_product_id.
             await m.addColumn(products, products.parentProductId);
+          }
+          if (from < 4) {
+            // Konsolidasi stok ke satuan dasar: tiap entry non-base di
+            // stock_ledger dikonversi dan digabung ke satuan dasar.
+            await _migrateStockToBaseUnitsV4();
           }
         },
         beforeOpen: (details) async {
@@ -218,10 +223,31 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Stock queries ─────────────────────────
 
-  /// Stok terkini = stockAfter dari entry ledger terbaru.
-  Future<double> currentStock(String productUnitId) async {
+  /// Lookup satuan dasar dan rasio dari sembarang productUnitId.
+  /// Mengembalikan (id: baseUnitId, ratio: ratioToBase).
+  Future<({String id, double ratio})> _baseUnitOf(String productUnitId) async {
+    final unit = await (select(productUnits)
+          ..where((t) => t.id.equals(productUnitId)))
+        .getSingleOrNull();
+    if (unit == null || unit.isBaseUnit) {
+      return (id: productUnitId, ratio: unit?.ratioToBase ?? 1.0);
+    }
+    final base = await (select(productUnits)
+          ..where((t) =>
+              t.productId.equals(unit.productId) & t.isBaseUnit.equals(true))
+          ..limit(1))
+        .getSingleOrNull();
+    // Tidak ada satuan dasar → perlakukan unit ini sebagai dasar (fallback).
+    if (base == null) return (id: productUnitId, ratio: 1.0);
+    return (id: base.id, ratio: unit.ratioToBase);
+  }
+
+  /// Stok mentah satuan dasar (stockAfter terakhir dalam ledger, selalu dalam
+  /// satuan dasar). Tidak boleh dipanggil langsung dari luar — gunakan
+  /// [currentStock].
+  Future<double> _rawBaseStock(String baseUnitId) async {
     final row = await (select(stockLedger)
-          ..where((t) => t.productUnitId.equals(productUnitId))
+          ..where((t) => t.productUnitId.equals(baseUnitId))
           ..orderBy([
             (t) => OrderingTerm.desc(t.createdAt),
             (t) => OrderingTerm.desc(t.id),
@@ -231,10 +257,44 @@ class AppDatabase extends _$AppDatabase {
     return row?.stockAfter ?? 0;
   }
 
-  /// Penyesuaian stok manual (opname / koreksi). Menulis satu entry ledger
-  /// bertipe `adjustment` dengan `stockAfter = newQty`. `qtyChange` = selisih
-  /// dari stok sekarang, sehingga laporan pergerakan stok tetap konsisten.
-  /// Mengembalikan selisih yang diterapkan (newQty − stokLama).
+  /// Stok terkini dalam satuan yang diminta.
+  /// Semua ledger ditulis ke satuan dasar; satuan non-dasar = baseStock ÷ ratio.
+  Future<double> currentStock(String productUnitId) async {
+    final info = await _baseUnitOf(productUnitId);
+    final base = await _rawBaseStock(info.id);
+    return info.ratio <= 1.0 ? base : base / info.ratio;
+  }
+
+  /// Tulis satu entry ke stock_ledger, selalu pada satuan dasar.
+  /// [productUnitId] boleh satuan apa pun; [qtyChange] dalam satuan itu.
+  Future<void> _appendStock({
+    required String productUnitId,
+    required double qtyChange,
+    required String type,
+    String? referenceId,
+    String? kasirId,
+    String? note,
+    required DateTime now,
+  }) async {
+    final info = await _baseUnitOf(productUnitId);
+    final baseChange = qtyChange * info.ratio;
+    final prevBase = await _rawBaseStock(info.id);
+    await into(stockLedger).insert(StockLedgerCompanion.insert(
+      id: const Uuid().v4(),
+      productUnitId: info.id,
+      type: type,
+      qtyChange: baseChange,
+      stockAfter: prevBase + baseChange,
+      referenceId: Value(referenceId),
+      kasirId: Value(kasirId),
+      note: Value(note),
+      createdAt: Value(now),
+    ));
+  }
+
+  /// Penyesuaian stok manual (opname / koreksi). Tulis ke satuan dasar.
+  /// [newQty] dalam satuan [productUnitId] — dikonversi ke dasar sebelum disimpan.
+  /// Mengembalikan selisih dalam satuan yang diminta.
   Future<double> adjustStock({
     required String productUnitId,
     required double newQty,
@@ -242,20 +302,87 @@ class AppDatabase extends _$AppDatabase {
     String? note,
   }) async {
     return transaction(() async {
-      final prev = await currentStock(productUnitId);
-      final delta = newQty - prev;
+      final info = await _baseUnitOf(productUnitId);
+      final newBase = newQty * info.ratio;
+      final prevBase = await _rawBaseStock(info.id);
+      final deltaBase = newBase - prevBase;
       await into(stockLedger).insert(StockLedgerCompanion.insert(
         id: const Uuid().v4(),
-        productUnitId: productUnitId,
+        productUnitId: info.id,
         type: 'adjustment',
-        qtyChange: delta,
-        stockAfter: newQty,
+        qtyChange: deltaBase,
+        stockAfter: newBase,
         kasirId: Value(kasirId),
         note: Value(note),
         createdAt: Value(DateTime.now()),
       ));
-      return delta;
+      // Kembalikan delta dalam satuan yang diminta UI.
+      return info.ratio <= 1.0 ? deltaBase : deltaBase / info.ratio;
     });
+  }
+
+  /// Migrasi v4: konversi semua entry stock_ledger non-base ke satuan dasar.
+  /// Hanya menjaga saldo akhir (tidak mereplikasi riwayat per entry).
+  Future<void> _migrateStockToBaseUnitsV4() async {
+    final now = DateTime.now();
+    // Ambil semua satuan non-dasar yang punya entri di ledger.
+    final rows = await customSelect(
+      'SELECT pu.id, pu.ratio_to_base, pu.product_id '
+      'FROM product_units pu '
+      'WHERE pu.is_base_unit = 0 '
+      '  AND EXISTS (SELECT 1 FROM stock_ledger sl WHERE sl.product_unit_id = pu.id)',
+    ).get();
+
+    for (final row in rows) {
+      final unitId = row.data['id'] as String;
+      final ratio = (row.data['ratio_to_base'] as num).toDouble();
+      final productId = row.data['product_id'] as String;
+
+      // Saldo non-base dari entry terakhir (dalam satuan non-base).
+      final lastRow = await customSelect(
+        'SELECT stock_after FROM stock_ledger '
+        'WHERE product_unit_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        variables: [Variable.withString(unitId)],
+      ).getSingleOrNull();
+      if (lastRow == null) continue;
+      final nonBaseStock = (lastRow.data['stock_after'] as num).toDouble();
+
+      // Hapus semua entry non-base (tidak lagi diperlukan).
+      await customStatement(
+        'DELETE FROM stock_ledger WHERE product_unit_id = ?',
+        [unitId],
+      );
+
+      if (nonBaseStock <= 0) continue; // tidak perlu tambah ke dasar
+
+      // Cari satuan dasar produk ini.
+      final baseRow = await customSelect(
+        'SELECT id FROM product_units WHERE product_id = ? AND is_base_unit = 1 LIMIT 1',
+        variables: [Variable.withString(productId)],
+      ).getSingleOrNull();
+      if (baseRow == null) continue;
+      final baseUnitId = baseRow.data['id'] as String;
+
+      // Saldo dasar saat ini.
+      final baseLastRow = await customSelect(
+        'SELECT stock_after FROM stock_ledger '
+        'WHERE product_unit_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        variables: [Variable.withString(baseUnitId)],
+      ).getSingleOrNull();
+      final currentBase =
+          baseLastRow != null ? (baseLastRow.data['stock_after'] as num).toDouble() : 0.0;
+
+      final contrib = nonBaseStock * ratio;
+      await into(stockLedger).insert(StockLedgerCompanion.insert(
+        id: const Uuid().v4(),
+        productUnitId: baseUnitId,
+        type: 'adjustment',
+        qtyChange: contrib,
+        stockAfter: currentBase + contrib,
+        note: const Value('Migrasi stok ke satuan dasar'),
+        createdAt: Value(now),
+      ));
+    }
   }
 
   // ───────────────────────── Transaction helpers ─────────────────────────
@@ -592,18 +719,15 @@ class AppDatabase extends _$AppDatabase {
           b.insert(loyaltyPointLedger, loyaltyEntry);
         }
       });
-      // Compute stockAfter inside the transaction for consistency.
+      // Deduct stock — semua ditulis ke satuan dasar via _appendStock.
       for (final s in stockItems) {
-        final prev = await currentStock(s.productUnitId);
-        await into(stockLedger).insert(StockLedgerCompanion.insert(
-          id: const Uuid().v4(),
+        await _appendStock(
           productUnitId: s.productUnitId,
-          type: 'sale',
           qtyChange: -s.qty,
-          stockAfter: prev - s.qty,
-          note: Value(s.note),
-          createdAt: Value(ts),
-        ));
+          type: 'sale',
+          note: s.note,
+          now: ts,
+        );
       }
       // Update loyalty balance untuk pelanggan.
       final cid = tx.customerId.value;
@@ -632,18 +756,15 @@ class AppDatabase extends _$AppDatabase {
       if (tx == null || tx.status == 'void') return;
 
       final now = DateTime.now();
-      // Reverse stock entries.
+      // Reverse stock — ditulis ke satuan dasar.
       for (final item in items) {
-        final lastStock = await currentStock(item.productUnitId);
-        await into(stockLedger).insert(StockLedgerCompanion.insert(
-          id: const Uuid().v4(),
+        await _appendStock(
           productUnitId: item.productUnitId,
-          type: 'return_in',
           qtyChange: item.qty,
-          stockAfter: lastStock + item.qty,
-          note: Value('Void ${tx.localId}'),
-          createdAt: Value(now),
-        ));
+          type: 'return_in',
+          note: 'Void ${tx.localId}',
+          now: now,
+        );
       }
 
       // Reverse loyalty jika ada.
@@ -696,20 +817,17 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final now = DateTime.now();
     await transaction(() async {
-      // Kembalikan stok untuk tiap item.
+      // Kembalikan stok — ditulis ke satuan dasar.
       for (final item in returnItems) {
-        final prev = await currentStock(item.productUnitId);
-        await into(stockLedger).insert(StockLedgerCompanion.insert(
-          id: const Uuid().v4(),
+        await _appendStock(
           productUnitId: item.productUnitId,
-          type: 'return_in',
           qtyChange: item.qty,
-          stockAfter: prev + item.qty,
-          referenceId: Value(originalTxId),
-          kasirId: Value(kasirId),
-          note: const Value('Retur'),
-          createdAt: Value(now),
-        ));
+          type: 'return_in',
+          referenceId: originalTxId,
+          kasirId: kasirId,
+          note: 'Retur',
+          now: now,
+        );
       }
 
       final refundTotal =
