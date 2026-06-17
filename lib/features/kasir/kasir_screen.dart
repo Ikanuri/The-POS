@@ -866,11 +866,13 @@ class _AddControl extends StatelessWidget {
   const _AddControl({
     required this.qty,
     required this.onTap,
+    this.onMinus,
     this.size = 34,
   });
 
   final double qty;
   final VoidCallback onTap;
+  final VoidCallback? onMinus;
   final double size;
 
   @override
@@ -878,38 +880,79 @@ class _AddControl extends StatelessWidget {
     final inCart = qty > 0;
     final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Saat ada di keranjang → hijau "sudah masuk" (warna kembalian). Saat
-    // kosong → terracotta accent. Beda warna agar status terlihat jelas.
     final bgColor = inCart ? AppTheme.changeFg(isDark) : AppTheme.accent;
     final shadowColor = inCart
         ? AppTheme.changeFg(isDark).withOpacity(0.30)
         : const Color(0x33C96442);
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: bgColor,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
-          ],
+
+    if (!inCart) {
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
+            ],
+          ),
+          child: Center(
+            child: Icon(Icons.add_rounded, color: Colors.white, size: size * 0.6),
+          ),
         ),
-        child: Center(
-          child: inCart
-              ? Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: size * 0.42,
-                  ),
-                )
-              : Icon(Icons.add_rounded, color: Colors.white, size: size * 0.6),
+      );
+    }
+
+    final circleSize = size + 4;
+    final minusSize = size - 6;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onMinus,
+          child: Container(
+            width: minusSize,
+            height: minusSize,
+            decoration: BoxDecoration(
+              color: bgColor.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Icon(Icons.remove_rounded,
+                  color: bgColor, size: minusSize * 0.6),
+            ),
+          ),
         ),
-      ),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: circleSize,
+            height: circleSize,
+            decoration: BoxDecoration(
+              color: bgColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: circleSize * 0.40,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1016,15 +1059,29 @@ class _ProductCard extends ConsumerWidget {
                       qty: qty,
                       size: 32,
                       onTap: () {
-                        // "+" selalu menambah 1 satuan dasar agar selalu
-                        // berfungsi. Untuk pilih satuan lain / varian, ketuk
-                        // badan kartu (buka modal).
                         if (d.baseUnitId.isEmpty || d.hasVariants) {
                           onOpenEntry();
                         } else {
                           onQuickAdd(product, d);
                         }
                       },
+                      onMinus: qty > 0
+                          ? () {
+                              final items = cart.where(
+                                  (c) => c.productId == product.id);
+                              if (items.isEmpty) return;
+                              final item = items.first;
+                              final eff =
+                                  notifier.effectiveQtyFor(item);
+                              if (eff <= 1) {
+                                notifier.removeItem(
+                                    item.productUnitId);
+                              } else {
+                                notifier.setEffectiveQty(
+                                    item.productUnitId, eff - 1);
+                              }
+                            }
+                          : null,
                     ),
                     orElse: () => const SizedBox(width: 32, height: 32),
                   ),
