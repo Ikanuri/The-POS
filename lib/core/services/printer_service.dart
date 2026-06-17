@@ -919,16 +919,25 @@ class PrinterService {
       }
     }
 
-    // ── Total akumulatif ──────────────────────────────────────────────────
+    // ── Total akumulatif (layout identik footer struk biasa) ────────────
     out.addAll(gen.text(_sep(w)));
-    out.addAll(gen.text(
-        _rowLR('TOTAL TAGIHAN', 'Rp ${_fmtNum(grandTotal)}', w),
+
+    final maxCharsWide = w ~/ 2;
+    List<int> wideNominal(String text) {
+      final lp = maxCharsWide - text.length;
+      final padded = lp > 0 ? '${' ' * lp}$text' : text;
+      return gen.text(padded,
+          styles: const PosStyles(bold: true, width: PosTextSize.size2));
+    }
+
+    out.addAll(gen.text('Total Tagihan',
         styles: const PosStyles(bold: true)));
+    out.addAll(wideNominal('Rp ${_fmtNum(grandTotal)}'));
     out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandPaid)}', w)));
     final grandSisa = grandTotal - grandPaid;
-    out.addAll(gen.text(
-        _rowLR('SISA', 'Rp ${_fmtNum(grandSisa)}', w),
+    out.addAll(gen.text('Sisa',
         styles: const PosStyles(bold: true)));
+    out.addAll(wideNominal('Rp ${_fmtNum(grandSisa)}'));
     if (lastPaymentAt != null) {
       out.addAll(gen.text(
           _rowLR('', 'Pelunasan: ${_fmtDateTimeFull(lastPaymentAt)}', w)));

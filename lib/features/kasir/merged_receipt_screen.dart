@@ -382,7 +382,7 @@ class _MergedReceiptPaper extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('#${shortTxNo(tx.localId)}',
-                      style: _mono.copyWith(fontWeight: FontWeight.w700)),
+                      style: _mono),
                   Text(date, style: _mono),
                 ],
               ),
