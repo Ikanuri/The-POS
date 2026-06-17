@@ -4,11 +4,25 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/theme_provider.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/utils/input_formatters.dart';
+
+const _thousandsFmt = ThousandsSeparatorFormatter();
 
 final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
   final db = ref.watch(databaseProvider);
   final v = await db.getSetting('allow_negative_stock');
   return v == '1';
+});
+
+/// Aturan poin loyalitas: setiap belanja [threshold] rupiah → dapat [pointsPer]
+/// poin. threshold = 0 menonaktifkan poin otomatis.
+final loyaltyRuleProvider =
+    FutureProvider<({int threshold, int pointsPer})>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final t = int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ?? 0;
+  final p = int.tryParse(await db.getSetting('loyalty_points_per') ?? '') ?? 1;
+  return (threshold: t, pointsPer: p < 1 ? 1 : p);
 });
 
 class PengaturanScreen extends ConsumerWidget {
@@ -94,6 +108,21 @@ class PengaturanScreen extends ConsumerWidget {
                       ref.invalidate(_allowNegativeStockProvider);
                     },
                   ),
+                  Builder(builder: (context) {
+                    final rule =
+                        ref.watch(loyaltyRuleProvider).valueOrNull;
+                    final subtitle = rule == null || rule.threshold <= 0
+                        ? 'Nonaktif — ketuk untuk mengatur'
+                        : 'Setiap belanja ${formatRupiah(rule.threshold)} '
+                            '→ ${rule.pointsPer} poin';
+                    return ListTile(
+                      leading: const Icon(Icons.stars_outlined),
+                      title: const Text('Poin Loyalitas'),
+                      subtitle: Text(subtitle),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _showLoyaltyDialog(context, ref),
+                    );
+                  }),
                 ],
               ],
             ),
@@ -185,6 +214,81 @@ class PengaturanScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showLoyaltyDialog(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(databaseProvider);
+    final curThreshold =
+        int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ?? 0;
+    final curPer =
+        int.tryParse(await db.getSetting('loyalty_points_per') ?? '') ?? 1;
+    if (!context.mounted) return;
+
+    final thresholdCtrl = TextEditingController(
+        text: curThreshold > 0
+            ? ThousandsSeparatorFormatter.format(curThreshold)
+            : '');
+    final perCtrl =
+        TextEditingController(text: (curPer < 1 ? 1 : curPer).toString());
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Poin Loyalitas'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Pelanggan terdaftar otomatis dapat poin tiap transaksi lunas. '
+              'Kosongkan nominal untuk menonaktifkan.',
+              style: TextStyle(fontSize: 12.5),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: thresholdCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [_thousandsFmt],
+              decoration: const InputDecoration(
+                labelText: 'Setiap belanja (Rp)',
+                prefixText: 'Rp ',
+                hintText: 'mis. 10.000',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: perCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Dapat berapa poin',
+                suffixText: 'poin',
+                hintText: 'mis. 1',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      final threshold =
+          ThousandsSeparatorFormatter.parseValue(thresholdCtrl.text);
+      final per = int.tryParse(perCtrl.text.trim()) ?? 1;
+      await db.setSetting('loyalty_point_threshold', threshold.toString());
+      await db.setSetting('loyalty_points_per', (per < 1 ? 1 : per).toString());
+      ref.invalidate(loyaltyRuleProvider);
+    }
+    thresholdCtrl.dispose();
+    perCtrl.dispose();
   }
 }
 

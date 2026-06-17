@@ -1174,7 +1174,9 @@ class _ProductCard extends ConsumerWidget {
                       qty: qty,
                       size: 32,
                       onTap: () {
-                        if (d.baseUnitId.isEmpty || d.hasVariants) {
+                        // "+" selalu menambah satuan dasar induk, walau produk
+                        // punya varian. Pilih varian via tahan item / ketuk body.
+                        if (d.baseUnitId.isEmpty) {
                           onOpenEntry();
                         } else {
                           onQuickAdd(product, d);
@@ -1350,7 +1352,9 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                   data: (d) => _AddControl(
                     qty: qty,
                     onTap: () {
-                      if (d.baseUnitId.isEmpty || d.hasVariants) {
+                      // "+" selalu menambah satuan dasar induk, walau punya
+                      // varian. Pilih varian via tahan item / ketuk body.
+                      if (d.baseUnitId.isEmpty) {
                         widget.onOpenEntry();
                       } else {
                         widget.onQuickAdd(product, d);

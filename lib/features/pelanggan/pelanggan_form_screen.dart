@@ -26,6 +26,7 @@ class _PelangganFormScreenState
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _pointsCtrl = TextEditingController(text: '0');
   bool _isLoading = false;
   bool _isEdit = false;
   String? _customerId;
@@ -55,6 +56,7 @@ class _PelangganFormScreenState
         _nameCtrl.text = c.name;
         _phoneCtrl.text = c.phone ?? '';
         _addressCtrl.text = c.address ?? '';
+        _pointsCtrl.text = c.loyaltyPoints.toString();
         setState(() {
           _existing = c;
           _groups = groups;
@@ -83,7 +85,7 @@ class _PelangganFormScreenState
             : _addressCtrl.text.trim()),
         customerGroupId: Value(_selectedGroupId),
         isActive: const Value(true),
-        loyaltyPoints: _isEdit ? const Value.absent() : const Value(0),
+        loyaltyPoints: Value(int.tryParse(_pointsCtrl.text.trim()) ?? 0),
         outstandingDebt: _isEdit ? const Value.absent() : const Value(0),
         createdAt: _isEdit ? const Value.absent() : Value(now),
         updatedAt: Value(now),
@@ -185,6 +187,7 @@ class _PelangganFormScreenState
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
+    _pointsCtrl.dispose();
     super.dispose();
   }
 
@@ -285,6 +288,17 @@ class _PelangganFormScreenState
                       onChanged: (v) =>
                           setState(() => _selectedGroupId = v),
                     ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _pointsCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Poin Loyalitas',
+                      suffixText: 'poin',
+                      helperText: 'Bisa diisi/diubah manual berapa pun',
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
                   const SizedBox(height: 80),
                 ],
               ),
