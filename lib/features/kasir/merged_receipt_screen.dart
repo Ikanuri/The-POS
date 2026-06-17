@@ -33,6 +33,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {};
   String _customerName = 'Umum';
+  String _customerAddress = '';
   DateTime? _lastPaymentAt; // waktu pelunasan terakhir lintas nota
 
   String _storeName = '';
@@ -104,12 +105,16 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
 
     // Nama pelanggan: terdaftar → nama customer; selain itu "Umum".
     var customerName = 'Umum';
+    var customerAddress = '';
     final first = txs.isNotEmpty ? txs.first : null;
     if (first?.customerId != null) {
       final c = await (db.select(db.customers)
             ..where((t) => t.id.equals(first!.customerId!)))
           .getSingleOrNull();
-      if (c != null) customerName = c.name;
+      if (c != null) {
+        customerName = c.name;
+        customerAddress = c.address?.trim() ?? '';
+      }
     }
 
     final storeName = await db.getSetting('store_name') ?? device.storeName;
@@ -127,6 +132,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customerName = customerName;
+        _customerAddress = customerAddress;
         _lastPaymentAt = lastPaymentAt;
         _storeName = storeName.isNotEmpty ? storeName : device.storeName;
         _storeAddress = storeAddress;
@@ -161,6 +167,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
       productNames: _productNames,
       unitNames: _unitNames,
       customerName: _customerName,
+      customerAddress: _customerAddress,
       storeName: _storeName,
       storeAddress: _storeAddress,
       storePhone: _storePhone,
@@ -236,6 +243,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
                   unitNames: _unitNames,
                   parentOf: _parentOf,
                   customerName: _customerName,
+                  customerAddress: _customerAddress,
                   storeName: _storeName,
                   storeAddress: _storeAddress,
                   storePhone: _storePhone,
@@ -265,6 +273,7 @@ class _MergedReceiptPaper extends StatelessWidget {
     required this.unitNames,
     required this.parentOf,
     required this.customerName,
+    this.customerAddress = '',
     required this.storeName,
     required this.storeAddress,
     required this.storePhone,
@@ -282,6 +291,7 @@ class _MergedReceiptPaper extends StatelessWidget {
   final Map<String, String> unitNames;
   final Map<String, String?> parentOf;
   final String customerName;
+  final String customerAddress;
   final String storeName;
   final String storeAddress;
   final String storePhone;
@@ -353,28 +363,25 @@ class _MergedReceiptPaper extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: _mono.copyWith(fontSize: 11)),
           const _DashedLine(),
-          Text('STRUK GABUNGAN',
-              textAlign: TextAlign.center,
-              style: _mono.copyWith(fontWeight: FontWeight.w900)),
           Text(customerName,
               textAlign: TextAlign.center,
               style: _mono.copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
-          Text('${txs.length} nota digabung',
-              textAlign: TextAlign.center,
-              style: _mono.copyWith(fontSize: 11)),
+          if (customerAddress.isNotEmpty)
+            Text(customerAddress,
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 11)),
 
           // ── Per nota (terpisah) ──────────────────────────────────────────
           ...txs.expand((tx) {
             final items = itemsByTx[tx.id] ?? const <TransactionItem>[];
             final sisa = tx.total - tx.paid;
-            final date =
-                '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}';
+            final date = _fmtDateTime(tx.createdAt);
             return [
               const _DashedLine(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('#${tx.localId}',
+                  Text('#${shortTxNo(tx.localId)}',
                       style: _mono.copyWith(fontWeight: FontWeight.w700)),
                   Text(date, style: _mono),
                 ],
@@ -405,11 +412,13 @@ class _MergedReceiptPaper extends StatelessWidget {
                   ],
                 );
               }),
+              const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Subtotal nota', style: _mono),
-                  Text('Rp ${_fmtNum(tx.total)}', style: _mono),
+                  Text('Rp ${_fmtNum(tx.total)}',
+                      style: _mono.copyWith(fontWeight: FontWeight.w700)),
                 ],
               ),
               if (sisa > 0)

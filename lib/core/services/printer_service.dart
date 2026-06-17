@@ -773,6 +773,7 @@ class PrinterService {
     required Map<String, String> productNames,
     required Map<String, String> unitNames,
     required String customerName,
+    String customerAddress = '',
     required String storeName,
     required String storeAddress,
     required String storePhone,
@@ -794,6 +795,7 @@ class PrinterService {
       productNames: productNames,
       unitNames: unitNames,
       customerName: customerName,
+      customerAddress: customerAddress,
       storeName: storeName,
       storeAddress: storeAddress,
       storePhone: storePhone,
@@ -821,6 +823,7 @@ class PrinterService {
     required Map<String, String> productNames,
     required Map<String, String> unitNames,
     required String customerName,
+    String customerAddress = '',
     required String storeName,
     required String storeAddress,
     required String storePhone,
@@ -872,12 +875,11 @@ class PrinterService {
       }
     }
     out.addAll(gen.text(_sep(w)));
-    out.addAll(gen.text('STRUK GABUNGAN',
-        styles: const PosStyles(bold: true, align: PosAlign.center)));
     out.addAll(gen.text(_toAscii(customerName),
-        styles: const PosStyles(align: PosAlign.center)));
-    out.addAll(gen.text('${txs.length} nota digabung',
-        styles: const PosStyles(align: PosAlign.center)));
+        styles: const PosStyles(bold: true, width: PosTextSize.size2)));
+    if (customerAddress.isNotEmpty) {
+      out.addAll(gen.text(_toAscii(customerAddress)));
+    }
 
     // ── Per-nota (terpisah) ───────────────────────────────────────────────
     var grandTotal = 0;
@@ -906,15 +908,10 @@ class PrinterService {
         final qtyLine = '  $qtyStr $uName x ${_fmtNum(item.priceAtSale)}';
         out.addAll(gen.text(_rowLR(qtyLine, _fmtNum(item.subtotal), w)));
       }
-      // Spasi satu baris memisahkan subtotal dari daftar produk; nominal tebal.
       out.addAll(gen.feed(1));
-      out.addAll(gen.row([
-        PosColumn(text: 'Subtotal nota', width: 6),
-        PosColumn(
-            text: 'Rp ${_fmtNum(tx.total)}',
-            width: 6,
-            styles: const PosStyles(bold: true, align: PosAlign.right)),
-      ]));
+      out.addAll(gen.text(
+          _rowLR('Subtotal nota', 'Rp ${_fmtNum(tx.total)}', w),
+          styles: const PosStyles(bold: true)));
       final sisa = tx.total - tx.paid;
       if (sisa > 0) {
         out.addAll(
