@@ -602,8 +602,14 @@ class PrinterService {
     if (settings.showCustomer) {
       final custName = customer?.name ?? tx.customerName;
       if (custName != null && custName.isNotEmpty) {
+        // Nama pelanggan: tebal & melebar (double-width) agar menonjol.
         out.addAll(bodyText(_toAscii(custName),
-            styles: const PosStyles(bold: true)));
+            styles: const PosStyles(bold: true, width: PosTextSize.size2)));
+        // Alamat (bila pelanggan terdaftar) di bawah nama, teks biasa.
+        final addr = customer?.address;
+        if (addr != null && addr.trim().isNotEmpty) {
+          out.addAll(bodyText(_toAscii(addr.trim())));
+        }
       }
     }
     out.addAll(bodySep());

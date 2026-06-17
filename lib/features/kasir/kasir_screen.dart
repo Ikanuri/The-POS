@@ -885,73 +885,65 @@ class _AddControl extends StatelessWidget {
         ? AppTheme.changeFg(isDark).withOpacity(0.30)
         : const Color(0x33C96442);
 
-    if (!inCart) {
-      return GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: bgColor,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
-            ],
-          ),
-          child: Center(
-            child: Icon(Icons.add_rounded, color: Colors.white, size: size * 0.6),
-          ),
-        ),
-      );
-    }
-
+    // Lingkaran utama (jumlah / "+") berukuran sama baik saat kosong maupun
+    // saat sudah ada di keranjang, agar tidak "melompat" ukuran.
     final circleSize = size + 4;
-    final minusSize = size - 6;
+    final mainCircle = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: circleSize,
+        height: circleSize,
+        decoration: BoxDecoration(
+          color: bgColor,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Center(
+          child: inCart
+              ? Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: circleSize * 0.40,
+                  ),
+                )
+              : Icon(Icons.add_rounded,
+                  color: Colors.white, size: circleSize * 0.6),
+        ),
+      ),
+    );
+
+    if (!inCart) return mainCircle;
+
+    // Tombol minus: merah, sedikit lebih kecil dari lingkaran jumlah. Pakai
+    // HitTestBehavior.opaque agar tap tidak "tembus" ke InkWell kartu produk.
+    final minusSize = size - 2;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: onMinus,
           child: Container(
             width: minusSize,
             height: minusSize,
-            decoration: BoxDecoration(
-              color: bgColor.withOpacity(0.15),
+            decoration: const BoxDecoration(
+              color: Color(0xFFD64545),
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Icon(Icons.remove_rounded,
-                  color: bgColor, size: minusSize * 0.6),
+                  color: Colors.white, size: minusSize * 0.6),
             ),
           ),
         ),
-        const SizedBox(width: 4),
-        GestureDetector(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: circleSize,
-            height: circleSize,
-            decoration: BoxDecoration(
-              color: bgColor,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: circleSize * 0.40,
-                ),
-              ),
-            ),
-          ),
-        ),
+        const SizedBox(width: 6),
+        mainCircle,
       ],
     );
   }

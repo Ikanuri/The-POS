@@ -838,6 +838,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       productNames: _productNames,
                       unitNames: _unitNames,
                       customerName: _customerDisplay(_tx!),
+                      customerAddress: _customer?.address?.trim() ?? '',
                       storeName: prefs.name.isNotEmpty
                           ? prefs.name
                           : device.storeName,
@@ -1096,6 +1097,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 ],
                               ),
                             ),
+                      // Alamat pelanggan terdaftar, di bawah baris nama.
+                      if (!_editingCustomer &&
+                          (_customer?.address?.trim().isNotEmpty ?? false))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20, top: 2),
+                          child: Text(
+                            _customer!.address!.trim(),
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.onSurfaceVariant),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1388,6 +1401,7 @@ class _ReceiptPaper extends StatelessWidget {
     required this.productNames,
     required this.unitNames,
     required this.customerName,
+    this.customerAddress = '',
     required this.storeName,
     required this.storeAddress,
     required this.storePhone,
@@ -1405,6 +1419,7 @@ class _ReceiptPaper extends StatelessWidget {
   final Map<String, String> unitNames;
   final Map<String, String?> parentOf;
   final String customerName;
+  final String customerAddress;
   final String storeName;
   final String storeAddress;
   final String storePhone;
@@ -1489,6 +1504,8 @@ class _ReceiptPaper extends StatelessWidget {
           Text(customerName,
               style: _mono.copyWith(
                   fontSize: 16, fontWeight: FontWeight.w900)),
+          if (customerAddress.isNotEmpty)
+            Text(customerAddress, style: _mono.copyWith(fontSize: 11)),
           const _DashedLine(),
           ..._ordered.expand((item) {
             final isVar = _parentItemOf(item) != null;

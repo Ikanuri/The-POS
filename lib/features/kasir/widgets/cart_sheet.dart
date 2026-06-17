@@ -189,20 +189,47 @@ class _CartItemTile extends ConsumerWidget {
             ),
           ],
         ),
-        subtitle: Row(
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(item.unitName,
-                style:
-                    TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-            if (item.priceOverridden) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.edit, size: 10, color: scheme.tertiary),
-            ],
-            if (isZeroed) ...[
-              const SizedBox(width: 4),
-              Text('via varian',
-                  style: TextStyle(fontSize: 10, color: scheme.primary)),
-            ],
+            Row(
+              children: [
+                Text(item.unitName,
+                    style: TextStyle(
+                        fontSize: 11, color: scheme.onSurfaceVariant)),
+                if (item.priceOverridden) ...[
+                  const SizedBox(width: 4),
+                  Icon(Icons.edit, size: 10, color: scheme.tertiary),
+                ],
+                if (isZeroed) ...[
+                  const SizedBox(width: 4),
+                  Text('via varian',
+                      style: TextStyle(fontSize: 10, color: scheme.primary)),
+                ],
+              ],
+            ),
+            if (item.itemNote != null && item.itemNote!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.note_alt_outlined,
+                        size: 11, color: scheme.tertiary),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(
+                        item.itemNote!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                            color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         trailing: Row(
