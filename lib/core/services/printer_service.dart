@@ -602,10 +602,8 @@ class PrinterService {
     if (settings.showCustomer) {
       final custName = customer?.name ?? tx.customerName;
       if (custName != null && custName.isNotEmpty) {
-        // Nama pelanggan ditebalkan & diperbesar (tinggi 2x) agar menonjol.
         out.addAll(bodyText(_toAscii(custName),
-            styles: const PosStyles(
-                bold: true, height: PosTextSize.size2)));
+            styles: const PosStyles(bold: true)));
       }
     }
     out.addAll(bodySep());
@@ -641,21 +639,28 @@ class PrinterService {
     }
 
     // ── Total ─────────────────────────────────────────────────────────────
-    // Footer (total & rincian bayar) diperbesar (tinggi 2x) agar mudah dibaca.
-    out.addAll(bodyLR('Total', 'Rp ${_fmtNum(tx.total)}',
-        styles: const PosStyles(bold: true, height: PosTextSize.size2)));
+    // Helper: nominal bold + double-width, right-aligned within body margin.
+    final maxCharsWide = w ~/ 2 - margin;
+    List<int> wideNominal(String text) {
+      final lp = maxCharsWide - text.length;
+      final padded = lp > 0 ? '${' ' * lp}$text' : text;
+      return bodyText(padded,
+          styles: const PosStyles(bold: true, width: PosTextSize.size2));
+    }
+
+    out.addAll(bodyText('Total', styles: const PosStyles(bold: true)));
+    out.addAll(wideNominal('Rp ${_fmtNum(tx.total)}'));
 
     if (settings.showPaymentDetail) {
-      out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(tx.paid)}',
-          styles: const PosStyles(height: PosTextSize.size2)));
+      out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(tx.paid)}'));
 
       if (tx.changeAmount > 0) {
-        out.addAll(bodyLR('Kembali', 'Rp ${_fmtNum(tx.changeAmount)}',
-            styles: const PosStyles(bold: true, height: PosTextSize.size2)));
+        out.addAll(bodyText('Kembali', styles: const PosStyles(bold: true)));
+        out.addAll(wideNominal('Rp ${_fmtNum(tx.changeAmount)}'));
       } else if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
         final remaining = tx.total - tx.paid;
-        out.addAll(bodyLR('Kurang', 'Rp ${_fmtNum(remaining)}',
-            styles: const PosStyles(bold: true, height: PosTextSize.size2)));
+        out.addAll(bodyText('Kurang', styles: const PosStyles(bold: true)));
+        out.addAll(wideNominal('Rp ${_fmtNum(remaining)}'));
       }
     }
 
