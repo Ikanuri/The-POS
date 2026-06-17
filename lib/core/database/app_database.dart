@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../services/crypto_service.dart';
 import 'tables/app_settings_table.dart';
 import 'tables/customer_tables.dart';
+import 'tables/employee_tables.dart';
 import 'tables/ledger_tables.dart';
 import 'tables/pricing_tables.dart';
 import 'tables/product_tables.dart';
@@ -80,6 +81,7 @@ const kKasirPermissionKeys = <String>[
   KasirPermissions,
   PaymentMethods,
   DailySummaries,
+  Employees,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -92,7 +94,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -132,6 +134,11 @@ class AppDatabase extends _$AppDatabase {
             // Konsolidasi stok ke satuan dasar: tiap entry non-base di
             // stock_ledger dikonversi dan digabung ke satuan dasar.
             await _migrateStockToBaseUnitsV4();
+          }
+          if (from < 5) {
+            // Pegawai toko: master data + kolom snapshot nama di transaksi.
+            await m.createTable(employees);
+            await m.addColumn(transactions, transactions.employeeName);
           }
         },
         beforeOpen: (details) async {
@@ -1361,6 +1368,31 @@ class AppDatabase extends _$AppDatabase {
     q.orderBy([(t) => OrderingTerm.asc(t.name)]);
     return q.watch();
   }
+
+  // ───────────────────────── Pegawai toko ─────────────────────────
+
+  /// Daftar pegawai aktif, diurut nama. Dipakai di picker pembayaran & struk.
+  Future<List<Employee>> getEmployees({bool activeOnly = true}) {
+    final q = select(employees);
+    if (activeOnly) q.where((t) => t.isActive.equals(true));
+    q.orderBy([(t) => OrderingTerm.asc(t.name)]);
+    return q.get();
+  }
+
+  Stream<List<Employee>> watchEmployees({bool activeOnly = true}) {
+    final q = select(employees);
+    if (activeOnly) q.where((t) => t.isActive.equals(true));
+    q.orderBy([(t) => OrderingTerm.asc(t.name)]);
+    return q.watch();
+  }
+
+  Future<void> upsertEmployee(EmployeesCompanion entry) =>
+      into(employees).insertOnConflictUpdate(entry);
+
+  /// Hapus pegawai dari master. Nota lama tetap menyimpan snapshot nama,
+  /// sehingga riwayat "siapa yang melayani" tidak hilang.
+  Future<void> deleteEmployee(String id) =>
+      (delete(employees)..where((t) => t.id.equals(id))).go();
 
   /// Soft-delete pelanggan (set isActive=false). Transaksi & riwayat historis
   /// tetap utuh karena hanya menyembunyikan dari daftar aktif.

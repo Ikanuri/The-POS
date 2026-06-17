@@ -44,6 +44,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   String _storeTelegram = '';
   String _receiptHeader = '';
 
+  // Pegawai: daftar untuk edit, + toggle tampil di struk share/cetak.
+  List<Employee> _employees = [];
+  bool _showEmployeeOnReceipt = true;
+
   /// Inline edit nama pembeli langsung di struk.
   bool _editingCustomer = false;
   final TextEditingController _custCtrl = TextEditingController();
@@ -338,6 +342,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
     final storeTelegram = await db.getSetting('store_telegram') ?? '';
     final receiptHeader = await db.getSetting('receipt_header') ?? '';
+    final showEmp = await db.getSetting('receipt_show_employee');
+    final employees = await db.getEmployees();
 
     if (mounted) {
       setState(() {
@@ -353,9 +359,95 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _storeWhatsapp = storeWhatsapp;
         _storeTelegram = storeTelegram;
         _receiptHeader = receiptHeader;
+        _showEmployeeOnReceipt = showEmp == null || showEmp == '1';
+        _employees = employees;
         _loading = false;
       });
     }
+  }
+
+  /// Nama pegawai untuk struk share/cetak: kosong bila toggle mati atau tak
+  /// diinput (struk menampilkan nothing bila kosong).
+  String get _employeeForReceipt =>
+      _showEmployeeOnReceipt ? (_tx?.employeeName ?? '') : '';
+
+  /// Edit / hapus pegawai pada nota ini (modal sheet, tanpa keyboard).
+  Future<void> _pickEmployee() async {
+    final scheme = Theme.of(context).colorScheme;
+    final db = ref.read(databaseProvider);
+    final result = await showModalBottomSheet<Object?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Text('Pegawai yang Melayani',
+                      style: Theme.of(ctx).textTheme.titleMedium),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      context.push('/pengaturan/pegawai');
+                    },
+                    icon: const Icon(Icons.settings_outlined, size: 16),
+                    label: const Text('Kelola'),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.block_outlined),
+                    title: const Text('Tanpa pegawai'),
+                    onTap: () => Navigator.pop(ctx, 'none'),
+                  ),
+                  if (_employees.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('Belum ada pegawai. Tambah lewat "Kelola".',
+                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                    ),
+                  ..._employees.map((e) => ListTile(
+                        leading: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: scheme.primaryContainer,
+                          child: Text(
+                            (e.name.isEmpty ? '?' : e.name[0]).toUpperCase(),
+                            style: TextStyle(
+                                color: scheme.onPrimaryContainer, fontSize: 12),
+                          ),
+                        ),
+                        title: Text(e.name),
+                        trailing: _tx?.employeeName == e.name
+                            ? Icon(Icons.check, color: scheme.primary)
+                            : null,
+                        onTap: () => Navigator.pop(ctx, e),
+                      )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return; // dismiss
+    final newName = result is Employee ? result.name : null;
+    await (db.update(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .write(TransactionsCompanion(employeeName: Value(newName)));
+    final updated = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .getSingleOrNull();
+    if (mounted && updated != null) setState(() => _tx = updated);
   }
 
   String _customerDisplay(Transaction tx) {
@@ -765,6 +857,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       productNames: _productNames,
       unitNames: _unitNames,
       customer: _customer,
+      employeeName: _employeeForReceipt,
       storeName: prefs.name,
       storeAddress: prefs.address,
       storePhone: prefs.phone,
@@ -839,6 +932,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       unitNames: _unitNames,
                       customerName: _customerDisplay(_tx!),
                       customerAddress: _customer?.address?.trim() ?? '',
+                      employeeName: _employeeForReceipt,
                       storeName: prefs.name.isNotEmpty
                           ? prefs.name
                           : device.storeName,
@@ -1109,6 +1203,39 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 color: scheme.onSurfaceVariant),
                           ),
                         ),
+                      // Pegawai yang melayani — hanya tampil bila diinput.
+                      // Tap untuk ganti / hapus (input awal di layar bayar).
+                      if (tx.employeeName?.trim().isNotEmpty ?? false) ...[
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _pickEmployee,
+                          child: Row(
+                            children: [
+                              Icon(Icons.badge_outlined,
+                                  size: 14, color: scheme.onSurfaceVariant),
+                              const SizedBox(width: 6),
+                              Text('Pegawai: ',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant)),
+                              Expanded(
+                                child: Text(
+                                  tx.employeeName!.trim(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.primary,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              Icon(Icons.edit_outlined,
+                                  size: 12, color: scheme.primary),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1402,6 +1529,7 @@ class _ReceiptPaper extends StatelessWidget {
     required this.unitNames,
     required this.customerName,
     this.customerAddress = '',
+    this.employeeName = '',
     required this.storeName,
     required this.storeAddress,
     required this.storePhone,
@@ -1420,6 +1548,7 @@ class _ReceiptPaper extends StatelessWidget {
   final Map<String, String?> parentOf;
   final String customerName;
   final String customerAddress;
+  final String employeeName;
   final String storeName;
   final String storeAddress;
   final String storePhone;
@@ -1547,6 +1676,19 @@ class _ReceiptPaper extends StatelessWidget {
             ];
           }),
           const _DashedLine(),
+          // Pegawai (di atas jumlah produk). "Pegawai: " normal, nama bold.
+          if (employeeName.trim().isNotEmpty)
+            Text.rich(
+              TextSpan(
+                style: _mono,
+                children: [
+                  const TextSpan(text: 'Pegawai: '),
+                  TextSpan(
+                      text: employeeName.trim(),
+                      style: _mono.copyWith(fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
           Text('Produk: ${items.length}', style: _mono),
           const _DashedLine(),
           Row(

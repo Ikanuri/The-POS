@@ -34,6 +34,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   Map<String, String?> _parentOf = {};
   String _customerName = 'Umum';
   String _customerAddress = '';
+  bool _showEmployee = true;
   DateTime? _lastPaymentAt; // waktu pelunasan terakhir lintas nota
 
   String _storeName = '';
@@ -123,6 +124,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
     final storeTelegram = await db.getSetting('store_telegram') ?? '';
     final receiptHeader = await db.getSetting('receipt_header') ?? '';
+    final showEmp = await db.getSetting('receipt_show_employee');
 
     if (mounted) {
       setState(() {
@@ -133,6 +135,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
         _parentOf = parentOf;
         _customerName = customerName;
         _customerAddress = customerAddress;
+        _showEmployee = showEmp == null || showEmp == '1';
         _lastPaymentAt = lastPaymentAt;
         _storeName = storeName.isNotEmpty ? storeName : device.storeName;
         _storeAddress = storeAddress;
@@ -168,6 +171,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
       unitNames: _unitNames,
       customerName: _customerName,
       customerAddress: _customerAddress,
+      showEmployee: _showEmployee,
       storeName: _storeName,
       storeAddress: _storeAddress,
       storePhone: _storePhone,
@@ -244,6 +248,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
                   parentOf: _parentOf,
                   customerName: _customerName,
                   customerAddress: _customerAddress,
+                  showEmployee: _showEmployee,
                   storeName: _storeName,
                   storeAddress: _storeAddress,
                   storePhone: _storePhone,
@@ -274,6 +279,7 @@ class _MergedReceiptPaper extends StatelessWidget {
     required this.parentOf,
     required this.customerName,
     this.customerAddress = '',
+    this.showEmployee = true,
     required this.storeName,
     required this.storeAddress,
     required this.storePhone,
@@ -292,6 +298,7 @@ class _MergedReceiptPaper extends StatelessWidget {
   final Map<String, String?> parentOf;
   final String customerName;
   final String customerAddress;
+  final bool showEmployee;
   final String storeName;
   final String storeAddress;
   final String storePhone;
@@ -376,6 +383,8 @@ class _MergedReceiptPaper extends StatelessWidget {
             final items = itemsByTx[tx.id] ?? const <TransactionItem>[];
             final sisa = tx.total - tx.paid;
             final date = _fmtDateTime(tx.createdAt);
+            final empName =
+                (showEmployee ? tx.employeeName?.trim() : null) ?? '';
             return [
               const _DashedLine(),
               Row(
@@ -386,6 +395,21 @@ class _MergedReceiptPaper extends StatelessWidget {
                   Text(date, style: _mono),
                 ],
               ),
+              // Pegawai di bawah id nota. "Pegawai: " normal, nama bold.
+              if (empName.isNotEmpty)
+                Text.rich(
+                  TextSpan(
+                    style: _mono,
+                    children: [
+                      const TextSpan(text: 'Pegawai: '),
+                      TextSpan(
+                          text: empName,
+                          style: _mono.copyWith(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              // Spasi antara header (id / pegawai) dan produk pertama.
+              const SizedBox(height: 6),
               ..._ordered(items).map((item) {
                 final isVar = _parentItemOf(item, items) != null;
                 final pad = isVar ? '  ' : '';

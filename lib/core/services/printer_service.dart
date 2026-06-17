@@ -447,6 +447,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    String employeeName = '',
     List<TransactionPayment> payments = const [],
     String storeWhatsapp = '',
     String storeTelegram = '',
@@ -467,6 +468,7 @@ class PrinterService {
       productNames: productNames,
       unitNames: unitNames,
       customer: customer,
+      employeeName: employeeName,
       storeName: storeName,
       storeAddress: storeAddress,
       storePhone: storePhone,
@@ -527,6 +529,7 @@ class PrinterService {
     required String storeAddress,
     required String storePhone,
     required String? strukNote,
+    String employeeName = '',
     List<TransactionPayment> payments = const [],
     String storeWhatsapp = '',
     String storeTelegram = '',
@@ -641,9 +644,25 @@ class PrinterService {
     }
     out.addAll(bodySep());
 
+    // ── Pegawai (di atas jumlah produk) ───────────────────────────────────
+    // "Pegawai:" normal, nama bold. Pakai gen.row agar bisa beda gaya dalam
+    // satu baris (kosong bila tidak diinput → tidak tampil apa pun).
+    final empName = employeeName.trim();
+    if (empName.isNotEmpty) {
+      out.addAll(gen.row([
+        PosColumn(text: 'Pegawai:', width: 3),
+        PosColumn(
+            text: ' ${_toAscii(empName)}',
+            width: 9,
+            styles: const PosStyles(bold: true)),
+      ]));
+    }
+
     // ── Jumlah produk ─────────────────────────────────────────────────────
     if (settings.showProductCount) {
       out.addAll(bodyText('Produk: $productCount'));
+    }
+    if (empName.isNotEmpty || settings.showProductCount) {
       out.addAll(bodySep());
     }
 
@@ -774,6 +793,7 @@ class PrinterService {
     required Map<String, String> unitNames,
     required String customerName,
     String customerAddress = '',
+    bool showEmployee = true,
     required String storeName,
     required String storeAddress,
     required String storePhone,
@@ -796,6 +816,7 @@ class PrinterService {
       unitNames: unitNames,
       customerName: customerName,
       customerAddress: customerAddress,
+      showEmployee: showEmployee,
       storeName: storeName,
       storeAddress: storeAddress,
       storePhone: storePhone,
@@ -824,6 +845,7 @@ class PrinterService {
     required Map<String, String> unitNames,
     required String customerName,
     String customerAddress = '',
+    bool showEmployee = true,
     required String storeName,
     required String storeAddress,
     required String storePhone,
@@ -892,6 +914,19 @@ class PrinterService {
       out.addAll(gen.text(
           _rowLR('#${shortTxNo(tx.localId)}', _fmtDateTimeFull(tx.createdAt), w),
           styles: const PosStyles(bold: true)));
+      // Pegawai di bawah id nota (bila diinput & toggle aktif).
+      final empName = (showEmployee ? tx.employeeName?.trim() : null) ?? '';
+      if (empName.isNotEmpty) {
+        out.addAll(gen.row([
+          PosColumn(text: 'Pegawai:', width: 3),
+          PosColumn(
+              text: ' ${_toAscii(empName)}',
+              width: 9,
+              styles: const PosStyles(bold: true)),
+        ]));
+      }
+      // Spasi antara header (id / pegawai) dan produk pertama.
+      out.addAll(gen.feed(1));
       for (final item in _orderItems(items, parentOf)) {
         final isVar = _parentItemOf(item, items, parentOf) != null;
         final rawName = _toAscii(productNames[item.productId] ?? 'Produk');

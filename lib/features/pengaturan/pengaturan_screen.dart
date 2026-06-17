@@ -15,6 +15,13 @@ final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
   return v == '1';
 });
 
+/// Toggle tampilkan nama pegawai di struk share & cetak. Default ON.
+final _showEmployeeProvider = FutureProvider<bool>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final v = await db.getSetting('receipt_show_employee');
+  return v == null || v == '1';
+});
+
 /// Aturan poin loyalitas: setiap belanja [threshold] rupiah → dapat [pointsPer]
 /// poin. threshold = 0 menonaktifkan poin otomatis.
 final loyaltyRuleProvider =
@@ -89,6 +96,32 @@ class PengaturanScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pengaturan/metode-bayar'),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('Pegawai Toko'),
+                  subtitle: const Text('Dicatat di tiap nota (yang melayani)'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pengaturan/pegawai'),
+                ),
+                if (device.isOwner) ...[
+                  Builder(builder: (context) {
+                    final show =
+                        ref.watch(_showEmployeeProvider).valueOrNull ?? true;
+                    return SwitchListTile(
+                      secondary: const Icon(Icons.receipt_long_outlined),
+                      title: const Text('Pegawai di Struk'),
+                      subtitle: const Text(
+                          'Tampilkan nama pegawai di struk share & cetak'),
+                      value: show,
+                      onChanged: (v) async {
+                        final db = ref.read(databaseProvider);
+                        await db.setSetting(
+                            'receipt_show_employee', v ? '1' : '0');
+                        ref.invalidate(_showEmployeeProvider);
+                      },
+                    );
+                  }),
+                ],
                 if (device.isOwner) ...[
                   ListTile(
                     leading: const Icon(Icons.tune_outlined),

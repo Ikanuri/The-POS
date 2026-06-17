@@ -44,6 +44,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   List<PaymentMethod> _methods = [];
   bool _isSaving = false;
 
+  // Pegawai yang melayani — dipilih dari daftar (modal sheet, tanpa keyboard).
+  List<Employee> _employees = [];
+  Employee? _selectedEmployee;
+
   @override
   void initState() {
     super.initState();
@@ -56,15 +60,94 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ..where((t) => t.isActive.equals(true))
           ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
+    final employees = await db.getEmployees();
     if (mounted) {
       setState(() {
         _methods = methods;
+        _employees = employees;
         if (methods.isNotEmpty) {
           _selectedMethodId = methods.first.id;
           _selectedMethodType = methods.first.type;
         }
       });
     }
+  }
+
+  /// Pilih pegawai via modal sheet — tanpa keyboard sehingga tidak menutupi
+  /// field lain. Mengembalikan pilihan (atau membersihkan bila "Tanpa pegawai").
+  Future<void> _pickEmployee() async {
+    FocusScope.of(context).unfocus();
+    final scheme = Theme.of(context).colorScheme;
+    final result = await showModalBottomSheet<Object?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Text('Pilih Pegawai',
+                      style: Theme.of(ctx).textTheme.titleMedium),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      context.push('/pengaturan/pegawai');
+                    },
+                    icon: const Icon(Icons.settings_outlined, size: 16),
+                    label: const Text('Kelola'),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.block_outlined),
+                    title: const Text('Tanpa pegawai'),
+                    onTap: () => Navigator.pop(ctx, 'none'),
+                  ),
+                  if (_employees.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'Belum ada pegawai. Tambah lewat "Kelola".',
+                        style: TextStyle(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ..._employees.map((e) => ListTile(
+                        leading: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: scheme.primaryContainer,
+                          child: Text(
+                            (e.name.isEmpty ? '?' : e.name[0]).toUpperCase(),
+                            style: TextStyle(
+                                color: scheme.onPrimaryContainer, fontSize: 12),
+                          ),
+                        ),
+                        title: Text(e.name),
+                        trailing: _selectedEmployee?.id == e.id
+                            ? Icon(Icons.check, color: scheme.primary)
+                            : null,
+                        onTap: () => Navigator.pop(ctx, e),
+                      )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return; // dibatalkan (dismiss)
+    setState(() {
+      _selectedEmployee = result is Employee ? result : null;
+    });
   }
 
   Future<void> _searchCustomers(String q) async {
@@ -246,6 +329,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         paid: paidAmount,
         changeAmount: _change,
         paymentMethod: _selectedMethodType,
+        employeeName: Value(_selectedEmployee?.name),
         pointsEarned: Value(pointsEarned),
         createdAt: Value(now),
       );
@@ -642,6 +726,55 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       ),
                   ],
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Pegawai picker — dipilih dari daftar (tanpa keyboard, sehingga
+          // tidak menutupi field lain).
+          Text('Pegawai (yang melayani)',
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Card(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickEmployee,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.badge_outlined,
+                        size: 18, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _selectedEmployee?.name ?? 'Pilih pegawai (opsional)',
+                        style: TextStyle(
+                          color: _selectedEmployee != null
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                          fontWeight: _selectedEmployee != null
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          fontStyle: _selectedEmployee == null
+                              ? FontStyle.italic
+                              : FontStyle.normal,
+                        ),
+                      ),
+                    ),
+                    if (_selectedEmployee != null)
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () =>
+                            setState(() => _selectedEmployee = null),
+                      )
+                    else
+                      Icon(Icons.expand_more, color: scheme.onSurfaceVariant),
+                  ],
+                ),
               ),
             ),
           ),
