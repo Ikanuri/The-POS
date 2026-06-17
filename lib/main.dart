@@ -72,7 +72,17 @@ class ThePosApp extends ConsumerWidget {
             systemNavigationBarDividerColor: Colors.transparent,
           ),
         );
-        return child!;
+
+        final userScale = ref.watch(fontScaleProvider).factor;
+        final mq = MediaQuery.of(context);
+        final shortestSide = mq.size.shortestSide;
+        final deviceFactor = (shortestSide / 390).clamp(0.92, 1.08);
+        final combined = userScale * deviceFactor;
+
+        return MediaQuery(
+          data: mq.copyWith(textScaler: TextScaler.linear(combined)),
+          child: child!,
+        );
       },
     );
   }

@@ -208,10 +208,47 @@ class PengaturanScreen extends ConsumerWidget {
                   onChanged: (_) =>
                       ref.read(themeModeProvider.notifier).toggle(),
                 ),
+                Builder(builder: (context) {
+                  final scale = ref.watch(fontScaleProvider);
+                  return ListTile(
+                    leading: const Icon(Icons.text_fields_outlined),
+                    title: const Text('Ukuran Teks'),
+                    subtitle: Text(scale.label),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showFontScaleDialog(context, ref),
+                  );
+                }),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showFontScaleDialog(BuildContext context, WidgetRef ref) {
+    final current = ref.read(fontScaleProvider);
+    showDialog<FontScale>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Ukuran Teks'),
+        children: FontScale.values.map((s) {
+          return RadioListTile<FontScale>(
+            title: Text(s.label),
+            subtitle: Text(
+              'Aa Bb Cc 123',
+              style: TextStyle(fontSize: 14 * s.factor),
+            ),
+            value: s,
+            groupValue: current,
+            onChanged: (v) {
+              if (v != null) {
+                ref.read(fontScaleProvider.notifier).set(v);
+                Navigator.pop(ctx, v);
+              }
+            },
+          );
+        }).toList(),
       ),
     );
   }
