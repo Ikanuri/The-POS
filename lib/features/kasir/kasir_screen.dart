@@ -175,6 +175,114 @@ final _catalogDetailProvider =
   );
 });
 
+/// Info satu varian (produk anak) untuk dropdown inline di katalog kasir.
+class _VariantInfo {
+  const _VariantInfo({
+    required this.productId,
+    required this.productName,
+    required this.unitId,
+    required this.unitName,
+    required this.price,
+    required this.costPrice,
+    this.barcode,
+  });
+
+  final String productId;
+  final String productName;
+  final String unitId;
+  final String unitName;
+  final int price;
+  final int costPrice;
+  final String? barcode;
+}
+
+final _variantsProvider =
+    FutureProvider.family<List<_VariantInfo>, String>((ref, parentId) async {
+  final db = ref.watch(databaseProvider);
+  ref.watch(productUpdateCountProvider);
+  final priceService = PriceService(db);
+  final vps = await db.getVariants(parentId);
+  final out = <_VariantInfo>[];
+  for (final vp in vps) {
+    final units = await db.getProductUnits(vp.id);
+    if (units.isEmpty) continue;
+    final base =
+        units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+    final resolved =
+        await priceService.resolvePrice(productUnitId: base.id, qty: 1);
+    final type = await (db.select(db.unitTypes)
+          ..where((t) => t.id.equals(base.unitTypeId ?? 1)))
+        .getSingleOrNull();
+    final barcodes = await db.getProductBarcodes(base.id);
+    out.add(_VariantInfo(
+      productId: vp.id,
+      productName: vp.name,
+      unitId: base.id,
+      unitName: type?.name ?? 'Satuan',
+      price: resolved.price,
+      costPrice: resolved.costPrice,
+      barcode:
+          barcodes.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull,
+    ));
+  }
+  return out;
+});
+
+/// Tambah 1 varian ke keranjang. Memastikan induk hadir sebagai placeholder
+/// agar invariant storedQty induk = base + Σ(varian) tetap terjaga.
+void _incrementVariant({
+  required CartNotifier notifier,
+  required List<CartItem> cart,
+  required Product parent,
+  required CatalogDetail parentDetail,
+  required _VariantInfo v,
+}) {
+  final existing = cart.where((c) => c.productUnitId == v.unitId).firstOrNull;
+  if (existing != null) {
+    notifier.setEffectiveQty(v.unitId, existing.qty + 1);
+    return;
+  }
+  final parentInCart =
+      cart.any((c) => !c.isVariant && c.productId == parent.id);
+  if (!parentInCart && parentDetail.baseUnitId.isNotEmpty) {
+    notifier.addItem(CartItem(
+      productId: parent.id,
+      productUnitId: parentDetail.baseUnitId,
+      productName: parent.name,
+      unitName: parentDetail.baseUnitName,
+      qty: 0,
+      price: parentDetail.basePrice,
+      originalPrice: parentDetail.basePrice,
+      costPrice: parentDetail.costPrice,
+      barcode: parentDetail.barcode,
+    ));
+  }
+  notifier.addItem(CartItem(
+    productId: v.productId,
+    productUnitId: v.unitId,
+    productName: v.productName,
+    unitName: v.unitName,
+    qty: 1,
+    price: v.price,
+    originalPrice: v.price,
+    costPrice: v.costPrice,
+    barcode: v.barcode,
+    parentProductId: parent.id,
+    isVariant: true,
+  ));
+}
+
+void _decrementVariant({
+  required CartNotifier notifier,
+  required List<CartItem> cart,
+  required _VariantInfo v,
+}) {
+  final existing = cart.where((c) => c.productUnitId == v.unitId).firstOrNull;
+  if (existing == null) return;
+  // setEffectiveQty menangani penghapusan & penyesuaian induk saat qty <= 0.
+  notifier.setEffectiveQty(v.unitId, existing.qty - 1);
+}
+
 // Gradient palette for product avatars — cycles by first char code
 const _kAvatarGradients = [
   [Color(0xFFD97757), Color(0xFFC96442)],
@@ -857,6 +965,21 @@ class _TbBtn extends StatelessWidget {
   }
 }
 
+/// Kurangi 1 satuan dasar produk [productId] dari keranjang. Item dihapus bila
+/// effective qty turun ke 0. Dipakai oleh tombol minus di kartu & list produk.
+void _decrementProduct(
+    List<CartItem> cart, CartNotifier notifier, String productId) {
+  final items = cart.where((c) => c.productId == productId);
+  if (items.isEmpty) return;
+  final item = items.first;
+  final eff = notifier.effectiveQtyFor(item);
+  if (eff <= 1) {
+    notifier.removeItem(item.productUnitId);
+  } else {
+    notifier.setEffectiveQty(item.productUnitId, eff - 1);
+  }
+}
+
 // ─── Add / counter control ────────────────────────────────────────────────────
 
 /// Tombol "+" yang berubah jadi lingkaran berisi jumlah saat produk ada di
@@ -1058,21 +1181,8 @@ class _ProductCard extends ConsumerWidget {
                         }
                       },
                       onMinus: qty > 0
-                          ? () {
-                              final items = cart.where(
-                                  (c) => c.productId == product.id);
-                              if (items.isEmpty) return;
-                              final item = items.first;
-                              final eff =
-                                  notifier.effectiveQtyFor(item);
-                              if (eff <= 1) {
-                                notifier.removeItem(
-                                    item.productUnitId);
-                              } else {
-                                notifier.setEffectiveQty(
-                                    item.productUnitId, eff - 1);
-                              }
-                            }
+                          ? () => _decrementProduct(
+                              cart, notifier, product.id)
                           : null,
                     ),
                     orElse: () => const SizedBox(width: 32, height: 32),
@@ -1102,7 +1212,7 @@ class _PriceShimmer extends StatelessWidget {
 
 // ─── Product list tile ────────────────────────────────────────────────────────
 
-class _ProductListTile extends ConsumerWidget {
+class _ProductListTile extends ConsumerStatefulWidget {
   const _ProductListTile({
     required this.product,
     required this.onTapBody,
@@ -1116,7 +1226,16 @@ class _ProductListTile extends ConsumerWidget {
   final VoidCallback onOpenEntry;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ProductListTile> createState() => _ProductListTileState();
+}
+
+class _ProductListTileState extends ConsumerState<_ProductListTile> {
+  bool _expanded = false;
+
+  Product get product => widget.product;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final grad = _gradFor(product.name);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
@@ -1125,99 +1244,230 @@ class _ProductListTile extends ConsumerWidget {
     final qty = cart
         .where((c) => c.productId == product.id)
         .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
+    final hasVariants = detailAsync.maybeWhen(
+        data: (d) => d.hasVariants, orElse: () => false);
 
-    return InkWell(
-      onTap: onTapBody,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: grad,
-                ),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Center(
-                child: Text(
-                  product.name.isNotEmpty
-                      ? product.name[0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: widget.onTapBody,
+          // Tahan item dengan varian → buka/tutup dropdown varian inline.
+          onLongPress:
+              hasVariants ? () => setState(() => _expanded = !_expanded) : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: grad,
+                    ),
+                    borderRadius: BorderRadius.circular(11),
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13.5,
+                  child: Center(
+                    child: Text(
+                      product.name.isNotEmpty
+                          ? product.name[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  detailAsync.when(
-                    data: (d) => Row(
-                      children: [
-                        Text(
-                          formatRupiah(d.basePrice),
-                          style: AppTheme.numStyle(context,
-                              size: 13.5,
-                              weight: FontWeight.w700,
-                              color: cs.primary),
-                        ),
-                        Text(
-                          ' /${d.baseUnitName}',
-                          style: TextStyle(
-                              fontSize: 11, color: cs.onSurfaceVariant),
-                        ),
-                        if (d.unitCount > 1)
-                          Text(
-                            '  +${d.unitCount - 1} satuan',
-                            style: TextStyle(
-                                fontSize: 11, color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              product.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13.5,
+                              ),
+                            ),
                           ),
-                      ],
-                    ),
-                    loading: () => Text('…',
-                        style: TextStyle(
-                            fontSize: 12, color: cs.onSurfaceVariant)),
-                    error: (_, __) => const SizedBox.shrink(),
+                          if (hasVariants) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              _expanded
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded,
+                              size: 16,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      detailAsync.when(
+                        data: (d) => Row(
+                          children: [
+                            Text(
+                              formatRupiah(d.basePrice),
+                              style: AppTheme.numStyle(context,
+                                  size: 13.5,
+                                  weight: FontWeight.w700,
+                                  color: cs.primary),
+                            ),
+                            Text(
+                              ' /${d.baseUnitName}',
+                              style: TextStyle(
+                                  fontSize: 11, color: cs.onSurfaceVariant),
+                            ),
+                            if (d.unitCount > 1)
+                              Text(
+                                '  +${d.unitCount - 1} satuan',
+                                style: TextStyle(
+                                    fontSize: 11, color: cs.onSurfaceVariant),
+                              ),
+                          ],
+                        ),
+                        loading: () => Text('…',
+                            style: TextStyle(
+                                fontSize: 12, color: cs.onSurfaceVariant)),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                detailAsync.maybeWhen(
+                  data: (d) => _AddControl(
+                    qty: qty,
+                    onTap: () {
+                      if (d.baseUnitId.isEmpty || d.hasVariants) {
+                        widget.onOpenEntry();
+                      } else {
+                        widget.onQuickAdd(product, d);
+                      }
+                    },
+                    onMinus: qty > 0
+                        ? () => _decrementProduct(cart, notifier, product.id)
+                        : null,
+                  ),
+                  orElse: () => const SizedBox(width: 34, height: 34),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            detailAsync.maybeWhen(
-              data: (d) => _AddControl(
-                qty: qty,
-                onTap: () {
-                  if (d.baseUnitId.isEmpty || d.hasVariants) {
-                    onOpenEntry();
-                  } else {
-                    onQuickAdd(product, d);
-                  }
-                },
-              ),
-              orElse: () => const SizedBox(width: 34, height: 34),
-            ),
-          ],
+          ),
         ),
+        // Dropdown varian inline — mendorong item di bawahnya, bukan popup.
+        if (_expanded && hasVariants)
+          _VariantDropdown(
+            parent: product,
+            parentDetail: detailAsync.asData?.value,
+          ),
+      ],
+    );
+  }
+}
+
+/// Daftar varian inline di bawah item produk. Tiap baris punya kontrol +/-
+/// dengan desain sama seperti tombol di item produk.
+class _VariantDropdown extends ConsumerWidget {
+  const _VariantDropdown({required this.parent, required this.parentDetail});
+
+  final Product parent;
+  final CatalogDetail? parentDetail;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final variantsAsync = ref.watch(_variantsProvider(parent.id));
+    final cart = ref.watch(cartProvider);
+    final notifier = ref.read(cartProvider.notifier);
+
+    return Container(
+      color: cs.surfaceContainerHighest.withOpacity(0.4),
+      padding: const EdgeInsets.only(left: 54, right: 12, top: 2, bottom: 6),
+      child: variantsAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          child: Center(
+            child: SizedBox(
+                width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+        ),
+        error: (_, __) => const SizedBox.shrink(),
+        data: (variants) {
+          if (variants.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text('Tidak ada varian',
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+            );
+          }
+          return Column(
+            children: [
+              for (final v in variants)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(v.productName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500)),
+                            Text(
+                              '${formatRupiah(v.price)} /${v.unitName}',
+                              style: TextStyle(
+                                  fontSize: 11, color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Builder(builder: (_) {
+                        final vQty = cart
+                            .where((c) => c.productUnitId == v.unitId)
+                            .fold<double>(0, (s, c) => s + c.qty);
+                        return _AddControl(
+                          qty: vQty,
+                          size: 28,
+                          onTap: () {
+                            final d = parentDetail;
+                            if (d == null) return;
+                            _incrementVariant(
+                              notifier: notifier,
+                              cart: cart,
+                              parent: parent,
+                              parentDetail: d,
+                              v: v,
+                            );
+                          },
+                          onMinus: vQty > 0
+                              ? () => _decrementVariant(
+                                  notifier: notifier, cart: cart, v: v)
+                              : null,
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
