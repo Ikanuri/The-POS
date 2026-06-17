@@ -883,7 +883,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'image/png')],
-        text: 'Struk ${_tx!.localId}',
+        text: 'Struk #${shortTxNo(_tx!.localId)}',
       );
       if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
     } catch (e) {
@@ -1498,7 +1498,7 @@ class _ReceiptPaper extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(date, style: _mono),
-              Text('#${tx.localId}', style: _mono),
+              Text('#${shortTxNo(tx.localId)}', style: _mono),
             ],
           ),
           Text(customerName,

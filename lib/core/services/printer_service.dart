@@ -6,6 +6,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/app_database.dart';
 
+/// Nomor urut nota saja, tanpa kode kasir & tanggal. localId berformat
+/// "KASIR-YYYYMMDD-NNNN" → "5". Defensif untuk data lama tanpa format.
+String shortTxNo(String localId) {
+  final parts = localId.split('-');
+  final seq = parts.length >= 2 ? parts.last : localId;
+  final trimmed = seq.replaceFirst(RegExp(r'^0+(?=\d)'), '');
+  return trimmed.isEmpty ? seq : trimmed;
+}
+
 /// Satu baris dalam log debug koneksi printer.
 class PrintLogEntry {
   PrintLogEntry(this.step, {this.ok, this.detail})
@@ -555,6 +564,8 @@ class PrinterService {
             height: PosTextSize.size2,
             width: PosTextSize.size2),
       ));
+      // Sedikit jarak setelah nama toko (mirip jarak antar baris kontak).
+      out.addAll(gen.feed(1));
     }
     if (storeAddress.isNotEmpty) {
       out.addAll(gen.text(_toAscii(storeAddress),
@@ -581,20 +592,12 @@ class PrinterService {
     }
     out.addAll(bodySep());
 
-    // ── Baris tanggal ─────────────────────────────────────────────────────
-    if (settings.showDateHeader) {
-      out.addAll(bodyText(_fmtDate(tx.createdAt)));
-    }
-    out.addAll(bodySep());
-
-    // ── Info transaksi ────────────────────────────────────────────────────
-    // Bila baris tanggal di atas sudah tampil, baris ini cukup jam saja agar
-    // tanggal tidak tercetak dua kali. Bila tidak, tampilkan tanggal+jam penuh.
-    final dtStr = settings.showDateHeader
-        ? _fmtTime(tx.createdAt)
-        : _fmtDateTimeFull(tx.createdAt);
+    // ── Info transaksi: tanggal + jam | nomor nota ────────────────────────
+    // Jam tampil di sebelah tanggal. Kode transaksi cukup nomor urut nota
+    // (kode kasir & tanggal tidak diulang di sini).
+    final dtStr = _fmtDateTimeFull(tx.createdAt);
     if (settings.showTxNumber) {
-      out.addAll(bodyLR(dtStr, '#${tx.localId}'));
+      out.addAll(bodyLR(dtStr, '#${shortTxNo(tx.localId)}'));
     } else {
       out.addAll(bodyText(dtStr));
     }
@@ -724,15 +727,6 @@ class PrinterService {
     'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
   ];
 
-  static String _fmtDate(DateTime dt) =>
-      '${dt.day} ${_months[dt.month - 1]} ${dt.year}';
-
-  static String _fmtTime(DateTime dt) {
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
-  }
-
   static String _fmtDateTimeFull(DateTime dt) {
     final hh = dt.hour.toString().padLeft(2, '0');
     final mm = dt.minute.toString().padLeft(2, '0');
@@ -852,6 +846,8 @@ class PrinterService {
               align: PosAlign.center,
               height: PosTextSize.size2,
               width: PosTextSize.size2)));
+      // Sedikit jarak setelah nama toko (mirip jarak antar baris kontak).
+      out.addAll(gen.feed(1));
     }
     if (storeAddress.isNotEmpty) {
       out.addAll(gen.text(_toAscii(storeAddress),
@@ -892,7 +888,7 @@ class PrinterService {
       final items = itemsByTx[tx.id] ?? const <TransactionItem>[];
       out.addAll(gen.text(_sep(w)));
       out.addAll(gen.text(
-          _rowLR('#${tx.localId}', _fmtDate(tx.createdAt), w),
+          _rowLR('#${shortTxNo(tx.localId)}', _fmtDateTimeFull(tx.createdAt), w),
           styles: const PosStyles(bold: true)));
       for (final item in _orderItems(items, parentOf)) {
         final isVar = _parentItemOf(item, items, parentOf) != null;
@@ -910,8 +906,15 @@ class PrinterService {
         final qtyLine = '  $qtyStr $uName x ${_fmtNum(item.priceAtSale)}';
         out.addAll(gen.text(_rowLR(qtyLine, _fmtNum(item.subtotal), w)));
       }
-      out.addAll(gen.text(
-          _rowLR('Subtotal nota', 'Rp ${_fmtNum(tx.total)}', w)));
+      // Spasi satu baris memisahkan subtotal dari daftar produk; nominal tebal.
+      out.addAll(gen.feed(1));
+      out.addAll(gen.row([
+        PosColumn(text: 'Subtotal nota', width: 6),
+        PosColumn(
+            text: 'Rp ${_fmtNum(tx.total)}',
+            width: 6,
+            styles: const PosStyles(bold: true, align: PosAlign.right)),
+      ]));
       final sisa = tx.total - tx.paid;
       if (sisa > 0) {
         out.addAll(
