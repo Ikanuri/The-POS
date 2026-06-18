@@ -62,6 +62,11 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
         title: const Text('Produk'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.sync_alt_outlined),
+            tooltip: 'Sinkron Harga',
+            onPressed: () => context.push('/produk/sinkron-harga'),
+          ),
+          IconButton(
             icon: const Icon(Icons.label_outline),
             tooltip: 'Kelola Kategori',
             onPressed: () => context.push('/produk/kategori'),
