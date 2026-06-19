@@ -552,8 +552,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     notifier.clear();
     if (mounted) {
-      // Kembali ke struk transaksi (data ter-refresh dari DB).
-      context.go('/kasir/struk/$txId');
+      // Pop kembali ke ReceiptScreen (bukan context.go) agar await
+      // context.push() di ReceiptScreen ter-resolve dan _load() dipanggil.
+      // context.go me-reuse widget dengan page key sama tanpa initState.
+      var count = 0;
+      Navigator.of(context).popUntil((_) {
+        if (count >= 2) return true;
+        count++;
+        return false;
+      });
     }
   }
 
