@@ -47,6 +47,11 @@ class TransactionItems extends Table {
   TextColumn get itemNote => text().nullable()(); // catatan item, muncul di struk
   IntColumn get subtotal => integer()();
 
+  /// Waktu item ditambahkan SETELAH transaksi awal selesai (fitur "tambah
+  /// belanjaan"). null = item asli saat transaksi dibuat. Terisi = item susulan;
+  /// dipakai struk in-app untuk memberi pembatas "Tambahan <jam>".
+  DateTimeColumn get addedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

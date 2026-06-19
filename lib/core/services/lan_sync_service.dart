@@ -121,6 +121,9 @@ class LanSyncService {
           await _db!.mergeRows(entry.key, entry.value, appendOnly.contains(entry.key));
       if (entry.key == 'transactions') mergedTxRows = entry.value;
     }
+    // Rekonsiliasi total/paid dari child rows sebelum membangun ringkasan,
+    // agar header transaksi yang item/pembayarannya bertambah via sync ikut benar.
+    await _db!.reconcileSyncedTransactions(mergedTxRows);
     await _db!.rebuildSummariesForMergedTransactions(mergedTxRows);
     return received;
   }
@@ -347,7 +350,9 @@ class LanSyncService {
         received += await db.mergeRows(entry.key, rows, appendOnly.contains(entry.key));
         if (entry.key == 'transactions') mergedTxRows = rows;
       }
-      // Refresh ringkasan harian untuk tanggal yang tersentuh transaksi masuk.
+      // Rekonsiliasi total/paid dari child rows, lalu refresh ringkasan harian
+      // untuk tanggal yang tersentuh transaksi masuk.
+      await db.reconcileSyncedTransactions(mergedTxRows);
       await db.rebuildSummariesForMergedTransactions(mergedTxRows);
 
       final sent = outDump.values.fold<int>(0, (s, r) => s + r.length);

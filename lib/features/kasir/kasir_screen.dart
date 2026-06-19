@@ -103,6 +103,59 @@ class _ScanToastCard extends StatelessWidget {
   }
 }
 
+/// Panduan visual scanner: kotak transparan dengan empat sudut + garis tengah.
+/// Murni dekoratif — tidak memengaruhi area deteksi (engine tetap fullframe).
+class _ScanGuideOverlay extends StatelessWidget {
+  const _ScanGuideOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(painter: _ScanGuidePainter());
+  }
+}
+
+class _ScanGuidePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final boxW = size.width * 0.7;
+    final boxH = boxW * 0.62;
+    final left = (size.width - boxW) / 2;
+    final top = (size.height - boxH) / 2;
+    final rect = Rect.fromLTWH(left, top, boxW, boxH);
+
+    // Kotak sudut.
+    final corner = Paint()
+      ..color = Colors.white.withOpacity(0.9)
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    const cLen = 26.0;
+    // Kiri-atas
+    canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(cLen, 0), corner);
+    canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(0, cLen), corner);
+    // Kanan-atas
+    canvas.drawLine(rect.topRight, rect.topRight + const Offset(-cLen, 0), corner);
+    canvas.drawLine(rect.topRight, rect.topRight + const Offset(0, cLen), corner);
+    // Kiri-bawah
+    canvas.drawLine(rect.bottomLeft, rect.bottomLeft + const Offset(cLen, 0), corner);
+    canvas.drawLine(rect.bottomLeft, rect.bottomLeft + const Offset(0, -cLen), corner);
+    // Kanan-bawah
+    canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(-cLen, 0), corner);
+    canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(0, -cLen), corner);
+
+    // Garis tengah merah (penanda arah scan).
+    final line = Paint()
+      ..color = Colors.red.withOpacity(0.8)
+      ..strokeWidth = 2;
+    final midY = top + boxH / 2;
+    canvas.drawLine(
+        Offset(left + 12, midY), Offset(left + boxW - 12, midY), line);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 final _heldCountProvider = StreamProvider<int>((ref) {
   return ref
       .watch(databaseProvider)
@@ -329,6 +382,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   // Toast melayang (mode continuous)
   _ScanToast? _activeToast;
 
+  // Senter (torch) scanner
+  bool _torchOn = false;
+
   // Debounce deteksi berulang barcode yang sama
   String? _lastScan;
   int _lastScanMs = 0;
@@ -422,6 +478,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   void _openScanner() {
     setState(() {
       _scannerOpen = true;
+      _torchOn = false;
       _scannerCtrl = MobileScannerController();
     });
   }
@@ -433,7 +490,15 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       _scannerOpen = false;
       _scannerCtrl = null;
       _activeToast = null;
+      _torchOn = false;
     });
+  }
+
+  Future<void> _toggleTorch() async {
+    final ctrl = _scannerCtrl;
+    if (ctrl == null) return;
+    await ctrl.toggleTorch();
+    if (mounted) setState(() => _torchOn = !_torchOn);
   }
 
   /// Resolusi barcode → data produk siap-tambah, atau null bila tidak ada.
@@ -637,6 +702,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             onPressed: _closeScanner,
           ),
           actions: [
+            IconButton(
+              icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
+              tooltip: 'Senter',
+              onPressed: _toggleTorch,
+            ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.settings_outlined),
               tooltip: 'Pengaturan Scanner',
@@ -672,6 +742,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                 final barcode = capture.barcodes.firstOrNull?.rawValue;
                 if (barcode != null) _handleBarcode(barcode);
               },
+            ),
+            // Overlay panduan visual (dekoratif — TIDAK membatasi area deteksi;
+            // engine tetap membaca barcode dari seluruh frame).
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: _ScanGuideOverlay(),
+              ),
             ),
             if (_activeToast != null)
               Positioned(

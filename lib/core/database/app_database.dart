@@ -94,7 +94,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -139,6 +139,11 @@ class AppDatabase extends _$AppDatabase {
             // Pegawai toko: master data + kolom snapshot nama di transaksi.
             await m.createTable(employees);
             await m.addColumn(transactions, transactions.employeeName);
+          }
+          if (from < 6) {
+            // Tambah belanjaan ke transaksi yang sudah dibayar: kolom penanda
+            // waktu item susulan.
+            await m.addColumn(transactionItems, transactionItems.addedAt);
           }
         },
         beforeOpen: (details) async {
@@ -821,6 +826,118 @@ class AppDatabase extends _$AppDatabase {
       }
       // Materialisasi ringkasan harian (di dalam transaksi → atomik).
       await _rebuildDailySummaryFor(_dateKey(ts));
+    });
+  }
+
+  /// Tambah item ke transaksi yang SUDAH tersimpan (fitur "tambah belanjaan").
+  /// Tetap satu transaksi & satu localId. Dalam satu transaksi DB:
+  ///  - insert transaction_items baru (ditandai addedAt = sekarang)
+  ///  - potong stok tiap item
+  ///  - catat pembayaran susulan (bila ada)
+  ///  - hitung ulang total & paid dari child rows, sesuaikan status
+  ///  - rebuild ringkasan harian
+  Future<void> addItemsToTransaction({
+    required String txId,
+    required List<TransactionItemsCompanion> items,
+    required List<({String productUnitId, double qty, String note})> stockItems,
+    TransactionPaymentsCompanion? payment,
+    String? kasirId,
+  }) async {
+    final now = DateTime.now();
+    await transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null || tx.status == 'void') return;
+
+      // Insert item susulan dengan penanda addedAt.
+      await batch((b) {
+        b.insertAll(
+          transactionItems,
+          items.map((c) => c.copyWith(addedAt: Value(now))),
+        );
+        if (payment != null) b.insert(transactionPayments, payment);
+      });
+
+      // Potong stok.
+      for (final s in stockItems) {
+        await _appendStock(
+          productUnitId: s.productUnitId,
+          qtyChange: -s.qty,
+          type: 'sale',
+          note: s.note,
+          kasirId: kasirId,
+          now: now,
+        );
+      }
+
+      // Hitung ulang total & paid dari child rows → sumber kebenaran tunggal.
+      await _reconcileTransactionTotals(txId);
+
+      await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
+    });
+  }
+
+  /// Hitung ulang `total` (Σ subtotal item) dan `paid` (Σ pembayaran) sebuah
+  /// transaksi dari child rows, lalu sesuaikan `status` & `change_amount`.
+  /// Dipakai setelah tambah-item dan setelah sync (rekonsiliasi).
+  ///
+  /// Sumber kebenaran:
+  ///  - total = Σ transaction_items.subtotal
+  ///  - paid  = Σ transaction_payments.amount (pembayaran awal pun tercatat di
+  ///            sini saat transaksi dibuat). Bila tabel pembayaran kosong
+  ///            (transaksi legacy/tempo), pakai kolom header `paid` apa adanya.
+  /// Keduanya hanya bergantung pada child rows yang menyebar via sync sebagai
+  /// baris baru → hasil identik di semua perangkat & idempoten.
+  Future<void> _reconcileTransactionTotals(String txId) async {
+    final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    if (tx == null || tx.status == 'void') return;
+    // Retur bertotal negatif & tidak pernah ditambah item — jangan diutak-atik.
+    if (tx.internalNote?.startsWith('RETUR:') ?? false) return;
+
+    final itemRows = await (select(transactionItems)
+          ..where((t) => t.transactionId.equals(txId)))
+        .get();
+    final newTotal = itemRows.fold<int>(0, (s, i) => s + i.subtotal);
+
+    final payRows = await (select(transactionPayments)
+          ..where((t) => t.transactionId.equals(txId)))
+        .get();
+    final sumPay = payRows.fold<int>(0, (s, p) => s + p.amount);
+    final newPaid = payRows.isEmpty ? tx.paid : sumPay;
+
+    final isTempo = tx.status == 'tempo' && newPaid == 0;
+    final newStatus = isTempo
+        ? 'tempo'
+        : (newPaid < newTotal ? 'kurang_bayar' : 'lunas');
+    final newChange = newPaid > newTotal ? newPaid - newTotal : 0;
+
+    await (update(transactions)..where((t) => t.id.equals(txId))).write(
+      TransactionsCompanion(
+        total: Value(newTotal),
+        paid: Value(newPaid),
+        status: Value(newStatus),
+        changeAmount: Value(newChange),
+      ),
+    );
+  }
+
+  /// Rekonsiliasi pasca-sync: untuk tiap transaksi hasil merge, hitung ulang
+  /// total/paid/status dari child rows. Mengoreksi kasus di mana item/pembayaran
+  /// susulan masuk via sync tetapi header transaksi (INSERT OR IGNORE) tidak
+  /// ikut terupdate. Aman dipanggil berulang (idempoten).
+  Future<void> reconcileSyncedTransactions(
+      List<Map<String, Object?>> txRows) async {
+    final ids = <String>{};
+    for (final r in txRows) {
+      final id = r['id'];
+      if (id is String) ids.add(id);
+    }
+    if (ids.isEmpty) return;
+    await transaction(() async {
+      for (final id in ids) {
+        await _reconcileTransactionTotals(id);
+      }
     });
   }
 
