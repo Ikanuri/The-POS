@@ -351,13 +351,21 @@ List<Color> _gradFor(String name) =>
         _kAvatarGradients.length];
 
 class KasirScreen extends ConsumerStatefulWidget {
-  const KasirScreen({super.key});
+  const KasirScreen({super.key, this.addToTxId});
+
+  /// Bila terisi, layar kasir berada dalam mode "tambah belanjaan" untuk
+  /// transaksi [addToTxId]: memakai keranjang terpisah dan tombol bayar
+  /// menjadi "Bayar Selisih". Bila null, mode kasir biasa.
+  final String? addToTxId;
 
   @override
   ConsumerState<KasirScreen> createState() => _KasirScreenState();
 }
 
 class _KasirScreenState extends ConsumerState<KasirScreen> {
+  /// Slot keranjang aktif: keranjang utama, atau keranjang tambah belanjaan.
+  String get _cartId => widget.addToTxId ?? kMainCartId;
+  bool get _isAddMode => widget.addToTxId != null;
   static const _prefContinuous = 'scanner_continuous';
   static const _prefToastDuration = 'scanner_toast_duration';
 
@@ -545,7 +553,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   /// dengan qty dasar, biarkan apa adanya agar qty dasar tidak hilang.
   Future<void> _ensureParentInCart(CartItem variantItem) async {
     if (!variantItem.isVariant || variantItem.parentProductId == null) return;
-    final cart = ref.read(cartProvider);
+    final cart = ref.read(cartProvider(_cartId));
     final hasParent = cart.any(
         (c) => c.productId == variantItem.parentProductId && !c.isVariant);
     if (hasParent) return;
@@ -567,7 +575,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         .getSingleOrNull();
     if (!mounted) return;
 
-    ref.read(cartProvider.notifier).addItem(CartItem(
+    ref.read(cartProvider(_cartId).notifier).addItem(CartItem(
           productId: parent.id,
           productUnitId: base.id,
           productName: parent.name,
@@ -596,7 +604,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         return;
       }
       await _ensureParentInCart(resolved.item);
-      ref.read(cartProvider.notifier).addItem(resolved.item);
+      ref.read(cartProvider(_cartId).notifier).addItem(resolved.item);
       return;
     }
 
@@ -613,7 +621,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       return;
     }
     final item = resolved.item;
-    final notifier = ref.read(cartProvider.notifier);
+    final notifier = ref.read(cartProvider(_cartId).notifier);
     await _ensureParentInCart(item);
     notifier.addItem(item);
     final newQty = notifier.qtyForUnit(item.productUnitId).round();
@@ -638,7 +646,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   void _toastInc() {
     final t = _activeToast;
     if (t == null) return;
-    final notifier = ref.read(cartProvider.notifier);
+    final notifier = ref.read(cartProvider(_cartId).notifier);
     final q = t.qty + 1;
     // setEffectiveQty agar varian menaikkan qty sambil menjaga qty dasar induk.
     notifier.setEffectiveQty(t.productUnitId, q.toDouble());
@@ -652,7 +660,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   void _toastDec() {
     final t = _activeToast;
     if (t == null) return;
-    final notifier = ref.read(cartProvider.notifier);
+    final notifier = ref.read(cartProvider(_cartId).notifier);
     final q = t.qty - 1;
     if (q <= 0) {
       notifier.removeItem(t.productUnitId);
@@ -672,13 +680,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => ItemEntrySheet(product: product),
+      builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
     );
   }
 
   /// Tambah cepat 1 satuan dasar (produk satuan tunggal).
   void _quickAdd(Product product, CatalogDetail detail) {
-    ref.read(cartProvider.notifier).addItem(CartItem(
+    ref.read(cartProvider(_cartId).notifier).addItem(CartItem(
           productId: product.id,
           productUnitId: detail.baseUnitId,
           productName: product.name,
@@ -766,8 +774,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       );
     }
 
-    final cart = ref.watch(cartProvider);
-    final cartNotifier = ref.read(cartProvider.notifier);
+    final cart = ref.watch(cartProvider(_cartId));
+    final cartNotifier = ref.read(cartProvider(_cartId).notifier);
     final query = ref.watch(_kasirSearchProvider);
     final isGrid = ref.watch(kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
@@ -775,6 +783,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
+      appBar: _isAddMode
+          ? AppBar(
+              title: const Text('Tambah Belanjaan'),
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Batal',
+                onPressed: () => context.pop(),
+              ),
+            )
+          : null,
       body: Column(
         children: [
           _KasirTopbar(
@@ -786,7 +804,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
               final msg = await showModalBottomSheet<String>(
                 context: context,
                 isScrollControlled: true,
-                builder: (_) => const HeldOrdersSheet(),
+                builder: (_) => HeldOrdersSheet(cartId: _cartId),
               );
               if (msg != null && msg.isNotEmpty && mounted) {
                 _showBanner(msg, InlineBannerType.success);
@@ -851,6 +869,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                     itemCount: prods.length,
                     itemBuilder: (_, i) => _ProductCard(
                       product: prods[i],
+                      cartId: _cartId,
                       onTapBody: () => _openEntry(prods[i]),
                       onQuickAdd: _quickAdd,
                       onOpenEntry: () => _openEntry(prods[i]),
@@ -864,6 +883,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                       Divider(height: 1, indent: 62, color: cs.outlineVariant),
                   itemBuilder: (_, i) => _ProductListTile(
                     product: prods[i],
+                    cartId: _cartId,
                     onTapBody: () => _openEntry(prods[i]),
                     onQuickAdd: _quickAdd,
                     onOpenEntry: () => _openEntry(prods[i]),
@@ -881,12 +901,15 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           : _CartBar(
               total: cartNotifier.totalAmount,
               count: cart.length,
+              payLabel: _isAddMode ? 'Bayar Selisih' : null,
               onView: () => showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
-                builder: (_) => const CartSheet(),
+                builder: (_) => CartSheet(cartId: _cartId),
               ),
-              onPay: () => context.go('/kasir/bayar'),
+              onPay: () => _isAddMode
+                  ? context.push('/kasir/tambah/${widget.addToTxId}/bayar')
+                  : context.go('/kasir/bayar'),
             ),
     );
   }
@@ -1154,12 +1177,14 @@ class _AddControl extends StatelessWidget {
 class _ProductCard extends ConsumerWidget {
   const _ProductCard({
     required this.product,
+    required this.cartId,
     required this.onTapBody,
     required this.onQuickAdd,
     required this.onOpenEntry,
   });
 
   final Product product;
+  final String cartId;
   final VoidCallback onTapBody;
   final void Function(Product, CatalogDetail) onQuickAdd;
   final VoidCallback onOpenEntry;
@@ -1169,8 +1194,8 @@ class _ProductCard extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final grad = _gradFor(product.name);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
-    final cart = ref.watch(cartProvider);
-    final notifier = ref.read(cartProvider.notifier);
+    final cart = ref.watch(cartProvider(cartId));
+    final notifier = ref.read(cartProvider(cartId).notifier);
     final qty = cart
         .where((c) => c.productId == product.id)
         .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
@@ -1294,12 +1319,14 @@ class _PriceShimmer extends StatelessWidget {
 class _ProductListTile extends ConsumerStatefulWidget {
   const _ProductListTile({
     required this.product,
+    required this.cartId,
     required this.onTapBody,
     required this.onQuickAdd,
     required this.onOpenEntry,
   });
 
   final Product product;
+  final String cartId;
   final VoidCallback onTapBody;
   final void Function(Product, CatalogDetail) onQuickAdd;
   final VoidCallback onOpenEntry;
@@ -1318,8 +1345,8 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
     final cs = Theme.of(context).colorScheme;
     final grad = _gradFor(product.name);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
-    final cart = ref.watch(cartProvider);
-    final notifier = ref.read(cartProvider.notifier);
+    final cart = ref.watch(cartProvider(widget.cartId));
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
     final qty = cart
         .where((c) => c.productId == product.id)
         .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
@@ -1452,6 +1479,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
           _VariantDropdown(
             parent: product,
             parentDetail: detailAsync.asData?.value,
+            cartId: widget.cartId,
           ),
       ],
     );
@@ -1461,17 +1489,22 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
 /// Daftar varian inline di bawah item produk. Tiap baris punya kontrol +/-
 /// dengan desain sama seperti tombol di item produk.
 class _VariantDropdown extends ConsumerWidget {
-  const _VariantDropdown({required this.parent, required this.parentDetail});
+  const _VariantDropdown({
+    required this.parent,
+    required this.parentDetail,
+    required this.cartId,
+  });
 
   final Product parent;
   final CatalogDetail? parentDetail;
+  final String cartId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final variantsAsync = ref.watch(_variantsProvider(parent.id));
-    final cart = ref.watch(cartProvider);
-    final notifier = ref.read(cartProvider.notifier);
+    final cart = ref.watch(cartProvider(cartId));
+    final notifier = ref.read(cartProvider(cartId).notifier);
 
     return Container(
       color: cs.surfaceContainerHighest.withOpacity(0.4),
@@ -1562,12 +1595,14 @@ class _CartBar extends StatelessWidget {
     required this.count,
     required this.onView,
     required this.onPay,
+    this.payLabel,
   });
 
   final int total;
   final int count;
   final VoidCallback onView;
   final VoidCallback onPay;
+  final String? payLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1654,9 +1689,10 @@ class _CartBar extends StatelessWidget {
                   ),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text(
-                  'Bayar',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                child: Text(
+                  payLabel ?? 'Bayar',
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
             ],

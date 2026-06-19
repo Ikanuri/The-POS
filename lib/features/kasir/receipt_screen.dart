@@ -119,6 +119,30 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     return (item.qty - childSum).clamp(0.0, double.infinity);
   }
 
+  /// Susun baris item untuk struk in-app. Bila ada item susulan (addedAt != null,
+  /// fitur tambah belanjaan), sisipkan pembatas "Tambahan <jam>" sebelum batch
+  /// item susulan. Khusus tampilan in-app — share/cetak tetap menyatu.
+  List<Widget> _buildItemRows(ColorScheme scheme) {
+    final rows = <Widget>[];
+    String? lastBatchLabel;
+    for (final parent in _topLevelItems) {
+      final added = parent.addedAt;
+      if (added != null) {
+        final label =
+            '${added.hour.toString().padLeft(2, '0')}:${added.minute.toString().padLeft(2, '0')}';
+        if (label != lastBatchLabel) {
+          lastBatchLabel = label;
+          rows.add(_AddedSeparator(time: label, scheme: scheme));
+        }
+      }
+      rows.add(_itemCheckRow(parent, scheme, isVariant: false));
+      for (final child in _childrenOf(parent)) {
+        rows.add(_itemCheckRow(child, scheme, isVariant: true, parent: parent));
+      }
+    }
+    return rows;
+  }
+
   Widget _itemCheckRow(TransactionItem item, ColorScheme scheme,
       {required bool isVariant, TransactionItem? parent}) {
     final checked = _checked[item.id] ?? false;
@@ -1269,12 +1293,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           Card(
             child: Column(
               children: [
-                for (final parent in _topLevelItems) ...[
-                  _itemCheckRow(parent, scheme, isVariant: false),
-                  for (final child in _childrenOf(parent))
-                    _itemCheckRow(child, scheme,
-                        isVariant: true, parent: parent),
-                ],
+                ..._buildItemRows(scheme),
                 const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -1324,6 +1343,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             FilledButton.tonal(
               onPressed: () => _showTambahBayar(context),
               child: const Text('Tambah Bayar'),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (!isVoid && !isRetur) ...[
+            FilledButton.tonalIcon(
+              onPressed: () async {
+                await context.push('/kasir/tambah/${tx.id}');
+                if (mounted) _load();
+              },
+              icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
+              label: const Text('Tambah Belanjaan'),
             ),
             const SizedBox(height: 8),
           ],
@@ -1787,6 +1817,37 @@ class _ReceiptPaper extends StatelessWidget {
       buf.write(s[i]);
     }
     return buf.toString();
+  }
+}
+
+/// Pembatas "Tambahan <jam>" untuk item susulan (hanya struk in-app).
+class _AddedSeparator extends StatelessWidget {
+  const _AddedSeparator({required this.time, required this.scheme});
+  final String time;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: scheme.outlineVariant)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'Tambahan $time',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: scheme.outlineVariant)),
+        ],
+      ),
+    );
   }
 }
 

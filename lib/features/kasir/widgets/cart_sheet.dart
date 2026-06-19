@@ -9,12 +9,13 @@ import '../../../core/utils/input_formatters.dart';
 import '../cart_provider.dart';
 
 class CartSheet extends ConsumerWidget {
-  const CartSheet({super.key});
+  const CartSheet({super.key, this.cartId = kMainCartId});
+  final String cartId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cart = ref.watch(cartProvider);
-    final notifier = ref.read(cartProvider.notifier);
+    final cart = ref.watch(cartProvider(cartId));
+    final notifier = ref.read(cartProvider(cartId).notifier);
     final scheme = Theme.of(context).colorScheme;
     final total = notifier.totalAmount;
 
@@ -98,6 +99,7 @@ class CartSheet extends ConsumerWidget {
                           item: item,
                           isVariant: item.isVariant,
                           effectiveQty: effQty,
+                          cartId: cartId,
                         );
                       },
                     );
@@ -153,15 +155,17 @@ class _CartItemTile extends ConsumerWidget {
     required this.item,
     this.isVariant = false,
     required this.effectiveQty,
+    required this.cartId,
   });
   final int index;
   final CartItem item;
   final bool isVariant;
   final double effectiveQty;
+  final String cartId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(cartProvider.notifier);
+    final notifier = ref.read(cartProvider(cartId).notifier);
     final scheme = Theme.of(context).colorScheme;
     final isZeroed = !isVariant && effectiveQty == 0;
     final subtotal = (item.price * effectiveQty).round();
@@ -243,7 +247,7 @@ class _CartItemTile extends ConsumerWidget {
                   : () => notifier.setEffectiveQty(
                       item.productUnitId, effectiveQty - 1),
             ),
-            _QtyField(item: item, effectiveQty: effectiveQty),
+            _QtyField(item: item, effectiveQty: effectiveQty, cartId: cartId),
             IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
               visualDensity: VisualDensity.compact,
@@ -268,7 +272,7 @@ class _CartItemTile extends ConsumerWidget {
   }
 
   Future<void> _showItemOptions(BuildContext context, WidgetRef ref) async {
-    final notifier = ref.read(cartProvider.notifier);
+    final notifier = ref.read(cartProvider(cartId).notifier);
     final device = ref.read(deviceProvider);
     bool canOverrideHarga = device.deviceRole != 'kasir';
     if (!canOverrideHarga) {
@@ -336,7 +340,7 @@ class _CartItemTile extends ConsumerWidget {
               onPressed: () {
                 final parsed = ThousandsSeparatorFormatter.parseValue(ctrl.text);
                 final price = parsed > 0 ? parsed : item.price;
-                ref.read(cartProvider.notifier).overridePrice(item.productUnitId, price);
+                ref.read(cartProvider(cartId).notifier).overridePrice(item.productUnitId, price);
                 ctx.pop();
               },
               child: const Text('Simpan'),
@@ -369,7 +373,7 @@ class _CartItemTile extends ConsumerWidget {
             FilledButton(
               onPressed: () {
                 final note = ctrl.text.trim().isEmpty ? null : ctrl.text.trim();
-                ref.read(cartProvider.notifier).setNote(item.productUnitId, note);
+                ref.read(cartProvider(cartId).notifier).setNote(item.productUnitId, note);
                 ctx.pop();
               },
               child: const Text('Simpan'),
@@ -386,9 +390,14 @@ class _CartItemTile extends ConsumerWidget {
 /// Qty yang bisa di-tap untuk inline edit. Tap → TextField kecil di tempat;
 /// blur/submit → setEffectiveQty. Desain tombol ± di sekitarnya tidak berubah.
 class _QtyField extends ConsumerStatefulWidget {
-  const _QtyField({required this.item, required this.effectiveQty});
+  const _QtyField({
+    required this.item,
+    required this.effectiveQty,
+    required this.cartId,
+  });
   final CartItem item;
   final double effectiveQty;
+  final String cartId;
 
   @override
   ConsumerState<_QtyField> createState() => _QtyFieldState();
@@ -430,7 +439,7 @@ class _QtyFieldState extends ConsumerState<_QtyField> {
   void _commit() {
     final parsed = double.tryParse(_ctrl.text.replaceAll(',', '.'));
     if (parsed != null) {
-      ref.read(cartProvider.notifier)
+      ref.read(cartProvider(widget.cartId).notifier)
           .setEffectiveQty(widget.item.productUnitId, parsed);
     }
     if (mounted) setState(() => _editing = false);

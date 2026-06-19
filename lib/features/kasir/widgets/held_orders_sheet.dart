@@ -19,12 +19,13 @@ final _heldOrdersProvider = StreamProvider<List<HeldOrder>>((ref) {
 /// Sheet pesanan ditahan: tahan keranjang aktif, lanjutkan / hapus
 /// pesanan yang ditahan sebelumnya.
 class HeldOrdersSheet extends ConsumerWidget {
-  const HeldOrdersSheet({super.key});
+  const HeldOrdersSheet({super.key, this.cartId = kMainCartId});
+  final String cartId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final heldAsync = ref.watch(_heldOrdersProvider);
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(cartProvider(cartId));
     final scheme = Theme.of(context).colorScheme;
 
     return SafeArea(
@@ -56,7 +57,7 @@ class HeldOrdersSheet extends ConsumerWidget {
                 onPressed: () => _holdCurrent(context, ref),
                 icon: const Icon(Icons.pause),
                 label: Text(
-                    'Tahan Sekarang (${cart.length} item · ${formatRupiah(ref.read(cartProvider.notifier).totalAmount)})'),
+                    'Tahan Sekarang (${cart.length} item · ${formatRupiah(ref.read(cartProvider(cartId).notifier).totalAmount)})'),
               ),
               const SizedBox(height: 12),
             ],
@@ -82,7 +83,7 @@ class HeldOrdersSheet extends ConsumerWidget {
                     itemCount: held.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (_, i) =>
-                        _HeldTile(order: held[i]),
+                        _HeldTile(order: held[i], cartId: cartId),
                   ),
                 );
               },
@@ -97,7 +98,7 @@ class HeldOrdersSheet extends ConsumerWidget {
   }
 
   Future<void> _holdCurrent(BuildContext context, WidgetRef ref) async {
-    final cart = ref.read(cartProvider);
+    final cart = ref.read(cartProvider(cartId));
     if (cart.isEmpty) return;
 
     final labelCtrl = TextEditingController();
@@ -141,7 +142,7 @@ class HeldOrdersSheet extends ConsumerWidget {
       label: label,
       cartJson: jsonEncode(cart.map((c) => c.toJson()).toList()),
     );
-    ref.read(cartProvider.notifier).clear();
+    ref.read(cartProvider(cartId).notifier).clear();
     if (context.mounted) {
       // Pop dengan pesan agar kasir menampilkannya sebagai banner inline
       // (bukan SnackBar/toast melayang).
@@ -151,8 +152,9 @@ class HeldOrdersSheet extends ConsumerWidget {
 }
 
 class _HeldTile extends ConsumerWidget {
-  const _HeldTile({required this.order});
+  const _HeldTile({required this.order, required this.cartId});
   final HeldOrder order;
+  final String cartId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -207,7 +209,7 @@ class _HeldTile extends ConsumerWidget {
       }
       return;
     }
-    final cart = ref.read(cartProvider);
+    final cart = ref.read(cartProvider(cartId));
     if (cart.isNotEmpty) {
       final ok = await showDialog<bool>(
         context: context,
@@ -231,7 +233,7 @@ class _HeldTile extends ConsumerWidget {
     if (!context.mounted) return;
 
     await ref.read(databaseProvider).deleteHeldOrder(order.id);
-    ref.read(cartProvider.notifier).replaceAll(items);
+    ref.read(cartProvider(cartId).notifier).replaceAll(items);
     if (context.mounted) {
       // Pop dengan pesan agar kasir menampilkannya sebagai banner inline.
       Navigator.of(context).pop('Melanjutkan pesanan: ${order.label}');

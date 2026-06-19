@@ -1,10 +1,86 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/models/cart_item.dart';
 
+/// Cart ID keranjang utama kasir. Keranjang "tambah belanjaan" memakai id
+/// transaksi sehingga terpisah total dari keranjang utama.
+const kMainCartId = 'main';
+
 class CartNotifier extends StateNotifier<List<CartItem>> {
-  CartNotifier() : super([]);
+  CartNotifier(this.cartId) : super([]) {
+    _load();
+  }
+
+  /// Penanda slot keranjang. 'main' = kasir biasa; selain itu = id transaksi
+  /// untuk fitur tambah belanjaan.
+  final String cartId;
+
+  static const _prefPrefix = 'cart_v1_';
+  String get _prefKey => '$_prefPrefix$cartId';
+
+  bool _loaded = false;
+
+  /// Muat keranjang dari penyimpanan lokal (survive app kill / restart).
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    // Jangan timpa bila pengguna sudah berinteraksi sebelum load selesai.
+    if (state.isEmpty) {
+      final raw = prefs.getString(_prefKey);
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final list = (jsonDecode(raw) as List)
+              .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
+              .toList();
+          super.state = list;
+        } catch (_) {/* abaikan data rusak */}
+      }
+    }
+    _loaded = true;
+    // Catat waktu akses terakhir untuk pembersihan keranjang yatim.
+    await prefs.setInt('${_prefKey}_ts', DateTime.now().millisecondsSinceEpoch);
+  }
+
+  void _persist() {
+    final snapshot = state;
+    SharedPreferences.getInstance().then((prefs) {
+      if (snapshot.isEmpty) {
+        prefs.remove(_prefKey);
+        prefs.remove('${_prefKey}_ts');
+      } else {
+        prefs.setString(
+            _prefKey, jsonEncode(snapshot.map((c) => c.toJson()).toList()));
+        prefs.setInt(
+            '${_prefKey}_ts', DateTime.now().millisecondsSinceEpoch);
+      }
+    });
+  }
+
+  @override
+  set state(List<CartItem> value) {
+    super.state = value;
+    if (_loaded) _persist();
+  }
+
+  /// Bersihkan keranjang "tambah belanjaan" yatim (>24 jam, bukan keranjang
+  /// utama) yang tidak pernah diselesaikan. Dipanggil sekali saat app init.
+  static Future<void> cleanupOrphanCarts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const maxAge = 24 * 60 * 60 * 1000;
+    for (final key in prefs.getKeys().toList()) {
+      if (!key.startsWith(_prefPrefix) || key.endsWith('_ts')) continue;
+      if (key == '$_prefPrefix$kMainCartId') continue; // jangan hapus utama
+      final ts = prefs.getInt('${key}_ts') ?? 0;
+      if (now - ts > maxAge) {
+        await prefs.remove(key);
+        await prefs.remove('${key}_ts');
+      }
+    }
+  }
 
   void addItem(CartItem item) {
     final idx = state.indexWhere(
@@ -225,8 +301,11 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   });
 }
 
-final cartProvider = StateNotifierProvider<CartNotifier, List<CartItem>>(
-  (ref) => CartNotifier(),
+/// Keranjang per-slot. `cartProvider(kMainCartId)` = kasir biasa;
+/// `cartProvider(txId)` = keranjang tambah belanjaan untuk transaksi itu.
+final cartProvider =
+    StateNotifierProvider.family<CartNotifier, List<CartItem>, String>(
+  (ref, cartId) => CartNotifier(cartId),
 );
 
 /// Susun keranjang: induk diikuti varian-variannya (tampilan bersarang).

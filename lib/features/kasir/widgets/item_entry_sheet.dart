@@ -17,10 +17,12 @@ class ItemEntrySheet extends ConsumerStatefulWidget {
     super.key,
     required this.product,
     this.customerGroupId,
+    this.cartId = kMainCartId,
   });
 
   final Product product;
   final String? customerGroupId;
+  final String cartId;
 
   @override
   ConsumerState<ItemEntrySheet> createState() => _ItemEntrySheetState();
@@ -165,7 +167,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     if (!mounted) return;
 
     // Jika item ini sudah ada di keranjang, prefill qty & harga-nya.
-    final cart = ref.read(cartProvider);
+    final cart = ref.read(cartProvider(widget.cartId));
     // Prefill qty varian yang sudah ada di keranjang.
     for (final v in variants) {
       final ex = cart.where((c) => c.productUnitId == v.unitId).firstOrNull;
@@ -175,7 +177,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     double qty = 1;
     int price = opts.isNotEmpty ? opts.first.basePrice : 0;
     bool overridden = false;
-    final notifier = ref.read(cartProvider.notifier);
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
     for (var i = 0; i < opts.length; i++) {
       final existing =
           cart.where((c) => c.productUnitId == opts[i].unit.id).firstOrNull;
@@ -253,7 +255,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   void _submit() {
     final sel = _sel;
     if (sel == null) return;
-    final notifier = ref.read(cartProvider.notifier);
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
 
     // storedQty = effectiveQty + variantTotal agar offset math benar.
     // Kalau _qty == 0 tapi ada varian, simpan parent sebagai placeholder

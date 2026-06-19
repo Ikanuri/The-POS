@@ -14,13 +14,19 @@ import 'cart_provider.dart';
 const _uuid = Uuid();
 
 class PaymentScreen extends ConsumerStatefulWidget {
-  const PaymentScreen({super.key});
+  const PaymentScreen({super.key, this.addToTxId});
+
+  /// Bila terisi, layar bayar berada dalam mode "bayar selisih" untuk
+  /// transaksi [addToTxId] — menambah item ke transaksi yang sudah ada.
+  final String? addToTxId;
 
   @override
   ConsumerState<PaymentScreen> createState() => _PaymentScreenState();
 }
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
+  String get _cartId => widget.addToTxId ?? kMainCartId;
+  bool get _isAddMode => widget.addToTxId != null;
   String _selectedMethodId = 'pm-tunai';
   String _selectedMethodType = 'tunai';
 
@@ -191,7 +197,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     });
   }
 
-  int get _cartTotal => ref.read(cartProvider.notifier).totalAmount;
+  int get _cartTotal => ref.read(cartProvider(_cartId).notifier).totalAmount;
 
   int get _total => _totalOverride ?? _cartTotal;
 
@@ -250,7 +256,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   Future<void> _confirm() async {
     if (_isSaving) return;
-    final cart = ref.read(cartProvider);
+    final cart = ref.read(cartProvider(_cartId));
     if (cart.isEmpty) return;
 
     setState(() => _isSaving = true);
@@ -261,7 +267,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final allowNegative =
           (await db.getSetting('allow_negative_stock')) == '1';
       if (!allowNegative) {
-        final notifier = ref.read(cartProvider.notifier);
+        final notifier = ref.read(cartProvider(_cartId).notifier);
         final shortages = <String>[];
         for (final item in cart) {
           final effQty = notifier.effectiveQtyFor(item);
@@ -286,8 +292,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           return;
         }
       }
+      // Mode tambah belanjaan: tambahkan item ke transaksi yang sudah ada,
+      // bukan membuat transaksi baru.
+      if (_isAddMode) {
+        await _confirmAddItems(db, cart);
+        return;
+      }
+
       final device = ref.read(deviceProvider);
-      final notifier = ref.read(cartProvider.notifier);
+      final notifier = ref.read(cartProvider(_cartId).notifier);
       final now = DateTime.now();
 
       // Nomor nota dijamin unik (penjualan & retur berbagi ruang sequence).
@@ -433,7 +446,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         loyaltyEntry: loyaltyEntry,
       );
 
-      ref.read(cartProvider.notifier).clear();
+      ref.read(cartProvider(_cartId).notifier).clear();
       if (mounted) {
         context.pushReplacement('/kasir/struk/$txId');
       }
@@ -447,6 +460,103 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
   }
 
+  /// Konfirmasi tambah belanjaan: bangun item susulan dari keranjang lalu
+  /// panggil [AppDatabase.addItemsToTransaction]. Pelanggan/pegawai mengikuti
+  /// transaksi asli (tidak diubah). Total selisih dibayar via metode terpilih.
+  Future<void> _confirmAddItems(AppDatabase db, List<CartItem> cart) async {
+    final device = ref.read(deviceProvider);
+    final notifier = ref.read(cartProvider(_cartId).notifier);
+    final now = DateTime.now();
+    final txId = widget.addToTxId!;
+
+    final isTempo = _selectedMethodType == 'tempo';
+    final paidAmount = isTempo ? 0 : _paid;
+
+    double effQty(CartItem item) => notifier.effectiveQtyFor(item);
+
+    // Alokasi diskon proporsional bila total selisih di-override.
+    final discountFactor =
+        (_totalOverride != null && _cartTotal > 0) ? _total / _cartTotal : 1.0;
+    final applyDiscount = discountFactor != 1.0;
+
+    final lines = cart
+        .where((item) => effQty(item) > 0)
+        .map((item) {
+          final eq = effQty(item);
+          return (item: item, eq: eq, base: (item.price * eq).round());
+        })
+        .toList();
+    var lastQtyIdx = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].eq > 0) lastQtyIdx = i;
+    }
+
+    final itemCompanions = <TransactionItemsCompanion>[];
+    var allocated = 0;
+    for (var i = 0; i < lines.length; i++) {
+      final l = lines[i];
+      int sub;
+      if (!applyDiscount) {
+        sub = l.base;
+      } else if (i == lastQtyIdx) {
+        sub = _total - allocated;
+      } else {
+        sub = (l.base * discountFactor).round();
+        allocated += sub;
+      }
+      final unitPrice =
+          (applyDiscount && l.eq > 0) ? (sub / l.eq).round() : l.item.price;
+      itemCompanions.add(TransactionItemsCompanion.insert(
+        id: _uuid.v4(),
+        transactionId: txId,
+        productId: l.item.productId,
+        productUnitId: l.item.productUnitId,
+        qty: l.eq,
+        priceAtSale: unitPrice,
+        originalPrice: l.item.originalPrice,
+        priceOverridden: Value(l.item.priceOverridden || applyDiscount),
+        costAtSale: Value(l.item.costPrice),
+        itemNote: Value(l.item.itemNote),
+        subtotal: sub,
+      ));
+    }
+
+    final stockItems = cart
+        .where((item) => effQty(item) > 0)
+        .map((item) => (
+              productUnitId: item.productUnitId,
+              qty: effQty(item),
+              note: 'tambah',
+            ))
+        .toList();
+
+    final payment = paidAmount > 0
+        ? TransactionPaymentsCompanion.insert(
+            id: _uuid.v4(),
+            transactionId: txId,
+            amount: paidAmount,
+            method: _selectedMethodType,
+            paidAt: Value(now),
+            kasirId: Value(device.deviceCode),
+            note: const Value('Tambah belanjaan'),
+          )
+        : null;
+
+    await db.addItemsToTransaction(
+      txId: txId,
+      items: itemCompanions,
+      stockItems: stockItems,
+      payment: payment,
+      kasirId: device.deviceCode,
+    );
+
+    notifier.clear();
+    if (mounted) {
+      // Kembali ke struk transaksi (data ter-refresh dari DB).
+      context.go('/kasir/struk/$txId');
+    }
+  }
+
   @override
   void dispose() {
     _custCtrl.dispose();
@@ -455,11 +565,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(cartProvider(_cartId));
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pembayaran')),
+      appBar: AppBar(
+          title: Text(_isAddMode ? 'Bayar Selisih' : 'Pembayaran')),
       body: Column(
         children: [
           Expanded(
@@ -592,6 +703,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ),
           const SizedBox(height: 16),
 
+          // Pelanggan & pegawai mengikuti transaksi asli saat tambah
+          // belanjaan — tidak ditampilkan/diubah di mode bayar selisih.
+          if (!_isAddMode) ...[
           // Customer picker
           Text('Pelanggan',
               style: Theme.of(context).textTheme.titleSmall),
@@ -779,6 +893,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          ],
 
           // Payment method
           Text('Metode Pembayaran',
@@ -907,7 +1022,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   /// Tombol "Bayar" aktif: keranjang tidak kosong. Untuk tunai, jumlah uang
   /// diinput nanti di sheet keypad — jadi tidak butuh _tendered di sini.
-  bool get _bayarEnabled => ref.read(cartProvider).isNotEmpty;
+  bool get _bayarEnabled => ref.read(cartProvider(_cartId)).isNotEmpty;
 
   String _bayarLabel() {
     if (_selectedMethodType == 'tempo') {

@@ -72,6 +72,19 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (_, state) =>
                     ReceiptScreen(transactionId: state.pathParameters['txId']!),
               ),
+              // Tambah belanjaan ke transaksi yang sudah ada.
+              GoRoute(
+                path: 'tambah/:txId',
+                builder: (_, state) =>
+                    KasirScreen(addToTxId: state.pathParameters['txId']!),
+                routes: [
+                  GoRoute(
+                    path: 'bayar',
+                    builder: (_, state) => PaymentScreen(
+                        addToTxId: state.pathParameters['txId']!),
+                  ),
+                ],
+              ),
             ],
           ),
           GoRoute(

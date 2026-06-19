@@ -9,6 +9,7 @@ import 'core/providers/device_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/kasir/cart_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,9 @@ Future<void> main() async {
       // Non-fatal — laporan & struk tetap berfungsi tanpa pre-aggregate.
     }
   }
+
+  // Bersihkan keranjang "tambah belanjaan" yatim (>24 jam) yang tidak selesai.
+  await CartNotifier.cleanupOrphanCarts();
 
   runApp(
     UncontrolledProviderScope(
