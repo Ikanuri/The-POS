@@ -122,7 +122,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// Susun baris item untuk struk in-app. Bila ada item susulan (addedAt != null,
   /// fitur tambah belanjaan), sisipkan pembatas "Tambahan <jam>" sebelum batch
   /// item susulan. Khusus tampilan in-app — share/cetak tetap menyatu.
-  List<Widget> _buildItemRows(ColorScheme scheme) {
+  List<Widget> _buildItemRows(ColorScheme scheme, {bool showProfit = false}) {
     final rows = <Widget>[];
     String? lastBatchLabel;
     for (final parent in _topLevelItems) {
@@ -135,109 +135,256 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           rows.add(_AddedSeparator(time: label, scheme: scheme));
         }
       }
-      rows.add(_itemCheckRow(parent, scheme, isVariant: false));
+      rows.add(_itemCheckRow(parent, scheme, isVariant: false, showProfit: showProfit));
       for (final child in _childrenOf(parent)) {
-        rows.add(_itemCheckRow(child, scheme, isVariant: true, parent: parent));
+        rows.add(_itemCheckRow(child, scheme, isVariant: true, parent: parent, showProfit: showProfit));
       }
     }
     return rows;
   }
 
   Widget _itemCheckRow(TransactionItem item, ColorScheme scheme,
-      {required bool isVariant, TransactionItem? parent}) {
+      {required bool isVariant, TransactionItem? parent, bool showProfit = false}) {
     final checked = _checked[item.id] ?? false;
     final hasChildren = !isVariant && _childrenOf(item).isNotEmpty;
     final effQty = _itemEffQty(item);
     final isPlaceholder = !isVariant && effQty == 0 && hasChildren;
+    final laba = showProfit && effQty > 0
+        ? ((item.priceAtSale - item.costAtSale) * effQty).round()
+        : 0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final profitColor = isDark ? const Color(0xFF81C784) : const Color(0xFF388E3C);
 
-    return CheckboxListTile(
-      dense: true,
-      controlAffinity: ListTileControlAffinity.leading,
-      value: checked,
-      contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 12),
-      onChanged: (v) {
-        final nv = v ?? false;
-        if (isVariant && parent != null) {
-          _setChildChecked(parent, item, nv);
-        } else if (hasChildren) {
-          _setParentChecked(item, nv);
-        } else {
-          setState(() => _checked[item.id] = nv);
-        }
-      },
-      title: Row(
-        children: [
-          if (isVariant)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.subdirectory_arrow_right,
-                  size: 13, color: scheme.onSurfaceVariant),
-            ),
-          Expanded(
-            child: Text(
-              _productNames[item.productId] ?? item.productId,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: isVariant ? 12 : 13,
-                fontWeight: isVariant ? FontWeight.w400 : FontWeight.w500,
-                decoration: checked ? TextDecoration.lineThrough : null,
-                color: checked
-                    ? scheme.onSurfaceVariant
-                    : (isVariant ? scheme.onSurfaceVariant : null),
+    return GestureDetector(
+      onLongPress: isPlaceholder ? null : () => _editItemNote(item),
+      child: CheckboxListTile(
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: checked,
+        contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 12),
+        onChanged: (v) {
+          final nv = v ?? false;
+          if (isVariant && parent != null) {
+            _setChildChecked(parent, item, nv);
+          } else if (hasChildren) {
+            _setParentChecked(item, nv);
+          } else {
+            setState(() => _checked[item.id] = nv);
+          }
+        },
+        title: Row(
+          children: [
+            if (isVariant)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(Icons.subdirectory_arrow_right,
+                    size: 13, color: scheme.onSurfaceVariant),
               ),
-            ),
-          ),
-        ],
-      ),
-      subtitle: isPlaceholder
-          ? Padding(
-              padding: const EdgeInsets.only(top: 1),
+            Expanded(
               child: Text(
-                'via varian',
-                style: TextStyle(fontSize: 11, color: scheme.primary),
-              ),
-            )
-          : Padding(
-              padding: EdgeInsets.only(left: isVariant ? 17 : 0),
-              child: Text.rich(
-                TextSpan(
-                  style:
-                      TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                  children: [
-                    TextSpan(
-                      text: '${_unitNames[item.productUnitId] ?? ''} '
-                          '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
-                          '${formatRupiah(item.priceAtSale)}',
-                    ),
-                    // Harga asli (sebelum dibulatkan/override) ditampilkan
-                    // dicoret di sebelahnya agar selisih terlihat jelas.
-                    if (item.priceOverridden &&
-                        item.originalPrice != item.priceAtSale) ...[
-                      const TextSpan(text: '  '),
-                      TextSpan(
-                        text: formatRupiah(item.originalPrice),
-                        style: TextStyle(
-                          decoration: TextDecoration.lineThrough,
-                          color: scheme.onSurfaceVariant.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
-                    if (item.itemNote != null)
-                      TextSpan(text: '\n${item.itemNote}'),
-                  ],
+                _productNames[item.productId] ?? item.productId,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: isVariant ? 12 : 13,
+                  fontWeight: isVariant ? FontWeight.w400 : FontWeight.w500,
+                  decoration: checked ? TextDecoration.lineThrough : null,
+                  color: checked
+                      ? scheme.onSurfaceVariant
+                      : (isVariant ? scheme.onSurfaceVariant : null),
                 ),
               ),
             ),
-      secondary: isPlaceholder
-          ? null
-          : Text(
-              formatRupiah((item.priceAtSale * effQty).round()),
-              style: TextStyle(
-                  fontSize: isVariant ? 12 : 13,
-                  fontWeight: FontWeight.w600),
-            ),
+          ],
+        ),
+        subtitle: isPlaceholder
+            ? Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Text(
+                  'via varian',
+                  style: TextStyle(fontSize: 11, color: scheme.primary),
+                ),
+              )
+            : Padding(
+                padding: EdgeInsets.only(left: isVariant ? 17 : 0),
+                child: Text.rich(
+                  TextSpan(
+                    style:
+                        TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                    children: [
+                      TextSpan(
+                        text: '${_unitNames[item.productUnitId] ?? ''} '
+                            '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
+                            '${formatRupiah(item.priceAtSale)}',
+                      ),
+                      if (item.priceOverridden &&
+                          item.originalPrice != item.priceAtSale) ...[
+                        const TextSpan(text: '  '),
+                        TextSpan(
+                          text: formatRupiah(item.originalPrice),
+                          style: TextStyle(
+                            decoration: TextDecoration.lineThrough,
+                            color: scheme.onSurfaceVariant.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                      if (showProfit && effQty > 0)
+                        TextSpan(
+                          text: laba >= 0
+                              ? '\nLaba: ${formatRupiah(laba)}'
+                              : '\nRugi: ${formatRupiah(-laba)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: laba >= 0 ? profitColor : scheme.error,
+                          ),
+                        ),
+                      if (item.itemNote != null)
+                        TextSpan(text: '\n${item.itemNote}'),
+                    ],
+                  ),
+                ),
+              ),
+        secondary: isPlaceholder
+            ? null
+            : Text(
+                formatRupiah((item.priceAtSale * effQty).round()),
+                style: TextStyle(
+                    fontSize: isVariant ? 12 : 13,
+                    fontWeight: FontWeight.w600),
+              ),
+      ),
     );
+  }
+
+  Future<void> _editItemNote(TransactionItem item) async {
+    final ctrl = TextEditingController(text: item.itemNote ?? '');
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_productNames[item.productId] ?? 'Catatan Barang'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            hintText: 'Catatan barang…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal')),
+          if (item.itemNote != null)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, ''),
+              child: const Text('Hapus'),
+            ),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text),
+              child: const Text('Simpan')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null || !mounted) return;
+    final db = ref.read(databaseProvider);
+    await (db.update(db.transactionItems)
+          ..where((t) => t.id.equals(item.id)))
+        .write(TransactionItemsCompanion(
+      itemNote: Value(result.isEmpty ? null : result),
+    ));
+    await _load();
+  }
+
+  Future<void> _editInternalNote() async {
+    final ctrl = TextEditingController(text: _tx!.internalNote ?? '');
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Catatan Internal'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Hanya terlihat di aplikasi, tidak muncul di struk cetak/share.',
+                style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Tulis catatan…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text),
+              child: const Text('Simpan')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null || !mounted) return;
+    final db = ref.read(databaseProvider);
+    await (db.update(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .write(TransactionsCompanion(
+      internalNote: Value(result.isEmpty ? null : result),
+    ));
+    await _load();
+  }
+
+  Future<void> _editStrukNote() async {
+    final ctrl = TextEditingController(text: _tx!.strukNote ?? '');
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Catatan Nota'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Muncul di semua jenis struk (aplikasi, share, cetak).',
+                style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Tulis catatan…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text),
+              child: const Text('Simpan')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null || !mounted) return;
+    final db = ref.read(databaseProvider);
+    await (db.update(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .write(TransactionsCompanion(
+      strukNote: Value(result.isEmpty ? null : result),
+    ));
+    await _load();
   }
 
   @override
@@ -1289,11 +1436,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               ),
             ),
 
-          // Items (varian bersarang di bawah induk)
+          // Items (varian bersarang di bawah induk, laba inline per item)
           Card(
             child: Column(
               children: [
-                ..._buildItemRows(scheme),
+                ..._buildItemRows(scheme, showProfit: device.canSeeReports),
                 const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -1301,6 +1448,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     children: [
                       _SummaryRow('Total', formatRupiah(tx.total),
                           bold: true, color: scheme.primary),
+                      if (device.canSeeReports) _buildTotalProfitRow(scheme),
                       if (tx.paid > 0)
                         _SummaryRow('Dibayar',
                             '${_methodLabel(tx.paymentMethod)} · ${formatRupiah(tx.paid)}'),
@@ -1326,10 +1474,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             ),
           ),
 
-          // Laba per item + total — hanya owner/asisten, tidak ikut share/print.
-          if (device.canSeeReports) ...[
+          // Catatan internal & catatan nota
+          if (!isVoid && !isRetur) ...[
             const SizedBox(height: 8),
-            _buildProfitCard(scheme),
+            _buildNotesSection(scheme, tx),
           ],
 
           // Timeline pembayaran — kapan tiap cicilan/pelunasan masuk.
@@ -1415,86 +1563,88 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         '${dt.minute.toString().padLeft(2, '0')}';
   }
 
-  /// Kartu laba: laba per baris item + total. Hanya tampil untuk owner/asisten
-  /// (lihat gating di build) dan sengaja TIDAK ada di _ReceiptPaper (share/print)
-  /// agar HPP tidak bocor ke pelanggan.
-  Widget _buildProfitCard(ColorScheme scheme) {
-    final rows = <Widget>[];
+  Widget _buildTotalProfitRow(ColorScheme scheme) {
     var totalLaba = 0;
-
-    void addRow(TransactionItem item, {required bool isVariant}) {
+    for (final item in _items) {
       final effQty = _itemEffQty(item);
-      if (effQty <= 0) return; // induk placeholder (qty pindah ke varian)
-      final laba = ((item.priceAtSale - item.costAtSale) * effQty).round();
-      totalLaba += laba;
-      rows.add(Padding(
-        padding: EdgeInsets.only(left: isVariant ? 16 : 0, top: 2, bottom: 2),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _productNames[item.productId] ?? item.productId,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: isVariant ? 11 : 12,
-                    color: isVariant ? scheme.onSurfaceVariant : null),
-              ),
-            ),
-            Text(
-              formatRupiah(laba),
-              style: TextStyle(
-                  fontSize: isVariant ? 11 : 12,
-                  fontWeight: FontWeight.w500,
-                  color: laba >= 0 ? scheme.tertiary : scheme.error),
-            ),
-          ],
-        ),
-      ));
+      if (effQty <= 0) continue;
+      totalLaba += ((item.priceAtSale - item.costAtSale) * effQty).round();
     }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final profitColor = isDark ? const Color(0xFF81C784) : const Color(0xFF388E3C);
+    return _SummaryRow(
+      totalLaba >= 0 ? 'Total Laba' : 'Total Rugi',
+      formatRupiah(totalLaba.abs()),
+      bold: true,
+      color: totalLaba >= 0 ? profitColor : scheme.error,
+    );
+  }
 
-    for (final parent in _topLevelItems) {
-      addRow(parent, isVariant: false);
-      for (final child in _childrenOf(parent)) {
-        addRow(child, isVariant: true);
-      }
-    }
-
+  Widget _buildNotesSection(ColorScheme scheme, Transaction tx) {
+    final isReturTx = tx.internalNote?.startsWith('RETUR:') ?? false;
     return Card(
-      color: scheme.surfaceContainerHighest,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.insights_outlined, size: 16, color: scheme.primary),
-                const SizedBox(width: 6),
-                Text('Laba (internal)',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.primary)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            ...rows,
-            const Divider(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Total Laba',
-                    style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w700)),
-                Text(
-                  formatRupiah(totalLaba),
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      color: totalLaba >= 0 ? scheme.tertiary : scheme.error),
+            if (!isReturTx)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _editInternalNote,
+                child: Row(
+                  children: [
+                    Icon(Icons.note_outlined, size: 16, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: tx.internalNote?.isNotEmpty == true
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Catatan Internal',
+                                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                                const SizedBox(height: 2),
+                                Text(tx.internalNote!, style: const TextStyle(fontSize: 12)),
+                              ],
+                            )
+                          : Text('Tambah catatan internal…',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant,
+                                  fontStyle: FontStyle.italic)),
+                    ),
+                    Icon(Icons.edit_outlined, size: 12, color: scheme.primary),
+                  ],
                 ),
-              ],
+              ),
+            if (!isReturTx) const Divider(height: 16),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _editStrukNote,
+              child: Row(
+                children: [
+                  Icon(Icons.receipt_outlined, size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: tx.strukNote?.isNotEmpty == true
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Catatan Nota',
+                                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                              const SizedBox(height: 2),
+                              Text(tx.strukNote!, style: const TextStyle(fontSize: 12)),
+                            ],
+                          )
+                        : Text('Tambah catatan nota…',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant,
+                                fontStyle: FontStyle.italic)),
+                  ),
+                  Icon(Icons.edit_outlined, size: 12, color: scheme.primary),
+                ],
+              ),
             ),
           ],
         ),

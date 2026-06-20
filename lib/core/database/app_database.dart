@@ -1246,6 +1246,31 @@ class AppDatabase extends _$AppDatabase {
     return rows.map((r) => r.data['tid'] as String).toSet();
   }
 
+  /// Detail produk yang cocok per transaksi — untuk tampilan di riwayat saat
+  /// filter produk aktif.
+  Future<Map<String, List<({String name, double qty, int price})>>>
+      findProductMatchesForQuery(String q) async {
+    if (q.trim().isEmpty) return {};
+    final rows = await customSelect(
+      'SELECT ti.transaction_id AS tid, p.name, ti.qty, ti.price_at_sale AS price '
+      'FROM transaction_items ti '
+      'JOIN products p ON p.id = ti.product_id '
+      'WHERE LOWER(p.name) LIKE ?',
+      variables: [Variable.withString('%${q.toLowerCase()}%')],
+      readsFrom: {transactionItems, products},
+    ).get();
+    final result = <String, List<({String name, double qty, int price})>>{};
+    for (final r in rows) {
+      final txId = r.data['tid'] as String;
+      (result[txId] ??= []).add((
+        name: r.data['name'] as String,
+        qty: (r.data['qty'] as num).toDouble(),
+        price: r.data['price'] as int,
+      ));
+    }
+    return result;
+  }
+
   // ───────────────────────── Daily summary ─────────────────────────
 
   static String _dateKey(DateTime d) =>

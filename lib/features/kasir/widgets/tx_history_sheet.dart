@@ -85,6 +85,15 @@ final _custNamesProvider = FutureProvider<Map<String, String>>((ref) async {
   return {for (final c in cs) c.id: c.name};
 });
 
+/// Detail produk yang cocok per transaksi saat filter produk aktif.
+final _productMatchProvider = FutureProvider.family<
+    Map<String, List<({String name, double qty, int price})>>,
+    String>((ref, query) async {
+  if (query.trim().isEmpty) return {};
+  final db = ref.watch(databaseProvider);
+  return db.findProductMatchesForQuery(query);
+});
+
 /// Sheet riwayat transaksi di kasir: cari, filter status/tanggal/produk,
 /// aksi Lunasi · Batalkan · Struk.
 class TxHistorySheet extends ConsumerStatefulWidget {
@@ -190,6 +199,11 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
     final namesAsync = ref.watch(_custNamesProvider);
     final names = namesAsync.valueOrNull ?? const <String, String>{};
     final scheme = Theme.of(context).colorScheme;
+
+    // Produk yang cocok per transaksi (hanya saat filter produk aktif).
+    final productMatches = _productQuery.isNotEmpty
+        ? ref.watch(_productMatchProvider(_productQuery)).valueOrNull
+        : null;
 
     // Statistik nota terpilih (gabung nota) dari hasil provider, sehingga tetap
     // utuh meski filter teks menyembunyikan baris yang sudah dipilih.
@@ -338,28 +352,51 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                             color: scheme.onSurfaceVariant, fontSize: 13)),
                   );
                 }
-                return ListView.separated(
+
+                // Kelompokkan per hari untuk separator tanggal.
+                final grouped = <Object>[];
+                DateTime? lastDay;
+                for (final tx in filtered) {
+                  final day = DateTime(tx.createdAt.year,
+                      tx.createdAt.month, tx.createdAt.day);
+                  if (lastDay == null || day != lastDay) {
+                    grouped.add(day);
+                    lastDay = day;
+                  }
+                  grouped.add(tx);
+                }
+
+                return ListView.builder(
                   controller: scrollCtrl,
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemCount: grouped.length,
                   itemBuilder: (_, i) {
-                    final t = filtered[i];
-                    return _TxRow(
-                      tx: t,
-                      names: names,
-                      expanded: !_selectMode && _expandedId == t.id,
-                      selectMode: _selectMode,
-                      selected: _selectedIds.contains(t.id),
-                      selectable: !_isReturTx(t),
-                      onToggle: () {
-                        if (_selectMode) {
-                          _toggleSelect(t, loadedTxs);
-                        } else {
-                          setState(() => _expandedId =
-                              _expandedId == t.id ? null : t.id);
-                        }
-                      },
-                      onChanged: () => ref.invalidate(_txHistoryProvider),
+                    final item = grouped[i];
+                    if (item is DateTime) {
+                      return _DaySeparator(date: item, scheme: scheme);
+                    }
+                    final t = item as Transaction;
+                    return Column(
+                      children: [
+                        _TxRow(
+                          tx: t,
+                          names: names,
+                          expanded: !_selectMode && _expandedId == t.id,
+                          selectMode: _selectMode,
+                          selected: _selectedIds.contains(t.id),
+                          selectable: !_isReturTx(t),
+                          productMatches: productMatches?[t.id],
+                          onToggle: () {
+                            if (_selectMode) {
+                              _toggleSelect(t, loadedTxs);
+                            } else {
+                              setState(() => _expandedId =
+                                  _expandedId == t.id ? null : t.id);
+                            }
+                          },
+                          onChanged: () => ref.invalidate(_txHistoryProvider),
+                        ),
+                        const Divider(height: 1),
+                      ],
                     );
                   },
                 );
@@ -565,6 +602,7 @@ class _TxRow extends ConsumerWidget {
     this.selectMode = false,
     this.selected = false,
     this.selectable = true,
+    this.productMatches,
   });
 
   final Transaction tx;
@@ -575,6 +613,7 @@ class _TxRow extends ConsumerWidget {
   final bool selectMode;
   final bool selected;
   final bool selectable;
+  final List<({String name, double qty, int price})>? productMatches;
 
   bool get _isRetur => tx.internalNote?.startsWith('RETUR:') ?? false;
 
@@ -634,7 +673,37 @@ class _TxRow extends ConsumerWidget {
               ),
             ],
           ),
-          subtitle: Text(time, style: const TextStyle(fontSize: 11)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(time, style: const TextStyle(fontSize: 11)),
+              if (productMatches != null && productMatches!.isNotEmpty)
+                ...productMatches!.map((m) {
+                  final qtyStr = m.qty % 1 == 0
+                      ? m.qty.toInt().toString()
+                      : '${m.qty}';
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_2_outlined,
+                            size: 12, color: scheme.primary),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '${m.name} · $qtyStr × ${formatRupiah(m.price)}',
+                            style: TextStyle(
+                                fontSize: 11, color: scheme.primary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -1050,4 +1119,46 @@ Future<bool> showVoidTransactionDialog(
         SnackBar(content: Text('Transaksi ${tx.localId} dibatalkan')));
   }
   return true;
+}
+
+class _DaySeparator extends StatelessWidget {
+  const _DaySeparator({required this.date, required this.scheme});
+  final DateTime date;
+  final ColorScheme scheme;
+
+  static const _dayNames = [
+    '', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'
+  ];
+  static const _monthNames = [
+    '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    String label;
+    if (date == today) {
+      label = 'Hari Ini';
+    } else if (date == yesterday) {
+      label = 'Kemarin';
+    } else {
+      label =
+          '${_dayNames[date.weekday]}, ${date.day} ${_monthNames[date.month]} ${date.year}';
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      color: scheme.surfaceContainerHighest.withOpacity(0.4),
+      child: Text(label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurfaceVariant,
+          )),
+    );
+  }
 }
