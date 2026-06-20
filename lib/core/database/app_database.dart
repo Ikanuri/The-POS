@@ -1651,7 +1651,7 @@ class AppDatabase extends _$AppDatabase {
       dump[t] = rows.map((r) => r.data).toList();
     }
     for (final t in masterData) {
-      final hasUpdated = t == 'products' || t == 'product_units' || t == 'customers';
+      final hasUpdated = t == 'products' || t == 'customers';
       if (hasUpdated) {
         final rows = await customSelect(
           'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
