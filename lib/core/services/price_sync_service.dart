@@ -19,6 +19,10 @@ class PriceCatalogItem {
     required this.unitTypeName,
     required this.price,
     required this.costPrice,
+    this.parentName,
+    this.parentKode,
+    this.isBaseUnit = true,
+    this.ratioToBase = 1.0,
   });
 
   final String productName;
@@ -28,6 +32,20 @@ class PriceCatalogItem {
   final int price;
   final int costPrice;
 
+  /// Identitas induk bila item ini varian (parentProductId pada host).
+  /// Dipakai klien untuk merekonstruksi relasi varian saat menambah produk.
+  final String? parentName;
+  final String? parentKode;
+
+  /// Atribut satuan agar klien bisa mencocokkan ke unit yang tepat (bukan
+  /// asal unit pertama) dan membuat unit baru dengan rasio yang benar.
+  final bool isBaseUnit;
+  final double ratioToBase;
+
+  bool get isVariant =>
+      (parentName != null && parentName!.trim().isNotEmpty) ||
+      (parentKode != null && parentKode!.trim().isNotEmpty);
+
   Map<String, Object?> toJson() => {
         'productName': productName,
         'kodeProduk': kodeProduk,
@@ -35,6 +53,10 @@ class PriceCatalogItem {
         'unitTypeName': unitTypeName,
         'price': price,
         'costPrice': costPrice,
+        'parentName': parentName,
+        'parentKode': parentKode,
+        'isBaseUnit': isBaseUnit,
+        'ratioToBase': ratioToBase,
       };
 
   factory PriceCatalogItem.fromJson(Map<String, dynamic> json) =>
@@ -45,6 +67,10 @@ class PriceCatalogItem {
         unitTypeName: json['unitTypeName'] as String? ?? '',
         price: json['price'] as int? ?? 0,
         costPrice: json['costPrice'] as int? ?? 0,
+        parentName: json['parentName'] as String?,
+        parentKode: json['parentKode'] as String?,
+        isBaseUnit: json['isBaseUnit'] as bool? ?? true,
+        ratioToBase: (json['ratioToBase'] as num?)?.toDouble() ?? 1.0,
       );
 }
 
@@ -109,12 +135,15 @@ class PriceSyncService {
   static Future<List<PriceCatalogItem>> _buildCatalog(AppDatabase db) async {
     final rows = await db.customSelect('''
       SELECT p.name AS product_name, p.kode_produk,
+             parent.name AS parent_name, parent.kode_produk AS parent_kode,
              ut.name AS unit_type_name,
+             pu.is_base_unit AS is_base_unit, pu.ratio_to_base AS ratio_to_base,
              pt.price, pt.cost_price,
              pb.barcode
       FROM products p
       JOIN product_units pu ON pu.product_id = p.id
       JOIN price_tiers pt ON pt.product_unit_id = pu.id AND pt.min_qty = 1
+      LEFT JOIN products parent ON parent.id = p.parent_product_id
       LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id
       LEFT JOIN (
         SELECT product_unit_id, barcode
@@ -122,7 +151,7 @@ class PriceSyncService {
         WHERE is_primary = 1
         GROUP BY product_unit_id
       ) pb ON pb.product_unit_id = pu.id
-      WHERE p.is_active = 1
+      WHERE p.is_active = 1 AND pt.price > 0
       ORDER BY p.name
     ''').get();
 
@@ -134,6 +163,11 @@ class PriceSyncService {
               unitTypeName: r.data['unit_type_name'] as String? ?? '',
               price: r.data['price'] as int? ?? 0,
               costPrice: r.data['cost_price'] as int? ?? 0,
+              parentName: r.data['parent_name'] as String?,
+              parentKode: r.data['parent_kode'] as String?,
+              isBaseUnit: ((r.data['is_base_unit'] as int?) ?? 1) == 1,
+              ratioToBase:
+                  (r.data['ratio_to_base'] as num?)?.toDouble() ?? 1.0,
             ))
         .toList();
   }

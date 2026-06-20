@@ -74,13 +74,13 @@ class PriceMatchService {
     final ambiguous = <AmbiguousItem>[];
 
     final allProducts = await db.searchProducts('');
-    final productMap = <String, Product>{};
-    for (final p in allProducts) {
-      productMap[p.id] = p;
-    }
+    // Peta unitTypeId → nama satuan, agar pencocokan bisa memilih unit yang
+    // benar (mis. "Dus" vs "Pcs") alih-alih asal unit pertama.
+    final unitTypes = await db.getAllUnitTypes();
+    final typeNameById = {for (final u in unitTypes) u.id: u.name};
 
     for (final item in catalog) {
-      final result = await _tryMatch(db, item, allProducts);
+      final result = await _tryMatch(db, item, allProducts, typeNameById);
       if (result != null) {
         matched.add(result);
       } else {
@@ -88,7 +88,8 @@ class PriceMatchService {
         if (fuzzyResult != null) {
           final units = await db.getProductUnits(fuzzyResult.$1.id);
           if (units.isNotEmpty) {
-            final unit = units.first;
+            final unit =
+                _resolveUnit(units, typeNameById, item.unitTypeName);
             final tiers = await db.getPriceTiers(unit.id);
             final baseTier =
                 tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
@@ -117,12 +118,31 @@ class PriceMatchService {
     );
   }
 
+  /// Pilih unit yang paling tepat untuk sebuah catalog item. Prioritas:
+  /// 1) nama satuan sama (mis. "Dus"), 2) unit dasar, 3) unit pertama.
+  static ProductUnit _resolveUnit(
+    List<ProductUnit> units,
+    Map<int, String> typeNameById,
+    String wantTypeName,
+  ) {
+    final want = wantTypeName.trim().toLowerCase();
+    if (want.isNotEmpty) {
+      for (final u in units) {
+        final tn =
+            (u.unitTypeId != null ? typeNameById[u.unitTypeId!] : null) ?? '';
+        if (tn.trim().toLowerCase() == want) return u;
+      }
+    }
+    return units.where((u) => u.isBaseUnit).firstOrNull ?? units.first;
+  }
+
   static Future<MatchedItem?> _tryMatch(
     AppDatabase db,
     PriceCatalogItem item,
     List<Product> allProducts,
+    Map<int, String> typeNameById,
   ) async {
-    // 1. Match by barcode
+    // 1. Match by barcode → unit persis (barcode menempel di satu unit).
     if (item.barcode != null && item.barcode!.isNotEmpty) {
       final bc = await db.lookupBarcode(item.barcode!);
       if (bc != null) {
@@ -149,7 +169,7 @@ class PriceMatchService {
       }
     }
 
-    // 2. Match by SKU
+    // 2. Match by SKU → produk, lalu unit yang cocok berdasarkan nama satuan.
     if (item.kodeProduk != null && item.kodeProduk!.isNotEmpty) {
       final skuLower = item.kodeProduk!.toLowerCase();
       final product = allProducts.where(
@@ -158,7 +178,7 @@ class PriceMatchService {
       if (product != null) {
         final units = await db.getProductUnits(product.id);
         if (units.isNotEmpty) {
-          final unit = units.first;
+          final unit = _resolveUnit(units, typeNameById, item.unitTypeName);
           final tiers = await db.getPriceTiers(unit.id);
           final baseTier =
               tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;

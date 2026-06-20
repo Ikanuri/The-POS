@@ -50,54 +50,27 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
     int linked = 0;
 
     try {
-      // 1. Update matched items
+      // Peta nama satuan → unitTypeId untuk membuat unit baru dengan satuan benar.
+      final unitTypes = await db.getAllUnitTypes();
+      final typeIdByName = {
+        for (final u in unitTypes) u.name.trim().toLowerCase(): u.id
+      };
+
+      // 1. Update matched items (unit sudah benar dari matching unit-aware).
       for (final m in _matched) {
         if (!m.selected || !m.hasChanges) continue;
-        await db.customStatement(
-          'UPDATE price_tiers SET price = ?, cost_price = ? '
-          'WHERE product_unit_id = ? AND min_qty = 1',
-          [m.catalogItem.price, m.catalogItem.costPrice, m.localProductUnitId],
-        );
+        await _upsertBaseTier(
+            db, m.localProductUnitId, m.catalogItem.price, m.catalogItem.costPrice);
         await (db.update(db.products)
               ..where((t) => t.id.equals(m.localProductId)))
             .write(ProductsCompanion(updatedAt: Value(DateTime.now())));
         updated++;
       }
 
-      // 2. Add not-found items
+      // 2. Add not-found items (varian ikut tertaut ke induk).
       for (final nf in _notFound) {
         if (nf.action != _NfAction.add) continue;
-        final c = nf.catalogItem;
-        final productId = const Uuid().v4();
-        final unitId = const Uuid().v4();
-        final now = DateTime.now();
-
-        await db.into(db.products).insert(ProductsCompanion.insert(
-          id: productId,
-          name: c.productName,
-          kodeProduk: Value(c.kodeProduk),
-          updatedAt: Value(now),
-        ));
-        await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
-          id: unitId,
-          productId: productId,
-        ));
-        await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
-          id: const Uuid().v4(),
-          productUnitId: unitId,
-          price: c.price,
-          costPrice: Value(c.costPrice),
-        ));
-        if (c.barcode != null && c.barcode!.isNotEmpty) {
-          await db.into(db.productBarcodes).insert(
-            ProductBarcodesCompanion.insert(
-              id: const Uuid().v4(),
-              productUnitId: unitId,
-              barcode: c.barcode!,
-              isPrimary: const Value(true),
-            ),
-          );
-        }
+        await _addCatalogProduct(db, nf.catalogItem, typeIdByName);
         added++;
       }
 
@@ -105,45 +78,14 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
       for (final a in _ambiguous) {
         final c = a.item.catalogItem;
         if (a.action == _AmbAction.link) {
-          await db.customStatement(
-            'UPDATE price_tiers SET price = ?, cost_price = ? '
-            'WHERE product_unit_id = ? AND min_qty = 1',
-            [c.price, c.costPrice, a.item.localProductUnitId],
-          );
+          await _upsertBaseTier(
+              db, a.item.localProductUnitId, c.price, c.costPrice);
           await (db.update(db.products)
                 ..where((t) => t.id.equals(a.item.localProductId)))
               .write(ProductsCompanion(updatedAt: Value(DateTime.now())));
           linked++;
         } else if (a.action == _AmbAction.addNew) {
-          final productId = const Uuid().v4();
-          final unitId = const Uuid().v4();
-          final now = DateTime.now();
-          await db.into(db.products).insert(ProductsCompanion.insert(
-            id: productId,
-            name: c.productName,
-            kodeProduk: Value(c.kodeProduk),
-            updatedAt: Value(now),
-          ));
-          await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
-            id: unitId,
-            productId: productId,
-          ));
-          await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
-            id: const Uuid().v4(),
-            productUnitId: unitId,
-            price: c.price,
-            costPrice: Value(c.costPrice),
-          ));
-          if (c.barcode != null && c.barcode!.isNotEmpty) {
-            await db.into(db.productBarcodes).insert(
-              ProductBarcodesCompanion.insert(
-                id: const Uuid().v4(),
-                productUnitId: unitId,
-                barcode: c.barcode!,
-                isPrimary: const Value(true),
-              ),
-            );
-          }
+          await _addCatalogProduct(db, c, typeIdByName);
           added++;
         }
       }
@@ -177,6 +119,121 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
       showError('Gagal: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Tulis/timpa tier dasar (min_qty=1) sebuah unit. UPDATE biasa akan diam-diam
+  /// tidak melakukan apa-apa bila tier belum ada — di sini kita INSERT bila perlu.
+  Future<void> _upsertBaseTier(
+      AppDatabase db, String unitId, int price, int costPrice) async {
+    final existing = await (db.select(db.priceTiers)
+          ..where((t) => t.productUnitId.equals(unitId) & t.minQty.equals(1)))
+        .get();
+    if (existing.isNotEmpty) {
+      await (db.update(db.priceTiers)
+            ..where((t) => t.id.equals(existing.first.id)))
+          .write(PriceTiersCompanion(
+        price: Value(price),
+        costPrice: Value(costPrice),
+      ));
+    } else {
+      await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+            id: const Uuid().v4(),
+            productUnitId: unitId,
+            price: price,
+            costPrice: Value(costPrice),
+          ));
+    }
+  }
+
+  /// Cari produk lokal yang cocok (prioritas kode produk, lalu nama). Untuk
+  /// varian, pencocokan nama juga dibatasi pada induk yang sama agar dua varian
+  /// bernama sama di bawah induk berbeda tidak saling tertukar. Bila tidak ada,
+  /// buat produk baru. Mencegah duplikat saat beberapa baris katalog menunjuk
+  /// produk yang sama (mis. satu produk dengan beberapa satuan).
+  Future<String> _findOrCreateProduct(
+    AppDatabase db, {
+    required String name,
+    String? kode,
+    String? parentId,
+    bool isChild = false,
+  }) async {
+    final candidates = await db.searchProducts('');
+    Product? found;
+    if (kode != null && kode.trim().isNotEmpty) {
+      final k = kode.trim().toLowerCase();
+      found = candidates
+          .where((p) => (p.kodeProduk ?? '').trim().toLowerCase() == k)
+          .firstOrNull;
+    }
+    found ??= candidates.where((p) {
+      if (p.name.trim().toLowerCase() != name.trim().toLowerCase()) {
+        return false;
+      }
+      return isChild ? p.parentProductId == parentId : true;
+    }).firstOrNull;
+    if (found != null) return found.id;
+
+    final id = const Uuid().v4();
+    await db.into(db.products).insert(ProductsCompanion.insert(
+          id: id,
+          name: name,
+          kodeProduk: Value(kode),
+          parentProductId: Value(parentId),
+          updatedAt: Value(DateTime.now()),
+        ));
+    return id;
+  }
+
+  /// Tambah produk dari catalog item: tautkan ke induk bila varian, buat unit
+  /// dengan satuan & rasio yang benar, lalu set harga.
+  Future<void> _addCatalogProduct(
+    AppDatabase db,
+    PriceCatalogItem c,
+    Map<String, int> typeIdByName,
+  ) async {
+    String? parentId;
+    if (c.isVariant) {
+      final pName = (c.parentName ?? c.parentKode ?? '').trim();
+      if (pName.isNotEmpty) {
+        parentId = await _findOrCreateProduct(db, name: pName, kode: c.parentKode);
+      }
+    }
+
+    final productId = await _findOrCreateProduct(
+      db,
+      name: c.productName,
+      kode: c.kodeProduk,
+      parentId: parentId,
+      isChild: parentId != null,
+    );
+
+    final unitId = const Uuid().v4();
+    final unitTypeId = c.unitTypeName.trim().isEmpty
+        ? null
+        : typeIdByName[c.unitTypeName.trim().toLowerCase()];
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: unitId,
+          productId: productId,
+          unitTypeId: Value(unitTypeId),
+          isBaseUnit: Value(c.isBaseUnit),
+          ratioToBase: Value(c.ratioToBase),
+        ));
+    await _upsertBaseTier(db, unitId, c.price, c.costPrice);
+
+    if (c.barcode != null && c.barcode!.isNotEmpty) {
+      // Hindari crash unique-constraint bila barcode sudah ada di device ini.
+      final existingBc = await db.lookupBarcode(c.barcode!);
+      if (existingBc == null) {
+        await db.into(db.productBarcodes).insert(
+              ProductBarcodesCompanion.insert(
+                id: const Uuid().v4(),
+                productUnitId: unitId,
+                barcode: c.barcode!,
+                isPrimary: const Value(true),
+              ),
+            );
+      }
     }
   }
 
@@ -380,17 +437,17 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
 enum _NfAction { skip, add }
 
 class _NotFoundItem {
-  _NotFoundItem({required this.catalogItem, this.action = _NfAction.skip});
+  _NotFoundItem({required this.catalogItem});
   final PriceCatalogItem catalogItem;
-  _NfAction action;
+  _NfAction action = _NfAction.skip;
 }
 
 enum _AmbAction { skip, link, addNew }
 
 class _AmbiguousAction {
-  _AmbiguousAction({required this.item, this.action = _AmbAction.skip});
+  _AmbiguousAction({required this.item});
   final AmbiguousItem item;
-  _AmbAction action;
+  _AmbAction action = _AmbAction.skip;
 }
 
 // ── Tiles ──
@@ -492,19 +549,24 @@ class _NotFoundTile extends StatelessWidget {
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
             Text('Harga: Rp ${_fmt(c.price)}',
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            if (c.isVariant)
+              Text('Varian dari: ${c.parentName ?? c.parentKode}',
+                  style: TextStyle(fontSize: 11, color: scheme.tertiary)),
             const SizedBox(height: 8),
-            SegmentedButton<_NfAction>(
-              segments: const [
-                ButtonSegment(value: _NfAction.skip, label: Text('Lewati')),
-                ButtonSegment(value: _NfAction.add, label: Text('Tambah')),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final (action, label) in const [
+                  (_NfAction.skip, 'Lewati'),
+                  (_NfAction.add, 'Tambah'),
+                ])
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: item.action == action,
+                    onSelected: (_) => onChanged(action),
+                    visualDensity: VisualDensity.compact,
+                  ),
               ],
-              selected: {item.action},
-              onSelectionChanged: (s) => onChanged(s.first),
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                textStyle: WidgetStatePropertyAll(
-                    Theme.of(context).textTheme.labelSmall),
-              ),
             ),
           ],
         ),
@@ -569,21 +631,22 @@ class _AmbiguousTile extends StatelessWidget {
               ]),
             ),
             const SizedBox(height: 8),
-            SegmentedButton<_AmbAction>(
-              segments: const [
-                ButtonSegment(value: _AmbAction.skip, label: Text('Lewati')),
-                ButtonSegment(
-                    value: _AmbAction.link, label: Text('Samakan')),
-                ButtonSegment(
-                    value: _AmbAction.addNew, label: Text('Tambah Baru')),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final (action, label) in const [
+                  (_AmbAction.skip, 'Lewati'),
+                  (_AmbAction.link, 'Samakan'),
+                  (_AmbAction.addNew, 'Tambah Baru'),
+                ])
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: item.action == action,
+                    onSelected: (_) => onChanged(action),
+                    visualDensity: VisualDensity.compact,
+                  ),
               ],
-              selected: {item.action},
-              onSelectionChanged: (s) => onChanged(s.first),
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                textStyle: WidgetStatePropertyAll(
-                    Theme.of(context).textTheme.labelSmall),
-              ),
             ),
           ],
         ),
