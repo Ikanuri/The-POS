@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/lan_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/widgets/qr_sync_widgets.dart';
 
 class SyncScreen extends ConsumerStatefulWidget {
   const SyncScreen({super.key});
@@ -175,6 +176,13 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                         onCopy: () => _copy(_hostToken, 'Token'),
                       ),
                       const SizedBox(height: 12),
+                      Center(
+                        child: QrSyncDisplay(data: {
+                          'ip': '$_hostIp:8625',
+                          'key': _hostToken,
+                        }),
+                      ),
+                      const SizedBox(height: 12),
                       FilledButton.tonal(
                         onPressed: _toggleHost,
                         child: const Text('Stop Server'),
@@ -275,8 +283,21 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                   ]),
                   const SizedBox(height: 8),
                   Text(
-                    'Masukkan IP dan Token yang ditampilkan di perangkat host.',
+                    'Scan QR atau masukkan IP dan Token dari perangkat host.',
                     style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final data = await showQrSyncScanner(context);
+                      if (data == null || !mounted) return;
+                      final ip = data['ip'] as String? ?? '';
+                      final key = data['key'] as String? ?? '';
+                      if (ip.isNotEmpty) _ipCtrl.text = ip;
+                      if (key.isNotEmpty) _tokenCtrl.text = key;
+                    },
+                    icon: const Icon(Icons.qr_code_scanner, size: 18),
+                    label: const Text('Scan QR Host'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(

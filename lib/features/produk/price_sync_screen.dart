@@ -10,6 +10,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/services/price_match_service.dart';
 import '../../core/services/price_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/widgets/qr_sync_widgets.dart';
 
 class PriceSyncScreen extends ConsumerStatefulWidget {
   const PriceSyncScreen({super.key});
@@ -256,6 +257,13 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
                             onCopy: () => _copy(_hostCode, 'Kode'),
                           ),
                           const SizedBox(height: 12),
+                          Center(
+                            child: QrSyncDisplay(data: {
+                              'ip': '$_hostIp:8626',
+                              'key': _hostCode,
+                            }),
+                          ),
+                          const SizedBox(height: 12),
                           FilledButton.tonal(
                             onPressed: _toggleHost,
                             child: const Text('Stop Server'),
@@ -287,10 +295,23 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
                         ]),
                         const SizedBox(height: 8),
                         Text(
-                          'Masukkan IP dan Kode dari toko yang '
-                          'membagikan harga.',
+                          'Scan QR atau masukkan IP dan Kode dari toko '
+                          'yang membagikan harga.',
                           style: TextStyle(
                               fontSize: 13, color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final data = await showQrSyncScanner(context);
+                            if (data == null || !mounted) return;
+                            final ip = data['ip'] as String? ?? '';
+                            final key = data['key'] as String? ?? '';
+                            if (ip.isNotEmpty) _ipCtrl.text = ip;
+                            if (key.isNotEmpty) _codeCtrl.text = key;
+                          },
+                          icon: const Icon(Icons.qr_code_scanner, size: 18),
+                          label: const Text('Scan QR Host'),
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
