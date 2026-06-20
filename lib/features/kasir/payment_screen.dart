@@ -9,6 +9,7 @@ import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import 'cart_meta_provider.dart';
 import 'cart_provider.dart';
 
 const _uuid = Uuid();
@@ -67,6 +68,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
     final employees = await db.getEmployees();
+
+    // Pra-isi pelanggan & pegawai dari metadata keranjang (dipilih di cart bar
+    // kasir). Mode tambah belanjaan mengikuti transaksi asli → tidak pra-isi.
+    final meta = _isAddMode ? const CartMeta() : ref.read(cartMetaProvider(_cartId));
+    Customer? preCustomer;
+    Map<String, (int, int)> preDebts = {};
+    if (meta.customerId != null) {
+      preCustomer = await (db.select(db.customers)
+            ..where((t) => t.id.equals(meta.customerId!)))
+          .getSingleOrNull();
+      if (preCustomer != null) {
+        preDebts[preCustomer.id] =
+            await db.getCustomerOutstandingDebt(preCustomer.id);
+      }
+    }
+    Employee? preEmployee;
+    if (meta.employeeId != null) {
+      for (final e in employees) {
+        if (e.id == meta.employeeId) {
+          preEmployee = e;
+          break;
+        }
+      }
+    }
+
     if (mounted) {
       setState(() {
         _methods = methods;
@@ -75,8 +101,37 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           _selectedMethodId = methods.first.id;
           _selectedMethodType = methods.first.type;
         }
+        if (preCustomer != null) {
+          _selectedCustomer = preCustomer;
+          _custCtrl.text = preCustomer.name;
+          _custDebts = preDebts;
+        } else if (meta.customerName != null && meta.customerName!.isNotEmpty) {
+          // Nama manual tanpa record pelanggan.
+          _custNameManual = meta.customerName!;
+          _custCtrl.text = meta.customerName!;
+        }
+        _selectedEmployee = preEmployee;
       });
     }
+  }
+
+  /// Tulis balik pilihan pelanggan/pegawai ke metadata keranjang agar tetap
+  /// konsisten bila pengguna kembali ke layar kasir. Tidak untuk mode tambah
+  /// belanjaan (keranjang susulan tidak menyimpan pelanggan).
+  void _syncMetaCustomer() {
+    if (_isAddMode) return;
+    ref.read(cartMetaProvider(_cartId).notifier).setCustomer(
+          _selectedCustomer?.id,
+          _selectedCustomer?.name ??
+              (_custNameManual.trim().isEmpty ? null : _custNameManual.trim()),
+        );
+  }
+
+  void _syncMetaEmployee() {
+    if (_isAddMode) return;
+    ref
+        .read(cartMetaProvider(_cartId).notifier)
+        .setEmployee(_selectedEmployee?.id, _selectedEmployee?.name);
   }
 
   /// Pilih pegawai via modal sheet — tanpa keyboard sehingga tidak menutupi
@@ -154,6 +209,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     setState(() {
       _selectedEmployee = result is Employee ? result : null;
     });
+    _syncMetaEmployee();
   }
 
   Future<void> _searchCustomers(String q) async {
@@ -447,6 +503,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       );
 
       ref.read(cartProvider(_cartId).notifier).clear();
+      ref.read(cartMetaProvider(_cartId).notifier).clear();
       if (mounted) {
         context.pushReplacement('/kasir/struk/$txId');
       }
@@ -551,6 +608,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
 
     notifier.clear();
+    ref.read(cartMetaProvider(_cartId).notifier).clear();
     if (mounted) {
       // Pop kembali ke ReceiptScreen (bukan context.go) agar await
       // context.push() di ReceiptScreen ter-resolve dan _load() dipanggil.
@@ -750,6 +808,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               _custCtrl.clear();
                               _custNameManual = '';
                             });
+                            _syncMetaCustomer();
                           },
                         ),
                       ],
@@ -840,6 +899,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                   _custCtrl.text = c.name;
                                   _custDropdownOpen = false;
                                 });
+                                _syncMetaCustomer();
                               },
                             );
                           }).toList(),
@@ -889,8 +949,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       IconButton(
                         icon: const Icon(Icons.close, size: 18),
                         visualDensity: VisualDensity.compact,
-                        onPressed: () =>
-                            setState(() => _selectedEmployee = null),
+                        onPressed: () {
+                          setState(() => _selectedEmployee = null);
+                          _syncMetaEmployee();
+                        },
                       )
                     else
                       Icon(Icons.expand_more, color: scheme.onSurfaceVariant),

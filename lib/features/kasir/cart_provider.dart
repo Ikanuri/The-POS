@@ -23,6 +23,21 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
 
   bool _loaded = false;
 
+  /// productUnitId item terakhir yang ditambahkan/disentuh — dipakai cart bar
+  /// untuk menampilkan ringkasan "produk terakhir". Tidak dipersistensi
+  /// terpisah; diturunkan dari item terakhir saat load/replace.
+  String? lastTouchedUnitId;
+
+  /// Item yang paling baru disentuh (atau null bila keranjang kosong / item
+  /// sudah dihapus). Lewati induk placeholder (effective qty 0 dengan varian).
+  CartItem? get lastTouchedItem {
+    if (lastTouchedUnitId == null) return null;
+    for (final c in state) {
+      if (c.productUnitId == lastTouchedUnitId) return c;
+    }
+    return null;
+  }
+
   /// Muat keranjang dari penyimpanan lokal (survive app kill / restart).
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,6 +51,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
               .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
               .toList();
           super.state = list;
+          if (list.isNotEmpty) lastTouchedUnitId = list.last.productUnitId;
         } catch (_) {/* abaikan data rusak */}
       }
     }
@@ -83,6 +99,10 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   }
 
   void addItem(CartItem item) {
+    // Catat sebagai item terakhir disentuh untuk ringkasan cart bar. Induk
+    // placeholder (qty 0) tetap dicatat lalu segera ditimpa oleh add varian
+    // yang menyusul, sehingga hasil akhirnya item nyata.
+    lastTouchedUnitId = item.productUnitId;
     final idx = state.indexWhere(
         (c) => c.productUnitId == item.productUnitId);
     if (idx >= 0) {
@@ -134,6 +154,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   void setEffectiveQty(String productUnitId, double effectiveQty) {
     final idx = state.indexWhere((c) => c.productUnitId == productUnitId);
     if (idx < 0) return;
+    lastTouchedUnitId = productUnitId;
     final item = state[idx];
     if (item.isVariant) {
       _setVariantQty(item, effectiveQty);
@@ -261,6 +282,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   /// Set / ganti item berdasarkan productUnitId (dipakai modal edit item).
   /// Berbeda dari [addItem] yang menambah qty; ini menimpa.
   void setItem(CartItem item) {
+    lastTouchedUnitId = item.productUnitId;
     final idx = state.indexWhere((c) => c.productUnitId == item.productUnitId);
     if (item.qty <= 0) {
       if (idx >= 0) removeItem(item.productUnitId);
@@ -286,10 +308,16 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       .where((c) => c.productUnitId == productUnitId)
       .fold(0.0, (s, c) => s + c.qty);
 
-  void clear() => state = [];
+  void clear() {
+    lastTouchedUnitId = null;
+    state = [];
+  }
 
   /// Ganti seluruh isi keranjang (dipakai saat melanjutkan pesanan ditahan).
-  void replaceAll(List<CartItem> items) => state = items;
+  void replaceAll(List<CartItem> items) {
+    lastTouchedUnitId = items.isNotEmpty ? items.last.productUnitId : null;
+    state = items;
+  }
 
   int get totalAmount => state.fold(0, (sum, item) {
     final effQty = effectiveQtyFor(item);

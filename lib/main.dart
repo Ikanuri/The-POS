@@ -9,6 +9,7 @@ import 'core/providers/device_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/kasir/cart_meta_provider.dart';
 import 'features/kasir/cart_provider.dart';
 
 Future<void> main() async {
@@ -39,6 +40,8 @@ Future<void> main() async {
 
   // Bersihkan keranjang "tambah belanjaan" yatim (>24 jam) yang tidak selesai.
   await CartNotifier.cleanupOrphanCarts();
+  // Metadata keranjang yatim mengikuti pembersihan keranjang di atas.
+  await CartMetaNotifier.cleanupOrphanMeta();
 
   runApp(
     UncontrolledProviderScope(

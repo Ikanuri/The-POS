@@ -6,6 +6,7 @@ import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
+import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 
 class CartSheet extends ConsumerWidget {
@@ -66,6 +67,9 @@ class CartSheet extends ConsumerWidget {
                           );
                           if (ok == true) {
                             notifier.clear();
+                            ref
+                                .read(cartMetaProvider(cartId).notifier)
+                                .clear();
                             if (ctx.mounted) Navigator.of(ctx).pop();
                           }
                         },

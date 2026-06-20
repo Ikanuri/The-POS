@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
@@ -14,11 +16,14 @@ import '../../core/providers/product_providers.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import 'cart_meta_provider.dart';
 import 'cart_provider.dart';
+import 'widgets/cart_meta_pickers.dart';
 import 'widgets/cart_sheet.dart';
-import 'widgets/held_orders_sheet.dart';
 import 'widgets/item_entry_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
+
+const _kasirUuid = Uuid();
 
 final _kasirSearchProvider = StateProvider<String>((ref) => '');
 
@@ -162,6 +167,38 @@ final _heldCountProvider = StreamProvider<int>((ref) {
       .watchHeldOrders()
       .map((list) => list.length);
 });
+
+final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
+  return ref.watch(databaseProvider).watchHeldOrders();
+});
+
+/// Bongkar payload pesanan ditahan. Format baru: objek `{items:[...], meta:{}}`.
+/// Format lama (kompatibel mundur): list item langsung tanpa metadata.
+({List<CartItem> items, CartMeta meta}) _parseHeldPayload(String json) {
+  try {
+    final decoded = jsonDecode(json);
+    if (decoded is List) {
+      // Format lama: hanya daftar item.
+      return (
+        items: decoded
+            .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        meta: const CartMeta(),
+      );
+    }
+    if (decoded is Map<String, dynamic>) {
+      final itemsRaw = decoded['items'] as List? ?? const [];
+      final metaRaw = decoded['meta'] as Map<String, dynamic>?;
+      return (
+        items: itemsRaw
+            .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
+      );
+    }
+  } catch (_) {/* data rusak → kosong */}
+  return (items: const <CartItem>[], meta: const CartMeta());
+}
 
 final _kasirProductsProvider =
     StreamProvider.family<List<Product>, String>((ref, query) {
@@ -396,6 +433,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   // Debounce deteksi berulang barcode yang sama
   String? _lastScan;
   int _lastScanMs = 0;
+
+  // Panel pesanan ditahan inline (slide dari atas, mendorong katalog ke bawah).
+  bool _heldPanelOpen = false;
 
   // Banner notifikasi inline (bukan SnackBar overlay)
   String? _bannerMsg;
@@ -684,6 +724,107 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     );
   }
 
+  /// Tahan keranjang aktif. Bila pelanggan sudah dipilih, langsung pakai
+  /// namanya sebagai label (tanpa dialog). Bila belum, minta penanda.
+  Future<void> _holdCurrent() async {
+    final cart = ref.read(cartProvider(_cartId));
+    if (cart.isEmpty) return;
+    final meta = ref.read(cartMetaProvider(_cartId));
+
+    String label;
+    if (meta.hasCustomer) {
+      label = meta.customerName!;
+    } else {
+      final entered = await _askHoldLabel();
+      if (entered == null) return; // dibatalkan
+      label = entered;
+    }
+
+    final db = ref.read(databaseProvider);
+    final payload = jsonEncode({
+      'items': cart.map((c) => c.toJson()).toList(),
+      'meta': meta.toJson(),
+    });
+    await db.holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
+    ref.read(cartProvider(_cartId).notifier).clear();
+    ref.read(cartMetaProvider(_cartId).notifier).clear();
+    if (mounted) {
+      setState(() => _heldPanelOpen = false);
+      _showBanner('Pesanan "$label" ditahan', InlineBannerType.success);
+    }
+  }
+
+  Future<String?> _askHoldLabel() async {
+    final ctrl = TextEditingController();
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Tahan Pesanan'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Nama / penanda',
+              hintText: 'Contoh: Bu Sari',
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(
+                  ctrl.text.trim().isEmpty ? 'Pesanan' : ctrl.text.trim()),
+              child: const Text('Tahan'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      ctrl.dispose();
+    }
+  }
+
+  Future<void> _resumeHeld(HeldOrder order) async {
+    final parsed = _parseHeldPayload(order.cartJson);
+    if (parsed.items.isEmpty) {
+      _showBanner('Data pesanan rusak — tidak ada item yang bisa dipulihkan');
+      return;
+    }
+    final cart = ref.read(cartProvider(_cartId));
+    if (cart.isNotEmpty) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Ganti Keranjang?'),
+          content: const Text(
+              'Keranjang saat ini akan diganti dengan pesanan yang ditahan. '
+              'Tahan dulu keranjang aktif jika tidak ingin hilang.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Batal')),
+            FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Ganti')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    if (!mounted) return;
+    await ref.read(databaseProvider).deleteHeldOrder(order.id);
+    ref.read(cartProvider(_cartId).notifier).replaceAll(parsed.items);
+    ref.read(cartMetaProvider(_cartId).notifier).replaceAll(parsed.meta);
+    if (mounted) {
+      setState(() => _heldPanelOpen = false);
+      _showBanner('Melanjutkan pesanan: ${order.label}',
+          InlineBannerType.success);
+    }
+  }
+
   /// Tambah cepat 1 satuan dasar (produk satuan tunggal).
   void _quickAdd(Product product, CatalogDetail detail) {
     ref.read(cartProvider(_cartId).notifier).addItem(CartItem(
@@ -800,16 +941,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             searchFocus: _searchFocus,
             onSearch: (v) => ref.read(_kasirSearchProvider.notifier).state = v,
             onScan: _openScanner,
-            onHeld: () async {
-              final msg = await showModalBottomSheet<String>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => HeldOrdersSheet(cartId: _cartId),
-              );
-              if (msg != null && msg.isNotEmpty && mounted) {
-                _showBanner(msg, InlineBannerType.success);
-              }
-            },
+            onHeld: () => setState(() => _heldPanelOpen = !_heldPanelOpen),
             onHistory: () => showModalBottomSheet(
               context: context,
               isScrollControlled: true,
@@ -823,6 +955,19 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             message: _bannerMsg,
             type: _bannerType,
             onDismiss: () => setState(() => _bannerMsg = null),
+          ),
+          // Panel pesanan ditahan — slide inline dari atas (mendorong katalog
+          // ke bawah, bukan overlay modal).
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _heldPanelOpen
+                ? _HeldInlinePanel(
+                    onResume: _resumeHeld,
+                    onClose: () => setState(() => _heldPanelOpen = false),
+                  )
+                : const SizedBox(width: double.infinity),
           ),
           Expanded(
             child: productsAsync.when(
@@ -898,18 +1043,35 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       ),
       bottomNavigationBar: cart.isEmpty
           ? null
-          : _CartBar(
-              total: cartNotifier.totalAmount,
-              count: cart.length,
-              payLabel: _isAddMode ? 'Bayar Selisih' : null,
-              onView: () => showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => CartSheet(cartId: _cartId),
-              ),
-              onPay: () => _isAddMode
-                  ? context.push('/kasir/tambah/${widget.addToTxId}/bayar')
-                  : context.go('/kasir/bayar'),
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Tab folder pelanggan & pegawai + tombol tahan — hanya di mode
+                // kasir biasa (mode tambah belanjaan mengikuti transaksi asli).
+                if (!_isAddMode)
+                  _CartMetaTab(
+                    cartId: _cartId,
+                    onHold: _holdCurrent,
+                  ),
+                _CartBar(
+                  total: cartNotifier.totalAmount,
+                  count: cart.length,
+                  payLabel: _isAddMode ? 'Bayar Selisih' : null,
+                  lastItem: _isAddMode ? null : cartNotifier.lastTouchedItem,
+                  lastEffQty: cartNotifier.lastTouchedItem == null
+                      ? 0
+                      : cartNotifier
+                          .effectiveQtyFor(cartNotifier.lastTouchedItem!),
+                  onView: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => CartSheet(cartId: _cartId),
+                  ),
+                  onPay: () => _isAddMode
+                      ? context.push('/kasir/tambah/${widget.addToTxId}/bayar')
+                      : context.go('/kasir/bayar'),
+                ),
+              ],
             ),
     );
   }
@@ -1596,6 +1758,8 @@ class _CartBar extends StatelessWidget {
     required this.onView,
     required this.onPay,
     this.payLabel,
+    this.lastItem,
+    this.lastEffQty = 0,
   });
 
   final int total;
@@ -1604,10 +1768,26 @@ class _CartBar extends StatelessWidget {
   final VoidCallback onPay;
   final String? payLabel;
 
+  /// Produk terakhir yang ditambahkan/disentuh — ditampilkan ringkas di bawah
+  /// total. null bila tidak relevan (mis. mode tambah belanjaan).
+  final CartItem? lastItem;
+  final double lastEffQty;
+
+  /// Ringkasan satu baris item terakhir: "2 pcs · Indomie Goreng · Rp 2.500".
+  String? _lastItemLabel() {
+    final it = lastItem;
+    if (it == null || lastEffQty <= 0) return null;
+    final qtyStr =
+        lastEffQty % 1 == 0 ? lastEffQty.toInt().toString() : '$lastEffQty';
+    final unit = it.unitName.isEmpty ? '' : ' ${it.unitName}';
+    return '$qtyStr$unit · ${it.productName} · ${formatRupiah(it.price)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final bottomPad = MediaQuery.of(context).padding.bottom;
+    final lastLabel = _lastItemLabel();
 
     return Container(
       decoration: BoxDecoration(
@@ -1655,6 +1835,19 @@ class _CartBar extends StatelessWidget {
                   style: AppTheme.numStyle(context,
                       size: 16.5, weight: FontWeight.w700),
                 ),
+                if (lastLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      lastLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1698,6 +1891,345 @@ class _CartBar extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Tab folder pelanggan/pegawai + tahan ──────────────────────────────────
+
+/// Tab berbentuk trapesium (seperti label folder) yang menempel di atas cart
+/// bar. Berisi chip pelanggan, chip pegawai, dan tombol tahan pesanan.
+class _CartMetaTab extends ConsumerWidget {
+  const _CartMetaTab({required this.cartId, required this.onHold});
+
+  final String cartId;
+  final VoidCallback onHold;
+
+  Future<void> _pickCustomer(BuildContext context, WidgetRef ref) async {
+    final meta = ref.read(cartMetaProvider(cartId));
+    final pick = await showCustomerPickerSheet(context, ref,
+        currentName: meta.customerName);
+    if (pick == null) return;
+    ref.read(cartMetaProvider(cartId).notifier).setCustomer(pick.id, pick.name);
+  }
+
+  Future<void> _pickEmployee(BuildContext context, WidgetRef ref) async {
+    final meta = ref.read(cartMetaProvider(cartId));
+    final pick = await showEmployeePickerSheet(context, ref,
+        currentId: meta.employeeId);
+    if (pick == null) return;
+    ref.read(cartMetaProvider(cartId).notifier).setEmployee(pick.id, pick.name);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final meta = ref.watch(cartMetaProvider(cartId));
+    final notifier = ref.read(cartMetaProvider(cartId).notifier);
+    const slant = 14.0;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Transform.translate(
+        // Geser turun 1px agar dasar tab menutup garis batas atas cart bar →
+        // tampak menyatu seperti tab folder yang menonjol dari bar.
+        offset: const Offset(0, 1),
+        child: CustomPaint(
+          painter: _TabPainter(
+            fill: cs.surface,
+            border: cs.outlineVariant,
+            slant: slant,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant + 10, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _MetaChip(
+                  icon: Icons.person_outline,
+                  label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
+                  active: meta.hasCustomer,
+                  onTap: () => _pickCustomer(context, ref),
+                  onClear:
+                      meta.hasCustomer ? () => notifier.clearCustomer() : null,
+                ),
+                const SizedBox(width: 4),
+                _MetaChip(
+                  icon: Icons.badge_outlined,
+                  label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
+                  active: meta.hasEmployee,
+                  onTap: () => _pickEmployee(context, ref),
+                  onClear:
+                      meta.hasEmployee ? () => notifier.clearEmployee() : null,
+                ),
+                const SizedBox(width: 4),
+                // Tombol tahan pesanan.
+                InkWell(
+                  onTap: onHold,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.pause_circle_outline,
+                            size: 16, color: cs.primary),
+                        const SizedBox(width: 4),
+                        Text('Tahan',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: cs.primary)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.onClear,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final fg = active ? cs.onSurface : cs.onSurfaceVariant;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: active ? cs.primary : fg),
+            const SizedBox(width: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 110),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                  fontStyle: active ? FontStyle.normal : FontStyle.italic,
+                  color: fg,
+                ),
+              ),
+            ),
+            if (onClear != null)
+              GestureDetector(
+                onTap: onClear,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 3),
+                  child: Icon(Icons.close, size: 14, color: cs.onSurfaceVariant),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabPainter extends CustomPainter {
+  _TabPainter({required this.fill, required this.border, required this.slant});
+
+  final Color fill;
+  final Color border;
+  final double slant;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(slant, 0)
+      ..lineTo(size.width - slant, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    canvas.drawPath(path, Paint()..color = fill);
+
+    // Garis tepi hanya pada sisi atas + dua sisi miring (dasar dibiarkan
+    // terbuka agar menyatu dengan cart bar).
+    final stroke = Paint()
+      ..color = border
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
+    final edge = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(slant, 0)
+      ..lineTo(size.width - slant, 0)
+      ..lineTo(size.width, size.height);
+    canvas.drawPath(edge, stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TabPainter old) =>
+      old.fill != fill || old.border != border || old.slant != slant;
+}
+
+// ─── Panel pesanan ditahan (inline) ────────────────────────────────────────
+
+class _HeldInlinePanel extends ConsumerWidget {
+  const _HeldInlinePanel({required this.onResume, required this.onClose});
+
+  final void Function(HeldOrder) onResume;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final heldAsync = ref.watch(_heldOrdersListProvider);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(
+          bottom: BorderSide(color: cs.outlineVariant, width: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'PESANAN DITAHAN',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: onClose,
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          heldAsync.when(
+            data: (held) {
+              if (held.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Text('Tidak ada pesanan ditahan.',
+                      style: TextStyle(
+                          fontSize: 12.5, color: cs.onSurfaceVariant)),
+                );
+              }
+              return SizedBox(
+                height: 86,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: held.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 9),
+                  itemBuilder: (_, i) =>
+                      _HeldCard(order: held[i], onTap: () => onResume(held[i])),
+                ),
+              );
+            },
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+            error: (e, _) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Text('Error: $e',
+                  style: TextStyle(fontSize: 12, color: cs.error)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeldCard extends StatelessWidget {
+  const _HeldCard({required this.order, required this.onTap});
+
+  final HeldOrder order;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final parsed = _parseHeldPayload(order.cartJson);
+    final itemCount = parsed.items.where((c) => !c.isVariant).length;
+    final total = parsed.items.fold<int>(0, (s, c) => s + c.subtotal);
+    final time =
+        '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 158,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              order.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$itemCount item · $time',
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+            const Spacer(),
+            Text(
+              formatRupiah(total),
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary),
+            ),
+          ],
+        ),
       ),
     );
   }
