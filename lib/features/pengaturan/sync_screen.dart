@@ -291,8 +291,9 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                     onPressed: () async {
                       final data = await showQrSyncScanner(context);
                       if (data == null || !mounted) return;
-                      final ip = data['ip'] as String? ?? '';
+                      var ip = data['ip'] as String? ?? '';
                       final key = data['key'] as String? ?? '';
+                      if (ip.contains(':')) ip = ip.split(':').first;
                       if (ip.isNotEmpty) _ipCtrl.text = ip;
                       if (key.isNotEmpty) _tokenCtrl.text = key;
                     },
