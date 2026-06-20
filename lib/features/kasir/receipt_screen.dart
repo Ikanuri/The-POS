@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
@@ -52,6 +53,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   bool _editingCustomer = false;
   final TextEditingController _custCtrl = TextEditingController();
   List<Customer> _custSuggestions = [];
+
+  /// Toggle tampilkan laba per item — persisted via SharedPreferences.
+  bool _showProfit = true;
 
   /// Checklist verifikasi serah-terima barang. Murni lokal (tidak disimpan).
   final Map<String, bool> _checked = {};
@@ -207,41 +211,49 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               )
             : Padding(
                 padding: EdgeInsets.only(left: isVariant ? 17 : 0),
-                child: Text.rich(
-                  TextSpan(
-                    style:
-                        TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                    children: [
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text.rich(
                       TextSpan(
-                        text: '${_unitNames[item.productUnitId] ?? ''} '
-                            '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
-                            '${formatRupiah(item.priceAtSale)}',
+                        style: TextStyle(
+                            fontSize: 11, color: scheme.onSurfaceVariant),
+                        children: [
+                          TextSpan(
+                            text: '${_unitNames[item.productUnitId] ?? ''} '
+                                '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
+                                '${formatRupiah(item.priceAtSale)}',
+                          ),
+                          if (item.priceOverridden &&
+                              item.originalPrice != item.priceAtSale) ...[
+                            const TextSpan(text: '  '),
+                            TextSpan(
+                              text: formatRupiah(item.originalPrice),
+                              style: TextStyle(
+                                decoration: TextDecoration.lineThrough,
+                                color: scheme.onSurfaceVariant.withOpacity(0.6),
+                              ),
+                            ),
+                          ],
+                          if (showProfit && effQty > 0)
+                            TextSpan(
+                              text: laba >= 0
+                                  ? '\nLaba: ${formatRupiah(laba)}'
+                                  : '\nRugi: ${formatRupiah(-laba)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: laba >= 0 ? profitColor : scheme.error,
+                              ),
+                            ),
+                        ],
                       ),
-                      if (item.priceOverridden &&
-                          item.originalPrice != item.priceAtSale) ...[
-                        const TextSpan(text: '  '),
-                        TextSpan(
-                          text: formatRupiah(item.originalPrice),
-                          style: TextStyle(
-                            decoration: TextDecoration.lineThrough,
-                            color: scheme.onSurfaceVariant.withOpacity(0.6),
-                          ),
-                        ),
-                      ],
-                      if (showProfit && effQty > 0)
-                        TextSpan(
-                          text: laba >= 0
-                              ? '\nLaba: ${formatRupiah(laba)}'
-                              : '\nRugi: ${formatRupiah(-laba)}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: laba >= 0 ? profitColor : scheme.error,
-                          ),
-                        ),
-                      if (item.itemNote != null)
-                        TextSpan(text: '\n${item.itemNote}'),
-                    ],
-                  ),
+                    ),
+                    if (item.itemNote != null)
+                      _Blockquote(
+                        text: item.itemNote!,
+                        color: scheme.outlineVariant,
+                      ),
+                  ],
                 ),
               ),
         secondary: isPlaceholder
@@ -515,9 +527,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final receiptHeader = await db.getSetting('receipt_header') ?? '';
     final showEmp = await db.getSetting('receipt_show_employee');
     final employees = await db.getEmployees();
+    final prefs = await SharedPreferences.getInstance();
+    final showProfit = prefs.getBool('receipt_show_profit') ?? true;
 
     if (mounted) {
       setState(() {
+        _showProfit = showProfit;
         _tx = tx;
         _items = items;
         _payments = payments;
@@ -1189,6 +1204,26 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           onPressed: () => context.go('/kasir'),
         ),
         actions: [
+          if (device.canSeeReports)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Pengaturan Struk',
+              onSelected: (v) async {
+                if (v == 'toggle_profit') {
+                  final prefs = await SharedPreferences.getInstance();
+                  final next = !_showProfit;
+                  await prefs.setBool('receipt_show_profit', next);
+                  setState(() => _showProfit = next);
+                }
+              },
+              itemBuilder: (_) => [
+                CheckedPopupMenuItem<String>(
+                  value: 'toggle_profit',
+                  checked: _showProfit,
+                  child: const Text('Tampilkan Laba', style: TextStyle(fontSize: 13)),
+                ),
+              ],
+            ),
           IconButton(
             icon: const Icon(Icons.share_outlined),
             tooltip: 'Bagikan Struk',
@@ -1440,7 +1475,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           Card(
             child: Column(
               children: [
-                ..._buildItemRows(scheme, showProfit: device.canSeeReports),
+                ..._buildItemRows(scheme,
+                    showProfit: device.canSeeReports && _showProfit),
                 const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -1448,7 +1484,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     children: [
                       _SummaryRow('Total', formatRupiah(tx.total),
                           bold: true, color: scheme.primary),
-                      if (device.canSeeReports) _buildTotalProfitRow(scheme),
+                      if (device.canSeeReports && _showProfit)
+                        _buildTotalProfitRow(scheme),
                       if (tx.paid > 0)
                         _SummaryRow('Dibayar',
                             '${_methodLabel(tx.paymentMethod)} · ${formatRupiah(tx.paid)}'),
@@ -1470,14 +1507,19 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     ],
                   ),
                 ),
+                // Catatan nota — di bawah total, dalam card yang sama
+                if (tx.strukNote?.isNotEmpty == true || (!isVoid && !isRetur)) ...[
+                  const Divider(height: 1),
+                  _buildStrukNoteBlock(scheme, tx, editable: !isVoid && !isRetur),
+                ],
               ],
             ),
           ),
 
-          // Catatan internal & catatan nota
+          // Catatan internal — card terpisah
           if (!isVoid && !isRetur) ...[
             const SizedBox(height: 8),
-            _buildNotesSection(scheme, tx),
+            _buildInternalNoteCard(scheme, tx),
           ],
 
           // Timeline pembayaran — kapan tiap cicilan/pelunasan masuk.
@@ -1580,73 +1622,110 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     );
   }
 
-  Widget _buildNotesSection(ColorScheme scheme, Transaction tx) {
-    final isReturTx = tx.internalNote?.startsWith('RETUR:') ?? false;
-    return Card(
+  /// Catatan nota — di bawah total, dalam card yang sama.
+  Widget _buildStrukNoteBlock(ColorScheme scheme, Transaction tx,
+      {required bool editable}) {
+    final hasNote = tx.strukNote?.isNotEmpty == true;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: editable ? _editStrukNote : null,
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isReturTx)
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _editInternalNote,
-                child: Row(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        child: hasNote
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.receipt_outlined,
+                          size: 13, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text('Catatan Nota',
+                          style: TextStyle(
+                              fontSize: 11, color: scheme.onSurfaceVariant)),
+                      const Spacer(),
+                      if (editable)
+                        Icon(Icons.edit_outlined,
+                            size: 12, color: scheme.primary),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  _Blockquote(
+                    text: tx.strukNote!,
+                    color: scheme.primary.withOpacity(0.3),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Icon(Icons.receipt_outlined,
+                      size: 14, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Tambah catatan nota…',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic)),
+                  ),
+                  if (editable)
+                    Icon(Icons.edit_outlined, size: 12, color: scheme.primary),
+                ],
+              ),
+      ),
+    );
+  }
+
+  /// Catatan internal — card terpisah.
+  Widget _buildInternalNoteCard(ColorScheme scheme, Transaction tx) {
+    final isReturTx = tx.internalNote?.startsWith('RETUR:') ?? false;
+    if (isReturTx) return const SizedBox.shrink();
+    final hasNote = tx.internalNote?.isNotEmpty == true;
+    return Card(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _editInternalNote,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: hasNote
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.note_outlined, size: 16, color: scheme.onSurfaceVariant),
+                    Row(
+                      children: [
+                        Icon(Icons.note_outlined,
+                            size: 13, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text('Catatan Internal',
+                            style: TextStyle(
+                                fontSize: 11, color: scheme.onSurfaceVariant)),
+                        const Spacer(),
+                        Icon(Icons.edit_outlined,
+                            size: 12, color: scheme.primary),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    _Blockquote(
+                      text: tx.internalNote!,
+                      color: scheme.tertiary.withOpacity(0.3),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Icon(Icons.note_outlined,
+                        size: 14, color: scheme.onSurfaceVariant),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: tx.internalNote?.isNotEmpty == true
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Catatan Internal',
-                                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-                                const SizedBox(height: 2),
-                                Text(tx.internalNote!, style: const TextStyle(fontSize: 12)),
-                              ],
-                            )
-                          : Text('Tambah catatan internal…',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant,
-                                  fontStyle: FontStyle.italic)),
+                      child: Text('Tambah catatan internal…',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: scheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic)),
                     ),
                     Icon(Icons.edit_outlined, size: 12, color: scheme.primary),
                   ],
                 ),
-              ),
-            if (!isReturTx) const Divider(height: 16),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _editStrukNote,
-              child: Row(
-                children: [
-                  Icon(Icons.receipt_outlined, size: 16, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: tx.strukNote?.isNotEmpty == true
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Catatan Nota',
-                                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-                              const SizedBox(height: 2),
-                              Text(tx.strukNote!, style: const TextStyle(fontSize: 12)),
-                            ],
-                          )
-                        : Text('Tambah catatan nota…',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: scheme.onSurfaceVariant,
-                                fontStyle: FontStyle.italic)),
-                  ),
-                  Icon(Icons.edit_outlined, size: 12, color: scheme.primary),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -2022,6 +2101,26 @@ class _DashedLine extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _Blockquote extends StatelessWidget {
+  const _Blockquote({required this.text, required this.color});
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(width: 3, color: color)),
+        color: color.withOpacity(0.08),
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+      ),
+      child: Text(text, style: const TextStyle(fontSize: 12, height: 1.3)),
     );
   }
 }

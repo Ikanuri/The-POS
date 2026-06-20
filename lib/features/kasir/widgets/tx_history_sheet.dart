@@ -818,6 +818,27 @@ class _TxDetail extends ConsumerWidget {
                 ],
               ),
             ),
+          // Catatan nota & internal — blockquote dengan warna berbeda
+          if (tx.strukNote?.isNotEmpty == true)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _NoteBlock(
+                label: 'Catatan Nota',
+                text: tx.strukNote!,
+                color: scheme.primary,
+              ),
+            ),
+          if (!isRetur &&
+              tx.internalNote?.isNotEmpty == true &&
+              !(tx.internalNote?.startsWith('RETUR:') ?? false))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _NoteBlock(
+                label: 'Catatan Internal',
+                text: tx.internalNote!,
+                color: scheme.tertiary,
+              ),
+            ),
           Row(
             children: [
               if (isHutang) ...[
@@ -1159,6 +1180,40 @@ class _DaySeparator extends StatelessWidget {
             fontWeight: FontWeight.w700,
             color: scheme.onSurfaceVariant,
           )),
+    );
+  }
+}
+
+class _NoteBlock extends StatelessWidget {
+  const _NoteBlock({
+    required this.label,
+    required this.text,
+    required this.color,
+  });
+  final String label;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(width: 3, color: color.withOpacity(0.5))),
+            color: color.withOpacity(0.06),
+            borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+          ),
+          child: Text(text,
+              style: TextStyle(fontSize: 11, color: color, height: 1.3)),
+        ),
+      ],
     );
   }
 }
