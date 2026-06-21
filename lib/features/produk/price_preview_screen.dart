@@ -174,6 +174,15 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
         price: Value(price),
         costPrice: Value(costPrice),
       ));
+      // Hapus tier duplikat lain (sisakan hanya yang diupdate).
+      if (existing.length > 1) {
+        final dupeIds = existing.skip(1).map((t) => t.id).toList();
+        log?.add('    HAPUS ${dupeIds.length} tier duplikat: '
+            '${dupeIds.map(_short).join(', ')}');
+        await (db.delete(db.priceTiers)
+              ..where((t) => t.id.isIn(dupeIds)))
+            .go();
+      }
     } else {
       final newId = const Uuid().v4();
       log?.add('    INSERT new tier id=${_short(newId)}');

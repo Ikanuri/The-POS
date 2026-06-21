@@ -167,6 +167,17 @@ class AppDatabase extends _$AppDatabase {
               mode: InsertMode.insertOrIgnore,
             );
           });
+          // Bersihkan tier duplikat (product_unit_id, min_qty) yang
+          // terbentuk akibat LAN sync INSERT OR REPLACE dengan UUID berbeda.
+          await customStatement('''
+            DELETE FROM price_tiers WHERE id IN (
+              SELECT pt.id FROM price_tiers pt
+              WHERE pt.rowid NOT IN (
+                SELECT MIN(rowid) FROM price_tiers
+                GROUP BY product_unit_id, min_qty
+              )
+            )
+          ''');
         },
       );
 
@@ -1704,6 +1715,34 @@ class AppDatabase extends _$AppDatabase {
             }
           }
         }
+        // price_tiers: cegah duplikat tier (product_unit_id, min_qty).
+        // Jika sudah ada tier untuk unit+minQty yang sama, update harga
+        // daripada insert row baru dengan PK berbeda.
+        if (tableName == 'price_tiers') {
+          final unitId = row['product_unit_id'];
+          final minQty = row['min_qty'];
+          final incomingId = row['id'];
+          if (unitId != null && minQty != null && incomingId != null) {
+            final existing = await customSelect(
+              'SELECT id FROM price_tiers '
+              'WHERE product_unit_id = ? AND min_qty = ? AND id != ?',
+              variables: [
+                Variable<Object>(unitId),
+                Variable<Object>(minQty),
+                Variable<Object>(incomingId),
+              ],
+            ).get();
+            // Hapus tier lokal duplikat agar INSERT OR REPLACE tidak
+            // menambah row baru di samping tier yang sudah ada.
+            for (final e in existing) {
+              await customStatement(
+                'DELETE FROM price_tiers WHERE id = ?',
+                [Variable<Object>(e.data['id']!)],
+              );
+            }
+          }
+        }
+
         final cols = row.keys.map((k) => '"$k"').join(', ');
         final placeholders = row.values.map((_) => '?').join(', ');
         final variables = _rowToVars(row);
