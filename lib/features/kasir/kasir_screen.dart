@@ -1773,21 +1773,25 @@ class _CartBar extends StatelessWidget {
   final CartItem? lastItem;
   final double lastEffQty;
 
-  /// Ringkasan satu baris item terakhir: "2 pcs · Indomie Goreng · Rp 2.500".
-  String? _lastItemLabel() {
+  /// Ringkasan satu baris item terakhir: "2 pcs · **Indomie Goreng** · Rp 2.500".
+  ({String prefix, String name, String suffix})? _lastItemParts() {
     final it = lastItem;
     if (it == null || lastEffQty <= 0) return null;
     final qtyStr =
         lastEffQty % 1 == 0 ? lastEffQty.toInt().toString() : '$lastEffQty';
     final unit = it.unitName.isEmpty ? '' : ' ${it.unitName}';
-    return '$qtyStr$unit · ${it.productName} · ${formatRupiah(it.price)}';
+    return (
+      prefix: '$qtyStr$unit · ',
+      name: it.productName,
+      suffix: ' · ${formatRupiah(it.price)}',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final bottomPad = MediaQuery.of(context).padding.bottom;
-    final lastLabel = _lastItemLabel();
+    final lastParts = _lastItemParts();
 
     return Container(
       decoration: BoxDecoration(
@@ -1835,17 +1839,26 @@ class _CartBar extends StatelessWidget {
                   style: AppTheme.numStyle(context,
                       size: 16.5, weight: FontWeight.w700),
                 ),
-                if (lastLabel != null)
+                if (lastParts != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      lastLabel,
+                    child: Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        children: [
+                          TextSpan(text: lastParts.prefix),
+                          TextSpan(
+                            text: lastParts.name,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: lastParts.suffix),
+                        ],
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant,
-                      ),
                     ),
                   ),
               ],
