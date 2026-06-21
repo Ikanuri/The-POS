@@ -10,10 +10,12 @@ class PriceMatchResult {
     required this.matched,
     required this.notFound,
     required this.ambiguous,
+    required this.log,
   });
   final List<MatchedItem> matched;
   final List<PriceCatalogItem> notFound;
   final List<AmbiguousItem> ambiguous;
+  final List<String> log;
 }
 
 class MatchedItem {
@@ -72,25 +74,32 @@ class PriceMatchService {
     final matched = <MatchedItem>[];
     final notFound = <PriceCatalogItem>[];
     final ambiguous = <AmbiguousItem>[];
+    final log = <String>[];
+
+    log.add('=== MATCH START: ${catalog.length} catalog items ===');
 
     final allProducts = await db.searchProducts('');
-    // Peta unitTypeId → nama satuan, agar pencocokan bisa memilih unit yang
-    // benar (mis. "Dus" vs "Pcs") alih-alih asal unit pertama.
+    log.add('Produk lokal aktif: ${allProducts.length}');
+
     final unitTypes = await db.getAllUnitTypes();
     final typeNameById = {for (final u in unitTypes) u.id: u.name};
 
     for (final item in catalog) {
-      final result = await _tryMatch(db, item, allProducts, typeNameById);
+      final result = await _tryMatch(db, item, allProducts, typeNameById, log);
       if (result != null) {
         matched.add(result);
       } else {
         final fuzzyResult = _tryFuzzyMatch(item, allProducts);
         if (fuzzyResult != null) {
+          log.add('  → Fuzzy match: "${fuzzyResult.$1.name}" '
+              '(${(fuzzyResult.$2 * 100).round()}%)');
           final units = await db.getProductUnits(fuzzyResult.$1.id);
           if (units.isNotEmpty) {
             final unit =
                 _resolveUnit(units, typeNameById, item.unitTypeName);
             final tiers = await db.getPriceTiers(unit.id);
+            log.add('    Tiers untuk unit ${_short(unit.id)}: '
+                '${tiers.map((t) => 'minQty=${t.minQty} price=${t.price} id=${_short(t.id)}').join(' | ')}');
             final baseTier =
                 tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
             ambiguous.add(AmbiguousItem(
@@ -103,23 +112,27 @@ class PriceMatchService {
               similarity: fuzzyResult.$2,
             ));
           } else {
+            log.add('  → Fuzzy match tapi tidak ada unit → notFound');
             notFound.add(item);
           }
         } else {
+          log.add('  → Tidak cocok sama sekali → notFound');
           notFound.add(item);
         }
       }
     }
 
+    log.add('=== MATCH DONE: ${matched.length} cocok, '
+        '${notFound.length} baru, ${ambiguous.length} mirip ===');
+
     return PriceMatchResult(
       matched: matched,
       notFound: notFound,
       ambiguous: ambiguous,
+      log: log,
     );
   }
 
-  /// Pilih unit yang paling tepat untuk sebuah catalog item. Prioritas:
-  /// 1) nama satuan sama (mis. "Dus"), 2) unit dasar, 3) unit pertama.
   static ProductUnit _resolveUnit(
     List<ProductUnit> units,
     Map<int, String> typeNameById,
@@ -141,8 +154,13 @@ class PriceMatchService {
     PriceCatalogItem item,
     List<Product> allProducts,
     Map<int, String> typeNameById,
+    List<String> log,
   ) async {
-    // 1. Match by barcode → unit persis (barcode menempel di satu unit).
+    log.add('[${item.productName}] catalog: price=${item.price}, '
+        'cost=${item.costPrice}, barcode=${item.barcode ?? "null"}, '
+        'sku=${item.kodeProduk ?? "null"}, unit="${item.unitTypeName}"');
+
+    // 1. Match by barcode
     if (item.barcode != null && item.barcode!.isNotEmpty) {
       final bc = await db.lookupBarcode(item.barcode!);
       if (bc != null) {
@@ -153,8 +171,18 @@ class PriceMatchService {
           final product = allProducts.where((p) => p.id == unit.productId).firstOrNull;
           if (product != null) {
             final tiers = await db.getPriceTiers(unit.id);
+            final tierCount = tiers.where((t) => t.minQty == 1).length;
+            log.add('  → Barcode match: unit=${_short(unit.id)}, '
+                'product="${product.name}"');
+            log.add('    Tiers minQty=1: $tierCount buah → '
+                '${tiers.where((t) => t.minQty == 1).map((t) => 'id=${_short(t.id)} price=${t.price} cost=${t.costPrice}').join(' | ')}');
             final baseTier =
                 tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
+            log.add('    baseTier dipilih: id=${_short(baseTier?.id ?? "?")} '
+                'price=${baseTier?.price ?? 0} cost=${baseTier?.costPrice ?? 0}');
+            if (tierCount > 1) {
+              log.add('    ⚠ DUPLIKAT TIER! $tierCount tier minQty=1 untuk unit ini');
+            }
             return MatchedItem(
               catalogItem: item,
               localProductId: product.id,
@@ -164,12 +192,19 @@ class PriceMatchService {
               localCostPrice: baseTier?.costPrice ?? 0,
               matchType: MatchType.barcode,
             );
+          } else {
+            log.add('  → Barcode ditemukan tapi produk tidak di allProducts '
+                '(inactive?) productId=${unit.productId}');
           }
+        } else {
+          log.add('  → Barcode ditemukan tapi unit hilang: ${bc.productUnitId}');
         }
+      } else {
+        log.add('  → Barcode "${item.barcode}" tidak ada di DB');
       }
     }
 
-    // 2. Match by SKU → produk, lalu unit yang cocok berdasarkan nama satuan.
+    // 2. Match by SKU
     if (item.kodeProduk != null && item.kodeProduk!.isNotEmpty) {
       final skuLower = item.kodeProduk!.toLowerCase();
       final product = allProducts.where(
@@ -180,8 +215,19 @@ class PriceMatchService {
         if (units.isNotEmpty) {
           final unit = _resolveUnit(units, typeNameById, item.unitTypeName);
           final tiers = await db.getPriceTiers(unit.id);
+          final tierCount = tiers.where((t) => t.minQty == 1).length;
+          log.add('  → SKU match: unit=${_short(unit.id)}, '
+              'product="${product.name}", '
+              '${units.length} units total');
+          log.add('    Tiers minQty=1: $tierCount buah → '
+              '${tiers.where((t) => t.minQty == 1).map((t) => 'id=${_short(t.id)} price=${t.price} cost=${t.costPrice}').join(' | ')}');
           final baseTier =
               tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
+          log.add('    baseTier dipilih: id=${_short(baseTier?.id ?? "?")} '
+              'price=${baseTier?.price ?? 0}');
+          if (tierCount > 1) {
+            log.add('    ⚠ DUPLIKAT TIER! $tierCount tier minQty=1 untuk unit ini');
+          }
           return MatchedItem(
             catalogItem: item,
             localProductId: product.id,
@@ -191,7 +237,11 @@ class PriceMatchService {
             localCostPrice: baseTier?.costPrice ?? 0,
             matchType: MatchType.sku,
           );
+        } else {
+          log.add('  → SKU match tapi tidak ada unit untuk product "${product.name}"');
         }
+      } else {
+        log.add('  → SKU "${item.kodeProduk}" tidak cocok');
       }
     }
 
@@ -256,4 +306,7 @@ class PriceMatchService {
 
     return dp[n][m];
   }
+
+  static String _short(String uuid) =>
+      uuid.length > 8 ? uuid.substring(0, 8) : uuid;
 }

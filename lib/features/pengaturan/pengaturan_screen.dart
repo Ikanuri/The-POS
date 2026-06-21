@@ -1,4 +1,6 @@
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -241,6 +243,14 @@ class PengaturanScreen extends ConsumerWidget {
                   onChanged: (_) =>
                       ref.read(themeModeProvider.notifier).toggle(),
                 ),
+                if (device.isOwner)
+                  ListTile(
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Diagnostic DB'),
+                    subtitle: const Text('Cek duplikat tier & integritas data'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showDiagnostic(context, ref),
+                  ),
                 Builder(builder: (context) {
                   final scale = ref.watch(fontScaleProvider);
                   return ListTile(
@@ -360,6 +370,107 @@ class PengaturanScreen extends ConsumerWidget {
     thresholdCtrl.dispose();
     perCtrl.dispose();
   }
+}
+
+Future<void> _showDiagnostic(BuildContext context, WidgetRef ref) async {
+  final db = ref.read(databaseProvider);
+  final buf = StringBuffer();
+
+  // 1. Duplikat tier minQty=1
+  final dupTiers = await db.customSelect('''
+    SELECT pt.product_unit_id, COUNT(*) as cnt,
+           GROUP_CONCAT(pt.id || ':' || pt.price || ':' || pt.cost_price, ' | ') as detail
+    FROM price_tiers pt
+    WHERE pt.min_qty = 1
+    GROUP BY pt.product_unit_id
+    HAVING cnt > 1
+  ''').get();
+
+  buf.writeln('=== DUPLIKAT TIER (minQty=1) ===');
+  buf.writeln('Jumlah unit dengan duplikat: ${dupTiers.length}');
+  for (final r in dupTiers) {
+    final unitId = r.data['product_unit_id'] as String;
+    final cnt = r.data['cnt'] as int;
+    final detail = r.data['detail'] as String;
+
+    // Cari nama produk
+    final prodRow = await db.customSelect('''
+      SELECT p.name, ut.name as unit_name
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id
+      WHERE pu.id = ?
+    ''', variables: [Variable.withString(unitId)]).getSingleOrNull();
+    final pName = prodRow?.data['name'] ?? '?';
+    final uName = prodRow?.data['unit_name'] ?? '?';
+
+    buf.writeln('');
+    buf.writeln('[$pName] ($uName) — $cnt tiers:');
+    for (final d in detail.split(' | ')) {
+      final parts = d.split(':');
+      if (parts.length >= 3) {
+        buf.writeln('  id=${parts[0].length > 8 ? parts[0].substring(0, 8) : parts[0]}… '
+            'price=${parts[1]} cost=${parts[2]}');
+      }
+    }
+  }
+
+  // 2. Ringkasan total
+  final totalTiers = await db.customSelect(
+    'SELECT COUNT(*) as cnt FROM price_tiers WHERE min_qty = 1'
+  ).getSingle();
+  final totalUnits = await db.customSelect(
+    'SELECT COUNT(*) as cnt FROM product_units'
+  ).getSingle();
+  final totalProducts = await db.customSelect(
+    'SELECT COUNT(*) as cnt FROM products WHERE is_active = 1'
+  ).getSingle();
+
+  buf.writeln('');
+  buf.writeln('=== RINGKASAN ===');
+  buf.writeln('Produk aktif: ${totalProducts.data['cnt']}');
+  buf.writeln('Unit total: ${totalUnits.data['cnt']}');
+  buf.writeln('Tier minQty=1 total: ${totalTiers.data['cnt']}');
+  buf.writeln('Unit dengan tier duplikat: ${dupTiers.length}');
+
+  if (!context.mounted) return;
+  final text = buf.toString();
+
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Row(
+        children: [
+          const Expanded(
+              child: Text('Diagnostic DB', style: TextStyle(fontSize: 16))),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 18),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: text));
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Disalin ke clipboard')));
+            },
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: SingleChildScrollView(
+          child: SelectableText(
+            text,
+            style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace'),
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Tutup'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SectionHeader extends StatelessWidget {

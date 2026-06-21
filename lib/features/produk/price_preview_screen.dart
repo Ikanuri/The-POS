@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -22,6 +23,8 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
   late final List<MatchedItem> _matched;
   late final List<_NotFoundItem> _notFound;
   late final List<_AmbiguousAction> _ambiguous;
+  late final List<String> _matchLog;
+  final List<String> _applyLog = [];
   bool _busy = false;
 
   @override
@@ -34,6 +37,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
     _ambiguous = widget.result.ambiguous
         .map((a) => _AmbiguousAction(item: a))
         .toList();
+    _matchLog = widget.result.log.toList();
   }
 
   int get _matchedSelected => _matched.where((m) => m.selected && m.hasChanges).length;
@@ -44,32 +48,50 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
   Future<void> _apply() async {
     final db = ref.read(databaseProvider);
     setState(() => _busy = true);
+    _applyLog.clear();
+    _applyLog.add('=== APPLY START ===');
 
     int updated = 0;
     int added = 0;
     int linked = 0;
 
     try {
-      // Peta nama satuan → unitTypeId untuk membuat unit baru dengan satuan benar.
       final unitTypes = await db.getAllUnitTypes();
       final typeIdByName = {
         for (final u in unitTypes) u.name.trim().toLowerCase(): u.id
       };
 
-      // 1. Update matched items (unit sudah benar dari matching unit-aware).
+      // 1. Update matched items
       for (final m in _matched) {
         if (!m.selected || !m.hasChanges) continue;
+        _applyLog.add('[UPDATE] "${m.localProductName}" '
+            'unit=${_short(m.localProductUnitId)}');
+        _applyLog.add('  catalog: price=${m.catalogItem.price}, '
+            'cost=${m.catalogItem.costPrice}');
+        _applyLog.add('  local sebelum: price=${m.localPrice}, '
+            'cost=${m.localCostPrice}');
+
         await _upsertBaseTier(
-            db, m.localProductUnitId, m.catalogItem.price, m.catalogItem.costPrice);
+            db, m.localProductUnitId, m.catalogItem.price, m.catalogItem.costPrice,
+            _applyLog);
+
+        // Verifikasi setelah update
+        final tiersAfter = await db.getPriceTiers(m.localProductUnitId);
+        final allMinQty1 = tiersAfter.where((t) => t.minQty == 1).toList();
+        _applyLog.add('  SETELAH update: ${allMinQty1.length} tier minQty=1 →'
+            ' ${allMinQty1.map((t) => 'id=${_short(t.id)} price=${t.price} cost=${t.costPrice}').join(' | ')}');
+
         await (db.update(db.products)
               ..where((t) => t.id.equals(m.localProductId)))
             .write(ProductsCompanion(updatedAt: Value(DateTime.now())));
         updated++;
       }
 
-      // 2. Add not-found items (varian ikut tertaut ke induk).
+      // 2. Add not-found items
       for (final nf in _notFound) {
         if (nf.action != _NfAction.add) continue;
+        _applyLog.add('[ADD] "${nf.catalogItem.productName}" '
+            'price=${nf.catalogItem.price}');
         await _addCatalogProduct(db, nf.catalogItem, typeIdByName);
         added++;
       }
@@ -78,17 +100,23 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
       for (final a in _ambiguous) {
         final c = a.item.catalogItem;
         if (a.action == _AmbAction.link) {
+          _applyLog.add('[LINK] "${a.item.localProductName}" ← '
+              '"${c.productName}" price=${c.price}');
           await _upsertBaseTier(
-              db, a.item.localProductUnitId, c.price, c.costPrice);
+              db, a.item.localProductUnitId, c.price, c.costPrice, _applyLog);
           await (db.update(db.products)
                 ..where((t) => t.id.equals(a.item.localProductId)))
               .write(ProductsCompanion(updatedAt: Value(DateTime.now())));
           linked++;
         } else if (a.action == _AmbAction.addNew) {
+          _applyLog.add('[ADD-NEW] "${c.productName}" price=${c.price}');
           await _addCatalogProduct(db, c, typeIdByName);
           added++;
         }
       }
+
+      _applyLog.add('=== APPLY DONE: $updated updated, $added added, '
+          '$linked linked ===');
 
       if (!mounted) return;
 
@@ -104,6 +132,10 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
           title: const Text('Selesai'),
           content: Text(msg),
           actions: [
+            TextButton(
+              onPressed: () => _showLogDialog(ctx),
+              child: const Text('Lihat Log'),
+            ),
             FilledButton(
               onPressed: () {
                 Navigator.pop(ctx);
@@ -115,6 +147,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
         ),
       );
     } catch (e) {
+      _applyLog.add('ERROR: $e');
       if (!mounted) return;
       showError('Gagal: $e');
     } finally {
@@ -122,14 +155,19 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
     }
   }
 
-  /// Tulis/timpa tier dasar (min_qty=1) sebuah unit. UPDATE biasa akan diam-diam
-  /// tidak melakukan apa-apa bila tier belum ada — di sini kita INSERT bila perlu.
   Future<void> _upsertBaseTier(
-      AppDatabase db, String unitId, int price, int costPrice) async {
+      AppDatabase db, String unitId, int price, int costPrice,
+      [List<String>? log]) async {
     final existing = await (db.select(db.priceTiers)
           ..where((t) => t.productUnitId.equals(unitId) & t.minQty.equals(1)))
         .get();
+    log?.add('  _upsertBaseTier: unit=${_short(unitId)}, '
+        'target price=$price, cost=$costPrice');
+    log?.add('    existing tiers minQty=1: ${existing.length} → '
+        '${existing.map((t) => 'id=${_short(t.id)} price=${t.price} cost=${t.costPrice}').join(' | ')}');
     if (existing.isNotEmpty) {
+      log?.add('    UPDATE tier id=${_short(existing.first.id)} '
+          '(${existing.first.price} → $price)');
       await (db.update(db.priceTiers)
             ..where((t) => t.id.equals(existing.first.id)))
           .write(PriceTiersCompanion(
@@ -137,14 +175,19 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
         costPrice: Value(costPrice),
       ));
     } else {
+      final newId = const Uuid().v4();
+      log?.add('    INSERT new tier id=${_short(newId)}');
       await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
-            id: const Uuid().v4(),
+            id: newId,
             productUnitId: unitId,
             price: price,
             costPrice: Value(costPrice),
           ));
     }
   }
+
+  static String _short(String uuid) =>
+      uuid.length > 8 ? uuid.substring(0, 8) : uuid;
 
   /// Cari produk lokal yang cocok (prioritas kode produk, lalu nama). Untuk
   /// varian, pencocokan nama juga dibatasi pada induk yang sama agar dua varian
@@ -237,6 +280,45 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
     }
   }
 
+  void _showLogDialog(BuildContext ctx) {
+    final allLog = [..._matchLog, '', ..._applyLog];
+    final text = allLog.join('\n');
+    showDialog(
+      context: ctx,
+      builder: (c) => AlertDialog(
+        title: Row(
+          children: [
+            const Expanded(child: Text('Sync Log', style: TextStyle(fontSize: 16))),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 18),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: text));
+                ScaffoldMessenger.of(c).showSnackBar(
+                    const SnackBar(content: Text('Log disalin')));
+              },
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              text,
+              style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -246,6 +328,13 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Preview Harga'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.bug_report_outlined),
+              tooltip: 'Lihat Log Matching',
+              onPressed: () => _showLogDialog(context),
+            ),
+          ],
           bottom: TabBar(
             tabs: [
               Tab(text: 'Cocok (${_matched.length})'),
