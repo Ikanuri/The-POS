@@ -238,7 +238,8 @@ class LanSyncService {
       final parts = <String>[];
       for (final e in tables.entries) {
         if (e.value.isNotEmpty) {
-          parts.add('${e.value.length} ${e.key}');
+          final label = _tableLabel(e.key);
+          parts.add('${e.value.length} $label');
         }
       }
       final summary = parts.isEmpty ? 'tidak ada data baru' : parts.join(', ');
@@ -274,6 +275,26 @@ class LanSyncService {
       return shelf.Response.internalServerError(body: 'Sync failed');
     }
   }
+
+  static const _kTableLabels = {
+    'transactions': 'transaksi',
+    'transaction_items': 'item transaksi',
+    'transaction_payments': 'pembayaran',
+    'stock_ledger': 'stok',
+    'loyalty_point_ledger': 'poin loyalti',
+    'expenses': 'pengeluaran',
+    'products': 'produk',
+    'product_units': 'satuan',
+    'price_tiers': 'harga',
+    'product_barcodes': 'barcode',
+    'customers': 'pelanggan',
+    'customer_groups': 'grup pelanggan',
+    'customer_group_prices': 'harga grup',
+    'kasir_permissions': 'izin kasir',
+  };
+
+  static String _tableLabel(String tableName) =>
+      _kTableLabels[tableName] ?? tableName;
 
   /// Constant-time string comparison — prevents timing side-channel on token.
   static bool _constantTimeEqual(String a, String b) {

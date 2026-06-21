@@ -217,47 +217,58 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                   color: scheme.tertiaryContainer,
                   margin: const EdgeInsets.only(bottom: 8),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-                    child: Row(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item.fromIp,
+                        Row(
+                          children: [
+                            Icon(Icons.devices_outlined, size: 16,
+                                color: scheme.onTertiaryContainer),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(item.fromIp,
                                   style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       color: scheme.onTertiaryContainer)),
-                              Text(item.tablesSummary,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: scheme.onTertiaryContainer
-                                          .withOpacity(0.8))),
-                              Text(
-                                  mins == 0
-                                      ? 'Baru saja'
-                                      : '$mins menit lalu',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: scheme.onTertiaryContainer
-                                          .withOpacity(0.6))),
-                            ],
-                          ),
+                            ),
+                            Text(
+                                mins == 0
+                                    ? 'Baru saja'
+                                    : '$mins menit lalu',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onTertiaryContainer
+                                        .withOpacity(0.6))),
+                          ],
                         ),
-                        TextButton(
-                          onPressed: () => _reject(item),
-                          style: TextButton.styleFrom(
-                              foregroundColor: scheme.error),
-                          child: const Text('Tolak'),
-                        ),
-                        FilledButton(
-                          onPressed: () => _approve(item),
-                          style: FilledButton.styleFrom(
-                              backgroundColor: scheme.tertiary,
-                              foregroundColor: scheme.onTertiary,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14)),
-                          child: const Text('Setuju'),
+                        const SizedBox(height: 6),
+                        Text(item.tablesSummary,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onTertiaryContainer
+                                    .withOpacity(0.8))),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => _reject(item),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: scheme.error),
+                              child: const Text('Tolak'),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: () => _approve(item),
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: scheme.tertiary,
+                                  foregroundColor: scheme.onTertiary,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14)),
+                              child: const Text('Setuju'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
