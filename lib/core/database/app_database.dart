@@ -46,6 +46,11 @@ const _kDefaultUnitTypes = <int, String>{
   23: 'Lembar',
   24: 'Ikat',
   25: 'Slop',
+  26: 'Ons',
+  27: 'Rek',
+  28: 'Paket',
+  29: 'Box',
+  30: 'Karton',
 };
 
 const kKasirPermissionKeys = <String>[
