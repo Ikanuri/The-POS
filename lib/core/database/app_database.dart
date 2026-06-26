@@ -1735,7 +1735,7 @@ class AppDatabase extends _$AppDatabase {
             for (final e in existing) {
               await customStatement(
                 'DELETE FROM price_tiers WHERE id = ?',
-                [Variable<Object>(e.data['id']!)],
+                [e.data['id']!],
               );
             }
           }

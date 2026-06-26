@@ -262,8 +262,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                             FilledButton(
                               onPressed: () => _approve(item),
                               style: FilledButton.styleFrom(
-                                  backgroundColor: scheme.tertiary,
-                                  foregroundColor: scheme.onTertiary,
+                                  backgroundColor: scheme.primary,
+                                  foregroundColor: scheme.onPrimary,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14)),
                               child: const Text('Setuju'),
