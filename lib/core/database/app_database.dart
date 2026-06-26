@@ -1689,54 +1689,77 @@ class AppDatabase extends _$AppDatabase {
       String tableName, List<Map<String, Object?>> rows, bool isAppendOnly) async {
     var count = 0;
     await transaction(() async {
-      for (final row in rows) {
+      for (var row in rows) {
         if (row.isEmpty) continue;
-        // Last-write-wins for master tables with updated_at.
-        // Cari PK: kolom 'id' (UUID) untuk tabel utama, atau 'permission_key'
-        // untuk kasir_permissions (yang tidak punya kolom id).
-        if (!isAppendOnly && row.containsKey('updated_at')) {
-          final incomingTs = row['updated_at'];
-          final pkCol = row.containsKey('id')
-              ? 'id'
-              : row.containsKey('permission_key')
-                  ? 'permission_key'
-                  : null;
-          final pkVal = pkCol != null ? row[pkCol] : null;
-          if (pkVal != null && incomingTs is int) {
-            final existing = await customSelect(
-              'SELECT updated_at FROM "$tableName" WHERE "$pkCol" = ?',
+
+        if (isAppendOnly) {
+          // Append-only: skip if PK already exists.
+          final pkVal = row['id'];
+          if (pkVal != null) {
+            final exists = await customSelect(
+              'SELECT 1 FROM "$tableName" WHERE id = ?',
               variables: [Variable<Object>(pkVal)],
             ).getSingleOrNull();
-            if (existing != null) {
-              final existingTs = existing.data['updated_at'];
-              if (existingTs is int && incomingTs < existingTs) continue;
+            if (exists != null) continue;
+          }
+          // Transactions & expenses have UNIQUE(local_id). Two devices with
+          // the same kasir code produce identical local_ids for different
+          // transactions. Rename the incoming local_id to avoid silent drops.
+          if (row.containsKey('local_id')) {
+            final localId = row['local_id'];
+            if (localId is String && localId.isNotEmpty) {
+              final collision = await customSelect(
+                'SELECT 1 FROM "$tableName" WHERE local_id = ?',
+                variables: [Variable<Object>(localId)],
+              ).getSingleOrNull();
+              if (collision != null) {
+                row = Map<String, Object?>.from(row);
+                row['local_id'] = '$localId-S';
+              }
             }
           }
-        }
-        // price_tiers: cegah duplikat tier (product_unit_id, min_qty).
-        // Jika sudah ada tier untuk unit+minQty yang sama, update harga
-        // daripada insert row baru dengan PK berbeda.
-        if (tableName == 'price_tiers') {
-          final unitId = row['product_unit_id'];
-          final minQty = row['min_qty'];
-          final incomingId = row['id'];
-          if (unitId != null && minQty != null && incomingId != null) {
-            final existing = await customSelect(
-              'SELECT id FROM price_tiers '
-              'WHERE product_unit_id = ? AND min_qty = ? AND id != ?',
-              variables: [
-                Variable<Object>(unitId),
-                Variable<Object>(minQty),
-                Variable<Object>(incomingId),
-              ],
-            ).get();
-            // Hapus tier lokal duplikat agar INSERT OR REPLACE tidak
-            // menambah row baru di samping tier yang sudah ada.
-            for (final e in existing) {
-              await customStatement(
-                'DELETE FROM price_tiers WHERE id = ?',
-                [e.data['id']!],
-              );
+        } else {
+          // Last-write-wins for master tables with updated_at.
+          if (row.containsKey('updated_at')) {
+            final incomingTs = row['updated_at'];
+            final pkCol = row.containsKey('id')
+                ? 'id'
+                : row.containsKey('permission_key')
+                    ? 'permission_key'
+                    : null;
+            final pkVal = pkCol != null ? row[pkCol] : null;
+            if (pkVal != null && incomingTs is int) {
+              final existing = await customSelect(
+                'SELECT updated_at FROM "$tableName" WHERE "$pkCol" = ?',
+                variables: [Variable<Object>(pkVal)],
+              ).getSingleOrNull();
+              if (existing != null) {
+                final existingTs = existing.data['updated_at'];
+                if (existingTs is int && incomingTs < existingTs) continue;
+              }
+            }
+          }
+          // price_tiers: cegah duplikat tier (product_unit_id, min_qty).
+          if (tableName == 'price_tiers') {
+            final unitId = row['product_unit_id'];
+            final minQty = row['min_qty'];
+            final incomingId = row['id'];
+            if (unitId != null && minQty != null && incomingId != null) {
+              final existing = await customSelect(
+                'SELECT id FROM price_tiers '
+                'WHERE product_unit_id = ? AND min_qty = ? AND id != ?',
+                variables: [
+                  Variable<Object>(unitId),
+                  Variable<Object>(minQty),
+                  Variable<Object>(incomingId),
+                ],
+              ).get();
+              for (final e in existing) {
+                await customStatement(
+                  'DELETE FROM price_tiers WHERE id = ?',
+                  [e.data['id']!],
+                );
+              }
             }
           }
         }
