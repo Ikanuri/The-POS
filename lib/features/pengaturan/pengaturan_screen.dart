@@ -1,11 +1,16 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide Column;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/theme_provider.dart';
+import '../../core/services/price_sync_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 
@@ -190,6 +195,20 @@ class PengaturanScreen extends ConsumerWidget {
                     onTap: () => context.push('/pengaturan/import-csv'),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.download_outlined),
+                    title: const Text('Export Produk CSV'),
+                    subtitle: const Text('Ekspor seluruh produk aktif ke CSV'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _exportProductsCsv(context, ref),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.sync_alt_outlined),
+                    title: const Text('Export Sinkron Harga CSV'),
+                    subtitle: const Text('Format katalog harga untuk sync'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _exportPriceCatalogCsv(context, ref),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.qr_code_2_outlined),
                     title: const Text('Pair Device Baru'),
                     subtitle: const Text('Tambah HP kasir / asisten via QR'),
@@ -369,6 +388,111 @@ class PengaturanScreen extends ConsumerWidget {
     }
     thresholdCtrl.dispose();
     perCtrl.dispose();
+  }
+}
+
+String _escapeCsv(String? value) {
+  if (value == null || value.isEmpty) return '';
+  if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+    return '"${value.replaceAll('"', '""')}"';
+  }
+  return value;
+}
+
+Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
+  final db = ref.read(databaseProvider);
+  final messenger = ScaffoldMessenger.of(context);
+
+  try {
+    final products = await db.searchProducts('');
+    final unitTypes = await db.getAllUnitTypes();
+    final typeNameById = {for (final u in unitTypes) u.id: u.name};
+
+    final buf = StringBuffer();
+    buf.writeln('nama,kode_produk,satuan,harga_jual,harga_beli,stok,barcode');
+
+    for (final p in products) {
+      final units = await db.getProductUnits(p.id);
+      for (final u in units) {
+        final tiers = await db.getPriceTiers(u.id);
+        final baseTier =
+            tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
+        final barcodes = await db.getProductBarcodes(u.id);
+        final barcode = barcodes.firstOrNull?.barcode ?? '';
+        final stock = await db.currentStock(u.id);
+        final unitName = u.unitTypeId != null
+            ? (typeNameById[u.unitTypeId!] ?? '')
+            : '';
+
+        buf.writeln([
+          _escapeCsv(p.name),
+          _escapeCsv(p.kodeProduk),
+          _escapeCsv(unitName),
+          baseTier?.price ?? 0,
+          baseTier?.costPrice ?? 0,
+          stock % 1 == 0 ? stock.toInt() : stock,
+          _escapeCsv(barcode),
+        ].join(','));
+      }
+    }
+
+    final bytes = utf8.encode(buf.toString());
+    final date = DateFormat('yyyyMMdd').format(DateTime.now());
+    await FilePicker.platform.saveFile(
+      fileName: 'produk_$date.csv',
+      bytes: Uint8List.fromList(bytes),
+      type: FileType.any,
+    );
+    messenger.showSnackBar(
+      SnackBar(content: Text('${products.length} produk diekspor ke CSV')),
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Gagal ekspor: $e')),
+    );
+  }
+}
+
+Future<void> _exportPriceCatalogCsv(BuildContext context, WidgetRef ref) async {
+  final db = ref.read(databaseProvider);
+  final messenger = ScaffoldMessenger.of(context);
+
+  try {
+    final catalog = await PriceSyncService.buildCatalog(db);
+
+    final buf = StringBuffer();
+    buf.writeln(
+        'nama,kode_produk,barcode,satuan,harga_jual,harga_beli,induk_nama,induk_kode,satuan_dasar,rasio');
+
+    for (final item in catalog) {
+      buf.writeln([
+        _escapeCsv(item.productName),
+        _escapeCsv(item.kodeProduk),
+        _escapeCsv(item.barcode),
+        _escapeCsv(item.unitTypeName),
+        item.price,
+        item.costPrice,
+        _escapeCsv(item.parentName),
+        _escapeCsv(item.parentKode),
+        item.isBaseUnit ? 1 : 0,
+        item.ratioToBase,
+      ].join(','));
+    }
+
+    final bytes = utf8.encode(buf.toString());
+    final date = DateFormat('yyyyMMdd').format(DateTime.now());
+    await FilePicker.platform.saveFile(
+      fileName: 'katalog_harga_$date.csv',
+      bytes: Uint8List.fromList(bytes),
+      type: FileType.any,
+    );
+    messenger.showSnackBar(
+      SnackBar(content: Text('${catalog.length} item katalog diekspor ke CSV')),
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Gagal ekspor: $e')),
+    );
   }
 }
 

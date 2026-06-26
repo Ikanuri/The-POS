@@ -132,6 +132,9 @@ class PriceSyncService {
     }
   }
 
+  static Future<List<PriceCatalogItem>> buildCatalog(AppDatabase db) =>
+      _buildCatalog(db);
+
   static Future<List<PriceCatalogItem>> _buildCatalog(AppDatabase db) async {
     final rows = await db.customSelect('''
       SELECT p.name AS product_name, p.kode_produk,
