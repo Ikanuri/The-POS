@@ -126,6 +126,53 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
     }
   }
 
+  Future<void> _exportCsv() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final catalog = await PriceSyncService.buildCatalog(db);
+
+      String esc(String? v) {
+        if (v == null || v.isEmpty) return '';
+        if (v.contains(',') || v.contains('"') || v.contains('\n')) {
+          return '"${v.replaceAll('"', '""')}"';
+        }
+        return v;
+      }
+
+      final buf = StringBuffer();
+      buf.writeln('nama,kode_produk,barcode,satuan,harga_jual,harga_beli,'
+          'induk_nama,induk_kode,satuan_dasar,rasio');
+      for (final item in catalog) {
+        buf.writeln([
+          esc(item.productName),
+          esc(item.kodeProduk),
+          esc(item.barcode),
+          esc(item.unitTypeName),
+          item.price,
+          item.costPrice,
+          esc(item.parentName),
+          esc(item.parentKode),
+          item.isBaseUnit ? 1 : 0,
+          item.ratioToBase,
+        ].join(','));
+      }
+
+      final now = DateTime.now();
+      String p(int n) => n.toString().padLeft(2, '0');
+      final date = '${now.year}${p(now.month)}${p(now.day)}';
+      await FilePicker.platform.saveFile(
+        fileName: 'katalog_harga_$date.csv',
+        bytes: Uint8List.fromList(utf8.encode(buf.toString())),
+        type: FileType.any,
+      );
+      if (!mounted) return;
+      showSuccess('${catalog.length} item katalog diekspor ke CSV');
+    } catch (e) {
+      if (!mounted) return;
+      showError('Gagal ekspor: $e');
+    }
+  }
+
   List<PriceCatalogItem> _parsePriceCsv(String content) {
     final lines =
         content.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
@@ -382,6 +429,19 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
                           onPressed: _importCsv,
                           icon: const Icon(Icons.file_open_outlined),
                           label: const Text('Pilih File CSV'),
+                        ),
+                        const Divider(height: 24),
+                        Text(
+                          'Ekspor seluruh katalog harga ke file CSV untuk '
+                          'dibagikan atau diimpor di perangkat lain.',
+                          style: TextStyle(
+                              fontSize: 13, color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _exportCsv,
+                          icon: const Icon(Icons.download_outlined),
+                          label: const Text('Export ke CSV'),
                         ),
                       ],
                     ),

@@ -250,23 +250,24 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                                     .withOpacity(0.8))),
                         const SizedBox(height: 10),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            TextButton(
-                              onPressed: () => _reject(item),
-                              style: TextButton.styleFrom(
-                                  foregroundColor: scheme.error),
-                              child: const Text('Tolak'),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => _reject(item),
+                                style: OutlinedButton.styleFrom(
+                                    foregroundColor: scheme.error),
+                                child: const Text('Tolak'),
+                              ),
                             ),
                             const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: () => _approve(item),
-                              style: FilledButton.styleFrom(
-                                  backgroundColor: scheme.primary,
-                                  foregroundColor: scheme.onPrimary,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14)),
-                              child: const Text('Setuju'),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () => _approve(item),
+                                style: FilledButton.styleFrom(
+                                    backgroundColor: scheme.primary,
+                                    foregroundColor: scheme.onPrimary),
+                                child: const Text('Setuju'),
+                              ),
                             ),
                           ],
                         ),
