@@ -102,7 +102,7 @@ class CsvImportService {
           (u) => u.name.toLowerCase() == satuanName.toLowerCase(),
         ).firstOrNull;
         if (matched != null) {
-          unitTypeId = (matched.id == 7 || matched.id == 8) ? 1 : matched.id;
+          unitTypeId = (matched.id == 7 || matched.id == 8) ? 12 : matched.id;
         }
       }
 

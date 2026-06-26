@@ -23,34 +23,27 @@ import 'tables/transaction_tables.dart';
 part 'app_database.g.dart';
 
 const _kDefaultUnitTypes = <int, String>{
-  1: 'Biji',
-  2: 'Pak',
-  3: 'Dos',
-  4: 'Ret',
-  5: 'Sak',
-  6: 'Kg',
-  9: 'Lusin',
-  10: 'Bal',
-  11: 'Botol',
-  12: 'Galon',
-  13: 'Sachet',
-  14: 'Renteng',
-  15: 'Kaleng',
-  16: 'Batang',
-  17: 'Bungkus',
-  18: 'Liter',
-  19: 'Meter',
-  20: 'Roll',
-  21: 'Set',
-  22: 'Pasang',
-  23: 'Lembar',
-  24: 'Ikat',
-  25: 'Slop',
-  26: 'Ons',
-  27: 'Rek',
-  28: 'Paket',
-  29: 'Box',
-  30: 'Karton',
+  1: 'Kg',
+  2: 'Pcs',
+  4: 'Pak',
+  5: 'Bal',
+  6: 'Sak',
+  9: 'Slop',
+  10: 'Pres',
+  11: 'Ons',
+  12: 'Biji',
+  13: 'Kas',
+  14: 'Dos',
+  15: 'Lusin',
+  16: 'Box',
+  17: 'Rek',
+  18: 'Ret',
+  19: 'Tas',
+  20: 'Ikat',
+  22: 'Roll',
+  23: 'Toples',
+  24: 'Paket',
+  25: 'Karton',
 };
 
 const kKasirPermissionKeys = <String>[
@@ -163,7 +156,7 @@ class AppDatabase extends _$AppDatabase {
               _kDefaultUnitTypes.entries.map(
                 (e) => UnitTypesCompanion.insert(id: Value(e.key), name: e.value),
               ),
-              mode: InsertMode.insertOrIgnore,
+              mode: InsertMode.insertOrReplace,
             );
             b.insertAll(
               kasirPermissions,
@@ -188,7 +181,7 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> _seedDefaults() async {
     await batch((b) {
-      // Satuan legacy. ID 7 & 8 di sistem lama = 'Biji', merge ke ID 1.
+      // Satuan legacy. ID 7 & 8 di sistem lama = 'Biji', merge ke ID 12.
       b.insertAll(
         unitTypes,
         _kDefaultUnitTypes.entries

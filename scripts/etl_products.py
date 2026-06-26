@@ -37,7 +37,7 @@ COLUMN_ALIASES = {
     'stok': ['stok', 'stock', 'qty', 'jumlah'],
 }
 
-MERGED_UNIT_IDS = {7: 1, 8: 1}  # legacy 7 & 8 = 'Biji' -> ID 1
+MERGED_UNIT_IDS = {7: 12, 8: 12}  # legacy 7 & 8 = 'Biji' -> ID 12
 
 
 def resolve_columns(header):

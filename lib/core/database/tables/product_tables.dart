@@ -26,7 +26,7 @@ class ProductGroups extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Satuan legacy (ID 1–24): Biji, Pak, Dos, Ret, Sak, Kg, dll.
+/// Satuan legacy (ID 1–25): Kg, Pcs, Pak, Bal, Sak, Slop, Biji, Dos, dll.
 class UnitTypes extends Table {
   IntColumn get id => integer()();
   TextColumn get name => text()();
