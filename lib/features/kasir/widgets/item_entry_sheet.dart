@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
@@ -86,26 +87,52 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
 
   // DEBUG sementara — lacak interaksi field harga.
   String _dbgRole = '?';
-  int _dbgOnTap = 0;
   int _dbgOnChanged = 0;
   String _dbgLastInput = '-';
 
   final _priceCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
+  final _priceFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    _priceFocus.addListener(_onPriceFocusChange);
     _load();
   }
 
   @override
   void dispose() {
+    _priceFocus.removeListener(_onPriceFocusChange);
+    _priceFocus.dispose();
     _priceCtrl.dispose();
     _qtyCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
+  }
+
+  /// Saat field harga difokus → tampilkan digit mentah (tanpa titik ribuan)
+  /// supaya IME tidak desync. Saat blur → reformat ke "21.000".
+  void _onPriceFocusChange() {
+    // Saat baru mendapat fokus, seleksi semua agar mudah ditimpa.
+    _writePriceField(selectAll: _priceFocus.hasFocus);
+  }
+
+  /// Tulis ulang isi field harga sesuai status fokus: digit mentah saat diedit,
+  /// terformat saat tidak. Saat baru difokus, seleksi seluruh teks.
+  void _writePriceField({bool selectAll = false}) {
+    if (_priceFocus.hasFocus) {
+      final raw = _price == 0 ? '' : '$_price';
+      _priceCtrl.value = TextEditingValue(
+        text: raw,
+        selection: selectAll
+            ? TextSelection(baseOffset: 0, extentOffset: raw.length)
+            : TextSelection.collapsed(offset: raw.length),
+      );
+    } else {
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(_price);
+    }
   }
 
   Future<void> _load() async {
@@ -260,7 +287,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _noteCtrl.text = existing?.itemNote ?? '';
       _priceOverridden = false;
       _price = _options[idx].basePrice;
-      _priceCtrl.text = ThousandsSeparatorFormatter.format(_price);
+      _writePriceField();
     });
   }
 
@@ -268,7 +295,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     setState(() {
       _price = price;
       _priceOverridden = price != _sel!.basePrice;
-      _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
+      _writePriceField();
     });
   }
 
@@ -500,7 +527,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                       ),
                       child: Text(
                         'DEBUG  role=$_dbgRole  canOverride=$_canOverride\n'
-                        'onTap=$_dbgOnTap  onChanged=$_dbgOnChanged\n'
+                        'onChanged=$_dbgOnChanged\n'
                         'lastInput="$_dbgLastInput"  _price=$_price',
                         style: const TextStyle(
                             fontSize: 11,
@@ -593,10 +620,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               const SizedBox(height: 6),
                               TextField(
                                 controller: _priceCtrl,
+                                focusNode: _priceFocus,
                                 readOnly: !_canOverride,
                                 keyboardType: TextInputType.number,
-                                inputFormatters: const [
-                                  ThousandsSeparatorFormatter()
+                                // Digit-only: tidak menyisipkan karakter (titik)
+                                // sehingga posisi karakter tidak berubah & IME
+                                // tidak desync. Pemisah ribuan ditambahkan saat
+                                // field kehilangan fokus (lihat _writePriceField).
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly
                                 ],
                                 decoration: InputDecoration(
                                   isDense: true,
@@ -609,25 +641,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                           color: scheme.onSurfaceVariant)
                                       : null,
                                 ),
-                                onTap: _canOverride
-                                    ? () {
-                                        _dbgOnTap++;
-                                        debugPrint(
-                                            '[ItemEntry] price onTap #$_dbgOnTap');
-                                        _priceCtrl.selection = TextSelection(
-                                            baseOffset: 0,
-                                            extentOffset:
-                                                _priceCtrl.text.length);
-                                        setState(() {});
-                                      }
-                                    : null,
                                 onChanged: (v) {
                                   _dbgOnChanged++;
                                   _dbgLastInput = v;
-                                  debugPrint(
-                                      '[ItemEntry] price onChanged #$_dbgOnChanged raw="$v"');
-                                  final p =
-                                      ThousandsSeparatorFormatter.parseValue(v);
+                                  final p = int.tryParse(v) ?? 0;
                                   _price = p;
                                   _priceOverridden =
                                       _sel != null && p != _sel!.basePrice;
