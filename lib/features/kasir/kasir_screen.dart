@@ -437,6 +437,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   // Panel pesanan ditahan inline (slide dari atas, mendorong katalog ke bawah).
   bool _heldPanelOpen = false;
 
+  // Sheet keranjang sedang terbuka? Dipakai agar scan eksternal berturut-turut
+  // tetap diproses saat sheet terbuka, dan agar tidak membuka sheet ganda.
+  bool _cartSheetOpen = false;
+
   // Banner notifikasi inline (bukan SnackBar overlay)
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
@@ -461,7 +465,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (event is! KeyDownEvent) return false;
     if (_scannerOpen) return false;
     if (_searchFocus.hasFocus) return false;
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    // Lewati jika layar kasir bukan rute teratas — KECUALI saat sheet keranjang
+    // yang kita buka sendiri sedang tampil (agar scan berturut-turut tetap jalan).
+    if (!_cartSheetOpen && !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return false;
+    }
 
     final now = DateTime.now();
     final gapMs = now.difference(_lastKeyTime).inMilliseconds;
@@ -473,7 +481,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       final code = _hwScanBuffer.toString().trim();
       _hwScanBuffer.clear();
       if (code.length >= _kMinBarcodeLen) {
-        _handleBarcode(code);
+        _handleBarcode(code, fromExternal: true);
         return true;
       }
       return false;
@@ -629,12 +637,27 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         ));
   }
 
-  Future<void> _handleBarcode(String barcode) async {
+  Future<void> _handleBarcode(String barcode, {bool fromExternal = false}) async {
     // Debounce: abaikan deteksi berulang barcode sama dalam 1.5 detik.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (barcode == _lastScan && nowMs - _lastScanMs < 1500) return;
     _lastScan = barcode;
     _lastScanMs = nowMs;
+
+    // Scanner eksternal (HID): tambah ke keranjang, beri haptik, lalu buka
+    // sheet keranjang sebagai konfirmasi visual (mode kamera tak terpakai).
+    if (fromExternal) {
+      final resolved = await _resolveBarcode(barcode);
+      if (resolved == null) {
+        if (mounted) _showBanner('Barcode tidak ditemukan: $barcode');
+        return;
+      }
+      await _ensureParentInCart(resolved.item);
+      ref.read(cartProvider(_cartId).notifier).addItem(resolved.item);
+      HapticFeedback.mediumImpact();
+      _openCartSheet();
+      return;
+    }
 
     if (!_continuousScan) {
       _closeScanner();
@@ -645,6 +668,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       }
       await _ensureParentInCart(resolved.item);
       ref.read(cartProvider(_cartId).notifier).addItem(resolved.item);
+      HapticFeedback.mediumImpact();
       return;
     }
 
@@ -664,8 +688,21 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final notifier = ref.read(cartProvider(_cartId).notifier);
     await _ensureParentInCart(item);
     notifier.addItem(item);
+    HapticFeedback.mediumImpact();
     final newQty = notifier.qtyForUnit(item.productUnitId).round();
     _showOrUpdateToast(item, newQty);
+  }
+
+  /// Buka sheet keranjang. Bila sudah terbuka, isi diperbarui otomatis lewat
+  /// provider — tidak membuka sheet kedua.
+  void _openCartSheet() {
+    if (_cartSheetOpen) return;
+    _cartSheetOpen = true;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => CartSheet(cartId: _cartId),
+    ).whenComplete(() => _cartSheetOpen = false);
   }
 
   void _showOrUpdateToast(CartItem item, int qty) {
@@ -1062,11 +1099,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                       ? 0
                       : cartNotifier
                           .effectiveQtyFor(cartNotifier.lastTouchedItem!),
-                  onView: () => showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (_) => CartSheet(cartId: _cartId),
-                  ),
+                  onView: _openCartSheet,
                   onPay: () => _isAddMode
                       ? context.push('/kasir/tambah/${widget.addToTxId}/bayar')
                       : context.go('/kasir/bayar'),
@@ -1800,105 +1833,112 @@ class _CartBar extends StatelessWidget {
           top: BorderSide(color: cs.outlineVariant, width: 0.5),
         ),
       ),
-      padding: EdgeInsets.fromLTRB(14, 10, 14, 10 + bottomPad),
-      child: Row(
+      padding: EdgeInsets.fromLTRB(14, 12, 14, 12 + bottomPad),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: AppTheme.accent,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                '$count',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
+          // Total diperbesar & di-center, dengan badge jumlah item di kiri.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  color: AppTheme.accent,
+                  shape: BoxShape.circle,
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Total',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-                Text(
-                  formatRupiah(total),
-                  style: AppTheme.numStyle(context,
-                      size: 16.5, weight: FontWeight.w700),
-                ),
-                if (lastParts != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text.rich(
-                      TextSpan(
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        children: [
-                          TextSpan(text: lastParts.prefix),
-                          TextSpan(
-                            text: lastParts.name,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: lastParts.suffix),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                child: Center(
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
                     ),
                   ),
-              ],
-            ),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OutlinedButton(
-                onPressed: onView,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  side: BorderSide(color: cs.outlineVariant),
-                  foregroundColor: cs.onSurface,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text(
-                  'Lihat',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: onPay,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Total',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  Text(
+                    formatRupiah(total),
+                    style: AppTheme.numStyle(context,
+                        size: 23, weight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (lastParts != null) ...[
+            const SizedBox(height: 5),
+            Text.rich(
+              TextSpan(
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
                 ),
-                child: Text(
-                  payLabel ?? 'Bayar',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                children: [
+                  TextSpan(text: lastParts.prefix),
+                  TextSpan(
+                    text: lastParts.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  TextSpan(text: lastParts.suffix),
+                ],
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: 12),
+          // Tombol Lihat & Bayar sejajar penuh di bawah total.
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onView,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 46),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(color: cs.outlineVariant),
+                    foregroundColor: cs.onSurface,
+                  ),
+                  child: const Text(
+                    'Lihat',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: onPay,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 46),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    payLabel ?? 'Bayar',
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
