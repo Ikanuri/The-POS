@@ -320,8 +320,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final db = ref.read(databaseProvider);
 
       // C-5: Cek stok sebelum transaksi jika setting "izinkan stok minus" OFF.
-      final allowNegative =
-          (await db.getSetting('allow_negative_stock')) == '1';
+      var allowNegative = (await db.getSetting('allow_negative_stock')) == '1';
+      // Asisten bisa diberi izin khusus override stok minus meski setting
+      // global OFF (mis. owner sedang tidak di tempat).
+      if (!allowNegative &&
+          ref.read(deviceProvider).deviceRole == 'asisten') {
+        allowNegative = await db.isPermissionEnabled('asisten_stok_minus');
+      }
       if (!allowNegative) {
         final notifier = ref.read(cartProvider(_cartId).notifier);
         final shortages = <String>[];

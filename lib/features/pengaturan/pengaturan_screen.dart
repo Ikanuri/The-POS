@@ -136,6 +136,13 @@ class PengaturanScreen extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.push('/pengaturan/izin-kasir'),
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.badge_outlined),
+                    title: const Text('Izin Asisten'),
+                    subtitle: const Text('Izinkan stok minus, dll'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/izin-asisten'),
+                  ),
                   SwitchListTile(
                     secondary: const Icon(Icons.remove_shopping_cart_outlined),
                     title: const Text('Izinkan Stok Minus'),

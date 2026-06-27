@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/services/crypto_service.dart';
 import 'package:the_pos/core/services/csv_import_service.dart';
@@ -38,6 +39,11 @@ double _effParent(CartNotifier n) =>
     n.effectiveQtyFor(n.state.firstWhere((c) => !c.isVariant));
 
 void main() {
+  // CartNotifier memuat keranjang dari SharedPreferences saat dibuat, jadi
+  // binding + mock prefs harus disiapkan agar test unit bisa jalan.
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
+
   group('CryptoService', () {
     test('generateStoreKey menghasilkan 32 byte base64url', () {
       final key = CryptoService.generateStoreKey();
@@ -262,7 +268,7 @@ void main() {
 
   group('CartNotifier varian/induk', () {
     test('scan 1 varian saja → induk placeholder, effective base 0', () {
-      final n = CartNotifier();
+      final n = CartNotifier('test');
       n.addItem(_parent(qty: 0)); // _ensureParentInCart: placeholder qty 0
       n.addItem(_variant('A')); // bump varian + induk
       expect(_effParent(n), 0);
@@ -270,7 +276,7 @@ void main() {
     });
 
     test('campur qty dasar + varian: base tidak tertelan', () {
-      final n = CartNotifier();
+      final n = CartNotifier('test');
       n.addItem(_parent(qty: 2)); // 2 qty dasar
       n.addItem(_variant('A')); // scan varian pertama kali
       expect(_effParent(n), 2); // qty dasar tetap 2
@@ -278,7 +284,7 @@ void main() {
     });
 
     test('hapus varian terakhir tanpa base → induk ikut hilang', () {
-      final n = CartNotifier();
+      final n = CartNotifier('test');
       n.addItem(_parent(qty: 0));
       n.addItem(_variant('A'));
       n.removeItem('VA-base');
@@ -286,7 +292,7 @@ void main() {
     });
 
     test('hapus varian saat masih ada qty dasar → induk tetap', () {
-      final n = CartNotifier();
+      final n = CartNotifier('test');
       n.addItem(_parent(qty: 2));
       n.addItem(_variant('A'));
       n.removeItem('VA-base');
@@ -295,7 +301,7 @@ void main() {
     });
 
     test('dua varian: hapus satu, sisanya & induk konsisten', () {
-      final n = CartNotifier();
+      final n = CartNotifier('test');
       n.addItem(_parent(qty: 0));
       n.addItem(_variant('A'));
       n.addItem(_variant('B'));
@@ -306,7 +312,7 @@ void main() {
     });
 
     test('setEffectiveQty varian menjaga qty dasar induk', () {
-      final n = CartNotifier();
+      final n = CartNotifier('test');
       n.addItem(_parent(qty: 2));
       n.addItem(_variant('A'));
       n.setEffectiveQty('VA-base', 3); // varian 1 → 3

@@ -79,6 +79,23 @@ class LanSyncService {
   static List<PendingSyncItem> get pendingQueue =>
       List.unmodifiable(_pendingQueue);
 
+  /// Tabel append-only yang boleh diunggah klien ke host. Master data tidak
+  /// pernah di-merge dari klien (alir satu arah host → bawahan).
+  static const appendOnlyTables = {
+    'transactions', 'transaction_items', 'transaction_payments',
+    'stock_ledger', 'loyalty_point_ledger', 'expenses',
+  };
+
+  /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi
+  /// digabung (header + item + pembayaran) agar tidak pernah terpisah.
+  /// Tabel pertama tiap kategori dipakai untuk menghitung jumlah tampilan.
+  static const syncCategories = <String, List<String>>{
+    'Transaksi': ['transactions', 'transaction_items', 'transaction_payments'],
+    'Stok': ['stock_ledger'],
+    'Poin Loyalti': ['loyalty_point_ledger'],
+    'Pengeluaran': ['expenses'],
+  };
+
   // ─── Host (server) side ──────────────────────────────────────────────────
 
   /// Start shelf server. Returns (ip, token) pair.
@@ -104,21 +121,25 @@ class LanSyncService {
   }
 
   /// Setujui item antrian → merge data ke DB, kirim balik data host.
-  static Future<int> approveSync(String itemId) async {
+  ///
+  /// [allowedTables] (opsional) membatasi tabel mana yang di-merge — dipakai
+  /// owner untuk memilih kategori data yang diterima. Bila null, semua tabel
+  /// append-only diterima. Master data dari klien tidak pernah di-merge.
+  static Future<int> approveSync(String itemId,
+      {Set<String>? allowedTables}) async {
     final idx = _pendingQueue.indexWhere((i) => i.id == itemId);
     if (idx < 0) return 0;
     final item = _pendingQueue.removeAt(idx);
     onQueueChanged?.call();
 
-    const appendOnly = {
-      'transactions', 'transaction_items', 'transaction_payments',
-      'stock_ledger', 'loyalty_point_ledger', 'expenses'
-    };
     int received = 0;
     List<Map<String, Object?>> mergedTxRows = const [];
     for (final entry in item.tables.entries) {
-      received +=
-          await _db!.mergeRows(entry.key, entry.value, appendOnly.contains(entry.key));
+      // Guard satu arah: hanya tabel append-only yang boleh dari klien.
+      if (!appendOnlyTables.contains(entry.key)) continue;
+      // Filter kategori yang dipilih owner.
+      if (allowedTables != null && !allowedTables.contains(entry.key)) continue;
+      received += await _db!.mergeRows(entry.key, entry.value, true);
       if (entry.key == 'transactions') mergedTxRows = entry.value;
     }
     // Rekonsiliasi total/paid dari child rows sebelum membangun ringkasan,
@@ -318,7 +339,11 @@ class LanSyncService {
     final key = CryptoService.deriveSyncKey(storeKey, syncToken);
     final effectiveSince = since ?? DateTime.fromMillisecondsSinceEpoch(0);
 
-    final outDump = await db.dumpSince(effectiveSince);
+    // Klien (perangkat bawahan) hanya mengirim data append-only ke atas.
+    // Master data (produk, harga, izin) tidak diunggah agar tidak menimpa
+    // data owner — master data mengalir satu arah dari host ke bawah.
+    final outDump =
+        await db.dumpSince(effectiveSince, includeMasterData: false);
     final payload = {
       'since': effectiveSince.toIso8601String(),
       'tables': outDump,
@@ -366,9 +391,10 @@ class LanSyncService {
         final rows = (entry.value as List).cast<Map<String, dynamic>>().map((r) {
           return r.map<String, Object?>((k, v) => MapEntry(k, v));
         }).toList();
-        const appendOnly = {'transactions', 'transaction_items', 'transaction_payments',
-            'stock_ledger', 'loyalty_point_ledger', 'expenses'};
-        received += await db.mergeRows(entry.key, rows, appendOnly.contains(entry.key));
+        // Klien menerima data dari host: master data di-merge last-write-wins
+        // (data owner menang), append-only di-INSERT OR IGNORE.
+        received += await db.mergeRows(
+            entry.key, rows, appendOnlyTables.contains(entry.key));
         if (entry.key == 'transactions') mergedTxRows = rows;
       }
       // Rekonsiliasi total/paid dari child rows, lalu refresh ringkasan harian

@@ -5,26 +5,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 
-final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
+final _asistenPermissionsProvider =
+    StreamProvider<List<KasirPermission>>((ref) {
   final db = ref.watch(databaseProvider);
-  return db
-      .select(db.kasirPermissions)
-      .watch()
-      // Hanya izin role Kasir — izin asisten punya layar sendiri.
-      .map((rows) => rows
-          .where((p) => kKasirPermissionKeys.contains(p.permissionKey))
-          .toList());
+  return db.select(db.kasirPermissions).watch().map((rows) => rows
+      .where((p) => kAsistenPermissionKeys.contains(p.permissionKey))
+      .toList());
 });
 
-class KasirPermissionsScreen extends ConsumerWidget {
-  const KasirPermissionsScreen({super.key});
+class AsistenPermissionsScreen extends ConsumerWidget {
+  const AsistenPermissionsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final permsAsync = ref.watch(_kasirPermissionsProvider);
+    final permsAsync = ref.watch(_asistenPermissionsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Izin Kasir')),
+      appBar: AppBar(title: const Text('Izin Asisten')),
       body: permsAsync.when(
         data: (perms) => ListView(
           padding: const EdgeInsets.all(8),
@@ -33,8 +30,8 @@ class KasirPermissionsScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Izin ini berlaku untuk device dengan role Kasir. '
-                  'Owner dan Asisten selalu punya akses penuh.',
+                  'Izin ini berlaku untuk device dengan role Asisten. Selain '
+                  'yang diatur di sini, Asisten tetap punya akses penuh.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -78,22 +75,13 @@ class _PermissionTile extends ConsumerWidget {
   }
 
   String _label(String key) => switch (key) {
-        'input_stok' => 'Input Stok',
-        'tambah_pelanggan' => 'Tambah Pelanggan',
-        'input_pengeluaran' => 'Input Pengeluaran',
-        'input_pembelian' => 'Input Pembelian',
-        'override_harga' => 'Override Harga',
-        'batal_transaksi' => 'Batalkan Transaksi',
+        'asisten_stok_minus' => 'Izinkan Stok Minus',
         _ => key,
       };
 
   String _desc(String key) => switch (key) {
-        'input_stok' => 'Kasir bisa menambah stok produk',
-        'tambah_pelanggan' => 'Kasir bisa mendaftarkan pelanggan baru',
-        'input_pengeluaran' => 'Kasir bisa mencatat pengeluaran',
-        'input_pembelian' => 'Kasir bisa mencatat pembelian dari supplier',
-        'override_harga' => 'Kasir bisa mengubah harga di kasir',
-        'batal_transaksi' => 'Kasir bisa membatalkan / void transaksi',
+        'asisten_stok_minus' =>
+          'Asisten bisa menjual meski stok 0 (override stok minus)',
         _ => '',
       };
 }

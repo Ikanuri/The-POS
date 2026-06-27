@@ -11,6 +11,7 @@ import '../../features/pelanggan/pelanggan_list_screen.dart';
 import '../../features/pengaturan/arsip_screen.dart';
 import '../../features/pengaturan/backup_screen.dart';
 import '../../features/pengaturan/csv_import_screen.dart';
+import '../../features/pengaturan/asisten_permissions_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
 import '../../features/pengaturan/pair_device_screen.dart';
 import '../../features/pengaturan/payment_methods_screen.dart';
@@ -147,6 +148,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: 'izin-kasir',
                   builder: (_, __) => const KasirPermissionsScreen()),
+              GoRoute(
+                  path: 'izin-asisten',
+                  builder: (_, __) => const AsistenPermissionsScreen()),
               GoRoute(
                   path: 'pair',
                   builder: (_, __) => const PairDeviceScreen()),

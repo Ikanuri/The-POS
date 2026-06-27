@@ -55,6 +55,13 @@ const kKasirPermissionKeys = <String>[
   'batal_transaksi',
 ];
 
+/// Izin khusus role Asisten. Disimpan di tabel kasir_permissions yang sama
+/// (dengan prefix `asisten_`) agar ikut tersinkron, tapi ditampilkan di layar
+/// "Izin Asisten" terpisah. Asisten tetap punya akses penuh untuk hal lain.
+const kAsistenPermissionKeys = <String>[
+  'asisten_stok_minus',
+];
+
 @DriftDatabase(tables: [
   AppSettings,
   Products,
@@ -160,7 +167,7 @@ class AppDatabase extends _$AppDatabase {
             );
             b.insertAll(
               kasirPermissions,
-              kKasirPermissionKeys
+              [...kKasirPermissionKeys, ...kAsistenPermissionKeys]
                   .map((k) => KasirPermissionsCompanion.insert(permissionKey: k)),
               mode: InsertMode.insertOrIgnore,
             );
@@ -194,10 +201,10 @@ class AppDatabase extends _$AppDatabase {
         [for (var i = 3; i <= 20; i++) ProductGroupsCompanion.insert(id: Value(i))],
         mode: InsertMode.insertOrIgnore,
       );
-      // Permission kasir, semua default OFF.
+      // Permission kasir & asisten, semua default OFF.
       b.insertAll(
         kasirPermissions,
-        kKasirPermissionKeys
+        [...kKasirPermissionKeys, ...kAsistenPermissionKeys]
             .map((k) => KasirPermissionsCompanion.insert(permissionKey: k)),
         mode: InsertMode.insertOrIgnore,
       );
@@ -1632,8 +1639,17 @@ class AppDatabase extends _$AppDatabase {
   // ───────────────────────── Sync helpers ─────────────────────────
 
   /// Dump only syncable rows since [since] for WiFi sync.
+  ///
+  /// [includeMasterData] mengontrol arah data master (produk, harga, barcode,
+  /// pelanggan, izin kasir). Master data hanya boleh mengalir SATU ARAH dari
+  /// host (owner) ke perangkat bawahan. Maka:
+  ///   • Host mengirim ke bawah  → includeMasterData = true (default).
+  ///   • Klien mengirim ke atas  → includeMasterData = false, supaya perubahan
+  ///     harga di perangkat asisten/kasir TIDAK menimpa data owner.
+  /// Data append-only (transaksi, stok, pembayaran, dll) selalu ikut.
   Future<Map<String, List<Map<String, Object?>>>> dumpSince(
-      DateTime since) async {
+      DateTime since, {
+      bool includeMasterData = true}) async {
     const appendOnly = [
       'transactions', 'transaction_items', 'transaction_payments',
       'stock_ledger', 'loyalty_point_ledger', 'expenses',
@@ -1668,22 +1684,25 @@ class AppDatabase extends _$AppDatabase {
       ).get();
       dump[t] = rows.map((r) => r.data).toList();
     }
-    for (final t in masterData) {
-      final hasUpdated = t == 'products' || t == 'customers';
-      if (hasUpdated) {
-        final rows = await customSelect(
-          'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
-          variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
-        ).get();
-        dump[t] = rows.map((r) => r.data).toList();
-      } else {
-        final rows = await customSelect('SELECT * FROM "$t"').get();
-        dump[t] = rows.map((r) => r.data).toList();
+    // Master data & izin kasir hanya disertakan saat mengalir ke bawah (host
+    // → bawahan). Saat klien mengirim ke atas, dilewati agar tidak menimpa.
+    if (includeMasterData) {
+      for (final t in masterData) {
+        final hasUpdated = t == 'products' || t == 'customers';
+        if (hasUpdated) {
+          final rows = await customSelect(
+            'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
+            variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
+          ).get();
+          dump[t] = rows.map((r) => r.data).toList();
+        } else {
+          final rows = await customSelect('SELECT * FROM "$t"').get();
+          dump[t] = rows.map((r) => r.data).toList();
+        }
       }
-    }
-    // kasir_permissions — hanya punya updated_at (tanpa created_at).
-    // Ikut tersinkron agar perubahan izin dari owner langsung berlaku di HP kasir.
-    {
+      // kasir_permissions — hanya punya updated_at (tanpa created_at).
+      // Ikut tersinkron agar perubahan izin dari owner langsung berlaku di
+      // HP kasir/asisten.
       final rows = await customSelect(
         'SELECT * FROM "kasir_permissions" WHERE updated_at >= ?',
         variables: [Variable.withInt(sinceSec)],

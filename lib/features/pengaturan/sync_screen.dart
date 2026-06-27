@@ -77,8 +77,72 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   }
 
   Future<void> _approve(PendingSyncItem item) async {
+    // Kategori yang tersedia di payload ini (yang ada datanya), beserta jumlah.
+    final available = <String, ({List<String> tables, int count})>{};
+    LanSyncService.syncCategories.forEach((label, tables) {
+      final count = item.tables[tables.first]?.length ?? 0;
+      if (count > 0) available[label] = (tables: tables, count: count);
+    });
+
+    if (available.isEmpty) {
+      // Tidak ada data append-only untuk diterima → buang dari antrian.
+      LanSyncService.rejectSync(item.id);
+      if (mounted) showSuccess('Tidak ada data baru untuk diterima');
+      return;
+    }
+
+    final selected = {for (final k in available.keys) k: true};
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Terima Data Sync'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pilih kategori data dari ${item.fromIp} yang ingin diterima.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              ...available.entries.map((e) => CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text('${e.key} (${e.value.count})'),
+                    value: selected[e.key],
+                    onChanged: (v) =>
+                        setSt(() => selected[e.key] = v ?? false),
+                  )),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Batal')),
+            FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Terima')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    final allowed = <String>{};
+    available.forEach((label, v) {
+      if (selected[label] == true) allowed.addAll(v.tables);
+    });
+    if (allowed.isEmpty) {
+      LanSyncService.rejectSync(item.id);
+      if (mounted) showSuccess('Tidak ada kategori dipilih — sync dilewati');
+      return;
+    }
+
     try {
-      final received = await LanSyncService.approveSync(item.id);
+      final received =
+          await LanSyncService.approveSync(item.id, allowedTables: allowed);
       if (mounted) showSuccess('Sync disetujui · $received baris diterima');
     } catch (e) {
       if (mounted) showError('Gagal merge: $e');
