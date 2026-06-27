@@ -707,7 +707,6 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final editProductId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      useRootNavigator: true,
       builder: (_) => CartSheet(cartId: _cartId),
     );
     _cartSheetOpen = false;
@@ -718,7 +717,6 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      useRootNavigator: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
     );
     // Buka lagi keranjang setelah edit, selama masih ada isinya.
@@ -777,7 +775,6 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      useRootNavigator: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
     );
   }
