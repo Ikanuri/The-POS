@@ -342,7 +342,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                 height: 220,
                 child: Center(child: CircularProgressIndicator()),
               )
-            : Column(
+            : SingleChildScrollView(
+                child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -710,6 +711,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                     ),
                   ),
                 ],
+              ),
               ),
       ),
     );

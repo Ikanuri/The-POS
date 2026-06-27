@@ -654,7 +654,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       }
       await _ensureParentInCart(resolved.item);
       ref.read(cartProvider(_cartId).notifier).addItem(resolved.item);
-      HapticFeedback.mediumImpact();
+      HapticFeedback.heavyImpact();
       _openCartSheet();
       return;
     }
@@ -668,7 +668,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       }
       await _ensureParentInCart(resolved.item);
       ref.read(cartProvider(_cartId).notifier).addItem(resolved.item);
-      HapticFeedback.mediumImpact();
+      HapticFeedback.heavyImpact();
       return;
     }
 
@@ -688,7 +688,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final notifier = ref.read(cartProvider(_cartId).notifier);
     await _ensureParentInCart(item);
     notifier.addItem(item);
-    HapticFeedback.mediumImpact();
+    HapticFeedback.heavyImpact();
     final newQty = notifier.qtyForUnit(item.productUnitId).round();
     _showOrUpdateToast(item, newQty);
   }
