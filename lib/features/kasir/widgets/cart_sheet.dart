@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/input_formatters.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
+import 'item_entry_sheet.dart';
 
 class CartSheet extends ConsumerWidget {
   const CartSheet({super.key, this.cartId = kMainCartId});
@@ -218,24 +218,27 @@ class _CartItemTile extends ConsumerWidget {
             ),
             if (item.itemNote != null && item.itemNote!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(
-                  children: [
-                    Icon(Icons.note_alt_outlined,
-                        size: 11, color: scheme.tertiary),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(
-                        item.itemNote!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: scheme.onSurfaceVariant),
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.only(top: 4),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(8, 3, 6, 3),
+                  decoration: BoxDecoration(
+                    border: Border(
+                        left: BorderSide(
+                            width: 3,
+                            color: scheme.tertiary.withOpacity(0.5))),
+                    color: scheme.tertiary.withOpacity(0.06),
+                    borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(4)),
+                  ),
+                  child: Text(
+                    item.itemNote!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: scheme.tertiary),
+                  ),
                 ),
               ),
           ],
@@ -270,124 +273,26 @@ class _CartItemTile extends ConsumerWidget {
             ),
           ],
         ),
-        onLongPress: () => _showItemOptions(context, ref),
+        onTap: () => _openEditModal(context, ref),
       ),
     );
   }
 
-  Future<void> _showItemOptions(BuildContext context, WidgetRef ref) async {
-    final notifier = ref.read(cartProvider(cartId).notifier);
-    final device = ref.read(deviceProvider);
-    bool canOverrideHarga = device.deviceRole != 'kasir';
-    if (!canOverrideHarga) {
-      canOverrideHarga =
-          await ref.read(databaseProvider).isPermissionEnabled('override_harga');
-    }
-    if (!context.mounted) return;
+  /// Tap item keranjang → buka modal entri item (ubah satuan, harga, varian,
+  /// catatan, atau hapus). Untuk varian, buka modal produk induknya karena
+  /// qty varian dikelola dari sana.
+  Future<void> _openEditModal(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(databaseProvider);
+    final targetId = (item.isVariant && item.parentProductId != null)
+        ? item.parentProductId!
+        : item.productId;
+    final product = await db.getProductById(targetId);
+    if (product == null || !context.mounted) return;
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canOverrideHarga)
-              ListTile(
-                leading: const Icon(Icons.price_change_outlined),
-                title: const Text('Ubah Harga'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _showPriceEdit(context, ref);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.note_alt_outlined),
-              title: const Text('Catatan Item'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _showNoteEdit(context, ref);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
-              title: Text('Hapus', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                notifier.removeItem(item.productUnitId);
-              },
-            ),
-          ],
-        ),
-      ),
+      isScrollControlled: true,
+      builder: (_) => ItemEntrySheet(product: product, cartId: cartId),
     );
-  }
-
-  Future<void> _showPriceEdit(BuildContext context, WidgetRef ref) async {
-    final ctrl = TextEditingController(
-        text: ThousandsSeparatorFormatter.format(item.price));
-    try {
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Ubah Harga'),
-          content: TextField(
-            controller: ctrl,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: const [ThousandsSeparatorFormatter()],
-            decoration: const InputDecoration(prefixText: 'Rp '),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => ctx.pop(),
-                child: const Text('Batal')),
-            FilledButton(
-              onPressed: () {
-                final parsed = ThousandsSeparatorFormatter.parseValue(ctrl.text);
-                final price = parsed > 0 ? parsed : item.price;
-                ref.read(cartProvider(cartId).notifier).overridePrice(item.productUnitId, price);
-                ctx.pop();
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      ctrl.dispose();
-    }
-  }
-
-  Future<void> _showNoteEdit(BuildContext context, WidgetRef ref) async {
-    final ctrl = TextEditingController(text: item.itemNote ?? '');
-    try {
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Catatan Item'),
-          content: TextField(
-            controller: ctrl,
-            autofocus: true,
-            maxLines: 2,
-            decoration: const InputDecoration(hintText: 'Contoh: tanpa saus'),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => ctx.pop(),
-                child: const Text('Batal')),
-            FilledButton(
-              onPressed: () {
-                final note = ctrl.text.trim().isEmpty ? null : ctrl.text.trim();
-                ref.read(cartProvider(cartId).notifier).setNote(item.productUnitId, note);
-                ctx.pop();
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      ctrl.dispose();
-    }
   }
 }
 

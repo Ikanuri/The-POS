@@ -80,8 +80,13 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   int _price = 0;
   bool _priceOverridden = false;
 
+  /// True bila satuan terpilih sudah ada di keranjang saat modal dibuka →
+  /// tampilkan tombol "Hapus dari keranjang".
+  bool _existsInCart = false;
+
   final _priceCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController();
+  final _noteCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -93,6 +98,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   void dispose() {
     _priceCtrl.dispose();
     _qtyCtrl.dispose();
+    _noteCtrl.dispose();
     super.dispose();
   }
 
@@ -177,6 +183,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     double qty = 1;
     int price = opts.isNotEmpty ? opts.first.basePrice : 0;
     bool overridden = false;
+    bool exists = false;
+    String note = '';
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
     for (var i = 0; i < opts.length; i++) {
       final existing =
@@ -187,6 +195,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         qty = notifier.effectiveQtyFor(existing);
         price = existing.price;
         overridden = existing.priceOverridden;
+        note = existing.itemNote ?? '';
+        exists = true;
         break;
       }
     }
@@ -200,9 +210,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _qty = qty;
       _price = price;
       _priceOverridden = overridden;
+      _existsInCart = exists;
       _loading = false;
       _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
       _qtyCtrl.text = _fmtQty(qty);
+      _noteCtrl.text = note;
     });
   }
 
@@ -229,8 +241,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _options.isEmpty ? null : _options[_selectedIdx];
 
   void _selectUnit(int idx) {
+    // Bila satuan yang dipilih sudah ada di keranjang, ikuti catatan & status
+    // override-nya agar edit konsisten per-satuan.
+    final cart = ref.read(cartProvider(widget.cartId));
+    final existing =
+        cart.where((c) => c.productUnitId == _options[idx].unit.id).firstOrNull;
     setState(() {
       _selectedIdx = idx;
+      _existsInCart = existing != null;
+      _noteCtrl.text = existing?.itemNote ?? '';
       _priceOverridden = false;
       _price = _options[idx].basePrice;
       _priceCtrl.text = ThousandsSeparatorFormatter.format(_price);
@@ -263,6 +282,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     final variantQtySum = _totalVariantQty;
     final storedQty = _qty + variantQtySum;
 
+    final note = _noteCtrl.text.trim();
     if (storedQty > 0) {
       notifier.setItem(CartItem(
         productId: widget.product.id,
@@ -274,6 +294,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         originalPrice: sel.basePrice,
         costPrice: sel.costPrice,
         priceOverridden: _priceOverridden,
+        itemNote: note.isEmpty ? null : note,
         barcode: sel.barcode,
       ));
     }
@@ -295,6 +316,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         isVariant: true,
       ));
     }
+    Navigator.of(context).pop();
+  }
+
+  /// Hapus item (satuan terpilih) dari keranjang. Hanya muncul saat item
+  /// memang sudah ada di keranjang (modal dibuka dari keranjang).
+  void _delete() {
+    final sel = _sel;
+    if (sel == null) return;
+    ref.read(cartProvider(widget.cartId).notifier).removeItem(sel.unit.id);
     Navigator.of(context).pop();
   }
 
@@ -332,8 +362,23 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.product.name,
-                            style: Theme.of(context).textTheme.titleMedium),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(widget.product.name,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
+                            ),
+                            if (_existsInCart)
+                              IconButton(
+                                icon: Icon(Icons.delete_outline,
+                                    color: scheme.error),
+                                tooltip: 'Hapus dari keranjang',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: _delete,
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 2),
                         Wrap(
                           spacing: 8,
@@ -548,6 +593,41 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                 },
                               ),
                             ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Catatan item ──────────────────────────────────────
+                  const SizedBox(height: 14),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.note_alt_outlined,
+                                size: 14, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Text('Catatan item',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _noteCtrl,
+                          maxLines: 2,
+                          minLines: 1,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            hintText: 'Contoh: tanpa saus, bungkus terpisah',
+                            contentPadding: EdgeInsets.symmetric(
+                                vertical: 8, horizontal: 10),
                           ),
                         ),
                       ],

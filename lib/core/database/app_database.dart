@@ -489,7 +489,11 @@ class AppDatabase extends _$AppDatabase {
       // Sembunyikan varian (produk anak) dari katalog utama.
       ..where((t) => t.parentProductId.isNull()));
     if (query.isNotEmpty) {
-      q.where((t) => t.name.lower().contains(query.toLowerCase()));
+      // Cari berdasarkan nama ATAU kode produk (SKU). Contoh: ketik "GBF"
+      // memunculkan "Gajah Baru Filter" yang kode_produk-nya GBF.
+      q.where((t) =>
+          t.name.lower().contains(query.toLowerCase()) |
+          t.kodeProduk.lower().contains(query.toLowerCase()));
     }
     if (groupId != null) {
       q.where((t) => t.productGroupId.equals(groupId));
@@ -506,6 +510,11 @@ class AppDatabase extends _$AppDatabase {
                 t.isActive.equals(true))
             ..orderBy([(t) => OrderingTerm.asc(t.name)]))
           .get();
+
+  /// Ambil satu produk berdasarkan id (mis. saat membuka modal edit item dari
+  /// keranjang). Mengembalikan null bila tidak ditemukan.
+  Future<Product?> getProductById(String id) =>
+      (select(products)..where((t) => t.id.equals(id))).getSingleOrNull();
 
   Stream<List<Product>> watchVariants(String parentProductId) =>
       (select(products)
