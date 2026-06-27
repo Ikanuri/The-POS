@@ -291,6 +291,10 @@ class _CartItemTile extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      // Root navigator: hindari konflik focus-scope saat modal bertumpuk di
+      // atas sheet keranjang (keduanya di nested navigator shell) yang membuat
+      // input keyboard tidak terhubung ke field harga.
+      useRootNavigator: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: cartId),
     );
   }

@@ -701,6 +701,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      // Root navigator agar modal entri item yang dibuka dari sini berada di
+      // navigator yang sama (root) → input keyboard field harga berfungsi.
+      useRootNavigator: true,
       builder: (_) => CartSheet(cartId: _cartId),
     ).whenComplete(() => _cartSheetOpen = false);
   }
@@ -757,6 +760,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
     );
   }
