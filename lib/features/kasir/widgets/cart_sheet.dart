@@ -3,11 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/cart_item.dart';
-import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
-import 'item_entry_sheet.dart';
 
 class CartSheet extends ConsumerWidget {
   const CartSheet({super.key, this.cartId = kMainCartId});
@@ -273,29 +271,17 @@ class _CartItemTile extends ConsumerWidget {
             ),
           ],
         ),
-        onTap: () => _openEditModal(context, ref),
+        // Tap item keranjang → tutup sheet keranjang sambil mengembalikan id
+        // produk yang akan diedit. Kasir akan membuka modal entri item di atas
+        // layar (bukan bertumpuk di atas DraggableScrollableSheet, yang
+        // memutus koneksi input keyboard). Untuk varian, kirim id induk.
+        onTap: () {
+          final targetId = (item.isVariant && item.parentProductId != null)
+              ? item.parentProductId!
+              : item.productId;
+          Navigator.of(context).pop(targetId);
+        },
       ),
-    );
-  }
-
-  /// Tap item keranjang → buka modal entri item (ubah satuan, harga, varian,
-  /// catatan, atau hapus). Untuk varian, buka modal produk induknya karena
-  /// qty varian dikelola dari sana.
-  Future<void> _openEditModal(BuildContext context, WidgetRef ref) async {
-    final db = ref.read(databaseProvider);
-    final targetId = (item.isVariant && item.parentProductId != null)
-        ? item.parentProductId!
-        : item.productId;
-    final product = await db.getProductById(targetId);
-    if (product == null || !context.mounted) return;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      // Root navigator: hindari konflik focus-scope saat modal bertumpuk di
-      // atas sheet keranjang (keduanya di nested navigator shell) yang membuat
-      // input keyboard tidak terhubung ke field harga.
-      useRootNavigator: true,
-      builder: (_) => ItemEntrySheet(product: product, cartId: cartId),
     );
   }
 }

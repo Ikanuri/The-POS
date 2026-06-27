@@ -85,11 +85,6 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   /// tampilkan tombol "Hapus dari keranjang".
   bool _existsInCart = false;
 
-  // DEBUG sementara — lacak interaksi field harga.
-  String _dbgRole = '?';
-  int _dbgOnChanged = 0;
-  String _dbgLastInput = '-';
-
   final _priceCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
@@ -144,8 +139,6 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     if (!canOverride) {
       canOverride = await db.isPermissionEnabled('override_harga');
     }
-    _dbgRole = device.deviceRole.isEmpty ? '(kosong)' : device.deviceRole;
-    debugPrint('[ItemEntry] role=$_dbgRole canOverride=$canOverride');
 
     final units = await db.getProductUnits(widget.product.id);
     final opts = <_UnitOption>[];
@@ -513,30 +506,6 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // DEBUG sementara — hapus setelah selesai diagnosa.
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.08),
-                        border: Border.all(color: Colors.red),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'DEBUG  role=$_dbgRole  canOverride=$_canOverride\n'
-                        'onChanged=$_dbgOnChanged\n'
-                        'lastInput="$_dbgLastInput"  _price=$_price',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-
                   // ── Qty & Harga input ─────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -642,8 +611,6 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       : null,
                                 ),
                                 onChanged: (v) {
-                                  _dbgOnChanged++;
-                                  _dbgLastInput = v;
                                   final p = int.tryParse(v) ?? 0;
                                   _price = p;
                                   _priceOverridden =

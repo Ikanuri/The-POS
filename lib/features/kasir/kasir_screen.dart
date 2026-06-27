@@ -695,17 +695,34 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   /// Buka sheet keranjang. Bila sudah terbuka, isi diperbarui otomatis lewat
   /// provider — tidak membuka sheet kedua.
-  void _openCartSheet() {
+  ///
+  /// Saat pengguna mengetuk item di keranjang, sheet ditutup dan mengembalikan
+  /// id produk yang akan diedit. Modal entri item lalu dibuka langsung di atas
+  /// layar kasir (bukan bertumpuk di atas DraggableScrollableSheet keranjang,
+  /// yang memutus koneksi input keyboard pada field harga). Setelah selesai,
+  /// keranjang dibuka kembali agar pengguna tetap dalam alur.
+  Future<void> _openCartSheet() async {
     if (_cartSheetOpen) return;
     _cartSheetOpen = true;
-    showModalBottomSheet(
+    final editProductId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      // Root navigator agar modal entri item yang dibuka dari sini berada di
-      // navigator yang sama (root) → input keyboard field harga berfungsi.
       useRootNavigator: true,
       builder: (_) => CartSheet(cartId: _cartId),
-    ).whenComplete(() => _cartSheetOpen = false);
+    );
+    _cartSheetOpen = false;
+    if (editProductId == null || !mounted) return;
+
+    final product = await ref.read(databaseProvider).getProductById(editProductId);
+    if (product == null || !mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
+    );
+    // Buka lagi keranjang setelah edit, selama masih ada isinya.
+    if (mounted && ref.read(cartProvider(_cartId)).isNotEmpty) _openCartSheet();
   }
 
   void _showOrUpdateToast(CartItem item, int qty) {
