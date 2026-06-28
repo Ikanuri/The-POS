@@ -658,7 +658,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       await _ensureParentInCart(resolved.item);
       ref.read(cartProvider(_cartId).notifier).addItem(resolved.item);
       HapticFeedback.heavyImpact();
-      _openCartSheet();
+      _openCartSheet(scrollToBottom: true);
       return;
     }
 
@@ -704,13 +704,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   /// layar kasir (bukan bertumpuk di atas DraggableScrollableSheet keranjang,
   /// yang memutus koneksi input keyboard pada field harga). Setelah selesai,
   /// keranjang dibuka kembali agar pengguna tetap dalam alur.
-  Future<void> _openCartSheet() async {
+  Future<void> _openCartSheet({bool scrollToBottom = false}) async {
     if (_cartSheetOpen) return;
     _cartSheetOpen = true;
     final editProductId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => CartSheet(cartId: _cartId),
+      builder: (_) => CartSheet(cartId: _cartId, scrollToBottom: scrollToBottom),
     );
     _cartSheetOpen = false;
     if (editProductId == null || !mounted) return;

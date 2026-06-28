@@ -8,8 +8,9 @@ import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 
 class CartSheet extends ConsumerStatefulWidget {
-  const CartSheet({super.key, this.cartId = kMainCartId});
+  const CartSheet({super.key, this.cartId = kMainCartId, this.scrollToBottom = false});
   final String cartId;
+  final bool scrollToBottom;
 
   @override
   ConsumerState<CartSheet> createState() => _CartSheetState();
@@ -17,7 +18,14 @@ class CartSheet extends ConsumerStatefulWidget {
 
 class _CartSheetState extends ConsumerState<CartSheet> {
   int _prevCount = 0;
+  bool _needsInitialScroll = false;
   ScrollController? _scrollCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _needsInitialScroll = widget.scrollToBottom;
+  }
 
   void _scrollToBottom() {
     final sc = _scrollCtrl;
@@ -40,6 +48,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final total = notifier.totalAmount;
 
     if (cart.length > _prevCount && _prevCount > 0) {
+      _scrollToBottom();
+    }
+    if (_needsInitialScroll && cart.isNotEmpty) {
+      _needsInitialScroll = false;
       _scrollToBottom();
     }
     _prevCount = cart.length;
