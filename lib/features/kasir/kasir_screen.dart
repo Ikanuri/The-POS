@@ -638,9 +638,12 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   }
 
   Future<void> _handleBarcode(String barcode, {bool fromExternal = false}) async {
-    // Debounce: abaikan deteksi berulang barcode sama dalam 1.5 detik.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (barcode == _lastScan && nowMs - _lastScanMs < 1500) return;
+    // Debounce lebih pendek untuk scanner eksternal (300 ms, cukup untuk
+    // mencegah echo hardware) agar scan berturut produk sama responsif.
+    // Kamera tetap 1.5 s karena barcode bisa terus terdeteksi selama terlihat.
+    final debounceMs = fromExternal ? 300 : 1500;
+    if (barcode == _lastScan && nowMs - _lastScanMs < debounceMs) return;
     _lastScan = barcode;
     _lastScanMs = nowMs;
 

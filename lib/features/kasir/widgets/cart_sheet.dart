@@ -7,23 +7,51 @@ import '../../../core/theme/app_theme.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 
-class CartSheet extends ConsumerWidget {
+class CartSheet extends ConsumerStatefulWidget {
   const CartSheet({super.key, this.cartId = kMainCartId});
   final String cartId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cart = ref.watch(cartProvider(cartId));
-    final notifier = ref.read(cartProvider(cartId).notifier);
+  ConsumerState<CartSheet> createState() => _CartSheetState();
+}
+
+class _CartSheetState extends ConsumerState<CartSheet> {
+  int _prevCount = 0;
+  ScrollController? _scrollCtrl;
+
+  void _scrollToBottom() {
+    final sc = _scrollCtrl;
+    if (sc == null || !sc.hasClients) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !sc.hasClients) return;
+      sc.animateTo(
+        sc.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cart = ref.watch(cartProvider(widget.cartId));
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
     final scheme = Theme.of(context).colorScheme;
     final total = notifier.totalAmount;
+
+    if (cart.length > _prevCount && _prevCount > 0) {
+      _scrollToBottom();
+    }
+    _prevCount = cart.length;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
-      builder: (ctx, scrollCtrl) => Column(
+      builder: (ctx, scrollCtrl) {
+        _scrollCtrl = scrollCtrl;
+        return Column(
         children: [
           Container(
             width: 40,
@@ -66,7 +94,7 @@ class CartSheet extends ConsumerWidget {
                           if (ok == true) {
                             notifier.clear();
                             ref
-                                .read(cartMetaProvider(cartId).notifier)
+                                .read(cartMetaProvider(widget.cartId).notifier)
                                 .clear();
                             if (ctx.mounted) Navigator.of(ctx).pop();
                           }
@@ -101,7 +129,7 @@ class CartSheet extends ConsumerWidget {
                           item: item,
                           isVariant: item.isVariant,
                           effectiveQty: effQty,
-                          cartId: cartId,
+                          cartId: widget.cartId,
                         );
                       },
                     );
@@ -146,7 +174,8 @@ class CartSheet extends ConsumerWidget {
             ),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 }
