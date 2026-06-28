@@ -19,7 +19,6 @@ class CartSheet extends ConsumerStatefulWidget {
 class _CartSheetState extends ConsumerState<CartSheet> {
   int _prevCount = 0;
   bool _needsInitialScroll = false;
-  ScrollController? _scrollCtrl;
 
   @override
   void initState() {
@@ -27,9 +26,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     _needsInitialScroll = widget.scrollToBottom;
   }
 
-  void _scrollToBottom() {
-    final sc = _scrollCtrl;
-    if (sc == null || !sc.hasClients) return;
+  void _scheduleScroll(ScrollController sc) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !sc.hasClients) return;
       sc.animateTo(
@@ -47,22 +44,20 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final scheme = Theme.of(context).colorScheme;
     final total = notifier.totalAmount;
 
-    if (cart.length > _prevCount && _prevCount > 0) {
-      _scrollToBottom();
-    }
-    if (_needsInitialScroll && cart.isNotEmpty) {
-      _needsInitialScroll = false;
-      _scrollToBottom();
-    }
-    _prevCount = cart.length;
-
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
       builder: (ctx, scrollCtrl) {
-        _scrollCtrl = scrollCtrl;
+        if (_needsInitialScroll && cart.isNotEmpty) {
+          _needsInitialScroll = false;
+          _scheduleScroll(scrollCtrl);
+        }
+        if (cart.length > _prevCount && _prevCount > 0) {
+          _scheduleScroll(scrollCtrl);
+        }
+        _prevCount = cart.length;
         return Column(
         children: [
           Container(
