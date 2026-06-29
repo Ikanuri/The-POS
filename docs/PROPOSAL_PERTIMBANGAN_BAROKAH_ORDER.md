@@ -1,10 +1,9 @@
-# Proposal Pengembangan Sistem Order Pelanggan
+# Proposal Pertimbangan Barokah Order
 # The POS — Kasir Griyo
 
-**Versi:** 1.0
+**Versi:** 1.1
 **Tanggal:** 29 Juni 2026
 **Proyek:** The POS (Kasir Griyo)
-**Branch:** `claude/upbeat-newton-rhnbeo`
 
 ---
 
@@ -13,27 +12,20 @@
 1. [Ringkasan Eksekutif](#1-ringkasan-eksekutif)
 2. [Latar Belakang](#2-latar-belakang)
 3. [Arsitektur Teknis The POS](#3-arsitektur-teknis-the-pos)
-4. [Perbaikan & Fitur Baru yang Telah Diterapkan](#4-perbaikan--fitur-baru-yang-telah-diterapkan)
-5. [Proposal Awal: Barokah Order (Cloud-Based)](#5-proposal-awal-barokah-order-cloud-based)
-6. [Analisis Kelemahan Pendekatan Cloud](#6-analisis-kelemahan-pendekatan-cloud)
-7. [Proposal Final: Static HTML + WhatsApp + Paste Parser](#7-proposal-final-static-html--whatsapp--paste-parser)
-8. [Rencana Implementasi](#8-rencana-implementasi)
-9. [Estimasi Dampak & Biaya](#9-estimasi-dampak--biaya)
-10. [Kesimpulan](#10-kesimpulan)
+4. [Proposal Awal: Barokah Order (Cloud-Based)](#4-proposal-awal-barokah-order-cloud-based)
+5. [Analisis Kelemahan Pendekatan Cloud](#5-analisis-kelemahan-pendekatan-cloud)
+6. [Proposal Final: Static HTML + WhatsApp + Paste Parser](#6-proposal-final-static-html--whatsapp--paste-parser)
+7. [Rencana Implementasi](#7-rencana-implementasi)
+8. [Estimasi Dampak & Biaya](#8-estimasi-dampak--biaya)
+9. [Kesimpulan](#9-kesimpulan)
+10. [TL;DR](#10-tldr)
 
 ---
 
 ## 1. Ringkasan Eksekutif
 
-Dokumen ini merangkum seluruh pengembangan yang telah dilakukan pada sistem The POS (Kasir Griyo) serta mengajukan proposal sistem order pelanggan yang terintegrasi.
+Dokumen ini mengevaluasi dua pendekatan untuk membangun sistem order pelanggan yang terintegrasi dengan The POS (Kasir Griyo):
 
-Pengembangan terbagi dalam dua bagian besar:
-
-**Bagian A — Peningkatan Kasir (Sudah Diterapkan)**
-Serangkaian perbaikan dan fitur baru pada layar kasir: dukungan scanner barcode eksternal (HID) dengan umpan balik haptic, redesain cart bar, auto-scroll keranjang, serta perbaikan bug kritis pada field harga yang tidak bisa diketik.
-
-**Bagian B — Sistem Order Pelanggan (Proposal)**
-Evaluasi dua pendekatan untuk sistem order pelanggan:
 - **Pendekatan A (Ditolak):** Barokah Order — aplikasi web terpisah dengan backend Cloudflare Workers, database D1, dan API layer.
 - **Pendekatan B (Direkomendasikan):** Static HTML + WhatsApp/Telegram + Paste Parser — file HTML self-contained sebagai katalog order, dikirim via WhatsApp, dan di-paste langsung ke POS.
 
@@ -46,6 +38,16 @@ Pendekatan B dipilih karena mengeliminasi tiga masalah fundamental sekaligus: ri
 ### 2.1 Tentang The POS
 
 The POS (Kasir Griyo) adalah aplikasi kasir (Point of Sale) berbasis Flutter yang dirancang khusus untuk pasar retail Indonesia. Aplikasi ini bersifat **offline-first** — seluruh data tersimpan di perangkat lokal menggunakan SQLite terenkripsi (SQLCipher), dan sinkronisasi antar perangkat dilakukan melalui WiFi LAN tanpa membutuhkan koneksi internet.
+
+**Fitur inti yang sudah berjalan:**
+- Kasir lengkap dengan multi-satuan, harga bertingkat, dan varian produk
+- Scan barcode via kamera dan scanner eksternal (HID) dengan umpan balik haptic
+- Sinkronisasi multi-perangkat via WiFi LAN (terenkripsi AES-256, approval-gated)
+- Sistem peran (Owner / Asisten / Kasir) dengan izin granular
+- Cetak struk via printer thermal Bluetooth
+- Laporan penjualan, stok, pelanggan, dan keuangan
+- Manajemen pelanggan dengan poin loyalti dan kredit/tempo
+- Import/export data (CSV, Excel, PDF)
 
 ### 2.2 Karakteristik Pengguna
 
@@ -169,8 +171,6 @@ Sistem mendukung **23 jenis satuan** yang sudah diselaraskan dengan data histori
 | | | 17 | Rek | | |
 | | | 18 | Ret | | |
 
-ID 7 dan 8 (legacy "Biji") telah di-merge ke ID 12 melalui proses ETL.
-
 ### 3.4 Sinkronisasi WiFi LAN
 
 Sinkronisasi antar perangkat menggunakan model **owner-controlled, approval-gated**:
@@ -238,181 +238,27 @@ The-POS/
 
 | | Owner | Asisten | Kasir |
 |---|---|---|---|
-| Kelola harga & produk | ✓ | ✗ | ✗ |
-| Lihat laporan | ✓ | ✓ | ✗ |
-| Host sinkronisasi | ✓ | ✓ | ✗ |
-| Setujui data sync | ✓ | ✗ | ✗ |
-| Override harga | ✓ | ✓ | Jika diizinkan |
-| Input stok | ✓ | ✓ | Jika diizinkan |
-| Batalkan transaksi | ✓ | ✓ | Jika diizinkan |
+| Kelola harga & produk | Ya | Tidak | Tidak |
+| Lihat laporan | Ya | Ya | Tidak |
+| Host sinkronisasi | Ya | Ya | Tidak |
+| Setujui data sync | Ya | Tidak | Tidak |
+| Override harga | Ya | Ya | Jika diizinkan |
+| Input stok | Ya | Ya | Jika diizinkan |
+| Batalkan transaksi | Ya | Ya | Jika diizinkan |
 
 ---
 
-## 4. Perbaikan & Fitur Baru yang Telah Diterapkan
+## 4. Proposal Awal: Barokah Order (Cloud-Based)
 
-Branch `claude/upbeat-newton-rhnbeo` mencakup **98 commit** dengan **19.013 baris ditambahkan** dan **2.089 baris dihapus** di 81 file. Bagian ini merangkum perbaikan dan fitur utama yang relevan.
-
-### 4.1 Dukungan Scanner Barcode Eksternal (HID)
-
-**Masalah:** Sebelumnya, barcode hanya bisa discan melalui kamera perangkat. Untuk toko dengan volume transaksi tinggi, ini lambat dan tidak ergonomis.
-
-**Solusi:** Ditambahkan handler keyboard hardware (`HardwareKeyboard.instance.addHandler`) yang mendeteksi input dari scanner barcode eksternal (USB/Bluetooth HID).
-
-**Cara kerja:**
-1. Scanner mengirim karakter barcode sebagai event keyboard
-2. Handler mem-buffer karakter satu per satu
-3. Tombol Enter menandakan akhir barcode
-4. Jeda antar-karakter > 500ms mengindikasikan input manusia (bukan scanner) → buffer direset
-5. Barcode valid (panjang minimum terpenuhi) langsung diproses
-
-**Guard conditions** — handler mengabaikan input saat:
-- Scanner kamera sedang terbuka
-- Field pencarian sedang difokuskan (mengetik manual)
-- Modal/dialog lain sedang terbuka (kecuali sheet keranjang)
-
-**File:** `lib/features/kasir/kasir_screen.dart` baris 460-500
-
-### 4.2 Umpan Balik Haptic
-
-**Masalah:** Kasir tidak mendapat konfirmasi sensorik saat barcode berhasil discan.
-
-**Solusi:** `HapticFeedback.heavyImpact()` dipanggil setiap kali barcode berhasil diproses — baik dari scanner kamera (single & continuous) maupun dari scanner eksternal.
-
-**Detail teknis:**
-- Menggunakan `flutter/services.dart` → `HapticFeedback.heavyImpact()`
-- Membutuhkan permission `android.permission.VIBRATE` di AndroidManifest
-- Fallback silent pada perangkat yang tidak mendukung vibrasi
-- Tidak ada toggle on/off — selalu aktif untuk menghindari kebingungan UI
-
-**File:** `android/app/src/main/AndroidManifest.xml` (permission), `kasir_screen.dart` (3 titik pemanggilan)
-
-### 4.3 Auto-Open Keranjang Saat Scan Eksternal
-
-**Masalah:** Saat menggunakan scanner eksternal, kasir tidak mendapat konfirmasi visual bahwa produk sudah masuk keranjang.
-
-**Solusi:** Setelah scan eksternal berhasil, sheet keranjang otomatis terbuka sebagai konfirmasi visual. Jika sheet sudah terbuka, isinya diperbarui otomatis lewat Riverpod provider tanpa membuka sheet kedua.
-
-**Alur:**
-```
-Scanner scan barcode
-  → Produk ditemukan di database
-  → Ditambahkan ke keranjang via cartProvider
-  → HapticFeedback.heavyImpact()
-  → _openCartSheet(scrollToBottom: true)
-  → Sheet keranjang terbuka di posisi item terbaru
-```
-
-### 4.4 Debounce Dua Tingkat
-
-**Masalah:** Scan barcode yang sama dua kali berturut-turut dalam waktu singkat (< 1 detik) tidak diproses — scan kedua dianggap duplikat oleh debounce 1,5 detik.
-
-**Solusi:** Debounce dipisah berdasarkan sumber scan:
-
-| Sumber | Debounce | Alasan |
-|---|---|---|
-| Scanner eksternal (HID) | **300 ms** | Cukup untuk mencegah echo hardware, tapi cepat untuk scan berturut produk sama |
-| Scanner kamera | **1.500 ms** | Barcode bisa terus terdeteksi selama masih terlihat di frame kamera |
-
-**File:** `kasir_screen.dart` baris 640-645
-
-### 4.5 Auto-Scroll Keranjang ke Bawah
-
-**Masalah:** Saat keranjang penuh (10+ item) dan scanner eksternal menambah produk baru, sheet keranjang terbuka di posisi atas — kasir harus scroll manual untuk melihat produk yang baru ditambahkan.
-
-**Solusi:** `CartSheet` dikonversi dari `ConsumerWidget` ke `ConsumerStatefulWidget` dengan logika auto-scroll.
-
-**Detail implementasi:**
-- Parameter `scrollToBottom` diteruskan dari `_openCartSheet()`
-- Scroll dijadwalkan di dalam callback `DraggableScrollableSheet.builder`, karena `ScrollController` baru tersedia di sana
-- `addPostFrameCallback` memastikan scroll terjadi setelah ListView selesai di-layout
-- Dua trigger: (1) saat sheet pertama kali dibuka dari scan eksternal, (2) saat item baru ditambahkan ke keranjang yang sudah terbuka
-
-**Bug yang ditemukan dan diperbaiki:**
-Versi awal memanggil `_scrollToBottom()` di method `build()` sebelum `DraggableScrollableSheet.builder` menyediakan `ScrollController`. Controller masih `null`, sehingga scroll tidak pernah terjadi. Diperbaiki dengan memindahkan logika ke dalam builder callback.
-
-**File:** `lib/features/kasir/widgets/cart_sheet.dart` baris 18-60
-
-### 4.6 Redesain Cart Bar
-
-**Masalah:** Tampilan cart bar di bagian bawah layar kasir terlalu kecil dan sulit dibaca.
-
-**Perubahan visual:**
-
-```
-SEBELUM:                              SESUDAH:
-┌──────────────────────────┐    ┌──────────────────────────┐
-│ (3) Total        Lihat   │    │      (3) Total           │
-│     Rp 48.000    Bayar   │    │      Rp 48.000           │
-└──────────────────────────┘    │   Terakhir: Gula 1kg     │
-                                │                          │
-                                │  [ Lihat ]  [  Bayar  ]  │
-                                └──────────────────────────┘
-```
-
-- Total diperbesar (size 16.5 → 23) dan diposisikan center
-- Badge jumlah item (lingkaran) di sebelah kiri total
-- Info item terakhir ditampilkan di bawah total
-- Tombol "Lihat" dan "Bayar" dipindah ke baris bawah sebagai full-width row
-- Tinggi tombol diperbesar (40 → 46px) untuk kemudahan tap
-
-**File:** `kasir_screen.dart` baris 1850-1970
-
-### 4.7 Perbaikan Bug Kritis: Field Harga Tidak Bisa Diketik
-
-**Gejala:** Saat mengetuk produk di daftar produk tab kasir untuk membuka modal entri item, field harga menampilkan keyboard namun input yang diketik tidak masuk ke field.
-
-**Kronologi investigasi:**
-
-| Percobaan | Diagnosis | Hasil |
-|---|---|---|
-| 1 | ScrollView menghalangi input saat modal dari keranjang | ❌ Tidak memperbaiki |
-| 2 | Nested navigator focus-scope conflict | ❌ Tidak memperbaiki |
-| 3 | `ThousandsSeparatorFormatter` menyebabkan IME desync | ❌ Tidak memperbaiki |
-| 4 | Modal bertumpuk di atas `DraggableScrollableSheet` memutus koneksi input | ❌ Tidak memperbaiki |
-
-Keempat percobaan gagal karena **mendiagnosis alur yang salah** (alur tap dari keranjang, bukan alur tap dari daftar produk).
-
-**Akar masalah yang sebenarnya:**
-
-Penambahan `useRootNavigator: true` pada `showModalBottomSheet` di method `_openEntry()` menyebabkan modal muncul di root navigator, bukan di shell navigator GoRouter. Akibatnya:
-
-1. `ModalRoute.of(context)?.isCurrent` pada KasirScreen tetap bernilai `true` — karena KasirScreen masih merupakan rute aktif di dalam shell navigator-nya, meskipun ada modal di root navigator di atasnya.
-
-2. Handler barcode eksternal (`_onHardwareKey`) tidak melakukan bail-out — karena guard condition `!(ModalRoute.of(context)?.isCurrent ?? true)` bernilai `false`.
-
-3. Setiap event keyboard dari software keyboard di-buffer dan **di-consume** (`return true`) oleh handler barcode — sehingga TextField pada modal tidak pernah menerima input.
-
-```
-ROOT NAVIGATOR
-  └── Modal (ItemEntrySheet) ← useRootNavigator: true menaruh di sini
-       └── TextField (keyboard muncul, tapi input dicuri HID handler)
-
-SHELL NAVIGATOR
-  └── KasirScreen ← ModalRoute.isCurrent tetap TRUE
-       └── _onHardwareKey: tidak bail-out, menelan semua input
-```
-
-**Perbaikan:**
-- Hapus `useRootNavigator: true` dari semua `showModalBottomSheet` di kasir
-- Kembalikan `ThousandsSeparatorFormatter` (revert `FilteringTextInputFormatter.digitsOnly`)
-- Hapus `_priceFocus` FocusNode dan listener yang tidak perlu
-- Kembalikan handler `onTap` untuk select-all pada field harga
-
-**Commit referensi:** `1917ef8` (terakhir berfungsi) → `939c07b` (perbaikan)
-
----
-
-## 5. Proposal Awal: Barokah Order (Cloud-Based)
-
-### 5.1 Konsep
+### 4.1 Konsep
 
 Barokah Order dirancang sebagai sistem order pelanggan berbasis cloud yang terintegrasi dengan The POS:
 
 ```
 ┌──────────────────┐     ┌──────────────────┐     ┌──────────────┐
-│   Kasir Griyo    │────▶│   Cloudflare     │◀────│   Barokah    │
+│   Kasir Griyo    │────>│   Cloudflare     │<────│   Barokah    │
 │   (The POS)      │     │   Workers + D1   │     │   Order      │
-│                  │◀────│                  │     │   (Web App)  │
+│                  │<────│                  │     │   (Web App)  │
 └──────────────────┘     └────────┬─────────┘     └──────────────┘
                                   │
                            ┌──────┴──────┐
@@ -421,7 +267,7 @@ Barokah Order dirancang sebagai sistem order pelanggan berbasis cloud yang terin
                            └─────────────┘
 ```
 
-### 5.2 Stack yang Direncanakan
+### 4.2 Stack yang Direncanakan
 
 | Komponen | Teknologi | Fungsi |
 |---|---|---|
@@ -430,19 +276,19 @@ Barokah Order dirancang sebagai sistem order pelanggan berbasis cloud yang terin
 | **Cache** | Cloudflare KV | Session, katalog snapshot |
 | **Frontend** | Cloudflare Pages (static) | Web app order pelanggan |
 | **Notifikasi** | Telegram Bot API | Alert order baru |
-| **Auth POS→API** | HMAC dari store_key | Token-based |
+| **Auth POS-API** | HMAC dari store_key | Token-based |
 
-### 5.3 Alur yang Dirancang
+### 4.3 Alur yang Dirancang
 
 ```
-1. POS push katalog produk → Workers API → D1
-2. Pelanggan buka web → pilih produk → submit order
-3. Workers simpan order → kirim notif Telegram
-4. POS poll antrian order → konfirmasi → masuk keranjang
-5. Transaksi berjalan normal → nota digital (HTML via Workers)
+1. POS push katalog produk  →  Workers API  →  D1
+2. Pelanggan buka web  →  pilih produk  →  submit order
+3. Workers simpan order  →  kirim notif Telegram
+4. POS poll antrian order  →  konfirmasi  →  masuk keranjang
+5. Transaksi berjalan normal  →  nota digital (HTML via Workers)
 ```
 
-### 5.4 Endpoint API
+### 4.4 Endpoint API
 
 | Method | Path | Fungsi |
 |---|---|---|
@@ -454,7 +300,7 @@ Barokah Order dirancang sebagai sistem order pelanggan berbasis cloud yang terin
 | PATCH | `/api/order/:id/status` | POS update status order |
 | GET | `/api/nota/:orderId` | Nota digital (HTML) |
 
-### 5.5 Skema D1
+### 4.5 Skema D1
 
 ```sql
 stores (id, name, address, phone, token_hash, telegram_chat_id)
@@ -465,9 +311,9 @@ order_items (id, order_id, product_id, product_name, unit_name, price, qty, subt
 
 ---
 
-## 6. Analisis Kelemahan Pendekatan Cloud
+## 5. Analisis Kelemahan Pendekatan Cloud
 
-### 6.1 Tiga Masalah Fundamental
+### 5.1 Tiga Masalah Fundamental
 
 Setelah evaluasi mendalam, pendekatan Barokah Order (cloud-based) memiliki tiga masalah fundamental yang sulit dimitigasi secara bersamaan:
 
@@ -509,7 +355,7 @@ Ini masalah yang **jauh lebih serius** dari DDoS. Tanpa autentikasi pelanggan, s
 
 Untuk toko dengan 10-50 order/hari, ini adalah **over-engineering**.
 
-### 6.2 Perbandingan Komprehensif
+### 5.2 Perbandingan Komprehensif
 
 ```
 ┌────────────────────┬──────────────────┬────────────────────────────┐
@@ -530,7 +376,7 @@ Untuk toko dengan 10-50 order/hari, ini adalah **over-engineering**.
 └────────────────────┴──────────────────┴────────────────────────────┘
 ```
 
-### 6.3 Mengapa WhatsApp Adalah Layer Autentikasi Terbaik
+### 5.3 Mengapa WhatsApp Adalah Layer Autentikasi Terbaik
 
 WhatsApp secara implisit menyelesaikan tiga masalah sekaligus:
 
@@ -544,9 +390,9 @@ WhatsApp secara implisit menyelesaikan tiga masalah sekaligus:
 
 ---
 
-## 7. Proposal Final: Static HTML + WhatsApp + Paste Parser
+## 6. Proposal Final: Static HTML + WhatsApp + Paste Parser
 
-### 7.1 Konsep
+### 6.1 Konsep
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -554,44 +400,44 @@ WhatsApp secara implisit menyelesaikan tiga masalah sekaligus:
 │                                                         │
 │  PELANGGAN                           KASIR              │
 │      │                                 │                │
-│      ▼                                 │                │
+│      v                                 │                │
 │   Buka HTML                            │                │
 │   (link / file)                        │                │
 │      │                                 │                │
-│      ▼                                 │                │
+│      v                                 │                │
 │   Pilih produk                         │                │
 │   Atur jumlah                          │                │
 │      │                                 │                │
-│      ▼                                 │                │
+│      v                                 │                │
 │   Teks order muncul                    │                │
 │   di bawah kotak                       │                │
 │      │                                 │                │
-│      ▼                                 │                │
-│   [Salin & Kirim via WA] ────────────▶ │                │
-│                                        ▼                │
+│      v                                 │                │
+│   [Salin & Kirim via WA] ────────────> │                │
+│                                        v                │
 │                                  Terima di WA           │
 │                                  Salin teks order       │
 │                                        │                │
-│                                        ▼                │
+│                                        v                │
 │                                  Buka "Paste Order"     │
 │                                  di POS                 │
 │                                        │                │
-│                                        ▼                │
+│                                        v                │
 │                                  Tempel → review        │
 │                                  → masuk keranjang      │
 │                                        │                │
-│                                        ▼                │
+│                                        v                │
 │                                  Bayar → Struk          │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 Komponen Sistem
+### 6.2 Komponen Sistem
 
 Sistem terdiri dari **tiga komponen** — dua di sisi POS, satu file HTML statis:
 
 #### A. Order Page Generator (di POS)
 
-POS men-generate file HTML self-contained yang berisi seluruh katalog produk sebagai data embedded. File ini bisa di-host di Cloudflare Pages (gratis, 1 file statis) atau dikirim langsung sebagai file via WhatsApp.
+POS men-generate file HTML self-contained yang berisi seluruh katalog produk sebagai data embedded. File ini bisa di-host secara gratis (lihat opsi hosting di Bab 6.7) atau dikirim langsung sebagai file via WhatsApp.
 
 **Kapan di-generate ulang:** Saat owner mengetuk "Update Link Order" di pengaturan (setelah harga/produk berubah).
 
@@ -607,7 +453,7 @@ POS men-generate file HTML self-contained yang berisi seluruh katalog produk seb
 HTML menghasilkan teks yang **bisa dibaca manusia DAN diparsing mesin**:
 
 ```
-📋 ORDER BAROKAH
+ORDER BAROKAH
 ━━━━━━━━━━━━━━━
 Gula Pasir 1kg × 2
 Minyak Goreng 2L × 1
@@ -624,7 +470,7 @@ Catatan: Antar sore ya
 
 | Bagian | Fungsi |
 |---|---|
-| Header (`📋 ORDER BAROKAH`) | Identifikasi visual |
+| Header (`ORDER BAROKAH`) | Identifikasi visual |
 | Daftar item (human-readable) | Bisa dibaca kasir tanpa sistem |
 | Data pelanggan | Nama, HP, catatan |
 | Kode mesin (`#BRK:...`) | Untuk parsing otomatis oleh POS |
@@ -644,7 +490,7 @@ Fitur baru di layar kasir yang menerima teks order dari clipboard dan mengkonver
 
 ```
 ┌─────────────────────────────────┐
-│  📋 Paste Order                 │
+│  Paste Order                    │
 │                                 │
 │  ┌───────────────────────────┐  │
 │  │ Tempel teks order di sini │  │
@@ -674,7 +520,7 @@ Fitur baru di layar kasir yang menerima teks order dari clipboard dan mengkonver
 5. Setelah konfirmasi → masukkan ke keranjang sebagai `CartItem[]`
 6. Lanjut ke alur bayar normal
 
-### 7.3 File Baru di POS
+### 6.3 File Baru di POS
 
 ```
 lib/core/services/
@@ -688,7 +534,7 @@ lib/features/pengaturan/
 └── order_link_screen.dart       ← UI generate & share link order
 ```
 
-### 7.4 File yang Diubah di POS
+### 6.4 File yang Diubah di POS
 
 | File | Perubahan |
 |---|---|
@@ -697,7 +543,7 @@ lib/features/pengaturan/
 | `lib/features/kasir/kasir_screen.dart` | Tambah tombol/akses ke "Paste Order" |
 | `lib/features/pengaturan/pengaturan_screen.dart` | Tambah menu "Link Order Pelanggan" |
 
-### 7.5 Spesifikasi `order_page_service.dart`
+### 6.5 Spesifikasi `order_page_service.dart`
 
 ```dart
 class OrderPageService {
@@ -730,7 +576,7 @@ const PRODUCTS = [
 ];
 ```
 
-### 7.6 Spesifikasi `order_parser_service.dart`
+### 6.6 Spesifikasi `order_parser_service.dart`
 
 ```dart
 class OrderParserService {
@@ -765,18 +611,22 @@ class ParsedOrderItem {
 }
 ```
 
-### 7.7 Hosting HTML
+### 6.7 Opsi Hosting HTML
 
-**Dua opsi (bisa keduanya sekaligus):**
+File HTML yang di-generate bersifat self-contained (satu file, tanpa dependency eksternal), sehingga bisa di-host di mana saja — atau bahkan tanpa hosting sama sekali:
 
-| Opsi | Cara | Kelebihan |
-|---|---|---|
-| **Cloudflare Pages** | POS upload HTML via Wrangler CLI atau API | URL tetap, bisa dibookmark pelanggan |
-| **Kirim file via WA** | POS generate HTML → share sebagai file | Offline, pelanggan simpan di HP |
+| Opsi | Cara | Kelebihan | Kekurangan |
+|---|---|---|---|
+| **Kirim file via WA** | POS generate HTML → share langsung sebagai file | Tanpa hosting, offline, pelanggan simpan di HP | Harus kirim ulang tiap update harga |
+| **GitHub Pages** | Push HTML ke repo GitHub → otomatis live di `username.github.io/repo` | Gratis, unlimited bandwidth, sudah punya akun GitHub | Perlu setup repo, push manual atau via API |
+| **Cloudflare Pages** | Upload via Wrangler CLI atau dashboard | Gratis, CDN global, sangat cepat | Perlu akun Cloudflare, setup Wrangler |
+| **Netlify** | Drag-and-drop file HTML ke dashboard | Gratis, paling mudah setup awal | Batas 100GB bandwidth/bulan (lebih dari cukup) |
 
-Untuk fase awal, opsi "kirim file via WA" lebih praktis — tidak butuh setup Cloudflare sama sekali. Pelanggan buka file HTML langsung dari WhatsApp, pilih barang, salin teks, kirim balik via WA.
+**Rekomendasi untuk fase awal:** Gunakan opsi "kirim file via WA" — tanpa setup sama sekali. Pelanggan buka file HTML langsung dari WhatsApp, pilih barang, salin teks, kirim balik via WA.
 
-### 7.8 Keunggulan Teknis
+**Untuk fase lanjut:** GitHub Pages adalah pilihan paling praktis karena repo GitHub sudah digunakan untuk proyek ini. Cukup push file HTML ke branch `gh-pages`, dan pelanggan bisa mengakses via URL tetap yang bisa dibookmark (misalnya `username.github.io/toko-order`).
+
+### 6.8 Keunggulan Teknis
 
 1. **Zero backend** — Tidak ada server, tidak ada database cloud, tidak ada API. HTML statis bisa dibuka langsung di browser tanpa koneksi internet (setelah pertama kali dibuka).
 
@@ -790,9 +640,9 @@ Untuk fase awal, opsi "kirim file via WA" lebih praktis — tidak butuh setup Cl
 
 ---
 
-## 8. Rencana Implementasi
+## 7. Rencana Implementasi
 
-### 8.1 Fase & Timeline
+### 7.1 Fase & Timeline
 
 ```
 FASE 1 (Minggu 1) ─── Order Parser + UI Paste Order
@@ -805,12 +655,12 @@ FASE 2 (Minggu 1-2) ─── HTML Generator
     File ubah: pengaturan_screen.dart, app_router.dart
     Deliverable: POS bisa generate HTML katalog + share via WA
 
-FASE 3 (Opsional) ─── Hosting Cloudflare Pages
-    Setup: Wrangler CLI, Cloudflare account
+FASE 3 (Opsional) ─── Hosting Static Pages
+    Setup: GitHub Pages atau Cloudflare Pages
     Deliverable: URL tetap untuk katalog order (bisa dibookmark)
 ```
 
-### 8.2 Detail Perubahan Per Fase
+### 7.2 Detail Perubahan Per Fase
 
 #### Fase 1: Order Parser (Prioritas Tertinggi)
 
@@ -837,11 +687,11 @@ Ini adalah komponen yang memberikan value paling cepat — bahkan tanpa HTML gen
 
 #### Fase 3: Hosting (Opsional)
 
-1. Setup Cloudflare Pages project
-2. Tambah fitur upload HTML ke Pages dari POS (via API atau manual)
+1. Setup GitHub Pages (push ke branch `gh-pages`) atau Cloudflare Pages
+2. Tambah fitur upload/push HTML dari POS (atau manual via desktop)
 3. Pelanggan akses via URL tetap
 
-### 8.3 Testing Checklist
+### 7.3 Testing Checklist
 
 - [ ] Parse teks dengan format valid → semua item masuk keranjang
 - [ ] Parse teks dengan kode produk tidak dikenal → tampil peringatan, item lain tetap masuk
@@ -855,9 +705,9 @@ Ini adalah komponen yang memberikan value paling cepat — bahkan tanpa HTML gen
 
 ---
 
-## 9. Estimasi Dampak & Biaya
+## 8. Estimasi Dampak & Biaya
 
-### 9.1 Perbandingan Biaya
+### 8.1 Perbandingan Biaya
 
 | | Barokah Order (Cloud) | HTML + WA + Parser |
 |---|---|---|
@@ -868,7 +718,7 @@ Ini adalah komponen yang memberikan value paling cepat — bahkan tanpa HTML gen
 | **Downtime risk** | Ada (cloud outage) | Tidak ada |
 | **Skalabilitas** | Tinggi | Cukup untuk 1-5 toko |
 
-### 9.2 Dampak Operasional
+### 8.2 Dampak Operasional
 
 **Sebelum (manual penuh):**
 ```
@@ -876,7 +726,7 @@ Pelanggan kirim WA: "Pak mau pesen gula 2, minyak 1, beras 3"
   → Kasir baca
   → Cari produk satu-satu di POS
   → Input qty manual
-  → ≈ 3-5 menit per order
+  → ~ 3-5 menit per order
 ```
 
 **Sesudah (HTML + paste):**
@@ -885,12 +735,12 @@ Pelanggan buka link, pilih produk, kirim via WA
   → Kasir salin teks
   → Paste di POS
   → Review → konfirmasi
-  → ≈ 30 detik per order
+  → ~ 30 detik per order
 ```
 
 **Penghematan waktu: ~80-90% per order.**
 
-### 9.3 Kapan Perlu Upgrade ke Cloud
+### 8.3 Kapan Perlu Upgrade ke Cloud
 
 Pendekatan HTML + WA + Parser memiliki batasan. Berikut indikator kapan perlu migrasi ke solusi cloud:
 
@@ -906,19 +756,7 @@ Ketika indikator ini tercapai, migrasi ke Cloudflare Workers menjadi justified �
 
 ---
 
-## 10. Kesimpulan
-
-### 10.1 Yang Sudah Dicapai
-
-Pada branch `claude/upbeat-newton-rhnbeo`, telah diterapkan serangkaian peningkatan signifikan pada layar kasir The POS:
-
-- **Scanner barcode eksternal (HID)** dengan deteksi otomatis, debounce dua tingkat, dan integrasi langsung ke keranjang
-- **Umpan balik haptic** sebagai konfirmasi sensorik saat scan berhasil
-- **Auto-scroll keranjang** ke item terbaru saat scan berturut-turut
-- **Redesain cart bar** yang lebih informatif dan mudah diakses
-- **Perbaikan bug kritis** pada field harga yang tidak bisa diketik, yang disebabkan oleh konflik antara `useRootNavigator` dan handler barcode HID
-
-### 10.2 Rekomendasi Sistem Order
+## 9. Kesimpulan
 
 Setelah evaluasi menyeluruh terhadap dua pendekatan:
 
@@ -936,12 +774,28 @@ Setelah evaluasi menyeluruh terhadap dua pendekatan:
 - Perubahan minimal pada kode POS yang sudah ada
 - Fondasi kode bisa digunakan kembali jika kelak perlu migrasi ke cloud
 
-### 10.3 Langkah Selanjutnya
+**Langkah selanjutnya:**
 
 1. **Fase 1:** Implementasi Order Parser dan UI Paste Order di POS
 2. **Fase 2:** Implementasi HTML Generator dan fitur share
-3. **Evaluasi:** Setelah 1-3 bulan penggunaan, evaluasi apakah perlu upgrade ke cloud berdasarkan indikator di Bab 9.3
+3. **Evaluasi:** Setelah 1-3 bulan penggunaan, evaluasi apakah perlu upgrade ke cloud berdasarkan indikator di Bab 8.3
 
 ---
 
-*Dokumen ini disusun berdasarkan analisis arsitektur proyek The POS, 98 commit perubahan pada branch pengembangan, serta evaluasi teknis terhadap dua pendekatan sistem order pelanggan.*
+## 10. TL;DR
+
+Awalnya kami mempertimbangkan untuk membangun "Barokah Order" — sebuah aplikasi web order pelanggan lengkap dengan backend di Cloudflare Workers, database D1, dan Telegram bot. Pelanggan buka web, pilih barang, submit, lalu order masuk otomatis ke sistem kasir.
+
+Setelah dievaluasi, pendekatan itu terlalu berat untuk kebutuhan yang sebenarnya cukup sederhana. Ada tiga masalah yang sulit dipecahkan sekaligus: bagaimana mencegah serangan DDoS ke API publik, bagaimana memastikan order yang masuk bukan order palsu (tanpa bikin ribet pelanggan yang gaptek), dan siapa yang maintain 5 komponen cloud yang semuanya bisa rusak kapan saja.
+
+Lalu muncul pertanyaan: kenapa tidak pakai WhatsApp saja?
+
+Solusi yang kami rekomendasikan jauh lebih sederhana. POS men-generate satu file HTML yang berisi daftar produk dan harga. File itu dikirim ke pelanggan lewat WhatsApp — atau di-host gratis di GitHub Pages supaya bisa diakses via link tetap. Pelanggan buka file itu di HP, pilih barang yang mau dipesan, lalu tekan tombol "Kirim via WhatsApp". Teks pesanan otomatis terformat rapi dan siap dikirim. Di sisi kasir, tinggal salin teks pesanan itu, tempel di fitur "Paste Order" di POS, dan seluruh keranjang langsung terisi otomatis. Selesai.
+
+WhatsApp di sini bukan cuma kanal pengiriman — ia sekaligus jadi sistem keamanan. Tidak ada server yang bisa diserang (file HTML statis, bukan API). Tidak ada fake order karena yang kirim pesan pasti orang yang nomornya dikenal. Tidak ada biaya bulanan. Dan yang paling penting: pelanggan tidak perlu belajar aplikasi baru — mereka tinggal buka link dan kirim WhatsApp seperti biasa.
+
+Kalau suatu hari volume order sudah lebih dari 50 per hari dan copy-paste mulai jadi bottleneck, barulah upgrade ke Cloudflare Workers masuk akal. Tapi untuk saat ini, solusi yang paling baik adalah yang paling sederhana.
+
+---
+
+*Dokumen ini disusun berdasarkan analisis arsitektur proyek The POS dan evaluasi teknis terhadap dua pendekatan sistem order pelanggan.*
