@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -111,18 +112,69 @@ class _ScanToastCard extends StatelessWidget {
   }
 }
 
+/// Pemicu animasi pulse garis scan — dipanggil saat produk berhasil discan
+/// dalam mode berulang (kamera tetap terbuka).
+class ScanPulseController extends ChangeNotifier {
+  void pulse() => notifyListeners();
+}
+
 /// Panduan visual scanner: kotak transparan dengan empat sudut + garis tengah.
 /// Murni dekoratif — tidak memengaruhi area deteksi (engine tetap fullframe).
-class _ScanGuideOverlay extends StatelessWidget {
-  const _ScanGuideOverlay();
+/// Garis tengah berdenyut (menebal + hijau) sesaat saat [controller] memicu
+/// pulse, sebagai konfirmasi visual produk berhasil discan.
+class _ScanGuideOverlay extends StatefulWidget {
+  const _ScanGuideOverlay({required this.controller});
+
+  final ScanPulseController controller;
+
+  @override
+  State<_ScanGuideOverlay> createState() => _ScanGuideOverlayState();
+}
+
+class _ScanGuideOverlayState extends State<_ScanGuideOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 380),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onPulse);
+  }
+
+  void _onPulse() {
+    _anim.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onPulse);
+    _anim.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(painter: _ScanGuidePainter());
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) {
+        // Naik cepat ke puncak (menebal+hijau) lalu turun kembali ke garis
+        // tipis merah — kurva segitiga sederhana berbasis sin agar mulus.
+        final t = (math.sin(_anim.value * math.pi)).clamp(0.0, 1.0);
+        return CustomPaint(painter: _ScanGuidePainter(pulse: t));
+      },
+    );
   }
 }
 
 class _ScanGuidePainter extends CustomPainter {
+  _ScanGuidePainter({this.pulse = 0});
+
+  /// 0 = garis merah normal (2px), 1 = puncak denyut (6px, hijau).
+  final double pulse;
+
   @override
   void paint(Canvas canvas, Size size) {
     final boxW = size.width * 0.7;
@@ -151,17 +203,21 @@ class _ScanGuidePainter extends CustomPainter {
     canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(-cLen, 0), corner);
     canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(0, -cLen), corner);
 
-    // Garis tengah merah (penanda arah scan).
+    // Garis tengah — merah normal, menebal & hijau sesaat saat pulse aktif.
+    final color = Color.lerp(
+        Colors.red.withOpacity(0.8), const Color(0xFF22C55E), pulse)!;
     final line = Paint()
-      ..color = Colors.red.withOpacity(0.8)
-      ..strokeWidth = 2;
+      ..color = color
+      ..strokeWidth = 2 + pulse * 4
+      ..strokeCap = StrokeCap.round;
     final midY = top + boxH / 2;
     canvas.drawLine(
         Offset(left + 12, midY), Offset(left + boxW - 12, midY), line);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ScanGuidePainter oldDelegate) =>
+      oldDelegate.pulse != pulse;
 }
 
 final _heldCountProvider = StreamProvider<int>((ref) {
@@ -421,6 +477,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   final _searchFocus = FocusNode();
   bool _scannerOpen = false;
   MobileScannerController? _scannerCtrl;
+  final _scanPulseController = ScanPulseController();
 
   // ── Scanner barcode eksternal (HID: USB OTG / Bluetooth HID) ──────────────
   // Scanner HID mengirim barcode seperti ketikan keyboard sangat cepat yang
@@ -558,6 +615,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     _searchCtrl.dispose();
     _activeToast?.timer?.cancel();
     _scannerCtrl?.dispose();
+    _scanPulseController.dispose();
     super.dispose();
   }
 
@@ -722,6 +780,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     await _ensureParentInCart(item);
     notifier.addItem(item);
     HapticFeedback.heavyImpact();
+    _scanPulseController.pulse();
     final newQty = notifier.qtyForUnit(item.productUnitId).round();
     _showOrUpdateToast(item, newQty);
   }
@@ -989,9 +1048,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             ),
             // Overlay panduan visual (dekoratif — TIDAK membatasi area deteksi;
             // engine tetap membaca barcode dari seluruh frame).
-            const Positioned.fill(
+            Positioned.fill(
               child: IgnorePointer(
-                child: _ScanGuideOverlay(),
+                child: _ScanGuideOverlay(controller: _scanPulseController),
               ),
             ),
             if (_activeToast != null)
