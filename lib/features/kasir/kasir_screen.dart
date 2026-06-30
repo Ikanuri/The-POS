@@ -995,7 +995,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     return Scaffold(
       appBar: _isCatalogMode
           ? AppBar(
-              title: const Text('Buat Katalog'),
+              title: Text(ref.watch(catalogEditProvider) != null
+                  ? 'Edit Katalog'
+                  : 'Buat Katalog'),
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 tooltip: 'Tutup',
@@ -1169,20 +1171,23 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (items.isEmpty) return;
     final lines = await buildCatalogLines(ref, items);
     if (!mounted) return;
-    await showCatalogPreviewSheet(context, ref, title: _catalogTitle, lines: lines);
+    await showCatalogPreviewSheet(context, ref,
+        title: _catalogTitle, lines: lines);
   }
 
-  /// Judul katalog default dari tanggal — bisa diubah saat menyimpan.
-  String get _catalogTitle => 'Daftar Harga';
+  /// Judul default: judul katalog yang sedang diedit, atau 'Daftar Harga'.
+  String get _catalogTitle =>
+      ref.read(catalogEditProvider)?.title ?? 'Daftar Harga';
 
   Future<void> _saveCatalog() async {
     final items = ref.read(cartProvider(_cartId));
     if (items.isEmpty) return;
+    final editing = ref.read(catalogEditProvider);
     final titleCtrl = TextEditingController(text: _catalogTitle);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Simpan Katalog'),
+        title: Text(editing == null ? 'Simpan Katalog' : 'Simpan Perubahan'),
         content: TextField(
           controller: titleCtrl,
           autofocus: true,
@@ -1207,18 +1212,31 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (ok != true || !mounted) return;
 
     final lines = await buildCatalogLines(ref, items);
-    final catalog = SavedCatalog(
-      id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
-      title: title.isEmpty ? 'Daftar Harga' : title,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
-      lines: lines,
-    );
-    await ref.read(catalogStoreProvider.notifier).add(catalog);
-    // Bersihkan keranjang katalog & kembali ke daftar katalog.
+    final store = ref.read(catalogStoreProvider.notifier);
+    if (editing != null) {
+      // Perbarui katalog yang sama (pertahankan id & waktu dibuat).
+      await store.update(SavedCatalog(
+        id: editing.id,
+        title: title.isEmpty ? editing.title : title,
+        createdAtMs: editing.createdAtMs,
+        lines: lines,
+      ));
+    } else {
+      await store.add(SavedCatalog(
+        id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
+        title: title.isEmpty ? 'Daftar Harga' : title,
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+        lines: lines,
+      ));
+    }
+    // Bersihkan keranjang & konteks edit, lalu kembali ke daftar katalog.
     ref.read(cartProvider(_cartId).notifier).clear();
+    ref.read(catalogEditProvider.notifier).state = null;
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Katalog disimpan')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(editing == null
+            ? 'Katalog disimpan'
+            : 'Perubahan katalog disimpan')));
     context.pop();
   }
 

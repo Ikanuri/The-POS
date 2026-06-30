@@ -13,6 +13,9 @@ class CatalogLine {
     this.isVariant = false,
     this.parentName,
     this.category = '',
+    this.productId = '',
+    this.productUnitId = '',
+    this.parentProductId,
   });
 
   final String productName;
@@ -23,6 +26,12 @@ class CatalogLine {
   final String? parentName;
   final String category;
 
+  // Id sumber — disimpan agar katalog tersimpan bisa diedit ulang (dimuat
+  // kembali ke keranjang katalog). Kosong untuk katalog format lama.
+  final String productId;
+  final String productUnitId;
+  final String? parentProductId;
+
   Map<String, dynamic> toJson() => {
         'productName': productName,
         'unitName': unitName,
@@ -31,6 +40,9 @@ class CatalogLine {
         'isVariant': isVariant,
         'parentName': parentName,
         'category': category,
+        'productId': productId,
+        'productUnitId': productUnitId,
+        'parentProductId': parentProductId,
       };
 
   factory CatalogLine.fromJson(Map<String, dynamic> json) => CatalogLine(
@@ -41,6 +53,9 @@ class CatalogLine {
         isVariant: json['isVariant'] as bool? ?? false,
         parentName: json['parentName'] as String?,
         category: json['category'] as String? ?? '',
+        productId: json['productId'] as String? ?? '',
+        productUnitId: json['productUnitId'] as String? ?? '',
+        parentProductId: json['parentProductId'] as String?,
       );
 }
 

@@ -45,6 +45,14 @@ class CatalogStore extends StateNotifier<List<SavedCatalog>> {
     await _persist();
   }
 
+  Future<void> update(SavedCatalog catalog) async {
+    state = [
+      for (final c in state)
+        if (c.id == catalog.id) catalog else c,
+    ]..sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+    await _persist();
+  }
+
   Future<void> remove(String id) async {
     state = state.where((c) => c.id != id).toList();
     await _persist();
@@ -55,3 +63,7 @@ final catalogStoreProvider =
     StateNotifierProvider<CatalogStore, List<SavedCatalog>>((ref) {
   return CatalogStore(ref.watch(databaseProvider));
 });
+
+/// Katalog yang sedang diedit (null = membuat katalog baru). Diset saat menekan
+/// "Edit" di daftar katalog, dibaca oleh layar kasir mode katalog saat menyimpan.
+final catalogEditProvider = StateProvider<SavedCatalog?>((ref) => null);

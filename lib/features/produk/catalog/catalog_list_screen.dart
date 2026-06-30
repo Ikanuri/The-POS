@@ -54,8 +54,9 @@ class CatalogListScreen extends ConsumerWidget {
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // Mulai katalog baru: kosongkan keranjang katalog dulu.
+          // Mulai katalog baru: kosongkan keranjang katalog & konteks edit.
           ref.read(cartProvider(kCatalogCartId).notifier).clear();
+          ref.read(catalogEditProvider.notifier).state = null;
           context.push('/produk/katalog/buat');
         },
         icon: const Icon(Icons.add),
@@ -90,30 +91,50 @@ class _CatalogTile extends ConsumerWidget {
         lines: catalog.lines,
         date: catalog.createdAt,
       ),
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: 'Hapus',
-        onPressed: () async {
-          final ok = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Hapus Katalog?'),
-              content: Text('"${catalog.title}" akan dihapus.'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('Batal')),
-                FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Hapus')),
-              ],
-            ),
-          );
-          if (ok == true) {
-            await ref.read(catalogStoreProvider.notifier).remove(catalog.id);
+      trailing: PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        onSelected: (v) {
+          if (v == 'edit') {
+            _edit(context, ref);
+          } else if (v == 'hapus') {
+            _confirmDelete(context, ref);
           }
         },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'edit', child: Text('Edit')),
+          PopupMenuItem(value: 'hapus', child: Text('Hapus')),
+        ],
       ),
     );
+  }
+
+  /// Muat ulang katalog ke keranjang katalog & buka layar kasir mode katalog
+  /// untuk diedit. Menyimpan akan memperbarui katalog yang sama.
+  void _edit(BuildContext context, WidgetRef ref) {
+    final items = catalogLinesToCartItems(catalog.lines);
+    ref.read(cartProvider(kCatalogCartId).notifier).replaceAll(items);
+    ref.read(catalogEditProvider.notifier).state = catalog;
+    context.push('/produk/katalog/buat');
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Katalog?'),
+        content: Text('"${catalog.title}" akan dihapus.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Hapus')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await ref.read(catalogStoreProvider.notifier).remove(catalog.id);
+    }
   }
 }

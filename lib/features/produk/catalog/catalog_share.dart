@@ -40,8 +40,35 @@ Future<List<CatalogLine>> buildCatalogLines(
                 ? nameById[i.parentProductId!]
                 : null,
             category: catByProduct[i.productId] ?? '',
+            productId: i.productId,
+            productUnitId: i.productUnitId,
+            parentProductId: i.parentProductId,
           ))
       .toList();
+}
+
+/// Rekonstruksi item keranjang dari katalog tersimpan agar bisa diedit ulang.
+/// Baris format lama (tanpa id) diberi id sintetis supaya tetap tampil & bisa
+/// dihapus, walau tak terhubung ke produk asli.
+List<CartItem> catalogLinesToCartItems(List<CatalogLine> lines) {
+  return [
+    for (var i = 0; i < lines.length; i++)
+      CartItem(
+        productId:
+            lines[i].productId.isEmpty ? 'catalog-legacy-$i' : lines[i].productId,
+        productUnitId: lines[i].productUnitId.isEmpty
+            ? 'catalog-legacy-unit-$i'
+            : lines[i].productUnitId,
+        productName: lines[i].productName,
+        unitName: lines[i].unitName,
+        qty: lines[i].qty,
+        price: lines[i].price,
+        originalPrice: lines[i].price,
+        costPrice: 0,
+        isVariant: lines[i].isVariant,
+        parentProductId: lines[i].parentProductId,
+      ),
+  ];
 }
 
 /// Muat info toko untuk header & footer katalog.
