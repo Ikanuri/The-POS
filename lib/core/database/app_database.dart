@@ -699,6 +699,24 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.name)]))
           .get();
 
+  /// Peta id produk → nama kategori untuk sekumpulan id (dipakai katalog untuk
+  /// mengelompokkan produk per kategori). Hanya satu query untuk produk + grup.
+  Future<Map<String, String>> getCategoryNamesForProducts(
+      List<String> ids) async {
+    if (ids.isEmpty) return {};
+    final groups = await getAllProductGroups();
+    final groupName = {for (final g in groups) g.id: g.name};
+    final rows =
+        await (select(products)..where((t) => t.id.isIn(ids))).get();
+    final map = <String, String>{};
+    for (final p in rows) {
+      final gid = p.productGroupId;
+      final name = gid == null ? null : groupName[gid];
+      if (name != null && name.isNotEmpty) map[p.id] = name;
+    }
+    return map;
+  }
+
   Future<void> addProductGroup(String name) async {
     final emptySlot = await (select(productGroups)
           ..where((t) => t.name.isNull())

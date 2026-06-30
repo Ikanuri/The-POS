@@ -16,6 +16,9 @@ import '../../core/providers/product_providers.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../produk/catalog/catalog_models.dart';
+import '../produk/catalog/catalog_share.dart';
+import '../produk/catalog/catalog_store.dart';
 import 'cart_meta_provider.dart';
 import 'cart_provider.dart';
 import 'widgets/cart_meta_pickers.dart';
@@ -388,21 +391,29 @@ List<Color> _gradFor(String name) =>
         _kAvatarGradients.length];
 
 class KasirScreen extends ConsumerStatefulWidget {
-  const KasirScreen({super.key, this.addToTxId});
+  const KasirScreen({super.key, this.addToTxId, this.catalogMode = false});
 
   /// Bila terisi, layar kasir berada dalam mode "tambah belanjaan" untuk
   /// transaksi [addToTxId]: memakai keranjang terpisah dan tombol bayar
   /// menjadi "Bayar Selisih". Bila null, mode kasir biasa.
   final String? addToTxId;
 
+  /// Bila true, layar kasir "dipinjam" untuk membuat katalog: memakai keranjang
+  /// terpisah (kCatalogCartId), menyembunyikan tombol Antrian/Riwayat & tab
+  /// tahan, dan cart bar diganti aksi Simpan/Bagikan katalog.
+  final bool catalogMode;
+
   @override
   ConsumerState<KasirScreen> createState() => _KasirScreenState();
 }
 
 class _KasirScreenState extends ConsumerState<KasirScreen> {
-  /// Slot keranjang aktif: keranjang utama, atau keranjang tambah belanjaan.
-  String get _cartId => widget.addToTxId ?? kMainCartId;
+  /// Slot keranjang aktif: katalog, tambah belanjaan, atau keranjang utama.
+  String get _cartId => widget.catalogMode
+      ? kCatalogCartId
+      : (widget.addToTxId ?? kMainCartId);
   bool get _isAddMode => widget.addToTxId != null;
+  bool get _isCatalogMode => widget.catalogMode;
   static const _prefContinuous = 'scanner_continuous';
   static const _prefToastDuration = 'scanner_toast_duration';
 
@@ -982,16 +993,25 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: _isAddMode
+      appBar: _isCatalogMode
           ? AppBar(
-              title: const Text('Tambah Belanjaan'),
+              title: const Text('Buat Katalog'),
               leading: IconButton(
                 icon: const Icon(Icons.close),
-                tooltip: 'Batal',
+                tooltip: 'Tutup',
                 onPressed: () => context.pop(),
               ),
             )
-          : null,
+          : _isAddMode
+              ? AppBar(
+                  title: const Text('Tambah Belanjaan'),
+                  leading: IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Batal',
+                    onPressed: () => context.pop(),
+                  ),
+                )
+              : null,
       body: Column(
         children: [
           _KasirTopbar(
@@ -1008,6 +1028,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             heldCount: heldCount,
             isGrid: isGrid,
             onToggleGrid: () => ref.read(kasirGridProvider.notifier).toggle(),
+            // Mode katalog: sembunyikan Antrian & Riwayat agar tak ambigu.
+            showQueueAndHistory: !_isCatalogMode,
           ),
           InlineBanner(
             message: _bannerMsg,
@@ -1101,32 +1123,110 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       ),
       bottomNavigationBar: cart.isEmpty
           ? null
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Tab folder pelanggan & pegawai + tombol tahan — hanya di mode
-                // kasir biasa (mode tambah belanjaan mengikuti transaksi asli).
-                if (!_isAddMode)
-                  _CartMetaTab(
-                    cartId: _cartId,
-                    onHold: _holdCurrent,
-                  ),
-                _CartBar(
-                  total: cartNotifier.totalAmount,
+          : _isCatalogMode
+              ? _CatalogBar(
                   count: cart.length,
-                  payLabel: _isAddMode ? 'Bayar Selisih' : null,
-                  lastItem: _isAddMode ? null : cartNotifier.lastTouchedItem,
-                  lastEffQty: cartNotifier.lastTouchedItem == null
-                      ? 0
-                      : cartNotifier
-                          .effectiveQtyFor(cartNotifier.lastTouchedItem!),
-                  onView: _openCartSheet,
-                  onPay: () => _isAddMode
-                      ? context.push('/kasir/tambah/${widget.addToTxId}/bayar')
-                      : context.go('/kasir/bayar'),
+                  lastItem: cartNotifier.lastTouchedItem,
+                  onView: _openCatalogItemsSheet,
+                  onSave: _saveCatalog,
+                  onShare: _shareCatalog,
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Tab folder pelanggan & pegawai + tombol tahan — hanya di
+                    // mode kasir biasa (tambah belanjaan ikut transaksi asli).
+                    if (!_isAddMode)
+                      _CartMetaTab(
+                        cartId: _cartId,
+                        onHold: _holdCurrent,
+                      ),
+                    _CartBar(
+                      total: cartNotifier.totalAmount,
+                      count: cart.length,
+                      payLabel: _isAddMode ? 'Bayar Selisih' : null,
+                      lastItem:
+                          _isAddMode ? null : cartNotifier.lastTouchedItem,
+                      lastEffQty: cartNotifier.lastTouchedItem == null
+                          ? 0
+                          : cartNotifier
+                              .effectiveQtyFor(cartNotifier.lastTouchedItem!),
+                      onView: _openCartSheet,
+                      onPay: () => _isAddMode
+                          ? context
+                              .push('/kasir/tambah/${widget.addToTxId}/bayar')
+                          : context.go('/kasir/bayar'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+    );
+  }
+
+  // ── Mode katalog: aksi simpan, bagikan, dan tinjau item ──────────────────
+
+  Future<void> _shareCatalog() async {
+    final items = ref.read(cartProvider(_cartId));
+    if (items.isEmpty) return;
+    final lines = await buildCatalogLines(ref, items);
+    if (!mounted) return;
+    await showCatalogPreviewSheet(context, ref, title: _catalogTitle, lines: lines);
+  }
+
+  /// Judul katalog default dari tanggal — bisa diubah saat menyimpan.
+  String get _catalogTitle => 'Daftar Harga';
+
+  Future<void> _saveCatalog() async {
+    final items = ref.read(cartProvider(_cartId));
+    if (items.isEmpty) return;
+    final titleCtrl = TextEditingController(text: _catalogTitle);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Simpan Katalog'),
+        content: TextField(
+          controller: titleCtrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Judul katalog',
+            hintText: 'mis. Update Harga Juni',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Simpan')),
+        ],
+      ),
+    );
+    final title = titleCtrl.text.trim();
+    titleCtrl.dispose();
+    if (ok != true || !mounted) return;
+
+    final lines = await buildCatalogLines(ref, items);
+    final catalog = SavedCatalog(
+      id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
+      title: title.isEmpty ? 'Daftar Harga' : title,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      lines: lines,
+    );
+    await ref.read(catalogStoreProvider.notifier).add(catalog);
+    // Bersihkan keranjang katalog & kembali ke daftar katalog.
+    ref.read(cartProvider(_cartId).notifier).clear();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Katalog disimpan')));
+    context.pop();
+  }
+
+  Future<void> _openCatalogItemsSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _CatalogItemsSheet(cartId: _cartId),
     );
   }
 }
@@ -1144,6 +1244,7 @@ class _KasirTopbar extends StatelessWidget {
     required this.heldCount,
     required this.isGrid,
     required this.onToggleGrid,
+    this.showQueueAndHistory = true,
   });
 
   final TextEditingController searchCtrl;
@@ -1155,6 +1256,9 @@ class _KasirTopbar extends StatelessWidget {
   final int heldCount;
   final bool isGrid;
   final VoidCallback onToggleGrid;
+
+  /// Tampilkan tombol Antrian (tahan) & Riwayat. Disembunyikan di mode katalog.
+  final bool showQueueAndHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -1231,19 +1335,21 @@ class _KasirTopbar extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 _TbBtn(icon: Icons.qr_code_scanner_rounded, onTap: onScan),
-                const SizedBox(width: 4),
-                _TbBtn(
-                  icon: Icons.pause_circle_outline_rounded,
-                  onTap: onHeld,
-                  badgeCount: heldCount,
-                  label: 'Antrian',
-                ),
-                const SizedBox(width: 4),
-                _TbBtn(
-                  icon: Icons.history_rounded,
-                  onTap: onHistory,
-                  label: 'Riwayat\nTransaksi',
-                ),
+                if (showQueueAndHistory) ...[
+                  const SizedBox(width: 4),
+                  _TbBtn(
+                    icon: Icons.pause_circle_outline_rounded,
+                    onTap: onHeld,
+                    badgeCount: heldCount,
+                    label: 'Antrian',
+                  ),
+                  const SizedBox(width: 4),
+                  _TbBtn(
+                    icon: Icons.history_rounded,
+                    onTap: onHistory,
+                    label: 'Riwayat\nTransaksi',
+                  ),
+                ],
                 const SizedBox(width: 4),
                 _TbBtn(
                   icon:
@@ -2006,6 +2112,237 @@ class _CartBar extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Cart bar mode katalog ─────────────────────────────────────────────────
+
+/// Pengganti [_CartBar] saat mode katalog: menampilkan jumlah produk & item
+/// terakhir, dengan aksi Lihat / Simpan / Bagikan (bukan Bayar).
+class _CatalogBar extends StatelessWidget {
+  const _CatalogBar({
+    required this.count,
+    required this.onView,
+    required this.onSave,
+    required this.onShare,
+    this.lastItem,
+  });
+
+  final int count;
+  final VoidCallback onView;
+  final VoidCallback onSave;
+  final VoidCallback onShare;
+  final CartItem? lastItem;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final last = lastItem;
+    final lastLabel = last == null
+        ? null
+        : '${last.productName}'
+            '${last.unitName.isEmpty ? '' : ' · ${last.unitName}'}'
+            ' · ${formatRupiah(last.price)}';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
+      ),
+      padding: EdgeInsets.fromLTRB(14, 10, 14, 10 + bottomPad),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  color: AppTheme.accent,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text('$count',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Katalog · $count produk',
+                        style: TextStyle(
+                            fontSize: 11, color: cs.onSurfaceVariant)),
+                    if (lastLabel != null)
+                      Text(
+                        lastLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 13.5, fontWeight: FontWeight.w600),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onView,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    side: BorderSide(color: cs.outlineVariant),
+                    foregroundColor: cs.onSurface,
+                  ),
+                  child: const Text('Lihat',
+                      style:
+                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onSave,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    side: BorderSide(color: cs.outlineVariant),
+                    foregroundColor: cs.onSurface,
+                  ),
+                  child: const Text('Simpan',
+                      style:
+                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: onShare,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Bagikan',
+                      style:
+                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Sheet tinjau item katalog — daftar produk yang akan masuk katalog, dengan
+/// opsi hapus per item. Tanpa tombol bayar (beda dari keranjang transaksi).
+class _CatalogItemsSheet extends ConsumerWidget {
+  const _CatalogItemsSheet({required this.cartId});
+  final String cartId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(cartProvider(cartId));
+    final notifier = ref.read(cartProvider(cartId).notifier);
+    final cs = Theme.of(context).colorScheme;
+    final ordered = orderCartItems(cart);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (ctx, scrollCtrl) => Column(
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Text('Item Katalog',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const Spacer(),
+                Text('${cart.length} produk',
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+              ],
+            ),
+          ),
+          const Divider(height: 16),
+          Expanded(
+            child: cart.isEmpty
+                ? Center(
+                    child: Text('Belum ada produk',
+                        style: TextStyle(color: cs.onSurfaceVariant)))
+                : ListView.separated(
+                    controller: scrollCtrl,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: ordered.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, indent: 16),
+                    itemBuilder: (_, i) {
+                      final item = ordered[i];
+                      return ListTile(
+                        dense: true,
+                        contentPadding:
+                            EdgeInsets.only(left: item.isVariant ? 30 : 16, right: 8),
+                        leading: item.isVariant
+                            ? Icon(Icons.subdirectory_arrow_right,
+                                size: 16, color: cs.onSurfaceVariant)
+                            : null,
+                        title: Text(item.productName,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                          item.unitName,
+                          style: TextStyle(
+                              fontSize: 11, color: cs.onSurfaceVariant),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(formatRupiah(item.price),
+                                style: TextStyle(
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13)),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Hapus',
+                              onPressed: () =>
+                                  notifier.removeItem(item.productUnitId),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

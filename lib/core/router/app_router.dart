@@ -25,6 +25,7 @@ import '../services/price_match_service.dart';
 import '../../features/produk/price_preview_screen.dart';
 import '../../features/produk/price_sync_screen.dart';
 import '../../features/produk/product_group_screen.dart';
+import '../../features/produk/catalog/catalog_list_screen.dart';
 import '../../features/produk/produk_form_screen.dart';
 import '../../features/produk/produk_list_screen.dart';
 import '../../features/ringkasan/ringkasan_screen.dart';
@@ -95,6 +96,16 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'kategori',
                 builder: (_, __) => const ProductGroupScreen(),
+              ),
+              GoRoute(
+                path: 'katalog',
+                builder: (_, __) => const CatalogListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'buat',
+                    builder: (_, __) => const KasirScreen(catalogMode: true),
+                  ),
+                ],
               ),
               GoRoute(
                 path: 'sinkron-harga',

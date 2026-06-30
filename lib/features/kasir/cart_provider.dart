@@ -9,6 +9,10 @@ import '../../core/models/cart_item.dart';
 /// transaksi sehingga terpisah total dari keranjang utama.
 const kMainCartId = 'main';
 
+/// Cart ID khusus mode katalog — keranjang terpisah agar pesanan utama kasir
+/// tetap aman saat membuat katalog (lihat KasirScreen.catalogMode).
+const kCatalogCartId = 'catalog';
+
 class CartNotifier extends StateNotifier<List<CartItem>> {
   CartNotifier(this.cartId) : super([]) {
     _load();

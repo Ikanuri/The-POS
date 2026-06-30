@@ -71,6 +71,11 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
             tooltip: 'Kelola Kategori',
             onPressed: () => context.push('/produk/kategori'),
           ),
+          IconButton(
+            icon: const Icon(Icons.collections_bookmark_outlined),
+            tooltip: 'Katalog',
+            onPressed: () => context.push('/produk/katalog'),
+          ),
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.add),
