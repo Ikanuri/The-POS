@@ -8,9 +8,15 @@ import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 
 class CartSheet extends ConsumerStatefulWidget {
-  const CartSheet({super.key, this.cartId = kMainCartId, this.scrollToBottom = false});
+  const CartSheet({
+    super.key,
+    this.cartId = kMainCartId,
+    this.scrollToBottom = false,
+    this.payRoute = '/kasir/bayar',
+  });
   final String cartId;
   final bool scrollToBottom;
+  final String payRoute;
 
   @override
   ConsumerState<CartSheet> createState() => _CartSheetState();
@@ -172,7 +178,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         ? null
                         : () {
                             Navigator.of(ctx).pop();
-                            context.push('/kasir/bayar');
+                            context.push(widget.payRoute);
                           },
                     child: const Text('Bayar'),
                   ),

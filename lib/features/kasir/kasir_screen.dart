@@ -452,6 +452,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   // tetap diproses saat sheet terbuka, dan agar tidak membuka sheet ganda.
   bool _cartSheetOpen = false;
 
+  // Hint swipe-ke-atas: tampil hingga pengguna memakai gesture 3 kali.
+  bool _swipeHintVisible = false;
+  static const _kSwipeHintCountKey = 'kasir_swipe_hint_count';
+
   // Banner notifikasi inline (bukan SnackBar overlay)
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
@@ -460,10 +464,25 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     setState(() { _bannerMsg = msg; _bannerType = type; });
   }
 
+  Future<void> _initSwipeHint() async {
+    final prefs = await SharedPreferences.getInstance();
+    final count = prefs.getInt(_kSwipeHintCountKey) ?? 0;
+    if (mounted && count < 3) setState(() => _swipeHintVisible = true);
+  }
+
+  Future<void> _incrementSwipeHint() async {
+    if (!_swipeHintVisible) return;
+    final prefs = await SharedPreferences.getInstance();
+    final count = (prefs.getInt(_kSwipeHintCountKey) ?? 0) + 1;
+    await prefs.setInt(_kSwipeHintCountKey, count);
+    if (count >= 3 && mounted) setState(() => _swipeHintVisible = false);
+  }
+
   @override
   void initState() {
     super.initState();
     _loadScannerPrefs();
+    _initSwipeHint();
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
   }
 
@@ -718,10 +737,17 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   Future<void> _openCartSheet({bool scrollToBottom = false}) async {
     if (_cartSheetOpen) return;
     _cartSheetOpen = true;
+    final payRoute = _isAddMode
+        ? '/kasir/tambah/${widget.addToTxId}/bayar'
+        : '/kasir/bayar';
     final editProductId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => CartSheet(cartId: _cartId, scrollToBottom: scrollToBottom),
+      builder: (_) => CartSheet(
+        cartId: _cartId,
+        scrollToBottom: scrollToBottom,
+        payRoute: payRoute,
+      ),
     );
     _cartSheetOpen = false;
     if (editProductId == null || !mounted) return;
@@ -1139,25 +1165,33 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                     // Tab folder pelanggan & pegawai + tombol tahan — hanya di
                     // mode kasir biasa (tambah belanjaan ikut transaksi asli).
                     if (!_isAddMode)
-                      _CartMetaTab(
-                        cartId: _cartId,
-                        onHold: _holdCurrent,
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _CartMetaTab(
+                          cartId: _cartId,
+                          onHold: _holdCurrent,
+                        ),
                       ),
-                    _CartBar(
-                      total: cartNotifier.totalAmount,
-                      count: cart.length,
-                      payLabel: _isAddMode ? 'Bayar Selisih' : null,
-                      lastItem:
-                          _isAddMode ? null : cartNotifier.lastTouchedItem,
-                      lastEffQty: cartNotifier.lastTouchedItem == null
-                          ? 0
-                          : cartNotifier
-                              .effectiveQtyFor(cartNotifier.lastTouchedItem!),
-                      onView: _openCartSheet,
-                      onPay: () => _isAddMode
-                          ? context
-                              .push('/kasir/tambah/${widget.addToTxId}/bayar')
-                          : context.go('/kasir/bayar'),
+                    // Geser ke atas untuk membuka sheet keranjang.
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragEnd: (d) {
+                        if (d.velocity.pixelsPerSecond.dy < -300) {
+                          _incrementSwipeHint().ignore();
+                          _openCartSheet();
+                        }
+                      },
+                      child: _CartBar(
+                        total: cartNotifier.totalAmount,
+                        count: cart.length,
+                        lastItem:
+                            _isAddMode ? null : cartNotifier.lastTouchedItem,
+                        lastEffQty: cartNotifier.lastTouchedItem == null
+                            ? 0
+                            : cartNotifier.effectiveQtyFor(
+                                cartNotifier.lastTouchedItem!),
+                        showSwipeHint: _swipeHintVisible,
+                      ),
                     ),
                   ],
                 ),
@@ -1976,23 +2010,19 @@ class _CartBar extends StatelessWidget {
   const _CartBar({
     required this.total,
     required this.count,
-    required this.onView,
-    required this.onPay,
-    this.payLabel,
     this.lastItem,
     this.lastEffQty = 0,
+    this.showSwipeHint = false,
   });
 
   final int total;
   final int count;
-  final VoidCallback onView;
-  final VoidCallback onPay;
-  final String? payLabel;
 
   /// Produk terakhir yang ditambahkan/disentuh — ditampilkan ringkas di bawah
   /// total. null bila tidak relevan (mis. mode tambah belanjaan).
   final CartItem? lastItem;
   final double lastEffQty;
+  final bool showSwipeHint;
 
   /// Ringkasan satu baris item terakhir: "2 pcs · **Indomie Goreng** · Rp 2.500".
   ({String prefix, String name, String suffix})? _lastItemParts() {
@@ -2091,46 +2121,24 @@ class _CartBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
-          const SizedBox(height: 12),
-          // Tombol Lihat & Bayar sejajar penuh di bawah total.
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onView,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 46),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    side: BorderSide(color: cs.outlineVariant),
-                    foregroundColor: cs.onSurface,
-                  ),
-                  child: const Text(
-                    'Lihat',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
+          if (showSwipeHint) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.keyboard_arrow_up_rounded,
+                    size: 14,
+                    color: cs.onSurfaceVariant.withOpacity(0.5)),
+                const SizedBox(width: 3),
+                Text(
+                  'Geser ke atas untuk lihat keranjang',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant.withOpacity(0.5)),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: onPay,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 46),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    payLabel ?? 'Bayar',
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -2403,8 +2411,7 @@ class _CartMetaTab extends ConsumerWidget {
 
     return Transform.translate(
       // Geser turun 1px agar dasar tab menutup garis batas atas cart bar →
-      // tampak menyatu seperti tab folder yang menonjol dari bar. Tab membentang
-      // selebar bar (chip di kiri, Tahan di kanan) supaya tak ada ruang kosong.
+      // tampak menyatu seperti tab folder yang menonjol dari bar.
       offset: const Offset(0, 1),
       child: CustomPaint(
         painter: _TabPainter(
@@ -2413,8 +2420,9 @@ class _CartMetaTab extends ConsumerWidget {
           slant: slant,
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant + 10, 8),
+          padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant, 8),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               _MetaChip(
                 icon: Icons.person_outline,
@@ -2433,34 +2441,33 @@ class _CartMetaTab extends ConsumerWidget {
                 onClear:
                     meta.hasEmployee ? () => notifier.clearEmployee() : null,
               ),
-              const Spacer(),
-              // Tombol tahan pesanan — didorong ke kanan.
+              const SizedBox(width: 4),
               InkWell(
-                  onTap: onHold,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.pause_circle_outline,
-                            size: 16, color: cs.primary),
-                        const SizedBox(width: 4),
-                        Text('Tahan',
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: cs.primary)),
-                      ],
-                    ),
+                onTap: onHold,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.pause_circle_outline,
+                          size: 16, color: cs.primary),
+                      const SizedBox(width: 4),
+                      Text('Tahan',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: cs.primary)),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 }
 

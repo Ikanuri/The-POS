@@ -269,7 +269,7 @@ Future<Uint8List> _buildPdf(BuildContext context, AppDatabase db,
                 style: pw.TextStyle(
                     fontSize: 18, fontWeight: pw.FontWeight.bold)),
             pw.Text(
-              'Laporan ${_tabLabel(tab)} · ${_fmtDate.format(range.start)} – '
+              'Laporan ${_tabLabel(tab)} - ${_fmtDate.format(range.start)} s/d '
               '${_fmtDate.format(range.end)}',
               style: const pw.TextStyle(fontSize: 11),
             ),
@@ -390,14 +390,17 @@ Future<Uint8List?> _captureWidget(
     builder: (_) => Positioned(
       left: -99999,
       top: 0,
-      child: Material(
-        color: Colors.white,
-        child: Directionality(
-          textDirection: ui.TextDirection.ltr,
-          child: MediaQuery(
-            data: const MediaQueryData(),
-            child: Theme(
-              data: AppTheme.light(),
+      child: Directionality(
+        textDirection: ui.TextDirection.ltr,
+        child: MediaQuery(
+          data: const MediaQueryData(),
+          child: Theme(
+            data: AppTheme.light(),
+            // Material harus di dalam Theme agar DefaultTextStyle menggunakan
+            // warna teks light-theme (gelap), bukan warna dari theme app yang
+            // mungkin sedang dark-mode (teks putih → tidak terbaca di PDF).
+            child: Material(
+              color: Colors.white,
               child: RepaintBoundary(
                 key: boundaryKey,
                 child: SizedBox(width: width, child: child),
