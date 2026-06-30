@@ -2383,45 +2383,41 @@ class _CartMetaTab extends ConsumerWidget {
     final notifier = ref.read(cartMetaProvider(cartId).notifier);
     const slant = 14.0;
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Transform.translate(
-        // Geser turun 1px agar dasar tab menutup garis batas atas cart bar →
-        // tampak menyatu seperti tab folder yang menonjol dari bar.
-        offset: const Offset(0, 1),
-        child: CustomPaint(
-          painter: _TabPainter(
-            fill: cs.surface,
-            border: cs.outlineVariant,
-            slant: slant,
-          ),
-          child: Padding(
-            // Kanan cukup selebar slant — tombol "Tahan" jadi item terakhir,
-            // tidak butuh ruang ekstra di sampingnya (hilangkan space mati).
-            padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant, 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _MetaChip(
-                  icon: Icons.person_outline,
-                  label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
-                  active: meta.hasCustomer,
-                  onTap: () => _pickCustomer(context, ref),
-                  onClear:
-                      meta.hasCustomer ? () => notifier.clearCustomer() : null,
-                ),
-                const SizedBox(width: 4),
-                _MetaChip(
-                  icon: Icons.badge_outlined,
-                  label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
-                  active: meta.hasEmployee,
-                  onTap: () => _pickEmployee(context, ref),
-                  onClear:
-                      meta.hasEmployee ? () => notifier.clearEmployee() : null,
-                ),
-                const SizedBox(width: 4),
-                // Tombol tahan pesanan.
-                InkWell(
+    return Transform.translate(
+      // Geser turun 1px agar dasar tab menutup garis batas atas cart bar →
+      // tampak menyatu seperti tab folder yang menonjol dari bar. Tab membentang
+      // selebar bar (chip di kiri, Tahan di kanan) supaya tak ada ruang kosong.
+      offset: const Offset(0, 1),
+      child: CustomPaint(
+        painter: _TabPainter(
+          fill: cs.surface,
+          border: cs.outlineVariant,
+          slant: slant,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant + 10, 8),
+          child: Row(
+            children: [
+              _MetaChip(
+                icon: Icons.person_outline,
+                label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
+                active: meta.hasCustomer,
+                onTap: () => _pickCustomer(context, ref),
+                onClear:
+                    meta.hasCustomer ? () => notifier.clearCustomer() : null,
+              ),
+              const SizedBox(width: 4),
+              _MetaChip(
+                icon: Icons.badge_outlined,
+                label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
+                active: meta.hasEmployee,
+                onTap: () => _pickEmployee(context, ref),
+                onClear:
+                    meta.hasEmployee ? () => notifier.clearEmployee() : null,
+              ),
+              const Spacer(),
+              // Tombol tahan pesanan — didorong ke kanan.
+              InkWell(
                   onTap: onHold,
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
@@ -2446,8 +2442,7 @@ class _CartMetaTab extends ConsumerWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 
