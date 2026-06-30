@@ -1169,6 +1169,9 @@ class _KasirTopbar extends StatelessWidget {
           Padding(
             padding: EdgeInsets.fromLTRB(12, topPadding + 8, 12, 10),
             child: Row(
+              // Sejajarkan kotak ikon di atas; keterangan menggantung di bawah
+              // tanpa menggeser tombol lain (tetap rapi di HP & tablet).
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   width: 36,
@@ -1233,9 +1236,14 @@ class _KasirTopbar extends StatelessWidget {
                   icon: Icons.pause_circle_outline_rounded,
                   onTap: onHeld,
                   badgeCount: heldCount,
+                  label: 'Antrian',
                 ),
                 const SizedBox(width: 4),
-                _TbBtn(icon: Icons.history_rounded, onTap: onHistory),
+                _TbBtn(
+                  icon: Icons.history_rounded,
+                  onTap: onHistory,
+                  label: 'Riwayat\nTransaksi',
+                ),
                 const SizedBox(width: 4),
                 _TbBtn(
                   icon:
@@ -1253,29 +1261,64 @@ class _KasirTopbar extends StatelessWidget {
 }
 
 class _TbBtn extends StatelessWidget {
-  const _TbBtn({required this.icon, required this.onTap, this.badgeCount = 0});
+  const _TbBtn({
+    required this.icon,
+    required this.onTap,
+    this.badgeCount = 0,
+    this.label,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
   final int badgeCount;
 
+  /// Keterangan opsional di bawah ikon (mis. 'Antrian'). Boleh berisi '\n'
+  /// untuk memaksa dua baris. Lebar dibatasi agar tidak menabrak tombol lain.
+  final String? label;
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final child = Icon(icon, size: 18, color: cs.onSurfaceVariant);
+    final box = Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.outlineVariant, width: 0.75),
+      ),
+      child: badgeCount > 0
+          ? Badge(label: Text('$badgeCount'), child: child)
+          : child,
+    );
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: cs.outlineVariant, width: 0.75),
-        ),
-        child: badgeCount > 0
-            ? Badge(label: Text('$badgeCount'), child: child)
-            : child,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          box,
+          if (label != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: SizedBox(
+                width: 44,
+                child: Text(
+                  label!,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    height: 1.05,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -2016,7 +2059,9 @@ class _CartMetaTab extends ConsumerWidget {
             slant: slant,
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant + 10, 8),
+            // Kanan cukup selebar slant — tombol "Tahan" jadi item terakhir,
+            // tidak butuh ruang ekstra di sampingnya (hilangkan space mati).
+            padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant, 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -21,7 +21,9 @@ class ExportService {
     required DateTimeRange range,
     required String storeName,
   }) async {
-    final data = await _fetchData(db, range);
+    // PDF di-render seluruhnya di memori, jadi batasi baris transaksi & produk
+    // lebih ketat dari XLSX untuk mencegah Out of Memory.
+    final data = await _fetchData(db, range, txLimit: 500, topLimit: 50);
     final doc = pw.Document();
 
     doc.addPage(pw.MultiPage(
@@ -44,7 +46,7 @@ class ExportService {
         pw.SizedBox(height: 16),
         _buildKpiSection(data),
         pw.SizedBox(height: 16),
-        _buildTransaksiTable(data.transactions),
+        _buildTransaksiTable(data.transactions, data.txCount),
         pw.SizedBox(height: 16),
         _buildProdukTable(data.topProducts),
       ],
@@ -84,12 +86,21 @@ class ExportService {
     );
   }
 
-  static pw.Widget _buildTransaksiTable(List<_TxRow> rows) {
+  static pw.Widget _buildTransaksiTable(List<_TxRow> rows, int totalCount) {
+    final truncated = totalCount > rows.length;
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text('Transaksi', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
         pw.SizedBox(height: 4),
+        if (truncated) ...[
+          pw.Text(
+            'Menampilkan ${rows.length} transaksi terbaru dari $totalCount '
+            'total. KPI di atas tetap mencakup seluruh periode.',
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+          ),
+          pw.SizedBox(height: 4),
+        ],
         if (rows.isEmpty) pw.Text('Tidak ada data'),
         if (rows.isNotEmpty)
           pw.Table(
@@ -197,6 +208,12 @@ class ExportService {
           TextCellValue(r.status),
         ]);
       }
+      if (data.txCount > data.transactions.length) {
+        sheet.appendRow([
+          TextCellValue('Menampilkan ${data.transactions.length} transaksi '
+              'terbaru dari ${data.txCount} total (Ringkasan tetap penuh).'),
+        ]);
+      }
     }
 
     // Produk sheet
@@ -236,98 +253,59 @@ class ExportService {
 
   // ─── Data fetching ────────────────────────────────────────────────────────
 
-  static Future<_ReportData> _fetchData(AppDatabase db, DateTimeRange range) async {
+  static Future<_ReportData> _fetchData(
+    AppDatabase db,
+    DateTimeRange range, {
+    int txLimit = 5000,
+    int topLimit = 500,
+  }) async {
+    // KPI total via query agregat satu-baris — tidak memuat seluruh transaksi
+    // & item ke memori (penyebab utama Out of Memory pada periode besar).
+    final totals = await db.getReportTotals(range.start, range.end);
+
+    // Daftar transaksi dibatasi agar tabel PDF / lembar XLSX tidak meledak di
+    // memori. Ambil yang terbaru lalu balik agar urut kronologis saat ditampil.
     final txs = await (db.select(db.transactions)
           ..where((t) =>
               t.status.isNotValue('void') &
               t.createdAt.isBiggerOrEqualValue(range.start) &
               t.createdAt.isSmallerOrEqualValue(range.end))
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(txLimit))
         .get();
+    final txRows = txs.reversed
+        .map((tx) => _TxRow(
+              localId: tx.localId,
+              createdAt: tx.createdAt,
+              customerLabel: tx.customerId != null
+                  ? 'Pelanggan'
+                  : tx.customerName ?? 'Umum',
+              total: tx.total,
+              paid: tx.paid,
+              status: tx.status,
+            ))
+        .toList();
 
-    int totalRevenue = 0;
-    int totalCogs = 0;
+    // Top produk & pelanggan via query JOIN agregat (bukan N+1 per transaksi).
+    final topProducts = await db.getTopProductsByRevenue(range.start, range.end,
+        limit: topLimit);
+    final productRows = topProducts
+        .map((p) => _ProductRow(
+            name: p.name, totalQty: p.qtySold, totalRevenue: p.revenue))
+        .toList();
 
-    final txRows = <_TxRow>[];
-    for (final tx in txs) {
-      totalRevenue += tx.total;
-      txRows.add(_TxRow(
-        localId: tx.localId,
-        createdAt: tx.createdAt,
-        customerLabel: tx.customerId != null
-            ? 'Pelanggan'
-            : tx.customerName ?? 'Umum',
-        total: tx.total,
-        paid: tx.paid,
-        status: tx.status,
-      ));
-    }
-
-    // Aggregate products
-    final Map<String, _ProductAgg> prodAgg = {};
-    for (final tx in txs) {
-      final items = await (db.select(db.transactionItems)
-            ..where((t) => t.transactionId.equals(tx.id)))
-          .get();
-      for (final item in items) {
-        totalCogs += (item.costAtSale * item.qty).round();
-        prodAgg.update(
-          item.productId,
-          (p) => p.copyWith(
-            totalQty: p.totalQty + item.qty,
-            totalRevenue: p.totalRevenue + item.subtotal,
-          ),
-          ifAbsent: () => _ProductAgg(
-            productId: item.productId,
-            totalQty: item.qty,
-            totalRevenue: item.subtotal,
-          ),
-        );
-      }
-    }
-
-    // Resolve product names
-    final productRows = <_ProductRow>[];
-    for (final agg in prodAgg.entries) {
-      final p = await (db.select(db.products)
-            ..where((t) => t.id.equals(agg.key)))
-          .getSingleOrNull();
-      productRows.add(_ProductRow(
-        name: p?.name ?? agg.key,
-        totalQty: agg.value.totalQty,
-        totalRevenue: agg.value.totalRevenue,
-      ));
-    }
-    productRows.sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
-
-    // Aggregate customers
-    final Map<String, _CustAgg> custAgg = {};
-    for (final tx in txs) {
-      if (tx.customerId == null) continue;
-      custAgg.update(
-        tx.customerId!,
-        (c) => c.copyWith(txCount: c.txCount + 1, totalSpend: c.totalSpend + tx.total),
-        ifAbsent: () => _CustAgg(customerId: tx.customerId!, txCount: 1, totalSpend: tx.total),
-      );
-    }
-    final custRows = <_CustRow>[];
-    for (final agg in custAgg.entries) {
-      final c = await (db.select(db.customers)
-            ..where((t) => t.id.equals(agg.key)))
-          .getSingleOrNull();
-      custRows.add(_CustRow(
-        name: c?.name ?? agg.key,
-        txCount: agg.value.txCount,
-        totalSpend: agg.value.totalSpend,
-      ));
-    }
-    custRows.sort((a, b) => b.totalSpend.compareTo(a.totalSpend));
+    final topCustomers = await db
+        .getTopCustomersByRevenue(range.start, range.end, limit: topLimit);
+    final custRows = topCustomers
+        .map((c) => _CustRow(
+            name: c.name, txCount: c.txCount, totalSpend: c.totalSpent))
+        .toList();
 
     return _ReportData(
-      totalRevenue: totalRevenue,
-      txCount: txs.length,
-      totalCogs: totalCogs,
-      grossProfit: totalRevenue - totalCogs,
+      totalRevenue: totals.revenue,
+      txCount: totals.txCount,
+      totalCogs: totals.cogs,
+      grossProfit: totals.revenue - totals.cogs,
       transactions: txRows,
       topProducts: productRows,
       customers: custRows,
@@ -371,29 +349,11 @@ class _TxRow {
   final String status;
 }
 
-class _ProductAgg {
-  const _ProductAgg({required this.productId, required this.totalQty, required this.totalRevenue});
-  final String productId;
-  final double totalQty;
-  final int totalRevenue;
-  _ProductAgg copyWith({double? totalQty, int? totalRevenue}) => _ProductAgg(
-      productId: productId, totalQty: totalQty ?? this.totalQty, totalRevenue: totalRevenue ?? this.totalRevenue);
-}
-
 class _ProductRow {
   const _ProductRow({required this.name, required this.totalQty, required this.totalRevenue});
   final String name;
   final double totalQty;
   final int totalRevenue;
-}
-
-class _CustAgg {
-  const _CustAgg({required this.customerId, required this.txCount, required this.totalSpend});
-  final String customerId;
-  final int txCount;
-  final int totalSpend;
-  _CustAgg copyWith({int? txCount, int? totalSpend}) => _CustAgg(
-      customerId: customerId, txCount: txCount ?? this.txCount, totalSpend: totalSpend ?? this.totalSpend);
 }
 
 class _CustRow {

@@ -103,51 +103,69 @@ class _TopDonut extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final palette = [
+    // Palet mencolok untuk Top item. Warna ke-5 (biru) ditambahkan agar saat
+    // ada 5 Top + "Lainnya", slice Lainnya tidak meminjam ulang warna Top 1.
+    final topColors = <Color>[
       scheme.primary,
-      scheme.secondary,
       scheme.tertiary,
+      scheme.secondary,
       scheme.error,
-      scheme.surfaceContainerHighest,
+      const Color(0xFF4C7DBF),
     ];
-    final onPalette = [
+    final onTopColors = <Color>[
       scheme.onPrimary,
-      scheme.onSecondary,
       scheme.onTertiary,
+      scheme.onSecondary,
       scheme.onError,
-      scheme.onSurfaceVariant,
+      Colors.white,
     ];
+    // "Lainnya" selalu abu-abu netral — beda jelas dari Top 1 (primary).
+    final otherColor = scheme.surfaceContainerHighest;
+    final onOtherColor = scheme.onSurfaceVariant;
+
+    final hasOther = otherValue > 0;
     final all = [
       ...slices,
-      if (otherValue > 0) _Slice('Lainnya', otherValue),
+      if (hasOther) _Slice('Lainnya', otherValue),
     ];
     final total = all.fold(0, (a, s) => a + s.value);
+
+    bool isOther(int i) => hasOther && i == all.length - 1;
+    Color colorFor(int i) =>
+        isOther(i) ? otherColor : topColors[i % topColors.length];
+    Color onColorFor(int i) =>
+        isOther(i) ? onOtherColor : onTopColors[i % onTopColors.length];
+
+    final sections = <PieChartSectionData>[];
+    for (var i = 0; i < all.length; i++) {
+      final double pct = total > 0 ? all[i].value / total * 100 : 0;
+      // Slice kecil (<8%) → angka tidak muat di dalam ring; dorong ke luar
+      // ring (lurus dengan porsinya) memakai warna teks netral agar terbaca.
+      final small = pct < 8;
+      sections.add(PieChartSectionData(
+        value: all[i].value.toDouble(),
+        color: colorFor(i),
+        title: total > 0 ? '${pct.round()}%' : '',
+        radius: 27,
+        titlePositionPercentageOffset: small ? 1.4 : 0.5,
+        titleStyle: TextStyle(
+          fontSize: small ? 9 : 10.5,
+          fontWeight: FontWeight.w700,
+          color: small ? scheme.onSurface : onColorFor(i),
+        ),
+      ));
+    }
 
     return Row(
       children: [
         SizedBox(
-          width: 140,
-          height: 140,
+          width: 150,
+          height: 150,
           child: PieChart(
             PieChartData(
-              centerSpaceRadius: 32,
+              centerSpaceRadius: 30,
               sectionsSpace: 2,
-              sections: [
-                for (var i = 0; i < all.length; i++)
-                  PieChartSectionData(
-                    value: all[i].value.toDouble(),
-                    color: palette[i % palette.length],
-                    title: total > 0
-                        ? '${(all[i].value / total * 100).round()}%'
-                        : '',
-                    radius: 38,
-                    titleStyle: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: onPalette[i % onPalette.length],
-                    ),
-                  ),
-              ],
+              sections: sections,
             ),
           ),
         ),
@@ -166,7 +184,7 @@ class _TopDonut extends StatelessWidget {
                         width: 10,
                         height: 10,
                         decoration: BoxDecoration(
-                          color: palette[i % palette.length],
+                          color: colorFor(i),
                           shape: BoxShape.circle,
                         ),
                       ),

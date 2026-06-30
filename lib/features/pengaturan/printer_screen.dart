@@ -26,21 +26,10 @@ class _PrinterScreenState extends State<PrinterScreen>
 
   PrinterSettings _settings = const PrinterSettings();
 
-  // ── Log debug ─────────────────────────────────────────────────────────────
-  final List<PrintLogEntry> _log = [];
-  bool _logExpanded = false;
-  final _logScrollCtrl = ScrollController();
-
   @override
   void initState() {
     super.initState();
     _load();
-  }
-
-  @override
-  void dispose() {
-    _logScrollCtrl.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -98,33 +87,18 @@ class _PrinterScreenState extends State<PrinterScreen>
   }
 
   Future<void> _testPrint(String mac) async {
-    setState(() {
-      _testingMac = mac;
-      _log.clear();
-      _logExpanded = true;
-    });
+    setState(() => _testingMac = mac);
     try {
-      final (ok, entries) = await PrinterService.testPrintDetailed(mac);
-      if (!mounted) return;
-      setState(() => _log.addAll(entries));
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_logScrollCtrl.hasClients) {
-          _logScrollCtrl.animateTo(
-            _logScrollCtrl.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      final (ok, _) = await PrinterService.testPrintDetailed(mac);
       if (!mounted) return;
       if (ok) {
         showSuccess('Test print berhasil!');
       } else {
-        showError('Gagal — lihat log di bawah');
+        showError('Gagal terhubung ke printer — periksa Bluetooth & printer');
       }
     } catch (e) {
       if (!mounted) return;
-      showError('Exception: $e');
+      showError('Gagal: $e');
     } finally {
       if (mounted) setState(() => _testingMac = null);
     }
@@ -206,12 +180,6 @@ class _PrinterScreenState extends State<PrinterScreen>
     await PrinterService.saveSettings(updated);
     if (!mounted) return;
     setState(() => _settings = updated);
-  }
-
-  void _copyLog() {
-    final text = _log.map((e) => e.toString()).join('\n');
-    Clipboard.setData(ClipboardData(text: text));
-    showSuccess('Log disalin ke clipboard');
   }
 
   @override
@@ -344,9 +312,6 @@ class _PrinterScreenState extends State<PrinterScreen>
                   itemBuilder: (_, i) => _deviceTile(context, _devices[i]),
                 ),
         ),
-
-        // Panel log debug
-        if (_log.isNotEmpty) _buildLogPanel(context, scheme),
       ],
     );
   }
@@ -486,7 +451,7 @@ class _PrinterScreenState extends State<PrinterScreen>
           else
             IconButton(
               icon: const Icon(Icons.print_outlined, size: 20),
-              tooltip: 'Test Print + Lihat Log',
+              tooltip: 'Test Print',
               visualDensity: VisualDensity.compact,
               onPressed: () => _testPrint(d.macAdress),
             ),
@@ -510,135 +475,6 @@ class _PrinterScreenState extends State<PrinterScreen>
     );
   }
 
-  Widget _buildLogPanel(BuildContext context, ColorScheme scheme) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final logBg = isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF0F0F8);
-    final logFg = isDark ? const Color(0xFFE0E0F0) : const Color(0xFF1A1A3E);
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      constraints: BoxConstraints(maxHeight: _logExpanded ? 240 : 44),
-      decoration: BoxDecoration(
-        color: logBg,
-        border: Border(top: BorderSide(color: scheme.outlineVariant)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _logExpanded = !_logExpanded),
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(Icons.terminal, size: 16, color: logFg.withOpacity(0.7)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Log Debug (${_log.length} langkah)',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          color: logFg.withOpacity(0.8)),
-                    ),
-                  ),
-                  if (_log.isNotEmpty)
-                    Icon(
-                      _log.last.ok == true
-                          ? Icons.check_circle
-                          : _log.last.ok == false
-                              ? Icons.cancel
-                              : Icons.info_outline,
-                      size: 16,
-                      color: _log.last.ok == true
-                          ? Colors.green
-                          : _log.last.ok == false
-                              ? Colors.red
-                              : logFg.withOpacity(0.6),
-                    ),
-                  const SizedBox(width: 6),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 16),
-                    tooltip: 'Salin log',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: _copyLog,
-                    color: logFg.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    _logExpanded ? Icons.expand_more : Icons.chevron_right,
-                    size: 18,
-                    color: logFg.withOpacity(0.6),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_logExpanded)
-            Expanded(
-              child: ListView.builder(
-                controller: _logScrollCtrl,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                itemCount: _log.length,
-                itemBuilder: (_, i) {
-                  final e = _log[i];
-                  final Color lineColor;
-                  if (e.ok == true) {
-                    lineColor = Colors.green.shade400;
-                  } else if (e.ok == false) {
-                    lineColor = Colors.red.shade400;
-                  } else {
-                    lineColor = logFg.withOpacity(0.7);
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: RichText(
-                      text: TextSpan(
-                        style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                            color: logFg.withOpacity(0.5)),
-                        children: [
-                          TextSpan(text: '[${e.timeStr}] '),
-                          TextSpan(
-                            text: e.step,
-                            style: TextStyle(
-                                color: lineColor,
-                                fontWeight: e.ok != null
-                                    ? FontWeight.w600
-                                    : FontWeight.normal),
-                          ),
-                          if (e.ok == true)
-                            TextSpan(
-                                text: ' ✓',
-                                style:
-                                    TextStyle(color: Colors.green.shade400)),
-                          if (e.ok == false)
-                            TextSpan(
-                                text: ' ✗',
-                                style: TextStyle(color: Colors.red.shade400)),
-                          if (e.detail != null)
-                            TextSpan(
-                              text: ': ${e.detail}',
-                              style: TextStyle(
-                                  color: logFg.withOpacity(0.5),
-                                  fontSize: 10),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 class _MessageState extends StatelessWidget {

@@ -1504,6 +1504,39 @@ class AppDatabase extends _$AppDatabase {
     }).toList();
   }
 
+  /// Total ringkas laporan (revenue, COGS, jumlah transaksi) dalam rentang —
+  /// query agregat satu-baris, tidak memuat seluruh transaksi/item ke memori
+  /// (mencegah Out of Memory saat ekspor periode besar).
+  Future<({int revenue, int cogs, int txCount})> getReportTotals(
+      DateTime from, DateTime to) async {
+    final revenueExpr = transactions.total.sum();
+    final countExpr = transactions.id.count();
+    final headRow = await (selectOnly(transactions)
+          ..addColumns([revenueExpr, countExpr])
+          ..where(transactions.status.isNotValue('void') &
+              transactions.createdAt.isBiggerOrEqualValue(from) &
+              transactions.createdAt.isSmallerOrEqualValue(to)))
+        .getSingle();
+
+    const cogsExpr = CustomExpression<double>(
+        'SUM(transaction_items.cost_at_sale * transaction_items.qty)');
+    final cogsRow = await (select(transactionItems).join([
+      innerJoin(transactions,
+          transactions.id.equalsExp(transactionItems.transactionId)),
+    ])
+          ..addColumns([cogsExpr])
+          ..where(transactions.status.isNotValue('void') &
+              transactions.createdAt.isBiggerOrEqualValue(from) &
+              transactions.createdAt.isSmallerOrEqualValue(to)))
+        .getSingle();
+
+    return (
+      revenue: headRow.read(revenueExpr) ?? 0,
+      cogs: (cogsRow.read(cogsExpr) ?? 0).round(),
+      txCount: headRow.read(countExpr) ?? 0,
+    );
+  }
+
   // ───────────────────────── Laporan queries ─────────────────────────
 
   Stream<List<Transaction>> watchTransactions({

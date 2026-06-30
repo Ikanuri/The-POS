@@ -11,13 +11,13 @@ class AppTheme {
   // Hutang / sisa bayar → MERAH di semua mode.
   // Kembalian → HIJAU soft di semua mode.
   static Color debtFg(bool isDark) =>
-      isDark ? const Color(0xFFFF6B6B) : const Color(0xFFD64545);
+      isDark ? const Color(0xFFFF8A8A) : const Color(0xFFD64545);
   static Color debtBg(bool isDark) =>
-      isDark ? const Color(0x33FF6B6B) : const Color(0xFFFCE9E9);
+      isDark ? const Color(0x4DFF6B6B) : const Color(0xFFFCE9E9);
   static Color changeFg(bool isDark) =>
-      isDark ? const Color(0xFF5FD39A) : const Color(0xFF1E7E4F);
+      isDark ? const Color(0xFF74E0AC) : const Color(0xFF1E7E4F);
   static Color changeBg(bool isDark) =>
-      isDark ? const Color(0x335FD39A) : const Color(0xFFE3F4EA);
+      isDark ? const Color(0x4D5FD39A) : const Color(0xFFE3F4EA);
 
   /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
   /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).
@@ -102,7 +102,7 @@ class AppTheme {
     final ink3   = isDark ? _dInk3   : _lInk3;
     final sh1    = isDark ? _sh1D    : _sh1L;
 
-    final scheme = ColorScheme.fromSeed(
+    var scheme = ColorScheme.fromSeed(
       seedColor: accent,
       brightness: isDark ? Brightness.dark : Brightness.light,
     ).copyWith(
@@ -112,6 +112,19 @@ class AppTheme {
       onSurface: ink,
       outlineVariant: line,
     );
+
+    // Di dark mode, container M3 (primaryContainer/tertiaryContainer) terlalu
+    // redup untuk chip "Uang Pas", metode bayar terpilih, & kartu "Bayar Nanti".
+    // Naikkan sedikit kecerahannya dengan tint di atas kartu gelap + teks terang.
+    if (isDark) {
+      scheme = scheme.copyWith(
+        primaryContainer: Color.alphaBlend(accent.withOpacity(0.42), card),
+        onPrimaryContainer: ink,
+        tertiaryContainer:
+            Color.alphaBlend(scheme.tertiary.withOpacity(0.40), card),
+        onTertiaryContainer: ink,
+      );
+    }
 
     final base = ThemeData(
       colorScheme: scheme,
