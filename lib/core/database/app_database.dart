@@ -1569,6 +1569,22 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .watch();
 
+  /// Transaksi dalam rentang (sekali ambil, dibatasi) untuk ekspor laporan —
+  /// terbaru dulu. Batas mencegah Out of Memory pada periode besar.
+  Future<List<Transaction>> getTransactionsInRange(
+    DateTime from,
+    DateTime to, {
+    int limit = 2000,
+  }) =>
+      (select(transactions)
+            ..where((t) =>
+                t.status.isNotValue('void') &
+                t.createdAt.isBiggerOrEqualValue(from) &
+                t.createdAt.isSmallerOrEqualValue(to))
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+            ..limit(limit))
+          .get();
+
   Future<List<Customer>> searchCustomers(String q) {
     final query = (select(customers)..where((t) => t.isActive.equals(true)));
     if (q.isNotEmpty) {
