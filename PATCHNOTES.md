@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 2 Juli 2026
+
+### 🛠️ Perbaikan yang Terasa
+- **QRIS kini tampil sebagai kode QR sungguhan** di layar pembayaran — pembeli
+  bisa langsung scan. Sebelumnya hanya muncul tulisan kode mentah yang tidak
+  bisa discan.
+- **Struk lebih akurat untuk produk bervarian** — bila induk (mis. Pop Ice)
+  dijual bersama varian rasanya sekaligus, baris induk di struk aplikasi
+  sempat tampil kosong tanpa nominal. Sekarang jumlah & harganya tampil benar.
+- **Total pesanan ditahan kini akurat** — kartu "Pesanan Ditahan" sempat
+  menghitung varian dua kali sehingga totalnya kelihatan lebih besar.
+- Berbagai penguatan di balik layar: stok aman saat tutup buku tahunan, data
+  pegawai ikut ter-backup, dan sinkronisasi antar perangkat lebih andal untuk
+  cicilan / tambah belanjaan pada nota lama.
+
+---
+
 ## 1 Juli 2026
 
 ### ✨ Fitur Baru

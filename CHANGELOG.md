@@ -8,8 +8,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-02
+
+- `16ad934` — fix: deep debug — perbaikan bug lintas modul (stok, sync, backup, struk, chart, QRIS)
+
 ## 2026-07-01
 
+- `9e16f22` — docs: add project memory files (CLAUDE.md, changelog, patchnotes, hand-off)
 - `178d16a` — docs: archive original project reference files
 
 ## 2026-06-30
