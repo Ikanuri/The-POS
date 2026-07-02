@@ -94,6 +94,8 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     for (final key in prefs.getKeys().toList()) {
       if (!key.startsWith(_prefPrefix) || key.endsWith('_ts')) continue;
       if (key == '$_prefPrefix$kMainCartId') continue; // jangan hapus utama
+      // Draft katalog bukan keranjang yatim — biarkan bertahan > 24 jam.
+      if (key == '$_prefPrefix$kCatalogCartId') continue;
       final ts = prefs.getInt('${key}_ts') ?? 0;
       if (now - ts > maxAge) {
         await prefs.remove(key);
@@ -339,6 +341,27 @@ final cartProvider =
     StateNotifierProvider.family<CartNotifier, List<CartItem>, String>(
   (ref, cartId) => CartNotifier(cartId),
 );
+
+/// Total belanja dari daftar item lepas (di luar notifier) dengan invariant
+/// induk-varian: storedQty induk = base + Σ(varian), jadi qty efektif induk
+/// harus dikurangi total varian agar varian tidak terhitung dua kali.
+/// Dipakai mis. kartu pesanan ditahan.
+int cartTotalOf(List<CartItem> items) {
+  var sum = 0;
+  for (final it in items) {
+    final double eff;
+    if (it.isVariant) {
+      eff = it.qty;
+    } else {
+      final variantTotal = items
+          .where((c) => c.isVariant && c.parentProductId == it.productId)
+          .fold(0.0, (s, c) => s + c.qty);
+      eff = (it.qty - variantTotal).clamp(0.0, double.infinity);
+    }
+    sum += (it.price * eff).round();
+  }
+  return sum;
+}
 
 /// Susun keranjang: induk diikuti varian-variannya (tampilan bersarang).
 List<CartItem> orderCartItems(List<CartItem> cart) {

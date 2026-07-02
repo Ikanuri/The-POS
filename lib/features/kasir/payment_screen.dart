@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
@@ -1412,15 +1413,15 @@ class _QrisDisplay extends StatelessWidget {
           children: [
             Text('Scan QRIS', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 12),
-            // QR display placeholder — gunakan qr_flutter jika qrValue tersedia
+            // Render payload QRIS statis sebagai QR yang bisa discan pembeli.
             Container(
-              width: 200,
-              height: 200,
               color: Colors.white,
-              alignment: Alignment.center,
-              child: Text(method!.qrValue!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 10)),
+              padding: const EdgeInsets.all(8),
+              child: QrImageView(
+                data: method!.qrValue!,
+                size: 200,
+                backgroundColor: Colors.white,
+              ),
             ),
           ],
         ),

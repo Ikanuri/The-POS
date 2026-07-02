@@ -324,7 +324,21 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   void _delete() {
     final sel = _sel;
     if (sel == null) return;
-    ref.read(cartProvider(widget.cartId).notifier).removeItem(sel.unit.id);
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
+    notifier.removeItem(sel.unit.id);
+    // Bila tidak ada lagi baris induk produk ini, hapus juga varian-variannya
+    // agar tidak tertinggal sebagai item yatim di keranjang.
+    final remaining = ref.read(cartProvider(widget.cartId));
+    final hasParentLine = remaining
+        .any((c) => !c.isVariant && c.productId == widget.product.id);
+    if (!hasParentLine) {
+      for (final c in remaining
+          .where((c) =>
+              c.isVariant && c.parentProductId == widget.product.id)
+          .toList()) {
+        notifier.removeItem(c.productUnitId);
+      }
+    }
     Navigator.of(context).pop();
   }
 

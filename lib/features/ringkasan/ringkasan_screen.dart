@@ -298,7 +298,9 @@ class _HourlyChart extends StatelessWidget {
             children: hourly.asMap().entries.map((e) {
               final h = e.key;
               final v = e.value;
-              final height = max > 0 ? (v / max * 70) : 0.0;
+              // Total per jam bisa negatif (jam yang didominasi retur) —
+              // clamp agar tinggi Container tidak negatif (crash).
+              final height = max > 0 ? (v.clamp(0, max) / max * 70) : 0.0;
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 1),

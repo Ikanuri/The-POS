@@ -772,7 +772,10 @@ class _DailyBarChart extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: sorted.map((e) {
-                final h = max > 0 ? (e.value / max * 70) : 2.0;
+                // Omzet harian bisa negatif (hari didominasi retur) — clamp
+                // agar Container tidak menerima tinggi negatif (crash).
+                final h =
+                    max > 0 ? (e.value.clamp(0, max) / max * 70) : 2.0;
                 return Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),

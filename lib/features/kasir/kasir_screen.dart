@@ -2725,7 +2725,9 @@ class _HeldCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final parsed = _parseHeldPayload(order.cartJson);
     final itemCount = parsed.items.where((c) => !c.isVariant).length;
-    final total = parsed.items.fold<int>(0, (s, c) => s + c.subtotal);
+    // Pakai perhitungan efektif — storedQty induk sudah memuat qty varian,
+    // menjumlah subtotal mentah membuat varian terhitung dua kali.
+    final total = cartTotalOf(parsed.items);
     final time =
         '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
 

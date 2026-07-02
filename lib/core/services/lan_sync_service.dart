@@ -133,20 +133,38 @@ class LanSyncService {
     onQueueChanged?.call();
 
     int received = 0;
-    List<Map<String, Object?>> mergedTxRows = const [];
+    final touchedTxIds = <String>{};
     for (final entry in item.tables.entries) {
       // Guard satu arah: hanya tabel append-only yang boleh dari klien.
       if (!appendOnlyTables.contains(entry.key)) continue;
       // Filter kategori yang dipilih owner.
       if (allowedTables != null && !allowedTables.contains(entry.key)) continue;
       received += await _db!.mergeRows(entry.key, entry.value, true);
-      if (entry.key == 'transactions') mergedTxRows = entry.value;
+      _collectTxIds(entry.key, entry.value, touchedTxIds);
     }
-    // Rekonsiliasi total/paid dari child rows sebelum membangun ringkasan,
-    // agar header transaksi yang item/pembayarannya bertambah via sync ikut benar.
-    await _db!.reconcileSyncedTransactions(mergedTxRows);
-    await _db!.rebuildSummariesForMergedTransactions(mergedTxRows);
+    // Rekonsiliasi total/paid dari child rows sebelum membangun ringkasan.
+    // Id diambil juga dari item/pembayaran, sehingga transaksi lama yang hanya
+    // menerima cicilan / item susulan via sync ikut dikoreksi headernya.
+    await _db!.reconcileTransactionsByIds(touchedTxIds);
+    await _db!.rebuildSummariesForTxIds(touchedTxIds);
     return received;
+  }
+
+  /// Kumpulkan id transaksi yang disentuh sebuah payload sync: dari header
+  /// (`transactions.id`) maupun child rows (`transaction_id` pada item &
+  /// pembayaran) — untuk rekonsiliasi dan refresh ringkasan harian.
+  static void _collectTxIds(
+      String table, List<Map<String, Object?>> rows, Set<String> out) {
+    final key = table == 'transactions'
+        ? 'id'
+        : (table == 'transaction_items' || table == 'transaction_payments')
+            ? 'transaction_id'
+            : null;
+    if (key == null) return;
+    for (final r in rows) {
+      final id = r[key];
+      if (id is String && id.isNotEmpty) out.add(id);
+    }
   }
 
   /// Tolak item antrian tanpa merge.
@@ -386,7 +404,7 @@ class LanSyncService {
 
       int received = 0;
       final tables = respPayload['tables'] as Map<String, dynamic>? ?? {};
-      List<Map<String, Object?>> mergedTxRows = const [];
+      final touchedTxIds = <String>{};
       for (final entry in tables.entries) {
         final rows = (entry.value as List).cast<Map<String, dynamic>>().map((r) {
           return r.map<String, Object?>((k, v) => MapEntry(k, v));
@@ -395,12 +413,13 @@ class LanSyncService {
         // (data owner menang), append-only di-INSERT OR IGNORE.
         received += await db.mergeRows(
             entry.key, rows, appendOnlyTables.contains(entry.key));
-        if (entry.key == 'transactions') mergedTxRows = rows;
+        _collectTxIds(entry.key, rows, touchedTxIds);
       }
       // Rekonsiliasi total/paid dari child rows, lalu refresh ringkasan harian
-      // untuk tanggal yang tersentuh transaksi masuk.
-      await db.reconcileSyncedTransactions(mergedTxRows);
-      await db.rebuildSummariesForMergedTransactions(mergedTxRows);
+      // untuk tanggal yang tersentuh — termasuk transaksi lama yang hanya
+      // menerima cicilan / item susulan (headernya tidak ada di payload).
+      await db.reconcileTransactionsByIds(touchedTxIds);
+      await db.rebuildSummariesForTxIds(touchedTxIds);
 
       final sent = outDump.values.fold<int>(0, (s, r) => s + r.length);
       final isPending =

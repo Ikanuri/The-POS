@@ -257,8 +257,9 @@ class AppDatabase extends _$AppDatabase {
     final unit = await (select(productUnits)
           ..where((t) => t.id.equals(productUnitId)))
         .getSingleOrNull();
+    // Satuan dasar selalu rasio 1.0 (abaikan nilai kolom yang mungkin salah).
     if (unit == null || unit.isBaseUnit) {
-      return (id: productUnitId, ratio: unit?.ratioToBase ?? 1.0);
+      return (id: productUnitId, ratio: 1.0);
     }
     final base = await (select(productUnits)
           ..where((t) =>
@@ -287,10 +288,12 @@ class AppDatabase extends _$AppDatabase {
 
   /// Stok terkini dalam satuan yang diminta.
   /// Semua ledger ditulis ke satuan dasar; satuan non-dasar = baseStock ÷ ratio.
+  /// Rasio < 1 (satuan lebih kecil dari dasar, mis. Ons saat dasar Kg) tetap
+  /// dikonversi; hanya rasio tak valid (<= 0) yang di-fallback tanpa konversi.
   Future<double> currentStock(String productUnitId) async {
     final info = await _baseUnitOf(productUnitId);
     final base = await _rawBaseStock(info.id);
-    return info.ratio <= 1.0 ? base : base / info.ratio;
+    return info.ratio <= 0 ? base : base / info.ratio;
   }
 
   /// Tulis satu entry ke stock_ledger, selalu pada satuan dasar.
@@ -345,7 +348,7 @@ class AppDatabase extends _$AppDatabase {
         createdAt: Value(DateTime.now()),
       ));
       // Kembalikan delta dalam satuan yang diminta UI.
-      return info.ratio <= 1.0 ? deltaBase : deltaBase / info.ratio;
+      return info.ratio <= 0 ? deltaBase : deltaBase / info.ratio;
     });
   }
 
@@ -458,7 +461,7 @@ class AppDatabase extends _$AppDatabase {
       'COALESCE(SUM(-ti.qty), 0) AS qty '
       'FROM transaction_items ti '
       'JOIN transactions t ON t.id = ti.transaction_id '
-      'WHERE t.internal_note = ? '
+      "WHERE t.internal_note = ? AND t.status != 'void' "
       'GROUP BY ti.product_unit_id',
       variables: [Variable.withString('RETUR:$originalTxId')],
       readsFrom: {transactionItems, transactions},
@@ -976,12 +979,41 @@ class AppDatabase extends _$AppDatabase {
       final id = r['id'];
       if (id is String) ids.add(id);
     }
+    await reconcileTransactionsByIds(ids);
+  }
+
+  /// Rekonsiliasi total/paid/status untuk sekumpulan id transaksi.
+  /// Id yang tidak ada di DB lokal dilewati dengan aman.
+  Future<void> reconcileTransactionsByIds(Set<String> ids) async {
     if (ids.isEmpty) return;
     await transaction(() async {
       for (final id in ids) {
         await _reconcileTransactionTotals(id);
       }
     });
+  }
+
+  /// Bangun ulang ringkasan harian untuk tanggal-tanggal yang disentuh
+  /// sekumpulan id transaksi (dilihat dari `created_at` di DB lokal setelah
+  /// merge). Melengkapi [rebuildSummariesForMergedTransactions] untuk kasus
+  /// item/pembayaran susulan yang headernya tidak ikut dalam payload.
+  Future<void> rebuildSummariesForTxIds(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final dates = <String>{};
+    // Chunk agar aman dari batas jumlah variabel SQLite.
+    final list = ids.toList();
+    for (var i = 0; i < list.length; i += 500) {
+      final chunk = list.sublist(i, (i + 500).clamp(0, list.length));
+      final rows = await (select(transactions)
+            ..where((t) => t.id.isIn(chunk)))
+          .get();
+      for (final t in rows) {
+        dates.add(_dateKey(t.createdAt));
+      }
+    }
+    for (final d in dates) {
+      await _rebuildDailySummaryFor(d);
+    }
   }
 
   Future<void> voidTransaction(String txId, String kasirId) async {
@@ -1668,6 +1700,7 @@ class AppDatabase extends _$AppDatabase {
     'stock_ledger', 'expenses', 'loyalty_point_ledger',
     'suppliers', 'purchases', 'purchase_items',
     'kasir_permissions', 'payment_methods', 'daily_summaries',
+    'employees',
   ];
 
   Future<Map<String, List<Map<String, Object?>>>> dumpAllTables() async {
@@ -1736,10 +1769,15 @@ class AppDatabase extends _$AppDatabase {
       //  • transaction_payments→ pakai `paid_at` (cicilan bisa masuk belakangan).
       //  • sisanya             → `created_at`.
       final String sql;
+      var varCount = 1;
       switch (t) {
         case 'transaction_items':
+          // Item susulan (fitur tambah belanjaan) bisa menempel pada transaksi
+          // lama — ikutkan juga berdasarkan added_at agar tidak tertinggal.
           sql = 'SELECT * FROM "transaction_items" WHERE transaction_id IN '
-              '(SELECT id FROM "transactions" WHERE created_at >= ?)';
+              '(SELECT id FROM "transactions" WHERE created_at >= ?) '
+              'OR added_at >= ?';
+          varCount = 2;
         case 'transaction_payments':
           sql = 'SELECT * FROM "transaction_payments" WHERE paid_at >= ?';
         default:
@@ -1747,7 +1785,7 @@ class AppDatabase extends _$AppDatabase {
       }
       final rows = await customSelect(
         sql,
-        variables: [Variable.withInt(sinceSec)],
+        variables: [for (var i = 0; i < varCount; i++) Variable.withInt(sinceSec)],
       ).get();
       dump[t] = rows.map((r) => r.data).toList();
     }
@@ -1803,13 +1841,24 @@ class AppDatabase extends _$AppDatabase {
           if (row.containsKey('local_id')) {
             final localId = row['local_id'];
             if (localId is String && localId.isNotEmpty) {
-              final collision = await customSelect(
-                'SELECT 1 FROM "$tableName" WHERE local_id = ?',
-                variables: [Variable<Object>(localId)],
-              ).getSingleOrNull();
-              if (collision != null) {
+              Future<bool> taken(String cand) async =>
+                  (await customSelect(
+                    'SELECT 1 FROM "$tableName" WHERE local_id = ?',
+                    variables: [Variable<Object>(cand)],
+                  ).getSingleOrNull()) !=
+                  null;
+              if (await taken(localId)) {
+                // Cari suffix bebas — '-S' statis bisa tabrakan lagi saat
+                // 3+ perangkat memakai kode kasir yang sama, dan INSERT OR
+                // IGNORE akan mem-drop transaksinya diam-diam.
+                var candidate = '$localId-S';
+                var n = 2;
+                while (await taken(candidate)) {
+                  candidate = '$localId-S$n';
+                  n++;
+                }
                 row = Map<String, Object?>.from(row);
-                row['local_id'] = '$localId-S';
+                row['local_id'] = candidate;
               }
             }
           }

@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
 
@@ -73,6 +75,24 @@ class TutupBukuService {
 
     // 4. Hapus data operasional tahun itu dari main.db.
     await db.transaction(() async {
+      // Snapshot saldo stok terakhir per satuan SEBELUM penghapusan. Produk
+      // yang seluruh riwayat stoknya berada di tahun yang diarsipkan akan
+      // kehilangan semua barisnya — saldonya harus dibawa ke entri baru agar
+      // stok tidak ter-reset ke 0.
+      final balanceRows = await db.customSelect(
+        'SELECT sl.product_unit_id AS uid, sl.stock_after AS bal '
+        'FROM stock_ledger sl '
+        'WHERE NOT EXISTS ('
+        '  SELECT 1 FROM stock_ledger s2 '
+        '  WHERE s2.product_unit_id = sl.product_unit_id '
+        '  AND (s2.created_at > sl.created_at '
+        '       OR (s2.created_at = sl.created_at AND s2.id > sl.id)))',
+      ).get();
+      final balances = <String, double>{
+        for (final r in balanceRows)
+          r.data['uid'] as String: (r.data['bal'] as num?)?.toDouble() ?? 0,
+      };
+
       // Hapus child tables dulu (FK).
       await db.customUpdate(
         'DELETE FROM transaction_items WHERE transaction_id IN '
@@ -100,6 +120,32 @@ class TutupBukuService {
         'DELETE FROM transactions '
         'WHERE created_at >= $yearStartSec AND created_at < $yearEndSec',
       );
+
+      // Bawa saldo stok untuk satuan yang ledger-nya habis terhapus
+      // (pergerakan terakhirnya ada di tahun yang diarsipkan).
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      for (final entry in balances.entries) {
+        if (entry.value == 0) continue;
+        final remain = await db.customSelect(
+          'SELECT 1 FROM stock_ledger WHERE product_unit_id = ? LIMIT 1',
+          variables: [Variable.withString(entry.key)],
+        ).getSingleOrNull();
+        if (remain != null) continue; // masih ada riwayat → saldo tetap benar
+        await db.customInsert(
+          'INSERT INTO stock_ledger '
+          '(id, product_unit_id, type, qty_change, stock_after, note, created_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable.withString(const Uuid().v4()),
+            Variable.withString(entry.key),
+            Variable.withString('adjustment'),
+            Variable.withReal(entry.value),
+            Variable.withReal(entry.value),
+            Variable.withString('Saldo dibawa dari tutup buku $year'),
+            Variable.withInt(nowSec),
+          ],
+        );
+      }
     });
 
     // 5. VACUUM main.db agar file mengecil setelah penghapusan massal.

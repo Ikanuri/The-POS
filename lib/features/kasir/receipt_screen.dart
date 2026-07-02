@@ -114,14 +114,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     });
   }
 
-  /// Effective qty untuk sebuah item di receipt, compatible dengan data
-  /// lama (storedQty) maupun baru (effectiveQty=0 untuk placeholder induk).
-  double _itemEffQty(TransactionItem item) {
-    final parentItem = _parentItemOf(item);
-    if (parentItem != null) return item.qty; // varian: langsung
-    final childSum = _childrenOf(item).fold(0.0, (s, c) => s + c.qty);
-    return (item.qty - childSum).clamp(0.0, double.infinity);
-  }
+  /// Qty sebuah item di receipt. transaction_items SELALU menyimpan qty
+  /// efektif (layar bayar menulis `l.eq`; induk placeholder eff 0 tidak
+  /// disimpan) — jadi tidak boleh dikurangi qty varian lagi. Pengurangan
+  /// ganda membuat induk yang dijual bersama varian tampil "via varian"
+  /// dengan nominal hilang, padahal qty dasarnya > 0.
+  double _itemEffQty(TransactionItem item) => item.qty;
 
   /// Susun baris item untuk struk in-app. Bila ada item susulan (addedAt != null,
   /// fitur tambah belanjaan), sisipkan pembatas "Tambahan <jam>" sebelum batch
@@ -1900,15 +1898,11 @@ class _ReceiptPaper extends StatelessWidget {
             final pad = isVar ? '  ' : '';
             final mark = checkedIds.contains(item.id) ? '✓ ' : '';
             final namePrefix = isVar ? '$pad└ ' : '';
-            // Effective qty: for parents = storedQty − sum(children), for variants = qty.
-            final childSum = isVar
-                ? 0.0
-                : items
-                    .where((c) => _parentItemOf(c)?.id == item.id)
-                    .fold(0.0, (s, c) => s + c.qty);
-            final effQty =
-                isVar ? item.qty : (item.qty - childSum).clamp(0.0, double.infinity);
-            final isPlaceholder = !isVar && effQty == 0 && childSum > 0;
+            // transaction_items selalu menyimpan qty efektif — jangan
+            // dikurangi qty varian lagi (double-subtract membuat induk yang
+            // dijual bersama varian tampil kosong).
+            final effQty = item.qty;
+            final isPlaceholder = !isVar && effQty == 0;
             final qtyStr = effQty % 1 == 0
                 ? effQty.toInt().toString()
                 : effQty.toString();
