@@ -10,7 +10,20 @@ _Terakhir diperbarui: 2 Juli 2026._
 
 ## Di Mana Kita Sekarang
 
-Sesi **deep debug + stress test**. `flutter analyze` bersih, semua di-push.
+Sesi **deep debug + stress test + test integrasi**. `flutter analyze` bersih,
+31 test hijau (`test/widget_test.dart`, `test/migration_v7_test.dart`,
+`test/db_fixes_test.dart`), semua di-push.
+
+**Test integrasi Drift nyata** (bukan simulasi/reimplementasi) membuktikan:
+- Migrasi schema v6→v7 (indeks `transaction_payments`) benar-benar jalan di
+  DB lama + query planner memakai indeks (`EXPLAIN QUERY PLAN`).
+- `getReturnedQtyByUnit` mengecualikan retur yang di-void.
+- `mergeRows` rename local_id mencari suffix bebas (-S, -S2, ...), bukan
+  berhenti di percobaan pertama.
+- `TutupBukuService.execute()` dijalankan end-to-end sungguhan (file I/O nyata
+  via fake `PathProviderPlatform`) — saldo stok unit yang ledger-nya habis
+  terarsip terbukti dibawa via entri baru, bukan hilang.
+
 
 **Hasil stress test (paling penting):**
 - **Aritmatika AMAN untuk skala waktu tak realistis.** Uang `int64` overflow di
