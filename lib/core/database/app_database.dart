@@ -1186,6 +1186,105 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Retur untuk nota yang BELUM LUNAS (status tempo/kurang_bayar): mengedit
+  /// NOTA ASLI langsung — baris item yang diretur dikurangi/dihapus, stok
+  /// dikembalikan, lalu total & status direkonsiliasi dari child rows.
+  /// TIDAK membuat nota retur terpisah dan TIDAK ada refund tunai, karena
+  /// belum ada uang yang benar-benar masuk untuk dikembalikan — yang
+  /// berkurang adalah HUTANG-nya. Nota yang sudah LUNAS tetap memakai
+  /// [addReturnTransaction] (nota retur terpisah + refund) karena uang
+  /// memang sudah berpindah tangan.
+  ///
+  /// [returns] — pasangan (transactionItemId, qty yang diretur). Qty
+  /// otomatis di-clamp ke sisa qty baris tersebut; qty <= 0 diabaikan.
+  Future<void> returnUnpaidTransactionItems({
+    required String txId,
+    required List<({String transactionItemId, double qty})> returns,
+    required String kasirId,
+  }) async {
+    if (returns.isEmpty) return;
+    await transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null || tx.status == 'void') return;
+      if (tx.status != 'tempo' && tx.status != 'kurang_bayar') {
+        throw StateError(
+            'returnUnpaidTransactionItems hanya untuk nota belum lunas '
+            '(status saat ini: ${tx.status})');
+      }
+      final now = DateTime.now();
+      var anyReturned = false;
+
+      for (final r in returns) {
+        if (r.qty <= 0) continue;
+        final item = await (select(transactionItems)
+              ..where((t) => t.id.equals(r.transactionItemId)))
+            .getSingleOrNull();
+        if (item == null || item.transactionId != txId) continue;
+        final retQty = r.qty.clamp(0.0, item.qty);
+        if (retQty <= 0) continue;
+        anyReturned = true;
+
+        // Kembalikan stok — sama seperti retur nota lunas.
+        await _appendStock(
+          productUnitId: item.productUnitId,
+          qtyChange: retQty,
+          type: 'return_in',
+          referenceId: txId,
+          kasirId: kasirId,
+          note: 'Retur (nota belum lunas)',
+          now: now,
+        );
+
+        final newQty = item.qty - retQty;
+        if (newQty <= 0) {
+          // Seluruh qty baris ini diretur → baris hilang dari nota, persis
+          // seolah barang itu tidak pernah dijual.
+          await (delete(transactionItems)..where((t) => t.id.equals(item.id)))
+              .go();
+        } else {
+          final newSubtotal = (item.priceAtSale * newQty).round();
+          await (update(transactionItems)
+                ..where((t) => t.id.equals(item.id)))
+              .write(TransactionItemsCompanion(
+            qty: Value(newQty),
+            subtotal: Value(newSubtotal),
+          ));
+        }
+      }
+      if (!anyReturned) return;
+
+      // Jejak audit ringan di timeline pembayaran (amount 0 → tidak
+      // memengaruhi jumlah dibayar, murni catatan "kapan ada retur").
+      await into(transactionPayments).insert(TransactionPaymentsCompanion.insert(
+        id: const Uuid().v4(),
+        transactionId: txId,
+        amount: 0,
+        method: 'retur',
+        paidAt: Value(now),
+        kasirId: Value(kasirId),
+        note: const Value('Retur barang (nota belum lunas)'),
+      ));
+
+      // Rekonsiliasi total/paid/status dari child rows yang tersisa — sumber
+      // kebenaran tunggal yang sama dipakai tambah-belanjaan & sync.
+      await _reconcileTransactionTotals(txId);
+
+      // _reconcileTransactionTotals mempertahankan status 'tempo' selama
+      // paid == 0, walau totalnya sudah jadi 0 (seluruh isi nota diretur).
+      // Nota tanpa tagihan tersisa seharusnya tidak lagi "menggantung".
+      final after = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (after != null && after.total <= 0 && after.status != 'lunas') {
+        await (update(transactions)..where((t) => t.id.equals(txId))).write(
+            const TransactionsCompanion(
+                status: Value('lunas'), changeAmount: Value(0)));
+      }
+
+      await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
+    });
+  }
+
   // ───────────────────────── Customer debt ─────────────────────────
 
   /// Total hutang akumulatif pelanggan + jumlah nota yang belum lunas.

@@ -39,7 +39,148 @@ Future<void> _insertTx(AppDatabase db,
       ));
 }
 
+/// Sisipkan satu baris transaction_items minimal-valid.
+Future<void> _insertItem(AppDatabase db,
+    {required String id,
+    required String transactionId,
+    required String productUnitId,
+    required double qty,
+    required int priceAtSale,
+    String productId = 'P1'}) async {
+  await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
+        id: id,
+        transactionId: transactionId,
+        productId: productId,
+        productUnitId: productUnitId,
+        qty: qty,
+        priceAtSale: priceAtSale,
+        originalPrice: priceAtSale,
+        subtotal: (priceAtSale * qty).round(),
+      ));
+}
+
 void main() {
+  group('returnUnpaidTransactionItems', () {
+    test('retur sebagian pada nota tempo: qty & total berkurang, status tetap tempo',
+        () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _insertTx(db,
+          id: 'tx1', localId: 'K1-1', status: 'tempo', total: 30000, paid: 0, createdAtSec: 1700000000);
+      await _insertItem(db,
+          id: 'ti1', transactionId: 'tx1', productUnitId: 'U1', qty: 3, priceAtSale: 10000);
+
+      await db.returnUnpaidTransactionItems(
+        txId: 'tx1',
+        returns: [(transactionItemId: 'ti1', qty: 1)],
+        kasirId: 'K1',
+      );
+
+      final item = await (db.select(db.transactionItems)
+            ..where((t) => t.id.equals('ti1')))
+          .getSingle();
+      expect(item.qty, 2, reason: 'qty berkurang 1 (dari 3 jadi 2)');
+      expect(item.subtotal, 20000);
+
+      final tx = await (db.select(db.transactions)..where((t) => t.id.equals('tx1'))).getSingle();
+      expect(tx.total, 20000, reason: 'total nota ikut berkurang dari 30000');
+      expect(tx.paid, 0);
+      expect(tx.status, 'tempo', reason: 'masih ada sisa & belum dibayar → tetap tempo');
+
+      // Stok dikembalikan.
+      expect(await db.currentStock('U1'), 1,
+          reason: 'return_in menambah stok sebesar qty yang diretur');
+
+      // Jejak audit tercatat, amount 0 (bukan uang sungguhan).
+      final payments = await db.getPaymentsForTx('tx1');
+      expect(payments.length, 1);
+      expect(payments.single.amount, 0);
+      expect(payments.single.method, 'retur');
+
+      await db.close();
+    });
+
+    test('retur SELURUH qty baris: baris hilang dari nota, total 0 → status jadi lunas',
+        () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _insertTx(db,
+          id: 'tx1', localId: 'K1-1', status: 'tempo', total: 19400, paid: 0, createdAtSec: 1700000000);
+      await _insertItem(db,
+          id: 'ti1', transactionId: 'tx1', productUnitId: 'U1', qty: 1, priceAtSale: 19400);
+
+      await db.returnUnpaidTransactionItems(
+        txId: 'tx1',
+        returns: [(transactionItemId: 'ti1', qty: 1)],
+        kasirId: 'K1',
+      );
+
+      final items = await (db.select(db.transactionItems)
+            ..where((t) => t.transactionId.equals('tx1')))
+          .get();
+      expect(items, isEmpty, reason: 'baris yang diretur penuh hilang dari nota, seperti contoh referensi');
+
+      final tx = await (db.select(db.transactions)..where((t) => t.id.equals('tx1'))).getSingle();
+      expect(tx.total, 0);
+      expect(tx.status, 'lunas',
+          reason: 'tidak ada tagihan tersisa → tidak boleh menggantung sebagai tempo');
+    });
+
+    test('retur pada kurang_bayar yang paid > total baru → lunas dengan kembalian otomatis',
+        () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      // Total 100rb, sudah dibayar 50rb (kurang_bayar). Retur 60rb → total
+      // baru 40rb, tapi paid tetap 50rb (uang itu memang sudah masuk) →
+      // pelanggan jadi kelebihan bayar 10rb yang harus dikembalikan.
+      await _insertTx(db,
+          id: 'tx1', localId: 'K1-1', status: 'kurang_bayar', total: 100000, paid: 50000, createdAtSec: 1700000000);
+      await db.into(db.transactionPayments).insert(TransactionPaymentsCompanion.insert(
+            id: 'p1',
+            transactionId: 'tx1',
+            amount: 50000,
+            method: 'tunai',
+            paidAt: Value(DateTime.fromMillisecondsSinceEpoch(1700000000 * 1000)),
+          ));
+      await _insertItem(db,
+          id: 'ti1', transactionId: 'tx1', productUnitId: 'U1', qty: 6, priceAtSale: 10000);
+
+      await db.returnUnpaidTransactionItems(
+        txId: 'tx1',
+        returns: [(transactionItemId: 'ti1', qty: 6)],
+        kasirId: 'K1',
+      );
+
+      final tx = await (db.select(db.transactions)..where((t) => t.id.equals('tx1'))).getSingle();
+      expect(tx.total, 0);
+      expect(tx.paid, 50000, reason: 'uang yang sudah masuk tidak diutak-atik oleh retur');
+      expect(tx.status, 'lunas');
+      expect(tx.changeAmount, 50000,
+          reason: 'kelebihan bayar relatif terhadap total baru harus tampil sebagai kembalian');
+
+      await db.close();
+    });
+
+    test('ditolak untuk nota yang sudah lunas — pakai addReturnTransaction, bukan ini', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _insertTx(db,
+          id: 'tx1', localId: 'K1-1', status: 'lunas', total: 10000, paid: 10000, createdAtSec: 1700000000);
+      await _insertItem(db,
+          id: 'ti1', transactionId: 'tx1', productUnitId: 'U1', qty: 1, priceAtSale: 10000);
+
+      // Pass Future-nya langsung (bukan closure) + await expectLater, agar
+      // db.close() di bawah tidak jalan lebih dulu daripada Future ini
+      // benar-benar reject.
+      await expectLater(
+        db.returnUnpaidTransactionItems(
+          txId: 'tx1',
+          returns: [(transactionItemId: 'ti1', qty: 1)],
+          kasirId: 'K1',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await db.close();
+    });
+  });
+
   group('getReturnedQtyByUnit', () {
     test('retur yang di-void tidak dihitung — hanya retur aktif', () async {
       final db = AppDatabase(NativeDatabase.memory());

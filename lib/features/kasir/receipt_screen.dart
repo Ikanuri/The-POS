@@ -805,7 +805,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final db = ref.read(databaseProvider);
     final returnQty = <String, double>{for (final i in _items) i.id: 0};
 
-    // Qty yang sudah pernah diretur sebelumnya (cegah double-retur).
+    // Nota belum lunas (tempo/kurang_bayar): retur mengedit nota ASLI langsung
+    // (kurangi/hapus baris item, hutang berkurang) — tidak ada nota retur
+    // terpisah & tidak ada refund tunai, karena memang belum ada uang masuk.
+    // Nota sudah lunas: tetap nota retur terpisah + refund (uang sudah
+    // benar-benar berpindah).
+    final isUnpaidTx =
+        _tx!.status == 'tempo' || _tx!.status == 'kurang_bayar';
+
+    // Qty yang sudah pernah diretur sebelumnya (cegah double-retur). Untuk
+    // nota belum lunas ini selalu kosong (baris sudah dikurangi in-place),
+    // tapi aman dipanggil di kedua jalur.
     final alreadyReturned = await db.getReturnedQtyByUnit(_tx!.id);
 
     // Load metode pembayaran untuk pilihan refund.
@@ -904,48 +914,84 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       ),
                     ),
                     const Divider(),
-                    // Pilihan metode refund
-                    Row(
-                      children: [
-                        Text('Kembalikan via',
-                            style: TextStyle(
-                                fontSize: 13, color: scheme.onSurfaceVariant)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              isDense: true,
-                              value: paymentMethods
-                                      .any((m) => m.type == refundMethod)
-                                  ? refundMethod
-                                  : 'tunai',
-                              items: [
-                                ...paymentMethods.map((m) => DropdownMenuItem(
-                                      value: m.type,
-                                      child: Text(m.name,
-                                          style: const TextStyle(fontSize: 13)),
-                                    )),
-                                if (!paymentMethods
-                                    .any((m) => m.type == 'tunai'))
-                                  const DropdownMenuItem(
-                                    value: 'tunai',
-                                    child: Text('Tunai',
-                                        style: TextStyle(fontSize: 13)),
-                                  ),
-                              ],
-                              onChanged: (v) =>
-                                  setSheet(() => refundMethod = v ?? 'tunai'),
-                            ),
-                          ),
+                    if (isUnpaidTx)
+                      // Nota belum lunas: tidak ada uang yang dikembalikan —
+                      // jelaskan bahwa ini mengurangi hutang, bukan refund.
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: scheme.tertiaryContainer,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                size: 16, color: scheme.onTertiaryContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Nota ini belum lunas — retur akan mengurangi '
+                                'hutang, bukan uang tunai kembali.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onTertiaryContainer),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      // Pilihan metode refund — hanya relevan bila nota sudah
+                      // lunas (uang benar-benar perlu dikembalikan).
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Text('Kembalikan via',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: scheme.onSurfaceVariant)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  isDense: true,
+                                  value: paymentMethods
+                                          .any((m) => m.type == refundMethod)
+                                      ? refundMethod
+                                      : 'tunai',
+                                  items: [
+                                    ...paymentMethods.map((m) => DropdownMenuItem(
+                                          value: m.type,
+                                          child: Text(m.name,
+                                              style:
+                                                  const TextStyle(fontSize: 13)),
+                                        )),
+                                    if (!paymentMethods
+                                        .any((m) => m.type == 'tunai'))
+                                      const DropdownMenuItem(
+                                        value: 'tunai',
+                                        child: Text('Tunai',
+                                            style: TextStyle(fontSize: 13)),
+                                      ),
+                                  ],
+                                  onChanged: (v) => setSheet(
+                                      () => refundMethod = v ?? 'tunai'),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total Refund',
-                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                            isUnpaidTx
+                                ? 'Total Dikurangi dari Hutang'
+                                : 'Total Refund',
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
                         Text(formatRupiah(refund),
                             style: TextStyle(
                                 fontWeight: FontWeight.w700,
@@ -973,6 +1019,32 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     if (saved != true || !mounted) return;
 
     final device = ref.read(deviceProvider);
+
+    if (isUnpaidTx) {
+      // Nota belum lunas: edit nota asli langsung, tidak ada nota retur
+      // terpisah / refund tunai (lihat returnUnpaidTransactionItems).
+      final returns = [
+        for (final item in _items)
+          if ((returnQty[item.id] ?? 0) > 0)
+            (transactionItemId: item.id, qty: returnQty[item.id]!),
+      ];
+      if (returns.isEmpty) return;
+
+      await db.returnUnpaidTransactionItems(
+        txId: _tx!.id,
+        returns: returns,
+        kasirId: device.deviceCode,
+      );
+      // Nota asli berubah (item & total berkurang) — muat ulang agar layar
+      // tidak menampilkan data basi.
+      await _load();
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Retur dicatat, hutang berkurang, stok dikembalikan')));
+      }
+      return;
+    }
+
     final localId = await db.generateUniqueLocalId(device.deviceCode);
     if (!mounted) return;
 
