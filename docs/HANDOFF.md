@@ -4,15 +4,53 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 2 Juli 2026._
+_Terakhir diperbarui: 5 Juli 2026._
 
 ---
 
 ## Di Mana Kita Sekarang
 
-Sesi **deep debug + stress test + test integrasi**. `flutter analyze` bersih,
-31 test hijau (`test/widget_test.dart`, `test/migration_v7_test.dart`,
-`test/db_fixes_test.dart`), semua di-push.
+Sesi **deep debug + stress test + test integrasi + redesign retur hutang**.
+`flutter analyze` bersih, **35 test hijau** (`test/widget_test.dart`,
+`test/migration_v7_test.dart`, `test/db_fixes_test.dart`), semua di-push,
+CI (GitHub Actions "Build APK") sukses di semua commit.
+
+### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
+User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**
+seharusnya **mengedit nota asli langsung** (item hilang dari nota, total &
+hutang berkurang), **bukan** membuat nota retur terpisah dengan refund tunai
+(yang sebelumnya salah — toko seolah harus keluar uang tunai padahal pembeli
+belum pernah bayar sama sekali).
+
+Diimplementasikan sebagai method baru **`returnUnpaidTransactionItems`**
+(app_database.dart) — terpisah dari `addReturnTransaction` yang lama (tetap
+dipakai HANYA untuk nota **lunas**, karena di situ uang memang sudah
+berpindah tangan sungguhan). Method baru:
+- Mengurangi/menghapus baris `transaction_items` yang diretur langsung (baris
+  hilang total dari nota bila qty diretur penuh — persis seperti contoh
+  referensi).
+- Mengembalikan stok (`return_in`, sama seperti jalur lama).
+- **Tidak** membuat nota baru, **tidak** ada refund tunai.
+- Rekonsiliasi total/status pakai `_reconcileTransactionTotals` yang sudah
+  ada (dipakai bersama tambah-belanjaan & sync) — otomatis menangani kasus
+  kelebihan bayar relatif (paid > total baru) sebagai kembalian.
+- Guard eksplisit: throw `StateError` bila dipanggil pada nota berstatus
+  selain tempo/kurang_bayar (mencegah salah pakai).
+
+UI (`receipt_screen.dart` `_showReturSheet`) bercabang berdasar status nota:
+nota belum lunas → sembunyikan pilihan "Kembalikan via", tampilkan banner
+info "mengurangi hutang", label "Total Dikurangi dari Hutang"; nota lunas →
+UI lama (pilihan metode refund) tidak berubah.
+
+**4 test baru** di `db_fixes_test.dart` membuktikan: retur sebagian (status
+tetap tempo), retur penuh (status→lunas, baris hilang), retur yang membuat
+overpay relatif (kembalian otomatis benar), dan guard menolak nota lunas.
+
+Poin diskusi lama "Retur atas nota tempo/kurang-bayar..." di bawah **sudah
+selesai/resolved** lewat perubahan ini — dihapus dari daftar "sengaja belum
+diperbaiki".
+
+### Sebelumnya di sesi ini (masih berlaku)
 
 **Test integrasi Drift nyata** (bukan simulasi/reimplementasi) membuktikan:
 - Migrasi schema v6→v7 (indeks `transaction_payments`) benar-benar jalan di
@@ -79,9 +117,6 @@ Sebelumnya (commit `16ad934`) 10 kelompok bug fungsional diperbaiki:
   atribusi varian per-baris — jangan disentuh tanpa keputusan user.
 - Tombol minus di kartu produk (`_decrementProduct`) selalu mengurangi baris
   satuan PERTAMA bila produk ada di keranjang dengan >1 satuan.
-- Retur atas nota tempo/kurang-bayar mencatat refund tunai penuh tanpa
-  mengurangi hutang nota asal (secara akuntansi konsisten, tapi alurnya
-  mungkin tak sesuai harapan kasir — keputusan bisnis).
 - Sync saat ini selalu full-dump (`since` = epoch, satu-satunya caller di
   sync_screen tidak mengirim `since`) — filter incremental di `dumpSince`
   sudah dibetulkan dan siap bila kelak dibuat incremental.

@@ -8,6 +8,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-05
+
+- `0dff97e` — feat(kasir): retur nota belum lunas kini mengurangi hutang langsung
+
 ## 2026-07-02
 
 - `61c7455` — perf(db): indeks transaction_payments(transaction_id) — cegah O(n^2) di startup (schema v7)

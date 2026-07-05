@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 Juli 2026
+
+### ✨ Fitur Baru
+- **Retur untuk nota belum lunas (hutang) kini lebih masuk akal.** Kalau
+  pelanggan mengembalikan barang dari nota yang **belum dibayar sama sekali
+  atau baru dibayar sebagian**, aplikasi sekarang langsung **mengurangi
+  hutangnya** — bukan lagi berpura-pura ada uang tunai yang harus
+  dikembalikan. Barang yang diretur langsung hilang dari nota itu, totalnya
+  otomatis berkurang. Untuk nota yang **sudah lunas**, cara retur tetap sama
+  seperti sebelumnya (nota retur terpisah + uang kembali beneran), karena
+  uangnya memang sudah diterima toko.
+
+---
+
 ## 2 Juli 2026
 
 ### 🛠️ Perbaikan yang Terasa
