@@ -99,7 +99,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -111,6 +111,12 @@ class AppDatabase extends _$AppDatabase {
     'CREATE INDEX IF NOT EXISTS idx_tx_status ON transactions(status, created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_ti_transaction ON transaction_items(transaction_id)',
     'CREATE INDEX IF NOT EXISTS idx_ti_product ON transaction_items(product_id)',
+    // Tanpa indeks ini, query pembayaran per-transaksi (getPaymentsForTx,
+    // rekonsiliasi total, dan anti-join backfillMissingPayments di startup)
+    // memindai seluruh tabel → O(n^2) yang makin berat seiring data menua.
+    'CREATE INDEX IF NOT EXISTS idx_tp_transaction ON transaction_payments(transaction_id)',
+    // Retur & timeline pembayaran memfilter berdasarkan waktu bayar.
+    'CREATE INDEX IF NOT EXISTS idx_tp_paid_at ON transaction_payments(paid_at)',
     'CREATE INDEX IF NOT EXISTS idx_stock_ledger_unit ON stock_ledger(product_unit_id, created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_stock_ledger_created ON stock_ledger(created_at DESC)',
   ];
@@ -149,6 +155,15 @@ class AppDatabase extends _$AppDatabase {
             // Tambah belanjaan ke transaksi yang sudah dibayar: kolom penanda
             // waktu item susulan.
             await m.addColumn(transactionItems, transactionItems.addedAt);
+          }
+          if (from < 7) {
+            // Indeks pembayaran per-transaksi (idx_tp_*). Krusial: tanpa ini
+            // query pembayaran O(n^2) di DB lama yang sudah menumpuk data.
+            // Jalankan ulang seluruh daftar (idempotent) agar instalasi lama
+            // ikut mendapat indeks apa pun yang ditambahkan belakangan.
+            for (final stmt in _performanceIndexes) {
+              await customStatement(stmt);
+            }
           }
         },
         beforeOpen: (details) async {
