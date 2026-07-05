@@ -11,6 +11,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 2 Juli 2026
 
 ### 🛠️ Perbaikan yang Terasa
+- **Aplikasi tetap cepat dibuka meski data sudah menumpuk tahunan.** Ditemukan
+  lewat uji beban: pembukaan aplikasi bisa melambat drastis (hingga hang) saat
+  jumlah transaksi membesar. Sudah diperbaiki — startup tetap ringan bahkan di
+  atas satu juta transaksi.
 - **QRIS kini tampil sebagai kode QR sungguhan** di layar pembayaran — pembeli
   bisa langsung scan. Sebelumnya hanya muncul tulisan kode mentah yang tidak
   bisa discan.

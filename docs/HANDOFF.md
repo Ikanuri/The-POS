@@ -10,9 +10,24 @@ _Terakhir diperbarui: 2 Juli 2026._
 
 ## Di Mana Kita Sekarang
 
-Baru menyelesaikan sesi **deep debug** menyeluruh (audit seluruh codebase).
-10 kelompok bug diperbaiki dalam satu commit (`16ad934`), `flutter analyze`
-bersih, semua di-push. Perbaikan terpenting:
+Sesi **deep debug + stress test**. `flutter analyze` bersih, semua di-push.
+
+**Hasil stress test (paling penting):**
+- **Aritmatika AMAN untuk skala waktu tak realistis.** Uang `int64` overflow di
+  ~1 miliar tahun (toko ramai); presisi Rp-satuan (2^53) di ~987 ribu tahun.
+  Stok `double` running-balance: drift 0 untuk pecahan terminating (0.25 kg);
+  ~0.02 gram setelah 1 juta penjualan 0.1. **Bukan faktor pembatas.**
+- **Faktor pembatas = PERFORMA, bukan korektnes.** Ditemukan cacat serius:
+  tidak ada indeks pada `transaction_payments(transaction_id)` → anti-join
+  `backfillMissingPayments` (jalan TIAP startup) O(n²). Terukur 90k tx = 156
+  detik. **Diperbaiki di `61c7455`** (indeks + schema v7): 90k=28ms,
+  1,1jt=368ms. Ini yang menentukan "berapa lama data stabil".
+- **Jawaban durability:** dengan fix v7 + tutup buku tahunan, praktis stabil
+  tanpa batas. Tanpa tutup buku, startup melambat linear (~O(total tx)) dari
+  dua backfill-scan; nyaman s/d ~1-2 juta transaksi (~beberapa tahun toko
+  ramai), lalu startup mulai terasa (ratusan ms).
+
+Sebelumnya (commit `16ad934`) 10 kelompok bug fungsional diperbaiki:
 
 - **Tutup buku** tak lagi me-reset stok produk yang seluruh riwayat ledger-nya
   ada di tahun terarsip (saldo dibawa via entri `adjustment` baru).
@@ -32,6 +47,15 @@ bersih, semua di-push. Perbaikan terpenting:
   `getReturnedQtyByUnit`; draft katalog tak ikut tersapu pembersihan keranjang
   24 jam; hapus induk dari modal entri ikut membersihkan varian yatim; total
   kartu pesanan ditahan pakai `cartTotalOf` (helper baru di cart_provider).
+
+## Kandidat Optimasi Durability Berikutnya (belum dikerjakan)
+- **Backfill tiap startup masih O(n) full-scan.** `backfillMissingSummaries`
+  (DISTINCT-date scan: 42ms@90k, 180ms@365k) & `backfillMissingPayments`
+  (kini pakai indeks, tapi tetap men-scan semua tx paid). Idealnya pakai
+  watermark ('last_backfill_ts') agar hanya memproses data baru. Belum
+  mendesak karena tutup buku mereset ukuran; indeks sudah menutup O(n²).
+- `getReturnedQtyByUnit` scan `transactions.internal_note` tanpa indeks —
+  jarang (hanya saat buka sheet retur), prioritas rendah.
 
 ## Temuan yang SENGAJA Belum Diperbaiki (kandidat diskusi)
 
