@@ -57,12 +57,16 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
 
     setState(() => _busy = true);
     try {
-      final device = ref.read(deviceProvider);
       final db = ref.read(databaseProvider);
-      final bytes = await DbExportService.export(
+      // exportPortable (BPOP2): key hanya dari password, TIDAK diikat
+      // storeKey toko ini. Backup harus bisa direstore di device/toko lain
+      // (mis. HP baru setelah HP lama hilang/rusak) — kalau diikat storeKey
+      // toko asal (format BPOS1 lama), restore di toko/device manapun selain
+      // toko asal PASTI gagal "password salah" walau password benar, karena
+      // storeKey toko tujuan (acak, di-generate ulang tiap setup) tidak
+      // mungkin sama dengan storeKey toko asal.
+      final bytes = await DbExportService.exportPortable(
         db: db,
-        storeKey: device.storeKey!,
-        storeUuid: device.storeUuid!,
         password: password,
       );
 
@@ -146,7 +150,12 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
       );
       await DbExportService.restore(db: db, payload: payload);
       if (!mounted) return;
-      showSuccess('Data berhasil di-restore');
+      // Sebagian layar (mis. Ringkasan, grup produk) memakai cache sekali-
+      // ambil yang tidak auto-refresh dari perubahan DB mendadak sebesar ini
+      // (beda dengan daftar produk/pelanggan yang live-update). Sarankan
+      // restart agar semua layar pasti konsisten dengan data baru.
+      showSuccess(
+          'Data berhasil di-restore. Tutup & buka ulang aplikasi agar semua layar menampilkan data terbaru.');
     } on BackupException catch (e) {
       if (!mounted) return;
       showError(e.message);

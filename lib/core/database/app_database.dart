@@ -1828,13 +1828,23 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> restoreFromDump(
       Map<String, List<Map<String, Object?>>> dump) async {
+    // customStatement/customInsert lewat raw SQL tidak diketahui Drift tabel
+    // mana yang berubah, jadi StreamProvider (mis. daftar produk/pelanggan)
+    // yang bergantung pada .watch() TIDAK auto-refresh walau data sungguhan
+    // sudah ganti total — restore terlihat "tidak berdampak" di UI padahal DB
+    // sudah benar. Param `updates:` memberi tahu Drift tabel yang terpengaruh.
+    final tablesByName = {for (final t in allTables) t.entityName: t};
     await transaction(() async {
       // Delete children before parents to avoid FK violations.
       for (final tableName in _allTables.reversed) {
-        await customStatement('DELETE FROM "$tableName"');
+        final table = tablesByName[tableName];
+        await customUpdate('DELETE FROM "$tableName"',
+            updates: table == null ? null : {table},
+            updateKind: UpdateKind.delete);
       }
       // Insert in forward (parent-first) order.
       for (final tableName in _allTables) {
+        final table = tablesByName[tableName];
         final rows = dump[tableName] ?? [];
         for (final row in rows) {
           if (row.isEmpty) continue;
@@ -1844,6 +1854,7 @@ class AppDatabase extends _$AppDatabase {
           await customInsert(
             'INSERT OR REPLACE INTO "$tableName" ($cols) VALUES ($placeholders)',
             variables: variables,
+            updates: table == null ? null : {table},
           );
         }
       }
