@@ -4,7 +4,7 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 6 Juli 2026 (lanjutan 6)._
+_Terakhir diperbarui: 6 Juli 2026 (lanjutan 7)._
 
 ---
 
@@ -12,12 +12,13 @@ _Terakhir diperbarui: 6 Juli 2026 (lanjutan 6)._
 
 Sesi **deep debug + stress test + test integrasi + redesign retur hutang +
 test Tier 1, 2 & 3 (termasuk widget-test harness) + feedback device Tier 4
-dari user**. `flutter analyze` bersih, **80 test hijau** (`test/widget_test.dart`,
+dari user (termasuk 2 bug backup/restore NYATA yang ditemukan & diperbaiki)**.
+`flutter analyze` bersih, **83 test hijau** (`test/widget_test.dart`,
 `test/migration_v7_test.dart`, `test/db_fixes_test.dart`,
 `test/transaction_lifecycle_test.dart`, `test/db_tier2_test.dart`,
 `test/discount_allocation_test.dart`, `test/chart_utils_test.dart`,
 `test/receipt_retur_widget_test.dart`, `test/tx_history_row_widget_test.dart`,
-`test/receipt_kasir_name_overflow_test.dart`).
+`test/receipt_kasir_name_overflow_test.dart`, `test/backup_restore_bug_test.dart`).
 
 ### Feedback device Tier 4 dari user (6 poin ditest langsung di HP)
 User meng-update (bukan uninstall — data lama tetap ada, sudah dicek tidak
@@ -39,7 +40,43 @@ ada yang hilang) dan mencoba 6 fitur:
    user sempat bingung kenapa status tidak "lunas semua" karena info sisa
    hutang / kembalian cuma ada di dalam struk, tidak di baris Riwayat
    Transaksi. → **Ditindaklanjuti sesi ini, lihat di bawah.**
-6. **Backup/restore** — belum ditest user, menyusul nanti.
+6. **Backup/restore** — DITEST, **2 BUG NYATA ditemukan & sudah diperbaiki
+   sesi ini** (commit `b97ffcb`), lihat detail di bawah.
+
+### 2 bug backup/restore ditemukan user via test device — diperbaiki commit `b97ffcb`
+User test: setup fresh device A → backup (1 produk/1 pegawai/1 pelanggan,
+password simpel) → restore di fresh device B → gagal "password salah atau
+data rusak". Juga: restore ulang di device A sendiri bilang "berhasil" tapi
+perubahan data (pelanggan dihapus/ditambah setelah backup) tidak ter-revert.
+
+**Bug 1 (blocking, cross-device restore MUSTAHIL selalu gagal)**:
+`backup_screen.dart` memakai `DbExportService.export()` (format BPOS1) yang
+menurunkan kunci file dari **storeKey TOKO ASAL + password**. `storeKey`
+acak 256-bit di-generate ULANG setiap kali setup toko baru — jadi device
+tujuan (fresh install = storeKey baru) TIDAK MUNGKIN menghasilkan kunci
+yang sama walau password 100% benar. Ironisnya teks UI sudah menjanjikan
+"file ini hanya bisa dibuka dengan password yang Anda tentukan" — janji itu
+cuma benar untuk format portable (`exportPortable`/BPOP2, kunci HANYA dari
+password) yang sudah ada di `db_export_service.dart` tapi TIDAK PERNAH
+dipanggil dari UI manapun (dead code). Fix: `backup_screen.dart` sekarang
+memanggil `exportPortable()`, bukan `export()`.
+
+**Bug 2 (silent, restore "berhasil" tapi UI tidak berubah)**: `restoreFromDump`
+menulis DELETE via `customStatement` dan INSERT via `customInsert` TANPA
+parameter `updates:` — raw SQL lewat Drift TIDAK otomatis diketahui tabel
+mana yang berubah. Semua `StreamProvider` yang bergantung pada `.watch()`
+(daftar produk, pelanggan, pegawai, kasir_permissions, payment_methods —
+konvensi paling umum di app ini) TIDAK ter-notifikasi sama sekali, walau
+DB sungguhan sudah benar-benar berubah. Fix: DELETE pakai `customUpdate`
+(bukan `customStatement`, yang sama sekali tak punya param `updates:`) +
+setiap `customInsert` diberi `updates: {table}` (via lookup `allTables`
+by `entityName`). Provider berbasis `FutureProvider` sekali-ambil (mis.
+Ringkasan, grup produk) tetap tidak auto-refresh — untuk itu pesan sukses
+sekarang menyarankan tutup-buka ulang aplikasi.
+
+3 test baru (`test/backup_restore_bug_test.dart`) membuktikan kedua fix,
+masing-masing DIVERIFIKASI benar-benar gagal di kode lama sebelum fix
+diterapkan (bukan cuma "lolos kebetulan").
 
 ### Fitur baru sesi ini: Sisa/Kembali langsung di baris Riwayat Transaksi — commit `79aa836`
 Respons langsung ke poin 5 di atas. `tx_history_sheet.dart` `_TxRow`:
@@ -117,18 +154,18 @@ menangkap (masalah tata letak visual).
     `_QrisDisplay` di payment_screen.dart (butuh setup cart+payment method
     lebih berat), dan chart harian/per-jam (opsional, karena
     `clampedBarHeight` sendiri sudah dites tuntas secara matematis).
-- **Tier 4** — ✅ Dikerjakan user di device asli, 6 poin ditest & dilaporkan
+- **Tier 4** — ✅ SELESAI, 6/6 poin ditest user & ditindaklanjuti
   (lihat "Feedback device Tier 4" di atas). 1 poin (Sisa/Kembali di Riwayat
-  Transaksi) ditindaklanjuti jadi fitur baru; 1 poin (overflow nama kasir)
-  diverifikasi lewat widget test otomatis (bukan device asli). 1 poin masih
-  menggantung di sisi user: backup/restore (belum ditest).
+  Transaksi) jadi fitur baru; 1 poin (overflow nama kasir) diverifikasi
+  lewat widget test otomatis; 1 poin (backup/restore) menemukan **2 bug
+  nyata yang sudah diperbaiki** (lihat "2 bug backup/restore" di atas).
 
-Kalau lanjut sesi berikutnya: tanyakan apakah user sudah sempat test
-backup/restore (satu-satunya poin dari feedback Tier 4 yang masih
-menggantung), atau lanjut widget test untuk screen lain (QRIS) bila
-diminta. Versi (`pubspec.yaml`) masih `2.0.0+1` — belum dinaikkan, belum
-ada PR ke `main` (branch ini ~70 commit di depan), keduanya menunggu
-keputusan user.
+Kalau lanjut sesi berikutnya: semua 6 poin feedback Tier 4 sudah
+ditindaklanjuti — kalau user tidak punya temuan device baru, kandidat
+lanjutan adalah widget test untuk screen lain (QRIS) atau mulai bahas
+kesiapan rilis. Versi (`pubspec.yaml`) masih `2.0.0+1` — belum dinaikkan,
+belum ada PR ke `main` (branch ini ~70+ commit di depan), keduanya
+menunggu keputusan user.
 
 ### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
 User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**

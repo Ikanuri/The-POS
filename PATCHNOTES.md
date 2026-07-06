@@ -10,6 +10,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 6 Juli 2026
 
+### 🛠️ Perbaikan yang Terasa
+- **Restore backup ke HP/toko baru kini benar-benar bisa.** Sebelumnya,
+  memulihkan file backup (`.berkahpos`) di HP lain atau setelah install ulang
+  aplikasi SELALU gagal dengan pesan "password salah atau data rusak" —
+  walau passwordnya sudah benar. Sekarang file backup bisa dibuka di
+  device/toko manapun asal passwordnya benar, sesuai yang sudah dijanjikan.
+- **Restore backup di HP yang sama kini benar-benar mengubah data.**
+  Sebelumnya aplikasi bilang "Data berhasil di-restore" tapi layar (mis.
+  daftar pelanggan) tidak ikut ter-update — data lama masih tampil sampai
+  aplikasi ditutup & dibuka ulang manual. Sekarang layar langsung
+  menampilkan data hasil restore. Untuk beberapa layar (Ringkasan, grup
+  produk) aplikasi tetap menyarankan tutup-buka ulang agar 100% konsisten.
+
 ### ✨ Fitur Baru
 - **Sisa hutang & kembalian kini langsung terlihat di Riwayat Transaksi.**
   Sebelumnya harus buka struk dulu baru sadar nota belum lunas penuh atau ada
