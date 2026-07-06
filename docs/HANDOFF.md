@@ -4,7 +4,7 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 6 Juli 2026 (lanjutan 5)._
+_Terakhir diperbarui: 6 Juli 2026 (lanjutan 6)._
 
 ---
 
@@ -12,19 +12,25 @@ _Terakhir diperbarui: 6 Juli 2026 (lanjutan 5)._
 
 Sesi **deep debug + stress test + test integrasi + redesign retur hutang +
 test Tier 1, 2 & 3 (termasuk widget-test harness) + feedback device Tier 4
-dari user**. `flutter analyze` bersih, **79 test hijau** (`test/widget_test.dart`,
+dari user**. `flutter analyze` bersih, **80 test hijau** (`test/widget_test.dart`,
 `test/migration_v7_test.dart`, `test/db_fixes_test.dart`,
 `test/transaction_lifecycle_test.dart`, `test/db_tier2_test.dart`,
 `test/discount_allocation_test.dart`, `test/chart_utils_test.dart`,
-`test/receipt_retur_widget_test.dart`, `test/tx_history_row_widget_test.dart`).
+`test/receipt_retur_widget_test.dart`, `test/tx_history_row_widget_test.dart`,
+`test/receipt_kasir_name_overflow_test.dart`).
 
 ### Feedback device Tier 4 dari user (6 poin ditest langsung di HP)
 User meng-update (bukan uninstall — data lama tetap ada, sudah dicek tidak
 ada yang hilang) dan mencoba 6 fitur:
 1. **Retur** — bekerja baik.
-2. **Overflow nama kasir panjang** (baris "Kasir: ..." di struk) — belum
-   sempat ditest user di device; kalau nanti ditemukan masalah akan
-   dilaporkan. (Kode-nya sendiri sudah dibetulkan sesi lalu, `7307740`.)
+2. **Overflow nama kasir panjang** (baris "Kasir: ..." di struk) — user
+   belum sempat test di device (ganti nama device butuh setup ulang,
+   berisiko ganggu pairing asli). **Diverifikasi sesi ini via widget test**
+   (`test/receipt_kasir_name_overflow_test.dart`, commit `a0c4c6c`) memakai
+   `DeviceIdentity` palsu bernama sangat panjang — dikonfirmasi TIDAK
+   overflow (fix `7307740` sudah benar). Test-nya sendiri divalidasi
+   benar-benar mendeteksi regresi (sempat direvert sementara ke kode lama,
+   terbukti gagal dengan RenderFlex overflow 773px, sebelum dikembalikan).
 3. **Produk bervarian di struk** — dikonfirmasi benar via screenshot (Pop
    Ice + varian Coklat tampil dengan qty & harga benar).
 4. **QRIS** — dikonfirmasi benar via screenshot (render QR sungguhan, bisa
@@ -113,14 +119,16 @@ menangkap (masalah tata letak visual).
     `clampedBarHeight` sendiri sudah dites tuntas secara matematis).
 - **Tier 4** — ✅ Dikerjakan user di device asli, 6 poin ditest & dilaporkan
   (lihat "Feedback device Tier 4" di atas). 1 poin (Sisa/Kembali di Riwayat
-  Transaksi) sudah ditindaklanjuti jadi fitur baru sesi ini. 2 poin masih
-  menggantung di sisi user: overflow nama kasir panjang (belum sempat
-  ditest), backup/restore (belum ditest).
+  Transaksi) ditindaklanjuti jadi fitur baru; 1 poin (overflow nama kasir)
+  diverifikasi lewat widget test otomatis (bukan device asli). 1 poin masih
+  menggantung di sisi user: backup/restore (belum ditest).
 
 Kalau lanjut sesi berikutnya: tanyakan apakah user sudah sempat test
-overflow nama kasir panjang & backup/restore (2 poin dari feedback Tier 4
-yang masih menggantung), atau lanjut widget test untuk screen lain (QRIS)
-bila diminta.
+backup/restore (satu-satunya poin dari feedback Tier 4 yang masih
+menggantung), atau lanjut widget test untuk screen lain (QRIS) bila
+diminta. Versi (`pubspec.yaml`) masih `2.0.0+1` — belum dinaikkan, belum
+ada PR ke `main` (branch ini ~70 commit di depan), keduanya menunggu
+keputusan user.
 
 ### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
 User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**
