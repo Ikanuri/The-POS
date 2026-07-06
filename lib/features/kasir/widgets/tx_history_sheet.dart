@@ -234,13 +234,16 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Text(
-                  _selectMode
-                      ? '${_selectedIds.length} nota dipilih'
-                      : 'Riwayat Transaksi',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: Text(
+                    _selectMode
+                        ? '${_selectedIds.length} nota dipilih'
+                        : 'Riwayat Transaksi',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
-                const Spacer(),
                 if (_selectMode)
                   TextButton(
                     onPressed: _exitSelectMode,
@@ -620,6 +623,7 @@ class _TxRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isHutang = tx.status == 'kurang_bayar' || tx.status == 'tempo';
     final isRegistered = tx.customerId != null;
     final time =
@@ -733,6 +737,29 @@ class _TxRow extends ConsumerWidget {
                           : scheme.onPrimaryContainer,
                     ),
                   ),
+                ),
+              // Sisa/kembalian langsung terlihat tanpa perlu buka struk atau
+              // expand baris — dulu pengguna harus buka struk dulu baru sadar
+              // nota belum lunas penuh / ada kembalian menggantung. fontSize
+              // kecil + height rapat (bukan default ~1.4) agar tetap muat
+              // dalam tinggi trailing ListTile(dense:true) yang sudah 2 baris.
+              if (!_isRetur && isHutang)
+                Text(
+                  'Sisa ${formatRupiah(tx.total - tx.paid)}',
+                  style: TextStyle(
+                      fontSize: 9,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.debtFg(isDark)),
+                )
+              else if (!_isRetur && tx.changeAmount > 0)
+                Text(
+                  'Kembali ${formatRupiah(tx.changeAmount)}',
+                  style: TextStyle(
+                      fontSize: 9,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.changeFg(isDark)),
                 ),
             ],
           ),

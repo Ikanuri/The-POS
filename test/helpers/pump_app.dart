@@ -29,6 +29,12 @@ import 'package:the_pos/core/theme/app_theme.dart';
 /// ter-build sama sekali sehingga `find.text(...)` tidak akan menemukannya,
 /// padahal bukan itu yang mau diuji. Perbesar tinggi surface menghindari
 /// kelas masalah ini tanpa perlu scroll manual di tiap test.
+///
+/// [child] dibungkus `Scaffold` — beberapa widget (mis. `TxHistorySheet`)
+/// didesain untuk dipakai di dalam `showModalBottomSheet` yang secara
+/// otomatis menyediakan ancestor `Material` (dibutuhkan mis. oleh
+/// `TextField`); tanpa Scaffold di sini, widget seperti itu akan error
+/// "No Material widget found" walau di app sungguhan tidak pernah bermasalah.
 Future<void> pumpWithFakeApp(
   WidgetTester tester, {
   required AppDatabase db,
@@ -58,9 +64,11 @@ Future<void> pumpWithFakeApp(
       ],
       child: MaterialApp(
         theme: AppTheme.light(),
-        home: child,
+        home: Scaffold(body: child),
       ),
     ),
   );
+  // Beberapa screen memuat data lewat rantai FutureProvider (mis.
+  // _txHistoryProvider yang bergantung pada databaseProvider).
   await tester.pumpAndSettle();
 }
