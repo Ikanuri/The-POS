@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/chart_utils.dart';
 
 final _ringkasanProvider = FutureProvider<_RingkasanData>((ref) async {
   final db = ref.watch(databaseProvider);
@@ -298,9 +299,7 @@ class _HourlyChart extends StatelessWidget {
             children: hourly.asMap().entries.map((e) {
               final h = e.key;
               final v = e.value;
-              // Total per jam bisa negatif (jam yang didominasi retur) —
-              // clamp agar tinggi Container tidak negatif (crash).
-              final height = max > 0 ? (v.clamp(0, max) / max * 70) : 0.0;
+              final height = clampedBarHeight(v, max, emptyHeight: 0);
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 1),

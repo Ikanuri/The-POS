@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/chart_utils.dart';
 
 final _ringkasanTabProvider =
     FutureProvider.family<_RingkasanTabData, DateTimeRange>((ref, range) async {
@@ -264,10 +265,7 @@ class _DailyChart extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: sorted.map((e) {
-              // Omzet harian bisa negatif (hari yang didominasi retur) —
-              // clamp agar Container tidak menerima tinggi negatif (crash).
-              final h =
-                  max > 0 ? (e.value.clamp(0, max) / max * 70) : 2.0;
+              final h = clampedBarHeight(e.value, max);
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),

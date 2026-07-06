@@ -15,6 +15,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/chart_utils.dart';
 
 // Ekspor laporan PER KATEGORI (tab). Setiap tab punya PDF & XLSX sendiri.
 // Grafik di PDF = tangkapan widget chart asli aplikasi (identik tampilannya).
@@ -772,10 +773,7 @@ class _DailyBarChart extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: sorted.map((e) {
-                // Omzet harian bisa negatif (hari didominasi retur) — clamp
-                // agar Container tidak menerima tinggi negatif (crash).
-                final h =
-                    max > 0 ? (e.value.clamp(0, max) / max * 70) : 2.0;
+                final h = clampedBarHeight(e.value, max);
                 return Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
