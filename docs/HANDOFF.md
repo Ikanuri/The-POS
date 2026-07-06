@@ -4,37 +4,42 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 5 Juli 2026 (lanjutan)._
+_Terakhir diperbarui: 5 Juli 2026 (lanjutan 2)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
 Sesi **deep debug + stress test + test integrasi + redesign retur hutang +
-test Tier 1**. `flutter analyze` bersih, **45 test hijau**
+test Tier 1 & 2**. `flutter analyze` bersih, **60 test hijau**
 (`test/widget_test.dart`, `test/migration_v7_test.dart`,
-`test/db_fixes_test.dart`, `test/transaction_lifecycle_test.dart`), semua
-di-push, CI (GitHub Actions "Build APK") sukses di semua commit.
+`test/db_fixes_test.dart`, `test/transaction_lifecycle_test.dart`,
+`test/db_tier2_test.dart`), semua di-push, CI (GitHub Actions "Build APK")
+sukses di semua commit.
 
-### Diskusi kesiapan production — peta test yang masih kurang
-User bertanya "test apa saja yang perlu sebelum production". Dipetakan 4
-tier berdasar risiko:
-- **Tier 1 (kritis, tersentuh tiap transaksi)** — SUDAH SELESAI di commit
-  `9b9b3cc`: `saveTransaction`, `voidTransaction`, `addReturnTransaction`
-  (jalur nota lunas), `settleMergedDebt`. Sebelumnya nol test padahal
-  fungsi paling sering dieksekusi di seluruh app.
-- **Tier 2 (penting, lebih jarang)** — BELUM: `PriceService.resolvePrice`
-  (pemilihan tier harga), `mergeRows` jalur master-data (last-write-wins) &
-  dedup price_tiers, `restoreFromDump` (mutasi DB penuh, baru
-  enkripsi/dekripsinya yang dites), `generateUniqueLocalId`.
+### Diskusi kesiapan production — peta test (4 tier berdasar risiko)
+- **Tier 1 (kritis, tersentuh tiap transaksi)** — ✅ SELESAI (`9b9b3cc`):
+  `saveTransaction`, `voidTransaction`, `addReturnTransaction` (nota lunas),
+  `settleMergedDebt`.
+- **Tier 2 (penting, lebih jarang)** — ✅ SELESAI (`3a7ce6b`):
+  `PriceService.resolvePrice`, `mergeRows` master-data LWW & dedup
+  price_tiers, `restoreFromDump`, `generateUniqueLocalId`.
 - **Tier 3 (nice-to-have)** — BELUM: alokasi diskon proporsional di
   `payment_screen.dart` (perlu diekstrak jadi pure function dulu baru bisa
-  dites), widget test (nol widget test sama sekali sejauh ini — semua test
-  murni logika/DB, belum ada yang "memompa" widget tree Flutter).
+  dites — saat ini logika pembulatan diskon terkubur di dalam method privat
+  `_confirm`/`_confirmAddItems` StatefulWidget), widget test (nol widget
+  test sama sekali sejauh ini — 60 test semuanya murni logika/DB, belum ada
+  yang benar-benar "memompa" widget tree Flutter — jadi fix visual sesi ini
+  seperti render QRIS, clamp chart, banner retur belum lunas, TIDAK
+  tervalidasi otomatis, hanya lewat `flutter analyze` + baca kode).
 - **Tier 4 (tak bisa diotomasi dari sini)** — install APK di device asli +
   migrasi di atas DB produksi asli, printer Bluetooth, scanner kamera.
 
-Kalau lanjut sesi berikutnya dengan topik serupa, mulai dari Tier 2.
+Kalau lanjut sesi berikutnya dengan topik serupa, mulai dari Tier 3.
+Catatan: ekstraksi logika diskon payment_screen ke pure function adalah
+perubahan struktur kecil (bukan cuma nambah test) — pastikan behavior
+persis sama sebelum & sesudah ekstraksi (idealnya tulis test dulu terhadap
+kode lama via characterization test, baru ekstrak).
 
 ### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
 User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**
