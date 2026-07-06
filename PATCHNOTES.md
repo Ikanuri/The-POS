@@ -11,6 +11,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 6 Juli 2026
 
 ### 🛠️ Perbaikan yang Terasa
+- **Riwayat Transaksi kini langsung menampilkan transaksi terbaru** setiap
+  dibuka — sebelumnya kadang perlu tekan tombol refresh dulu supaya
+  transaksi yang baru saja dibuat kelihatan.
 - **Restore backup ke HP/toko baru kini benar-benar bisa.** Sebelumnya,
   memulihkan file backup (`.berkahpos`) di HP lain atau setelah install ulang
   aplikasi SELALU gagal dengan pesan "password salah atau data rusak" —

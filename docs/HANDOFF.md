@@ -4,7 +4,7 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 6 Juli 2026 (lanjutan 7)._
+_Terakhir diperbarui: 6 Juli 2026 (lanjutan 8)._
 
 ---
 
@@ -12,13 +12,60 @@ _Terakhir diperbarui: 6 Juli 2026 (lanjutan 7)._
 
 Sesi **deep debug + stress test + test integrasi + redesign retur hutang +
 test Tier 1, 2 & 3 (termasuk widget-test harness) + feedback device Tier 4
-dari user (termasuk 2 bug backup/restore NYATA yang ditemukan & diperbaiki)**.
-`flutter analyze` bersih, **83 test hijau** (`test/widget_test.dart`,
-`test/migration_v7_test.dart`, `test/db_fixes_test.dart`,
-`test/transaction_lifecycle_test.dart`, `test/db_tier2_test.dart`,
-`test/discount_allocation_test.dart`, `test/chart_utils_test.dart`,
-`test/receipt_retur_widget_test.dart`, `test/tx_history_row_widget_test.dart`,
-`test/receipt_kasir_name_overflow_test.dart`, `test/backup_restore_bug_test.dart`).
+dari user (termasuk 2 bug backup/restore NYATA) + Riwayat Transaksi Opsi C +
+optimasi pencarian produk + incremental sync watermark**. `flutter analyze`
+bersih, **91 test hijau** (`test/widget_test.dart`, `test/migration_v7_test.dart`,
+`test/db_fixes_test.dart`, `test/transaction_lifecycle_test.dart`,
+`test/db_tier2_test.dart`, `test/discount_allocation_test.dart`,
+`test/chart_utils_test.dart`, `test/receipt_retur_widget_test.dart`,
+`test/tx_history_row_widget_test.dart`, `test/receipt_kasir_name_overflow_test.dart`,
+`test/backup_restore_bug_test.dart`, `test/tx_history_auto_refresh_test.dart`,
+`test/product_search_test.dart`, `test/lan_sync_watermark_test.dart`).
+
+### Riwayat Transaksi Opsi C + optimasi pencarian + sync watermark — commit `d9340b2`
+Lanjutan diskusi panjang soal trade-off "tombol refresh manual vs auto" di
+Riwayat Transaksi (user minta perbandingan performa detail sebelum putuskan).
+Kesimpulan diskusi: performa A (manual) vs C (auto saat buka sheet) **hampir
+tidak beda** untuk tampilan biasa (query sudah terindeks `idx_tx_created_at`,
+LIMIT 100) — bedanya cuma di **pencarian produk** (`LIKE '%...%'` unindexed,
+scan SELURUH riwayat transaksi tiap ketik). User pilih: **Opsi C + benahi
+pencarian produk + kerjakan incremental sync (dianggap opsi terbaik)**.
+
+1. **Opsi C** (`tx_history_sheet.dart`): `initState` sekarang invalidate
+   `_txHistoryProvider` via post-frame callback (ref.invalidate tidak boleh
+   langsung di initState — Riverpod perlu akses InheritedWidget yang belum
+   ada). Tombol manual TETAP ada sebagai cadangan (kasus data masuk dari
+   sync SAAT sheet terbuka). Test regresi (`tx_history_auto_refresh_test.dart`)
+   membuktikan skenario nyata: tutup sheet → transaksi baru → buka lagi →
+   langsung muncul tanpa tekan tombol (dulu ter-cache lintas buka-tutup).
+
+2. **Optimasi pencarian produk** (`findTxIdsWithProduct`,
+   `findProductMatchesForQuery` di app_database.dart): diubah dari 1-langkah
+   (JOIN transaction_items+products lalu filter LIKE — menyisir SELURUH
+   riwayat) jadi 2-langkah (cari product id dulu di tabel `products` yang
+   kecil, baru lookup `transaction_items` via `idx_ti_product` yang sudah
+   ada). Biaya pencarian jadi proporsional ke jumlah SKU katalog, BUKAN ke
+   volume riwayat transaksi yang terus tumbuh. Test korektnes di
+   `product_search_test.dart` (substring match, case-insensitive, exclude
+   transaksi tak cocok, multi-item per transaksi).
+
+3. **Incremental sync watermark** (`lan_sync_service.dart`): `syncToHost`
+   sebelumnya SELALU `since=epoch` (full-dump SELURUH riwayat toko tiap
+   sync — user bilang "akan selalu dipakai", jadi worth dikerjakan sekarang
+   sebelum data keburu besar). Watermark tersimpan (`app_settings` key
+   `last_sync_download_at`) dipakai **HANYA untuk arah host→klien**
+   (download) — aman karena begitu diterima, langsung di-merge PERMANEN ke
+   DB lokal. **Arah klien→host (upload) SENGAJA TETAP full-dump** — data
+   yang diunggah klien masuk `_pendingQueue` di host yang HANYA tersimpan
+   di memori (bukan tabel DB), jadi hilang total kalau host restart
+   sebelum owner approve. Kalau watermark upload dimajukan begitu saja,
+   data yang kebetulan hilang dari antrian itu tidak akan pernah terkirim
+   ulang — risiko kehilangan data permanen. Ini keputusan sadar (bukan
+   lupa dioptimasi) — kalau mau dioptimasi juga, perlu mekanisme konfirmasi
+   approval balik dari host ke klien (belum ada, di luar scope sesi ini).
+   Test (`lan_sync_watermark_test.dart`) pakai host+klien SUNGGUHAN via
+   127.0.0.1 (bukan mock) — perlu override `HttpOverrides` balik ke real
+   networking (flutter_test mem-fake semua HttpClient jadi selalu 400).
 
 ### Feedback device Tier 4 dari user (6 poin ditest langsung di HP)
 User meng-update (bukan uninstall — data lama tetap ada, sudah dicek tidak
@@ -161,11 +208,15 @@ menangkap (masalah tata letak visual).
   nyata yang sudah diperbaiki** (lihat "2 bug backup/restore" di atas).
 
 Kalau lanjut sesi berikutnya: semua 6 poin feedback Tier 4 sudah
-ditindaklanjuti — kalau user tidak punya temuan device baru, kandidat
-lanjutan adalah widget test untuk screen lain (QRIS) atau mulai bahas
-kesiapan rilis. Versi (`pubspec.yaml`) masih `2.0.0+1` — belum dinaikkan,
-belum ada PR ke `main` (branch ini ~70+ commit di depan), keduanya
-menunggu keputusan user.
+ditindaklanjuti, termasuk Riwayat Transaksi Opsi C + optimasi pencarian +
+sync watermark (lihat detail di atas). Kandidat lanjutan (opsional, tidak
+mendesak): widget test untuk screen lain (QRIS), atau kalau kelak upload
+sync juga mau dioptimasi — perlu mekanisme host mengonfirmasi balik ke
+klien bahwa data yang diunggah SUDAH di-approve (bukan cuma "terkirim"),
+supaya watermark upload aman dimajukan tanpa risiko kehilangan data dari
+antrian approval yang cuma di memori. Versi (`pubspec.yaml`) masih
+`2.0.0+1` — belum dinaikkan, belum ada PR ke `main` (branch ini ~70+
+commit di depan), keduanya menunggu keputusan user.
 
 ### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
 User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**
