@@ -987,11 +987,20 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                            isUnpaidTx
-                                ? 'Total Dikurangi dari Hutang'
-                                : 'Total Refund',
-                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                        // "Total Dikurangi dari Hutang" lebih panjang dari
+                        // "Total Refund" — dibungkus Expanded + ellipsis agar
+                        // tidak meluber di layar sempit; nominal di kanan
+                        // (lebih penting) selalu tampil utuh.
+                        Expanded(
+                          child: Text(
+                              isUnpaidTx
+                                  ? 'Total Dikurangi dari Hutang'
+                                  : 'Total Refund',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                        const SizedBox(width: 8),
                         Text(formatRupiah(refund),
                             style: TextStyle(
                                 fontWeight: FontWeight.w700,
@@ -1424,9 +1433,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         children: [
                           Icon(Icons.badge_outlined, size: 14, color: scheme.onSurfaceVariant),
                           const SizedBox(width: 6),
-                          Text('Kasir: ${device.deviceName}',
-                              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-                          const Spacer(),
+                          // Nama device bebas diisi user saat setup — bisa panjang.
+                          // Dibungkus Expanded + ellipsis agar tanggal di kanan
+                          // (info lebih penting) tidak ikut terdorong meluber.
+                          Expanded(
+                            child: Text('Kasir: ${device.deviceName}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                          ),
+                          const SizedBox(width: 6),
                           Text(_formatDateTime(tx.createdAt),
                               style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
                         ],
