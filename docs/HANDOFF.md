@@ -4,21 +4,63 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 5 Juli 2026 (lanjutan 4)._
+_Terakhir diperbarui: 6 Juli 2026 (lanjutan 5)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
 Sesi **deep debug + stress test + test integrasi + redesign retur hutang +
-test Tier 1, 2 & 3 (termasuk widget-test harness)**. `flutter analyze`
-bersih, **76 test hijau** (`test/widget_test.dart`,
+test Tier 1, 2 & 3 (termasuk widget-test harness) + feedback device Tier 4
+dari user**. `flutter analyze` bersih, **79 test hijau** (`test/widget_test.dart`,
 `test/migration_v7_test.dart`, `test/db_fixes_test.dart`,
 `test/transaction_lifecycle_test.dart`, `test/db_tier2_test.dart`,
 `test/discount_allocation_test.dart`, `test/chart_utils_test.dart`,
-`test/receipt_retur_widget_test.dart`), semua di-push, CI (GitHub Actions
-"Build APK") sukses di semua commit. **User konfirmasi Tier 4 (device
-asli) sudah dikerjakan terpisah & sebagian sudah berfungsi.**
+`test/receipt_retur_widget_test.dart`, `test/tx_history_row_widget_test.dart`).
+
+### Feedback device Tier 4 dari user (6 poin ditest langsung di HP)
+User meng-update (bukan uninstall — data lama tetap ada, sudah dicek tidak
+ada yang hilang) dan mencoba 6 fitur:
+1. **Retur** — bekerja baik.
+2. **Overflow nama kasir panjang** (baris "Kasir: ..." di struk) — belum
+   sempat ditest user di device; kalau nanti ditemukan masalah akan
+   dilaporkan. (Kode-nya sendiri sudah dibetulkan sesi lalu, `7307740`.)
+3. **Produk bervarian di struk** — dikonfirmasi benar via screenshot (Pop
+   Ice + varian Coklat tampil dengan qty & harga benar).
+4. **QRIS** — dikonfirmasi benar via screenshot (render QR sungguhan, bisa
+   discan).
+5. **Nota gabungan (merged invoice)** — logika pembayaran sudah benar, TAPI
+   user sempat bingung kenapa status tidak "lunas semua" karena info sisa
+   hutang / kembalian cuma ada di dalam struk, tidak di baris Riwayat
+   Transaksi. → **Ditindaklanjuti sesi ini, lihat di bawah.**
+6. **Backup/restore** — belum ditest user, menyusul nanti.
+
+### Fitur baru sesi ini: Sisa/Kembali langsung di baris Riwayat Transaksi — commit `79aa836`
+Respons langsung ke poin 5 di atas. `tx_history_sheet.dart` `_TxRow`:
+`trailing` Column sekarang menampilkan baris tambahan di bawah nominal total:
+- **"Sisa Rp X"** (merah, `AppTheme.debtFg`) kalau `status` kurang_bayar/tempo.
+- **"Kembali Rp X"** (hijau, `AppTheme.changeFg`) kalau lunas & `changeAmount > 0`.
+- Tidak ada tambahan kalau uang pas (bukan retur pula — baris retur tidak
+  menampilkan badge lunas/sisa sama sekali, sudah sesuai desain lama).
+
+Harness widget-test (dari sesi lalu) sekali lagi menemukan overflow NYATA
+sebelum sempat dipakai user: header Row "Riwayat Transaksi" (dengan tombol
+mode-pilih di sampingnya) overflow di layar sempit saat teksnya jadi
+"N nota dipilih". Fix sama seperti overflow-overflow sebelumnya
+(`Expanded` + `maxLines:1` + `ellipsis`, `Spacer` dihapus karena `Expanded`
+sudah mendorong tombol ke kanan).
+
+**Catatan debugging penting** (biar tidak terulang): test baru sempat gagal
+terus dengan pesan "Found 0 widgets with text ...", padahal `print()` debug
+manual dalam isolasi menunjukkan teks itu ADA di tree. Ternyata bukan soal
+timing/race Riverpod — `formatRupiah()` (`app_theme.dart`) sengaja memakai
+**non-breaking space (U+00A0)** antara "Rp" dan angka (biar tidak terpisah
+baris), sedangkan literal string di test pakai spasi biasa (U+0020) —
+`==` string gagal walau terlihat identik saat di-print. Fix: literal test
+pakai karakter U+00A0 asli (`const _nbsp = ' '`), BUKAN spasi biasa.
+Setelah tahu akar masalahnya, `pump_app.dart` yang tadinya ditambah pump
+manual berlapis (dikira perlu untuk timing) berhasil disederhanakan
+KEMBALI ke satu `pumpAndSettle()` saja — semua test tetap hijau.
 
 ### Widget-test harness (Tier 3, bagian kedua) — commit `7307740`
 `test/helpers/pump_app.dart` — `pumpWithFakeApp(tester, db:, child:)`:
@@ -69,12 +111,16 @@ menangkap (masalah tata letak visual).
     `_QrisDisplay` di payment_screen.dart (butuh setup cart+payment method
     lebih berat), dan chart harian/per-jam (opsional, karena
     `clampedBarHeight` sendiri sudah dites tuntas secara matematis).
-- **Tier 4** — ✅ Dikerjakan user secara terpisah di device asli; sebagian
-  sudah berfungsi. Detail temuan (kalau ada yang perlu diperbaiki) belum
-  disampaikan ke sesi ini — tanyakan user bila lanjut.
+- **Tier 4** — ✅ Dikerjakan user di device asli, 6 poin ditest & dilaporkan
+  (lihat "Feedback device Tier 4" di atas). 1 poin (Sisa/Kembali di Riwayat
+  Transaksi) sudah ditindaklanjuti jadi fitur baru sesi ini. 2 poin masih
+  menggantung di sisi user: overflow nama kasir panjang (belum sempat
+  ditest), backup/restore (belum ditest).
 
-Kalau lanjut sesi berikutnya: tanyakan temuan dari testing device Tier 4
-user, atau lanjut widget test untuk screen lain (QRIS) bila diminta.
+Kalau lanjut sesi berikutnya: tanyakan apakah user sudah sempat test
+overflow nama kasir panjang & backup/restore (2 poin dari feedback Tier 4
+yang masih menggantung), atau lanjut widget test untuk screen lain (QRIS)
+bila diminta.
 
 ### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
 User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**

@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 Juli 2026
+
+### ✨ Fitur Baru
+- **Sisa hutang & kembalian kini langsung terlihat di Riwayat Transaksi.**
+  Sebelumnya harus buka struk dulu baru sadar nota belum lunas penuh atau ada
+  kembalian yang menggantung (paling sering bikin bingung di nota gabungan
+  beberapa pelanggan). Sekarang baris riwayat langsung menampilkan
+  **"Sisa Rp ..."** (merah) kalau nota belum lunas penuh, atau
+  **"Kembali Rp ..."** (hijau) kalau lunas dan ada kembalian. Nota dengan
+  uang pas tidak menampilkan tambahan apa pun.
+
+---
+
 ## 5 Juli 2026
 
 ### 🛠️ Perbaikan yang Terasa
