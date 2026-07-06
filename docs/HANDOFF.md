@@ -4,20 +4,42 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 5 Juli 2026 (lanjutan 3)._
+_Terakhir diperbarui: 5 Juli 2026 (lanjutan 4)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
 Sesi **deep debug + stress test + test integrasi + redesign retur hutang +
-test Tier 1, 2 & 3**. `flutter analyze` bersih, **74 test hijau**
-(`test/widget_test.dart`, `test/migration_v7_test.dart`,
-`test/db_fixes_test.dart`, `test/transaction_lifecycle_test.dart`,
-`test/db_tier2_test.dart`, `test/discount_allocation_test.dart`,
-`test/chart_utils_test.dart`), semua di-push, CI (GitHub Actions
+test Tier 1, 2 & 3 (termasuk widget-test harness)**. `flutter analyze`
+bersih, **76 test hijau** (`test/widget_test.dart`,
+`test/migration_v7_test.dart`, `test/db_fixes_test.dart`,
+`test/transaction_lifecycle_test.dart`, `test/db_tier2_test.dart`,
+`test/discount_allocation_test.dart`, `test/chart_utils_test.dart`,
+`test/receipt_retur_widget_test.dart`), semua di-push, CI (GitHub Actions
 "Build APK") sukses di semua commit. **User konfirmasi Tier 4 (device
 asli) sudah dikerjakan terpisah & sebagian sudah berfungsi.**
+
+### Widget-test harness (Tier 3, bagian kedua) — commit `7307740`
+`test/helpers/pump_app.dart` — `pumpWithFakeApp(tester, db:, child:)`:
+override `databaseProvider`/`deviceProvider` Riverpod dengan versi palsu
+(in-memory `AppDatabase` + `DeviceIdentity` ter-configured), tanpa perlu
+device/SQLCipher sungguhan. **Catatan penting**: surface di-set generus
+(430x2400) karena banyak screen pakai `ListView(children:)` yang lazy-build
+anak di luar viewport — kalau lupa ini, widget yang "di bawah" (mis. tombol
+Retur) tidak akan ketemu `find.text(...)` padahal bukan itu yang salah.
+
+Widget test pertama (`receipt_retur_widget_test.dart`) langsung menemukan
+**2 overflow layout NYATA** (bukan kesalahan test) di `receipt_screen.dart`,
+keduanya sudah diperbaiki (pola: bungkus `Expanded` + `ellipsis` pada teks
+yang bisa panjang, biarkan teks penting di sisi lain tetap utuh):
+1. Baris "Kasir: <nama device>" — nama device bebas diisi user saat setup.
+2. Baris "Total Dikurangi dari Hutang" (dari redesign retur sesi ini) —
+   labelnya lebih panjang dari "Total Refund".
+
+Ini bukti nyata harness widget-test bernilai LEBIH dari sekadar "membuktikan
+kode saya benar" — dia menemukan bug yang test logika/DB TIDAK BISA
+menangkap (masalah tata letak visual).
 
 ### Diskusi kesiapan production — peta test (4 tier berdasar risiko)
 - **Tier 1 (kritis, tersentuh tiap transaksi)** — ✅ SELESAI (`9b9b3cc`):
@@ -26,33 +48,33 @@ asli) sudah dikerjakan terpisah & sebagian sudah berfungsi.**
 - **Tier 2 (penting, lebih jarang)** — ✅ SELESAI (`3a7ce6b`):
   `PriceService.resolvePrice`, `mergeRows` master-data LWW & dedup
   price_tiers, `restoreFromDump`, `generateUniqueLocalId`.
-- **Tier 3 (nice-to-have)** — SEBAGIAN SELESAI:
-  - ✅ Alokasi diskon proporsional diekstrak dari `payment_screen.dart`
+- **Tier 3 (nice-to-have)** — ✅ SELESAI:
+  - Alokasi diskon proporsional diekstrak dari `payment_screen.dart`
     (duplikat persis di `_confirm` & `_confirmAddItems`) jadi
     `allocateCartTotal` murni (`lib/features/kasir/discount_allocation.dart`,
     commit `5a4ee57`). Diverifikasi manual byte-per-byte bahwa hasil
     `TransactionItemsCompanion` identik sebelum/sesudah (satu kondisi yang
     hilang, `_totalOverride != null`, terbukti redundan — `_total` selalu
     `== _cartTotal` saat override null, jadi rasio otomatis 1.0).
-  - ✅ Matematika clamp tinggi bar chart (fix crash omzet negatif) diekstrak
+  - Matematika clamp tinggi bar chart (fix crash omzet negatif) diekstrak
     dari 3 lokasi duplikat jadi `clampedBarHeight`
     (`lib/core/utils/chart_utils.dart`, commit `9991519`). Parameter
     `emptyHeight` dibedakan eksplisit per situs supaya visual persis sama.
-  - ❌ **Widget test (pump widget tree) — masih NOL sama sekali.** Semua 74
-    test murni logika/DB, tidak ada satupun yang benar-benar merender widget
-    Flutter. Kenapa belum dikerjakan: hampir semua screen bergantung pada
-    `ref.watch(databaseProvider)` (throw kalau device belum configured) dan/
-    atau `GoRouter` context — butuh harness (fake `AppDatabase` +
-    `ProviderScope` override + router dummy) sebagai investasi terpisah,
-    bukan "quick win". Mengingat Tier 4 (device asli) sudah mengonfirmasi
-    sebagian berfungsi secara visual, prioritas widget-test-harness ini
-    diturunkan — tawarkan ke user dulu sebelum dikerjakan, jangan asumsi.
+  - Widget-test harness dibangun (`test/helpers/pump_app.dart`, commit
+    `7307740`) — lihat detail di atas. Menemukan & memperbaiki 2 overflow
+    layout nyata di `receipt_screen.dart`.
+  - Sisa pekerjaan Tier 3 yang REALISTIS untuk lanjutan (belum dikerjakan,
+    bukan mendesak): tambah widget test serupa untuk screen lain yang
+    fix-nya sesi ini murni visual & belum ketahuan lewat device — kandidat:
+    `_QrisDisplay` di payment_screen.dart (butuh setup cart+payment method
+    lebih berat), dan chart harian/per-jam (opsional, karena
+    `clampedBarHeight` sendiri sudah dites tuntas secara matematis).
 - **Tier 4** — ✅ Dikerjakan user secara terpisah di device asli; sebagian
   sudah berfungsi. Detail temuan (kalau ada yang perlu diperbaiki) belum
   disampaikan ke sesi ini — tanyakan user bila lanjut.
 
-Kalau lanjut sesi berikutnya: baik untuk lanjut ke widget-test-harness (butuh
-keputusan eksplisit user dulu) atau menindaklanjuti temuan device dari Tier 4.
+Kalau lanjut sesi berikutnya: tanyakan temuan dari testing device Tier 4
+user, atau lanjut widget test untuk screen lain (QRIS) bila diminta.
 
 ### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
 User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**

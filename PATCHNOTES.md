@@ -10,6 +10,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 5 Juli 2026
 
+### 🛠️ Perbaikan yang Terasa
+- **Struk tidak lagi bisa terpotong di layar sempit.** Kalau nama perangkat
+  kasir cukup panjang, baris "Kasir: ..." di struk berpotensi mendorong
+  tanggal transaksi sampai terpotong dari layar. Sekarang otomatis
+  menyingkat (...) agar tanggal tetap selalu terlihat penuh. Baris ringkasan
+  retur untuk nota belum lunas juga diperbaiki dengan cara serupa.
+
 ### ✨ Fitur Baru
 - **Retur untuk nota belum lunas (hutang) kini lebih masuk akal.** Kalau
   pelanggan mengembalikan barang dari nota yang **belum dibayar sama sekali
