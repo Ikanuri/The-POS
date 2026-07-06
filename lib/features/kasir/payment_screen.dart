@@ -11,6 +11,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import 'cart_meta_provider.dart';
+import 'discount_allocation.dart';
 import 'cart_provider.dart';
 
 const _uuid = Uuid();
@@ -415,54 +416,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // Bila total di-override manual (diskon), alokasikan selisihnya secara
       // proporsional ke tiap baris agar Σ subtotal == total tersimpan dan
       // struk konsisten. HPP (costAtSale) tidak diutak-atik → laba akurat.
-      final discountFactor =
-          (_totalOverride != null && _cartTotal > 0) ? _total / _cartTotal : 1.0;
-      final applyDiscount = discountFactor != 1.0;
+      // Lewati item induk placeholder (effectiveQty == 0) — ditangani di
+      // dalam allocateCartTotal.
+      final allocatedLines = allocateCartTotal(
+        items: cart,
+        effectiveQtyOf: effQty,
+        total: _total,
+        cartTotal: _cartTotal,
+      );
 
-      // Lewati item induk placeholder (effectiveQty == 0) agar tidak masuk
-      // ke transaction_items. Induk yang hanya dipakai sebagai header varian
-      // di UI tidak perlu dicatat sebagai baris terpisah.
-      final lines = cart
-          .where((item) => effQty(item) > 0)
-          .map((item) {
-            final eq = effQty(item);
-            return (item: item, eq: eq, base: (item.price * eq).round());
-          })
-          .toList();
-      var lastQtyIdx = -1;
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i].eq > 0) lastQtyIdx = i;
-      }
-
-      final itemCompanions = <TransactionItemsCompanion>[];
-      var allocated = 0;
-      for (var i = 0; i < lines.length; i++) {
-        final l = lines[i];
-        int sub;
-        if (!applyDiscount) {
-          sub = l.base;
-        } else if (i == lastQtyIdx) {
-          sub = _total - allocated; // baris terakhir menyerap sisa pembulatan
-        } else {
-          sub = (l.base * discountFactor).round();
-          allocated += sub;
-        }
-        final unitPrice =
-            (applyDiscount && l.eq > 0) ? (sub / l.eq).round() : l.item.price;
-        itemCompanions.add(TransactionItemsCompanion.insert(
-          id: _uuid.v4(),
-          transactionId: txId,
-          productId: l.item.productId,
-          productUnitId: l.item.productUnitId,
-          qty: l.eq,
-          priceAtSale: unitPrice,
-          originalPrice: l.item.originalPrice,
-          priceOverridden: Value(l.item.priceOverridden || applyDiscount),
-          costAtSale: Value(l.item.costPrice),
-          itemNote: Value(l.item.itemNote),
-          subtotal: sub,
-        ));
-      }
+      final itemCompanions = <TransactionItemsCompanion>[
+        for (final l in allocatedLines)
+          TransactionItemsCompanion.insert(
+            id: _uuid.v4(),
+            transactionId: txId,
+            productId: l.item.productId,
+            productUnitId: l.item.productUnitId,
+            qty: l.effectiveQty,
+            priceAtSale: l.unitPrice,
+            originalPrice: l.item.originalPrice,
+            priceOverridden: Value(l.priceOverridden),
+            costAtSale: Value(l.item.costPrice),
+            itemNote: Value(l.item.itemNote),
+            subtotal: l.subtotal,
+          ),
+      ];
 
       final paymentCompanions = paidAmount > 0
           ? [
@@ -538,51 +516,29 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     double effQty(CartItem item) => notifier.effectiveQtyFor(item);
 
     // Alokasi diskon proporsional bila total selisih di-override.
-    final discountFactor =
-        (_totalOverride != null && _cartTotal > 0) ? _total / _cartTotal : 1.0;
-    final applyDiscount = discountFactor != 1.0;
+    final allocatedLines = allocateCartTotal(
+      items: cart,
+      effectiveQtyOf: effQty,
+      total: _total,
+      cartTotal: _cartTotal,
+    );
 
-    final lines = cart
-        .where((item) => effQty(item) > 0)
-        .map((item) {
-          final eq = effQty(item);
-          return (item: item, eq: eq, base: (item.price * eq).round());
-        })
-        .toList();
-    var lastQtyIdx = -1;
-    for (var i = 0; i < lines.length; i++) {
-      if (lines[i].eq > 0) lastQtyIdx = i;
-    }
-
-    final itemCompanions = <TransactionItemsCompanion>[];
-    var allocated = 0;
-    for (var i = 0; i < lines.length; i++) {
-      final l = lines[i];
-      int sub;
-      if (!applyDiscount) {
-        sub = l.base;
-      } else if (i == lastQtyIdx) {
-        sub = _total - allocated;
-      } else {
-        sub = (l.base * discountFactor).round();
-        allocated += sub;
-      }
-      final unitPrice =
-          (applyDiscount && l.eq > 0) ? (sub / l.eq).round() : l.item.price;
-      itemCompanions.add(TransactionItemsCompanion.insert(
-        id: _uuid.v4(),
-        transactionId: txId,
-        productId: l.item.productId,
-        productUnitId: l.item.productUnitId,
-        qty: l.eq,
-        priceAtSale: unitPrice,
-        originalPrice: l.item.originalPrice,
-        priceOverridden: Value(l.item.priceOverridden || applyDiscount),
-        costAtSale: Value(l.item.costPrice),
-        itemNote: Value(l.item.itemNote),
-        subtotal: sub,
-      ));
-    }
+    final itemCompanions = <TransactionItemsCompanion>[
+      for (final l in allocatedLines)
+        TransactionItemsCompanion.insert(
+          id: _uuid.v4(),
+          transactionId: txId,
+          productId: l.item.productId,
+          productUnitId: l.item.productUnitId,
+          qty: l.effectiveQty,
+          priceAtSale: l.unitPrice,
+          originalPrice: l.item.originalPrice,
+          priceOverridden: Value(l.priceOverridden),
+          costAtSale: Value(l.item.costPrice),
+          itemNote: Value(l.item.itemNote),
+          subtotal: l.subtotal,
+        ),
+    ];
 
     final stockItems = cart
         .where((item) => effQty(item) > 0)
