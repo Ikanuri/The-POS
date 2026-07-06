@@ -4,16 +4,37 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 5 Juli 2026._
+_Terakhir diperbarui: 5 Juli 2026 (lanjutan)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
-Sesi **deep debug + stress test + test integrasi + redesign retur hutang**.
-`flutter analyze` bersih, **35 test hijau** (`test/widget_test.dart`,
-`test/migration_v7_test.dart`, `test/db_fixes_test.dart`), semua di-push,
-CI (GitHub Actions "Build APK") sukses di semua commit.
+Sesi **deep debug + stress test + test integrasi + redesign retur hutang +
+test Tier 1**. `flutter analyze` bersih, **45 test hijau**
+(`test/widget_test.dart`, `test/migration_v7_test.dart`,
+`test/db_fixes_test.dart`, `test/transaction_lifecycle_test.dart`), semua
+di-push, CI (GitHub Actions "Build APK") sukses di semua commit.
+
+### Diskusi kesiapan production — peta test yang masih kurang
+User bertanya "test apa saja yang perlu sebelum production". Dipetakan 4
+tier berdasar risiko:
+- **Tier 1 (kritis, tersentuh tiap transaksi)** — SUDAH SELESAI di commit
+  `9b9b3cc`: `saveTransaction`, `voidTransaction`, `addReturnTransaction`
+  (jalur nota lunas), `settleMergedDebt`. Sebelumnya nol test padahal
+  fungsi paling sering dieksekusi di seluruh app.
+- **Tier 2 (penting, lebih jarang)** — BELUM: `PriceService.resolvePrice`
+  (pemilihan tier harga), `mergeRows` jalur master-data (last-write-wins) &
+  dedup price_tiers, `restoreFromDump` (mutasi DB penuh, baru
+  enkripsi/dekripsinya yang dites), `generateUniqueLocalId`.
+- **Tier 3 (nice-to-have)** — BELUM: alokasi diskon proporsional di
+  `payment_screen.dart` (perlu diekstrak jadi pure function dulu baru bisa
+  dites), widget test (nol widget test sama sekali sejauh ini — semua test
+  murni logika/DB, belum ada yang "memompa" widget tree Flutter).
+- **Tier 4 (tak bisa diotomasi dari sini)** — install APK di device asli +
+  migrasi di atas DB produksi asli, printer Bluetooth, scanner kamera.
+
+Kalau lanjut sesi berikutnya dengan topik serupa, mulai dari Tier 2.
 
 ### Retur untuk nota belum lunas — REDESIGN (keputusan user: Opsi A)
 User menunjukkan contoh dari app pembanding: retur atas nota **tempo/kurang_bayar**
