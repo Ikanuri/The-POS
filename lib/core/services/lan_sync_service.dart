@@ -347,6 +347,30 @@ class LanSyncService {
 
   // ─── Client side ─────────────────────────────────────────────────────────
 
+  /// Key `app_settings` untuk watermark "sampai kapan data HOST terakhir kali
+  /// berhasil diterima & di-merge ke DB lokal". HANYA untuk arah host→klien.
+  ///
+  /// Arah klien→host (`outDump` di bawah) SENGAJA TETAP full-dump setiap
+  /// sync, tidak dioptimasi lewat watermark ini. Alasannya: data yang
+  /// diunggah klien masuk `_pendingQueue` di host — antrian itu HANYA
+  /// tersimpan di memori (bukan di database), jadi hilang total kalau host
+  /// di-restart sebelum owner sempat approve. Kalau watermark upload
+  /// dimajukan begitu saja setelah "terkirim", data yang kebetulan hilang
+  /// dari antrian itu tidak akan pernah terkirim ulang — bisa hilang
+  /// permanen. Watermark download DI SINI aman dimajukan karena data hasil
+  /// merge dari host langsung tersimpan permanen di DB lokal saat itu juga
+  /// (tidak lewat antrian approval apa pun).
+  static const _kDownloadWatermarkKey = 'last_sync_download_at';
+
+  static Future<DateTime?> _loadDownloadWatermark(AppDatabase db) async {
+    final raw = await db.getSetting(_kDownloadWatermarkKey);
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  static Future<void> _saveDownloadWatermark(AppDatabase db, DateTime at) =>
+      db.setSetting(_kDownloadWatermarkKey, at.toIso8601String());
+
   static Future<SyncResult> syncToHost({
     required AppDatabase db,
     required String storeKey,
@@ -355,15 +379,27 @@ class LanSyncService {
     DateTime? since,
   }) async {
     final key = CryptoService.deriveSyncKey(storeKey, syncToken);
-    final effectiveSince = since ?? DateTime.fromMillisecondsSinceEpoch(0);
+    // Watermark host→klien: kalau caller tidak beri `since` eksplisit, pakai
+    // watermark tersimpan dari sync sukses terakhir (bukan selalu epoch) —
+    // supaya host tidak perlu dump SELURUH riwayat toko tiap kali ada satu
+    // kasir sync. Dicatat SEBELUM request dikirim, supaya data host yang
+    // berubah SELAMA sync ini berlangsung tidak "terlewat" di sync
+    // berikutnya (lebih baik terima sedikit dobel yang aman di-merge ulang,
+    // daripada kehilangan data).
+    final downloadSince = since ??
+        await _loadDownloadWatermark(db) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    final downloadSyncStartedAt = DateTime.now();
 
     // Klien (perangkat bawahan) hanya mengirim data append-only ke atas.
     // Master data (produk, harga, izin) tidak diunggah agar tidak menimpa
     // data owner — master data mengalir satu arah dari host ke bawah.
-    final outDump =
-        await db.dumpSince(effectiveSince, includeMasterData: false);
+    // SENGAJA selalu epoch (bukan watermark) — lihat catatan di
+    // _kDownloadWatermarkKey soal kenapa arah upload tidak dioptimasi.
+    final outDump = await db.dumpSince(DateTime.fromMillisecondsSinceEpoch(0),
+        includeMasterData: false);
     final payload = {
-      'since': effectiveSince.toIso8601String(),
+      'since': downloadSince.toIso8601String(),
       'tables': outDump,
     };
     final payloadJson = jsonEncode(payload);
@@ -420,6 +456,13 @@ class LanSyncService {
       // menerima cicilan / item susulan (headernya tidak ada di payload).
       await db.reconcileTransactionsByIds(touchedTxIds);
       await db.rebuildSummariesForTxIds(touchedTxIds);
+
+      // Watermark HANYA disimpan setelah data host benar-benar ter-merge
+      // permanen ke DB lokal (baris di atas ini) — kalau ada exception di
+      // langkah mana pun sebelum sini, watermark TIDAK maju, jadi sync
+      // berikutnya otomatis retry dari titik lama (aman, cuma kirim/terima
+      // agak lebih banyak, bukan kehilangan data).
+      await _saveDownloadWatermark(db, downloadSyncStartedAt);
 
       final sent = outDump.values.fold<int>(0, (s, r) => s + r.length);
       final isPending =

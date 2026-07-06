@@ -1422,17 +1422,33 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── History filter ─────────────────────────
 
+  /// Cari id produk dengan nama mengandung [q] — dipakai bersama oleh
+  /// [findTxIdsWithProduct] & [findProductMatchesForQuery].
+  ///
+  /// SENGAJA cari di tabel `products` dulu (kecil, proporsional ke jumlah SKU
+  /// katalog) sebelum menyentuh `transaction_items` (bisa jutaan baris kalau
+  /// riwayat toko sudah lama). Sebelumnya kedua fungsi ini melakukan
+  /// `JOIN transaction_items+products` lalu filter `LIKE` pada nama produk —
+  /// karena `LIKE '%...%'` tidak bisa pakai indeks, itu efektif menyisir
+  /// SELURUH riwayat transaksi setiap kali pencarian diketik, makin lambat
+  /// makin lama toko beroperasi. Dengan cari product id dulu, langkah kedua
+  /// bisa pakai `idx_ti_product` (sudah ada) untuk lompat langsung ke baris
+  /// yang relevan — biaya pencarian jadi lepas dari volume riwayat transaksi.
+  Future<List<String>> _matchingProductIds(String q) => (select(products)
+        ..where((p) => p.name.lower().contains(q.toLowerCase())))
+      .map((p) => p.id)
+      .get();
+
   /// Set id transaksi yang memuat produk dengan nama mengandung [q].
   Future<Set<String>> findTxIdsWithProduct(String q) async {
     if (q.trim().isEmpty) return <String>{};
-    final rows = await customSelect(
-      'SELECT DISTINCT ti.transaction_id AS tid FROM transaction_items ti '
-      'JOIN products p ON p.id = ti.product_id '
-      'WHERE LOWER(p.name) LIKE ?',
-      variables: [Variable.withString('%${q.toLowerCase()}%')],
-      readsFrom: {transactionItems, products},
-    ).get();
-    return rows.map((r) => r.data['tid'] as String).toSet();
+    final productIds = await _matchingProductIds(q);
+    if (productIds.isEmpty) return <String>{};
+    final rows = await (select(transactionItems)
+          ..where((ti) => ti.productId.isIn(productIds)))
+        .map((ti) => ti.transactionId)
+        .get();
+    return rows.toSet();
   }
 
   /// Detail produk yang cocok per transaksi — untuk tampilan di riwayat saat
@@ -1440,21 +1456,21 @@ class AppDatabase extends _$AppDatabase {
   Future<Map<String, List<({String name, double qty, int price})>>>
       findProductMatchesForQuery(String q) async {
     if (q.trim().isEmpty) return {};
-    final rows = await customSelect(
-      'SELECT ti.transaction_id AS tid, p.name, ti.qty, ti.price_at_sale AS price '
-      'FROM transaction_items ti '
-      'JOIN products p ON p.id = ti.product_id '
-      'WHERE LOWER(p.name) LIKE ?',
-      variables: [Variable.withString('%${q.toLowerCase()}%')],
-      readsFrom: {transactionItems, products},
-    ).get();
+    final productIds = await _matchingProductIds(q);
+    if (productIds.isEmpty) return {};
+    final query = select(transactionItems).join([
+      innerJoin(products, products.id.equalsExp(transactionItems.productId)),
+    ])
+      ..where(transactionItems.productId.isIn(productIds));
+    final rows = await query.get();
     final result = <String, List<({String name, double qty, int price})>>{};
     for (final r in rows) {
-      final txId = r.data['tid'] as String;
-      (result[txId] ??= []).add((
-        name: r.data['name'] as String,
-        qty: (r.data['qty'] as num).toDouble(),
-        price: r.data['price'] as int,
+      final ti = r.readTable(transactionItems);
+      final p = r.readTable(products);
+      (result[ti.transactionId] ??= []).add((
+        name: p.name,
+        qty: ti.qty,
+        price: ti.priceAtSale,
       ));
     }
     return result;

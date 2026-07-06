@@ -123,6 +123,23 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
       _productQuery.isNotEmpty;
 
   @override
+  void initState() {
+    super.initState();
+    // _txHistoryProvider bukan StreamProvider — tidak auto-refresh sendiri
+    // dari perubahan DB, dan hasilnya tetap ter-cache walau sheet ini
+    // ditutup-buka berkali-kali. Tanpa ini, transaksi yang baru saja dibuat
+    // (mis. dari layar Kasir) bisa tidak langsung terlihat sampai tombol
+    // refresh manual ditekan. Filter awal selalu default (state baru per
+    // buka sheet), jadi cukup invalidate query dengan filter default.
+    // ref.invalidate tidak boleh dipanggil langsung di initState (Riverpod
+    // butuh akses InheritedWidget yang belum tersedia sampai initState
+    // selesai) — jadwalkan via post-frame callback.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.invalidate(_txHistoryProvider(const _HistoryQuery()));
+    });
+  }
+
+  @override
   void dispose() {
     _productDebounce?.cancel();
     super.dispose();
