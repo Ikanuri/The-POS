@@ -102,13 +102,12 @@ class CryptoService {
   static Uint8List derivePortableKeyV2(String password, List<int> salt) =>
       pbkdf2(utf8.encode(password), salt, iterations: 210000);
 
-  /// AES-256-CBC. Output: base64(IV + ciphertext) jika [iv] tidak diberikan.
-  static String encryptText(String plain, Uint8List keyBytes, {Uint8List? iv}) {
+  /// AES-256-CBC dengan IV acak. Output: base64(IV + ciphertext).
+  static String encryptText(String plain, Uint8List keyBytes) {
     final key = enc.Key(keyBytes);
-    final ivBytes = iv ?? randomIV();
+    final ivBytes = randomIV();
     final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
     final encrypted = encrypter.encrypt(plain, iv: enc.IV(ivBytes));
-    if (iv != null) return encrypted.base64;
     return base64Encode([...ivBytes, ...encrypted.bytes]);
   }
 

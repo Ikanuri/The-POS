@@ -5,6 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 
+/// Izin yang fiturnya BELUM ada di aplikasi (input pengeluaran & pembelian
+/// supplier) — disembunyikan dari UI agar owner tidak menyalakan toggle yang
+/// tidak berefek apa pun. Key-nya tetap di DB & tetap tersinkron, sehingga
+/// begitu fiturnya dibangun tinggal dihapus dari daftar ini.
+const _kHiddenPermissionKeys = {'input_pengeluaran', 'input_pembelian'};
+
 final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
   final db = ref.watch(databaseProvider);
   return db
@@ -12,7 +18,9 @@ final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
       .watch()
       // Hanya izin role Kasir — izin asisten punya layar sendiri.
       .map((rows) => rows
-          .where((p) => kKasirPermissionKeys.contains(p.permissionKey))
+          .where((p) =>
+              kKasirPermissionKeys.contains(p.permissionKey) &&
+              !_kHiddenPermissionKeys.contains(p.permissionKey))
           .toList());
 });
 

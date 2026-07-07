@@ -16,12 +16,10 @@ class ItemEntrySheet extends ConsumerStatefulWidget {
   const ItemEntrySheet({
     super.key,
     required this.product,
-    this.customerGroupId,
     this.cartId = kMainCartId,
   });
 
   final Product product;
-  final String? customerGroupId;
   final String cartId;
 
   @override
@@ -121,7 +119,6 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       final resolved = await priceService.resolvePrice(
         productUnitId: u.id,
         qty: 1,
-        customerGroupId: widget.customerGroupId,
       );
       final stock = await db.currentStock(u.id);
       final tiers = await db.getPriceTiers(u.id);
@@ -154,7 +151,6 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       final vResolved = await priceService.resolvePrice(
         productUnitId: base.id,
         qty: 1,
-        customerGroupId: widget.customerGroupId,
       );
       final vBarcodes = await db.getProductBarcodes(base.id);
       variants.add(_VariantOption(

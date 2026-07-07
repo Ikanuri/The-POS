@@ -262,29 +262,6 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     state = state.where((c) => c.productUnitId != productUnitId).toList();
   }
 
-  void removeItemByIndex(int index) {
-    final s = [...state];
-    s.removeAt(index);
-    state = s;
-  }
-
-  void overridePrice(String productUnitId, int newPrice) {
-    state = [
-      for (final c in state)
-        if (c.productUnitId == productUnitId)
-          c.copyWith(price: newPrice, priceOverridden: true)
-        else
-          c,
-    ];
-  }
-
-  void setNote(String productUnitId, String? note) {
-    state = [
-      for (final c in state)
-        if (c.productUnitId == productUnitId) c.copyWith(itemNote: note) else c,
-    ];
-  }
-
   /// Set / ganti item berdasarkan productUnitId (dipakai modal edit item).
   /// Berbeda dari [addItem] yang menambah qty; ini menimpa.
   void setItem(CartItem item) {
@@ -304,16 +281,6 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     }
   }
 
-  /// Total qty semua satuan milik satu produk (untuk badge counter di katalog).
-  double qtyForProduct(String productId) => state
-      .where((c) => c.productId == productId)
-      .fold(0.0, (s, c) => s + c.qty);
-
-  /// Qty untuk satu satuan tertentu.
-  double qtyForUnit(String productUnitId) => state
-      .where((c) => c.productUnitId == productUnitId)
-      .fold(0.0, (s, c) => s + c.qty);
-
   void clear() {
     lastTouchedUnitId = null;
     state = [];
@@ -328,10 +295,6 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   int get totalAmount => state.fold(0, (sum, item) {
     final effQty = effectiveQtyFor(item);
     return sum + (item.price * effQty).round();
-  });
-
-  int get itemCount => state.fold(0, (sum, item) {
-    return sum + effectiveQtyFor(item).ceil();
   });
 }
 
