@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-07
 
+- `c1bafd7` — fix: audit ulang — konsolidasi pelunasan ke addPaymentToTransaction + filter arsip per-tahun
+- `998a475` — docs: catat hasil audit kode — 14 bug fix + cleanup (commit 7d1fc6f, 81f1af6)
 - `81f1af6` — chore: hapus kode mati hasil audit + sembunyikan izin fitur yang belum ada
 - `7d1fc6f` — fix: perbaiki 12 temuan bug audit kode (sync arsip, retur multi-bank, CSV, kembalian, dll)
 - `dd6f729` — docs: tambahkan metode test wajib sebelum rilis ke CLAUDE.md

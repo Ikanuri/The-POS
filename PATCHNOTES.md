@@ -16,10 +16,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   "BRI" dan "BCA"), membuka layar retur untuk nota lunas bisa error dan
   retur tidak bisa dilakukan. Sekarang pilihan "Kembalikan via" menampilkan
   tiap rekening dengan benar.
-- **Kembalian dari "Tambah Bayar" tidak hilang lagi.** Sebelumnya, kalau
-  pelanggan melunasi hutang dengan uang lebih (mis. hutang Rp 95.000 dibayar
-  Rp 100.000), catatan "Kembali Rp 5.000" bisa lenyap dari riwayat & struk
-  setelah data tersentuh sinkronisasi. Sekarang tercatat permanen.
+- **Kembalian dari pelunasan hutang tidak hilang lagi** — di semua tempat:
+  "Tambah Bayar" di struk, tombol "Lunasi" di Riwayat Transaksi, dan
+  "Tambah Bayar" di Laporan. Sebelumnya, kalau pelanggan melunasi hutang
+  dengan uang lebih (mis. hutang Rp 95.000 dibayar Rp 100.000), catatan
+  "Kembali Rp 5.000" bisa lenyap atau tidak tercatat sama sekali. Kolom
+  nominal di dialog Laporan kini juga otomatis berpemisah ribuan.
 - **Import ulang file CSV kini memperbarui harga, bukan menggandakan
   produk.** Sebelumnya, mengimport file yang sama dua kali membuat seluruh
   katalog dobel dan barcode "pindah" ke produk duplikat sehingga hasil scan

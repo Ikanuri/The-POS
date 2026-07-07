@@ -4,7 +4,7 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 7 Juli 2026 (sesi audit kode menyeluruh)._
+_Terakhir diperbarui: 7 Juli 2026 (audit + pemeriksaan ulang menyeluruh)._
 
 ---
 
@@ -12,9 +12,18 @@ _Terakhir diperbarui: 7 Juli 2026 (sesi audit kode menyeluruh)._
 
 Sesi **audit kode menyeluruh** pasca rilis v2.1.0: seluruh lib/ dibaca,
 14 bug ditemukan (2 Tinggi, 5 Sedang, 7 Rendah) + inventaris kode mati.
-User memilih (via poll): **fix semua** + bersihkan kode mati. Semua selesai
-di commit `7d1fc6f` (fix) + `81f1af6` (cleanup kode mati).
-`flutter analyze` bersih, **105 test hijau** (91 lama + 14 regresi baru di
+User memilih (via poll): **fix semua** + bersihkan kode mati. Selesai di
+commit `7d1fc6f` (fix) + `81f1af6` (cleanup). Pemeriksaan ULANG menyeluruh
+atas permintaan user menemukan 3 temuan lanjutan (semuanya dalam mandat
+poll yang sama) — diperbaiki di `c1bafd7`:
+- 'Lunasi' di Riwayat Transaksi & 'Tambah Bayar' di tab Laporan masih
+  memakai pola lama B7 → keduanya kini lewat `addPaymentToTransaction`
+  (satu-satunya jalur pelunasan; jangan tulis paid/changeAmount manual
+  dari UI lagi).
+- `filterArchivedRows` kini per TAHUN YANG PUNYA FILE ARSIP
+  (`TutupBukuService.listArchivedYears`), bukan cutoff `last_archive_year`
+  — tahun sebelum arsip pertama tidak pernah diarsip & datanya masih sah.
+`flutter analyze` bersih, **106 test hijau** (91 lama + 15 regresi baru di
 `test/audit_fixes_test.dart` — tiap fix dibuktikan gagal saat di-revert
 sementara, sesuai metodologi CLAUDE.md).
 
