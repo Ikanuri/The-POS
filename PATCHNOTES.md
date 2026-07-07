@@ -8,6 +8,42 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Juli 2026
+
+### 🛠️ Perbaikan yang Terasa
+- **Retur di toko dengan lebih dari satu rekening bank kini berfungsi.**
+  Sebelumnya, kalau Metode Pembayaran berisi dua metode sejenis (mis. bank
+  "BRI" dan "BCA"), membuka layar retur untuk nota lunas bisa error dan
+  retur tidak bisa dilakukan. Sekarang pilihan "Kembalikan via" menampilkan
+  tiap rekening dengan benar.
+- **Kembalian dari pelunasan hutang tidak hilang lagi** — di semua tempat:
+  "Tambah Bayar" di struk, tombol "Lunasi" di Riwayat Transaksi, dan
+  "Tambah Bayar" di Laporan. Sebelumnya, kalau pelanggan melunasi hutang
+  dengan uang lebih (mis. hutang Rp 95.000 dibayar Rp 100.000), catatan
+  "Kembali Rp 5.000" bisa lenyap atau tidak tercatat sama sekali. Kolom
+  nominal di dialog Laporan kini juga otomatis berpemisah ribuan.
+- **Import ulang file CSV kini memperbarui harga, bukan menggandakan
+  produk.** Sebelumnya, mengimport file yang sama dua kali membuat seluruh
+  katalog dobel dan barcode "pindah" ke produk duplikat sehingga hasil scan
+  jadi kacau. Sekarang produk yang sudah ada dikenali (lewat barcode, kode,
+  atau nama+satuan) dan hanya harganya yang diperbarui.
+- **Data tahun yang sudah ditutup buku tidak bisa muncul dobel lagi.**
+  Sebelumnya, sinkronisasi dari HP kasir setelah owner melakukan tutup buku
+  bisa memasukkan kembali transaksi tahun lama ke data utama (dobel dengan
+  arsip). Sekarang data tahun terarsip otomatis disaring saat sync.
+- **Pesan yang jelas saat jam HP berbeda.** Kalau sinkronisasi gagal karena
+  jam kedua HP selisih lebih dari 5 menit, kini muncul petunjuk berbahasa
+  Indonesia untuk menyamakan tanggal & jam — bukan pesan teknis.
+- **Poin pelanggan kembali utuh saat retur dibatalkan.** Sebelumnya poin
+  yang dipotong saat retur hilang permanen walau retur-nya di-void.
+- **Aplikasi terbuka lebih cepat** di toko dengan riwayat transaksi besar —
+  pekerjaan perapihan data dipindah ke belakang layar setelah layar tampil.
+- **Pengaturan Izin Kasir dirapikan**: dua izin yang fiturnya memang belum
+  ada di aplikasi ("Input Pengeluaran" & "Input Pembelian") disembunyikan
+  agar tidak membingungkan.
+
+---
+
 ## 6 Juli 2026
 
 ### 🛠️ Perbaikan yang Terasa

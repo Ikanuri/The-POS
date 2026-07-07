@@ -18,8 +18,22 @@ class PriceService {
       final groupPrice =
           await _db.getCustomerGroupPrice(productUnitId, customerGroupId);
       if (groupPrice != null) {
+        // Harga jual dari grup, tapi HPP tetap dari tier — harga grup tidak
+        // punya kolom cost. Tanpa ini costAtSale tercatat 0 dan laba di
+        // laporan melonjak palsu untuk penjualan harga-grup.
+        final tiers = await _db.getPriceTiers(productUnitId); // minQty DESC
+        PriceTier? costTier;
+        for (final t in tiers) {
+          if (t.minQty <= qty) {
+            costTier = t;
+            break;
+          }
+        }
+        if (costTier == null && tiers.isNotEmpty) costTier = tiers.last;
         return ResolvedPrice(
-            price: groupPrice.price, source: PriceSource.customerGroup);
+            price: groupPrice.price,
+            costPrice: costTier?.costPrice ?? 0,
+            source: PriceSource.customerGroup);
       }
     }
 

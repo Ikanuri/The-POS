@@ -4,15 +4,12 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
 import '../merged_receipt_screen.dart';
-
-const _txUuid = Uuid();
 
 /// Parameter query riwayat. Saat tidak ada filter aktif → 100 terakhir;
 /// saat ada filter aktif → sampai 1000 agar pencarian menjangkau data lama.
@@ -1067,31 +1064,20 @@ class _TxDetail extends ConsumerWidget {
 
     ctrl.dispose();
     if (result == null || result <= 0 || !context.mounted) return;
-    // Uang yang diterima boleh melebihi sisa tagihan → sisanya jadi kembalian.
-    final applied = result.clamp(1, remaining); // yang masuk ke tagihan
-    final change = result > remaining ? result - remaining : 0; // kembalian
 
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
-    await db.into(db.transactionPayments).insert(
-          TransactionPaymentsCompanion.insert(
-            id: _txUuid.v4(),
-            transactionId: tx.id,
-            amount: applied,
-            method: 'tunai',
-            paidAt: Value(DateTime.now()),
-            kasirId: Value(device.deviceCode),
-          ),
-        );
-    final newPaid = tx.paid + applied;
+    // Satu jalur DB yang sama dengan "Tambah Bayar" di struk: paid dicatat
+    // PENUH (boleh > total → kembalian dari paid - total) supaya info
+    // kembalian tidak tertimpa rekonsiliasi (sync / tambah belanjaan).
+    final change = await db.addPaymentToTransaction(
+      txId: tx.id,
+      amount: result,
+      method: 'tunai',
+      kasirId: device.deviceCode,
+    );
+    final newPaid = tx.paid + result;
     final lunas = newPaid >= tx.total;
-    await (db.update(db.transactions)..where((t) => t.id.equals(tx.id)))
-        .write(TransactionsCompanion(
-      paid: Value(newPaid),
-      status: Value(lunas ? 'lunas' : 'kurang_bayar'),
-      // Akumulasi kembalian agar tercatat di struk.
-      changeAmount: Value(tx.changeAmount + change),
-    ));
     onChanged();
     if (context.mounted) {
       final msg = lunas

@@ -432,11 +432,6 @@ class PrinterService {
 
   // ── Print struk ──────────────────────────────────────────────────────────
 
-  static Future<bool> testPrint(String mac) async {
-    final (ok, _) = await testPrintDetailed(mac);
-    return ok;
-  }
-
   static Future<bool> printReceipt({
     required Transaction tx,
     required List<TransactionItem> items,

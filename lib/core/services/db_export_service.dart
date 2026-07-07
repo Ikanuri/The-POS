@@ -20,26 +20,11 @@ class DbExportService {
   static const _magicPortable = [0x42, 0x50, 0x4F, 0x53, 0x50]; // "BPOSP"
   static const _magicPortableV2 = [0x42, 0x50, 0x4F, 0x50, 0x32]; // "BPOP2"
 
-  /// Export semua tabel ke bytes terenkripsi (BPOS1 — toko spesifik).
-  static Future<Uint8List> export({
-    required AppDatabase db,
-    required String storeKey,
-    required String storeUuid,
-    required String password,
-  }) async {
-    final dump = await db.dumpAllTables();
-    final payload = <String, dynamic>{
-      'storeUuid': storeUuid,
-      'exportedAt': DateTime.now().toIso8601String(),
-      'tables': dump,
-    };
-    final jsonBytes = utf8.encode(jsonEncode(payload));
-    final compressed = GZipCodec().encode(jsonBytes);
-    final key = CryptoService.deriveFileKey(storeKey, password, storeUuid);
-    final iv = CryptoService.randomIV();
-    final encrypted = CryptoService.encryptBytes(compressed, key, iv);
-    return Uint8List.fromList([..._magic, ...iv, ...encrypted]);
-  }
+  // Catatan: export format BPOS1 (kunci diikat ke storeKey toko asal) sudah
+  // dihapus — restore lintas-device MUSTAHIL dengan format itu (storeKey
+  // di-generate ulang tiap setup) dan tidak ada UI yang memakainya lagi.
+  // Jalur DECRYPT BPOS1/BPOSP tetap dipertahankan agar file backup lama
+  // masih bisa dibuka.
 
   /// Export portable BPOP2 — lintas toko, salt acak disimpan di header.
   static Future<Uint8List> exportPortable({

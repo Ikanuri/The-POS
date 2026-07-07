@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -24,14 +25,30 @@ Future<void> main() async {
   // Identitas device harus dimuat sebelum router memutuskan redirect /setup.
   await container.read(deviceProvider.notifier).load();
 
-  // Catch-up ringkasan harian yang belum ter-materialisasi (mis. data dari
-  // versi lama atau hari yang terlewat). Hanya bila DB sudah bisa dibuka.
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const ThePosApp(),
+    ),
+  );
+
+  // Pekerjaan catch-up dijalankan SETELAH runApp agar tidak menahan frame
+  // pertama — durasi backfill tumbuh seiring data (O(total tx)), dan pada
+  // toko lama sempat membuat splash tertahan ratusan ms tiap startup.
+  unawaited(_runStartupMaintenance(container));
+}
+
+/// Catch-up non-fatal saat startup: materialisasi ringkasan harian, backfill
+/// buku pembayaran untuk data lama, dan pembersihan keranjang yatim. Semua
+/// idempotent — aman berjalan paralel dengan pemakaian app.
+Future<void> _runStartupMaintenance(ProviderContainer container) async {
+  // Ringkasan & buku pembayaran hanya bila DB sudah bisa dibuka.
   if (container.read(deviceProvider).isConfigured) {
     try {
       final db = container.read(databaseProvider);
       await db.backfillMissingSummaries();
-      // Lengkapi buku pembayaran untuk nota lama (data pra-fitur / import) agar
-      // timeline pembayaran di struk tetap muncul.
+      // Lengkapi buku pembayaran untuk nota lama (data pra-fitur / import)
+      // agar timeline pembayaran di struk tetap muncul.
       await db.backfillMissingPayments();
     } catch (_) {
       // Non-fatal — laporan & struk tetap berfungsi tanpa pre-aggregate.
@@ -42,13 +59,6 @@ Future<void> main() async {
   await CartNotifier.cleanupOrphanCarts();
   // Metadata keranjang yatim mengikuti pembersihan keranjang di atas.
   await CartMetaNotifier.cleanupOrphanMeta();
-
-  runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: const ThePosApp(),
-    ),
-  );
 }
 
 class ThePosApp extends ConsumerWidget {

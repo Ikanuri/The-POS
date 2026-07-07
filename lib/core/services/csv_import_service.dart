@@ -9,11 +9,17 @@ import '../database/app_database.dart';
 class CsvImportResult {
   const CsvImportResult({
     required this.imported,
+    this.updated = 0,
     required this.duplicates,
     required this.noBarcode,
     required this.errors,
   });
   final int imported;
+
+  /// Baris yang cocok dengan produk yang SUDAH ada di database
+  /// (barcode → SKU → nama+satuan) — harga jual/beli tier dasarnya
+  /// diperbarui, TIDAK dibuat produk baru.
+  final int updated;
   final int duplicates;
   final int noBarcode;
   final List<String> errors;
@@ -50,12 +56,16 @@ class CsvImportService {
     final dataRows = rows.skip(1).toList();
 
     int imported = 0;
+    int updated = 0;
     int duplicates = 0;
     int noBarcode = 0;
     final errors = <String>[];
 
     final unitTypes = await db.getAllUnitTypes();
     final groups = await db.getAllProductGroups();
+    // Produk yang sudah ada — untuk mencocokkan baris CSV ke produk lama
+    // (import ulang = update harga, bukan duplikasi katalog).
+    final existingProducts = await db.searchProducts('');
 
     final seen = <String>{};
 
@@ -67,11 +77,18 @@ class CsvImportService {
       return '';
     }
 
-    // Netralkan CSV formula injection: buang prefix =,+,-,@ di awal teks
+    // Netralkan CSV formula injection: buang prefix berbahaya di awal teks
     // agar tidak tereksekusi bila data diekspor & dibuka di Excel/Sheets.
+    // `=` dan `@` selalu formula; `+`/`-` hanya berbahaya bila diikuti
+    // angka/kurung (mis. "-2+3") — nama produk sah seperti "-Promo" atau
+    // "A-1" tidak boleh ikut terpangkas.
+    bool dangerousArithmetic(String s) =>
+        s.length >= 2 && '0123456789.('.contains(s[1]);
     String sanitize(String s) {
       var out = s;
-      while (out.isNotEmpty && '=+-@'.contains(out[0])) {
+      while (out.isNotEmpty &&
+          ('=@'.contains(out[0]) ||
+              ('+-'.contains(out[0]) && dangerousArithmetic(out)))) {
         out = out.substring(1).trimLeft();
       }
       return out;
@@ -122,6 +139,37 @@ class CsvImportService {
         continue;
       }
       seen.add(dedupKey);
+
+      // ── Cocokkan ke produk yang SUDAH ada (barcode → SKU → nama+satuan).
+      // Kalau ketemu: perbarui harga jual/beli tier dasar produk lama —
+      // JANGAN membuat produk baru. Tanpa ini, import ulang file yang sama
+      // menduplikasi seluruh katalog DAN memindahkan barcode dari produk
+      // lama ke duplikat baru (saveProduct menghapus baris barcode manapun
+      // yang memegang nilai sama demi UNIQUE), sehingga scan barcode mulai
+      // menambah produk duplikat tanpa riwayat stok.
+      try {
+        final matchedUnitId = await _matchExistingUnit(
+          db: db,
+          existingProducts: existingProducts,
+          name: name,
+          kode: kode,
+          barcodeStr: barcodeStr,
+          unitTypeId: unitTypeId,
+        );
+        if (matchedUnitId != null) {
+          await _updateBaseTier(
+            db: db,
+            productUnitId: matchedUnitId,
+            price: hargaJual,
+            costPrice: hargaBeli,
+          );
+          updated++;
+          continue;
+        }
+      } catch (e) {
+        errors.add('Baris ${rowIdx + 2} ($name): $e');
+        continue;
+      }
 
       if (barcodeStr.isEmpty) noBarcode++;
 
@@ -193,10 +241,84 @@ class CsvImportService {
 
     return CsvImportResult(
       imported: imported,
+      updated: updated,
       duplicates: duplicates,
       noBarcode: noBarcode,
       errors: errors,
     );
+  }
+
+  /// Cari satuan produk lama yang cocok dengan baris CSV, prioritas:
+  /// 1. barcode (identitas terkuat), 2. SKU/kode produk, 3. nama+tipe satuan.
+  /// Untuk match nama, tipe satuan HARUS sama — nama sama dengan satuan
+  /// berbeda dianggap produk lain (konsisten dengan dedupKey nama|satuan).
+  static Future<String?> _matchExistingUnit({
+    required AppDatabase db,
+    required List<Product> existingProducts,
+    required String name,
+    required String kode,
+    required String barcodeStr,
+    required int unitTypeId,
+  }) async {
+    if (barcodeStr.isNotEmpty) {
+      final bc = await db.lookupBarcode(barcodeStr);
+      if (bc != null) return bc.productUnitId;
+    }
+
+    Product? product;
+    if (kode.isNotEmpty) {
+      final kodeLower = kode.toLowerCase();
+      product = existingProducts
+          .where((p) => p.kodeProduk?.toLowerCase() == kodeLower)
+          .firstOrNull;
+    }
+    var matchedByName = false;
+    if (product == null) {
+      final nameLower = name.toLowerCase();
+      product = existingProducts
+          .where((p) => p.name.toLowerCase() == nameLower)
+          .firstOrNull;
+      matchedByName = product != null;
+    }
+    if (product == null) return null;
+
+    final units = await db.getProductUnits(product.id);
+    if (units.isEmpty) return null;
+    final sameType =
+        units.where((u) => u.unitTypeId == unitTypeId).firstOrNull;
+    if (sameType != null) return sameType.id;
+    // Nama sama tapi tidak ada satuan bertipe sama → bukan produk yang sama.
+    if (matchedByName) return null;
+    // SKU cocok = identitas kuat → pakai satuan dasar.
+    return (units.where((u) => u.isBaseUnit).firstOrNull ?? units.first).id;
+  }
+
+  /// Perbarui harga jual/beli tier dasar (minQty = 1) sebuah satuan; buat
+  /// tier baru bila belum ada. Stok TIDAK disentuh.
+  static Future<void> _updateBaseTier({
+    required AppDatabase db,
+    required String productUnitId,
+    required int price,
+    required int costPrice,
+  }) async {
+    final tiers = await db.getPriceTiers(productUnitId);
+    final base = tiers.where((t) => t.minQty == 1).firstOrNull;
+    if (base != null) {
+      await (db.update(db.priceTiers)..where((t) => t.id.equals(base.id)))
+          .write(PriceTiersCompanion(
+        price: Value(price),
+        costPrice: Value(costPrice),
+      ));
+    } else {
+      await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+            id: _uuid.v4(),
+            productUnitId: productUnitId,
+            minQty: const Value(1),
+            price: price,
+            costPrice: Value(costPrice),
+            createdAt: Value(DateTime.now()),
+          ));
+    }
   }
 
   /// Parse harga dari berbagai format: "10000", "10.000" (titik ribuan),
@@ -218,39 +340,51 @@ class CsvImportService {
   /// Exposed for testing.
   static List<List<String>> testParseCsv(String content) => _parseCsv(content);
 
-  /// Parser CSV minimal: handle quoted fields yang mengandung koma.
+  /// Parser CSV minimal: handle quoted fields yang mengandung koma DAN
+  /// newline (RFC 4180) — pemindaian karakter atas seluruh isi file, bukan
+  /// per-baris, supaya field ber-kutip multi-baris tidak terpotong.
   static List<List<String>> _parseCsv(String content) {
-    final lines = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+    final src = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final result = <List<String>>[];
-    for (final line in lines) {
-      if (line.trim().isEmpty) continue;
-      result.add(_parseLine(line));
-    }
-    return result;
-  }
-
-  static List<String> _parseLine(String line) {
-    final fields = <String>[];
+    var fields = <String>[];
     var field = StringBuffer();
     var inQuote = false;
+    var rowHasContent = false;
 
-    for (var i = 0; i < line.length; i++) {
-      final c = line[i];
+    void endField() {
+      fields.add(field.toString());
+      field = StringBuffer();
+    }
+
+    void endRow() {
+      endField();
+      if (rowHasContent || fields.any((f) => f.trim().isNotEmpty)) {
+        result.add(fields);
+      }
+      fields = <String>[];
+      rowHasContent = false;
+    }
+
+    for (var i = 0; i < src.length; i++) {
+      final c = src[i];
       if (c == '"') {
-        if (inQuote && i + 1 < line.length && line[i + 1] == '"') {
+        if (inQuote && i + 1 < src.length && src[i + 1] == '"') {
           field.write('"');
           i++;
         } else {
           inQuote = !inQuote;
         }
+        rowHasContent = true;
       } else if (c == ',' && !inQuote) {
-        fields.add(field.toString());
-        field = StringBuffer();
+        endField();
+      } else if (c == '\n' && !inQuote) {
+        endRow();
       } else {
         field.write(c);
+        rowHasContent = true;
       }
     }
-    fields.add(field.toString());
-    return fields;
+    if (field.isNotEmpty || fields.isNotEmpty) endRow();
+    return result;
   }
 }
