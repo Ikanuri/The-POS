@@ -1,7 +1,7 @@
 name: the_pos
 description: "The POS — Aplikasi kasir offline-first untuk toko grosir."
 publish_to: 'none'
-version: 2.0.0+1
+version: 2.1.0+2
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -34,6 +34,7 @@ dependencies:
   # Printer thermal Bluetooth
   print_bluetooth_thermal: ^1.0.9
   esc_pos_utils_plus: ^2.0.4
+  permission_handler: ^11.3.1
 
   # WiFi LAN sync
   shelf: ^1.4.0
@@ -48,9 +49,11 @@ dependencies:
 
   # UI
   google_fonts: ^6.0.0
+  fl_chart: ^0.68.0
 
   # Utils
   shared_preferences: ^2.2.0
+  flutter_secure_storage: ^9.0.0
   uuid: ^4.4.0
   intl: ^0.19.0
   path_provider: ^2.1.0
@@ -63,6 +66,9 @@ dev_dependencies:
   build_runner: ^2.4.0
   drift_dev: ^2.21.0
   riverpod_generator: ^2.4.0
+  # Untuk fake PathProviderPlatform.instance di test tutup buku (file I/O nyata
+  # tanpa platform channel).
+  path_provider_platform_interface: ^2.1.0
 
 flutter:
   uses-material-design: true

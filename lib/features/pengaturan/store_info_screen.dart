@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class StoreInfoScreen extends ConsumerStatefulWidget {
   const StoreInfoScreen({super.key});
@@ -11,18 +12,42 @@ class StoreInfoScreen extends ConsumerStatefulWidget {
   ConsumerState<StoreInfoScreen> createState() => _StoreInfoScreenState();
 }
 
-class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
+class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
+    with InlineBannerStateMixin<StoreInfoScreen> {
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _waCtrl = TextEditingController();
+  final _telegramCtrl = TextEditingController();
+  final _headerCtrl = TextEditingController();
   final _strukturCtrl = TextEditingController();
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    final device = ref.read(deviceProvider);
-    _nameCtrl.text = device.storeName;
+    _nameCtrl.text = ref.read(deviceProvider).storeName;
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final db = ref.read(databaseProvider);
+    final address = await db.getSetting('store_address') ?? '';
+    final phone = await db.getSetting('store_phone') ?? '';
+    final wa = await db.getSetting('store_whatsapp') ?? '';
+    final telegram = await db.getSetting('store_telegram') ?? '';
+    final header = await db.getSetting('receipt_header') ?? '';
+    final note = await db.getSetting('receipt_note') ?? '';
+    if (mounted) {
+      setState(() {
+        _addressCtrl.text = address;
+        _phoneCtrl.text = phone;
+        _waCtrl.text = wa;
+        _telegramCtrl.text = telegram;
+        _headerCtrl.text = header;
+        _strukturCtrl.text = note;
+      });
+    }
   }
 
   @override
@@ -30,26 +55,40 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     _phoneCtrl.dispose();
+    _waCtrl.dispose();
+    _telegramCtrl.dispose();
+    _headerCtrl.dispose();
     _strukturCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     if (_nameCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nama toko wajib diisi')),
-      );
+      showError('Nama toko wajib diisi');
       return;
     }
     setState(() => _saving = true);
-    // Store info in SharedPreferences (non-encrypted fields)
-    // For now we update the store name via device notifier
-    setState(() => _saving = false);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informasi toko disimpan')),
-      );
-      context.pop();
+    try {
+      final db = ref.read(databaseProvider);
+      final name = _nameCtrl.text.trim();
+      await db.setSetting('store_name', name);
+      await db.setSetting('store_address', _addressCtrl.text.trim());
+      await db.setSetting('store_phone', _phoneCtrl.text.trim());
+      await db.setSetting('store_whatsapp', _waCtrl.text.trim());
+      await db.setSetting('store_telegram', _telegramCtrl.text.trim());
+      await db.setSetting('receipt_header', _headerCtrl.text.trim());
+      await db.setSetting('receipt_note', _strukturCtrl.text.trim());
+      await ref.read(deviceProvider.notifier).updateStoreName(name);
+      if (mounted) {
+        showSuccess('Informasi toko disimpan');
+        Future.delayed(const Duration(milliseconds: 900), () {
+          if (mounted) context.pop();
+        });
+      }
+    } catch (e) {
+      if (mounted) showError('Gagal menyimpan: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -57,7 +96,10 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Informasi Toko')),
-      body: ListView(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextFormField(
@@ -88,14 +130,45 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen> {
           ),
           const SizedBox(height: 12),
           TextFormField(
+            controller: _waCtrl,
+            decoration: const InputDecoration(
+              labelText: 'WhatsApp',
+              hintText: '08xx-xxxx-xxxx',
+            ),
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _telegramCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Telegram',
+              hintText: '@tokoku atau t.me/tokoku',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _headerCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Teks Header Struk',
+              hintText: 'Mis. cabang, slogan, jam buka…',
+              helperText: 'Tampil di bagian atas struk, di bawah info toko',
+            ),
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
             controller: _strukturCtrl,
             decoration: const InputDecoration(
               labelText: 'Catatan di Struk',
               hintText: 'Terima kasih telah berbelanja…',
+              helperText: 'Tampil di bagian bawah struk',
             ),
             maxLines: 3,
           ),
           const SizedBox(height: 80),
+        ],
+      )),
         ],
       ),
       bottomNavigationBar: Padding(

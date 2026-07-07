@@ -258,6 +258,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> kodeProduk = GeneratedColumn<String>(
       'kode_produk', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _parentProductIdMeta =
+      const VerificationMeta('parentProductId');
+  @override
+  late final GeneratedColumn<String> parentProductId = GeneratedColumn<String>(
+      'parent_product_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _isActiveMeta =
       const VerificationMeta('isActive');
   @override
@@ -285,8 +291,16 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, name, productGroupId, kodeProduk, isActive, createdAt, updatedAt];
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        productGroupId,
+        kodeProduk,
+        parentProductId,
+        isActive,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -320,6 +334,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           kodeProduk.isAcceptableOrUnknown(
               data['kode_produk']!, _kodeProdukMeta));
     }
+    if (data.containsKey('parent_product_id')) {
+      context.handle(
+          _parentProductIdMeta,
+          parentProductId.isAcceptableOrUnknown(
+              data['parent_product_id']!, _parentProductIdMeta));
+    }
     if (data.containsKey('is_active')) {
       context.handle(_isActiveMeta,
           isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta));
@@ -349,6 +369,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.int, data['${effectivePrefix}product_group_id']),
       kodeProduk: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}kode_produk']),
+      parentProductId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}parent_product_id']),
       isActive: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
       createdAt: attachedDatabase.typeMapping
@@ -369,6 +391,11 @@ class Product extends DataClass implements Insertable<Product> {
   final String name;
   final int? productGroupId;
   final String? kodeProduk;
+
+  /// Bila terisi, produk ini adalah VARIAN dari produk induk (mis. Pop Ice →
+  /// Coklat). Varian disembunyikan dari katalog utama dan muncul sebagai
+  /// pilihan add-on di modal entri item induk.
+  final String? parentProductId;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -377,6 +404,7 @@ class Product extends DataClass implements Insertable<Product> {
       required this.name,
       this.productGroupId,
       this.kodeProduk,
+      this.parentProductId,
       required this.isActive,
       required this.createdAt,
       required this.updatedAt});
@@ -390,6 +418,9 @@ class Product extends DataClass implements Insertable<Product> {
     }
     if (!nullToAbsent || kodeProduk != null) {
       map['kode_produk'] = Variable<String>(kodeProduk);
+    }
+    if (!nullToAbsent || parentProductId != null) {
+      map['parent_product_id'] = Variable<String>(parentProductId);
     }
     map['is_active'] = Variable<bool>(isActive);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -407,6 +438,9 @@ class Product extends DataClass implements Insertable<Product> {
       kodeProduk: kodeProduk == null && nullToAbsent
           ? const Value.absent()
           : Value(kodeProduk),
+      parentProductId: parentProductId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentProductId),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -421,6 +455,7 @@ class Product extends DataClass implements Insertable<Product> {
       name: serializer.fromJson<String>(json['name']),
       productGroupId: serializer.fromJson<int?>(json['productGroupId']),
       kodeProduk: serializer.fromJson<String?>(json['kodeProduk']),
+      parentProductId: serializer.fromJson<String?>(json['parentProductId']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -434,6 +469,7 @@ class Product extends DataClass implements Insertable<Product> {
       'name': serializer.toJson<String>(name),
       'productGroupId': serializer.toJson<int?>(productGroupId),
       'kodeProduk': serializer.toJson<String?>(kodeProduk),
+      'parentProductId': serializer.toJson<String?>(parentProductId),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -445,6 +481,7 @@ class Product extends DataClass implements Insertable<Product> {
           String? name,
           Value<int?> productGroupId = const Value.absent(),
           Value<String?> kodeProduk = const Value.absent(),
+          Value<String?> parentProductId = const Value.absent(),
           bool? isActive,
           DateTime? createdAt,
           DateTime? updatedAt}) =>
@@ -454,6 +491,9 @@ class Product extends DataClass implements Insertable<Product> {
         productGroupId:
             productGroupId.present ? productGroupId.value : this.productGroupId,
         kodeProduk: kodeProduk.present ? kodeProduk.value : this.kodeProduk,
+        parentProductId: parentProductId.present
+            ? parentProductId.value
+            : this.parentProductId,
         isActive: isActive ?? this.isActive,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -467,6 +507,9 @@ class Product extends DataClass implements Insertable<Product> {
           : this.productGroupId,
       kodeProduk:
           data.kodeProduk.present ? data.kodeProduk.value : this.kodeProduk,
+      parentProductId: data.parentProductId.present
+          ? data.parentProductId.value
+          : this.parentProductId,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -480,6 +523,7 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('name: $name, ')
           ..write('productGroupId: $productGroupId, ')
           ..write('kodeProduk: $kodeProduk, ')
+          ..write('parentProductId: $parentProductId, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -488,8 +532,8 @@ class Product extends DataClass implements Insertable<Product> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, name, productGroupId, kodeProduk, isActive, createdAt, updatedAt);
+  int get hashCode => Object.hash(id, name, productGroupId, kodeProduk,
+      parentProductId, isActive, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -498,6 +542,7 @@ class Product extends DataClass implements Insertable<Product> {
           other.name == this.name &&
           other.productGroupId == this.productGroupId &&
           other.kodeProduk == this.kodeProduk &&
+          other.parentProductId == this.parentProductId &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -508,6 +553,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<String> name;
   final Value<int?> productGroupId;
   final Value<String?> kodeProduk;
+  final Value<String?> parentProductId;
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -517,6 +563,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.name = const Value.absent(),
     this.productGroupId = const Value.absent(),
     this.kodeProduk = const Value.absent(),
+    this.parentProductId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -527,6 +574,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     required String name,
     this.productGroupId = const Value.absent(),
     this.kodeProduk = const Value.absent(),
+    this.parentProductId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -538,6 +586,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<String>? name,
     Expression<int>? productGroupId,
     Expression<String>? kodeProduk,
+    Expression<String>? parentProductId,
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -548,6 +597,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (name != null) 'name': name,
       if (productGroupId != null) 'product_group_id': productGroupId,
       if (kodeProduk != null) 'kode_produk': kodeProduk,
+      if (parentProductId != null) 'parent_product_id': parentProductId,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -560,6 +610,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<String>? name,
       Value<int?>? productGroupId,
       Value<String?>? kodeProduk,
+      Value<String?>? parentProductId,
       Value<bool>? isActive,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
@@ -569,6 +620,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       name: name ?? this.name,
       productGroupId: productGroupId ?? this.productGroupId,
       kodeProduk: kodeProduk ?? this.kodeProduk,
+      parentProductId: parentProductId ?? this.parentProductId,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -590,6 +642,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     }
     if (kodeProduk.present) {
       map['kode_produk'] = Variable<String>(kodeProduk.value);
+    }
+    if (parentProductId.present) {
+      map['parent_product_id'] = Variable<String>(parentProductId.value);
     }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
@@ -613,6 +668,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('name: $name, ')
           ..write('productGroupId: $productGroupId, ')
           ..write('kodeProduk: $kodeProduk, ')
+          ..write('parentProductId: $parentProductId, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3246,6 +3302,12 @@ class $TransactionsTable extends Transactions
   late final GeneratedColumn<String> strukNote = GeneratedColumn<String>(
       'struk_note', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _employeeNameMeta =
+      const VerificationMeta('employeeName');
+  @override
+  late final GeneratedColumn<String> employeeName = GeneratedColumn<String>(
+      'employee_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _pointsEarnedMeta =
       const VerificationMeta('pointsEarned');
   @override
@@ -3282,6 +3344,7 @@ class $TransactionsTable extends Transactions
         paymentMethod,
         internalNote,
         strukNote,
+        employeeName,
         pointsEarned,
         createdAt,
         syncedAt
@@ -3367,6 +3430,12 @@ class $TransactionsTable extends Transactions
       context.handle(_strukNoteMeta,
           strukNote.isAcceptableOrUnknown(data['struk_note']!, _strukNoteMeta));
     }
+    if (data.containsKey('employee_name')) {
+      context.handle(
+          _employeeNameMeta,
+          employeeName.isAcceptableOrUnknown(
+              data['employee_name']!, _employeeNameMeta));
+    }
     if (data.containsKey('points_earned')) {
       context.handle(
           _pointsEarnedMeta,
@@ -3414,6 +3483,8 @@ class $TransactionsTable extends Transactions
           .read(DriftSqlType.string, data['${effectivePrefix}internal_note']),
       strukNote: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}struk_note']),
+      employeeName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}employee_name']),
       pointsEarned: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}points_earned'])!,
       createdAt: attachedDatabase.typeMapping
@@ -3447,6 +3518,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final String paymentMethod;
   final String? internalNote;
   final String? strukNote;
+
+  /// Nama pegawai toko yang melayani / mengambilkan barang pada nota ini.
+  /// Disimpan sebagai snapshot nama (denormalisasi) agar tetap akurat meski
+  /// pegawai dihapus dari master. null = tidak diinput.
+  final String? employeeName;
   final int pointsEarned;
   final DateTime createdAt;
   final DateTime? syncedAt;
@@ -3463,6 +3539,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       required this.paymentMethod,
       this.internalNote,
       this.strukNote,
+      this.employeeName,
       required this.pointsEarned,
       required this.createdAt,
       this.syncedAt});
@@ -3490,6 +3567,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     }
     if (!nullToAbsent || strukNote != null) {
       map['struk_note'] = Variable<String>(strukNote);
+    }
+    if (!nullToAbsent || employeeName != null) {
+      map['employee_name'] = Variable<String>(employeeName);
     }
     map['points_earned'] = Variable<int>(pointsEarned);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -3523,6 +3603,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       strukNote: strukNote == null && nullToAbsent
           ? const Value.absent()
           : Value(strukNote),
+      employeeName: employeeName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(employeeName),
       pointsEarned: Value(pointsEarned),
       createdAt: Value(createdAt),
       syncedAt: syncedAt == null && nullToAbsent
@@ -3547,6 +3630,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
       internalNote: serializer.fromJson<String?>(json['internalNote']),
       strukNote: serializer.fromJson<String?>(json['strukNote']),
+      employeeName: serializer.fromJson<String?>(json['employeeName']),
       pointsEarned: serializer.fromJson<int>(json['pointsEarned']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
@@ -3568,6 +3652,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'paymentMethod': serializer.toJson<String>(paymentMethod),
       'internalNote': serializer.toJson<String?>(internalNote),
       'strukNote': serializer.toJson<String?>(strukNote),
+      'employeeName': serializer.toJson<String?>(employeeName),
       'pointsEarned': serializer.toJson<int>(pointsEarned),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
@@ -3587,6 +3672,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           String? paymentMethod,
           Value<String?> internalNote = const Value.absent(),
           Value<String?> strukNote = const Value.absent(),
+          Value<String?> employeeName = const Value.absent(),
           int? pointsEarned,
           DateTime? createdAt,
           Value<DateTime?> syncedAt = const Value.absent()}) =>
@@ -3605,6 +3691,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         internalNote:
             internalNote.present ? internalNote.value : this.internalNote,
         strukNote: strukNote.present ? strukNote.value : this.strukNote,
+        employeeName:
+            employeeName.present ? employeeName.value : this.employeeName,
         pointsEarned: pointsEarned ?? this.pointsEarned,
         createdAt: createdAt ?? this.createdAt,
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
@@ -3632,6 +3720,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ? data.internalNote.value
           : this.internalNote,
       strukNote: data.strukNote.present ? data.strukNote.value : this.strukNote,
+      employeeName: data.employeeName.present
+          ? data.employeeName.value
+          : this.employeeName,
       pointsEarned: data.pointsEarned.present
           ? data.pointsEarned.value
           : this.pointsEarned,
@@ -3655,6 +3746,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('paymentMethod: $paymentMethod, ')
           ..write('internalNote: $internalNote, ')
           ..write('strukNote: $strukNote, ')
+          ..write('employeeName: $employeeName, ')
           ..write('pointsEarned: $pointsEarned, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
@@ -3676,6 +3768,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       paymentMethod,
       internalNote,
       strukNote,
+      employeeName,
       pointsEarned,
       createdAt,
       syncedAt);
@@ -3695,6 +3788,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.paymentMethod == this.paymentMethod &&
           other.internalNote == this.internalNote &&
           other.strukNote == this.strukNote &&
+          other.employeeName == this.employeeName &&
           other.pointsEarned == this.pointsEarned &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt);
@@ -3713,6 +3807,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String> paymentMethod;
   final Value<String?> internalNote;
   final Value<String?> strukNote;
+  final Value<String?> employeeName;
   final Value<int> pointsEarned;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
@@ -3730,6 +3825,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.paymentMethod = const Value.absent(),
     this.internalNote = const Value.absent(),
     this.strukNote = const Value.absent(),
+    this.employeeName = const Value.absent(),
     this.pointsEarned = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
@@ -3748,6 +3844,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     required String paymentMethod,
     this.internalNote = const Value.absent(),
     this.strukNote = const Value.absent(),
+    this.employeeName = const Value.absent(),
     this.pointsEarned = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
@@ -3772,6 +3869,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? paymentMethod,
     Expression<String>? internalNote,
     Expression<String>? strukNote,
+    Expression<String>? employeeName,
     Expression<int>? pointsEarned,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
@@ -3790,6 +3888,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (paymentMethod != null) 'payment_method': paymentMethod,
       if (internalNote != null) 'internal_note': internalNote,
       if (strukNote != null) 'struk_note': strukNote,
+      if (employeeName != null) 'employee_name': employeeName,
       if (pointsEarned != null) 'points_earned': pointsEarned,
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
@@ -3810,6 +3909,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       Value<String>? paymentMethod,
       Value<String?>? internalNote,
       Value<String?>? strukNote,
+      Value<String?>? employeeName,
       Value<int>? pointsEarned,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt,
@@ -3827,6 +3927,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       internalNote: internalNote ?? this.internalNote,
       strukNote: strukNote ?? this.strukNote,
+      employeeName: employeeName ?? this.employeeName,
       pointsEarned: pointsEarned ?? this.pointsEarned,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
@@ -3873,6 +3974,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (strukNote.present) {
       map['struk_note'] = Variable<String>(strukNote.value);
     }
+    if (employeeName.present) {
+      map['employee_name'] = Variable<String>(employeeName.value);
+    }
     if (pointsEarned.present) {
       map['points_earned'] = Variable<int>(pointsEarned.value);
     }
@@ -3903,6 +4007,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('paymentMethod: $paymentMethod, ')
           ..write('internalNote: $internalNote, ')
           ..write('strukNote: $strukNote, ')
+          ..write('employeeName: $employeeName, ')
           ..write('pointsEarned: $pointsEarned, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
@@ -3991,6 +4096,12 @@ class $TransactionItemsTable extends TransactionItems
   late final GeneratedColumn<int> subtotal = GeneratedColumn<int>(
       'subtotal', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _addedAtMeta =
+      const VerificationMeta('addedAt');
+  @override
+  late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
+      'added_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -4003,7 +4114,8 @@ class $TransactionItemsTable extends TransactionItems
         priceOverridden,
         costAtSale,
         itemNote,
-        subtotal
+        subtotal,
+        addedAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4086,6 +4198,10 @@ class $TransactionItemsTable extends TransactionItems
     } else if (isInserting) {
       context.missing(_subtotalMeta);
     }
+    if (data.containsKey('added_at')) {
+      context.handle(_addedAtMeta,
+          addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta));
+    }
     return context;
   }
 
@@ -4117,6 +4233,8 @@ class $TransactionItemsTable extends TransactionItems
           .read(DriftSqlType.string, data['${effectivePrefix}item_note']),
       subtotal: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}subtotal'])!,
+      addedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}added_at']),
     );
   }
 
@@ -4138,6 +4256,11 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
   final int costAtSale;
   final String? itemNote;
   final int subtotal;
+
+  /// Waktu item ditambahkan SETELAH transaksi awal selesai (fitur "tambah
+  /// belanjaan"). null = item asli saat transaksi dibuat. Terisi = item susulan;
+  /// dipakai struk in-app untuk memberi pembatas "Tambahan <jam>".
+  final DateTime? addedAt;
   const TransactionItem(
       {required this.id,
       required this.transactionId,
@@ -4149,7 +4272,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       required this.priceOverridden,
       required this.costAtSale,
       this.itemNote,
-      required this.subtotal});
+      required this.subtotal,
+      this.addedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4166,6 +4290,9 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       map['item_note'] = Variable<String>(itemNote);
     }
     map['subtotal'] = Variable<int>(subtotal);
+    if (!nullToAbsent || addedAt != null) {
+      map['added_at'] = Variable<DateTime>(addedAt);
+    }
     return map;
   }
 
@@ -4184,6 +4311,9 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           ? const Value.absent()
           : Value(itemNote),
       subtotal: Value(subtotal),
+      addedAt: addedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(addedAt),
     );
   }
 
@@ -4202,6 +4332,7 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       costAtSale: serializer.fromJson<int>(json['costAtSale']),
       itemNote: serializer.fromJson<String?>(json['itemNote']),
       subtotal: serializer.fromJson<int>(json['subtotal']),
+      addedAt: serializer.fromJson<DateTime?>(json['addedAt']),
     );
   }
   @override
@@ -4219,6 +4350,7 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       'costAtSale': serializer.toJson<int>(costAtSale),
       'itemNote': serializer.toJson<String?>(itemNote),
       'subtotal': serializer.toJson<int>(subtotal),
+      'addedAt': serializer.toJson<DateTime?>(addedAt),
     };
   }
 
@@ -4233,7 +4365,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           bool? priceOverridden,
           int? costAtSale,
           Value<String?> itemNote = const Value.absent(),
-          int? subtotal}) =>
+          int? subtotal,
+          Value<DateTime?> addedAt = const Value.absent()}) =>
       TransactionItem(
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
@@ -4246,6 +4379,7 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
         costAtSale: costAtSale ?? this.costAtSale,
         itemNote: itemNote.present ? itemNote.value : this.itemNote,
         subtotal: subtotal ?? this.subtotal,
+        addedAt: addedAt.present ? addedAt.value : this.addedAt,
       );
   TransactionItem copyWithCompanion(TransactionItemsCompanion data) {
     return TransactionItem(
@@ -4270,6 +4404,7 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           data.costAtSale.present ? data.costAtSale.value : this.costAtSale,
       itemNote: data.itemNote.present ? data.itemNote.value : this.itemNote,
       subtotal: data.subtotal.present ? data.subtotal.value : this.subtotal,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
   }
 
@@ -4286,7 +4421,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           ..write('priceOverridden: $priceOverridden, ')
           ..write('costAtSale: $costAtSale, ')
           ..write('itemNote: $itemNote, ')
-          ..write('subtotal: $subtotal')
+          ..write('subtotal: $subtotal, ')
+          ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
   }
@@ -4303,7 +4439,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       priceOverridden,
       costAtSale,
       itemNote,
-      subtotal);
+      subtotal,
+      addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4318,7 +4455,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           other.priceOverridden == this.priceOverridden &&
           other.costAtSale == this.costAtSale &&
           other.itemNote == this.itemNote &&
-          other.subtotal == this.subtotal);
+          other.subtotal == this.subtotal &&
+          other.addedAt == this.addedAt);
 }
 
 class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
@@ -4333,6 +4471,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
   final Value<int> costAtSale;
   final Value<String?> itemNote;
   final Value<int> subtotal;
+  final Value<DateTime?> addedAt;
   final Value<int> rowid;
   const TransactionItemsCompanion({
     this.id = const Value.absent(),
@@ -4346,6 +4485,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     this.costAtSale = const Value.absent(),
     this.itemNote = const Value.absent(),
     this.subtotal = const Value.absent(),
+    this.addedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionItemsCompanion.insert({
@@ -4360,6 +4500,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     this.costAtSale = const Value.absent(),
     this.itemNote = const Value.absent(),
     required int subtotal,
+    this.addedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         transactionId = Value(transactionId),
@@ -4381,6 +4522,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     Expression<int>? costAtSale,
     Expression<String>? itemNote,
     Expression<int>? subtotal,
+    Expression<DateTime>? addedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4395,6 +4537,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
       if (costAtSale != null) 'cost_at_sale': costAtSale,
       if (itemNote != null) 'item_note': itemNote,
       if (subtotal != null) 'subtotal': subtotal,
+      if (addedAt != null) 'added_at': addedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4411,6 +4554,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
       Value<int>? costAtSale,
       Value<String?>? itemNote,
       Value<int>? subtotal,
+      Value<DateTime?>? addedAt,
       Value<int>? rowid}) {
     return TransactionItemsCompanion(
       id: id ?? this.id,
@@ -4424,6 +4568,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
       costAtSale: costAtSale ?? this.costAtSale,
       itemNote: itemNote ?? this.itemNote,
       subtotal: subtotal ?? this.subtotal,
+      addedAt: addedAt ?? this.addedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4464,6 +4609,9 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     if (subtotal.present) {
       map['subtotal'] = Variable<int>(subtotal.value);
     }
+    if (addedAt.present) {
+      map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4484,6 +4632,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
           ..write('costAtSale: $costAtSale, ')
           ..write('itemNote: $itemNote, ')
           ..write('subtotal: $subtotal, ')
+          ..write('addedAt: $addedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8421,6 +8570,879 @@ class PaymentMethodsCompanion extends UpdateCompanion<PaymentMethod> {
   }
 }
 
+class $DailySummariesTable extends DailySummaries
+    with TableInfo<$DailySummariesTable, DailySummary> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DailySummariesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<String> date = GeneratedColumn<String>(
+      'date', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _omzetMeta = const VerificationMeta('omzet');
+  @override
+  late final GeneratedColumn<int> omzet = GeneratedColumn<int>(
+      'omzet', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _hppMeta = const VerificationMeta('hpp');
+  @override
+  late final GeneratedColumn<int> hpp = GeneratedColumn<int>(
+      'hpp', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _labaKotorMeta =
+      const VerificationMeta('labaKotor');
+  @override
+  late final GeneratedColumn<int> labaKotor = GeneratedColumn<int>(
+      'laba_kotor', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _jumlahTransaksiMeta =
+      const VerificationMeta('jumlahTransaksi');
+  @override
+  late final GeneratedColumn<int> jumlahTransaksi = GeneratedColumn<int>(
+      'jumlah_transaksi', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _jumlahItemMeta =
+      const VerificationMeta('jumlahItem');
+  @override
+  late final GeneratedColumn<int> jumlahItem = GeneratedColumn<int>(
+      'jumlah_item', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _pembayaranTunaiMeta =
+      const VerificationMeta('pembayaranTunai');
+  @override
+  late final GeneratedColumn<int> pembayaranTunai = GeneratedColumn<int>(
+      'pembayaran_tunai', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _pembayaranQrisMeta =
+      const VerificationMeta('pembayaranQris');
+  @override
+  late final GeneratedColumn<int> pembayaranQris = GeneratedColumn<int>(
+      'pembayaran_qris', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _pembayaranTransferMeta =
+      const VerificationMeta('pembayaranTransfer');
+  @override
+  late final GeneratedColumn<int> pembayaranTransfer = GeneratedColumn<int>(
+      'pembayaran_transfer', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _pembayaranLainnyaMeta =
+      const VerificationMeta('pembayaranLainnya');
+  @override
+  late final GeneratedColumn<int> pembayaranLainnya = GeneratedColumn<int>(
+      'pembayaran_lainnya', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        date,
+        omzet,
+        hpp,
+        labaKotor,
+        jumlahTransaksi,
+        jumlahItem,
+        pembayaranTunai,
+        pembayaranQris,
+        pembayaranTransfer,
+        pembayaranLainnya,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'daily_summaries';
+  @override
+  VerificationContext validateIntegrity(Insertable<DailySummary> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('omzet')) {
+      context.handle(
+          _omzetMeta, omzet.isAcceptableOrUnknown(data['omzet']!, _omzetMeta));
+    }
+    if (data.containsKey('hpp')) {
+      context.handle(
+          _hppMeta, hpp.isAcceptableOrUnknown(data['hpp']!, _hppMeta));
+    }
+    if (data.containsKey('laba_kotor')) {
+      context.handle(_labaKotorMeta,
+          labaKotor.isAcceptableOrUnknown(data['laba_kotor']!, _labaKotorMeta));
+    }
+    if (data.containsKey('jumlah_transaksi')) {
+      context.handle(
+          _jumlahTransaksiMeta,
+          jumlahTransaksi.isAcceptableOrUnknown(
+              data['jumlah_transaksi']!, _jumlahTransaksiMeta));
+    }
+    if (data.containsKey('jumlah_item')) {
+      context.handle(
+          _jumlahItemMeta,
+          jumlahItem.isAcceptableOrUnknown(
+              data['jumlah_item']!, _jumlahItemMeta));
+    }
+    if (data.containsKey('pembayaran_tunai')) {
+      context.handle(
+          _pembayaranTunaiMeta,
+          pembayaranTunai.isAcceptableOrUnknown(
+              data['pembayaran_tunai']!, _pembayaranTunaiMeta));
+    }
+    if (data.containsKey('pembayaran_qris')) {
+      context.handle(
+          _pembayaranQrisMeta,
+          pembayaranQris.isAcceptableOrUnknown(
+              data['pembayaran_qris']!, _pembayaranQrisMeta));
+    }
+    if (data.containsKey('pembayaran_transfer')) {
+      context.handle(
+          _pembayaranTransferMeta,
+          pembayaranTransfer.isAcceptableOrUnknown(
+              data['pembayaran_transfer']!, _pembayaranTransferMeta));
+    }
+    if (data.containsKey('pembayaran_lainnya')) {
+      context.handle(
+          _pembayaranLainnyaMeta,
+          pembayaranLainnya.isAcceptableOrUnknown(
+              data['pembayaran_lainnya']!, _pembayaranLainnyaMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {date};
+  @override
+  DailySummary map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DailySummary(
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}date'])!,
+      omzet: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}omzet'])!,
+      hpp: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}hpp'])!,
+      labaKotor: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}laba_kotor'])!,
+      jumlahTransaksi: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}jumlah_transaksi'])!,
+      jumlahItem: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}jumlah_item'])!,
+      pembayaranTunai: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}pembayaran_tunai'])!,
+      pembayaranQris: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}pembayaran_qris'])!,
+      pembayaranTransfer: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}pembayaran_transfer'])!,
+      pembayaranLainnya: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}pembayaran_lainnya'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $DailySummariesTable createAlias(String alias) {
+    return $DailySummariesTable(attachedDatabase, alias);
+  }
+}
+
+class DailySummary extends DataClass implements Insertable<DailySummary> {
+  /// 'YYYY-MM-DD' (zona waktu lokal device).
+  final String date;
+  final int omzet;
+  final int hpp;
+  final int labaKotor;
+  final int jumlahTransaksi;
+  final int jumlahItem;
+  final int pembayaranTunai;
+  final int pembayaranQris;
+  final int pembayaranTransfer;
+  final int pembayaranLainnya;
+  final DateTime updatedAt;
+  const DailySummary(
+      {required this.date,
+      required this.omzet,
+      required this.hpp,
+      required this.labaKotor,
+      required this.jumlahTransaksi,
+      required this.jumlahItem,
+      required this.pembayaranTunai,
+      required this.pembayaranQris,
+      required this.pembayaranTransfer,
+      required this.pembayaranLainnya,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['date'] = Variable<String>(date);
+    map['omzet'] = Variable<int>(omzet);
+    map['hpp'] = Variable<int>(hpp);
+    map['laba_kotor'] = Variable<int>(labaKotor);
+    map['jumlah_transaksi'] = Variable<int>(jumlahTransaksi);
+    map['jumlah_item'] = Variable<int>(jumlahItem);
+    map['pembayaran_tunai'] = Variable<int>(pembayaranTunai);
+    map['pembayaran_qris'] = Variable<int>(pembayaranQris);
+    map['pembayaran_transfer'] = Variable<int>(pembayaranTransfer);
+    map['pembayaran_lainnya'] = Variable<int>(pembayaranLainnya);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  DailySummariesCompanion toCompanion(bool nullToAbsent) {
+    return DailySummariesCompanion(
+      date: Value(date),
+      omzet: Value(omzet),
+      hpp: Value(hpp),
+      labaKotor: Value(labaKotor),
+      jumlahTransaksi: Value(jumlahTransaksi),
+      jumlahItem: Value(jumlahItem),
+      pembayaranTunai: Value(pembayaranTunai),
+      pembayaranQris: Value(pembayaranQris),
+      pembayaranTransfer: Value(pembayaranTransfer),
+      pembayaranLainnya: Value(pembayaranLainnya),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory DailySummary.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DailySummary(
+      date: serializer.fromJson<String>(json['date']),
+      omzet: serializer.fromJson<int>(json['omzet']),
+      hpp: serializer.fromJson<int>(json['hpp']),
+      labaKotor: serializer.fromJson<int>(json['labaKotor']),
+      jumlahTransaksi: serializer.fromJson<int>(json['jumlahTransaksi']),
+      jumlahItem: serializer.fromJson<int>(json['jumlahItem']),
+      pembayaranTunai: serializer.fromJson<int>(json['pembayaranTunai']),
+      pembayaranQris: serializer.fromJson<int>(json['pembayaranQris']),
+      pembayaranTransfer: serializer.fromJson<int>(json['pembayaranTransfer']),
+      pembayaranLainnya: serializer.fromJson<int>(json['pembayaranLainnya']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'date': serializer.toJson<String>(date),
+      'omzet': serializer.toJson<int>(omzet),
+      'hpp': serializer.toJson<int>(hpp),
+      'labaKotor': serializer.toJson<int>(labaKotor),
+      'jumlahTransaksi': serializer.toJson<int>(jumlahTransaksi),
+      'jumlahItem': serializer.toJson<int>(jumlahItem),
+      'pembayaranTunai': serializer.toJson<int>(pembayaranTunai),
+      'pembayaranQris': serializer.toJson<int>(pembayaranQris),
+      'pembayaranTransfer': serializer.toJson<int>(pembayaranTransfer),
+      'pembayaranLainnya': serializer.toJson<int>(pembayaranLainnya),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  DailySummary copyWith(
+          {String? date,
+          int? omzet,
+          int? hpp,
+          int? labaKotor,
+          int? jumlahTransaksi,
+          int? jumlahItem,
+          int? pembayaranTunai,
+          int? pembayaranQris,
+          int? pembayaranTransfer,
+          int? pembayaranLainnya,
+          DateTime? updatedAt}) =>
+      DailySummary(
+        date: date ?? this.date,
+        omzet: omzet ?? this.omzet,
+        hpp: hpp ?? this.hpp,
+        labaKotor: labaKotor ?? this.labaKotor,
+        jumlahTransaksi: jumlahTransaksi ?? this.jumlahTransaksi,
+        jumlahItem: jumlahItem ?? this.jumlahItem,
+        pembayaranTunai: pembayaranTunai ?? this.pembayaranTunai,
+        pembayaranQris: pembayaranQris ?? this.pembayaranQris,
+        pembayaranTransfer: pembayaranTransfer ?? this.pembayaranTransfer,
+        pembayaranLainnya: pembayaranLainnya ?? this.pembayaranLainnya,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  DailySummary copyWithCompanion(DailySummariesCompanion data) {
+    return DailySummary(
+      date: data.date.present ? data.date.value : this.date,
+      omzet: data.omzet.present ? data.omzet.value : this.omzet,
+      hpp: data.hpp.present ? data.hpp.value : this.hpp,
+      labaKotor: data.labaKotor.present ? data.labaKotor.value : this.labaKotor,
+      jumlahTransaksi: data.jumlahTransaksi.present
+          ? data.jumlahTransaksi.value
+          : this.jumlahTransaksi,
+      jumlahItem:
+          data.jumlahItem.present ? data.jumlahItem.value : this.jumlahItem,
+      pembayaranTunai: data.pembayaranTunai.present
+          ? data.pembayaranTunai.value
+          : this.pembayaranTunai,
+      pembayaranQris: data.pembayaranQris.present
+          ? data.pembayaranQris.value
+          : this.pembayaranQris,
+      pembayaranTransfer: data.pembayaranTransfer.present
+          ? data.pembayaranTransfer.value
+          : this.pembayaranTransfer,
+      pembayaranLainnya: data.pembayaranLainnya.present
+          ? data.pembayaranLainnya.value
+          : this.pembayaranLainnya,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailySummary(')
+          ..write('date: $date, ')
+          ..write('omzet: $omzet, ')
+          ..write('hpp: $hpp, ')
+          ..write('labaKotor: $labaKotor, ')
+          ..write('jumlahTransaksi: $jumlahTransaksi, ')
+          ..write('jumlahItem: $jumlahItem, ')
+          ..write('pembayaranTunai: $pembayaranTunai, ')
+          ..write('pembayaranQris: $pembayaranQris, ')
+          ..write('pembayaranTransfer: $pembayaranTransfer, ')
+          ..write('pembayaranLainnya: $pembayaranLainnya, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      date,
+      omzet,
+      hpp,
+      labaKotor,
+      jumlahTransaksi,
+      jumlahItem,
+      pembayaranTunai,
+      pembayaranQris,
+      pembayaranTransfer,
+      pembayaranLainnya,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DailySummary &&
+          other.date == this.date &&
+          other.omzet == this.omzet &&
+          other.hpp == this.hpp &&
+          other.labaKotor == this.labaKotor &&
+          other.jumlahTransaksi == this.jumlahTransaksi &&
+          other.jumlahItem == this.jumlahItem &&
+          other.pembayaranTunai == this.pembayaranTunai &&
+          other.pembayaranQris == this.pembayaranQris &&
+          other.pembayaranTransfer == this.pembayaranTransfer &&
+          other.pembayaranLainnya == this.pembayaranLainnya &&
+          other.updatedAt == this.updatedAt);
+}
+
+class DailySummariesCompanion extends UpdateCompanion<DailySummary> {
+  final Value<String> date;
+  final Value<int> omzet;
+  final Value<int> hpp;
+  final Value<int> labaKotor;
+  final Value<int> jumlahTransaksi;
+  final Value<int> jumlahItem;
+  final Value<int> pembayaranTunai;
+  final Value<int> pembayaranQris;
+  final Value<int> pembayaranTransfer;
+  final Value<int> pembayaranLainnya;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const DailySummariesCompanion({
+    this.date = const Value.absent(),
+    this.omzet = const Value.absent(),
+    this.hpp = const Value.absent(),
+    this.labaKotor = const Value.absent(),
+    this.jumlahTransaksi = const Value.absent(),
+    this.jumlahItem = const Value.absent(),
+    this.pembayaranTunai = const Value.absent(),
+    this.pembayaranQris = const Value.absent(),
+    this.pembayaranTransfer = const Value.absent(),
+    this.pembayaranLainnya = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DailySummariesCompanion.insert({
+    required String date,
+    this.omzet = const Value.absent(),
+    this.hpp = const Value.absent(),
+    this.labaKotor = const Value.absent(),
+    this.jumlahTransaksi = const Value.absent(),
+    this.jumlahItem = const Value.absent(),
+    this.pembayaranTunai = const Value.absent(),
+    this.pembayaranQris = const Value.absent(),
+    this.pembayaranTransfer = const Value.absent(),
+    this.pembayaranLainnya = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : date = Value(date);
+  static Insertable<DailySummary> custom({
+    Expression<String>? date,
+    Expression<int>? omzet,
+    Expression<int>? hpp,
+    Expression<int>? labaKotor,
+    Expression<int>? jumlahTransaksi,
+    Expression<int>? jumlahItem,
+    Expression<int>? pembayaranTunai,
+    Expression<int>? pembayaranQris,
+    Expression<int>? pembayaranTransfer,
+    Expression<int>? pembayaranLainnya,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (date != null) 'date': date,
+      if (omzet != null) 'omzet': omzet,
+      if (hpp != null) 'hpp': hpp,
+      if (labaKotor != null) 'laba_kotor': labaKotor,
+      if (jumlahTransaksi != null) 'jumlah_transaksi': jumlahTransaksi,
+      if (jumlahItem != null) 'jumlah_item': jumlahItem,
+      if (pembayaranTunai != null) 'pembayaran_tunai': pembayaranTunai,
+      if (pembayaranQris != null) 'pembayaran_qris': pembayaranQris,
+      if (pembayaranTransfer != null) 'pembayaran_transfer': pembayaranTransfer,
+      if (pembayaranLainnya != null) 'pembayaran_lainnya': pembayaranLainnya,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DailySummariesCompanion copyWith(
+      {Value<String>? date,
+      Value<int>? omzet,
+      Value<int>? hpp,
+      Value<int>? labaKotor,
+      Value<int>? jumlahTransaksi,
+      Value<int>? jumlahItem,
+      Value<int>? pembayaranTunai,
+      Value<int>? pembayaranQris,
+      Value<int>? pembayaranTransfer,
+      Value<int>? pembayaranLainnya,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return DailySummariesCompanion(
+      date: date ?? this.date,
+      omzet: omzet ?? this.omzet,
+      hpp: hpp ?? this.hpp,
+      labaKotor: labaKotor ?? this.labaKotor,
+      jumlahTransaksi: jumlahTransaksi ?? this.jumlahTransaksi,
+      jumlahItem: jumlahItem ?? this.jumlahItem,
+      pembayaranTunai: pembayaranTunai ?? this.pembayaranTunai,
+      pembayaranQris: pembayaranQris ?? this.pembayaranQris,
+      pembayaranTransfer: pembayaranTransfer ?? this.pembayaranTransfer,
+      pembayaranLainnya: pembayaranLainnya ?? this.pembayaranLainnya,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (date.present) {
+      map['date'] = Variable<String>(date.value);
+    }
+    if (omzet.present) {
+      map['omzet'] = Variable<int>(omzet.value);
+    }
+    if (hpp.present) {
+      map['hpp'] = Variable<int>(hpp.value);
+    }
+    if (labaKotor.present) {
+      map['laba_kotor'] = Variable<int>(labaKotor.value);
+    }
+    if (jumlahTransaksi.present) {
+      map['jumlah_transaksi'] = Variable<int>(jumlahTransaksi.value);
+    }
+    if (jumlahItem.present) {
+      map['jumlah_item'] = Variable<int>(jumlahItem.value);
+    }
+    if (pembayaranTunai.present) {
+      map['pembayaran_tunai'] = Variable<int>(pembayaranTunai.value);
+    }
+    if (pembayaranQris.present) {
+      map['pembayaran_qris'] = Variable<int>(pembayaranQris.value);
+    }
+    if (pembayaranTransfer.present) {
+      map['pembayaran_transfer'] = Variable<int>(pembayaranTransfer.value);
+    }
+    if (pembayaranLainnya.present) {
+      map['pembayaran_lainnya'] = Variable<int>(pembayaranLainnya.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailySummariesCompanion(')
+          ..write('date: $date, ')
+          ..write('omzet: $omzet, ')
+          ..write('hpp: $hpp, ')
+          ..write('labaKotor: $labaKotor, ')
+          ..write('jumlahTransaksi: $jumlahTransaksi, ')
+          ..write('jumlahItem: $jumlahItem, ')
+          ..write('pembayaranTunai: $pembayaranTunai, ')
+          ..write('pembayaranQris: $pembayaranQris, ')
+          ..write('pembayaranTransfer: $pembayaranTransfer, ')
+          ..write('pembayaranLainnya: $pembayaranLainnya, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EmployeesTable extends Employees
+    with TableInfo<$EmployeesTable, Employee> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EmployeesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _isActiveMeta =
+      const VerificationMeta('isActive');
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+      'is_active', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_active" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, name, isActive, createdAt, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'employees';
+  @override
+  VerificationContext validateIntegrity(Insertable<Employee> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(_isActiveMeta,
+          isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Employee map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Employee(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      isActive: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $EmployeesTable createAlias(String alias) {
+    return $EmployeesTable(attachedDatabase, alias);
+  }
+}
+
+class Employee extends DataClass implements Insertable<Employee> {
+  final String id;
+  final String name;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Employee(
+      {required this.id,
+      required this.name,
+      required this.isActive,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EmployeesCompanion toCompanion(bool nullToAbsent) {
+    return EmployeesCompanion(
+      id: Value(id),
+      name: Value(name),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory Employee.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Employee(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  Employee copyWith(
+          {String? id,
+          String? name,
+          bool? isActive,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Employee(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        isActive: isActive ?? this.isActive,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  Employee copyWithCompanion(EmployeesCompanion data) {
+    return Employee(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Employee(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, isActive, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Employee &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EmployeesCompanion extends UpdateCompanion<Employee> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EmployeesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EmployeesCompanion.insert({
+    required String id,
+    required String name,
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name);
+  static Insertable<Employee> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EmployeesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<bool>? isActive,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return EmployeesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EmployeesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8452,6 +9474,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $KasirPermissionsTable kasirPermissions =
       $KasirPermissionsTable(this);
   late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
+  late final $DailySummariesTable dailySummaries = $DailySummariesTable(this);
+  late final $EmployeesTable employees = $EmployeesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8478,7 +9502,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         purchases,
         purchaseItems,
         kasirPermissions,
-        paymentMethods
+        paymentMethods,
+        dailySummaries,
+        employees
       ];
 }
 
@@ -8624,6 +9650,7 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   required String name,
   Value<int?> productGroupId,
   Value<String?> kodeProduk,
+  Value<String?> parentProductId,
   Value<bool> isActive,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -8634,6 +9661,7 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<String> name,
   Value<int?> productGroupId,
   Value<String?> kodeProduk,
+  Value<String?> parentProductId,
   Value<bool> isActive,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -8681,6 +9709,10 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get kodeProduk => $composableBuilder(
       column: $table.kodeProduk, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get parentProductId => $composableBuilder(
+      column: $table.parentProductId,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnFilters(column));
@@ -8735,6 +9767,10 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get kodeProduk => $composableBuilder(
       column: $table.kodeProduk, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get parentProductId => $composableBuilder(
+      column: $table.parentProductId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnOrderings(column));
 
@@ -8765,6 +9801,9 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get kodeProduk => $composableBuilder(
       column: $table.kodeProduk, builder: (column) => column);
+
+  GeneratedColumn<String> get parentProductId => $composableBuilder(
+      column: $table.parentProductId, builder: (column) => column);
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
@@ -8824,6 +9863,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<String> name = const Value.absent(),
             Value<int?> productGroupId = const Value.absent(),
             Value<String?> kodeProduk = const Value.absent(),
+            Value<String?> parentProductId = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -8834,6 +9874,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             name: name,
             productGroupId: productGroupId,
             kodeProduk: kodeProduk,
+            parentProductId: parentProductId,
             isActive: isActive,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -8844,6 +9885,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             required String name,
             Value<int?> productGroupId = const Value.absent(),
             Value<String?> kodeProduk = const Value.absent(),
+            Value<String?> parentProductId = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -8854,6 +9896,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             name: name,
             productGroupId: productGroupId,
             kodeProduk: kodeProduk,
+            parentProductId: parentProductId,
             isActive: isActive,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -11094,6 +12137,7 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   required String paymentMethod,
   Value<String?> internalNote,
   Value<String?> strukNote,
+  Value<String?> employeeName,
   Value<int> pointsEarned,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
@@ -11113,6 +12157,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<String> paymentMethod,
   Value<String?> internalNote,
   Value<String?> strukNote,
+  Value<String?> employeeName,
   Value<int> pointsEarned,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
@@ -11203,6 +12248,9 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get strukNote => $composableBuilder(
       column: $table.strukNote, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get employeeName => $composableBuilder(
+      column: $table.employeeName, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get pointsEarned => $composableBuilder(
       column: $table.pointsEarned, builder: (column) => ColumnFilters(column));
@@ -11305,6 +12353,10 @@ class $$TransactionsTableOrderingComposer
   ColumnOrderings<String> get strukNote => $composableBuilder(
       column: $table.strukNote, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get employeeName => $composableBuilder(
+      column: $table.employeeName,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get pointsEarned => $composableBuilder(
       column: $table.pointsEarned,
       builder: (column) => ColumnOrderings(column));
@@ -11360,6 +12412,9 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<String> get strukNote =>
       $composableBuilder(column: $table.strukNote, builder: (column) => column);
+
+  GeneratedColumn<String> get employeeName => $composableBuilder(
+      column: $table.employeeName, builder: (column) => column);
 
   GeneratedColumn<int> get pointsEarned => $composableBuilder(
       column: $table.pointsEarned, builder: (column) => column);
@@ -11451,6 +12506,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String> paymentMethod = const Value.absent(),
             Value<String?> internalNote = const Value.absent(),
             Value<String?> strukNote = const Value.absent(),
+            Value<String?> employeeName = const Value.absent(),
             Value<int> pointsEarned = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
@@ -11469,6 +12525,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             paymentMethod: paymentMethod,
             internalNote: internalNote,
             strukNote: strukNote,
+            employeeName: employeeName,
             pointsEarned: pointsEarned,
             createdAt: createdAt,
             syncedAt: syncedAt,
@@ -11487,6 +12544,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             required String paymentMethod,
             Value<String?> internalNote = const Value.absent(),
             Value<String?> strukNote = const Value.absent(),
+            Value<String?> employeeName = const Value.absent(),
             Value<int> pointsEarned = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
@@ -11505,6 +12563,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             paymentMethod: paymentMethod,
             internalNote: internalNote,
             strukNote: strukNote,
+            employeeName: employeeName,
             pointsEarned: pointsEarned,
             createdAt: createdAt,
             syncedAt: syncedAt,
@@ -11584,6 +12643,7 @@ typedef $$TransactionItemsTableCreateCompanionBuilder
   Value<int> costAtSale,
   Value<String?> itemNote,
   required int subtotal,
+  Value<DateTime?> addedAt,
   Value<int> rowid,
 });
 typedef $$TransactionItemsTableUpdateCompanionBuilder
@@ -11599,6 +12659,7 @@ typedef $$TransactionItemsTableUpdateCompanionBuilder
   Value<int> costAtSale,
   Value<String?> itemNote,
   Value<int> subtotal,
+  Value<DateTime?> addedAt,
   Value<int> rowid,
 });
 
@@ -11660,6 +12721,9 @@ class $$TransactionItemsTableFilterComposer
 
   ColumnFilters<int> get subtotal => $composableBuilder(
       column: $table.subtotal, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get addedAt => $composableBuilder(
+      column: $table.addedAt, builder: (column) => ColumnFilters(column));
 
   $$TransactionsTableFilterComposer get transactionId {
     final $$TransactionsTableFilterComposer composer = $composerBuilder(
@@ -11724,6 +12788,9 @@ class $$TransactionItemsTableOrderingComposer
   ColumnOrderings<int> get subtotal => $composableBuilder(
       column: $table.subtotal, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get addedAt => $composableBuilder(
+      column: $table.addedAt, builder: (column) => ColumnOrderings(column));
+
   $$TransactionsTableOrderingComposer get transactionId {
     final $$TransactionsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -11784,6 +12851,9 @@ class $$TransactionItemsTableAnnotationComposer
   GeneratedColumn<int> get subtotal =>
       $composableBuilder(column: $table.subtotal, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+
   $$TransactionsTableAnnotationComposer get transactionId {
     final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -11840,6 +12910,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             Value<int> costAtSale = const Value.absent(),
             Value<String?> itemNote = const Value.absent(),
             Value<int> subtotal = const Value.absent(),
+            Value<DateTime?> addedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionItemsCompanion(
@@ -11854,6 +12925,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             costAtSale: costAtSale,
             itemNote: itemNote,
             subtotal: subtotal,
+            addedAt: addedAt,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -11868,6 +12940,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             Value<int> costAtSale = const Value.absent(),
             Value<String?> itemNote = const Value.absent(),
             required int subtotal,
+            Value<DateTime?> addedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionItemsCompanion.insert(
@@ -11882,6 +12955,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             costAtSale: costAtSale,
             itemNote: itemNote,
             subtotal: subtotal,
+            addedAt: addedAt,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -14261,6 +15335,445 @@ typedef $$PaymentMethodsTableProcessedTableManager = ProcessedTableManager<
     ),
     PaymentMethod,
     PrefetchHooks Function()>;
+typedef $$DailySummariesTableCreateCompanionBuilder = DailySummariesCompanion
+    Function({
+  required String date,
+  Value<int> omzet,
+  Value<int> hpp,
+  Value<int> labaKotor,
+  Value<int> jumlahTransaksi,
+  Value<int> jumlahItem,
+  Value<int> pembayaranTunai,
+  Value<int> pembayaranQris,
+  Value<int> pembayaranTransfer,
+  Value<int> pembayaranLainnya,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$DailySummariesTableUpdateCompanionBuilder = DailySummariesCompanion
+    Function({
+  Value<String> date,
+  Value<int> omzet,
+  Value<int> hpp,
+  Value<int> labaKotor,
+  Value<int> jumlahTransaksi,
+  Value<int> jumlahItem,
+  Value<int> pembayaranTunai,
+  Value<int> pembayaranQris,
+  Value<int> pembayaranTransfer,
+  Value<int> pembayaranLainnya,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$DailySummariesTableFilterComposer
+    extends Composer<_$AppDatabase, $DailySummariesTable> {
+  $$DailySummariesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get omzet => $composableBuilder(
+      column: $table.omzet, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get hpp => $composableBuilder(
+      column: $table.hpp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get labaKotor => $composableBuilder(
+      column: $table.labaKotor, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get jumlahTransaksi => $composableBuilder(
+      column: $table.jumlahTransaksi,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get jumlahItem => $composableBuilder(
+      column: $table.jumlahItem, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get pembayaranTunai => $composableBuilder(
+      column: $table.pembayaranTunai,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get pembayaranQris => $composableBuilder(
+      column: $table.pembayaranQris,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get pembayaranTransfer => $composableBuilder(
+      column: $table.pembayaranTransfer,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get pembayaranLainnya => $composableBuilder(
+      column: $table.pembayaranLainnya,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$DailySummariesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DailySummariesTable> {
+  $$DailySummariesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get omzet => $composableBuilder(
+      column: $table.omzet, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get hpp => $composableBuilder(
+      column: $table.hpp, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get labaKotor => $composableBuilder(
+      column: $table.labaKotor, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get jumlahTransaksi => $composableBuilder(
+      column: $table.jumlahTransaksi,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get jumlahItem => $composableBuilder(
+      column: $table.jumlahItem, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get pembayaranTunai => $composableBuilder(
+      column: $table.pembayaranTunai,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get pembayaranQris => $composableBuilder(
+      column: $table.pembayaranQris,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get pembayaranTransfer => $composableBuilder(
+      column: $table.pembayaranTransfer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get pembayaranLainnya => $composableBuilder(
+      column: $table.pembayaranLainnya,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$DailySummariesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DailySummariesTable> {
+  $$DailySummariesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<int> get omzet =>
+      $composableBuilder(column: $table.omzet, builder: (column) => column);
+
+  GeneratedColumn<int> get hpp =>
+      $composableBuilder(column: $table.hpp, builder: (column) => column);
+
+  GeneratedColumn<int> get labaKotor =>
+      $composableBuilder(column: $table.labaKotor, builder: (column) => column);
+
+  GeneratedColumn<int> get jumlahTransaksi => $composableBuilder(
+      column: $table.jumlahTransaksi, builder: (column) => column);
+
+  GeneratedColumn<int> get jumlahItem => $composableBuilder(
+      column: $table.jumlahItem, builder: (column) => column);
+
+  GeneratedColumn<int> get pembayaranTunai => $composableBuilder(
+      column: $table.pembayaranTunai, builder: (column) => column);
+
+  GeneratedColumn<int> get pembayaranQris => $composableBuilder(
+      column: $table.pembayaranQris, builder: (column) => column);
+
+  GeneratedColumn<int> get pembayaranTransfer => $composableBuilder(
+      column: $table.pembayaranTransfer, builder: (column) => column);
+
+  GeneratedColumn<int> get pembayaranLainnya => $composableBuilder(
+      column: $table.pembayaranLainnya, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DailySummariesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $DailySummariesTable,
+    DailySummary,
+    $$DailySummariesTableFilterComposer,
+    $$DailySummariesTableOrderingComposer,
+    $$DailySummariesTableAnnotationComposer,
+    $$DailySummariesTableCreateCompanionBuilder,
+    $$DailySummariesTableUpdateCompanionBuilder,
+    (
+      DailySummary,
+      BaseReferences<_$AppDatabase, $DailySummariesTable, DailySummary>
+    ),
+    DailySummary,
+    PrefetchHooks Function()> {
+  $$DailySummariesTableTableManager(
+      _$AppDatabase db, $DailySummariesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DailySummariesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DailySummariesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DailySummariesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> date = const Value.absent(),
+            Value<int> omzet = const Value.absent(),
+            Value<int> hpp = const Value.absent(),
+            Value<int> labaKotor = const Value.absent(),
+            Value<int> jumlahTransaksi = const Value.absent(),
+            Value<int> jumlahItem = const Value.absent(),
+            Value<int> pembayaranTunai = const Value.absent(),
+            Value<int> pembayaranQris = const Value.absent(),
+            Value<int> pembayaranTransfer = const Value.absent(),
+            Value<int> pembayaranLainnya = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DailySummariesCompanion(
+            date: date,
+            omzet: omzet,
+            hpp: hpp,
+            labaKotor: labaKotor,
+            jumlahTransaksi: jumlahTransaksi,
+            jumlahItem: jumlahItem,
+            pembayaranTunai: pembayaranTunai,
+            pembayaranQris: pembayaranQris,
+            pembayaranTransfer: pembayaranTransfer,
+            pembayaranLainnya: pembayaranLainnya,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String date,
+            Value<int> omzet = const Value.absent(),
+            Value<int> hpp = const Value.absent(),
+            Value<int> labaKotor = const Value.absent(),
+            Value<int> jumlahTransaksi = const Value.absent(),
+            Value<int> jumlahItem = const Value.absent(),
+            Value<int> pembayaranTunai = const Value.absent(),
+            Value<int> pembayaranQris = const Value.absent(),
+            Value<int> pembayaranTransfer = const Value.absent(),
+            Value<int> pembayaranLainnya = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DailySummariesCompanion.insert(
+            date: date,
+            omzet: omzet,
+            hpp: hpp,
+            labaKotor: labaKotor,
+            jumlahTransaksi: jumlahTransaksi,
+            jumlahItem: jumlahItem,
+            pembayaranTunai: pembayaranTunai,
+            pembayaranQris: pembayaranQris,
+            pembayaranTransfer: pembayaranTransfer,
+            pembayaranLainnya: pembayaranLainnya,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DailySummariesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $DailySummariesTable,
+    DailySummary,
+    $$DailySummariesTableFilterComposer,
+    $$DailySummariesTableOrderingComposer,
+    $$DailySummariesTableAnnotationComposer,
+    $$DailySummariesTableCreateCompanionBuilder,
+    $$DailySummariesTableUpdateCompanionBuilder,
+    (
+      DailySummary,
+      BaseReferences<_$AppDatabase, $DailySummariesTable, DailySummary>
+    ),
+    DailySummary,
+    PrefetchHooks Function()>;
+typedef $$EmployeesTableCreateCompanionBuilder = EmployeesCompanion Function({
+  required String id,
+  required String name,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$EmployeesTableUpdateCompanionBuilder = EmployeesCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$EmployeesTableFilterComposer
+    extends Composer<_$AppDatabase, $EmployeesTable> {
+  $$EmployeesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+      column: $table.isActive, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EmployeesTableOrderingComposer
+    extends Composer<_$AppDatabase, $EmployeesTable> {
+  $$EmployeesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+      column: $table.isActive, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EmployeesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EmployeesTable> {
+  $$EmployeesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EmployeesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EmployeesTable,
+    Employee,
+    $$EmployeesTableFilterComposer,
+    $$EmployeesTableOrderingComposer,
+    $$EmployeesTableAnnotationComposer,
+    $$EmployeesTableCreateCompanionBuilder,
+    $$EmployeesTableUpdateCompanionBuilder,
+    (Employee, BaseReferences<_$AppDatabase, $EmployeesTable, Employee>),
+    Employee,
+    PrefetchHooks Function()> {
+  $$EmployeesTableTableManager(_$AppDatabase db, $EmployeesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EmployeesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EmployeesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EmployeesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<bool> isActive = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EmployeesCompanion(
+            id: id,
+            name: name,
+            isActive: isActive,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            Value<bool> isActive = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EmployeesCompanion.insert(
+            id: id,
+            name: name,
+            isActive: isActive,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EmployeesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $EmployeesTable,
+    Employee,
+    $$EmployeesTableFilterComposer,
+    $$EmployeesTableOrderingComposer,
+    $$EmployeesTableAnnotationComposer,
+    $$EmployeesTableCreateCompanionBuilder,
+    $$EmployeesTableUpdateCompanionBuilder,
+    (Employee, BaseReferences<_$AppDatabase, $EmployeesTable, Employee>),
+    Employee,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -14309,4 +15822,8 @@ class $AppDatabaseManager {
       $$KasirPermissionsTableTableManager(_db, _db.kasirPermissions);
   $$PaymentMethodsTableTableManager get paymentMethods =>
       $$PaymentMethodsTableTableManager(_db, _db.paymentMethods);
+  $$DailySummariesTableTableManager get dailySummaries =>
+      $$DailySummariesTableTableManager(_db, _db.dailySummaries);
+  $$EmployeesTableTableManager get employees =>
+      $$EmployeesTableTableManager(_db, _db.employees);
 }

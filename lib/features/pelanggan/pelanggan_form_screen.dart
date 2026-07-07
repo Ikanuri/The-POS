@@ -26,6 +26,7 @@ class _PelangganFormScreenState
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _pointsCtrl = TextEditingController(text: '0');
   bool _isLoading = false;
   bool _isEdit = false;
   String? _customerId;
@@ -55,6 +56,7 @@ class _PelangganFormScreenState
         _nameCtrl.text = c.name;
         _phoneCtrl.text = c.phone ?? '';
         _addressCtrl.text = c.address ?? '';
+        _pointsCtrl.text = c.loyaltyPoints.toString();
         setState(() {
           _existing = c;
           _groups = groups;
@@ -83,7 +85,7 @@ class _PelangganFormScreenState
             : _addressCtrl.text.trim()),
         customerGroupId: Value(_selectedGroupId),
         isActive: const Value(true),
-        loyaltyPoints: _isEdit ? const Value.absent() : const Value(0),
+        loyaltyPoints: Value(int.tryParse(_pointsCtrl.text.trim()) ?? 0),
         outstandingDebt: _isEdit ? const Value.absent() : const Value(0),
         createdAt: _isEdit ? const Value.absent() : Value(now),
         updatedAt: Value(now),
@@ -107,11 +109,85 @@ class _PelangganFormScreenState
     }
   }
 
+  Future<void> _delete() async {
+    final c = _existing;
+    if (c == null) return;
+    final hasDebt = c.outstandingDebt > 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Pelanggan'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Hapus "${c.name}" dari daftar pelanggan?'),
+            const SizedBox(height: 8),
+            Text(
+              'Riwayat transaksi lama tetap tersimpan. Pelanggan hanya '
+              'disembunyikan dari daftar aktif.',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+            ),
+            if (hasDebt) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 18,
+                        color: Theme.of(ctx).colorScheme.onErrorContainer),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Masih punya hutang ${formatRupiah(c.outstandingDebt)}. '
+                        'Pastikan sudah dilunasi / dicatat.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(ctx).colorScheme.onErrorContainer),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final db = ref.read(databaseProvider);
+    await db.deactivateCustomer(c.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Pelanggan "${c.name}" dihapus')));
+      context.pop();
+    }
+  }
+
   @override
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
+    _pointsCtrl.dispose();
     super.dispose();
   }
 
@@ -122,6 +198,14 @@ class _PelangganFormScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Pelanggan' : 'Tambah Pelanggan'),
+        actions: [
+          if (_isEdit && _existing != null)
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: scheme.error),
+              tooltip: 'Hapus Pelanggan',
+              onPressed: _isLoading ? null : _delete,
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -204,6 +288,17 @@ class _PelangganFormScreenState
                       onChanged: (v) =>
                           setState(() => _selectedGroupId = v),
                     ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _pointsCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Poin Loyalitas',
+                      suffixText: 'poin',
+                      helperText: 'Bisa diisi/diubah manual berapa pun',
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
                   const SizedBox(height: 80),
                 ],
               ),

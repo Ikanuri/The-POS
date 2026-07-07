@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:uuid/uuid.dart';
 
@@ -37,7 +39,8 @@ class CsvImportService {
     required List<int> bytes,
     required AppDatabase db,
   }) async {
-    final content = String.fromCharCodes(bytes);
+    var content = utf8.decode(bytes, allowMalformed: true);
+    if (content.startsWith('﻿')) content = content.substring(1);
     final rows = _parseCsv(content);
     if (rows.isEmpty) {
       return const CsvImportResult(imported: 0, duplicates: 0, noBarcode: 0, errors: []);
@@ -64,21 +67,31 @@ class CsvImportService {
       return '';
     }
 
+    // Netralkan CSV formula injection: buang prefix =,+,-,@ di awal teks
+    // agar tidak tereksekusi bila data diekspor & dibuka di Excel/Sheets.
+    String sanitize(String s) {
+      var out = s;
+      while (out.isNotEmpty && '=+-@'.contains(out[0])) {
+        out = out.substring(1).trimLeft();
+      }
+      return out;
+    }
+
     for (var rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
       final row = dataRows[rowIdx];
       if (row.isEmpty || row.every((c) => c.trim().isEmpty)) continue;
 
-      final name = col(['nama', 'name', 'product_name', 'nama_produk'], row);
+      final name = sanitize(col(['nama', 'name', 'product_name', 'nama_produk'], row));
       if (name.isEmpty) {
         errors.add('Baris ${rowIdx + 2}: nama produk kosong');
         continue;
       }
 
-      final kode = col(['kode', 'kode_produk', 'code', 'sku'], row);
+      final kode = sanitize(col(['kode', 'kode_produk', 'code', 'sku'], row));
       final grupName = col(['grup', 'group', 'kategori', 'category', 'group_name'], row);
       final satuanName = col(['satuan', 'unit', 'uom', 'unit_type'], row);
-      final hargaJual = int.tryParse(col(['harga_jual', 'harga', 'sell_price', 'price'], row)) ?? 0;
-      final hargaBeli = int.tryParse(col(['harga_beli', 'cost', 'buy_price', 'cogs'], row)) ?? 0;
+      final hargaJual = _parseIntPrice(col(['harga_jual', 'harga', 'sell_price', 'price'], row));
+      final hargaBeli = _parseIntPrice(col(['harga_beli', 'cost', 'buy_price', 'cogs'], row));
       final stok = double.tryParse(col(['stok', 'stock', 'qty', 'quantity'], row)) ?? 0;
       final barcodeStr = col(['barcode', 'kode_barcode', 'ean', 'upc'], row);
 
@@ -89,7 +102,7 @@ class CsvImportService {
           (u) => u.name.toLowerCase() == satuanName.toLowerCase(),
         ).firstOrNull;
         if (matched != null) {
-          unitTypeId = (matched.id == 7 || matched.id == 8) ? 1 : matched.id;
+          unitTypeId = (matched.id == 7 || matched.id == 8) ? 12 : matched.id;
         }
       }
 
@@ -184,6 +197,22 @@ class CsvImportService {
       noBarcode: noBarcode,
       errors: errors,
     );
+  }
+
+  /// Parse harga dari berbagai format: "10000", "10.000" (titik ribuan),
+  /// "10,000" (koma ribuan barat). Mengembalikan 0 jika tidak dapat di-parse.
+  static int _parseIntPrice(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return 0;
+    final direct = int.tryParse(s);
+    if (direct != null) return direct;
+    final noThousands = s.replaceAll('.', '');
+    final noDots = int.tryParse(noThousands);
+    if (noDots != null) return noDots;
+    final noCommas = s.replaceAll(',', '');
+    final noCommaInt = int.tryParse(noCommas);
+    if (noCommaInt != null) return noCommaInt;
+    return (double.tryParse(s) ?? 0).round();
   }
 
   /// Exposed for testing.

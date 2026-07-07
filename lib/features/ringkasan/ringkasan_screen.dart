@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/chart_utils.dart';
 
 final _ringkasanProvider = FutureProvider<_RingkasanData>((ref) async {
   final db = ref.watch(databaseProvider);
@@ -289,31 +290,52 @@ class _HourlyChart extends StatelessWidget {
     }
     final scheme = Theme.of(context).colorScheme;
 
-    return SizedBox(
-      height: 80,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: hourly.asMap().entries.map((e) {
-          final h = e.key;
-          final v = e.value;
-          final height = max > 0 ? (v / max * 70) : 0.0;
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: Tooltip(
-                message: '$h:00\n${formatRupiah(v)}',
-                child: Container(
-                  height: height + 2,
-                  decoration: BoxDecoration(
-                    color: v > 0 ? scheme.primary : scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(2),
+    return Column(
+      children: [
+        SizedBox(
+          height: 80,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: hourly.asMap().entries.map((e) {
+              final h = e.key;
+              final v = e.value;
+              final height = clampedBarHeight(v, max, emptyHeight: 0);
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Tooltip(
+                    message: '$h:00\n${formatRupiah(v)}',
+                    child: Container(
+                      height: height + 2,
+                      decoration: BoxDecoration(
+                        color: v > 0
+                            ? scheme.primary
+                            : scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
                 ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Row(
+          children: hourly.asMap().entries.map((e) {
+            final h = e.key;
+            final label = h % 6 == 0 ? h.toString().padLeft(2, '0') : '';
+            return Expanded(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 8, color: scheme.onSurfaceVariant),
               ),
-            ),
-          );
-        }).toList(),
-      ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }

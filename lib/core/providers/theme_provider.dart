@@ -34,3 +34,44 @@ final themeModeProvider =
     StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
   return ThemeModeNotifier();
 });
+
+enum FontScale {
+  kecil(0.85, 'Kecil'),
+  normal(1.0, 'Normal'),
+  besar(1.15, 'Besar'),
+  sangatBesar(1.3, 'Sangat Besar');
+
+  const FontScale(this.factor, this.label);
+  final double factor;
+  final String label;
+}
+
+class FontScaleNotifier extends StateNotifier<FontScale> {
+  FontScaleNotifier() : super(FontScale.normal) {
+    _load();
+  }
+
+  static const _prefKey = 'font_scale';
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_prefKey);
+    if (saved != null) {
+      state = FontScale.values.firstWhere(
+        (s) => s.name == saved,
+        orElse: () => FontScale.normal,
+      );
+    }
+  }
+
+  Future<void> set(FontScale scale) async {
+    state = scale;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKey, scale.name);
+  }
+}
+
+final fontScaleProvider =
+    StateNotifierProvider<FontScaleNotifier, FontScale>((ref) {
+  return FontScaleNotifier();
+});

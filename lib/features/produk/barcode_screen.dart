@@ -29,10 +29,11 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
     final p = await (db.select(db.products)
           ..where((t) => t.id.equals(widget.productId)))
         .getSingleOrNull();
-    if (p == null || !mounted) {
-      setState(() => _loading = false);
+    if (p == null) {
+      if (mounted) setState(() => _loading = false);
       return;
     }
+    if (!mounted) return;
     final units = await db.getProductUnits(widget.productId);
     final entries = <_BarcodeEntry>[];
     for (final u in units) {

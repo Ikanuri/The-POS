@@ -5,6 +5,10 @@ class Products extends Table {
   TextColumn get name => text()();
   IntColumn get productGroupId => integer().nullable()();
   TextColumn get kodeProduk => text().nullable()();
+  /// Bila terisi, produk ini adalah VARIAN dari produk induk (mis. Pop Ice →
+  /// Coklat). Varian disembunyikan dari katalog utama dan muncul sebagai
+  /// pilihan add-on di modal entri item induk.
+  TextColumn get parentProductId => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -22,7 +26,7 @@ class ProductGroups extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Satuan legacy (ID 1–24): Biji, Pak, Dos, Ret, Sak, Kg, dll.
+/// Satuan legacy (ID 1–25): Kg, Pcs, Pak, Bal, Sak, Slop, Biji, Dos, dll.
 class UnitTypes extends Table {
   IntColumn get id => integer()();
   TextColumn get name => text()();

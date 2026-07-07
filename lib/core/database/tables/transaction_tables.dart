@@ -20,6 +20,12 @@ class Transactions extends Table {
   TextColumn get paymentMethod => text()(); // tunai | transfer | qris | ewallet | tempo
   TextColumn get internalNote => text().nullable()();
   TextColumn get strukNote => text().nullable()();
+
+  /// Nama pegawai toko yang melayani / mengambilkan barang pada nota ini.
+  /// Disimpan sebagai snapshot nama (denormalisasi) agar tetap akurat meski
+  /// pegawai dihapus dari master. null = tidak diinput.
+  TextColumn get employeeName => text().nullable()();
+
   IntColumn get pointsEarned => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
@@ -40,6 +46,11 @@ class TransactionItems extends Table {
   IntColumn get costAtSale => integer().withDefault(const Constant(0))();
   TextColumn get itemNote => text().nullable()(); // catatan item, muncul di struk
   IntColumn get subtotal => integer()();
+
+  /// Waktu item ditambahkan SETELAH transaksi awal selesai (fitur "tambah
+  /// belanjaan"). null = item asli saat transaksi dibuat. Terisi = item susulan;
+  /// dipakai struk in-app untuk memberi pembatas "Tambahan <jam>".
+  DateTimeColumn get addedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

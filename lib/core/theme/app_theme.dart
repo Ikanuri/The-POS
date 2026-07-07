@@ -7,6 +7,43 @@ class AppTheme {
   // Terracotta clay accent — from mockup --accent token
   static const accent = Color(0xFFC96442);
 
+  // ── Warna semantik kasir (konsisten light & dark) ──────────────────
+  // Hutang / sisa bayar → MERAH di semua mode.
+  // Kembalian → HIJAU soft di semua mode.
+  static Color debtFg(bool isDark) =>
+      isDark ? const Color(0xFFFF8A8A) : const Color(0xFFD64545);
+  static Color debtBg(bool isDark) =>
+      isDark ? const Color(0x4DFF6B6B) : const Color(0xFFFCE9E9);
+  static Color changeFg(bool isDark) =>
+      isDark ? const Color(0xFF74E0AC) : const Color(0xFF1E7E4F);
+  static Color changeBg(bool isDark) =>
+      isDark ? const Color(0x4D5FD39A) : const Color(0xFFE3F4EA);
+
+  /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
+  /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).
+  static void showSnack(BuildContext context, String message,
+      {bool isError = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? _dCard : _lInk;
+    final fg = isDark ? _dInk : _lCanvas;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        backgroundColor: bg,
+        content: Row(
+          children: [
+            if (isError) ...[
+              Icon(Icons.error_outline, size: 18, color: debtFg(isDark)),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Text(message, style: TextStyle(color: fg)),
+            ),
+          ],
+        ),
+      ));
+  }
+
   // Light palette — exact mockup CSS tokens
   static const _lCanvas = Color(0xFFEBE8E0);
   static const _lPanel  = Color(0xFFFBFAF7);
@@ -33,6 +70,10 @@ class AppTheme {
 
   static ThemeData light() => _build(false);
   static ThemeData dark()  => _build(true);
+
+  /// Warna latar terdalam (scaffold background) untuk mode yang diberikan.
+  /// Dipakai untuk mewarnai system navigation bar Android agar mengikuti tema.
+  static Color canvasColor(bool isDark) => isDark ? _dCanvas : _lCanvas;
 
   /// Newsreader serif style — use for all monetary/numeric values.
   static TextStyle numStyle(
@@ -61,7 +102,7 @@ class AppTheme {
     final ink3   = isDark ? _dInk3   : _lInk3;
     final sh1    = isDark ? _sh1D    : _sh1L;
 
-    final scheme = ColorScheme.fromSeed(
+    var scheme = ColorScheme.fromSeed(
       seedColor: accent,
       brightness: isDark ? Brightness.dark : Brightness.light,
     ).copyWith(
@@ -71,6 +112,19 @@ class AppTheme {
       onSurface: ink,
       outlineVariant: line,
     );
+
+    // Di dark mode, container M3 (primaryContainer/tertiaryContainer) terlalu
+    // redup untuk chip "Uang Pas", metode bayar terpilih, & kartu "Bayar Nanti".
+    // Naikkan sedikit kecerahannya dengan tint di atas kartu gelap + teks terang.
+    if (isDark) {
+      scheme = scheme.copyWith(
+        primaryContainer: Color.alphaBlend(accent.withOpacity(0.42), card),
+        onPrimaryContainer: ink,
+        tertiaryContainer:
+            Color.alphaBlend(scheme.tertiary.withOpacity(0.40), card),
+        onTertiaryContainer: ink,
+      );
+    }
 
     final base = ThemeData(
       colorScheme: scheme,

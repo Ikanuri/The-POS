@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
@@ -7,6 +6,7 @@ import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/input_formatters.dart';
 import '../cart_provider.dart';
 
 /// Modal entri item: pilih satuan (harga lain), atur qty & harga, lalu
@@ -17,10 +17,12 @@ class ItemEntrySheet extends ConsumerStatefulWidget {
     super.key,
     required this.product,
     this.customerGroupId,
+    this.cartId = kMainCartId,
   });
 
   final Product product;
   final String? customerGroupId;
+  final String cartId;
 
   @override
   ConsumerState<ItemEntrySheet> createState() => _ItemEntrySheetState();
@@ -46,18 +48,45 @@ class _UnitOption {
   final String? barcode;
 }
 
+/// Varian (produk anak) yang bisa ditambahkan sebagai item add-on bersarang.
+class _VariantOption {
+  _VariantOption({
+    required this.product,
+    required this.unitId,
+    required this.unitName,
+    required this.price,
+    required this.costPrice,
+    this.barcode,
+  });
+
+  final Product product;
+  final String unitId;
+  final String unitName;
+  final int price;
+  final int costPrice;
+  final String? barcode;
+}
+
 class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   bool _loading = true;
   bool _canOverride = false;
   List<_UnitOption> _options = [];
   int _selectedIdx = 0;
 
+  List<_VariantOption> _variants = [];
+  final Map<String, double> _variantQty = {}; // variant productId → qty
+
   double _qty = 1;
   int _price = 0;
   bool _priceOverridden = false;
 
+  /// True bila satuan terpilih sudah ada di keranjang saat modal dibuka →
+  /// tampilkan tombol "Hapus dari keranjang".
+  bool _existsInCart = false;
+
   final _priceCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController();
+  final _noteCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -69,6 +98,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   void dispose() {
     _priceCtrl.dispose();
     _qtyCtrl.dispose();
+    _noteCtrl.dispose();
     super.dispose();
   }
 
@@ -110,22 +140,63 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       ));
     }
 
+    // Varian (produk anak) — tiap varian punya satuan dasar sendiri.
+    final variantProducts = await db.getVariants(widget.product.id);
+    final variants = <_VariantOption>[];
+    for (final vp in variantProducts) {
+      final vUnits = await db.getProductUnits(vp.id);
+      if (vUnits.isEmpty) continue;
+      final base =
+          vUnits.firstWhere((u) => u.isBaseUnit, orElse: () => vUnits.first);
+      final vType = await (db.select(db.unitTypes)
+            ..where((t) => t.id.equals(base.unitTypeId ?? 1)))
+          .getSingleOrNull();
+      final vResolved = await priceService.resolvePrice(
+        productUnitId: base.id,
+        qty: 1,
+        customerGroupId: widget.customerGroupId,
+      );
+      final vBarcodes = await db.getProductBarcodes(base.id);
+      variants.add(_VariantOption(
+        product: vp,
+        unitId: base.id,
+        unitName: vType?.name ?? 'Satuan',
+        price: vResolved.price,
+        costPrice: vResolved.costPrice,
+        barcode: vBarcodes
+            .where((b) => b.isPrimary)
+            .map((b) => b.barcode)
+            .firstOrNull,
+      ));
+    }
+
     if (!mounted) return;
 
     // Jika item ini sudah ada di keranjang, prefill qty & harga-nya.
-    final cart = ref.read(cartProvider);
+    final cart = ref.read(cartProvider(widget.cartId));
+    // Prefill qty varian yang sudah ada di keranjang.
+    for (final v in variants) {
+      final ex = cart.where((c) => c.productUnitId == v.unitId).firstOrNull;
+      if (ex != null) _variantQty[v.product.id] = ex.qty;
+    }
     var selIdx = 0;
     double qty = 1;
     int price = opts.isNotEmpty ? opts.first.basePrice : 0;
     bool overridden = false;
+    bool exists = false;
+    String note = '';
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
     for (var i = 0; i < opts.length; i++) {
       final existing =
           cart.where((c) => c.productUnitId == opts[i].unit.id).firstOrNull;
       if (existing != null) {
         selIdx = i;
-        qty = existing.qty;
+        // Prefill dengan effectiveQty agar konsisten dengan tampilan keranjang.
+        qty = notifier.effectiveQtyFor(existing);
         price = existing.price;
         overridden = existing.priceOverridden;
+        note = existing.itemNote ?? '';
+        exists = true;
         break;
       }
     }
@@ -133,16 +204,36 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
 
     setState(() {
       _options = opts;
+      _variants = variants;
       _canOverride = canOverride;
       _selectedIdx = selIdx;
       _qty = qty;
       _price = price;
       _priceOverridden = overridden;
+      _existsInCart = exists;
       _loading = false;
-      _priceCtrl.text = price.toString();
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
       _qtyCtrl.text = _fmtQty(qty);
+      _noteCtrl.text = note;
     });
   }
+
+  void _setVariantQty(String variantId, double q) {
+    setState(() => _variantQty[variantId] = q.clamp(0, 9999));
+  }
+
+  int get _variantTotal {
+    var total = 0;
+    for (final v in _variants) {
+      total += (v.price * (_variantQty[v.product.id] ?? 0)).round();
+    }
+    return total;
+  }
+
+  double get _totalVariantQty =>
+      _variants.fold(0.0, (s, v) => s + (_variantQty[v.product.id] ?? 0));
+
+  bool get _canSubmit => _qty > 0 || _totalVariantQty > 0;
 
   String _fmtQty(double q) => q % 1 == 0 ? q.toInt().toString() : q.toString();
 
@@ -150,11 +241,18 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _options.isEmpty ? null : _options[_selectedIdx];
 
   void _selectUnit(int idx) {
+    // Bila satuan yang dipilih sudah ada di keranjang, ikuti catatan & status
+    // override-nya agar edit konsisten per-satuan.
+    final cart = ref.read(cartProvider(widget.cartId));
+    final existing =
+        cart.where((c) => c.productUnitId == _options[idx].unit.id).firstOrNull;
     setState(() {
       _selectedIdx = idx;
+      _existsInCart = existing != null;
+      _noteCtrl.text = existing?.itemNote ?? '';
       _priceOverridden = false;
       _price = _options[idx].basePrice;
-      _priceCtrl.text = _price.toString();
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(_price);
     });
   }
 
@@ -162,13 +260,13 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     setState(() {
       _price = price;
       _priceOverridden = price != _sel!.basePrice;
-      _priceCtrl.text = price.toString();
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
     });
   }
 
   void _setQty(double q) {
     setState(() {
-      _qty = q < 0 ? 0 : q;
+      _qty = q.clamp(0, 9999);
       _qtyCtrl.text = _fmtQty(_qty);
     });
   }
@@ -176,19 +274,71 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   void _submit() {
     final sel = _sel;
     if (sel == null) return;
-    final notifier = ref.read(cartProvider.notifier);
-    notifier.setItem(CartItem(
-      productId: widget.product.id,
-      productUnitId: sel.unit.id,
-      productName: widget.product.name,
-      unitName: sel.unitName,
-      qty: _qty,
-      price: _price,
-      originalPrice: sel.basePrice,
-      costPrice: sel.costPrice,
-      priceOverridden: _priceOverridden,
-      barcode: sel.barcode,
-    ));
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
+
+    // storedQty = effectiveQty + variantTotal agar offset math benar.
+    // Kalau _qty == 0 tapi ada varian, simpan parent sebagai placeholder
+    // (effectiveQty = 0 → tampil "via varian").
+    final variantQtySum = _totalVariantQty;
+    final storedQty = _qty + variantQtySum;
+
+    final note = _noteCtrl.text.trim();
+    if (storedQty > 0) {
+      notifier.setItem(CartItem(
+        productId: widget.product.id,
+        productUnitId: sel.unit.id,
+        productName: widget.product.name,
+        unitName: sel.unitName,
+        qty: storedQty,
+        price: _price,
+        originalPrice: sel.basePrice,
+        costPrice: sel.costPrice,
+        priceOverridden: _priceOverridden,
+        itemNote: note.isEmpty ? null : note,
+        barcode: sel.barcode,
+      ));
+    }
+
+    // Varian terpilih → item add-on bersarang di bawah induk.
+    for (final v in _variants) {
+      final vq = _variantQty[v.product.id] ?? 0;
+      notifier.setItem(CartItem(
+        productId: v.product.id,
+        productUnitId: v.unitId,
+        productName: v.product.name,
+        unitName: v.unitName,
+        qty: vq,
+        price: v.price,
+        originalPrice: v.price,
+        costPrice: v.costPrice,
+        barcode: v.barcode,
+        parentProductId: widget.product.id,
+        isVariant: true,
+      ));
+    }
+    Navigator.of(context).pop();
+  }
+
+  /// Hapus item (satuan terpilih) dari keranjang. Hanya muncul saat item
+  /// memang sudah ada di keranjang (modal dibuka dari keranjang).
+  void _delete() {
+    final sel = _sel;
+    if (sel == null) return;
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
+    notifier.removeItem(sel.unit.id);
+    // Bila tidak ada lagi baris induk produk ini, hapus juga varian-variannya
+    // agar tidak tertinggal sebagai item yatim di keranjang.
+    final remaining = ref.read(cartProvider(widget.cartId));
+    final hasParentLine = remaining
+        .any((c) => !c.isVariant && c.productId == widget.product.id);
+    if (!hasParentLine) {
+      for (final c in remaining
+          .where((c) =>
+              c.isVariant && c.parentProductId == widget.product.id)
+          .toList()) {
+        notifier.removeItem(c.productUnitId);
+      }
+    }
     Navigator.of(context).pop();
   }
 
@@ -210,14 +360,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 10),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: scheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(2),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: scheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   Padding(
@@ -225,13 +376,51 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.product.name,
-                            style: Theme.of(context).textTheme.titleMedium),
-                        if (widget.product.kodeProduk != null)
-                          Text(widget.product.kodeProduk!,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant)),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(widget.product.name,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
+                            ),
+                            if (_existsInCart)
+                              IconButton(
+                                icon: Icon(Icons.delete_outline,
+                                    color: scheme.error),
+                                tooltip: 'Hapus dari keranjang',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: _delete,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (_sel != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: scheme.secondaryContainer,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Satuan: ${_sel!.unitName}',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: scheme.onSecondaryContainer),
+                                ),
+                              ),
+                            if (widget.product.kodeProduk != null)
+                              Text('Kode: ${widget.product.kodeProduk!}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant)),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -320,9 +509,12 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  _StepBtn(
-                                    icon: Icons.remove,
-                                    onTap: () => _setQty(_qty - 1),
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                        size: 24),
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => _setQty(_qty - 1),
                                   ),
                                   Expanded(
                                     child: TextField(
@@ -336,15 +528,24 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                         contentPadding:
                                             EdgeInsets.symmetric(vertical: 8),
                                       ),
+                                      onTap: () => _qtyCtrl.selection =
+                                          TextSelection(
+                                              baseOffset: 0,
+                                              extentOffset:
+                                                  _qtyCtrl.text.length),
                                       onChanged: (v) {
-                                        final q = double.tryParse(v);
-                                        if (q != null) _qty = q;
+                                        final q = double.tryParse(v.trim());
+                                        setState(() {
+                                          _qty = (q != null && q >= 0) ? q.clamp(0, 9999) : 0;
+                                        });
                                       },
                                     ),
                                   ),
-                                  _StepBtn(
-                                    icon: Icons.add,
-                                    onTap: () => _setQty(_qty + 1),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline,
+                                        size: 24),
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => _setQty(_qty + 1),
                                   ),
                                 ],
                               ),
@@ -375,8 +576,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                 controller: _priceCtrl,
                                 readOnly: !_canOverride,
                                 keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly
+                                inputFormatters: const [
+                                  ThousandsSeparatorFormatter()
                                 ],
                                 decoration: InputDecoration(
                                   isDense: true,
@@ -389,8 +590,16 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                           color: scheme.onSurfaceVariant)
                                       : null,
                                 ),
+                                onTap: _canOverride
+                                    ? () => _priceCtrl.selection =
+                                        TextSelection(
+                                            baseOffset: 0,
+                                            extentOffset:
+                                                _priceCtrl.text.length)
+                                    : null,
                                 onChanged: (v) {
-                                  final p = int.tryParse(v) ?? 0;
+                                  final p =
+                                      ThousandsSeparatorFormatter.parseValue(v);
                                   _price = p;
                                   _priceOverridden =
                                       _sel != null && p != _sel!.basePrice;
@@ -403,6 +612,82 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                       ],
                     ),
                   ),
+
+                  // ── Catatan item ──────────────────────────────────────
+                  const SizedBox(height: 14),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.note_alt_outlined,
+                                size: 14, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Text('Catatan item',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _noteCtrl,
+                          maxLines: 2,
+                          minLines: 1,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            hintText: 'Contoh: tanpa saus, bungkus terpisah',
+                            contentPadding: EdgeInsets.symmetric(
+                                vertical: 8, horizontal: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Varian (add-on bersarang) ─────────────────────────
+                  if (_variants.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_tree_outlined,
+                              size: 15, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text('Varian',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 196),
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          for (final v in _variants)
+                            _VariantRow(
+                              name: v.product.name,
+                              unitName: v.unitName,
+                              price: v.price,
+                              qty: _variantQty[v.product.id] ?? 0,
+                              onMinus: () => _setVariantQty(v.product.id,
+                                  (_variantQty[v.product.id] ?? 0) - 1),
+                              onPlus: () => _setVariantQty(v.product.id,
+                                  (_variantQty[v.product.id] ?? 0) + 1),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
 
                   // ── Subtotal + submit ─────────────────────────────────
@@ -414,12 +699,13 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Subtotal',
+                            Text(_variantTotal > 0 ? 'Total' : 'Subtotal',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: scheme.onSurfaceVariant)),
                             Text(
-                              formatRupiah((_price * _qty).round()),
+                              formatRupiah(
+                                  (_price * _qty).round() + _variantTotal),
                               style: AppTheme.numStyle(context,
                                   size: 18, weight: FontWeight.w700),
                             ),
@@ -428,8 +714,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: FilledButton(
-                            onPressed: _qty > 0 ? _submit : null,
-                            child: Text(_qty > 0
+                            onPressed: _canSubmit ? _submit : null,
+                            child: Text(_canSubmit
                                 ? 'Tambah ke Keranjang'
                                 : 'Atur jumlah'),
                           ),
@@ -439,6 +725,82 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _VariantRow extends StatelessWidget {
+  const _VariantRow({
+    required this.name,
+    required this.unitName,
+    required this.price,
+    required this.qty,
+    required this.onMinus,
+    required this.onPlus,
+  });
+
+  final String name;
+  final String unitName;
+  final int price;
+  final double qty;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final active = qty > 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: active
+            ? scheme.secondaryContainer.withOpacity(0.5)
+            : scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: active ? scheme.secondary : scheme.outlineVariant,
+          width: active ? 1.2 : 0.75,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                Text('$unitName · ${formatRupiah(price)}',
+                    style: TextStyle(
+                        fontSize: 10.5, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, size: 22),
+            visualDensity: VisualDensity.compact,
+            onPressed: qty <= 0 ? null : onMinus,
+          ),
+          SizedBox(
+            width: 24,
+            child: Text(
+              qty % 1 == 0 ? qty.toInt().toString() : qty.toString(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, size: 22),
+            visualDensity: VisualDensity.compact,
+            onPressed: onPlus,
+          ),
+        ],
       ),
     );
   }
@@ -504,26 +866,3 @@ class _PriceChip extends StatelessWidget {
   }
 }
 
-class _StepBtn extends StatelessWidget {
-  const _StepBtn({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: scheme.outlineVariant, width: 0.75),
-        ),
-        child: Icon(icon, size: 18, color: scheme.onSurface),
-      ),
-    );
-  }
-}

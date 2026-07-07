@@ -3,10 +3,68 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/product_providers.dart';
+import '../../core/utils/input_formatters.dart';
+import '../../core/widgets/inline_banner.dart';
+
+/// Buka dialog scanner kamera untuk mengisi field barcode secara otomatis.
+/// Mengembalikan nilai barcode yang ter-scan, atau null jika dibatalkan.
+Future<String?> _scanBarcodeDialog(BuildContext context) async {
+  String? result;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: SizedBox(
+        width: 300,
+        height: 340,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 4, 0),
+              child: Row(
+                children: [
+                  Text('Scan Barcode',
+                      style: Theme.of(ctx).textTheme.titleMedium),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(12)),
+                child: MobileScanner(
+                  onDetect: (capture) {
+                    final barcode =
+                        capture.barcodes.firstOrNull?.rawValue;
+                    if (barcode != null && barcode.isNotEmpty) {
+                      result = barcode;
+                      Navigator.of(ctx).pop();
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return result;
+}
 
 const _uuid = Uuid();
 
@@ -25,12 +83,36 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   bool _isLoading = false;
   bool _isEdit = false;
   bool _readOnly = false;
+  bool _isDirty = false;
+  bool _initialLoaded = false;
+
+  /// Varian yang ditambahkan selama sesi edit ini. Varian tersimpan langsung
+  /// ke DB saat dibuat, jadi bila pengguna membuang perubahan (Buang), varian
+  /// sesi ini harus ikut diurungkan agar "data tidak terlanjur tertambah".
+  final Set<String> _sessionVariantIds = {};
+
+  void _markDirty() {
+    if (_initialLoaded && !_isDirty && !_readOnly) {
+      setState(() => _isDirty = true);
+    }
+  }
+
+  String? _bannerMsg;
+  InlineBannerType _bannerType = InlineBannerType.error;
+
+  void _showBanner(String msg, [InlineBannerType type = InlineBannerType.error]) {
+    setState(() { _bannerMsg = msg; _bannerType = type; });
+  }
 
   List<_UnitEntry> _units = [];
+  /// Id satuan yang sudah tersimpan di DB (saat load). Hanya satuan tersimpan
+  /// yang punya stok untuk disesuaikan — satuan baru belum ada di stock_ledger.
+  final Set<String> _persistedUnitIds = {};
   List<ProductGroup> _groups = [];
   List<UnitType> _unitTypes = [];
   int? _selectedGroupId;
   String? _productId;
+  Stream<List<Product>>? _variantStream;
 
   @override
   void initState() {
@@ -69,17 +151,33 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       for (final u in units) {
         final tiers = await db.getPriceTiers(u.id);
         final barcodes = await db.getProductBarcodes(u.id);
-        final basePrice = tiers.isNotEmpty
-            ? tiers.lastWhere((t) => t.minQty == 1,
-                orElse: () => tiers.last)
-            : null;
+        // tiers ordered DESC minQty — base tier is the one with minQty == 1
+        final baseTier = tiers.firstWhere(
+          (t) => t.minQty == 1,
+          orElse: () => tiers.isNotEmpty ? tiers.last : PriceTier(
+            id: '', productUnitId: u.id, minQty: 1, price: 0, costPrice: 0,
+            createdAt: DateTime.now(),
+          ),
+        );
+        final extraTiers = tiers
+            .where((t) => t.minQty != 1)
+            .map((t) => _TierEntry(
+                  id: t.id,
+                  minQty: t.minQty,
+                  price: t.price,
+                  costPrice: t.costPrice,
+                ))
+            .toList()
+          ..sort((a, b) => a.minQty.compareTo(b.minQty));
+
         entries.add(_UnitEntry(
           id: u.id,
           unitTypeId: u.unitTypeId ?? 1,
           isBaseUnit: u.isBaseUnit,
           ratioToBase: u.ratioToBase,
-          price: basePrice?.price ?? 0,
-          costPrice: basePrice?.costPrice ?? 0,
+          price: baseTier.price,
+          costPrice: baseTier.costPrice,
+          extraTiers: extraTiers,
           barcode: barcodes
               .where((b) => b.isPrimary)
               .map((b) => b.barcode)
@@ -90,6 +188,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         setState(() {
           _selectedGroupId = product.productGroupId;
           _units = entries;
+          _persistedUnitIds
+            ..clear()
+            ..addAll(units.map((u) => u.id));
+          _initialLoaded = true;
         });
       }
     } else {
@@ -105,17 +207,126 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             costPrice: 0,
           ),
         ];
+        _initialLoaded = true;
       });
     }
   }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_units.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tambahkan minimal 1 satuan')),
+  /// Dialog penyesuaian stok manual untuk satu satuan. Menulis langsung ke
+  /// `stock_ledger` (terlepas dari tombol Simpan form). Mengembalikan true bila
+  /// stok berubah, sehingga kartu satuan bisa menyegarkan tampilannya.
+  Future<bool> _adjustStockDialog(String unitId, String unitLabel) async {
+    final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    final current = await db.currentStock(unitId);
+    if (!mounted) return false;
+
+    String fmt(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
+    final qtyCtrl = TextEditingController(text: fmt(current));
+    final noteCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sesuaikan Stok'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$unitLabel\nStok saat ini: ${fmt(current)}',
+                style: const TextStyle(fontSize: 12)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyCtrl,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Stok baru',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: noteCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Catatan (opsional)',
+                hintText: 'mis. opname, barang rusak',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => ctx.pop(false), child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => ctx.pop(true), child: const Text('Simpan')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return false;
+    final newQty = double.tryParse(qtyCtrl.text.trim().replaceAll(',', '.'));
+    if (newQty == null || newQty < 0) {
+      if (mounted) _showBanner('Angka stok tidak valid');
+      return false;
+    }
+    final delta = await db.adjustStock(
+      productUnitId: unitId,
+      newQty: newQty,
+      kasirId: device.deviceCode,
+      note: noteCtrl.text.trim().isEmpty
+          ? 'Penyesuaian manual'
+          : noteCtrl.text.trim(),
+    );
+    if (mounted) {
+      _showBanner(
+        'Stok disesuaikan (${delta >= 0 ? '+' : ''}${fmt(delta)})',
+        InlineBannerType.success,
       );
-      return;
+    }
+    return delta != 0;
+  }
+
+  Future<void> _save() async {
+    final wasNew = !_isEdit;
+    final ok = await _persistProduct();
+    if (!ok) return;
+    if (mounted) {
+      // Varian sesi ini sudah ikut "dikomit" lewat Simpan → jangan diurungkan.
+      _sessionVariantIds.clear();
+      // Tandai bersih agar PopScope tidak menahan navigasi programatik ini.
+      _isDirty = false;
+      // Banner sukses ditampilkan di layar daftar produk setelah kembali
+      // (layar ini akan ditutup, jadi banner inline di sini tak terlihat).
+      context.pop(wasNew ? 'Produk disimpan' : 'Produk diperbarui');
+    }
+  }
+
+  /// Simpan produk + satuan ke DB tanpa menutup layar. Mengembalikan true bila
+  /// berhasil. Dipakai tombol Simpan dan alur "Tambah Varian" pada produk baru
+  /// (varian butuh induk yang sudah tersimpan lebih dulu).
+  Future<bool> _persistProduct() async {
+    if (!_formKey.currentState!.validate()) return false;
+    if (_units.isEmpty) {
+      _showBanner('Tambahkan minimal 1 satuan');
+      return false;
+    }
+
+    // Validate extra tiers: no duplicate minQty, ratioToBase > 0.
+    for (final u in _units) {
+      if (u.ratioToBase <= 0) {
+        _showBanner('Rasio satuan harus > 0');
+        return false;
+      }
+      final minQtys = u.extraTiers.map((t) => t.minQty).toList();
+      if (minQtys.toSet().length != minQtys.length) {
+        _showBanner('Minimum qty pada tier harga tidak boleh duplikat');
+        return false;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -148,6 +359,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       final tiers = <String, List<PriceTiersCompanion>>{};
       for (final u in _units) {
         tiers[u.id] = [
+          // Base price (minQty defaults to 1)
           PriceTiersCompanion.insert(
             id: _uuid.v4(),
             productUnitId: u.id,
@@ -155,6 +367,15 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             costPrice: Value(u.costPrice),
             createdAt: Value(now),
           ),
+          // Grosir tiers
+          ...u.extraTiers.map((t) => PriceTiersCompanion.insert(
+                id: _uuid.v4(),
+                productUnitId: u.id,
+                minQty: Value(t.minQty),
+                price: t.price,
+                costPrice: Value(t.costPrice),
+                createdAt: Value(now),
+              )),
         ];
       }
 
@@ -180,17 +401,25 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         barcodesByUnitTempId: barcodes,
       );
 
+      // Invalidate catalog detail cache (price tiers don't trigger watchProducts).
+      ref.read(productUpdateCountProvider.notifier).state++;
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEdit ? 'Produk diperbarui' : 'Produk disimpan')),
-        );
-        context.pop();
+        // Produk kini tersimpan: pindah ke mode edit di tempat agar bagian
+        // Varian (yang butuh induk tersimpan) langsung bisa dipakai, dan satuan
+        // baru bisa disesuaikan stoknya.
+        setState(() {
+          _productId = prodId;
+          _isEdit = true;
+          _persistedUnitIds
+            ..clear()
+            ..addAll(_units.map((u) => u.id));
+        });
       }
+      return true;
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) _showBanner('Error: $e');
+      return false;
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -208,11 +437,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         costPrice: 0,
       ));
     });
+    _markDirty();
   }
 
   void _removeUnit(int index) {
     if (_units.length <= 1) return;
     setState(() => _units.removeAt(index));
+    _markDirty();
   }
 
   @override
@@ -224,7 +455,38 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope<Object?>(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final hasVariantAdds = _sessionVariantIds.isNotEmpty;
+        final leave = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Buang perubahan?'),
+            content: Text(hasVariantAdds
+                ? 'Perubahan yang belum disimpan akan hilang, termasuk '
+                    '${_sessionVariantIds.length} varian yang baru ditambahkan.'
+                : 'Perubahan yang belum disimpan akan hilang.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Kembali'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Buang'),
+              ),
+            ],
+          ),
+        );
+        if (leave == true) {
+          // Urungkan varian yang ditambah selama sesi ini sebelum keluar.
+          await _discardSessionVariants();
+          if (context.mounted) context.pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_isEdit
             ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
@@ -240,9 +502,17 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Form(
-              key: _formKey,
-              child: ListView(
+          : Column(
+              children: [
+                InlineBanner(
+                  message: _bannerMsg,
+                  type: _bannerType,
+                  onDismiss: () => setState(() => _bannerMsg = null),
+                ),
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (_readOnly)
@@ -286,6 +556,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                       hintText: 'Contoh: Indomie Goreng',
                     ),
                     textCapitalization: TextCapitalization.words,
+                    onChanged: (_) => _markDirty(),
                     validator: (v) => _readOnly
                         ? null
                         : (v == null || v.trim().isEmpty
@@ -296,28 +567,62 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   TextFormField(
                     controller: _kodeCtrl,
                     readOnly: _readOnly,
+                    onChanged: (_) => _markDirty(),
                     decoration: const InputDecoration(
                       labelText: 'Kode Produk',
                       hintText: 'Contoh: IMI-001 (opsional)',
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (_groups.where((g) => g.name != null).isNotEmpty)
-                    DropdownButtonFormField<int?>(
-                      value: _selectedGroupId,
+                  DropdownButtonFormField<int?>(
+                      // Guard: bila kategori terpilih sudah dihapus di layar
+                      // lain, jatuhkan ke null agar dropdown tidak crash
+                      // (assert "exactly one item with value").
+                      value: _groups.any((g) =>
+                              g.name != null && g.id == _selectedGroupId)
+                          ? _selectedGroupId
+                          : null,
                       decoration: const InputDecoration(labelText: 'Kategori'),
                       items: [
-                        const DropdownMenuItem(value: null, child: Text('Tanpa Kategori')),
+                        const DropdownMenuItem(
+                            value: null, child: Text('Tanpa Kategori')),
                         ..._groups
                             .where((g) => g.name != null)
                             .map((g) => DropdownMenuItem(
                                   value: g.id,
                                   child: Text(g.name!),
                                 )),
+                        DropdownMenuItem(
+                          value: -1,
+                          child: Row(children: [
+                            Icon(Icons.add,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Text('+ Tambah Kategori Baru…',
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary)),
+                          ]),
+                        ),
                       ],
                       onChanged: _readOnly
                           ? null
-                          : (v) => setState(() => _selectedGroupId = v),
+                          : (v) async {
+                              if (v == -1) {
+                                await context.push('/produk/kategori');
+                                final fresh = await ref
+                                    .read(databaseProvider)
+                                    .getAllProductGroups();
+                                if (mounted) {
+                                  setState(() => _groups = fresh);
+                                }
+                                return;
+                              }
+                              setState(() => _selectedGroupId = v);
+                              _markDirty();
+                            },
                     ),
                   const SizedBox(height: 20),
                   Row(
@@ -334,22 +639,166 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ..._units.asMap().entries.map((e) => _UnitCard(
-                        key: ValueKey(e.value.id),
-                        entry: e.value,
-                        index: e.key,
-                        unitTypes: _unitTypes,
-                        canRemove: !_readOnly && _units.length > 1,
-                        readOnly: _readOnly,
-                        onChanged: _readOnly
-                            ? (_) {}
-                            : (updated) =>
-                                setState(() => _units[e.key] = updated),
-                        onRemove: () => _removeUnit(e.key),
-                      )),
+                  ..._units.asMap().entries.map((e) {
+                    final unitId = e.value.id;
+                    final showStock = _persistedUnitIds.contains(unitId);
+                    final unitLabel = _unitTypes
+                            .where((t) => t.id == e.value.unitTypeId)
+                            .map((t) => t.name)
+                            .firstOrNull ??
+                        'Satuan ${e.key + 1}';
+                    return _UnitCard(
+                      key: ValueKey(unitId),
+                      entry: e.value,
+                      index: e.key,
+                      unitTypes: _unitTypes,
+                      canRemove: !_readOnly && _units.length > 1,
+                      readOnly: _readOnly,
+                      showStock: showStock,
+                      canAdjustStock: showStock && !_readOnly,
+                      loadStock: showStock
+                          ? () => ref.read(databaseProvider).currentStock(unitId)
+                          : null,
+                      onAdjustStock: () => _adjustStockDialog(unitId, unitLabel),
+                      onChanged: _readOnly
+                          ? (_) {}
+                          : (updated) {
+                              setState(() => _units[e.key] = updated);
+                              _markDirty();
+                            },
+                      onRemove: () => _removeUnit(e.key),
+                    );
+                  }),
+
+                  // ── Varian (produk anak / add-on) ────────────────────
+                  if (!_readOnly || _productId != null) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Text('Varian',
+                            style: Theme.of(context).textTheme.titleSmall),
+                        const Spacer(),
+                        if (!_readOnly)
+                          TextButton.icon(
+                            onPressed: _addVariant,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Tambah Varian'),
+                          ),
+                      ],
+                    ),
+                    Text(
+                      'Sub-item seperti rasa / tipe (mis. Pop Ice → Coklat). '
+                      'Muncul saat tap produk di kasir & bersarang di struk.',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_productId == null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'Tap "Tambah Varian" untuk menyimpan produk ini lalu '
+                          'menambahkan varian.',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
+                        ),
+                      )
+                    else
+                      StreamBuilder<List<Product>>(
+                        stream: _variantStream ??= ref
+                            .read(databaseProvider)
+                            .watchVariants(_productId!),
+                        builder: (ctx, snap) {
+                          final vs = snap.data ?? const <Product>[];
+                          if (vs.isEmpty) {
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 4),
+                              child: Text('Belum ada varian.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant)),
+                            );
+                          }
+                          return Column(
+                            children: vs
+                                .map((v) => Card(
+                                      margin:
+                                          const EdgeInsets.only(bottom: 6),
+                                      child: ListTile(
+                                        dense: true,
+                                        onTap: _readOnly
+                                            ? null
+                                            : () => _editVariant(v),
+                                        leading: const Icon(
+                                            Icons.subdirectory_arrow_right,
+                                            size: 18),
+                                        title: Text(v.name),
+                                        subtitle: v.kodeProduk != null
+                                            ? Text('Kode: ${v.kodeProduk}',
+                                                style: const TextStyle(
+                                                    fontSize: 11))
+                                            : null,
+                                        trailing: _readOnly
+                                            ? null
+                                            : Row(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(),
+                                                    icon: const Icon(
+                                                        Icons.edit_outlined,
+                                                        size: 19),
+                                                    tooltip: 'Edit varian',
+                                                    onPressed: () =>
+                                                        _editVariant(v),
+                                                  ),
+                                                  const SizedBox(width: 14),
+                                                  IconButton(
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(),
+                                                    icon: Icon(
+                                                        Icons.delete_outline,
+                                                        size: 20,
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .error),
+                                                    tooltip: 'Hapus varian',
+                                                    onPressed: () =>
+                                                        _deleteVariant(v),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    ))
+                                .toList(),
+                          );
+                        },
+                      ),
+                  ],
                   const SizedBox(height: 80),
                 ],
               ),
+            ),
+                ),
+              ],
             ),
       bottomNavigationBar: _readOnly
           ? null
@@ -361,7 +810,216 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 child: const Text('Simpan Produk'),
               ),
             ),
+      ),
     );
+  }
+
+  /// Dialog form varian (dipakai Tambah & Edit). Mengembalikan nilai input,
+  /// atau null bila dibatalkan.
+  Future<({String name, int price, String? barcode, bool trackStock})?>
+      _variantDialog({
+    required String title,
+    required String confirmLabel,
+    String name = '',
+    required int price,
+    String? barcode,
+    bool trackStock = false,
+  }) async {
+    final nameCtrl = TextEditingController(text: name);
+    final priceCtrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(price));
+    final barcodeCtrl = TextEditingController(text: barcode ?? '');
+    var track = trackStock;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                    labelText: 'Nama Varian *', hintText: 'Contoh: Coklat'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: priceCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: const [ThousandsSeparatorFormatter()],
+                decoration: const InputDecoration(
+                    labelText: 'Harga', prefixText: 'Rp '),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: barcodeCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Barcode (opsional)',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.qr_code_scanner, size: 20),
+                    tooltip: 'Scan barcode',
+                    onPressed: () async {
+                      final bc = await _scanBarcodeDialog(context);
+                      if (bc != null) barcodeCtrl.text = bc;
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: track,
+                onChanged: (v) => setDialog(() => track = v),
+                title: const Text('Lacak stok varian',
+                    style: TextStyle(fontSize: 14)),
+                subtitle: const Text(
+                    'Aktifkan bila varian punya stok terpisah',
+                    style: TextStyle(fontSize: 11)),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                if (nameCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx, true);
+              },
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return null;
+    return (
+      name: nameCtrl.text.trim(),
+      price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
+      barcode:
+          barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
+      trackStock: track,
+    );
+  }
+
+  Future<void> _addVariant() async {
+    // Varian butuh induk yang sudah tersimpan. Untuk produk baru, simpan dulu
+    // (di tempat) lalu lanjut menambah varian.
+    if (_productId == null) {
+      final saved = await _persistProduct();
+      if (!saved || !mounted) return;
+    }
+    final base = _units.firstWhere((u) => u.isBaseUnit,
+        orElse: () => _units.first);
+    // Harga default mengikuti induk.
+    final res = await _variantDialog(
+      title: 'Tambah Varian',
+      confirmLabel: 'Tambah',
+      price: base.price,
+    );
+    if (res == null) return;
+    final db = ref.read(databaseProvider);
+    final variantId = await db.createVariant(
+      parentProductId: _productId!,
+      name: res.name,
+      price: res.price,
+      costPrice: base.costPrice,
+      unitTypeId: base.unitTypeId,
+      barcode: res.barcode,
+      isNonStock: !res.trackStock,
+    );
+    // Lacak agar bisa diurungkan bila edit dibatalkan; tandai dirty supaya
+    // dialog konfirmasi muncul saat menekan kembali.
+    _sessionVariantIds.add(variantId);
+    _markDirty();
+    if (mounted) {
+      _showBanner('Varian "${res.name}" ditambahkan',
+          InlineBannerType.success);
+    }
+  }
+
+  Future<void> _editVariant(Product v) async {
+    final db = ref.read(databaseProvider);
+    // Ambil nilai varian saat ini untuk pra-isi dialog.
+    final units = await db.getProductUnits(v.id);
+    final baseUnit =
+        units.where((u) => u.isBaseUnit).firstOrNull ?? units.firstOrNull;
+    var curPrice = 0;
+    String? curBarcode;
+    var trackStock = false;
+    if (baseUnit != null) {
+      final tiers = await db.getPriceTiers(baseUnit.id);
+      curPrice = tiers.where((t) => t.minQty == 1).map((t) => t.price).firstOrNull ??
+          (tiers.isNotEmpty ? tiers.last.price : 0);
+      final bcs = await db.getProductBarcodes(baseUnit.id);
+      curBarcode = bcs.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull;
+      trackStock = !baseUnit.isNonStock;
+    }
+    if (!mounted) return;
+    final res = await _variantDialog(
+      title: 'Edit Varian',
+      confirmLabel: 'Simpan',
+      name: v.name,
+      price: curPrice,
+      barcode: curBarcode,
+      trackStock: trackStock,
+    );
+    if (res == null) return;
+    await db.updateVariant(
+      variantProductId: v.id,
+      name: res.name,
+      price: res.price,
+      barcode: res.barcode,
+      isNonStock: !res.trackStock,
+    );
+    ref.read(productUpdateCountProvider.notifier).state++;
+    if (mounted) {
+      _showBanner('Varian "${res.name}" diperbarui', InlineBannerType.success);
+    }
+  }
+
+  Future<void> _deleteVariant(Product v) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Varian'),
+        content: Text('Hapus varian "${v.name}"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(databaseProvider).deleteVariant(v.id);
+    // Sudah dihapus manual → tak perlu diurungkan lagi saat discard.
+    _sessionVariantIds.remove(v.id);
+  }
+
+  /// Hapus varian yang ditambahkan selama sesi edit ini (dipanggil saat
+  /// pengguna memilih "Buang"). Varian dibuat langsung di DB, jadi tanpa ini
+  /// varian akan tetap tertambah meski perubahan dibatalkan.
+  Future<void> _discardSessionVariants() async {
+    if (_sessionVariantIds.isEmpty) return;
+    final db = ref.read(databaseProvider);
+    for (final id in _sessionVariantIds) {
+      await db.deleteVariant(id);
+    }
+    _sessionVariantIds.clear();
   }
 
   Future<void> _confirmDeactivate() async {
@@ -388,6 +1046,22 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   }
 }
 
+// ─── Data classes ────────────────────────────────────────────────────────────
+
+class _TierEntry {
+  _TierEntry({
+    required this.id,
+    required this.minQty,
+    required this.price,
+    required this.costPrice,
+  });
+
+  final String id;
+  int minQty;
+  int price;
+  int costPrice;
+}
+
 class _UnitEntry {
   _UnitEntry({
     required this.id,
@@ -396,8 +1070,9 @@ class _UnitEntry {
     required this.ratioToBase,
     required this.price,
     required this.costPrice,
+    List<_TierEntry>? extraTiers,
     this.barcode,
-  });
+  }) : extraTiers = extraTiers ?? [];
 
   final String id;
   int unitTypeId;
@@ -405,6 +1080,7 @@ class _UnitEntry {
   double ratioToBase;
   int price;
   int costPrice;
+  List<_TierEntry> extraTiers;
   String? barcode;
 
   _UnitEntry copyWith({
@@ -413,6 +1089,7 @@ class _UnitEntry {
     double? ratioToBase,
     int? price,
     int? costPrice,
+    List<_TierEntry>? extraTiers,
     String? barcode,
   }) =>
       _UnitEntry(
@@ -422,9 +1099,12 @@ class _UnitEntry {
         ratioToBase: ratioToBase ?? this.ratioToBase,
         price: price ?? this.price,
         costPrice: costPrice ?? this.costPrice,
+        extraTiers: extraTiers ?? this.extraTiers,
         barcode: barcode ?? this.barcode,
       );
 }
+
+// ─── Unit Card ───────────────────────────────────────────────────────────────
 
 class _UnitCard extends StatefulWidget {
   const _UnitCard({
@@ -436,6 +1116,10 @@ class _UnitCard extends StatefulWidget {
     required this.readOnly,
     required this.onChanged,
     required this.onRemove,
+    this.showStock = false,
+    this.canAdjustStock = false,
+    this.loadStock,
+    this.onAdjustStock,
   });
 
   final _UnitEntry entry;
@@ -445,6 +1129,13 @@ class _UnitCard extends StatefulWidget {
   final bool readOnly;
   final ValueChanged<_UnitEntry> onChanged;
   final VoidCallback onRemove;
+
+  /// Tampilkan baris stok (hanya untuk satuan yang sudah tersimpan).
+  final bool showStock;
+  final bool canAdjustStock;
+  final Future<double> Function()? loadStock;
+  /// Buka dialog penyesuaian; true bila stok berubah → kartu menyegarkan.
+  final Future<bool> Function()? onAdjustStock;
 
   @override
   State<_UnitCard> createState() => _UnitCardState();
@@ -456,9 +1147,22 @@ class _UnitCardState extends State<_UnitCard> {
   late final TextEditingController _ratioCtrl;
   late final TextEditingController _barcodeCtrl;
 
+  late List<_TierEntry> _extraTiers;
+  late List<TextEditingController> _tierMinCtrl;
+  late List<TextEditingController> _tierPriceCtrl;
+
+  Future<double>? _stockFuture;
+
+  void _refreshStock() {
+    if (widget.loadStock != null) {
+      setState(() => _stockFuture = widget.loadStock!());
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    if (widget.loadStock != null) _stockFuture = widget.loadStock!();
     _priceCtrl = TextEditingController(
         text: widget.entry.price > 0 ? widget.entry.price.toString() : '');
     _costCtrl = TextEditingController(
@@ -471,6 +1175,15 @@ class _UnitCardState extends State<_UnitCard> {
             : '1');
     _barcodeCtrl =
         TextEditingController(text: widget.entry.barcode ?? '');
+
+    _extraTiers = List.from(widget.entry.extraTiers);
+    _tierMinCtrl = _extraTiers
+        .map((t) => TextEditingController(text: t.minQty.toString()))
+        .toList();
+    _tierPriceCtrl = _extraTiers
+        .map((t) => TextEditingController(
+            text: t.price > 0 ? t.price.toString() : ''))
+        .toList();
   }
 
   @override
@@ -479,7 +1192,53 @@ class _UnitCardState extends State<_UnitCard> {
     _costCtrl.dispose();
     _ratioCtrl.dispose();
     _barcodeCtrl.dispose();
+    for (final c in _tierMinCtrl) {
+      c.dispose();
+    }
+    for (final c in _tierPriceCtrl) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _addTier() {
+    final newTier = _TierEntry(
+      id: _uuid.v4(),
+      minQty: _extraTiers.isNotEmpty
+          ? (_extraTiers.last.minQty + 10)
+          : 10,
+      price: 0,
+      costPrice: 0,
+    );
+    setState(() {
+      _extraTiers.add(newTier);
+      _tierMinCtrl
+          .add(TextEditingController(text: newTier.minQty.toString()));
+      _tierPriceCtrl.add(TextEditingController(text: ''));
+    });
+    widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
+  }
+
+  void _removeTier(int i) {
+    _tierMinCtrl[i].dispose();
+    _tierPriceCtrl[i].dispose();
+    setState(() {
+      _extraTiers.removeAt(i);
+      _tierMinCtrl.removeAt(i);
+      _tierPriceCtrl.removeAt(i);
+    });
+    widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
+  }
+
+  void _syncTier(int i) {
+    final rawMin = int.tryParse(_tierMinCtrl[i].text) ?? 2;
+    _extraTiers[i] = _TierEntry(
+      id: _extraTiers[i].id,
+      minQty: rawMin < 2 ? 2 : rawMin,
+      price: int.tryParse(_tierPriceCtrl[i].text) ?? 0,
+      costPrice: _extraTiers[i].costPrice,
+    );
+    widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
   }
 
   @override
@@ -492,6 +1251,7 @@ class _UnitCardState extends State<_UnitCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Header row ──────────────────────────────────────────────────
             Row(
               children: [
                 Text(
@@ -521,6 +1281,59 @@ class _UnitCardState extends State<_UnitCard> {
               ],
             ),
             const SizedBox(height: 8),
+
+            // ── Stok terkini + tombol sesuaikan ──────────────────────────────
+            if (widget.showStock) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined,
+                        size: 16, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text('Stok: ',
+                        style: TextStyle(
+                            fontSize: 13, color: scheme.onSurfaceVariant)),
+                    FutureBuilder<double>(
+                      future: _stockFuture,
+                      builder: (_, snap) {
+                        final s = snap.data;
+                        final txt = s == null
+                            ? '…'
+                            : (s % 1 == 0 ? s.toInt().toString() : s.toString());
+                        return Text(txt,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700));
+                      },
+                    ),
+                    const Spacer(),
+                    if (widget.canAdjustStock)
+                      TextButton.icon(
+                        onPressed: () async {
+                          final changed =
+                              await widget.onAdjustStock?.call() ?? false;
+                          if (changed) _refreshStock();
+                        },
+                        icon: const Icon(Icons.tune, size: 15),
+                        label: const Text('Sesuaikan'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+
+            // ── Unit type dropdown ───────────────────────────────────────────
             DropdownButtonFormField<int>(
               value: widget.entry.unitTypeId,
               decoration: const InputDecoration(
@@ -540,6 +1353,8 @@ class _UnitCardState extends State<_UnitCard> {
                     },
             ),
             const SizedBox(height: 8),
+
+            // ── Base price row ───────────────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -584,6 +1399,8 @@ class _UnitCardState extends State<_UnitCard> {
               ],
             ),
             const SizedBox(height: 8),
+
+            // ── Ratio & barcode row ──────────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -595,7 +1412,8 @@ class _UnitCardState extends State<_UnitCard> {
                       isDense: true,
                       hintText: 'Contoh: 10, 40',
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     onChanged: widget.readOnly
                         ? null
                         : (v) {
@@ -612,9 +1430,26 @@ class _UnitCardState extends State<_UnitCard> {
                   child: TextFormField(
                     controller: _barcodeCtrl,
                     readOnly: widget.readOnly,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Barcode',
                       isDense: true,
+                      suffixIcon: widget.readOnly
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.qr_code_scanner,
+                                  size: 18),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Scan barcode',
+                              onPressed: () async {
+                                final bc =
+                                    await _scanBarcodeDialog(context);
+                                if (bc != null && mounted) {
+                                  _barcodeCtrl.text = bc;
+                                  widget.onChanged(widget.entry
+                                      .copyWith(barcode: bc));
+                                }
+                              },
+                            ),
                     ),
                     onChanged: widget.readOnly
                         ? null
@@ -627,6 +1462,90 @@ class _UnitCardState extends State<_UnitCard> {
                 ),
               ],
             ),
+
+            // ── Grosir tiers ─────────────────────────────────────────────────
+            if (_extraTiers.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Harga Grosir',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              for (var i = 0; i < _extraTiers.length; i++) ...[
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 76,
+                      child: TextFormField(
+                        controller: _tierMinCtrl[i],
+                        readOnly: widget.readOnly,
+                        decoration: const InputDecoration(
+                          labelText: '≥ Qty',
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        onChanged: widget.readOnly
+                            ? null
+                            : (_) => _syncTier(i),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _tierPriceCtrl[i],
+                        readOnly: widget.readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'Harga Grosir',
+                          isDense: true,
+                          prefixText: 'Rp ',
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        onChanged: widget.readOnly
+                            ? null
+                            : (_) => _syncTier(i),
+                      ),
+                    ),
+                    if (!widget.readOnly) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(Icons.remove_circle_outline,
+                            size: 18, color: scheme.error),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _removeTier(i),
+                        tooltip: 'Hapus tier',
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+
+            if (!widget.readOnly) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _addTier,
+                icon: const Icon(Icons.add, size: 15),
+                label: const Text('Tambah Harga Grosir'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+            ],
+
+            // ── Base unit toggle ─────────────────────────────────────────────
             if (!widget.entry.isBaseUnit) ...[
               const SizedBox(height: 4),
               CheckboxListTile(
@@ -638,8 +1557,8 @@ class _UnitCardState extends State<_UnitCard> {
                     ? null
                     : (v) {
                         if (v == true) {
-                          widget
-                              .onChanged(widget.entry.copyWith(isBaseUnit: true));
+                          widget.onChanged(
+                              widget.entry.copyWith(isBaseUnit: true));
                         }
                       },
               ),

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/lan_sync_service.dart';
+import '../../core/widgets/inline_banner.dart';
+import '../../core/widgets/qr_sync_widgets.dart';
 
 class SyncScreen extends ConsumerStatefulWidget {
   const SyncScreen({super.key});
@@ -12,11 +14,13 @@ class SyncScreen extends ConsumerStatefulWidget {
   ConsumerState<SyncScreen> createState() => _SyncScreenState();
 }
 
-class _SyncScreenState extends ConsumerState<SyncScreen> {
+class _SyncScreenState extends ConsumerState<SyncScreen>
+    with InlineBannerStateMixin<SyncScreen> {
   // Host state
   bool _hostRunning = false;
   String _hostIp = '';
   String _hostToken = '';
+  List<PendingSyncItem> _queue = [];
 
   // Client state
   final _ipCtrl = TextEditingController();
@@ -25,7 +29,17 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
   String? _syncResult;
 
   @override
+  void initState() {
+    super.initState();
+    // Listen for queue changes while screen is open.
+    LanSyncService.onQueueChanged = () {
+      if (mounted) setState(() => _queue = LanSyncService.pendingQueue.toList());
+    };
+  }
+
+  @override
   void dispose() {
+    LanSyncService.onQueueChanged = null;
     LanSyncService.stopHost();
     _ipCtrl.dispose();
     _tokenCtrl.dispose();
@@ -39,6 +53,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
         _hostRunning = false;
         _hostIp = '';
         _hostToken = '';
+        _queue = [];
       });
       return;
     }
@@ -53,30 +68,102 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
         _hostRunning = true;
         _hostIp = ip;
         _hostToken = token;
+        _queue = LanSyncService.pendingQueue.toList();
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal start server: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error),
-      );
+      showError('Gagal start server: $e');
     }
+  }
+
+  Future<void> _approve(PendingSyncItem item) async {
+    // Kategori yang tersedia di payload ini (yang ada datanya), beserta jumlah.
+    final available = <String, ({List<String> tables, int count})>{};
+    LanSyncService.syncCategories.forEach((label, tables) {
+      final count = item.tables[tables.first]?.length ?? 0;
+      if (count > 0) available[label] = (tables: tables, count: count);
+    });
+
+    if (available.isEmpty) {
+      // Tidak ada data append-only untuk diterima → buang dari antrian.
+      LanSyncService.rejectSync(item.id);
+      if (mounted) showSuccess('Tidak ada data baru untuk diterima');
+      return;
+    }
+
+    final selected = {for (final k in available.keys) k: true};
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Terima Data Sync'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pilih kategori data dari ${item.fromIp} yang ingin diterima.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              ...available.entries.map((e) => CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text('${e.key} (${e.value.count})'),
+                    value: selected[e.key],
+                    onChanged: (v) =>
+                        setSt(() => selected[e.key] = v ?? false),
+                  )),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Batal')),
+            FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Terima')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    final allowed = <String>{};
+    available.forEach((label, v) {
+      if (selected[label] == true) allowed.addAll(v.tables);
+    });
+    if (allowed.isEmpty) {
+      LanSyncService.rejectSync(item.id);
+      if (mounted) showSuccess('Tidak ada kategori dipilih — sync dilewati');
+      return;
+    }
+
+    try {
+      final received =
+          await LanSyncService.approveSync(item.id, allowedTables: allowed);
+      if (mounted) showSuccess('Sync disetujui · $received baris diterima');
+    } catch (e) {
+      if (mounted) showError('Gagal merge: $e');
+    }
+  }
+
+  void _reject(PendingSyncItem item) {
+    LanSyncService.rejectSync(item.id);
+    if (mounted) showSuccess('Sync dari ${item.fromIp} ditolak');
   }
 
   void _copy(String value, String label) {
     Clipboard.setData(ClipboardData(text: value));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label disalin: $value')),
-    );
+    showSuccess('$label disalin: $value');
   }
 
   Future<void> _sync() async {
     final ip = _ipCtrl.text.trim();
     final token = _tokenCtrl.text.trim().toUpperCase();
     if (ip.isEmpty || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Masukkan IP dan Token host')),
-      );
+      showError('Masukkan IP dan Token host');
       return;
     }
     setState(() {
@@ -94,8 +181,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _syncResult =
-            'Selesai! Diterima: ${result.received} baris, Dikirim: ${result.sent} baris';
+        _syncResult = result.pendingApproval
+            ? 'Data terkirim, menunggu persetujuan owner di perangkat host.\n'
+                'Diterima dari host: ${result.received} baris.'
+            : 'Selesai! Diterima: ${result.received} baris, Dikirim: ${result.sent} baris';
       });
     } catch (e) {
       if (!mounted) return;
@@ -112,7 +201,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sync WiFi')),
-      body: ListView(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Host mode (owner/asisten)
@@ -148,6 +240,13 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                         onCopy: () => _copy(_hostToken, 'Token'),
                       ),
                       const SizedBox(height: 12),
+                      Center(
+                        child: QrSyncDisplay(data: {
+                          'ip': '$_hostIp:8625',
+                          'key': _hostToken,
+                        }),
+                      ),
+                      const SizedBox(height: 12),
                       FilledButton.tonal(
                         onPressed: _toggleHost,
                         child: const Text('Stop Server'),
@@ -163,6 +262,86 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
               ),
             ),
             const SizedBox(height: 12),
+
+            // B-4: Antrian persetujuan sync dari perangkat kasir.
+            if (_queue.isNotEmpty) ...[
+              Row(children: [
+                Icon(Icons.pending_actions_outlined,
+                    color: scheme.tertiary, size: 18),
+                const SizedBox(width: 6),
+                Text('Menunggu Persetujuan (${_queue.length})',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ]),
+              const SizedBox(height: 6),
+              ..._queue.map((item) {
+                final mins = DateTime.now()
+                    .difference(item.arrivedAt)
+                    .inMinutes;
+                return Card(
+                  color: scheme.tertiaryContainer,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.devices_outlined, size: 16,
+                                color: scheme.onTertiaryContainer),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(item.fromIp,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.onTertiaryContainer)),
+                            ),
+                            Text(
+                                mins == 0
+                                    ? 'Baru saja'
+                                    : '$mins menit lalu',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onTertiaryContainer
+                                        .withOpacity(0.6))),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(item.tablesSummary,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onTertiaryContainer
+                                    .withOpacity(0.8))),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => _reject(item),
+                                style: OutlinedButton.styleFrom(
+                                    foregroundColor: scheme.error),
+                                child: const Text('Tolak'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () => _approve(item),
+                                style: FilledButton.styleFrom(
+                                    backgroundColor: scheme.primary,
+                                    foregroundColor: scheme.onPrimary),
+                                child: const Text('Setuju'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
           ],
 
           // Client mode (semua device bisa sync)
@@ -180,8 +359,22 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                   ]),
                   const SizedBox(height: 8),
                   Text(
-                    'Masukkan IP dan Token yang ditampilkan di perangkat host.',
+                    'Scan QR atau masukkan IP dan Token dari perangkat host.',
                     style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final data = await showQrSyncScanner(context);
+                      if (data == null || !mounted) return;
+                      var ip = data['ip'] as String? ?? '';
+                      final key = data['key'] as String? ?? '';
+                      if (ip.contains(':')) ip = ip.split(':').first;
+                      if (ip.isNotEmpty) _ipCtrl.text = ip;
+                      if (key.isNotEmpty) _tokenCtrl.text = key;
+                    },
+                    icon: const Icon(Icons.qr_code_scanner, size: 18),
+                    label: const Text('Scan QR Host'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -196,11 +389,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                   TextFormField(
                     controller: _tokenCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'Token (6 karakter)',
+                      labelText: 'Token (12 karakter)',
                       isDense: true,
                     ),
                     textCapitalization: TextCapitalization.characters,
-                    maxLength: 6,
+                    maxLength: 12,
                   ),
                   const SizedBox(height: 4),
                   if (_syncing)
@@ -243,6 +436,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
               ),
             ),
           ),
+        ],
+      )),
         ],
       ),
     );

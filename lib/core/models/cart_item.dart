@@ -14,6 +14,8 @@ class CartItem {
     this.priceOverridden = false,
     this.itemNote,
     this.barcode,
+    this.parentProductId,
+    this.isVariant = false,
   });
 
   final String productId;
@@ -28,13 +30,23 @@ class CartItem {
   final String? itemNote;
   final String? barcode;
 
+  /// Bila item ini varian (produk anak), berisi id produk induk agar di
+  /// keranjang & struk tampil bersarang di bawah induknya.
+  final String? parentProductId;
+  final bool isVariant;
+
   int get subtotal => (price * qty).round();
+
+  /// Sentinel agar [copyWith] bisa membedakan "tidak diubah" (parameter
+  /// dihilangkan) dari "set ke null" (hapus catatan). Tanpa ini, mengirim
+  /// `itemNote: null` tak bisa menghapus catatan yang sudah ada.
+  static const Object _unset = Object();
 
   CartItem copyWith({
     double? qty,
     int? price,
     bool? priceOverridden,
-    String? itemNote,
+    Object? itemNote = _unset,
   }) =>
       CartItem(
         productId: productId,
@@ -46,8 +58,12 @@ class CartItem {
         originalPrice: originalPrice,
         costPrice: costPrice,
         priceOverridden: priceOverridden ?? this.priceOverridden,
-        itemNote: itemNote ?? this.itemNote,
+        itemNote: identical(itemNote, _unset)
+            ? this.itemNote
+            : itemNote as String?,
         barcode: barcode,
+        parentProductId: parentProductId,
+        isVariant: isVariant,
       );
 
   Map<String, dynamic> toJson() => {
@@ -62,6 +78,8 @@ class CartItem {
         'priceOverridden': priceOverridden,
         'itemNote': itemNote,
         'barcode': barcode,
+        'parentProductId': parentProductId,
+        'isVariant': isVariant,
       };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
@@ -76,5 +94,7 @@ class CartItem {
         priceOverridden: json['priceOverridden'] as bool? ?? false,
         itemNote: json['itemNote'] as String?,
         barcode: json['barcode'] as String?,
+        parentProductId: json['parentProductId'] as String?,
+        isVariant: json['isVariant'] as bool? ?? false,
       );
 }

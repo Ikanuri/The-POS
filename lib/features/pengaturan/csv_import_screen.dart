@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/csv_import_service.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class CsvImportScreen extends ConsumerStatefulWidget {
   const CsvImportScreen({super.key});
@@ -12,7 +13,8 @@ class CsvImportScreen extends ConsumerStatefulWidget {
   ConsumerState<CsvImportScreen> createState() => _CsvImportScreenState();
 }
 
-class _CsvImportScreenState extends ConsumerState<CsvImportScreen> {
+class _CsvImportScreenState extends ConsumerState<CsvImportScreen>
+    with InlineBannerStateMixin<CsvImportScreen> {
   bool _busy = false;
 
   Future<void> _pickAndImport() async {
@@ -85,12 +87,7 @@ class _CsvImportScreenState extends ConsumerState<CsvImportScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal import: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      showError('Gagal import: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -101,9 +98,13 @@ class _CsvImportScreenState extends ConsumerState<CsvImportScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Import Produk CSV')),
-      body: _busy
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(
+            child: _busy
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 Card(
@@ -141,6 +142,9 @@ class _CsvImportScreenState extends ConsumerState<CsvImportScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 }

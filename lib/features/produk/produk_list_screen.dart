@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/widgets/inline_banner.dart';
 
 final _searchQueryProvider = StateProvider<String>((ref) => '');
 final _selectedGroupProvider = StateProvider<int?>((ref) => null);
@@ -27,11 +28,24 @@ final _canEditProdukProvider = FutureProvider.autoDispose<bool>((ref) async {
   return ref.watch(databaseProvider).isPermissionEnabled('input_stok');
 });
 
-class ProdukListScreen extends ConsumerWidget {
+class ProdukListScreen extends ConsumerStatefulWidget {
   const ProdukListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProdukListScreen> createState() => _ProdukListScreenState();
+}
+
+class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
+    with InlineBannerStateMixin<ProdukListScreen> {
+  /// Buka form produk lalu tampilkan banner sukses bila form mengembalikan
+  /// pesan saat ditutup (mis. "Produk disimpan").
+  Future<void> _openForm(String route) async {
+    final result = await context.push<Object?>(route);
+    if (result is String && result.isNotEmpty) showSuccess(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final device = ref.watch(deviceProvider);
     final query = ref.watch(_searchQueryProvider);
     final groupId = ref.watch(_selectedGroupProvider);
@@ -47,16 +61,32 @@ class ProdukListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Produk'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.sync_alt_outlined),
+            tooltip: 'Sinkron Harga',
+            onPressed: () => context.push('/produk/sinkron-harga'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.label_outline),
+            tooltip: 'Kelola Kategori',
+            onPressed: () => context.push('/produk/kategori'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.collections_bookmark_outlined),
+            tooltip: 'Katalog',
+            onPressed: () => context.push('/produk/katalog'),
+          ),
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.add),
               tooltip: 'Tambah Produk',
-              onPressed: () => context.push('/produk/baru'),
+              onPressed: () => _openForm('/produk/baru'),
             ),
         ],
       ),
       body: Column(
         children: [
+          inlineBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: TextField(
@@ -132,7 +162,7 @@ class ProdukListScreen extends ConsumerWidget {
                         if (canEdit && query.isEmpty) ...[
                           const SizedBox(height: 16),
                           FilledButton.icon(
-                            onPressed: () => context.push('/produk/baru'),
+                            onPressed: () => _openForm('/produk/baru'),
                             icon: const Icon(Icons.add),
                             label: const Text('Tambah Produk'),
                           ),
@@ -148,6 +178,7 @@ class ProdukListScreen extends ConsumerWidget {
                   itemBuilder: (context, i) => _ProductTile(
                     product: prods[i],
                     canEdit: canEdit,
+                    onOpen: _openForm,
                   ),
                 );
               },
@@ -192,9 +223,14 @@ class _GroupChip extends StatelessWidget {
 }
 
 class _ProductTile extends ConsumerWidget {
-  const _ProductTile({required this.product, required this.canEdit});
+  const _ProductTile({
+    required this.product,
+    required this.canEdit,
+    required this.onOpen,
+  });
   final Product product;
   final bool canEdit;
+  final Future<void> Function(String route) onOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -216,11 +252,12 @@ class _ProductTile extends ConsumerWidget {
       trailing: canEdit
           ? IconButton(
               icon: const Icon(Icons.edit_outlined, size: 20),
-              onPressed: () =>
-                  context.push('/produk/${product.id}'),
+              onPressed: () => onOpen('/produk/${product.id}'),
             )
           : null,
-      onTap: () => context.push('/produk/${product.id}'),
+      // Tetap bisa di-tap walau !canEdit: form membuka mode read-only
+      // ("Detail Produk") untuk kasir tanpa izin input_stok.
+      onTap: () => onOpen('/produk/${product.id}'),
     );
   }
 }

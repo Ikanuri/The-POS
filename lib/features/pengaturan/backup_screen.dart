@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/db_export_service.dart';
+import '../../core/widgets/inline_banner.dart';
 
 class BackupScreen extends ConsumerStatefulWidget {
   const BackupScreen({super.key});
@@ -12,7 +13,8 @@ class BackupScreen extends ConsumerStatefulWidget {
   ConsumerState<BackupScreen> createState() => _BackupScreenState();
 }
 
-class _BackupScreenState extends ConsumerState<BackupScreen> {
+class _BackupScreenState extends ConsumerState<BackupScreen>
+    with InlineBannerStateMixin<BackupScreen> {
   bool _busy = false;
 
   Future<void> _export() async {
@@ -55,12 +57,16 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
 
     setState(() => _busy = true);
     try {
-      final device = ref.read(deviceProvider);
       final db = ref.read(databaseProvider);
-      final bytes = await DbExportService.export(
+      // exportPortable (BPOP2): key hanya dari password, TIDAK diikat
+      // storeKey toko ini. Backup harus bisa direstore di device/toko lain
+      // (mis. HP baru setelah HP lama hilang/rusak) — kalau diikat storeKey
+      // toko asal (format BPOS1 lama), restore di toko/device manapun selain
+      // toko asal PASTI gagal "password salah" walau password benar, karena
+      // storeKey toko tujuan (acak, di-generate ulang tiap setup) tidak
+      // mungkin sama dengan storeKey toko asal.
+      final bytes = await DbExportService.exportPortable(
         db: db,
-        storeKey: device.storeKey!,
-        storeUuid: device.storeUuid!,
         password: password,
       );
 
@@ -74,14 +80,10 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Backup berhasil disimpan')),
-      );
+      showSuccess('Backup berhasil disimpan');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal backup: $e'), backgroundColor: Theme.of(context).colorScheme.error),
-      );
+      showError('Gagal backup: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -148,25 +150,18 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       );
       await DbExportService.restore(db: db, payload: payload);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data berhasil di-restore')),
-      );
+      // Sebagian layar (mis. Ringkasan, grup produk) memakai cache sekali-
+      // ambil yang tidak auto-refresh dari perubahan DB mendadak sebesar ini
+      // (beda dengan daftar produk/pelanggan yang live-update). Sarankan
+      // restart agar semua layar pasti konsisten dengan data baru.
+      showSuccess(
+          'Data berhasil di-restore. Tutup & buka ulang aplikasi agar semua layar menampilkan data terbaru.');
     } on BackupException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      showError(e.message);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal restore: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      showError('Gagal restore: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -177,9 +172,13 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Backup & Restore')),
-      body: _busy
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      body: Column(
+        children: [
+          inlineBanner(),
+          Expanded(
+            child: _busy
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 Card(
@@ -267,6 +266,9 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 

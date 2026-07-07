@@ -7,7 +7,21 @@ import '../../core/providers/device_provider.dart';
 
 final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
   final db = ref.watch(databaseProvider);
-  return db.select(db.kasirPermissions).watch();
+  return db
+      .select(db.kasirPermissions)
+      .watch()
+      // Hanya izin role Kasir — izin asisten punya layar sendiri.
+      .map((rows) => rows
+          .where((p) => kKasirPermissionKeys.contains(p.permissionKey))
+          .toList());
+});
+
+/// Izinkan stok minus — setting global (bukan per-permission), tapi sekarang
+/// dikelola di layar Izin Kasir agar tidak berserakan di halaman pengaturan.
+final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final v = await db.getSetting('allow_negative_stock');
+  return v == '1';
 });
 
 class KasirPermissionsScreen extends ConsumerWidget {
@@ -37,11 +51,36 @@ class KasirPermissionsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             ...perms.map((p) => _PermissionTile(permission: p)),
+            const _AllowNegativeStockTile(),
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
+    );
+  }
+}
+
+/// Toggle stok minus (setting global). Dipindah ke sini agar menyatu dengan
+/// izin kasir lain — kasir bisa jual meski stok 0 (pre-order).
+class _AllowNegativeStockTile extends ConsumerWidget {
+  const _AllowNegativeStockTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final allow = ref.watch(_allowNegativeStockProvider).valueOrNull ?? false;
+    return SwitchListTile(
+      title: const Text('Izinkan Stok Minus'),
+      subtitle: Text('Kasir bisa jual meski stok 0 (pre-order)',
+          style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      value: allow,
+      onChanged: (v) async {
+        final db = ref.read(databaseProvider);
+        await db.setSetting('allow_negative_stock', v ? '1' : '0');
+        ref.invalidate(_allowNegativeStockProvider);
+      },
     );
   }
 }
@@ -63,7 +102,10 @@ class _PermissionTile extends ConsumerWidget {
         final db = ref.read(databaseProvider);
         await (db.update(db.kasirPermissions)
               ..where((t) => t.permissionKey.equals(permission.permissionKey)))
-            .write(KasirPermissionsCompanion(isEnabled: Value(v)));
+            .write(KasirPermissionsCompanion(
+          isEnabled: Value(v),
+          updatedAt: Value(DateTime.now()),
+        ));
       },
     );
   }
@@ -74,6 +116,7 @@ class _PermissionTile extends ConsumerWidget {
         'input_pengeluaran' => 'Input Pengeluaran',
         'input_pembelian' => 'Input Pembelian',
         'override_harga' => 'Override Harga',
+        'batal_transaksi' => 'Batalkan Transaksi',
         _ => key,
       };
 
@@ -83,6 +126,7 @@ class _PermissionTile extends ConsumerWidget {
         'input_pengeluaran' => 'Kasir bisa mencatat pengeluaran',
         'input_pembelian' => 'Kasir bisa mencatat pembelian dari supplier',
         'override_harga' => 'Kasir bisa mengubah harga di kasir',
+        'batal_transaksi' => 'Kasir bisa membatalkan / void transaksi',
         _ => '',
       };
 }

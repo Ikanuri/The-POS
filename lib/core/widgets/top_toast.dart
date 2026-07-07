@@ -35,7 +35,7 @@ void showTopToast(
 
   overlay.insert(entry);
   Future.delayed(duration + const Duration(milliseconds: 350), () {
-    entry.remove();
+    if (entry.mounted) entry.remove();
   });
 }
 
