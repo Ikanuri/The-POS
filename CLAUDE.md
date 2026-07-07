@@ -80,6 +80,44 @@ lib/
 - Wajib `flutter analyze` bersih (0 issue) sebelum commit.
 - Build APK via GitHub Actions (`.github/`), single arm64-v8a.
 
+## Metode Test Sebelum Rilis — WAJIB dipakai untuk fitur/fix baru
+
+Jenjang test dari yang paling murah/cepat ke paling mahal — pilih level
+sesuai apa yang disentuh, jangan lompat ke widget test kalau cukup test DB:
+
+1. **Logic/DB murni** → test langsung terhadap `AppDatabase(NativeDatabase.memory())`
+   sungguhan (bukan mock/reimplementasi ulang logika di test). Test integrasi
+   Drift nyata bisa membuktikan hal yang tak bisa dibuktikan cara lain, mis.
+   migrasi schema (buat DB versi lama via raw sqlite3, buka via `AppDatabase`
+   untuk memicu `onUpgrade` sungguhan) atau `EXPLAIN QUERY PLAN` untuk indeks.
+
+2. **UI/widget** → pakai harness `test/helpers/pump_app.dart`
+   (`pumpWithFakeApp(tester, db:, child:, device:)`) yang override
+   `databaseProvider`/`deviceProvider` dengan versi palsu — merender screen
+   sungguhan tanpa device/SQLCipher asli. Harness ini sudah beberapa kali
+   menemukan bug NYATA yang tak mungkin ketahuan dari test DB saja (overflow
+   layout, provider yang tidak refresh). `surfaceSize` harus generus (default
+   430×2400) karena `ListView(children:)` lazy-build di luar viewport.
+
+3. **Networking asli (LAN sync)** → jangan mock protokolnya. `flutter_test`
+   mem-fake SEMUA `HttpClient` jadi selalu balas 400 — override balik pakai
+   `HttpOverrides.runZoned` (perlu escape ganda: `Zone.root.run` + nonaktifkan
+   `HttpOverrides.global` sementara, kalau tidak akan stack-overflow karena
+   `createHttpClient` memanggil dirinya sendiri). Sambungkan host+klien
+   sungguhan lewat `127.0.0.1`, bukan simulasi payload manual.
+
+4. **WAJIB untuk setiap test regresi/bugfix**: sebelum dianggap selesai,
+   **revert sementara** fix-nya ke kode lama, jalankan test barunya, dan
+   **buktikan test itu GAGAL** dengan pesan yang masuk akal (bukan error lain
+   yang tak relevan) — baru kembalikan fix-nya dan pastikan hijau lagi. Tanpa
+   langkah ini, test yang "lolos" bisa saja lolos karena kebetulan (assert
+   salah, query tidak benar-benar dites, dll), bukan karena benar-benar
+   mendeteksi bug-nya.
+
+5. Setelah semua test baru hijau: jalankan **seluruh** `flutter test` (bukan
+   cuma file baru) untuk pastikan tidak ada regresi di tempat lain, plus
+   `flutter analyze` bersih — baru commit.
+
 ## Git
 
 - Branch fitur khusus ditentukan per-task; jangan push ke branch lain tanpa izin.
