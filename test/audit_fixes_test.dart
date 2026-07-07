@@ -45,15 +45,35 @@ void main() {
     final sec2026 = DateTime(2026, 3, 1).millisecondsSinceEpoch ~/ 1000;
     final sec2027 = DateTime(2027, 2, 1).millisecondsSinceEpoch ~/ 1000;
 
-    test('tanpa last_archive_year → payload lolos apa adanya', () async {
+    test('tanpa arsip sama sekali → payload lolos apa adanya', () async {
       final db = AppDatabase(NativeDatabase.memory());
       final tables = {
         'transactions': [
           {'id': 'tx-old', 'created_at': sec2026},
         ],
       };
-      final out = await LanSyncService.filterArchivedRows(db, tables);
+      final out =
+          await LanSyncService.filterArchivedRows(db, tables, const {});
       expect(out['transactions'], hasLength(1));
+      await db.close();
+    });
+
+    test(
+        'tahun SEBELUM arsip pertama (tidak pernah diarsip, datanya masih '
+        'sah di DB utama) tetap lolos', () async {
+      // Toko mulai 2024, baru pertama kali tutup buku untuk 2026 → data
+      // 2024-2025 tidak pernah diarsip dan masih hidup di DB utama host.
+      // Baris klien dari tahun-tahun itu TIDAK boleh ikut terbuang.
+      final db = AppDatabase(NativeDatabase.memory());
+      final sec2025 = DateTime(2025, 6, 1).millisecondsSinceEpoch ~/ 1000;
+      final out = await LanSyncService.filterArchivedRows(db, {
+        'transactions': [
+          {'id': 'tx-2025', 'created_at': sec2025},
+          {'id': 'tx-2026', 'created_at': sec2026},
+        ],
+      }, const {2026});
+      expect(out['transactions']!.map((r) => r['id']), ['tx-2025'],
+          reason: 'hanya tahun yang benar-benar diarsip yang disaring');
       await db.close();
     });
 
@@ -61,7 +81,6 @@ void main() {
         'transaksi tahun terarsip DIBUANG (tidak hidup lagi setelah '
         'tutup buku), tahun berjalan tetap lolos', () async {
       final db = AppDatabase(NativeDatabase.memory());
-      await db.setSetting('last_archive_year', '2026');
 
       final tables = {
         'transactions': [
@@ -83,7 +102,8 @@ void main() {
         ],
       };
 
-      final out = await LanSyncService.filterArchivedRows(db, tables);
+      final out =
+          await LanSyncService.filterArchivedRows(db, tables, const {2026});
       expect(out['transactions']!.map((r) => r['id']), ['tx-2027']);
       expect(out['transaction_items']!.map((r) => r['id']), ['ti-b']);
       expect(out['stock_ledger']!.map((r) => r['id']), ['sl-new']);
@@ -93,7 +113,6 @@ void main() {
     test('child row untuk transaksi yang SUDAH ada di DB lokal tetap lolos',
         () async {
       final db = AppDatabase(NativeDatabase.memory());
-      await db.setSetting('last_archive_year', '2026');
       // Nota lama tahun berjalan yang sudah ada di host — cicilan susulan
       // dari klien harus tetap bisa menempel.
       await _insertTx(db,
@@ -108,7 +127,7 @@ void main() {
         'transaction_payments': [
           {'id': 'tp-1', 'transaction_id': 'tx-local', 'amount': 30000},
         ],
-      });
+      }, const {2026});
       expect(out['transaction_payments'], hasLength(1));
       await db.close();
     });
@@ -118,7 +137,6 @@ void main() {
         'yang dihapus tutup buku (tanpa filter, mergeRows me-resurrect)',
         () async {
       final db = AppDatabase(NativeDatabase.memory());
-      await db.setSetting('last_archive_year', '2026');
 
       // Payload klien: transaksi 2026 yang di host sudah dihapus tutup buku.
       final payloadTx = [
@@ -144,7 +162,7 @@ void main() {
 
       // Jalur baru: filter dulu → tidak ada yang di-merge.
       final filtered = await LanSyncService.filterArchivedRows(
-          db, {'transactions': payloadTx});
+          db, {'transactions': payloadTx}, const {2026});
       await db.mergeRows(
           'transactions', filtered['transactions'] ?? const [], true);
       count = await (db.select(db.transactions)).get();

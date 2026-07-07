@@ -10,6 +10,7 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import '../database/app_database.dart';
 import 'crypto_service.dart';
+import 'tutup_buku_service.dart';
 
 const _kSyncPort = 8625;
 // 50 MB max payload — protects the host from memory-exhaustion DoS.
@@ -121,8 +122,9 @@ class LanSyncService {
     return (ip, _syncToken!);
   }
 
-  /// Buang baris append-only yang tanggalnya berada di tahun yang SUDAH
-  /// ditutup-buku host (`last_archive_year` di app_settings).
+  /// Buang baris append-only yang tanggalnya jatuh di tahun yang SUDAH
+  /// ditutup-buku host ([archivedYears] = tahun-tahun yang benar-benar punya
+  /// file arsip, dari `TutupBukuService.listArchivedYears`).
   ///
   /// Tanpa filter ini, upload klien yang selalu full-dump sejak epoch akan
   /// meng-insert ULANG transaksi tahun terarsip: tutup buku menghapus baris
@@ -130,20 +132,28 @@ class LanSyncService {
   /// lama dan data "hidup lagi" — dobel dengan arsip, ringkasan harian tahun
   /// lama ikut terbangun kembali, dan file DB membengkak lagi.
   ///
+  /// SENGAJA per-tahun-arsip (bukan cutoff `last_archive_year`): UI tutup
+  /// buku hanya bisa mengarsipkan "tahun lalu", jadi toko yang baru mulai
+  /// tutup buku bisa punya tahun-tahun lebih lama yang TIDAK pernah diarsip
+  /// dan datanya masih sah di DB utama — baris klien dari tahun-tahun itu
+  /// harus tetap boleh masuk (dedup PK sudah ditangani INSERT OR IGNORE).
+  ///
   /// Aturan:
   ///  • `transactions`, `stock_ledger`, `loyalty_point_ledger`, `expenses`
-  ///    dengan `created_at` sebelum 1 Jan (tahun arsip + 1) → dibuang.
+  ///    dengan `created_at` di tahun terarsip → dibuang.
   ///  • `transaction_items` / `transaction_payments` dibuang bila transaksi
   ///    induknya ikut terbuang ATAU tidak ada sama sekali (tidak di payload
   ///    dan tidak di DB lokal) — mencegah pelanggaran FK saat merge.
   static Future<Map<String, List<Map<String, Object?>>>> filterArchivedRows(
-      AppDatabase db, Map<String, List<Map<String, Object?>>> tables) async {
-    final year = int.tryParse(await db.getSetting('last_archive_year') ?? '');
-    if (year == null) return tables;
-    final cutoffSec = DateTime(year + 1).millisecondsSinceEpoch ~/ 1000;
+      AppDatabase db,
+      Map<String, List<Map<String, Object?>>> tables,
+      Set<int> archivedYears) async {
+    if (archivedYears.isEmpty) return tables;
 
-    bool beforeCutoff(Object? createdAt) =>
-        createdAt is int && createdAt < cutoffSec;
+    bool inArchivedYear(Object? createdAt) =>
+        createdAt is int &&
+        archivedYears.contains(
+            DateTime.fromMillisecondsSinceEpoch(createdAt * 1000).year);
 
     final out = <String, List<Map<String, Object?>>>{};
     final keptTxIds = <Object?>{};
@@ -154,7 +164,7 @@ class LanSyncService {
     if (txRows != null) {
       final kept = <Map<String, Object?>>[];
       for (final r in txRows) {
-        if (beforeCutoff(r['created_at'])) {
+        if (inArchivedYear(r['created_at'])) {
           droppedTxIds.add(r['id']);
         } else {
           kept.add(r);
@@ -213,7 +223,7 @@ class LanSyncService {
           entry.key == 'expenses') {
         out[entry.key] = [
           for (final r in entry.value)
-            if (!beforeCutoff(r['created_at'])) r,
+            if (!inArchivedYear(r['created_at'])) r,
         ];
       } else {
         out[entry.key] = entry.value;
@@ -236,7 +246,10 @@ class LanSyncService {
 
     // Saring data dari tahun yang sudah ditutup-buku SEBELUM merge — lihat
     // dok [filterArchivedRows].
-    final tables = await filterArchivedRows(_db!, item.tables);
+    final archivedYears =
+        (await TutupBukuService.listArchivedYears()).toSet();
+    final tables =
+        await filterArchivedRows(_db!, item.tables, archivedYears);
 
     int received = 0;
     final touchedTxIds = <String>{};
