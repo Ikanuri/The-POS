@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Variable;
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -120,6 +121,107 @@ class LanSyncService {
     return (ip, _syncToken!);
   }
 
+  /// Buang baris append-only yang tanggalnya berada di tahun yang SUDAH
+  /// ditutup-buku host (`last_archive_year` di app_settings).
+  ///
+  /// Tanpa filter ini, upload klien yang selalu full-dump sejak epoch akan
+  /// meng-insert ULANG transaksi tahun terarsip: tutup buku menghapus baris
+  /// aslinya dari DB utama, sehingga `INSERT OR IGNORE` tidak menemukan PK
+  /// lama dan data "hidup lagi" — dobel dengan arsip, ringkasan harian tahun
+  /// lama ikut terbangun kembali, dan file DB membengkak lagi.
+  ///
+  /// Aturan:
+  ///  • `transactions`, `stock_ledger`, `loyalty_point_ledger`, `expenses`
+  ///    dengan `created_at` sebelum 1 Jan (tahun arsip + 1) → dibuang.
+  ///  • `transaction_items` / `transaction_payments` dibuang bila transaksi
+  ///    induknya ikut terbuang ATAU tidak ada sama sekali (tidak di payload
+  ///    dan tidak di DB lokal) — mencegah pelanggaran FK saat merge.
+  static Future<Map<String, List<Map<String, Object?>>>> filterArchivedRows(
+      AppDatabase db, Map<String, List<Map<String, Object?>>> tables) async {
+    final year = int.tryParse(await db.getSetting('last_archive_year') ?? '');
+    if (year == null) return tables;
+    final cutoffSec = DateTime(year + 1).millisecondsSinceEpoch ~/ 1000;
+
+    bool beforeCutoff(Object? createdAt) =>
+        createdAt is int && createdAt < cutoffSec;
+
+    final out = <String, List<Map<String, Object?>>>{};
+    final keptTxIds = <Object?>{};
+    final droppedTxIds = <Object?>{};
+
+    // 1. Header transaksi dulu — hasilnya menentukan nasib child rows.
+    final txRows = tables['transactions'];
+    if (txRows != null) {
+      final kept = <Map<String, Object?>>[];
+      for (final r in txRows) {
+        if (beforeCutoff(r['created_at'])) {
+          droppedTxIds.add(r['id']);
+        } else {
+          kept.add(r);
+          keptTxIds.add(r['id']);
+        }
+      }
+      out['transactions'] = kept;
+    }
+
+    // 2. Child rows: cek induk yang tidak dikenal ke DB lokal (chunked).
+    const childTables = ['transaction_items', 'transaction_payments'];
+    final unknownParents = <String>{};
+    for (final t in childTables) {
+      for (final r in tables[t] ?? const <Map<String, Object?>>[]) {
+        final pid = r['transaction_id'];
+        if (pid is String &&
+            !keptTxIds.contains(pid) &&
+            !droppedTxIds.contains(pid)) {
+          unknownParents.add(pid);
+        }
+      }
+    }
+    final existingParents = <String>{};
+    final unknownList = unknownParents.toList();
+    for (var i = 0; i < unknownList.length; i += 500) {
+      final chunk =
+          unknownList.sublist(i, (i + 500).clamp(0, unknownList.length));
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      final rows = await db.customSelect(
+        'SELECT id FROM transactions WHERE id IN ($placeholders)',
+        variables: [for (final id in chunk) Variable.withString(id)],
+      ).get();
+      for (final r in rows) {
+        existingParents.add(r.data['id'] as String);
+      }
+    }
+    for (final t in childTables) {
+      final rows = tables[t];
+      if (rows == null) continue;
+      out[t] = [
+        for (final r in rows)
+          if (r['transaction_id'] is String &&
+              (keptTxIds.contains(r['transaction_id']) ||
+                  existingParents.contains(r['transaction_id'])))
+            r,
+      ];
+    }
+
+    // 3. Tabel append-only lain: cukup filter created_at.
+    for (final entry in tables.entries) {
+      if (entry.key == 'transactions' || childTables.contains(entry.key)) {
+        continue;
+      }
+      if (entry.key == 'stock_ledger' ||
+          entry.key == 'loyalty_point_ledger' ||
+          entry.key == 'expenses') {
+        out[entry.key] = [
+          for (final r in entry.value)
+            if (!beforeCutoff(r['created_at'])) r,
+        ];
+      } else {
+        out[entry.key] = entry.value;
+      }
+    }
+    return out;
+  }
+
   /// Setujui item antrian → merge data ke DB, kirim balik data host.
   ///
   /// [allowedTables] (opsional) membatasi tabel mana yang di-merge — dipakai
@@ -132,9 +234,13 @@ class LanSyncService {
     final item = _pendingQueue.removeAt(idx);
     onQueueChanged?.call();
 
+    // Saring data dari tahun yang sudah ditutup-buku SEBELUM merge — lihat
+    // dok [filterArchivedRows].
+    final tables = await filterArchivedRows(_db!, item.tables);
+
     int received = 0;
     final touchedTxIds = <String>{};
-    for (final entry in item.tables.entries) {
+    for (final entry in tables.entries) {
       // Guard satu arah: hanya tabel append-only yang boleh dari klien.
       if (!appendOnlyTables.contains(entry.key)) continue;
       // Filter kategori yang dipilih owner.
@@ -232,15 +338,25 @@ class LanSyncService {
       if (nonce.isEmpty || tsStr.isEmpty || clientHmac.isEmpty) {
         return shelf.Response(400, body: 'Missing HMAC headers');
       }
-      // Tolak timestamp lebih dari 5 menit dari sekarang.
+      // Tolak timestamp lebih dari 5 menit dari sekarang. Pesan harus bisa
+      // dimengerti pemilik toko — penyebab tersering adalah jam salah satu
+      // HP meleset (device offline sering tidak sinkron waktu otomatis).
       final ts = DateTime.tryParse(tsStr);
       if (ts == null ||
           DateTime.now().difference(ts).abs() > const Duration(minutes: 5)) {
-        return shelf.Response(400, body: 'Timestamp out of window');
+        return shelf.Response(400,
+            body: 'Jam perangkat berbeda lebih dari 5 menit dari perangkat '
+                'ini. Samakan tanggal & jam kedua HP (aktifkan "tanggal & '
+                'waktu otomatis"), lalu coba sync lagi.');
       }
       // Tolak nonce yang sudah pernah dipakai (replay prevention).
       if (_usedNonces.contains(nonce)) {
         return shelf.Response(400, body: 'Nonce replayed');
+      }
+      // Batasi ukuran cache nonce (sesi host yang lama sekali bisa menumpuk).
+      // Set Dart menjaga urutan sisip → buang yang paling lama.
+      while (_usedNonces.length >= 5000) {
+        _usedNonces.remove(_usedNonces.first);
       }
       final hmacKey = CryptoService.deriveSyncHmacKey(_storeKey!, _syncToken!);
       final expectedHmac = CryptoService.hmacSha256(

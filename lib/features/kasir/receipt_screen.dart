@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
@@ -17,8 +16,6 @@ import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import 'widgets/tx_history_sheet.dart';
-
-const _receiptUuid = Uuid();
 
 class ReceiptScreen extends ConsumerStatefulWidget {
   const ReceiptScreen({super.key, required this.transactionId});
@@ -761,32 +758,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     if (result != null && result > 0 && mounted) {
       final db = ref.read(databaseProvider);
       final device = ref.read(deviceProvider);
-      final now = DateTime.now();
-      final tx = _tx!;
-      // Uang diterima boleh melebihi sisa → kelebihan jadi kembalian.
-      final applied = result.clamp(1, remaining);
-      final change = result > remaining ? result - remaining : 0;
-
-      await db.into(db.transactionPayments).insert(
-            TransactionPaymentsCompanion.insert(
-              id: _receiptUuid.v4(),
-              transactionId: widget.transactionId,
-              amount: applied,
-              method: 'tunai',
-              paidAt: Value(now),
-              kasirId: Value(device.deviceCode),
-            ),
-          );
-
-      final newPaid = tx.paid + applied;
-      final lunas = newPaid >= tx.total;
-      await (db.update(db.transactions)
-            ..where((t) => t.id.equals(widget.transactionId)))
-          .write(TransactionsCompanion(
-        paid: Value(newPaid),
-        status: Value(lunas ? 'lunas' : 'kurang_bayar'),
-        changeAmount: Value(tx.changeAmount + change),
-      ));
+      // Uang diterima dicatat PENUH (paid boleh > total → kembalian
+      // diturunkan dari paid - total), lewat satu jalur DB yang konsisten
+      // dengan _reconcileTransactionTotals — kalau paid di-cap dan kembalian
+      // disimpan terpisah, rekonsiliasi (sync/tambah belanjaan/retur) akan
+      // menimpanya kembali ke 0 dan info "Kembali Rp X" hilang.
+      final change = await db.addPaymentToTransaction(
+        txId: widget.transactionId,
+        amount: result,
+        method: 'tunai',
+        kasirId: device.deviceCode,
+      );
       await _load();
       if (change > 0) {
         messenger.showSnackBar(SnackBar(
@@ -831,8 +813,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         (item.qty - (alreadyReturned[item.productUnitId] ?? 0))
             .clamp(0.0, item.qty);
 
-    // Default refund method = metode transaksi asal.
-    var refundMethod = _tx!.paymentMethod;
+    // Default refund = metode aktif pertama yang bertipe sama dengan
+    // transaksi asal. Dropdown di-key pakai `id` metode (unik), BUKAN `type`:
+    // dua metode setipe (mis. dua rekening bank) membuat nilai dropdown
+    // duplikat → assertion Flutter gagal dan sheet retur tidak bisa dipakai.
+    const fallbackTunaiId = '__tunai__';
+    var refundMethodId = paymentMethods
+            .where((m) => m.type == _tx!.paymentMethod)
+            .firstOrNull
+            ?.id ??
+        paymentMethods.where((m) => m.type == 'tunai').firstOrNull?.id ??
+        fallbackTunaiId;
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -957,13 +948,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
                                   isDense: true,
-                                  value: paymentMethods
-                                          .any((m) => m.type == refundMethod)
-                                      ? refundMethod
-                                      : 'tunai',
+                                  value: refundMethodId,
                                   items: [
                                     ...paymentMethods.map((m) => DropdownMenuItem(
-                                          value: m.type,
+                                          value: m.id,
                                           child: Text(m.name,
                                               style:
                                                   const TextStyle(fontSize: 13)),
@@ -971,13 +959,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                     if (!paymentMethods
                                         .any((m) => m.type == 'tunai'))
                                       const DropdownMenuItem(
-                                        value: 'tunai',
+                                        value: fallbackTunaiId,
                                         child: Text('Tunai',
                                             style: TextStyle(fontSize: 13)),
                                       ),
                                   ],
-                                  onChanged: (v) => setSheet(
-                                      () => refundMethod = v ?? 'tunai'),
+                                  onChanged: (v) => setSheet(() =>
+                                      refundMethodId = v ?? fallbackTunaiId),
                                 ),
                               ),
                             ),
@@ -1071,6 +1059,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     ];
     if (returnItems.isEmpty) return;
 
+    // Terjemahkan id metode terpilih kembali ke `type` (yang disimpan DB).
+    final refundMethod = paymentMethods
+            .where((m) => m.id == refundMethodId)
+            .firstOrNull
+            ?.type ??
+        'tunai';
     await db.addReturnTransaction(
       originalTxId: _tx!.id,
       localId: localId,

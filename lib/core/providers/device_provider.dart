@@ -141,11 +141,16 @@ final deviceProvider =
 /// PBKDF2 sudah lebih dari cukup — menaikkan iterasi tidak menambah keamanan
 /// untuk input ber-entropi tinggi, hanya memperlambat startup.
 final databaseProvider = Provider<AppDatabase>((ref) {
-  final device = ref.watch(deviceProvider);
-  if (!device.isConfigured) {
+  // HANYA bergantung pada storeKey (via select) — kalau me-watch seluruh
+  // deviceProvider, perubahan identitas apa pun (mis. ganti nama toko di
+  // Pengaturan) ikut me-rebuild provider ini: koneksi SQLCipher lama ditutup
+  // di tengah sesi dan query/stream yang sedang berjalan bisa error.
+  final storeKey =
+      ref.watch(deviceProvider.select((device) => device.storeKey));
+  if (storeKey == null) {
     throw StateError('Database diakses sebelum setup selesai');
   }
-  final db = AppDatabase.open(deriveDatabaseKey(device.storeKey!));
+  final db = AppDatabase.open(deriveDatabaseKey(storeKey));
   ref.onDispose(db.close);
   return db;
 });

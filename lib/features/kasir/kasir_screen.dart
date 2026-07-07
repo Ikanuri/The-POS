@@ -29,7 +29,13 @@ import 'widgets/tx_history_sheet.dart';
 
 const _kasirUuid = Uuid();
 
-final _kasirSearchProvider = StateProvider<String>((ref) => '');
+/// Query pencarian, di-key per slot keranjang (kasir utama vs mode katalog
+/// vs tambah belanjaan). Dulu satu StateProvider global: teks yang diketik di
+/// kasir ikut memfilter mode katalog (dan sebaliknya) padahal field pencarian
+/// layar itu kosong — filter aktif tapi tombol hapusnya tersembunyi.
+/// autoDispose membuat query mode non-utama hilang saat layarnya ditutup.
+final _kasirSearchProvider =
+    StateProvider.autoDispose.family<String, String>((ref, cartId) => '');
 
 /// State toast melayang saat scan mode berulang.
 class _ScanToast {
@@ -781,7 +787,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     notifier.addItem(item);
     HapticFeedback.heavyImpact();
     _scanPulseController.pulse();
-    final newQty = notifier.qtyForUnit(item.productUnitId).round();
+    // Toast menampilkan & memanipulasi qty EFEKTIF (tombol ± toast memanggil
+    // setEffectiveQty). Kalau pakai stored qty, produk induk yang keranjangnya
+    // sudah berisi varian akan melompat sebesar total varian saat ± ditekan.
+    CartItem? inCart;
+    for (final c in ref.read(cartProvider(_cartId))) {
+      if (c.productUnitId == item.productUnitId) {
+        inCart = c;
+        break;
+      }
+    }
+    final newQty =
+        inCart == null ? 0 : notifier.effectiveQtyFor(inCart).round();
     _showOrUpdateToast(item, newQty);
   }
 
@@ -1071,7 +1088,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
     final cart = ref.watch(cartProvider(_cartId));
     final cartNotifier = ref.read(cartProvider(_cartId).notifier);
-    final query = ref.watch(_kasirSearchProvider);
+    final query = ref.watch(_kasirSearchProvider(_cartId));
     final isGrid = ref.watch(kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
     final productsAsync = ref.watch(_kasirProductsProvider(query));
@@ -1104,7 +1121,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           _KasirTopbar(
             searchCtrl: _searchCtrl,
             searchFocus: _searchFocus,
-            onSearch: (v) => ref.read(_kasirSearchProvider.notifier).state = v,
+            onSearch: (v) =>
+                ref.read(_kasirSearchProvider(_cartId).notifier).state = v,
             onScan: _openScanner,
             onHeld: () => setState(() => _heldPanelOpen = !_heldPanelOpen),
             onHistory: () => showModalBottomSheet(

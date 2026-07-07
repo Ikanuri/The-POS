@@ -433,22 +433,10 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Transaction helpers ─────────────────────────
 
-  Future<int> countTodayTransactions(String deviceCode) async {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    final c = transactions.id.count();
-    final q = selectOnly(transactions)
-      ..addColumns([c])
-      ..where(transactions.kasirId.equals(deviceCode) &
-          transactions.createdAt.isBiggerOrEqualValue(start));
-    final row = await q.getSingle();
-    return row.read(c) ?? 0;
-  }
-
   /// Nomor nota harian yang dijamin unik. Penjualan dan retur berbagi ruang
-  /// penghitung yang sama, sehingga memakai countTodayTransactions+1 mentah
-  /// bisa bertabrakan. Method ini mencari sequence bebas berikutnya dengan
-  /// memeriksa localId yang sudah ada.
+  /// penghitung yang sama, sehingga menghitung jumlah transaksi hari ini +1
+  /// mentah bisa bertabrakan. Method ini mencari sequence bebas berikutnya
+  /// dengan memeriksa localId yang sudah ada.
   Future<String> generateUniqueLocalId(String deviceCode, [DateTime? at]) async {
     final now = at ?? DateTime.now();
     final datePart = '${now.year}'
@@ -1054,6 +1042,48 @@ class AppDatabase extends _$AppDatabase {
         );
       }
 
+      // Void atas NOTA RETUR: pulihkan poin loyalty yang tadinya dipotong
+      // retur (retur memotong poin nota asal secara proporsional; kalau retur
+      // dibatalkan, potongan itu harus dikembalikan — tanpa ini poin pelanggan
+      // hilang permanen). Rumus proporsi identik dengan addReturnTransaction.
+      final returOrigId = (tx.internalNote?.startsWith('RETUR:') ?? false)
+          ? tx.internalNote!.substring('RETUR:'.length)
+          : null;
+      if (returOrigId != null && tx.total < 0) {
+        final orig = await (select(transactions)
+              ..where((t) => t.id.equals(returOrigId)))
+            .getSingleOrNull();
+        if (orig != null &&
+            orig.customerId != null &&
+            orig.pointsEarned > 0 &&
+            orig.total > 0) {
+          final refundTotal = -tx.total;
+          final proportion = (refundTotal / orig.total).clamp(0.0, 1.0);
+          final pointsToRestore = (orig.pointsEarned * proportion)
+              .round()
+              .clamp(0, orig.pointsEarned);
+          if (pointsToRestore > 0) {
+            await customUpdate(
+              'UPDATE customers SET loyalty_points = loyalty_points + ? WHERE id = ?',
+              variables: [
+                Variable.withInt(pointsToRestore),
+                Variable.withString(orig.customerId!),
+              ],
+              updates: {customers},
+            );
+            await into(loyaltyPointLedger)
+                .insert(LoyaltyPointLedgerCompanion.insert(
+              id: const Uuid().v4(),
+              customerId: orig.customerId!,
+              type: 'adjust',
+              points: pointsToRestore,
+              note: Value('Void retur ${tx.localId}'),
+              createdAt: Value(now),
+            ));
+          }
+        }
+      }
+
       // Reverse loyalty jika ada.
       if (tx.pointsEarned > 0 && tx.customerId != null) {
         await customUpdate(
@@ -1325,6 +1355,53 @@ class AppDatabase extends _$AppDatabase {
       (out[r.transactionId] ??= []).add(r);
     }
     return out;
+  }
+
+  /// Catat pembayaran susulan ("Tambah Bayar") pada satu nota.
+  ///
+  /// `paid` dicatat PENUH (boleh melebihi total → selisihnya jadi kembalian),
+  /// konsisten dengan perilaku layar kasir (tunai berlebih tercatat utuh) dan
+  /// dengan `_reconcileTransactionTotals` yang menurunkan `change_amount`
+  /// dari `paid - total`. Kalau paid di-cap di total sementara kembalian
+  /// disimpan terpisah, rekonsiliasi mana pun (sync, tambah belanjaan, retur)
+  /// akan menimpa kembalian itu kembali ke 0 dan info "Kembali Rp X" hilang.
+  ///
+  /// Mengembalikan kembalian (0 bila pas/kurang). Nota void / tidak ditemukan
+  /// → tidak melakukan apa pun dan mengembalikan 0.
+  Future<int> addPaymentToTransaction({
+    required String txId,
+    required int amount,
+    required String method,
+    required String kasirId,
+    String? note,
+    DateTime? now,
+  }) async {
+    if (amount <= 0) return 0;
+    final ts = now ?? DateTime.now();
+    return transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null || tx.status == 'void') return 0;
+      await into(transactionPayments).insert(TransactionPaymentsCompanion.insert(
+        id: const Uuid().v4(),
+        transactionId: txId,
+        amount: amount,
+        method: method,
+        paidAt: Value(ts),
+        kasirId: Value(kasirId),
+        note: Value(note),
+      ));
+      final newPaid = tx.paid + amount;
+      final change = newPaid > tx.total ? newPaid - tx.total : 0;
+      await (update(transactions)..where((t) => t.id.equals(txId))).write(
+        TransactionsCompanion(
+          paid: Value(newPaid),
+          status: Value(newPaid >= tx.total ? 'lunas' : 'kurang_bayar'),
+          changeAmount: Value(change),
+        ),
+      );
+      return change;
+    });
   }
 
   /// Lunasi beberapa nota sekaligus (gabung nota) dengan distribusi FIFO:

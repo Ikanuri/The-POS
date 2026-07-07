@@ -81,6 +81,25 @@ class PriceSyncService {
   static String? _pairingCode;
   static AppDatabase? _db;
 
+  // Proteksi brute-force per-IP: kode pairing hanya 6 digit dan katalog yang
+  // dilayani memuat HARGA MODAL — tanpa lockout, 1 juta kombinasi bisa
+  // dicoba habis dalam hitungan menit oleh siapa pun di WiFi yang sama.
+  // Pola sama dengan LanSyncService: 5 kali gagal → tunggu 5 menit.
+  static final _failedAttempts = <String, int>{};
+  static final _lockoutUntil = <String, DateTime>{};
+  static const _kMaxFailures = 5;
+  static const _kLockoutDuration = Duration(minutes: 5);
+
+  /// Perbandingan string waktu-konstan — cegah timing side-channel pada kode.
+  static bool _constantTimeEqual(String a, String b) {
+    if (a.length != b.length) return false;
+    var result = 0;
+    for (var i = 0; i < a.length; i++) {
+      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return result == 0;
+  }
+
   static String _generateCode() {
     final rng = Random.secure();
     return List.generate(6, (_) => rng.nextInt(10)).join();
@@ -92,6 +111,8 @@ class PriceSyncService {
     await stopHost();
     _db = db;
     _pairingCode = _generateCode();
+    _failedAttempts.clear();
+    _lockoutUntil.clear();
 
     final handler =
         const shelf.Pipeline().addHandler(_handleRequest);
@@ -108,6 +129,8 @@ class PriceSyncService {
     await _server?.close(force: true);
     _server = null;
     _pairingCode = null;
+    _failedAttempts.clear();
+    _lockoutUntil.clear();
   }
 
   static bool get isHostRunning => _server != null;
@@ -117,10 +140,26 @@ class PriceSyncService {
       return shelf.Response.notFound('Not found');
     }
 
+    final ip = (request.context['shelf.io.connection_info']
+                as HttpConnectionInfo?)
+            ?.remoteAddress
+            .address ??
+        'unknown';
+    final lockedUntil = _lockoutUntil[ip];
+    if (lockedUntil != null && lockedUntil.isAfter(DateTime.now())) {
+      return shelf.Response(429, body: 'Too many attempts. Try again later.');
+    }
+
     final code = request.headers['x-pairing-code'] ?? '';
-    if (code != _pairingCode) {
+    if (!_constantTimeEqual(code, _pairingCode ?? '')) {
+      _failedAttempts[ip] = (_failedAttempts[ip] ?? 0) + 1;
+      if ((_failedAttempts[ip] ?? 0) >= _kMaxFailures) {
+        _lockoutUntil[ip] = DateTime.now().add(_kLockoutDuration);
+        _failedAttempts.remove(ip);
+      }
       return shelf.Response.forbidden('Invalid code');
     }
+    _failedAttempts.remove(ip);
 
     try {
       final catalog = await _buildCatalog(_db!);

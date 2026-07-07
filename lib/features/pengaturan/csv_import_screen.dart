@@ -56,6 +56,7 @@ class _CsvImportScreenState extends ConsumerState<CsvImportScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _ResultRow(label: 'Diimport', value: result2.imported, icon: Icons.check_circle_outline, color: Colors.green),
+              _ResultRow(label: 'Harga produk lama diperbarui', value: result2.updated, icon: Icons.update_outlined),
               _ResultRow(label: 'Duplikat dilewati', value: result2.duplicates, icon: Icons.skip_next_outlined),
               _ResultRow(label: 'Tanpa barcode', value: result2.noBarcode, icon: Icons.qr_code_outlined),
               if (result2.errors.isNotEmpty) ...[
