@@ -175,6 +175,20 @@ const String _htmlTemplate = r'''
     --ok:#6fa380; --warn:#d39a52;
   }
 }
+/* Toggle manual (tombol matahari/bulan) — menang atas prefers-color-scheme
+   di kedua arah, supaya pilihan user selalu dihormati. */
+:root[data-theme="dark"]{
+  --canvas:#161412; --panel:#211e1c; --card:#2a2623;
+  --ink:#ece7dd; --ink-2:#a8a298; --ink-3:#726c63;
+  --line:#383330; --field:#1c1917;
+  --ok:#6fa380; --warn:#d39a52;
+}
+:root[data-theme="light"]{
+  --canvas:#ebe8e0; --panel:#fbfaf7; --card:#ffffff;
+  --ink:#2a2824; --ink-2:#6c685f; --ink-3:#9d988b;
+  --line:#e7e2d7; --field:#f1eee7;
+  --ok:#4f7b5e; --warn:#b9702b;
+}
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;}
 body{
@@ -184,9 +198,14 @@ body{
 #app{width:100%;max-width:480px;min-height:100vh;background:var(--panel);
   display:flex;flex-direction:column;position:relative;}
 .topbar{padding:14px 16px 10px;border-bottom:1px solid var(--line);
-  background:var(--panel);position:sticky;top:0;z-index:5;}
+  background:var(--panel);position:sticky;top:0;z-index:5;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
 .tb-store{font-family:var(--serif);font-size:19px;font-weight:600;}
 .tb-sub{font-size:11px;color:var(--ink-3);margin-top:2px;}
+.theme-btn{flex-shrink:0;width:34px;height:34px;border:1px solid var(--line);
+  background:var(--field);color:var(--ink-2);border-radius:999px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;}
+.theme-btn svg{width:17px;height:17px;}
 .search-wrap{padding:10px 16px;}
 .search{display:flex;align-items:center;gap:8px;background:var(--field);
   border-radius:var(--r-btn);padding:9px 12px;}
@@ -231,7 +250,7 @@ summary::-webkit-details-marker{display:none;}
 .cb-count.empty{background:var(--ink-3);}
 .cb-info{flex:1;min-width:0;}
 .cb-lbl{font-size:11px;color:var(--ink-3);}
-.cb-total{font-size:16px;font-weight:700;font-family:var(--serif);}
+.cb-total{font-size:21px;font-weight:700;font-family:var(--serif);}
 .cb-view{border:1px solid var(--line);background:transparent;color:var(--ink);
   border-radius:var(--r-btn);padding:9px 16px;font-size:13px;font-weight:600;
   cursor:pointer;flex-shrink:0;}
@@ -266,7 +285,7 @@ textarea.tfield{resize:none;min-height:56px;}
 .grand{display:flex;justify-content:space-between;align-items:baseline;
   margin-bottom:10px;}
 .grand .gl{font-size:13px;color:var(--ink-2);}
-.grand .gv{font-size:20px;font-weight:700;font-family:var(--serif);}
+.grand .gv{font-size:27px;font-weight:700;font-family:var(--serif);}
 .wa-btn{width:100%;border:none;background:#25D366;color:#fff;border-radius:var(--r-btn);
   padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;
   display:flex;align-items:center;justify-content:center;gap:8px;}
@@ -284,8 +303,11 @@ textarea.tfield{resize:none;min-height:56px;}
 <body>
 <div id="app">
   <div class="topbar">
-    <div class="tb-store" id="storeName"></div>
-    <div class="tb-sub" id="storeSub"></div>
+    <div>
+      <div class="tb-store" id="storeName"></div>
+      <div class="tb-sub" id="storeSub"></div>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
   </div>
   <div class="search-wrap">
     <div class="search">
@@ -333,6 +355,32 @@ textarea.tfield{resize:none;min-height:56px;}
 var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
 var byUnit = {}; // unitId -> {name, unit, price, parentName}
+var openState = {}; // productId -> bool, dropdown varian tetap terbuka/tertutup lewat re-render
+
+// ── Toggle terang/gelap manual — menimpa prefers-color-scheme, disimpan
+// per-browser lewat localStorage supaya pilihan bertahan saat file dibuka lagi.
+var ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+var ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>';
+
+function applyTheme(mode){
+  document.documentElement.setAttribute('data-theme', mode);
+  document.getElementById('themeBtn').innerHTML = mode === 'dark' ? ICON_SUN : ICON_MOON;
+}
+function initTheme(){
+  var saved = null;
+  try { saved = localStorage.getItem('posOrderTheme'); } catch (e) {}
+  if (saved !== 'light' && saved !== 'dark') {
+    saved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  applyTheme(saved);
+}
+document.getElementById('themeBtn').addEventListener('click', function(){
+  var cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  var next = cur === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem('posOrderTheme', next); } catch (e) {}
+});
+initTheme();
 
 DATA.products.forEach(function(p){
   byUnit[p.unitId] = {name:p.name, unit:p.unit, price:p.price, parentName:null};
@@ -393,8 +441,19 @@ function renderList(){
 
     if (variants.length > 0) {
       var det = document.createElement('details');
-      // Auto-expand: query aktif & cocok lewat nama varian (bukan nama induk).
-      if (q && matchedVariants.length > 0) det.open = true;
+      det.dataset.pid = p.id;
+      // Tetap terbuka sampai user sendiri yang tap induk untuk menutup —
+      // openState dicek dulu supaya tidak collapse tiap kali render() ulang
+      // (mis. selesai tambah qty varian).
+      if (openState.hasOwnProperty(p.id)) {
+        det.open = openState[p.id];
+      } else if (q && matchedVariants.length > 0) {
+        // Auto-expand: query aktif & cocok lewat nama varian (bukan nama induk).
+        det.open = true;
+      }
+      det.addEventListener('toggle', function(){
+        openState[this.dataset.pid] = this.open;
+      });
       var sum = document.createElement('summary');
       sum.innerHTML =
         '<div class="prow-main">' +

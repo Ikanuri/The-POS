@@ -75,24 +75,22 @@ void main() {
     expect(names, contains('idx_tp_paid_at'),
         reason: 'migrasi harus menambah indeks paid_at');
 
-    // Versi schema benar-benar naik ke 7.
+    // Versi schema benar-benar naik ke skema terkini (8 — nambah tabel
+    // alt_prices di migrasi 7->8, tapi test ini fokus ke migrasi 6->7).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 7);
+    expect(ver.data.values.first, 8);
 
     // Data lama tetap utuh setelah migrasi.
-    final pay = await db
-        .customSelect(
-            'SELECT amount FROM transaction_payments WHERE transaction_id = ?',
-            variables: [Variable.withString('tx1')])
-        .getSingle();
+    final pay = await db.customSelect(
+        'SELECT amount FROM transaction_payments WHERE transaction_id = ?',
+        variables: [Variable.withString('tx1')]).getSingle();
     expect(pay.data['amount'], 5000);
 
     // Indeks benar-benar dipakai query planner (bukan full-scan).
-    final plan = await db
-        .customSelect('EXPLAIN QUERY PLAN SELECT * FROM transaction_payments '
-            'WHERE transaction_id = ?',
-            variables: [Variable.withString('tx1')])
-        .get();
+    final plan = await db.customSelect(
+        'EXPLAIN QUERY PLAN SELECT * FROM transaction_payments '
+        'WHERE transaction_id = ?',
+        variables: [Variable.withString('tx1')]).get();
     final planText = plan.map((r) => r.data.values.join(' ')).join(' | ');
     expect(planText.toLowerCase(), contains('idx_tp_transaction'),
         reason: 'query pembayaran harus memakai indeks, bukan SCAN');

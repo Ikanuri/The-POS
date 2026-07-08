@@ -2103,6 +2103,319 @@ class PriceTiersCompanion extends UpdateCompanion<PriceTier> {
   }
 }
 
+class $AltPricesTable extends AltPrices
+    with TableInfo<$AltPricesTable, AltPrice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AltPricesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productUnitIdMeta =
+      const VerificationMeta('productUnitId');
+  @override
+  late final GeneratedColumn<String> productUnitId = GeneratedColumn<String>(
+      'product_unit_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES product_units (id)'));
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+      'label', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _priceMeta = const VerificationMeta('price');
+  @override
+  late final GeneratedColumn<int> price = GeneratedColumn<int>(
+      'price', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, productUnitId, label, price, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'alt_prices';
+  @override
+  VerificationContext validateIntegrity(Insertable<AltPrice> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('product_unit_id')) {
+      context.handle(
+          _productUnitIdMeta,
+          productUnitId.isAcceptableOrUnknown(
+              data['product_unit_id']!, _productUnitIdMeta));
+    } else if (isInserting) {
+      context.missing(_productUnitIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+          _labelMeta, label.isAcceptableOrUnknown(data['label']!, _labelMeta));
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('price')) {
+      context.handle(
+          _priceMeta, price.isAcceptableOrUnknown(data['price']!, _priceMeta));
+    } else if (isInserting) {
+      context.missing(_priceMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AltPrice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AltPrice(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      productUnitId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}product_unit_id'])!,
+      label: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}label'])!,
+      price: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}price'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $AltPricesTable createAlias(String alias) {
+    return $AltPricesTable(attachedDatabase, alias);
+  }
+}
+
+class AltPrice extends DataClass implements Insertable<AltPrice> {
+  final String id;
+  final String productUnitId;
+  final String label;
+  final int price;
+  final DateTime createdAt;
+  const AltPrice(
+      {required this.id,
+      required this.productUnitId,
+      required this.label,
+      required this.price,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['product_unit_id'] = Variable<String>(productUnitId);
+    map['label'] = Variable<String>(label);
+    map['price'] = Variable<int>(price);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AltPricesCompanion toCompanion(bool nullToAbsent) {
+    return AltPricesCompanion(
+      id: Value(id),
+      productUnitId: Value(productUnitId),
+      label: Value(label),
+      price: Value(price),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AltPrice.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AltPrice(
+      id: serializer.fromJson<String>(json['id']),
+      productUnitId: serializer.fromJson<String>(json['productUnitId']),
+      label: serializer.fromJson<String>(json['label']),
+      price: serializer.fromJson<int>(json['price']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'productUnitId': serializer.toJson<String>(productUnitId),
+      'label': serializer.toJson<String>(label),
+      'price': serializer.toJson<int>(price),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AltPrice copyWith(
+          {String? id,
+          String? productUnitId,
+          String? label,
+          int? price,
+          DateTime? createdAt}) =>
+      AltPrice(
+        id: id ?? this.id,
+        productUnitId: productUnitId ?? this.productUnitId,
+        label: label ?? this.label,
+        price: price ?? this.price,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  AltPrice copyWithCompanion(AltPricesCompanion data) {
+    return AltPrice(
+      id: data.id.present ? data.id.value : this.id,
+      productUnitId: data.productUnitId.present
+          ? data.productUnitId.value
+          : this.productUnitId,
+      label: data.label.present ? data.label.value : this.label,
+      price: data.price.present ? data.price.value : this.price,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AltPrice(')
+          ..write('id: $id, ')
+          ..write('productUnitId: $productUnitId, ')
+          ..write('label: $label, ')
+          ..write('price: $price, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, productUnitId, label, price, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AltPrice &&
+          other.id == this.id &&
+          other.productUnitId == this.productUnitId &&
+          other.label == this.label &&
+          other.price == this.price &&
+          other.createdAt == this.createdAt);
+}
+
+class AltPricesCompanion extends UpdateCompanion<AltPrice> {
+  final Value<String> id;
+  final Value<String> productUnitId;
+  final Value<String> label;
+  final Value<int> price;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const AltPricesCompanion({
+    this.id = const Value.absent(),
+    this.productUnitId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.price = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AltPricesCompanion.insert({
+    required String id,
+    required String productUnitId,
+    required String label,
+    required int price,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        productUnitId = Value(productUnitId),
+        label = Value(label),
+        price = Value(price);
+  static Insertable<AltPrice> custom({
+    Expression<String>? id,
+    Expression<String>? productUnitId,
+    Expression<String>? label,
+    Expression<int>? price,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productUnitId != null) 'product_unit_id': productUnitId,
+      if (label != null) 'label': label,
+      if (price != null) 'price': price,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AltPricesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? productUnitId,
+      Value<String>? label,
+      Value<int>? price,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return AltPricesCompanion(
+      id: id ?? this.id,
+      productUnitId: productUnitId ?? this.productUnitId,
+      label: label ?? this.label,
+      price: price ?? this.price,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (productUnitId.present) {
+      map['product_unit_id'] = Variable<String>(productUnitId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (price.present) {
+      map['price'] = Variable<int>(price.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AltPricesCompanion(')
+          ..write('id: $id, ')
+          ..write('productUnitId: $productUnitId, ')
+          ..write('label: $label, ')
+          ..write('price: $price, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $CustomerGroupsTable extends CustomerGroups
     with TableInfo<$CustomerGroupsTable, CustomerGroup> {
   @override
@@ -9454,6 +9767,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProductBarcodesTable productBarcodes =
       $ProductBarcodesTable(this);
   late final $PriceTiersTable priceTiers = $PriceTiersTable(this);
+  late final $AltPricesTable altPrices = $AltPricesTable(this);
   late final $CustomerGroupsTable customerGroups = $CustomerGroupsTable(this);
   late final $CustomerGroupPricesTable customerGroupPrices =
       $CustomerGroupPricesTable(this);
@@ -9488,6 +9802,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         productUnits,
         productBarcodes,
         priceTiers,
+        altPrices,
         customerGroups,
         customerGroupPrices,
         customers,
@@ -10265,6 +10580,21 @@ final class $$ProductUnitsTableReferences
         manager.$state.copyWith(prefetchedData: cache));
   }
 
+  static MultiTypedResultKey<$AltPricesTable, List<AltPrice>>
+      _altPricesRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.altPrices,
+              aliasName: $_aliasNameGenerator(
+                  db.productUnits.id, db.altPrices.productUnitId));
+
+  $$AltPricesTableProcessedTableManager get altPricesRefs {
+    final manager = $$AltPricesTableTableManager($_db, $_db.altPrices)
+        .filter((f) => f.productUnitId.id($_item.id));
+
+    final cache = $_typedResult.readTableOrNull(_altPricesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
   static MultiTypedResultKey<$CustomerGroupPricesTable,
       List<CustomerGroupPrice>> _customerGroupPricesRefsTable(
           _$AppDatabase db) =>
@@ -10362,6 +10692,27 @@ class $$ProductUnitsTableFilterComposer
             $$PriceTiersTableFilterComposer(
               $db: $db,
               $table: $db.priceTiers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> altPricesRefs(
+      Expression<bool> Function($$AltPricesTableFilterComposer f) f) {
+    final $$AltPricesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.altPrices,
+        getReferencedColumn: (t) => t.productUnitId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$AltPricesTableFilterComposer(
+              $db: $db,
+              $table: $db.altPrices,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -10523,6 +10874,27 @@ class $$ProductUnitsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> altPricesRefs<T extends Object>(
+      Expression<T> Function($$AltPricesTableAnnotationComposer a) f) {
+    final $$AltPricesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.altPrices,
+        getReferencedColumn: (t) => t.productUnitId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$AltPricesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.altPrices,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
   Expression<T> customerGroupPricesRefs<T extends Object>(
       Expression<T> Function($$CustomerGroupPricesTableAnnotationComposer a)
           f) {
@@ -10562,6 +10934,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
         {bool productId,
         bool productBarcodesRefs,
         bool priceTiersRefs,
+        bool altPricesRefs,
         bool customerGroupPricesRefs})> {
   $$ProductUnitsTableTableManager(_$AppDatabase db, $ProductUnitsTable table)
       : super(TableManagerState(
@@ -10619,12 +10992,14 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
               {productId = false,
               productBarcodesRefs = false,
               priceTiersRefs = false,
+              altPricesRefs = false,
               customerGroupPricesRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (productBarcodesRefs) db.productBarcodes,
                 if (priceTiersRefs) db.priceTiers,
+                if (altPricesRefs) db.altPrices,
                 if (customerGroupPricesRefs) db.customerGroupPrices
               ],
               addJoins: <
@@ -10679,6 +11054,18 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.productUnitId == item.id),
                         typedResults: items),
+                  if (altPricesRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$ProductUnitsTableReferences
+                            ._altPricesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProductUnitsTableReferences(db, table, p0)
+                                .altPricesRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.productUnitId == item.id),
+                        typedResults: items),
                   if (customerGroupPricesRefs)
                     await $_getPrefetchedData(
                         currentTable: table,
@@ -10713,6 +11100,7 @@ typedef $$ProductUnitsTableProcessedTableManager = ProcessedTableManager<
         {bool productId,
         bool productBarcodesRefs,
         bool priceTiersRefs,
+        bool altPricesRefs,
         bool customerGroupPricesRefs})>;
 typedef $$ProductBarcodesTableCreateCompanionBuilder = ProductBarcodesCompanion
     Function({
@@ -11275,6 +11663,277 @@ typedef $$PriceTiersTableProcessedTableManager = ProcessedTableManager<
     $$PriceTiersTableUpdateCompanionBuilder,
     (PriceTier, $$PriceTiersTableReferences),
     PriceTier,
+    PrefetchHooks Function({bool productUnitId})>;
+typedef $$AltPricesTableCreateCompanionBuilder = AltPricesCompanion Function({
+  required String id,
+  required String productUnitId,
+  required String label,
+  required int price,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$AltPricesTableUpdateCompanionBuilder = AltPricesCompanion Function({
+  Value<String> id,
+  Value<String> productUnitId,
+  Value<String> label,
+  Value<int> price,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+final class $$AltPricesTableReferences
+    extends BaseReferences<_$AppDatabase, $AltPricesTable, AltPrice> {
+  $$AltPricesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProductUnitsTable _productUnitIdTable(_$AppDatabase db) =>
+      db.productUnits.createAlias(
+          $_aliasNameGenerator(db.altPrices.productUnitId, db.productUnits.id));
+
+  $$ProductUnitsTableProcessedTableManager get productUnitId {
+    final manager = $$ProductUnitsTableTableManager($_db, $_db.productUnits)
+        .filter((f) => f.id($_item.productUnitId));
+    final item = $_typedResult.readTableOrNull(_productUnitIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$AltPricesTableFilterComposer
+    extends Composer<_$AppDatabase, $AltPricesTable> {
+  $$AltPricesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get label => $composableBuilder(
+      column: $table.label, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get price => $composableBuilder(
+      column: $table.price, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  $$ProductUnitsTableFilterComposer get productUnitId {
+    final $$ProductUnitsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productUnitId,
+        referencedTable: $db.productUnits,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductUnitsTableFilterComposer(
+              $db: $db,
+              $table: $db.productUnits,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$AltPricesTableOrderingComposer
+    extends Composer<_$AppDatabase, $AltPricesTable> {
+  $$AltPricesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get label => $composableBuilder(
+      column: $table.label, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get price => $composableBuilder(
+      column: $table.price, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  $$ProductUnitsTableOrderingComposer get productUnitId {
+    final $$ProductUnitsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productUnitId,
+        referencedTable: $db.productUnits,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductUnitsTableOrderingComposer(
+              $db: $db,
+              $table: $db.productUnits,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$AltPricesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AltPricesTable> {
+  $$AltPricesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<int> get price =>
+      $composableBuilder(column: $table.price, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProductUnitsTableAnnotationComposer get productUnitId {
+    final $$ProductUnitsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productUnitId,
+        referencedTable: $db.productUnits,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductUnitsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.productUnits,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$AltPricesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $AltPricesTable,
+    AltPrice,
+    $$AltPricesTableFilterComposer,
+    $$AltPricesTableOrderingComposer,
+    $$AltPricesTableAnnotationComposer,
+    $$AltPricesTableCreateCompanionBuilder,
+    $$AltPricesTableUpdateCompanionBuilder,
+    (AltPrice, $$AltPricesTableReferences),
+    AltPrice,
+    PrefetchHooks Function({bool productUnitId})> {
+  $$AltPricesTableTableManager(_$AppDatabase db, $AltPricesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AltPricesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AltPricesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AltPricesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> productUnitId = const Value.absent(),
+            Value<String> label = const Value.absent(),
+            Value<int> price = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AltPricesCompanion(
+            id: id,
+            productUnitId: productUnitId,
+            label: label,
+            price: price,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String productUnitId,
+            required String label,
+            required int price,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AltPricesCompanion.insert(
+            id: id,
+            productUnitId: productUnitId,
+            label: label,
+            price: price,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$AltPricesTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({productUnitId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (productUnitId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.productUnitId,
+                    referencedTable:
+                        $$AltPricesTableReferences._productUnitIdTable(db),
+                    referencedColumn:
+                        $$AltPricesTableReferences._productUnitIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$AltPricesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $AltPricesTable,
+    AltPrice,
+    $$AltPricesTableFilterComposer,
+    $$AltPricesTableOrderingComposer,
+    $$AltPricesTableAnnotationComposer,
+    $$AltPricesTableCreateCompanionBuilder,
+    $$AltPricesTableUpdateCompanionBuilder,
+    (AltPrice, $$AltPricesTableReferences),
+    AltPrice,
     PrefetchHooks Function({bool productUnitId})>;
 typedef $$CustomerGroupsTableCreateCompanionBuilder = CustomerGroupsCompanion
     Function({
@@ -15792,6 +16451,8 @@ class $AppDatabaseManager {
       $$ProductBarcodesTableTableManager(_db, _db.productBarcodes);
   $$PriceTiersTableTableManager get priceTiers =>
       $$PriceTiersTableTableManager(_db, _db.priceTiers);
+  $$AltPricesTableTableManager get altPrices =>
+      $$AltPricesTableTableManager(_db, _db.altPrices);
   $$CustomerGroupsTableTableManager get customerGroups =>
       $$CustomerGroupsTableTableManager(_db, _db.customerGroups);
   $$CustomerGroupPricesTableTableManager get customerGroupPrices =>

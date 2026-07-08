@@ -44,12 +44,11 @@ Future<String?> _scanBarcodeDialog(BuildContext context) async {
             const Divider(height: 1),
             Expanded(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                    bottom: Radius.circular(12)),
+                borderRadius:
+                    const BorderRadius.vertical(bottom: Radius.circular(12)),
                 child: MobileScanner(
                   onDetect: (capture) {
-                    final barcode =
-                        capture.barcodes.firstOrNull?.rawValue;
+                    final barcode = capture.barcodes.firstOrNull?.rawValue;
                     if (barcode != null && barcode.isNotEmpty) {
                       result = barcode;
                       Navigator.of(ctx).pop();
@@ -100,11 +99,16 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
 
-  void _showBanner(String msg, [InlineBannerType type = InlineBannerType.error]) {
-    setState(() { _bannerMsg = msg; _bannerType = type; });
+  void _showBanner(String msg,
+      [InlineBannerType type = InlineBannerType.error]) {
+    setState(() {
+      _bannerMsg = msg;
+      _bannerType = type;
+    });
   }
 
   List<_UnitEntry> _units = [];
+
   /// Id satuan yang sudah tersimpan di DB (saat load). Hanya satuan tersimpan
   /// yang punya stok untuk disesuaikan — satuan baru belum ada di stock_ledger.
   final Set<String> _persistedUnitIds = {};
@@ -150,14 +154,21 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       final entries = <_UnitEntry>[];
       for (final u in units) {
         final tiers = await db.getPriceTiers(u.id);
+        final altPriceRows = await db.getAltPrices(u.id);
         final barcodes = await db.getProductBarcodes(u.id);
         // tiers ordered DESC minQty — base tier is the one with minQty == 1
         final baseTier = tiers.firstWhere(
           (t) => t.minQty == 1,
-          orElse: () => tiers.isNotEmpty ? tiers.last : PriceTier(
-            id: '', productUnitId: u.id, minQty: 1, price: 0, costPrice: 0,
-            createdAt: DateTime.now(),
-          ),
+          orElse: () => tiers.isNotEmpty
+              ? tiers.last
+              : PriceTier(
+                  id: '',
+                  productUnitId: u.id,
+                  minQty: 1,
+                  price: 0,
+                  costPrice: 0,
+                  createdAt: DateTime.now(),
+                ),
         );
         final extraTiers = tiers
             .where((t) => t.minQty != 1)
@@ -170,6 +181,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             .toList()
           ..sort((a, b) => a.minQty.compareTo(b.minQty));
 
+        final altPriceEntries = altPriceRows
+            .map(
+                (a) => _AltPriceEntry(id: a.id, label: a.label, price: a.price))
+            .toList();
+
         entries.add(_UnitEntry(
           id: u.id,
           unitTypeId: u.unitTypeId ?? 1,
@@ -178,6 +194,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           price: baseTier.price,
           costPrice: baseTier.costPrice,
           extraTiers: extraTiers,
+          altPrices: altPriceEntries,
           barcode: barcodes
               .where((b) => b.isPrimary)
               .map((b) => b.barcode)
@@ -338,23 +355,24 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       final productCompanion = ProductsCompanion(
         id: Value(prodId),
         name: Value(_nameCtrl.text.trim()),
-        kodeProduk: Value(_kodeCtrl.text.trim().isEmpty
-            ? null
-            : _kodeCtrl.text.trim()),
+        kodeProduk:
+            Value(_kodeCtrl.text.trim().isEmpty ? null : _kodeCtrl.text.trim()),
         productGroupId: Value(_selectedGroupId),
         isActive: const Value(true),
         updatedAt: Value(now),
         createdAt: _isEdit ? const Value.absent() : Value(now),
       );
 
-      final unitCompanions = _units.map((u) => ProductUnitsCompanion(
-            id: Value(u.id),
-            productId: Value(prodId),
-            unitTypeId: Value(u.unitTypeId),
-            isBaseUnit: Value(u.isBaseUnit),
-            ratioToBase: Value(u.ratioToBase),
-            isNonStock: const Value(false),
-          )).toList();
+      final unitCompanions = _units
+          .map((u) => ProductUnitsCompanion(
+                id: Value(u.id),
+                productId: Value(prodId),
+                unitTypeId: Value(u.unitTypeId),
+                isBaseUnit: Value(u.isBaseUnit),
+                ratioToBase: Value(u.ratioToBase),
+                isNonStock: const Value(false),
+              ))
+          .toList();
 
       final tiers = <String, List<PriceTiersCompanion>>{};
       for (final u in _units) {
@@ -379,6 +397,20 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         ];
       }
 
+      final altPrices = <String, List<AltPricesCompanion>>{};
+      for (final u in _units) {
+        altPrices[u.id] = u.altPrices
+            .where((a) => a.label.trim().isNotEmpty && a.price > 0)
+            .map((a) => AltPricesCompanion.insert(
+                  id: _uuid.v4(),
+                  productUnitId: u.id,
+                  label: a.label.trim(),
+                  price: a.price,
+                  createdAt: Value(now),
+                ))
+            .toList();
+      }
+
       final barcodes = <String, List<ProductBarcodesCompanion>>{};
       for (final u in _units) {
         if (u.barcode != null && u.barcode!.isNotEmpty) {
@@ -399,6 +431,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         units: unitCompanions,
         tiersByUnitTempId: tiers,
         barcodesByUnitTempId: barcodes,
+        altPricesByUnitTempId: altPrices,
       );
 
       // Invalidate catalog detail cache (price tiers don't trigger watchProducts).
@@ -487,329 +520,352 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(_isEdit
-            ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
-            : 'Tambah Produk'),
-        actions: [
-          if (_isEdit && !_readOnly)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Nonaktifkan',
-              onPressed: _confirmDeactivate,
-            ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                InlineBanner(
-                  message: _bannerMsg,
-                  type: _bannerType,
-                  onDismiss: () => setState(() => _bannerMsg = null),
-                ),
-                Expanded(
-                  child: Form(
-                    key: _formKey,
-                    child: ListView(
-                padding: const EdgeInsets.all(16),
+        appBar: AppBar(
+          title: Text(_isEdit
+              ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
+              : 'Tambah Produk'),
+          actions: [
+            if (_isEdit && !_readOnly)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Nonaktifkan',
+                onPressed: _confirmDeactivate,
+              ),
+          ],
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
                 children: [
-                  if (_readOnly)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .secondaryContainer
-                            .withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
+                  InlineBanner(
+                    message: _bannerMsg,
+                    type: _bannerType,
+                    onDismiss: () => setState(() => _bannerMsg = null),
+                  ),
+                  Expanded(
+                    child: Form(
+                      key: _formKey,
+                      child: ListView(
+                        padding: const EdgeInsets.all(16),
                         children: [
-                          Icon(Icons.lock_outline,
-                              size: 16,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondaryContainer),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Mode baca — izin Input Stok belum aktif',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSecondaryContainer),
+                          if (_readOnly)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .secondaryContainer
+                                    .withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.lock_outline,
+                                      size: 16,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondaryContainer),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Mode baca — izin Input Stok belum aktif',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSecondaryContainer),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          TextFormField(
+                            controller: _nameCtrl,
+                            readOnly: _readOnly,
+                            decoration: const InputDecoration(
+                              labelText: 'Nama Produk *',
+                              hintText: 'Contoh: Indomie Goreng',
+                            ),
+                            textCapitalization: TextCapitalization.words,
+                            onChanged: (_) => _markDirty(),
+                            validator: (v) => _readOnly
+                                ? null
+                                : (v == null || v.trim().isEmpty
+                                    ? 'Nama wajib diisi'
+                                    : null),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _kodeCtrl,
+                            readOnly: _readOnly,
+                            onChanged: (_) => _markDirty(),
+                            decoration: const InputDecoration(
+                              labelText: 'Kode Produk',
+                              hintText: 'Contoh: IMI-001 (opsional)',
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<int?>(
+                            // Guard: bila kategori terpilih sudah dihapus di layar
+                            // lain, jatuhkan ke null agar dropdown tidak crash
+                            // (assert "exactly one item with value").
+                            value: _groups.any((g) =>
+                                    g.name != null && g.id == _selectedGroupId)
+                                ? _selectedGroupId
+                                : null,
+                            decoration:
+                                const InputDecoration(labelText: 'Kategori'),
+                            items: [
+                              const DropdownMenuItem(
+                                  value: null, child: Text('Tanpa Kategori')),
+                              ..._groups
+                                  .where((g) => g.name != null)
+                                  .map((g) => DropdownMenuItem(
+                                        value: g.id,
+                                        child: Text(g.name!),
+                                      )),
+                              DropdownMenuItem(
+                                value: -1,
+                                child: Row(children: [
+                                  Icon(Icons.add,
+                                      size: 16,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary),
+                                  const SizedBox(width: 6),
+                                  Text('+ Tambah Kategori Baru…',
+                                      style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary)),
+                                ]),
+                              ),
+                            ],
+                            onChanged: _readOnly
+                                ? null
+                                : (v) async {
+                                    if (v == -1) {
+                                      await context.push('/produk/kategori');
+                                      final fresh = await ref
+                                          .read(databaseProvider)
+                                          .getAllProductGroups();
+                                      if (mounted) {
+                                        setState(() => _groups = fresh);
+                                      }
+                                      return;
+                                    }
+                                    setState(() => _selectedGroupId = v);
+                                    _markDirty();
+                                  },
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Text('Satuan & Harga',
+                                  style:
+                                      Theme.of(context).textTheme.titleSmall),
+                              const Spacer(),
+                              if (!_readOnly)
+                                TextButton.icon(
+                                  onPressed: _addUnit,
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Tambah Satuan'),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ..._units.asMap().entries.map((e) {
+                            final unitId = e.value.id;
+                            final showStock =
+                                _persistedUnitIds.contains(unitId);
+                            final unitLabel = _unitTypes
+                                    .where((t) => t.id == e.value.unitTypeId)
+                                    .map((t) => t.name)
+                                    .firstOrNull ??
+                                'Satuan ${e.key + 1}';
+                            return _UnitCard(
+                              key: ValueKey(unitId),
+                              entry: e.value,
+                              index: e.key,
+                              unitTypes: _unitTypes,
+                              canRemove: !_readOnly && _units.length > 1,
+                              readOnly: _readOnly,
+                              showStock: showStock,
+                              canAdjustStock: showStock && !_readOnly,
+                              loadStock: showStock
+                                  ? () => ref
+                                      .read(databaseProvider)
+                                      .currentStock(unitId)
+                                  : null,
+                              onAdjustStock: () =>
+                                  _adjustStockDialog(unitId, unitLabel),
+                              onChanged: _readOnly
+                                  ? (_) {}
+                                  : (updated) {
+                                      setState(() => _units[e.key] = updated);
+                                      _markDirty();
+                                    },
+                              onRemove: () => _removeUnit(e.key),
+                            );
+                          }),
+
+                          // ── Varian (produk anak / add-on) ────────────────────
+                          if (!_readOnly || _productId != null) ...[
+                            const SizedBox(height: 20),
+                            Row(
+                              children: [
+                                Text('Varian',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall),
+                                const Spacer(),
+                                if (!_readOnly)
+                                  TextButton.icon(
+                                    onPressed: _addVariant,
+                                    icon: const Icon(Icons.add, size: 16),
+                                    label: const Text('Tambah Varian'),
+                                  ),
+                              ],
+                            ),
+                            Text(
+                              'Sub-item seperti rasa / tipe (mis. Pop Ice → Coklat). '
+                              'Muncul saat tap produk di kasir & bersarang di struk.',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 8),
+                            if (_productId == null)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                child: Text(
+                                  'Tap "Tambah Varian" untuk menyimpan produk ini lalu '
+                                  'menambahkan varian.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant),
+                                ),
+                              )
+                            else
+                              StreamBuilder<List<Product>>(
+                                stream: _variantStream ??= ref
+                                    .read(databaseProvider)
+                                    .watchVariants(_productId!),
+                                builder: (ctx, snap) {
+                                  final vs = snap.data ?? const <Product>[];
+                                  if (vs.isEmpty) {
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4),
+                                      child: Text('Belum ada varian.',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant)),
+                                    );
+                                  }
+                                  return Column(
+                                    children: vs
+                                        .map((v) => Card(
+                                              margin: const EdgeInsets.only(
+                                                  bottom: 6),
+                                              child: ListTile(
+                                                dense: true,
+                                                onTap: _readOnly
+                                                    ? null
+                                                    : () => _editVariant(v),
+                                                leading: const Icon(
+                                                    Icons
+                                                        .subdirectory_arrow_right,
+                                                    size: 18),
+                                                title: Text(v.name),
+                                                subtitle: v.kodeProduk != null
+                                                    ? Text(
+                                                        'Kode: ${v.kodeProduk}',
+                                                        style: const TextStyle(
+                                                            fontSize: 11))
+                                                    : null,
+                                                trailing: _readOnly
+                                                    ? null
+                                                    : Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          IconButton(
+                                                            visualDensity:
+                                                                VisualDensity
+                                                                    .compact,
+                                                            padding:
+                                                                EdgeInsets.zero,
+                                                            constraints:
+                                                                const BoxConstraints(),
+                                                            icon: const Icon(
+                                                                Icons
+                                                                    .edit_outlined,
+                                                                size: 19),
+                                                            tooltip:
+                                                                'Edit varian',
+                                                            onPressed: () =>
+                                                                _editVariant(v),
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 14),
+                                                          IconButton(
+                                                            visualDensity:
+                                                                VisualDensity
+                                                                    .compact,
+                                                            padding:
+                                                                EdgeInsets.zero,
+                                                            constraints:
+                                                                const BoxConstraints(),
+                                                            icon: Icon(
+                                                                Icons
+                                                                    .delete_outline,
+                                                                size: 20,
+                                                                color: Theme.of(
+                                                                        context)
+                                                                    .colorScheme
+                                                                    .error),
+                                                            tooltip:
+                                                                'Hapus varian',
+                                                            onPressed: () =>
+                                                                _deleteVariant(
+                                                                    v),
+                                                          ),
+                                                        ],
+                                                      ),
+                                              ),
+                                            ))
+                                        .toList(),
+                                  );
+                                },
+                              ),
+                          ],
+                          const SizedBox(height: 80),
                         ],
                       ),
                     ),
-                  TextFormField(
-                    controller: _nameCtrl,
-                    readOnly: _readOnly,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama Produk *',
-                      hintText: 'Contoh: Indomie Goreng',
-                    ),
-                    textCapitalization: TextCapitalization.words,
-                    onChanged: (_) => _markDirty(),
-                    validator: (v) => _readOnly
-                        ? null
-                        : (v == null || v.trim().isEmpty
-                            ? 'Nama wajib diisi'
-                            : null),
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _kodeCtrl,
-                    readOnly: _readOnly,
-                    onChanged: (_) => _markDirty(),
-                    decoration: const InputDecoration(
-                      labelText: 'Kode Produk',
-                      hintText: 'Contoh: IMI-001 (opsional)',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int?>(
-                      // Guard: bila kategori terpilih sudah dihapus di layar
-                      // lain, jatuhkan ke null agar dropdown tidak crash
-                      // (assert "exactly one item with value").
-                      value: _groups.any((g) =>
-                              g.name != null && g.id == _selectedGroupId)
-                          ? _selectedGroupId
-                          : null,
-                      decoration: const InputDecoration(labelText: 'Kategori'),
-                      items: [
-                        const DropdownMenuItem(
-                            value: null, child: Text('Tanpa Kategori')),
-                        ..._groups
-                            .where((g) => g.name != null)
-                            .map((g) => DropdownMenuItem(
-                                  value: g.id,
-                                  child: Text(g.name!),
-                                )),
-                        DropdownMenuItem(
-                          value: -1,
-                          child: Row(children: [
-                            Icon(Icons.add,
-                                size: 16,
-                                color: Theme.of(context).colorScheme.primary),
-                            const SizedBox(width: 6),
-                            Text('+ Tambah Kategori Baru…',
-                                style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary)),
-                          ]),
-                        ),
-                      ],
-                      onChanged: _readOnly
-                          ? null
-                          : (v) async {
-                              if (v == -1) {
-                                await context.push('/produk/kategori');
-                                final fresh = await ref
-                                    .read(databaseProvider)
-                                    .getAllProductGroups();
-                                if (mounted) {
-                                  setState(() => _groups = fresh);
-                                }
-                                return;
-                              }
-                              setState(() => _selectedGroupId = v);
-                              _markDirty();
-                            },
-                    ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Text('Satuan & Harga',
-                          style: Theme.of(context).textTheme.titleSmall),
-                      const Spacer(),
-                      if (!_readOnly)
-                        TextButton.icon(
-                          onPressed: _addUnit,
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('Tambah Satuan'),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ..._units.asMap().entries.map((e) {
-                    final unitId = e.value.id;
-                    final showStock = _persistedUnitIds.contains(unitId);
-                    final unitLabel = _unitTypes
-                            .where((t) => t.id == e.value.unitTypeId)
-                            .map((t) => t.name)
-                            .firstOrNull ??
-                        'Satuan ${e.key + 1}';
-                    return _UnitCard(
-                      key: ValueKey(unitId),
-                      entry: e.value,
-                      index: e.key,
-                      unitTypes: _unitTypes,
-                      canRemove: !_readOnly && _units.length > 1,
-                      readOnly: _readOnly,
-                      showStock: showStock,
-                      canAdjustStock: showStock && !_readOnly,
-                      loadStock: showStock
-                          ? () => ref.read(databaseProvider).currentStock(unitId)
-                          : null,
-                      onAdjustStock: () => _adjustStockDialog(unitId, unitLabel),
-                      onChanged: _readOnly
-                          ? (_) {}
-                          : (updated) {
-                              setState(() => _units[e.key] = updated);
-                              _markDirty();
-                            },
-                      onRemove: () => _removeUnit(e.key),
-                    );
-                  }),
-
-                  // ── Varian (produk anak / add-on) ────────────────────
-                  if (!_readOnly || _productId != null) ...[
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Text('Varian',
-                            style: Theme.of(context).textTheme.titleSmall),
-                        const Spacer(),
-                        if (!_readOnly)
-                          TextButton.icon(
-                            onPressed: _addVariant,
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Tambah Varian'),
-                          ),
-                      ],
-                    ),
-                    Text(
-                      'Sub-item seperti rasa / tipe (mis. Pop Ice → Coklat). '
-                      'Muncul saat tap produk di kasir & bersarang di struk.',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_productId == null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(
-                          'Tap "Tambah Varian" untuk menyimpan produk ini lalu '
-                          'menambahkan varian.',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant),
-                        ),
-                      )
-                    else
-                      StreamBuilder<List<Product>>(
-                        stream: _variantStream ??= ref
-                            .read(databaseProvider)
-                            .watchVariants(_productId!),
-                        builder: (ctx, snap) {
-                          final vs = snap.data ?? const <Product>[];
-                          if (vs.isEmpty) {
-                            return Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 4),
-                              child: Text('Belum ada varian.',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant)),
-                            );
-                          }
-                          return Column(
-                            children: vs
-                                .map((v) => Card(
-                                      margin:
-                                          const EdgeInsets.only(bottom: 6),
-                                      child: ListTile(
-                                        dense: true,
-                                        onTap: _readOnly
-                                            ? null
-                                            : () => _editVariant(v),
-                                        leading: const Icon(
-                                            Icons.subdirectory_arrow_right,
-                                            size: 18),
-                                        title: Text(v.name),
-                                        subtitle: v.kodeProduk != null
-                                            ? Text('Kode: ${v.kodeProduk}',
-                                                style: const TextStyle(
-                                                    fontSize: 11))
-                                            : null,
-                                        trailing: _readOnly
-                                            ? null
-                                            : Row(
-                                                mainAxisSize:
-                                                    MainAxisSize.min,
-                                                children: [
-                                                  IconButton(
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    padding: EdgeInsets.zero,
-                                                    constraints:
-                                                        const BoxConstraints(),
-                                                    icon: const Icon(
-                                                        Icons.edit_outlined,
-                                                        size: 19),
-                                                    tooltip: 'Edit varian',
-                                                    onPressed: () =>
-                                                        _editVariant(v),
-                                                  ),
-                                                  const SizedBox(width: 14),
-                                                  IconButton(
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    padding: EdgeInsets.zero,
-                                                    constraints:
-                                                        const BoxConstraints(),
-                                                    icon: Icon(
-                                                        Icons.delete_outline,
-                                                        size: 20,
-                                                        color: Theme.of(context)
-                                                            .colorScheme
-                                                            .error),
-                                                    tooltip: 'Hapus varian',
-                                                    onPressed: () =>
-                                                        _deleteVariant(v),
-                                                  ),
-                                                ],
-                                              ),
-                                      ),
-                                    ))
-                                .toList(),
-                          );
-                        },
-                      ),
-                  ],
-                  const SizedBox(height: 80),
                 ],
               ),
-            ),
+        bottomNavigationBar: _readOnly
+            ? null
+            : Padding(
+                padding: EdgeInsets.fromLTRB(
+                    16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+                child: FilledButton(
+                  onPressed: _isLoading ? null : _save,
+                  child: const Text('Simpan Produk'),
                 ),
-              ],
-            ),
-      bottomNavigationBar: _readOnly
-          ? null
-          : Padding(
-              padding: EdgeInsets.fromLTRB(
-                  16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-              child: FilledButton(
-                onPressed: _isLoading ? null : _save,
-                child: const Text('Simpan Produk'),
               ),
-            ),
       ),
     );
   }
@@ -826,8 +882,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     bool trackStock = false,
   }) async {
     final nameCtrl = TextEditingController(text: name);
-    final priceCtrl = TextEditingController(
-        text: ThousandsSeparatorFormatter.format(price));
+    final priceCtrl =
+        TextEditingController(text: ThousandsSeparatorFormatter.format(price));
     final barcodeCtrl = TextEditingController(text: barcode ?? '');
     var track = trackStock;
 
@@ -878,8 +934,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 onChanged: (v) => setDialog(() => track = v),
                 title: const Text('Lacak stok varian',
                     style: TextStyle(fontSize: 14)),
-                subtitle: const Text(
-                    'Aktifkan bila varian punya stok terpisah',
+                subtitle: const Text('Aktifkan bila varian punya stok terpisah',
                     style: TextStyle(fontSize: 11)),
               ),
             ],
@@ -903,8 +958,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     return (
       name: nameCtrl.text.trim(),
       price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
-      barcode:
-          barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
+      barcode: barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
       trackStock: track,
     );
   }
@@ -916,8 +970,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       final saved = await _persistProduct();
       if (!saved || !mounted) return;
     }
-    final base = _units.firstWhere((u) => u.isBaseUnit,
-        orElse: () => _units.first);
+    final base =
+        _units.firstWhere((u) => u.isBaseUnit, orElse: () => _units.first);
     // Harga default mengikuti induk.
     final res = await _variantDialog(
       title: 'Tambah Varian',
@@ -940,8 +994,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     _sessionVariantIds.add(variantId);
     _markDirty();
     if (mounted) {
-      _showBanner('Varian "${res.name}" ditambahkan',
-          InlineBannerType.success);
+      _showBanner('Varian "${res.name}" ditambahkan', InlineBannerType.success);
     }
   }
 
@@ -956,10 +1009,12 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     var trackStock = false;
     if (baseUnit != null) {
       final tiers = await db.getPriceTiers(baseUnit.id);
-      curPrice = tiers.where((t) => t.minQty == 1).map((t) => t.price).firstOrNull ??
-          (tiers.isNotEmpty ? tiers.last.price : 0);
+      curPrice =
+          tiers.where((t) => t.minQty == 1).map((t) => t.price).firstOrNull ??
+              (tiers.isNotEmpty ? tiers.last.price : 0);
       final bcs = await db.getProductBarcodes(baseUnit.id);
-      curBarcode = bcs.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull;
+      curBarcode =
+          bcs.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull;
       trackStock = !baseUnit.isNonStock;
     }
     if (!mounted) return;
@@ -1031,11 +1086,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             'Produk tidak akan muncul di katalog kasir. Data tetap tersimpan.'),
         actions: [
           TextButton(
-              onPressed: () => ctx.pop(false),
-              child: const Text('Batal')),
+              onPressed: () => ctx.pop(false), child: const Text('Batal')),
           FilledButton(
-              onPressed: () => ctx.pop(true),
-              child: const Text('Nonaktifkan')),
+              onPressed: () => ctx.pop(true), child: const Text('Nonaktifkan')),
         ],
       ),
     );
@@ -1062,6 +1115,21 @@ class _TierEntry {
   int costPrice;
 }
 
+/// Harga alternatif berlabel bebas (mis. "Harga Toko A" = 3000) — bukan
+/// tier qty seperti [_TierEntry], murni pilihan cepat tap-untuk-pakai di
+/// kasir (`ItemEntrySheet`).
+class _AltPriceEntry {
+  _AltPriceEntry({
+    required this.id,
+    required this.label,
+    required this.price,
+  });
+
+  final String id;
+  String label;
+  int price;
+}
+
 class _UnitEntry {
   _UnitEntry({
     required this.id,
@@ -1071,8 +1139,10 @@ class _UnitEntry {
     required this.price,
     required this.costPrice,
     List<_TierEntry>? extraTiers,
+    List<_AltPriceEntry>? altPrices,
     this.barcode,
-  }) : extraTiers = extraTiers ?? [];
+  })  : extraTiers = extraTiers ?? [],
+        altPrices = altPrices ?? [];
 
   final String id;
   int unitTypeId;
@@ -1081,6 +1151,7 @@ class _UnitEntry {
   int price;
   int costPrice;
   List<_TierEntry> extraTiers;
+  List<_AltPriceEntry> altPrices;
   String? barcode;
 
   _UnitEntry copyWith({
@@ -1090,6 +1161,7 @@ class _UnitEntry {
     int? price,
     int? costPrice,
     List<_TierEntry>? extraTiers,
+    List<_AltPriceEntry>? altPrices,
     String? barcode,
   }) =>
       _UnitEntry(
@@ -1100,6 +1172,7 @@ class _UnitEntry {
         price: price ?? this.price,
         costPrice: costPrice ?? this.costPrice,
         extraTiers: extraTiers ?? this.extraTiers,
+        altPrices: altPrices ?? this.altPrices,
         barcode: barcode ?? this.barcode,
       );
 }
@@ -1134,6 +1207,7 @@ class _UnitCard extends StatefulWidget {
   final bool showStock;
   final bool canAdjustStock;
   final Future<double> Function()? loadStock;
+
   /// Buka dialog penyesuaian; true bila stok berubah → kartu menyegarkan.
   final Future<bool> Function()? onAdjustStock;
 
@@ -1150,6 +1224,10 @@ class _UnitCardState extends State<_UnitCard> {
   late List<_TierEntry> _extraTiers;
   late List<TextEditingController> _tierMinCtrl;
   late List<TextEditingController> _tierPriceCtrl;
+
+  late List<_AltPriceEntry> _altPrices;
+  late List<TextEditingController> _altLabelCtrl;
+  late List<TextEditingController> _altPriceCtrl;
 
   Future<double>? _stockFuture;
 
@@ -1173,16 +1251,23 @@ class _UnitCardState extends State<_UnitCard> {
         text: widget.entry.ratioToBase != 1.0
             ? widget.entry.ratioToBase.toString()
             : '1');
-    _barcodeCtrl =
-        TextEditingController(text: widget.entry.barcode ?? '');
+    _barcodeCtrl = TextEditingController(text: widget.entry.barcode ?? '');
 
     _extraTiers = List.from(widget.entry.extraTiers);
     _tierMinCtrl = _extraTiers
         .map((t) => TextEditingController(text: t.minQty.toString()))
         .toList();
     _tierPriceCtrl = _extraTiers
-        .map((t) => TextEditingController(
-            text: t.price > 0 ? t.price.toString() : ''))
+        .map((t) =>
+            TextEditingController(text: t.price > 0 ? t.price.toString() : ''))
+        .toList();
+
+    _altPrices = List.from(widget.entry.altPrices);
+    _altLabelCtrl =
+        _altPrices.map((a) => TextEditingController(text: a.label)).toList();
+    _altPriceCtrl = _altPrices
+        .map((a) =>
+            TextEditingController(text: a.price > 0 ? a.price.toString() : ''))
         .toList();
   }
 
@@ -1198,22 +1283,25 @@ class _UnitCardState extends State<_UnitCard> {
     for (final c in _tierPriceCtrl) {
       c.dispose();
     }
+    for (final c in _altLabelCtrl) {
+      c.dispose();
+    }
+    for (final c in _altPriceCtrl) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   void _addTier() {
     final newTier = _TierEntry(
       id: _uuid.v4(),
-      minQty: _extraTiers.isNotEmpty
-          ? (_extraTiers.last.minQty + 10)
-          : 10,
+      minQty: _extraTiers.isNotEmpty ? (_extraTiers.last.minQty + 10) : 10,
       price: 0,
       costPrice: 0,
     );
     setState(() {
       _extraTiers.add(newTier);
-      _tierMinCtrl
-          .add(TextEditingController(text: newTier.minQty.toString()));
+      _tierMinCtrl.add(TextEditingController(text: newTier.minQty.toString()));
       _tierPriceCtrl.add(TextEditingController(text: ''));
     });
     widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
@@ -1239,6 +1327,36 @@ class _UnitCardState extends State<_UnitCard> {
       costPrice: _extraTiers[i].costPrice,
     );
     widget.onChanged(widget.entry.copyWith(extraTiers: List.from(_extraTiers)));
+  }
+
+  void _addAltPrice() {
+    final newAlt = _AltPriceEntry(id: _uuid.v4(), label: '', price: 0);
+    setState(() {
+      _altPrices.add(newAlt);
+      _altLabelCtrl.add(TextEditingController());
+      _altPriceCtrl.add(TextEditingController());
+    });
+    widget.onChanged(widget.entry.copyWith(altPrices: List.from(_altPrices)));
+  }
+
+  void _removeAltPrice(int i) {
+    _altLabelCtrl[i].dispose();
+    _altPriceCtrl[i].dispose();
+    setState(() {
+      _altPrices.removeAt(i);
+      _altLabelCtrl.removeAt(i);
+      _altPriceCtrl.removeAt(i);
+    });
+    widget.onChanged(widget.entry.copyWith(altPrices: List.from(_altPrices)));
+  }
+
+  void _syncAltPrice(int i) {
+    _altPrices[i] = _AltPriceEntry(
+      id: _altPrices[i].id,
+      label: _altLabelCtrl[i].text,
+      price: int.tryParse(_altPriceCtrl[i].text) ?? 0,
+    );
+    widget.onChanged(widget.entry.copyWith(altPrices: List.from(_altPrices)));
   }
 
   @override
@@ -1306,7 +1424,9 @@ class _UnitCardState extends State<_UnitCard> {
                         final s = snap.data;
                         final txt = s == null
                             ? '…'
-                            : (s % 1 == 0 ? s.toInt().toString() : s.toString());
+                            : (s % 1 == 0
+                                ? s.toInt().toString()
+                                : s.toString());
                         return Text(txt,
                             style: const TextStyle(
                                 fontSize: 13, fontWeight: FontWeight.w700));
@@ -1324,8 +1444,7 @@ class _UnitCardState extends State<_UnitCard> {
                         label: const Text('Sesuaikan'),
                         style: TextButton.styleFrom(
                           visualDensity: VisualDensity.compact,
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
                       ),
                   ],
@@ -1436,17 +1555,15 @@ class _UnitCardState extends State<_UnitCard> {
                       suffixIcon: widget.readOnly
                           ? null
                           : IconButton(
-                              icon: const Icon(Icons.qr_code_scanner,
-                                  size: 18),
+                              icon: const Icon(Icons.qr_code_scanner, size: 18),
                               visualDensity: VisualDensity.compact,
                               tooltip: 'Scan barcode',
                               onPressed: () async {
-                                final bc =
-                                    await _scanBarcodeDialog(context);
+                                final bc = await _scanBarcodeDialog(context);
                                 if (bc != null && mounted) {
                                   _barcodeCtrl.text = bc;
-                                  widget.onChanged(widget.entry
-                                      .copyWith(barcode: bc));
+                                  widget.onChanged(
+                                      widget.entry.copyWith(barcode: bc));
                                 }
                               },
                             ),
@@ -1455,8 +1572,7 @@ class _UnitCardState extends State<_UnitCard> {
                         ? null
                         : (v) {
                             widget.onChanged(widget.entry.copyWith(
-                                barcode:
-                                    v.trim().isEmpty ? null : v.trim()));
+                                barcode: v.trim().isEmpty ? null : v.trim()));
                           },
                   ),
                 ),
@@ -1492,9 +1608,7 @@ class _UnitCardState extends State<_UnitCard> {
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly
                         ],
-                        onChanged: widget.readOnly
-                            ? null
-                            : (_) => _syncTier(i),
+                        onChanged: widget.readOnly ? null : (_) => _syncTier(i),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1511,9 +1625,7 @@ class _UnitCardState extends State<_UnitCard> {
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly
                         ],
-                        onChanged: widget.readOnly
-                            ? null
-                            : (_) => _syncTier(i),
+                        onChanged: widget.readOnly ? null : (_) => _syncTier(i),
                       ),
                     ),
                     if (!widget.readOnly) ...[
@@ -1537,6 +1649,83 @@ class _UnitCardState extends State<_UnitCard> {
                 onPressed: _addTier,
                 icon: const Icon(Icons.add, size: 15),
                 label: const Text('Tambah Harga Grosir'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+            ],
+
+            // ── Harga alternatif berlabel ───────────────────────────────────
+            if (_altPrices.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Harga Lain',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              for (var i = 0; i < _altPrices.length; i++) ...[
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _altLabelCtrl[i],
+                        readOnly: widget.readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'Nama Harga',
+                          hintText: 'mis. Harga Toko A',
+                          isDense: true,
+                        ),
+                        onChanged:
+                            widget.readOnly ? null : (_) => _syncAltPrice(i),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 110,
+                      child: TextFormField(
+                        controller: _altPriceCtrl[i],
+                        readOnly: widget.readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'Nominal',
+                          isDense: true,
+                          prefixText: 'Rp ',
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        onChanged:
+                            widget.readOnly ? null : (_) => _syncAltPrice(i),
+                      ),
+                    ),
+                    if (!widget.readOnly) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(Icons.remove_circle_outline,
+                            size: 18, color: scheme.error),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _removeAltPrice(i),
+                        tooltip: 'Hapus harga',
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+
+            if (!widget.readOnly) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _addAltPrice,
+                icon: const Icon(Icons.add, size: 15),
+                label: const Text('Tambah Harga Lain'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding:
