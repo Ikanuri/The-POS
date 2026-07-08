@@ -10,7 +10,30 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 8 Juli 2026
 
+### ✨ Fitur Baru
+- **Tombol Bayar Nanti kini terpisah, tidak lagi campur dengan Metode
+  Pembayaran.** Di layar Bayar, sekarang ada 2 tombol besar di bagian
+  bawah: **"Bayar [jumlah]"** (hijau, untuk pembayaran tunai/QRIS/dll seperti
+  biasa) dan **"Bayar Nanti"** (merah, langsung mencatat sebagai hutang).
+  Lebih jelas dan tidak perlu mencari-cari chip "Bayar Nanti" di antara
+  metode pembayaran lain.
+- **Harga Lain di pengaturan produk.** Selain harga grosir, sekarang produk
+  bisa punya harga alternatif dengan nama bebas — misal harga jual "Sedap
+  Goreng" normalnya Rp 2.850, tapi bisa ditambah harga bernama "Harga Toko
+  A" senilai Rp 3.000. Saat di kasir, tap produk lalu pilih harga itu
+  langsung dari daftar chip harga, tidak perlu ketik manual. Atur lewat
+  Kelola Produk → pilih produk → "Tambah Harga Lain".
+
 ### 🧪 Eksperimental
+- **Katalog Pesanan: dropdown varian tidak lagi otomatis tertutup.**
+  Sebelumnya, tiap kali menambah jumlah varian (mis. pilih rasa), daftar
+  variannya langsung tertutup lagi — merepotkan kalau mau pilih beberapa
+  rasa sekaligus. Sekarang tetap terbuka sampai pelanggan sendiri yang
+  menutupnya dengan tap nama produknya.
+- **Katalog Pesanan: ada tombol ganti tampilan terang/gelap** (ikon
+  matahari/bulan di pojok kanan atas), pilihan tersimpan otomatis untuk
+  kunjungan berikutnya. Teks Total di halaman ini juga diperbesar supaya
+  lebih mudah dibaca.
 - **Katalog Pesanan kini bisa langsung ditempel ke keranjang kasir.**
   Sebelumnya, kasir harus membaca pesanan WhatsApp dari pelanggan satu-satu
   dan menginputnya manual. Sekarang, cukup salin (copy) teks pesanan yang

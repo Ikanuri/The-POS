@@ -4,14 +4,58 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 8 Juli 2026 (Fase 2 fitur eksperimental Katalog Pesanan — parser & Tempel Pesanan)._
+_Terakhir diperbarui: 8 Juli 2026 (tombol Bayar Nanti terpisah, fitur Harga
+Lain, poles UX Katalog Pesanan — commit `6dedc80`)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
-Fitur eksperimental **Katalog Pesanan** (branch `claude/order-html-eksperimental`)
-sekarang lengkap dua fase, menutup alur ujung-ke-ujung: generate HTML →
+### Sesi terbaru (commit `6dedc80`) — 3 perbaikan/fitur kecil independen
+1. **Modal Bayar**: chip "Bayar Nanti" (dulu campur di baris Metode
+   Pembayaran) sekarang jadi tombol dedicated sendiri di `payment_screen.dart`
+   — 2 tombol di bar bawah: `FilledButton` hijau (`Color(0xFF22C55E)`)
+   "Bayar {total}" + `FilledButton` merah (`scheme.error`) "Bayar Nanti".
+   `_onBayarNantiPressed()` set `_selectedMethodType='tempo'` lalu langsung
+   `_confirm()` — TIDAK ada dialog konfirmasi tambahan (sama seperti alur
+   lama, cuma dipicu tombol berbeda).
+2. **Harga Lain** (fitur baru — tabel `alt_prices`, `schemaVersion` 7->8):
+   harga alternatif berlabel bebas per satuan produk (mis. "Harga Toko A" =
+   3000), BEDA dari `price_tiers` (qty-tier) — murni pilihan manual, tidak
+   pernah dipilih otomatis oleh `PriceService.resolvePrice`. Dikelola di
+   `produk_form_screen.dart` (section "Harga Lain", pola sama persis dengan
+   "Harga Grosir" — delete-then-reinsert saat save). Tampil sebagai chip
+   tap-untuk-pakai di `ItemEntrySheet` (`getAltPrices()`, disatukan dengan
+   chip satuan & tier grosir yang sudah ada, lewat `_applyTierPrice()` yang
+   sama). Terdaftar sebagai master data satu-arah (host→klien) di
+   `lan_sync_service.dart`/`dumpSince`/`_allTables` (backup), mengikuti pola
+   `price_tiers` PERSIS (kalau nanti nambah tabel master data baru lagi, ikuti
+   4 titik ini: `@DriftDatabase(tables:...)`, `_allTables`, `masterData` di
+   `dumpSince`, `_kTableLabels` di `lan_sync_service.dart`).
+3. **Katalog Pesanan (eksperimental)** — 3 poles UX di `order_page_service.dart`
+   template: (a) dropdown varian pakai `openState` per productId + event
+   `toggle` supaya TIDAK collapse tiap `render()` ulang (dulu nutup lagi tiap
+   nambah qty varian) — hanya nutup kalau user sendiri tap ringkasan/induk;
+   (b) tombol toggle terang/gelap manual (`#themeBtn`, `data-theme` attr +
+   `localStorage`), menang atas `prefers-color-scheme` di kedua arah; (c)
+   font total diperbesar (`.cb-total` 16->21px, `.grand .gv` 20->27px).
+   **Perilaku JS ini TIDAK bisa dites lewat `flutter test`** (JS tidak
+   dieksekusi) — diverifikasi manual pakai Chromium headless (Playwright,
+   `/opt/pw-browsers/chromium`) generate HTML sungguhan lalu klik-klik. Kalau
+   nanti ubah template ini lagi, verifikasi ulang dengan cara yang sama
+   (lihat riwayat percakapan sesi ini untuk skrip contoh) — jangan cuma
+   percaya `flutter analyze`/`flutter test` hijau, itu tidak menyentuh JS
+   sama sekali.
+
+Test baru sesi ini: migrasi v7->v8 (`test/migration_v8_test.dart`, Tier 1,
+revert-verify tabel `alt_prices` benar-benar dibuat), `saveProduct` harga
+alternatif (`test/alt_prices_test.dart`, Tier 1, revert-verify replace +
+cascade-delete saat satuan dihapus), layout 2-tombol Bayar
+(`test/payment_screen_buttons_test.dart`, Tier 2 widget, revert-verify label
+hilang tertangkap). `flutter analyze` bersih, **124 test hijau**.
+
+### Fitur eksperimental Katalog Pesanan (branch `claude/order-html-eksperimental`)
+Lengkap dua fase, menutup alur ujung-ke-ujung: generate HTML →
 kirim WA manual → pelanggan pilih barang → kasir tempel balik ke keranjang.
 
 ### Fase 1 — generator HTML (commit `e422639`, `dc9c3ef`)
@@ -56,8 +100,6 @@ kirim WA manual → pelanggan pilih barang → kasir tempel balik ke keranjang.
   kasus ini. Kedua kelas regresi (dedup dimatikan, lebar label dipaksa 200)
   diverifikasi lewat revert-sementara: tanpa fix, test gagal dengan pesan
   yang sesuai; dengan fix, hijau lagi.
-
-`flutter analyze` bersih, **119 test hijau** (112 lama + 7 baru Fase 2).
 
 ### Yang SENGAJA belum dibangun (deferred, bukan lupa)
 - Hosting "link hidup" (GitHub Pages dkk) untuk Katalog Pesanan — user pilih
@@ -109,6 +151,10 @@ sukses (dev pre-release di GitHub Releases).
 - Katalog Pesanan (eksperimental): tanpa hosting, kasir utama tidak
   disentuh (hanya tombol baru ditambah), Fase 1 (HTML) + Fase 2 (parser +
   Tempel Pesanan) sudah selesai keduanya.
+- Harga Lain (`alt_prices`) TIDAK pernah dipilih otomatis oleh
+  `PriceService.resolvePrice` — murni manual/tap, beda filosofi dari
+  `price_tiers` (qty-tier) yang auto-resolve berdasar qty. Jangan campur
+  logikanya kalau nanti ada perubahan price resolver.
 
 ## Menggantung / Kandidat Berikutnya
 - Saran fitur audit di atas menunggu keputusan user.
