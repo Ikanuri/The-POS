@@ -42,6 +42,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   ada di aplikasi ("Input Pengeluaran" & "Input Pembelian") disembunyikan
   agar tidak membingungkan.
 
+### 🧪 Eksperimental
+- **Katalog Pesanan (baru, tahap awal).** Di Pengaturan → Eksperimental,
+  owner sekarang bisa membuat & membagikan satu file "Katalog Pesanan" ke
+  pelanggan lewat WhatsApp. Pelanggan buka file itu di HP-nya (tanpa perlu
+  internet), pilih sendiri barang & jumlahnya — termasuk varian (mis.
+  pilihan rasa) — lalu tekan "Kirim via WhatsApp" untuk mengirim pesanan
+  yang sudah rapi terformat. **Catatan penting**: file ini TIDAK otomatis
+  ter-update — tiap kali harga berubah, perlu dibuat & dikirim ulang. Untuk
+  saat ini, kasir masih membaca pesanan itu dan menginputnya manual seperti
+  biasa; fitur "tempel otomatis ke keranjang" menyusul di tahap berikutnya.
+
 ---
 
 ## 6 Juli 2026

@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-07
 
+- `e422639` — feat(eksperimental): katalog pesanan HTML self-contained tanpa hosting
 - `1993b80` — chore: naikkan versi ke 2.1.1+3 untuk rilis perbaikan audit
 - `b6fefbe` — fix: audit code review — consolidate payment logic & archive filtering (PR #2, squash dari `7ed9692`)
 - `c1bafd7` — fix: audit ulang — konsolidasi pelunasan ke addPaymentToTransaction + filter arsip per-tahun
