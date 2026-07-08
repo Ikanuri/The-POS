@@ -13,6 +13,7 @@ import '../../features/pengaturan/backup_screen.dart';
 import '../../features/pengaturan/csv_import_screen.dart';
 import '../../features/pengaturan/asisten_permissions_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
+import '../../features/pengaturan/order_share_screen.dart';
 import '../../features/pengaturan/pair_device_screen.dart';
 import '../../features/pengaturan/payment_methods_screen.dart';
 import '../../features/pengaturan/pengaturan_screen.dart';
@@ -60,7 +61,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
         routes: [
-          GoRoute(path: '/ringkasan', builder: (_, __) => const RingkasanScreen()),
+          GoRoute(
+              path: '/ringkasan', builder: (_, __) => const RingkasanScreen()),
           GoRoute(
             path: '/kasir',
             builder: (_, __) => const KasirScreen(),
@@ -82,8 +84,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'bayar',
-                    builder: (_, state) => PaymentScreen(
-                        addToTxId: state.pathParameters['txId']!),
+                    builder: (_, state) =>
+                        PaymentScreen(addToTxId: state.pathParameters['txId']!),
                   ),
                 ],
               ),
@@ -148,14 +150,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const PengaturanScreen(),
             routes: [
               GoRoute(
-                  path: 'toko',
-                  builder: (_, __) => const StoreInfoScreen()),
+                  path: 'toko', builder: (_, __) => const StoreInfoScreen()),
               GoRoute(
                   path: 'metode-bayar',
                   builder: (_, __) => const PaymentMethodsScreen()),
               GoRoute(
-                  path: 'pegawai',
-                  builder: (_, __) => const EmployeeScreen()),
+                  path: 'pegawai', builder: (_, __) => const EmployeeScreen()),
               GoRoute(
                   path: 'izin-kasir',
                   builder: (_, __) => const KasirPermissionsScreen()),
@@ -163,26 +163,21 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'izin-asisten',
                   builder: (_, __) => const AsistenPermissionsScreen()),
               GoRoute(
-                  path: 'pair',
-                  builder: (_, __) => const PairDeviceScreen()),
+                  path: 'pair', builder: (_, __) => const PairDeviceScreen()),
+              GoRoute(path: 'sync', builder: (_, __) => const SyncScreen()),
+              GoRoute(path: 'backup', builder: (_, __) => const BackupScreen()),
               GoRoute(
-                  path: 'sync',
-                  builder: (_, __) => const SyncScreen()),
-              GoRoute(
-                  path: 'backup',
-                  builder: (_, __) => const BackupScreen()),
-              GoRoute(
-                  path: 'printer',
-                  builder: (_, __) => const PrinterScreen()),
+                  path: 'printer', builder: (_, __) => const PrinterScreen()),
               GoRoute(
                   path: 'import-csv',
                   builder: (_, __) => const CsvImportScreen()),
               GoRoute(
+                  path: 'katalog-pesanan',
+                  builder: (_, __) => const OrderShareScreen()),
+              GoRoute(
                   path: 'tutup-buku',
                   builder: (_, __) => const TutupBukuScreen()),
-              GoRoute(
-                  path: 'arsip',
-                  builder: (_, __) => const ArsipScreen()),
+              GoRoute(path: 'arsip', builder: (_, __) => const ArsipScreen()),
             ],
           ),
         ],
