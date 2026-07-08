@@ -25,6 +25,7 @@ import 'cart_provider.dart';
 import 'widgets/cart_meta_pickers.dart';
 import 'widgets/cart_sheet.dart';
 import 'widgets/item_entry_sheet.dart';
+import 'widgets/paste_order_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
 
 const _kasirUuid = Uuid();
@@ -200,14 +201,20 @@ class _ScanGuidePainter extends CustomPainter {
     canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(cLen, 0), corner);
     canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(0, cLen), corner);
     // Kanan-atas
-    canvas.drawLine(rect.topRight, rect.topRight + const Offset(-cLen, 0), corner);
-    canvas.drawLine(rect.topRight, rect.topRight + const Offset(0, cLen), corner);
+    canvas.drawLine(
+        rect.topRight, rect.topRight + const Offset(-cLen, 0), corner);
+    canvas.drawLine(
+        rect.topRight, rect.topRight + const Offset(0, cLen), corner);
     // Kiri-bawah
-    canvas.drawLine(rect.bottomLeft, rect.bottomLeft + const Offset(cLen, 0), corner);
-    canvas.drawLine(rect.bottomLeft, rect.bottomLeft + const Offset(0, -cLen), corner);
+    canvas.drawLine(
+        rect.bottomLeft, rect.bottomLeft + const Offset(cLen, 0), corner);
+    canvas.drawLine(
+        rect.bottomLeft, rect.bottomLeft + const Offset(0, -cLen), corner);
     // Kanan-bawah
-    canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(-cLen, 0), corner);
-    canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(0, -cLen), corner);
+    canvas.drawLine(
+        rect.bottomRight, rect.bottomRight + const Offset(-cLen, 0), corner);
+    canvas.drawLine(
+        rect.bottomRight, rect.bottomRight + const Offset(0, -cLen), corner);
 
     // Garis tengah — merah normal, menebal & hijau sesaat saat pulse aktif.
     final color = Color.lerp(
@@ -309,8 +316,7 @@ final _catalogDetailProvider =
       unitCount: 0,
     );
   }
-  final base =
-      units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+  final base = units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
   final resolved =
       await PriceService(db).resolvePrice(productUnitId: base.id, qty: 1);
   final unitType = await (db.select(db.unitTypes)
@@ -448,9 +454,8 @@ const _kAvatarGradients = [
   [Color(0xFF4E8B8B), Color(0xFF3A7474)],
 ];
 
-List<Color> _gradFor(String name) =>
-    _kAvatarGradients[(name.isEmpty ? 0 : name.codeUnitAt(0)) %
-        _kAvatarGradients.length];
+List<Color> _gradFor(String name) => _kAvatarGradients[
+    (name.isEmpty ? 0 : name.codeUnitAt(0)) % _kAvatarGradients.length];
 
 class KasirScreen extends ConsumerStatefulWidget {
   const KasirScreen({super.key, this.addToTxId, this.catalogMode = false});
@@ -471,9 +476,8 @@ class KasirScreen extends ConsumerStatefulWidget {
 
 class _KasirScreenState extends ConsumerState<KasirScreen> {
   /// Slot keranjang aktif: katalog, tambah belanjaan, atau keranjang utama.
-  String get _cartId => widget.catalogMode
-      ? kCatalogCartId
-      : (widget.addToTxId ?? kMainCartId);
+  String get _cartId =>
+      widget.catalogMode ? kCatalogCartId : (widget.addToTxId ?? kMainCartId);
   bool get _isAddMode => widget.addToTxId != null;
   bool get _isCatalogMode => widget.catalogMode;
   static const _prefContinuous = 'scanner_continuous';
@@ -523,8 +527,12 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
 
-  void _showBanner(String msg, [InlineBannerType type = InlineBannerType.error]) {
-    setState(() { _bannerMsg = msg; _bannerType = type; });
+  void _showBanner(String msg,
+      [InlineBannerType type = InlineBannerType.error]) {
+    setState(() {
+      _bannerMsg = msg;
+      _bannerType = type;
+    });
   }
 
   Future<void> _initSwipeHint() async {
@@ -696,8 +704,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   Future<void> _ensureParentInCart(CartItem variantItem) async {
     if (!variantItem.isVariant || variantItem.parentProductId == null) return;
     final cart = ref.read(cartProvider(_cartId));
-    final hasParent = cart.any(
-        (c) => c.productId == variantItem.parentProductId && !c.isVariant);
+    final hasParent = cart
+        .any((c) => c.productId == variantItem.parentProductId && !c.isVariant);
     if (hasParent) return;
 
     final db = ref.read(databaseProvider);
@@ -731,7 +739,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         ));
   }
 
-  Future<void> _handleBarcode(String barcode, {bool fromExternal = false}) async {
+  Future<void> _handleBarcode(String barcode,
+      {bool fromExternal = false}) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     // Debounce lebih pendek untuk scanner eksternal (300 ms, cukup untuk
     // mencegah echo hardware) agar scan berturut produk sama responsif.
@@ -813,9 +822,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   Future<void> _openCartSheet({bool scrollToBottom = false}) async {
     if (_cartSheetOpen) return;
     _cartSheetOpen = true;
-    final payRoute = _isAddMode
-        ? '/kasir/tambah/${widget.addToTxId}/bayar'
-        : '/kasir/bayar';
+    final payRoute =
+        _isAddMode ? '/kasir/tambah/${widget.addToTxId}/bayar' : '/kasir/bayar';
     final editProductId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -828,7 +836,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     _cartSheetOpen = false;
     if (editProductId == null || !mounted) return;
 
-    final product = await ref.read(databaseProvider).getProductById(editProductId);
+    final product =
+        await ref.read(databaseProvider).getProductById(editProductId);
     if (product == null || !mounted) return;
     await showModalBottomSheet(
       context: context,
@@ -946,8 +955,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                 onPressed: () => Navigator.of(ctx).pop(),
                 child: const Text('Batal')),
             FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(
-                  ctrl.text.trim().isEmpty ? 'Pesanan' : ctrl.text.trim()),
+              onPressed: () => Navigator.of(ctx)
+                  .pop(ctrl.text.trim().isEmpty ? 'Pesanan' : ctrl.text.trim()),
               child: const Text('Tahan'),
             ),
           ],
@@ -991,8 +1000,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     ref.read(cartMetaProvider(_cartId).notifier).replaceAll(parsed.meta);
     if (mounted) {
       setState(() => _heldPanelOpen = false);
-      _showBanner('Melanjutkan pesanan: ${order.label}',
-          InlineBannerType.success);
+      _showBanner(
+          'Melanjutkan pesanan: ${order.label}', InlineBannerType.success);
     }
   }
 
@@ -1130,6 +1139,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
               isScrollControlled: true,
               builder: (_) => const TxHistorySheet(),
             ),
+            // EKSPERIMENTAL — Fase 2 fitur Katalog Pesanan. Hanya di mode
+            // kasir biasa (bukan katalog/tambah-belanjaan) agar tidak
+            // menambah kebingungan di alur yang sudah ada.
+            onPasteOrder: (!_isCatalogMode && !_isAddMode)
+                ? () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => PasteOrderSheet(cartId: _cartId),
+                    )
+                : null,
             heldCount: heldCount,
             isGrid: isGrid,
             onToggleGrid: () => ref.read(kasirGridProvider.notifier).toggle(),
@@ -1265,8 +1284,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                             _isAddMode ? null : cartNotifier.lastTouchedItem,
                         lastEffQty: cartNotifier.lastTouchedItem == null
                             ? 0
-                            : cartNotifier.effectiveQtyFor(
-                                cartNotifier.lastTouchedItem!),
+                            : cartNotifier
+                                .effectiveQtyFor(cartNotifier.lastTouchedItem!),
                         showSwipeHint: _swipeHintVisible,
                       ),
                     ),
@@ -1374,6 +1393,7 @@ class _KasirTopbar extends StatelessWidget {
     required this.isGrid,
     required this.onToggleGrid,
     this.showQueueAndHistory = true,
+    this.onPasteOrder,
   });
 
   final TextEditingController searchCtrl;
@@ -1388,6 +1408,10 @@ class _KasirTopbar extends StatelessWidget {
 
   /// Tampilkan tombol Antrian (tahan) & Riwayat. Disembunyikan di mode katalog.
   final bool showQueueAndHistory;
+
+  /// EKSPERIMENTAL — buka sheet "Tempel Pesanan". null = sembunyikan tombol
+  /// (mode katalog / tambah belanjaan).
+  final VoidCallback? onPasteOrder;
 
   @override
   Widget build(BuildContext context) {
@@ -1440,7 +1464,8 @@ class _KasirTopbar extends StatelessWidget {
                         focusNode: searchFocus,
                         decoration: InputDecoration(
                           hintText: 'Cari produk…',
-                          prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                          prefixIcon:
+                              const Icon(Icons.search_rounded, size: 18),
                           suffixIcon: value.text.isNotEmpty
                               ? IconButton(
                                   icon:
@@ -1481,10 +1506,19 @@ class _KasirTopbar extends StatelessWidget {
                 ],
                 const SizedBox(width: 4),
                 _TbBtn(
-                  icon:
-                      isGrid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                  icon: isGrid
+                      ? Icons.view_list_rounded
+                      : Icons.grid_view_rounded,
                   onTap: onToggleGrid,
                 ),
+                if (onPasteOrder != null) ...[
+                  const SizedBox(width: 4),
+                  _TbBtn(
+                    icon: Icons.content_paste_go_rounded,
+                    onTap: onPasteOrder!,
+                    label: 'Tempel\nPesanan',
+                  ),
+                ],
               ],
             ),
           ),
@@ -1616,7 +1650,8 @@ class _AddControl extends StatelessWidget {
           color: bgColor,
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
+            BoxShadow(
+                color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
           ],
         ),
         child: Center(
@@ -1779,8 +1814,7 @@ class _ProductCard extends ConsumerWidget {
                         }
                       },
                       onMinus: qty > 0
-                          ? () => _decrementProduct(
-                              cart, notifier, product.id)
+                          ? () => _decrementProduct(cart, notifier, product.id)
                           : null,
                     ),
                     orElse: () => const SizedBox(width: 32, height: 32),
@@ -1844,8 +1878,8 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
     final qty = cart
         .where((c) => c.productId == product.id)
         .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
-    final hasVariants = detailAsync.maybeWhen(
-        data: (d) => d.hasVariants, orElse: () => false);
+    final hasVariants =
+        detailAsync.maybeWhen(data: (d) => d.hasVariants, orElse: () => false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2008,7 +2042,9 @@ class _VariantDropdown extends ConsumerWidget {
           padding: EdgeInsets.symmetric(vertical: 10),
           child: Center(
             child: SizedBox(
-                width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2)),
           ),
         ),
         error: (_, __) => const SizedBox.shrink(),
@@ -2204,8 +2240,7 @@ class _CartBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.keyboard_arrow_up_rounded,
-                    size: 14,
-                    color: cs.onSurfaceVariant.withOpacity(0.5)),
+                    size: 14, color: cs.onSurfaceVariant.withOpacity(0.5)),
                 const SizedBox(width: 3),
                 Text(
                   'Geser ke atas untuk lihat keranjang',
@@ -2314,8 +2349,8 @@ class _CatalogBar extends StatelessWidget {
                     foregroundColor: cs.onSurface,
                   ),
                   child: const Text('Lihat',
-                      style:
-                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2330,8 +2365,8 @@ class _CatalogBar extends StatelessWidget {
                     foregroundColor: cs.onSurface,
                   ),
                   child: const Text('Simpan',
-                      style:
-                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2344,8 +2379,8 @@ class _CatalogBar extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('Bagikan',
-                      style:
-                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600)),
                 ),
               ),
             ],
@@ -2413,8 +2448,8 @@ class _CatalogItemsSheet extends ConsumerWidget {
                       final item = ordered[i];
                       return ListTile(
                         dense: true,
-                        contentPadding:
-                            EdgeInsets.only(left: item.isVariant ? 30 : 16, right: 8),
+                        contentPadding: EdgeInsets.only(
+                            left: item.isVariant ? 30 : 16, right: 8),
                         leading: item.isVariant
                             ? Icon(Icons.subdirectory_arrow_right,
                                 size: 16, color: cs.onSurfaceVariant)
@@ -2473,8 +2508,8 @@ class _CartMetaTab extends ConsumerWidget {
 
   Future<void> _pickEmployee(BuildContext context, WidgetRef ref) async {
     final meta = ref.read(cartMetaProvider(cartId));
-    final pick = await showEmployeePickerSheet(context, ref,
-        currentId: meta.employeeId);
+    final pick =
+        await showEmployeePickerSheet(context, ref, currentId: meta.employeeId);
     if (pick == null) return;
     ref.read(cartMetaProvider(cartId).notifier).setEmployee(pick.id, pick.name);
   }
@@ -2596,7 +2631,8 @@ class _MetaChip extends StatelessWidget {
                 onTap: onClear,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 3),
-                  child: Icon(Icons.close, size: 14, color: cs.onSurfaceVariant),
+                  child:
+                      Icon(Icons.close, size: 14, color: cs.onSurfaceVariant),
                 ),
               ),
           ],
@@ -2686,7 +2722,8 @@ class _HeldInlinePanel extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(20),
                 child: Padding(
                   padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                  child:
+                      Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
                 ),
               ),
             ],
