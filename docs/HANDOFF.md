@@ -4,14 +4,62 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 8 Juli 2026 (checkbox kembalian di struk + animasi
-expand kolom cari kasir — commit `632a836`)._
+_Terakhir diperbarui: 8 Juli 2026 (poles layout topbar kasir + pengecualian
+tap produk dari collapse cari — commit `50752cd`)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
-### Sesi terbaru (commit `632a836`) — 2 fitur independen
+### Sesi terbaru (commit `50752cd`) — poles 2 fitur sesi sebelumnya (`632a836`)
+Bug ditemukan user langsung setelah fitur checkbox kembalian & expand
+kolom cari (di bawah) selesai dibangun — BELUM sempat dirilis, jadi ini
+dianggap penyempurnaan fitur yang sama, bukan entri PATCHNOTES terpisah.
+
+1. **Lebar collapsed field cari TIDAK LAGI hardcode 128px** (itu overlap
+   dengan tombol scan) — sekarang `_KasirTopbarState._collapsedWidth(maxW)`
+   dihitung persis dari `_buttonRowWidth` getter (jumlah lebar tiap `_TbBtn`
+   yang benar-benar dirender: 36px ikon-saja / 44px berlabel + gap `_kTbGap`
+   4px antar-tombol) + satu `_kTbGap` lagi sebagai jarak field↔tombol
+   pertama. Otomatis menyesuaikan per mode (mode katalog sembunyikan
+   Antrian/Riwayat → button row lebih sempit → field collapsed lebih
+   lebar), TIDAK pernah overlap berapa pun kombinasi tombolnya.
+2. **Tinggi Stack topbar 44->56px + padding bawah Row 10->16px** — label
+   2 baris (mis. "Riwayat Transaksi") butuh ~56px total (36px kotak + ~20px
+   label), tapi Stack cuma dialokasikan 44px → label kepepet/nyaris
+   menyentuh Divider di bawahnya. Diverifikasi presisi: revert kedua nilai
+   ini sekaligus balik ke gap NEGATIF -2px (label betulan menembus
+   divider), persis keluhan user.
+3. **Tap "+" pada kartu produk TIDAK LAGI collapse field cari** bila field
+   sedang expanded & berisi teks — `_KasirScreenState._markSkipSearchCollapse()`
+   di-set oleh `Listener.onPointerDown` di root `_ProductCard`/
+   `_ProductListTile` (param baru `onBeforeTap`), dikonsumsi SEKALI oleh
+   `Listener.onPointerDown` ancestor yang biasanya memanggil
+   `_searchFocus.unfocus()`. Mengandalkan urutan hit-test Flutter (leaf
+   dispatch SEBELUM root untuk PointerDownEvent yang sama) — descendant
+   sempat men-set flag sebelum ancestor sempat cek & unfocus.
+4. **Tap badan kartu produk (buka modal ItemEntrySheet) TIDAK LAGI
+   collapse field cari** — akar masalah BEDA dari kasus "+": modal
+   (route baru) mengambil alih fokus lewat mekanisme `FocusScope` Flutter
+   sendiri (bukan lewat Listener kita), jadi suppression flag di atas TIDAK
+   cukup. `_openEntry` sekarang menahan `_searchForceExpanded=true`
+   (dibaca `_KasirTopbarState._visuallyExpanded = _expanded ||
+   widget.forceExpanded`) SELAMA modal terbuka, lalu setelah modal ditutup:
+   `setState(_searchForceExpanded=false)` + `_searchFocus.requestFocus()`
+   supaya user bisa lanjut ketik/tap tanpa field sempat mengecil sama
+   sekali (bukan cuma "mengecil sebentar lalu balik lagi").
+5. Pengecualian #3 & #4 HANYA berlaku bila field berisi teks saat itu —
+   field expanded-tapi-kosong tetap collapse normal saat tap +/badan
+   produk (tidak ada state yang perlu dipertahankan).
+
+Test baru sesi ini (semua lolos revert-verify, termasuk kombinasi 2 nilai
+sekaligus untuk kasus #2 karena reverting satu nilai saja tidak cukup
+mereproduksi bug aslinya): `test/kasir_search_layout_test.dart` (jarak
+field↔scan, jarak label↔divider), `test/kasir_search_product_tap_test.dart`
+(3 skenario: tap + berisi teks, tap badan buka modal, tap + kosong tetap
+collapse). `flutter analyze` bersih, **137 test hijau**.
+
+### Sesi sebelumnya (commit `632a836`) — 2 fitur independen
 1. **Checkbox "kembalian sudah diambil"** di `receipt_screen.dart` —
    kolom baru `transactions.changeTaken` (`schemaVersion` 8->9, `BoolColumn`
    default false). Baris "Kembalian" diganti widget `_ChangeTakenRow`
@@ -25,34 +73,27 @@ expand kolom cari kasir — commit `632a836`)._
 2. **Kolom cari kasir expand/collapse** — `_KasirTopbar` di
    `kasir_screen.dart` diubah dari `StatelessWidget` jadi `StatefulWidget`
    (`_KasirTopbarState`). State `_expanded` MURNI mengikuti
-   `searchFocus.hasFocus` lewat listener (bukan bool terpisah) — jadi
-   collapse/expand SELALU sinkron dengan fokus asli field, tidak bisa
-   "nyasar". Layout: `LayoutBuilder` + `Stack` (`clipBehavior: Clip.none`
-   supaya label tombol seperti "Antrian" tidak terpotong) — tombol-tombol
-   topbar di `Positioned(right:0)` dengan `AnimatedOpacity`+`IgnorePointer`,
-   field cari di `AnimatedPositioned(left:0, width: expanded ? maxW :
-   128)` dengan `Container(color: cs.surface)` di baliknya (solid, bukan
-   transparan) supaya BENAR-BENAR menimpa tombol, bukan cuma memotong tata
-   letak. Tombol x (`suffixIcon`) hanya render saat `_expanded`;
-   `_onClearOrShrink()`: kosong → `searchFocus.unfocus()` (memicu collapse
-   lewat listener yang sama), berisi → `clear()` + `onSearch('')` TANPA
+   `searchFocus.hasFocus` lewat listener. Layout: `LayoutBuilder` + `Stack`
+   (`clipBehavior: Clip.none` supaya label tombol tidak terpotong) —
+   tombol-tombol topbar di `Positioned(right:0)` dengan
+   `AnimatedOpacity`+`IgnorePointer`, field cari di
+   `AnimatedPositioned(left:0)` dengan `Container(color: cs.surface)` di
+   baliknya (solid) supaya BENAR-BENAR menimpa tombol. Tombol x
+   (`suffixIcon`) hanya render saat expanded; `_onClearOrShrink()`: kosong
+   → `searchFocus.unfocus()`, berisi → `clear()` + `onSearch('')` TANPA
    unfocus. Collapse-dari-luar: `Listener(behavior: translucent,
    onPointerDown: unfocus)` + `NotificationListener<ScrollStartNotification>`
-   membungkus SELURUH body di bawah topbar (banner + panel tahan + daftar
-   produk) — pakai `Listener` bukan `GestureDetector` supaya tap tetap
-   diteruskan normal ke kartu produk (tidak "dicuri" duluan oleh gesture
-   arena). Teks yang sudah diketik TIDAK PERNAH dihapus oleh jalur
-   collapse-dari-luar — hanya `_onClearOrShrink()` (tombol x saat kosong,
-   yang memang textnya sudah kosong) atau eksplisit clear (x saat berisi)
-   yang menyentuh `searchCtrl`.
+   membungkus SELURUH body di bawah topbar. Teks yang sudah diketik TIDAK
+   PERNAH dihapus oleh jalur collapse-dari-luar.
+   **(Lebar collapsed & tinggi Stack di poin ini SUDAH DIPERBAIKI di sesi
+   berikutnya di atas — jangan pakai detail lama "128px width, 44px
+   height" sebagai acuan lagi.)**
 
-Test baru sesi ini: migrasi v8->v9 (`test/migration_v9_test.dart`, Tier 1,
+Test sesi itu: migrasi v8->v9 (`test/migration_v9_test.dart`, Tier 1,
 revert-verify kolom `change_taken`), toggle checkbox kembalian
 (`test/receipt_change_taken_test.dart`, Tier 2 widget, revert-verify tulis
 DB), 4 skenario kolom cari (`test/kasir_search_expand_test.dart`, Tier 2
-widget: collapsed-default, expand+x-muncul, x-saat-berisi-vs-kosong,
-tap-di-luar-collapse-tanpa-hapus-teks) — semua lolos revert-sementara.
-`flutter analyze` bersih, **131 test hijau**.
+widget).
 
 ### Sesi sebelumnya (commit `6dedc80`) — 3 perbaikan/fitur kecil independen
 1. **Modal Bayar**: chip "Bayar Nanti" (dulu campur di baris Metode

@@ -22,8 +22,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sampingnya (scan, antrian, riwayat, dll). Sekarang kolom cari tampil
   ringkas dulu, lalu melebar mulus menutupi tombol-tombol itu begitu
   disentuh — ada tombol "x" untuk menghapus teks atau mengecilkan lagi
-  kolomnya. Tap di luar kolom (mis. di daftar produk) otomatis mengecilkan
-  kolom lagi tanpa menghapus kata yang sudah diketik.
+  kolomnya. Tap di luar kolom (mis. di daftar produk kosong) otomatis
+  mengecilkan kolom lagi tanpa menghapus kata yang sudah diketik. Tap
+  tombol "+" atau badan produk hasil pencarian TIDAK ikut mengecilkan
+  kolom — jadi bisa tap beberapa barang hasil cari berturut-turut tanpa
+  kolom cari tiba-tiba menutup.
 - **Tombol Bayar Nanti kini terpisah, tidak lagi campur dengan Metode
   Pembayaran.** Di layar Bayar, sekarang ada 2 tombol besar di bagian
   bawah: **"Bayar [jumlah]"** (hijau, untuk pembayaran tunai/QRIS/dll seperti
