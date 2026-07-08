@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-08
 
+- `632a836` — feat: checkbox kembalian sudah diambil, animasi expand kolom cari kasir
 - `6dedc80` — feat: tombol Bayar Nanti terpisah, harga alternatif berlabel, poles Katalog Pesanan
 - `ef9ab12` — feat(eksperimental): parser & UI Tempel Pesanan sisi kasir (Katalog Pesanan Fase 2)
 

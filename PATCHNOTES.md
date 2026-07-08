@@ -11,6 +11,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 8 Juli 2026
 
 ### ✨ Fitur Baru
+- **Checkbox "Kembalian" di struk — cegah kembalian diberikan dua kali.**
+  Untuk nota yang barangnya diambil belakangan, sekarang ada centang kecil
+  di samping baris "Kembalian" di struk. Setelah kembalian benar-benar
+  diserahkan ke pembeli, tinggal dicentang — jadi kasir lain (atau kasir
+  yang sama, lupa) tidak salah kasih kembalian lagi saat pembeli kembali
+  mengambil barang.
+- **Kolom cari di layar Kasir kini melebar otomatis saat disentuh.**
+  Sebelumnya kolom cari selalu berdesakan dengan tombol-tombol di
+  sampingnya (scan, antrian, riwayat, dll). Sekarang kolom cari tampil
+  ringkas dulu, lalu melebar mulus menutupi tombol-tombol itu begitu
+  disentuh — ada tombol "x" untuk menghapus teks atau mengecilkan lagi
+  kolomnya. Tap di luar kolom (mis. di daftar produk) otomatis mengecilkan
+  kolom lagi tanpa menghapus kata yang sudah diketik.
 - **Tombol Bayar Nanti kini terpisah, tidak lagi campur dengan Metode
   Pembayaran.** Di layar Bayar, sekarang ada 2 tombol besar di bagian
   bawah: **"Bayar [jumlah]"** (hijau, untuk pembayaran tunai/QRIS/dll seperti

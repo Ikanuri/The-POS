@@ -4,14 +4,57 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 8 Juli 2026 (tombol Bayar Nanti terpisah, fitur Harga
-Lain, poles UX Katalog Pesanan — commit `6dedc80`)._
+_Terakhir diperbarui: 8 Juli 2026 (checkbox kembalian di struk + animasi
+expand kolom cari kasir — commit `632a836`)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
-### Sesi terbaru (commit `6dedc80`) — 3 perbaikan/fitur kecil independen
+### Sesi terbaru (commit `632a836`) — 2 fitur independen
+1. **Checkbox "kembalian sudah diambil"** di `receipt_screen.dart` —
+   kolom baru `transactions.changeTaken` (`schemaVersion` 8->9, `BoolColumn`
+   default false). Baris "Kembalian" diganti widget `_ChangeTakenRow`
+   (checkbox + label + nominal, tap di mana pun pada baris men-toggle).
+   `_toggleChangeTaken()` langsung `db.update(transactions)...write(...)`
+   — MURNI per-perangkat, TIDAK ikut LAN sync (konsisten dengan pola
+   `strukNote`/`internalNote` yang juga cuma diedit lokal setelah nota
+   dibuat — `transactions` ada di `appendOnlyTables`, sync tidak pernah
+   mengirim ulang baris yang sudah ada). Disembunyikan (`onChanged: null`)
+   untuk nota void.
+2. **Kolom cari kasir expand/collapse** — `_KasirTopbar` di
+   `kasir_screen.dart` diubah dari `StatelessWidget` jadi `StatefulWidget`
+   (`_KasirTopbarState`). State `_expanded` MURNI mengikuti
+   `searchFocus.hasFocus` lewat listener (bukan bool terpisah) — jadi
+   collapse/expand SELALU sinkron dengan fokus asli field, tidak bisa
+   "nyasar". Layout: `LayoutBuilder` + `Stack` (`clipBehavior: Clip.none`
+   supaya label tombol seperti "Antrian" tidak terpotong) — tombol-tombol
+   topbar di `Positioned(right:0)` dengan `AnimatedOpacity`+`IgnorePointer`,
+   field cari di `AnimatedPositioned(left:0, width: expanded ? maxW :
+   128)` dengan `Container(color: cs.surface)` di baliknya (solid, bukan
+   transparan) supaya BENAR-BENAR menimpa tombol, bukan cuma memotong tata
+   letak. Tombol x (`suffixIcon`) hanya render saat `_expanded`;
+   `_onClearOrShrink()`: kosong → `searchFocus.unfocus()` (memicu collapse
+   lewat listener yang sama), berisi → `clear()` + `onSearch('')` TANPA
+   unfocus. Collapse-dari-luar: `Listener(behavior: translucent,
+   onPointerDown: unfocus)` + `NotificationListener<ScrollStartNotification>`
+   membungkus SELURUH body di bawah topbar (banner + panel tahan + daftar
+   produk) — pakai `Listener` bukan `GestureDetector` supaya tap tetap
+   diteruskan normal ke kartu produk (tidak "dicuri" duluan oleh gesture
+   arena). Teks yang sudah diketik TIDAK PERNAH dihapus oleh jalur
+   collapse-dari-luar — hanya `_onClearOrShrink()` (tombol x saat kosong,
+   yang memang textnya sudah kosong) atau eksplisit clear (x saat berisi)
+   yang menyentuh `searchCtrl`.
+
+Test baru sesi ini: migrasi v8->v9 (`test/migration_v9_test.dart`, Tier 1,
+revert-verify kolom `change_taken`), toggle checkbox kembalian
+(`test/receipt_change_taken_test.dart`, Tier 2 widget, revert-verify tulis
+DB), 4 skenario kolom cari (`test/kasir_search_expand_test.dart`, Tier 2
+widget: collapsed-default, expand+x-muncul, x-saat-berisi-vs-kosong,
+tap-di-luar-collapse-tanpa-hapus-teks) — semua lolos revert-sementara.
+`flutter analyze` bersih, **131 test hijau**.
+
+### Sesi sebelumnya (commit `6dedc80`) — 3 perbaikan/fitur kecil independen
 1. **Modal Bayar**: chip "Bayar Nanti" (dulu campur di baris Metode
    Pembayaran) sekarang jadi tombol dedicated sendiri di `payment_screen.dart`
    — 2 tombol di bar bawah: `FilledButton` hijau (`Color(0xFF22C55E)`)
@@ -47,12 +90,12 @@ Lain, poles UX Katalog Pesanan — commit `6dedc80`)._
    percaya `flutter analyze`/`flutter test` hijau, itu tidak menyentuh JS
    sama sekali.
 
-Test baru sesi ini: migrasi v7->v8 (`test/migration_v8_test.dart`, Tier 1,
+Test sesi itu: migrasi v7->v8 (`test/migration_v8_test.dart`, Tier 1,
 revert-verify tabel `alt_prices` benar-benar dibuat), `saveProduct` harga
 alternatif (`test/alt_prices_test.dart`, Tier 1, revert-verify replace +
 cascade-delete saat satuan dihapus), layout 2-tombol Bayar
 (`test/payment_screen_buttons_test.dart`, Tier 2 widget, revert-verify label
-hilang tertangkap). `flutter analyze` bersih, **124 test hijau**.
+hilang tertangkap).
 
 ### Fitur eksperimental Katalog Pesanan (branch `claude/order-html-eksperimental`)
 Lengkap dua fase, menutup alur ujung-ke-ujung: generate HTML →
