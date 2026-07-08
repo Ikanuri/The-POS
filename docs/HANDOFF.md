@@ -4,96 +4,70 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 7 Juli 2026 (Fase 1 fitur eksperimental Katalog Pesanan)._
+_Terakhir diperbarui: 8 Juli 2026 (Fase 2 fitur eksperimental Katalog Pesanan — parser & Tempel Pesanan)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
-Setelah audit kode selesai (v2.1.1+3 sudah dirilis & di-build, lihat
-riwayat commit untuk detail — `98db2/audit` di CHANGELOG), sesi ini mulai
-membangun **fitur eksperimental baru: Katalog Pesanan** — turunan dari
-proposal lama `docs/PROPOSAL_PERTIMBANGAN_BAROKAH_ORDER.md` ("Static HTML +
-WhatsApp + Paste Parser"), tapi dengan cakupan yang jauh dipersempit sesuai
-keputusan eksplisit user lewat diskusi + poll:
+Fitur eksperimental **Katalog Pesanan** (branch `claude/order-html-eksperimental`)
+sekarang lengkap dua fase, menutup alur ujung-ke-ujung: generate HTML →
+kirim WA manual → pelanggan pilih barang → kasir tempel balik ke keranjang.
 
-1. **Referensi visual**: pakai `docs/reference/Mockup.zip` (React JSX
-   mockup) — dikonfirmasi ini memang cetak biru desain asli aplikasi
-   (token warna `#C96442`, Hanken Grotesk + Newsreader identik dengan
-   `AppTheme`). Tidak di-rebuild, hanya dijadikan acuan gaya visual untuk
-   halaman baru.
-2. **Cakupan dipersempit** ke HANYA: cart bar popup + keranjang + format
-   teks pesanan siap kirim, semuanya di SATU file HTML self-contained
-   (tanpa server/hosting — pilihan user: "kirim file WA manual").
-3. **Hosting**: user pilih opsi B (tanpa hosting) dari 3 opsi yang
-   ditawarkan (GitHub Pages / kirim manual / Netlify-Cloudflare). Jadi
-   TIDAK ada link yang otomatis update — file digenerate ulang & dikirim
-   manual tiap kali harga berubah.
-4. **UX varian**: panah expand bisa langsung di-tap + auto-expand saat
-   pencarian cocok — user pilih opsi B ("cukup di halaman order HTML
-   saja") — **kasir utama TIDAK disentuh sama sekali**, tetap pakai
-   long-press seperti sebelumnya.
+### Fase 1 — generator HTML (commit `e422639`, `dc9c3ef`)
+- `lib/core/services/order_page_service.dart` — `OrderPageService.
+  generateHtml({db, storeName, storeWhatsapp})` → satu file HTML
+  self-contained (CSS+JS inline, tanpa CDN/font eksternal, tanpa hosting —
+  keputusan eksplisit user: kirim manual via WA). Pelanggan pilih barang
+  (termasuk varian, UX arrow-tap + auto-expand saat search cocok) lalu tekan
+  "Kirim via WhatsApp" — teks pesanan berformat manusia-bisa-baca + baris
+  kode mesin `#PSN:<productUnitId>=<qty>;...` di akhir.
+- `lib/features/pengaturan/order_share_screen.dart` — layar
+  `/pengaturan/katalog-pesanan` (badge "Eksperimental", owner-only), generate
+  → `Share.shareXFiles` (pola sama seperti share struk/katalog).
+- 6 test (`test/order_page_service_test.dart`) menemukan & membuktikan 2 bug
+  nyata sebelum dianggap selesai: varian bocor jadi baris induk terpisah
+  (`searchProducts()` tidak menyaring varian, beda dari `watchProducts()`),
+  dan XSS lewat data JSON yang belum di-escape `"</"` → `"<\/"` di dalam
+  `<script>`.
 
-### Yang sudah dibangun (commit `e422639`, branch `claude/order-html-eksperimental`)
-- **`lib/core/services/order_page_service.dart`** — `OrderPageService.
-  generateHtml({db, storeName, storeWhatsapp})` → `({String html, int
-  productCount})`. Query katalog aktif (induk + varian, satuan dasar,
-  harga tier minQty=1 via `PriceService`), suntik ke template HTML statis
-  (CSS+JS inline, TANPA CDN/font eksternal — harus tetap terbuka sempurna
-  walau HP pelanggan offline). Identitas baris pakai `productUnitId`
-  (UUID), BUKAN `kodeProduk` (boleh kosong/tidak unik) — desain sengaja
-  lebih robust dari proposal asli yang pakai `kodeProduk`.
-- Format teks pesanan yang dihasilkan: baris manusia-bisa-baca + baris
-  kode mesin `#PSN:<productUnitId>=<qty>;...` di akhir. **Kode mesin ini
-  BELUM diparsing oleh apa pun** — murni disiapkan untuk Fase 2.
-- **`lib/features/pengaturan/order_share_screen.dart`** — layar baru
-  (`/pengaturan/katalog-pesanan`) dengan badge "Eksperimental" jelas,
-  penjelasan cara kerja 4 langkah, tombol "Buat & Bagikan" yang generate
-  HTML ke temp file lalu `Share.shareXFiles` (pola sama seperti share
-  struk/katalog yang sudah ada).
-- Entry point baru di `pengaturan_screen.dart`: section "Eksperimental"
-  terpisah (hanya untuk owner), tidak mengubah section lain.
-- Route baru `katalog-pesanan` di `app_router.dart`.
-- **6 test baru** (`test/order_page_service_test.dart`) — Tier 1 DB murni.
-  Menemukan & membuktikan **2 bug nyata** sebelum dianggap selesai (wajib
-  revert-sementara per CLAUDE.md):
-  1. `searchProducts()` TIDAK menyaring varian (beda dari `watchProducts`
-     yang punya `.parentProductId.isNull()`) — varian sempat ikut muncul
-     sebagai baris induk terpisah di katalog. **Fix**: filter manual
-     `.where((p) => p.parentProductId == null)` di `_buildCatalogJson`.
-  2. Data JSON yang disuntik ke dalam `<script>` belum di-escape `"</"` →
-     `"<\/"` — nama toko yang kebetulan memuat `</script>` bisa menutup
-     blok skrip lebih awal & membuat sisanya dieksekusi sebagai HTML/skrip
-     baru (XSS). **Fix**: `dataJson.replaceAll('</', r'<\/')` sebelum
-     disuntik. Catatan: `<title>` pakai escape HTML biasa (`_escapeHtml`,
-     escape `&`/`<`/`>`) — BEDA dari escape untuk konteks `<script>`,
-     jangan disamakan kalau menambah placeholder baru di template.
+### Fase 2 — parser & UI Tempel Pesanan (commit `ef9ab12`)
+- `lib/core/services/order_parser_service.dart` — `OrderParserService.
+  parse({db, text})` → `ParsedOrder`. Regex-extract baris `#PSN:...`, lookup
+  tiap `productUnitId` ke DB, **resolve harga LIVE via `PriceService`**
+  (bukan angka di teks — katalog terkirim bisa sudah basi beberapa hari),
+  dedup unitId dobel (gabung qty, bukan baris ganda), barang yang sudah
+  dihapus/dinonaktifkan masuk `ParsedOrder.notFound` tanpa menggagalkan
+  baris valid lain. Ikut extract `Nama:`/`HP:`/`Catatan:` (nilai `-` atau
+  kosong dianggap null).
+- `lib/features/kasir/widgets/paste_order_sheet.dart` — `PasteOrderSheet`
+  (bottom sheet): tempel teks → preview daftar item + notFound → isi
+  keranjang. `_ensureParentInCart()` sengaja DUPLIKAT self-contained (bukan
+  reuse method private `kasir_screen.dart`) — sesuai keputusan user sesi
+  sebelumnya bahwa kasir utama TIDAK boleh disentuh oleh fitur eksperimental
+  ini, hanya ditambah tombol baru.
+- `lib/features/kasir/kasir_screen.dart` — perubahan ADDITIF saja: tombol
+  baru "Tempel Pesanan" (`Icons.content_paste_go_rounded`) di topbar,
+  hanya tampil di mode kasir normal (bukan mode katalog/tambah-belanjaan).
+- 6 test parser (Tier 1 DB, `test/order_parser_service_test.dart`) + 1 test
+  layout (Tier 2 widget, `test/kasir_topbar_layout_test.dart`, render
+  `KasirScreen` di lebar 360dp) membuktikan tombol baru TIDAK memicu
+  `RenderFlex` overflow — CLAUDE.md mencatat topbar kasir historis rawan
+  kasus ini. Kedua kelas regresi (dedup dimatikan, lebar label dipaksa 200)
+  diverifikasi lewat revert-sementara: tanpa fix, test gagal dengan pesan
+  yang sesuai; dengan fix, hijau lagi.
 
-`flutter analyze` bersih, **112 test hijau** (106 lama + 6 baru).
+`flutter analyze` bersih, **119 test hijau** (112 lama + 7 baru Fase 2).
 
 ### Yang SENGAJA belum dibangun (deferred, bukan lupa)
-- **`OrderParserService`** (sisi kasir: baca teks pesanan → isi keranjang
-  otomatis) — proposal asli menyebut ini "Fase 1", tapi user secara
-  eksplisit mempersempit cakupan sesi ini ke HANYA generator HTML. Saya
-  sempat menulis servicenya lalu **menghapusnya lagi** karena jadi kode
-  mati tanpa UI pemanggil (bertentangan dengan prinsip audit kemarin).
-  Kalau dilanjutkan: desain format `#PSN:<productUnitId>=<qty>;...` di
-  `OrderPageService` sudah siap dipakai — parser tinggal regex-extract
-  baris itu, lookup `productUnitId` ke DB, resolve harga LIVE lewat
-  `PriceService` (JANGAN percaya angka di teks, katalog bisa basi),
-  lalu bangun `CartItem[]`. Untuk varian, ingat invariant `storedQty
-  induk = base + Σvarian` — perlu logika serupa `_ensureParentInCart` di
-  `kasir_screen.dart` (tapi JANGAN import/pakai method private itu
-  langsung — kasir utama sengaja tidak disentuh, tulis versi sendiri yang
-  self-contained di file baru).
-- **UX varian (arrow-tap + auto-expand-on-search)** hanya ada di HTML
-  generated, belum di kasir utama. User sengaja pilih tidak menyentuh
-  kasir utama sesi ini — kalau nanti mau diseragamkan, itu perubahan
-  terpisah yang perlu dikonfirmasi ulang (kasir utama pola sekarang:
-  long-press untuk expand, bukan tap-panah).
-- Hosting "link hidup" (GitHub Pages dkk) — user pilih TIDAK sekarang.
-  Opsi & tradeoff sudah didiskusikan & didokumentasikan kalau nanti mau
-  dipertimbangkan ulang (lihat riwayat percakapan / proposal asli §6.7).
+- Hosting "link hidup" (GitHub Pages dkk) untuk Katalog Pesanan — user pilih
+  TIDAK sekarang (kirim manual via WA). Opsi & tradeoff sudah didiskusikan
+  kalau nanti mau dipertimbangkan ulang.
+- UX varian (arrow-tap + auto-expand-on-search) hanya ada di HTML generated,
+  belum diseragamkan ke kasir utama (yang masih pakai long-press). Perubahan
+  terpisah, perlu dikonfirmasi ulang user kalau mau diselaraskan.
+- Belum ada PR untuk branch `claude/order-html-eksperimental` — menunggu
+  instruksi user.
 
 ## Ringkasan Sesi Audit Sebelumnya (masih berlaku, tidak diulang detail)
 14 bug hasil audit kode menyeluruh sudah diperbaiki & dirilis sebagai
@@ -133,15 +107,16 @@ sukses (dev pre-release di GitHub Releases).
   `Mockup.zip` & `Contoh_Dataset.rar` yang masih ada & dipakai aktif.
 - Ekspor pakai `FilePicker.saveFile`, bukan `Printing.sharePdf`.
 - Katalog Pesanan (eksperimental): tanpa hosting, kasir utama tidak
-  disentuh, sisi parser/tempel-otomatis ditunda ke fase berikutnya.
+  disentuh (hanya tombol baru ditambah), Fase 1 (HTML) + Fase 2 (parser +
+  Tempel Pesanan) sudah selesai keduanya.
 
 ## Menggantung / Kandidat Berikutnya
-- **Katalog Pesanan Fase 2** (kalau Fase 1 terbukti kepakai): bangun
-  `OrderParserService` + UI "Tempel Pesanan" di kasir. Lihat catatan
-  desain di atas.
 - Saran fitur audit di atas menunggu keputusan user.
 - Belum ada PR untuk branch `claude/order-html-eksperimental` — menunggu
-  instruksi user (buka PR / lanjut Fase 2 / hal lain).
+  instruksi user (buka PR / hal lain).
+- Kalau Katalog Pesanan terbukti kepakai di lapangan: pertimbangkan lagi
+  opsi hosting "link hidup" atau penyeragaman UX varian ke kasir utama
+  (keduanya sengaja ditunda, lihat di atas).
 
 ## Preferensi User
 - Untuk fitur bervisual (mis. animasi), **usulkan beberapa opsi desain dulu**

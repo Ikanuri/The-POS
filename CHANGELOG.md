@@ -8,8 +8,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-08
+
+- `ef9ab12` — feat(eksperimental): parser & UI Tempel Pesanan sisi kasir (Katalog Pesanan Fase 2)
+
 ## 2026-07-07
 
+- `dc9c3ef` — docs: catat fitur eksperimental Katalog Pesanan (commit e422639)
 - `e422639` — feat(eksperimental): katalog pesanan HTML self-contained tanpa hosting
 - `1993b80` — chore: naikkan versi ke 2.1.1+3 untuk rilis perbaikan audit
 - `b6fefbe` — fix: audit code review — consolidate payment logic & archive filtering (PR #2, squash dari `7ed9692`)

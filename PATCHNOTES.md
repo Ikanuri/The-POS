@@ -8,6 +8,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Juli 2026
+
+### 🧪 Eksperimental
+- **Katalog Pesanan kini bisa langsung ditempel ke keranjang kasir.**
+  Sebelumnya, kasir harus membaca pesanan WhatsApp dari pelanggan satu-satu
+  dan menginputnya manual. Sekarang, cukup salin (copy) teks pesanan yang
+  dikirim pelanggan, buka layar Kasir, tekan tombol baru "Tempel Pesanan" di
+  pojok atas, lalu tempel — barang, jumlah, dan nama pelanggan otomatis
+  terisi ke keranjang. Harga yang dipakai selalu harga TERBARU di aplikasi
+  (bukan harga lama yang mungkin tertulis di pesanan), dan barang yang sudah
+  dihapus/dinonaktifkan sejak katalog dikirim akan ditandai jelas sebagai
+  "tidak ditemukan" tanpa mengganggu barang lain yang valid.
+
+---
+
 ## 7 Juli 2026
 
 ### 🛠️ Perbaikan yang Terasa
@@ -49,9 +64,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   internet), pilih sendiri barang & jumlahnya — termasuk varian (mis.
   pilihan rasa) — lalu tekan "Kirim via WhatsApp" untuk mengirim pesanan
   yang sudah rapi terformat. **Catatan penting**: file ini TIDAK otomatis
-  ter-update — tiap kali harga berubah, perlu dibuat & dikirim ulang. Untuk
-  saat ini, kasir masih membaca pesanan itu dan menginputnya manual seperti
-  biasa; fitur "tempel otomatis ke keranjang" menyusul di tahap berikutnya.
+  ter-update — tiap kali harga berubah, perlu dibuat & dikirim ulang. (Lihat
+  pembaruan 8 Juli: kasir kini bisa menempel pesanan ini langsung ke
+  keranjang, tidak perlu input manual lagi.)
 
 ---
 
