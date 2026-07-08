@@ -34,6 +34,12 @@ void main() {
         paid_at INTEGER, kasir_id TEXT, note TEXT);
       CREATE INDEX idx_tp_transaction ON transaction_payments(transaction_id);
       CREATE INDEX idx_tp_paid_at ON transaction_payments(paid_at);
+      CREATE TABLE transactions(
+        id TEXT PRIMARY KEY, local_id TEXT UNIQUE, kasir_id TEXT, customer_id TEXT,
+        customer_name TEXT, status TEXT, total INTEGER, paid INTEGER,
+        change_amount INTEGER, payment_method TEXT, internal_note TEXT,
+        struk_note TEXT, employee_name TEXT, points_earned INTEGER,
+        created_at INTEGER, synced_at INTEGER);
     ''');
     v7.execute("INSERT INTO products(id, name, is_active) "
         "VALUES('p1','Gula Pasir',1)");
@@ -78,8 +84,10 @@ void main() {
     expect(rows.first.label, 'Harga Toko A');
     expect(rows.first.price, 3000);
 
+    // Versi schema benar-benar naik ke skema terkini (9 — migrasi lanjutan
+    // menambah change_taken, tapi test ini fokus ke migrasi 7->8).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 8);
+    expect(ver.data.values.first, 9);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

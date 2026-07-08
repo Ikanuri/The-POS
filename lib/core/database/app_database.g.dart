@@ -3629,6 +3629,16 @@ class $TransactionsTable extends Transactions
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _changeTakenMeta =
+      const VerificationMeta('changeTaken');
+  @override
+  late final GeneratedColumn<bool> changeTaken = GeneratedColumn<bool>(
+      'change_taken', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("change_taken" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -3659,6 +3669,7 @@ class $TransactionsTable extends Transactions
         strukNote,
         employeeName,
         pointsEarned,
+        changeTaken,
         createdAt,
         syncedAt
       ];
@@ -3755,6 +3766,12 @@ class $TransactionsTable extends Transactions
           pointsEarned.isAcceptableOrUnknown(
               data['points_earned']!, _pointsEarnedMeta));
     }
+    if (data.containsKey('change_taken')) {
+      context.handle(
+          _changeTakenMeta,
+          changeTaken.isAcceptableOrUnknown(
+              data['change_taken']!, _changeTakenMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -3800,6 +3817,8 @@ class $TransactionsTable extends Transactions
           .read(DriftSqlType.string, data['${effectivePrefix}employee_name']),
       pointsEarned: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}points_earned'])!,
+      changeTaken: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}change_taken'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       syncedAt: attachedDatabase.typeMapping
@@ -3837,6 +3856,13 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   /// pegawai dihapus dari master. null = tidak diinput.
   final String? employeeName;
   final int pointsEarned;
+
+  /// true bila kembalian sudah benar-benar diserahkan ke pembeli. Berguna
+  /// untuk nota yang barangnya diambil belakangan — dicentang manual di
+  /// struk agar kasir lain tidak memberikan kembalian dua kali. Murni
+  /// per-perangkat (tidak ikut sync — sama seperti edit strukNote/
+  /// internalNote setelah nota dibuat).
+  final bool changeTaken;
   final DateTime createdAt;
   final DateTime? syncedAt;
   const Transaction(
@@ -3854,6 +3880,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       this.strukNote,
       this.employeeName,
       required this.pointsEarned,
+      required this.changeTaken,
       required this.createdAt,
       this.syncedAt});
   @override
@@ -3885,6 +3912,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       map['employee_name'] = Variable<String>(employeeName);
     }
     map['points_earned'] = Variable<int>(pointsEarned);
+    map['change_taken'] = Variable<bool>(changeTaken);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || syncedAt != null) {
       map['synced_at'] = Variable<DateTime>(syncedAt);
@@ -3920,6 +3948,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ? const Value.absent()
           : Value(employeeName),
       pointsEarned: Value(pointsEarned),
+      changeTaken: Value(changeTaken),
       createdAt: Value(createdAt),
       syncedAt: syncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3945,6 +3974,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       strukNote: serializer.fromJson<String?>(json['strukNote']),
       employeeName: serializer.fromJson<String?>(json['employeeName']),
       pointsEarned: serializer.fromJson<int>(json['pointsEarned']),
+      changeTaken: serializer.fromJson<bool>(json['changeTaken']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
     );
@@ -3967,6 +3997,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'strukNote': serializer.toJson<String?>(strukNote),
       'employeeName': serializer.toJson<String?>(employeeName),
       'pointsEarned': serializer.toJson<int>(pointsEarned),
+      'changeTaken': serializer.toJson<bool>(changeTaken),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
     };
@@ -3987,6 +4018,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           Value<String?> strukNote = const Value.absent(),
           Value<String?> employeeName = const Value.absent(),
           int? pointsEarned,
+          bool? changeTaken,
           DateTime? createdAt,
           Value<DateTime?> syncedAt = const Value.absent()}) =>
       Transaction(
@@ -4007,6 +4039,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         employeeName:
             employeeName.present ? employeeName.value : this.employeeName,
         pointsEarned: pointsEarned ?? this.pointsEarned,
+        changeTaken: changeTaken ?? this.changeTaken,
         createdAt: createdAt ?? this.createdAt,
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
       );
@@ -4039,6 +4072,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       pointsEarned: data.pointsEarned.present
           ? data.pointsEarned.value
           : this.pointsEarned,
+      changeTaken:
+          data.changeTaken.present ? data.changeTaken.value : this.changeTaken,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
     );
@@ -4061,6 +4096,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('strukNote: $strukNote, ')
           ..write('employeeName: $employeeName, ')
           ..write('pointsEarned: $pointsEarned, ')
+          ..write('changeTaken: $changeTaken, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
           ..write(')'))
@@ -4083,6 +4119,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       strukNote,
       employeeName,
       pointsEarned,
+      changeTaken,
       createdAt,
       syncedAt);
   @override
@@ -4103,6 +4140,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.strukNote == this.strukNote &&
           other.employeeName == this.employeeName &&
           other.pointsEarned == this.pointsEarned &&
+          other.changeTaken == this.changeTaken &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt);
 }
@@ -4122,6 +4160,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String?> strukNote;
   final Value<String?> employeeName;
   final Value<int> pointsEarned;
+  final Value<bool> changeTaken;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
   final Value<int> rowid;
@@ -4140,6 +4179,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.strukNote = const Value.absent(),
     this.employeeName = const Value.absent(),
     this.pointsEarned = const Value.absent(),
+    this.changeTaken = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4159,6 +4199,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.strukNote = const Value.absent(),
     this.employeeName = const Value.absent(),
     this.pointsEarned = const Value.absent(),
+    this.changeTaken = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4184,6 +4225,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? strukNote,
     Expression<String>? employeeName,
     Expression<int>? pointsEarned,
+    Expression<bool>? changeTaken,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
     Expression<int>? rowid,
@@ -4203,6 +4245,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (strukNote != null) 'struk_note': strukNote,
       if (employeeName != null) 'employee_name': employeeName,
       if (pointsEarned != null) 'points_earned': pointsEarned,
+      if (changeTaken != null) 'change_taken': changeTaken,
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
       if (rowid != null) 'rowid': rowid,
@@ -4224,6 +4267,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       Value<String?>? strukNote,
       Value<String?>? employeeName,
       Value<int>? pointsEarned,
+      Value<bool>? changeTaken,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt,
       Value<int>? rowid}) {
@@ -4242,6 +4286,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       strukNote: strukNote ?? this.strukNote,
       employeeName: employeeName ?? this.employeeName,
       pointsEarned: pointsEarned ?? this.pointsEarned,
+      changeTaken: changeTaken ?? this.changeTaken,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
       rowid: rowid ?? this.rowid,
@@ -4293,6 +4338,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (pointsEarned.present) {
       map['points_earned'] = Variable<int>(pointsEarned.value);
     }
+    if (changeTaken.present) {
+      map['change_taken'] = Variable<bool>(changeTaken.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4322,6 +4370,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('strukNote: $strukNote, ')
           ..write('employeeName: $employeeName, ')
           ..write('pointsEarned: $pointsEarned, ')
+          ..write('changeTaken: $changeTaken, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
           ..write('rowid: $rowid')
@@ -12798,6 +12847,7 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   Value<String?> strukNote,
   Value<String?> employeeName,
   Value<int> pointsEarned,
+  Value<bool> changeTaken,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<int> rowid,
@@ -12818,6 +12868,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<String?> strukNote,
   Value<String?> employeeName,
   Value<int> pointsEarned,
+  Value<bool> changeTaken,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<int> rowid,
@@ -12913,6 +12964,9 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<int> get pointsEarned => $composableBuilder(
       column: $table.pointsEarned, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get changeTaken => $composableBuilder(
+      column: $table.changeTaken, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -13020,6 +13074,9 @@ class $$TransactionsTableOrderingComposer
       column: $table.pointsEarned,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get changeTaken => $composableBuilder(
+      column: $table.changeTaken, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -13077,6 +13134,9 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<int> get pointsEarned => $composableBuilder(
       column: $table.pointsEarned, builder: (column) => column);
+
+  GeneratedColumn<bool> get changeTaken => $composableBuilder(
+      column: $table.changeTaken, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -13167,6 +13227,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String?> strukNote = const Value.absent(),
             Value<String?> employeeName = const Value.absent(),
             Value<int> pointsEarned = const Value.absent(),
+            Value<bool> changeTaken = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -13186,6 +13247,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             strukNote: strukNote,
             employeeName: employeeName,
             pointsEarned: pointsEarned,
+            changeTaken: changeTaken,
             createdAt: createdAt,
             syncedAt: syncedAt,
             rowid: rowid,
@@ -13205,6 +13267,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String?> strukNote = const Value.absent(),
             Value<String?> employeeName = const Value.absent(),
             Value<int> pointsEarned = const Value.absent(),
+            Value<bool> changeTaken = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -13224,6 +13287,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             strukNote: strukNote,
             employeeName: employeeName,
             pointsEarned: pointsEarned,
+            changeTaken: changeTaken,
             createdAt: createdAt,
             syncedAt: syncedAt,
             rowid: rowid,

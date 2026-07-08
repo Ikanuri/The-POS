@@ -1155,92 +1155,117 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             // Mode katalog: sembunyikan Antrian & Riwayat agar tak ambigu.
             showQueueAndHistory: !_isCatalogMode,
           ),
-          InlineBanner(
-            message: _bannerMsg,
-            type: _bannerType,
-            onDismiss: () => setState(() => _bannerMsg = null),
-          ),
-          // Panel pesanan ditahan — slide inline dari atas (mendorong katalog
-          // ke bawah, bukan overlay modal).
-          AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _heldPanelOpen
-                ? _HeldInlinePanel(
-                    onResume: _resumeHeld,
-                    onClose: () => setState(() => _heldPanelOpen = false),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
           Expanded(
-            child: productsAsync.when(
-              data: (prods) {
-                if (prods.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerLowest,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Icon(Icons.inventory_2_outlined,
-                              color: cs.onSurfaceVariant, size: 26),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          query.isEmpty
-                              ? 'Belum ada produk'
-                              : 'Produk tidak ditemukan',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+            // Tap atau scroll di mana pun di bawah topbar keluar dari state
+            // input pencarian (fokus hilang → kolom shrink lewat listener di
+            // _KasirTopbar), TANPA menghapus teks yang sudah diketik.
+            // Listener (bukan GestureDetector) agar tap tetap diteruskan
+            // normal ke kartu produk/tombol di bawahnya, tidak "dicuri".
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) => _searchFocus.unfocus(),
+              child: NotificationListener<ScrollStartNotification>(
+                onNotification: (_) {
+                  _searchFocus.unfocus();
+                  return false;
+                },
+                child: Column(
+                  children: [
+                    InlineBanner(
+                      message: _bannerMsg,
+                      type: _bannerType,
+                      onDismiss: () => setState(() => _bannerMsg = null),
                     ),
-                  );
-                }
-                if (isGrid) {
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 180,
-                      mainAxisExtent: 138,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
+                    // Panel pesanan ditahan — slide inline dari atas (mendorong
+                    // katalog ke bawah, bukan overlay modal).
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: _heldPanelOpen
+                          ? _HeldInlinePanel(
+                              onResume: _resumeHeld,
+                              onClose: () =>
+                                  setState(() => _heldPanelOpen = false),
+                            )
+                          : const SizedBox(width: double.infinity),
                     ),
-                    itemCount: prods.length,
-                    itemBuilder: (_, i) => _ProductCard(
-                      product: prods[i],
-                      cartId: _cartId,
-                      onTapBody: () => _openEntry(prods[i]),
-                      onQuickAdd: _quickAdd,
-                      onOpenEntry: () => _openEntry(prods[i]),
+                    Expanded(
+                      child: productsAsync.when(
+                        data: (prods) {
+                          if (prods.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainerLowest,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Icon(Icons.inventory_2_outlined,
+                                        color: cs.onSurfaceVariant, size: 26),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    query.isEmpty
+                                        ? 'Belum ada produk'
+                                        : 'Produk tidak ditemukan',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          if (isGrid) {
+                            return GridView.builder(
+                              padding: const EdgeInsets.all(12),
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 180,
+                                mainAxisExtent: 138,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                              ),
+                              itemCount: prods.length,
+                              itemBuilder: (_, i) => _ProductCard(
+                                product: prods[i],
+                                cartId: _cartId,
+                                onTapBody: () => _openEntry(prods[i]),
+                                onQuickAdd: _quickAdd,
+                                onOpenEntry: () => _openEntry(prods[i]),
+                              ),
+                            );
+                          }
+                          return ListView.separated(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            itemCount: prods.length,
+                            separatorBuilder: (_, __) => Divider(
+                                height: 1,
+                                indent: 62,
+                                color: cs.outlineVariant),
+                            itemBuilder: (_, i) => _ProductListTile(
+                              product: prods[i],
+                              cartId: _cartId,
+                              onTapBody: () => _openEntry(prods[i]),
+                              onQuickAdd: _quickAdd,
+                              onOpenEntry: () => _openEntry(prods[i]),
+                            ),
+                          );
+                        },
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, _) => Center(child: Text('Error: $e')),
+                      ),
                     ),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  itemCount: prods.length,
-                  separatorBuilder: (_, __) =>
-                      Divider(height: 1, indent: 62, color: cs.outlineVariant),
-                  itemBuilder: (_, i) => _ProductListTile(
-                    product: prods[i],
-                    cartId: _cartId,
-                    onTapBody: () => _openEntry(prods[i]),
-                    onQuickAdd: _quickAdd,
-                    onOpenEntry: () => _openEntry(prods[i]),
-                  ),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -1381,7 +1406,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
 // ─── Topbar ──────────────────────────────────────────────────────────────────
 
-class _KasirTopbar extends StatelessWidget {
+/// Durasi & kurva animasi expand/collapse kolom cari — dipakai bersama oleh
+/// field pencarian (lebar) dan tombol-tombol di sampingnya (opacity) supaya
+/// keduanya terasa satu gerakan (field "menimpa" tombol), bukan dua animasi
+/// terpisah yang kebetulan searah.
+const _kSearchAnimDuration = Duration(milliseconds: 260);
+const _kSearchAnimCurve = Curves.easeOutCubic;
+
+/// Lebar kolom cari saat collapsed (tidak difokus) — cukup untuk ikon +
+/// hint singkat, sisanya diberikan ke tombol-tombol topbar.
+const _kSearchCollapsedWidth = 128.0;
+
+class _KasirTopbar extends StatefulWidget {
   const _KasirTopbar({
     required this.searchCtrl,
     required this.searchFocus,
@@ -1412,6 +1448,47 @@ class _KasirTopbar extends StatelessWidget {
   /// EKSPERIMENTAL — buka sheet "Tempel Pesanan". null = sembunyikan tombol
   /// (mode katalog / tambah belanjaan).
   final VoidCallback? onPasteOrder;
+
+  @override
+  State<_KasirTopbar> createState() => _KasirTopbarState();
+}
+
+class _KasirTopbarState extends State<_KasirTopbar> {
+  /// Mengikuti `searchFocus.hasFocus` — begitu field disentuh (dapat fokus)
+  /// kolom melebar; begitu fokus hilang (tap/scroll di luar, atau tombol x
+  /// saat kosong) kolom mengecil lagi. Teks yang sudah diketik TIDAK ikut
+  /// hilang saat collapse — hanya lebar visual yang berubah.
+  late bool _expanded = widget.searchFocus.hasFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.searchFocus.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.searchFocus.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (widget.searchFocus.hasFocus != _expanded) {
+      setState(() => _expanded = widget.searchFocus.hasFocus);
+    }
+  }
+
+  /// Tombol x di ujung kanan field (hanya tampil saat expanded): kosong →
+  /// shrink (unfocus, teks tetap seperti apa adanya/kosong); ada isi →
+  /// hapus semua karakter TAPI tetap expanded (tidak shrink).
+  void _onClearOrShrink() {
+    if (widget.searchCtrl.text.isEmpty) {
+      widget.searchFocus.unfocus();
+    } else {
+      widget.searchCtrl.clear();
+      widget.onSearch('');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1456,69 +1533,126 @@ class _KasirTopbar extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: searchCtrl,
-                    builder: (context, value, _) {
-                      return TextField(
-                        controller: searchCtrl,
-                        focusNode: searchFocus,
-                        decoration: InputDecoration(
-                          hintText: 'Cari produk…',
-                          prefixIcon:
-                              const Icon(Icons.search_rounded, size: 18),
-                          suffixIcon: value.text.isNotEmpty
-                              ? IconButton(
-                                  icon:
-                                      const Icon(Icons.clear_rounded, size: 16),
-                                  onPressed: () {
-                                    searchCtrl.clear();
-                                    onSearch('');
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final maxW = constraints.maxWidth;
+                      return SizedBox(
+                        height: 44,
+                        child: Stack(
+                          // Label tombol (mis. "Antrian") menggantung di bawah
+                          // kotak 36px — jangan dipotong walau tingginya
+                          // melebihi 44px milik Stack ini.
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Baris tombol — di belakang, faded + non-tappable
+                            // saat kolom cari melebar "menimpa" nya.
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: AnimatedOpacity(
+                                duration: _kSearchAnimDuration,
+                                curve: _kSearchAnimCurve,
+                                opacity: _expanded ? 0 : 1,
+                                child: IgnorePointer(
+                                  ignoring: _expanded,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _TbBtn(
+                                          icon: Icons.qr_code_scanner_rounded,
+                                          onTap: widget.onScan),
+                                      if (widget.showQueueAndHistory) ...[
+                                        const SizedBox(width: 4),
+                                        _TbBtn(
+                                          icon: Icons
+                                              .pause_circle_outline_rounded,
+                                          onTap: widget.onHeld,
+                                          badgeCount: widget.heldCount,
+                                          label: 'Antrian',
+                                        ),
+                                        const SizedBox(width: 4),
+                                        _TbBtn(
+                                          icon: Icons.history_rounded,
+                                          onTap: widget.onHistory,
+                                          label: 'Riwayat\nTransaksi',
+                                        ),
+                                      ],
+                                      const SizedBox(width: 4),
+                                      _TbBtn(
+                                        icon: widget.isGrid
+                                            ? Icons.view_list_rounded
+                                            : Icons.grid_view_rounded,
+                                        onTap: widget.onToggleGrid,
+                                      ),
+                                      if (widget.onPasteOrder != null) ...[
+                                        const SizedBox(width: 4),
+                                        _TbBtn(
+                                          icon: Icons.content_paste_go_rounded,
+                                          onTap: widget.onPasteOrder!,
+                                          label: 'Tempel\nPesanan',
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Field cari — di depan, lebar dianimasikan dari
+                            // sempit (collapsed) sampai penuh (menimpa tombol).
+                            AnimatedPositioned(
+                              duration: _kSearchAnimDuration,
+                              curve: _kSearchAnimCurve,
+                              left: 0,
+                              top: 0,
+                              height: 44,
+                              width: _expanded
+                                  ? maxW
+                                  : _kSearchCollapsedWidth.clamp(0, maxW),
+                              child: Container(
+                                // Latar solid (bukan transparan) supaya benar-
+                                // benar "menimpa" tombol di belakangnya, bukan
+                                // cuma memotong ruang layout-nya.
+                                color: cs.surface,
+                                child: ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: widget.searchCtrl,
+                                  builder: (context, value, _) {
+                                    return TextField(
+                                      controller: widget.searchCtrl,
+                                      focusNode: widget.searchFocus,
+                                      decoration: InputDecoration(
+                                        hintText: 'Cari produk…',
+                                        prefixIcon: const Icon(
+                                            Icons.search_rounded,
+                                            size: 18),
+                                        suffixIcon: _expanded
+                                            ? IconButton(
+                                                icon: const Icon(
+                                                    Icons.clear_rounded,
+                                                    size: 16),
+                                                onPressed: _onClearOrShrink,
+                                              )
+                                            : null,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                        isDense: true,
+                                      ),
+                                      onChanged: widget.onSearch,
+                                    );
                                   },
-                                )
-                              : null,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          isDense: true,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        onChanged: onSearch,
                       );
                     },
                   ),
                 ),
-                const SizedBox(width: 6),
-                _TbBtn(icon: Icons.qr_code_scanner_rounded, onTap: onScan),
-                if (showQueueAndHistory) ...[
-                  const SizedBox(width: 4),
-                  _TbBtn(
-                    icon: Icons.pause_circle_outline_rounded,
-                    onTap: onHeld,
-                    badgeCount: heldCount,
-                    label: 'Antrian',
-                  ),
-                  const SizedBox(width: 4),
-                  _TbBtn(
-                    icon: Icons.history_rounded,
-                    onTap: onHistory,
-                    label: 'Riwayat\nTransaksi',
-                  ),
-                ],
-                const SizedBox(width: 4),
-                _TbBtn(
-                  icon: isGrid
-                      ? Icons.view_list_rounded
-                      : Icons.grid_view_rounded,
-                  onTap: onToggleGrid,
-                ),
-                if (onPasteOrder != null) ...[
-                  const SizedBox(width: 4),
-                  _TbBtn(
-                    icon: Icons.content_paste_go_rounded,
-                    onTap: onPasteOrder!,
-                    label: 'Tempel\nPesanan',
-                  ),
-                ],
               ],
             ),
           ),

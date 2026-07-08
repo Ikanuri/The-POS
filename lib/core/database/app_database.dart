@@ -100,7 +100,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -171,6 +171,11 @@ class AppDatabase extends _$AppDatabase {
             // A" = 3000) — tap-untuk-pakai di kasir, terpisah dari tier
             // minQty di price_tiers.
             await m.createTable(altPrices);
+          }
+          if (from < 9) {
+            // Centang "kembalian sudah diambil" di struk — mencegah kembalian
+            // diserahkan dua kali untuk nota yang barangnya diambil belakangan.
+            await m.addColumn(transactions, transactions.changeTaken);
           }
         },
         beforeOpen: (details) async {

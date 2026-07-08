@@ -17,7 +17,8 @@ class Transactions extends Table {
   IntColumn get total => integer()();
   IntColumn get paid => integer()();
   IntColumn get changeAmount => integer()();
-  TextColumn get paymentMethod => text()(); // tunai | transfer | qris | ewallet | tempo
+  TextColumn get paymentMethod =>
+      text()(); // tunai | transfer | qris | ewallet | tempo
   TextColumn get internalNote => text().nullable()();
   TextColumn get strukNote => text().nullable()();
 
@@ -27,6 +28,14 @@ class Transactions extends Table {
   TextColumn get employeeName => text().nullable()();
 
   IntColumn get pointsEarned => integer().withDefault(const Constant(0))();
+
+  /// true bila kembalian sudah benar-benar diserahkan ke pembeli. Berguna
+  /// untuk nota yang barangnya diambil belakangan — dicentang manual di
+  /// struk agar kasir lain tidak memberikan kembalian dua kali. Murni
+  /// per-perangkat (tidak ikut sync — sama seperti edit strukNote/
+  /// internalNote setelah nota dibuat).
+  BoolColumn get changeTaken => boolean().withDefault(const Constant(false))();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
 
@@ -42,9 +51,11 @@ class TransactionItems extends Table {
   RealColumn get qty => real()(); // support desimal: 0.25, 0.5 kg
   IntColumn get priceAtSale => integer()(); // harga final setelah override
   IntColumn get originalPrice => integer()(); // harga dari algoritma
-  BoolColumn get priceOverridden => boolean().withDefault(const Constant(false))();
+  BoolColumn get priceOverridden =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get costAtSale => integer().withDefault(const Constant(0))();
-  TextColumn get itemNote => text().nullable()(); // catatan item, muncul di struk
+  TextColumn get itemNote =>
+      text().nullable()(); // catatan item, muncul di struk
   IntColumn get subtotal => integer()();
 
   /// Waktu item ditambahkan SETELAH transaksi awal selesai (fitur "tambah
