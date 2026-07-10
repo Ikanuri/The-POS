@@ -838,8 +838,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                   border:
                                       Border.all(color: scheme.outlineVariant),
                                 ),
-                                child: Column(
-                                  children: _custSuggestions.take(5).map((c) {
+                                constraints: const BoxConstraints(maxHeight: 240),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  itemCount: _custSuggestions.length,
+                                  itemBuilder: (context, index) {
+                                    final c = _custSuggestions[index];
                                     final debt = _custDebts[c.id];
                                     final hasDebt = debt != null && debt.$1 > 0;
                                     return ListTile(
@@ -874,7 +879,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                         _syncMetaCustomer();
                                       },
                                     );
-                                  }).toList(),
+                                  },
                                 ),
                               ),
                           ],
