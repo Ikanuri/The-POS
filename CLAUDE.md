@@ -118,6 +118,18 @@ sesuai apa yang disentuh, jangan lompat ke widget test kalau cukup test DB:
    cuma file baru) untuk pastikan tidak ada regresi di tempat lain, plus
    `flutter analyze` bersih — baru commit.
 
+## Perencanaan — [PLAN.md](PLAN.md)
+
+- **Setiap ada rencana kerja** (fitur/fix yang didiskusikan tapi belum
+  dieksekusi — termasuk hasil sesi analisis/diskusi "jangan coding dulu"),
+  **masukkan ke `PLAN.md`** di root, komprehensif (detail teknis: file,
+  akar masalah, bukti; maupun non-teknis: prioritas, ketergantungan,
+  pertanyaan desain yang menggantung).
+- **Setiap satu item di `PLAN.md` selesai dieksekusi** (sudah dikerjakan &
+  di-commit), **hapus item itu dari `PLAN.md`** — jangan dibiarkan
+  menumpuk. `PLAN.md` isinya HANYA rencana yang masih menggantung, bukan
+  log riwayat (riwayat teknis ada di [CHANGELOG.md](CHANGELOG.md)).
+
 ## Git
 
 - Branch fitur khusus ditentukan per-task; jangan push ke branch lain tanpa izin.
