@@ -4,202 +4,104 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 8 Juli 2026 (poles layout topbar kasir + pengecualian
-tap produk dari collapse cari — commit `50752cd`)._
+_Terakhir diperbarui: 10 Juli 2026 (eksekusi 5 item PLAN.md: fix dropdown
+pelanggan, fix dedup importer CSV, optimasi performa HTML Katalog Pesanan,
+urutan qty/satuan struk, reorder Harga Lain — commit `6f1fbc4`..`b949268`)._
 
 ---
 
 ## Di Mana Kita Sekarang
 
-### Sesi terbaru (commit `50752cd`) — poles 2 fitur sesi sebelumnya (`632a836`)
-Bug ditemukan user langsung setelah fitur checkbox kembalian & expand
-kolom cari (di bawah) selesai dibangun — BELUM sempat dirilis, jadi ini
-dianggap penyempurnaan fitur yang sama, bukan entri PATCHNOTES terpisah.
+### Sesi terbaru — audit dataset toko lama → `PLAN.md` → eksekusi 5 item
+Sesi ini dimulai dari pertanyaan user soal update data berkala dari dataset
+toko lama (`docs/reference/Contoh_Dataset.rar`, `Products.csv`), berkembang
+jadi audit besar (bug dropdown pelanggan, bug importer CSV, bug rasio
+multi-satuan hilang saat import, dll). Semua temuan dimasukkan ke
+[PLAN.md](../PLAN.md) (aturan proses ada di CLAUDE.md §Perencanaan — SETIAP
+rencana kerja masuk situ, dihapus begitu selesai dieksekusi). Lalu user minta
+eksekusi 5 item yang sudah "siap dikerjakan sekarang" sekaligus:
 
-1. **Lebar collapsed field cari TIDAK LAGI hardcode 128px** (itu overlap
-   dengan tombol scan) — sekarang `_KasirTopbarState._collapsedWidth(maxW)`
-   dihitung persis dari `_buttonRowWidth` getter (jumlah lebar tiap `_TbBtn`
-   yang benar-benar dirender: 36px ikon-saja / 44px berlabel + gap `_kTbGap`
-   4px antar-tombol) + satu `_kTbGap` lagi sebagai jarak field↔tombol
-   pertama. Otomatis menyesuaikan per mode (mode katalog sembunyikan
-   Antrian/Riwayat → button row lebih sempit → field collapsed lebih
-   lebar), TIDAK pernah overlap berapa pun kombinasi tombolnya.
-2. **Tinggi Stack topbar 44->56px + padding bawah Row 10->16px** — label
-   2 baris (mis. "Riwayat Transaksi") butuh ~56px total (36px kotak + ~20px
-   label), tapi Stack cuma dialokasikan 44px → label kepepet/nyaris
-   menyentuh Divider di bawahnya. Diverifikasi presisi: revert kedua nilai
-   ini sekaligus balik ke gap NEGATIF -2px (label betulan menembus
-   divider), persis keluhan user.
-3. **Tap "+" pada kartu produk TIDAK LAGI collapse field cari** bila field
-   sedang expanded & berisi teks — `_KasirScreenState._markSkipSearchCollapse()`
-   di-set oleh `Listener.onPointerDown` di root `_ProductCard`/
-   `_ProductListTile` (param baru `onBeforeTap`), dikonsumsi SEKALI oleh
-   `Listener.onPointerDown` ancestor yang biasanya memanggil
-   `_searchFocus.unfocus()`. Mengandalkan urutan hit-test Flutter (leaf
-   dispatch SEBELUM root untuk PointerDownEvent yang sama) — descendant
-   sempat men-set flag sebelum ancestor sempat cek & unfocus.
-4. **Tap badan kartu produk (buka modal ItemEntrySheet) TIDAK LAGI
-   collapse field cari** — akar masalah BEDA dari kasus "+": modal
-   (route baru) mengambil alih fokus lewat mekanisme `FocusScope` Flutter
-   sendiri (bukan lewat Listener kita), jadi suppression flag di atas TIDAK
-   cukup. `_openEntry` sekarang menahan `_searchForceExpanded=true`
-   (dibaca `_KasirTopbarState._visuallyExpanded = _expanded ||
-   widget.forceExpanded`) SELAMA modal terbuka, lalu setelah modal ditutup:
-   `setState(_searchForceExpanded=false)` + `_searchFocus.requestFocus()`
-   supaya user bisa lanjut ketik/tap tanpa field sempat mengecil sama
-   sekali (bukan cuma "mengecil sebentar lalu balik lagi").
-5. Pengecualian #3 & #4 HANYA berlaku bila field berisi teks saat itu —
-   field expanded-tapi-kosong tetap collapse normal saat tap +/badan
-   produk (tidak ada state yang perlu dipertahankan).
+1. **Fix dropdown pelanggan** (`ea6e952`) — hapus
+   `.take(5)`/`.take(8)` di `payment_screen.dart` &
+   `cart_meta_pickers.dart`, ganti `ListView.builder` lazy dengan tinggi
+   terkunci. Ini juga menyelesaikan bug "Mbak Ima tidak ketemu saat ketik
+   ima" (root cause: dipotong sebelum sempat scroll).
+2. **Fix dedup importer CSV** (`3bff1b6`) — kunci dedup lama cuma
+   `nama|unitTypeId`, sekarang prioritas `barcode` → `kode_produk` →
+   fallback nama+satuan. Bug nyata: 2 baris "Sedap Goreng" satuan Dos
+   dengan barcode beda di `Products.csv` user, salah satu dulu terbuang
+   diam-diam.
+3. **Optimasi performa HTML Katalog Pesanan** (`c1a9efe`) — debounce
+   search ~120ms, update stepper per-baris (bukan `renderList()` penuh),
+   `renderCartSheet()` cuma jalan kalau sheet terbuka, `DocumentFragment`
+   untuk batch render baris. **Diverifikasi pakai Chromium headless
+   (Playwright)** — bukan cuma `flutter test` (JS tidak tereksekusi di
+   situ). Skrip verifikasi: buat HTML sample 300 produk, load via
+   `playwright.chromium.launch({executablePath: '/opt/pw-browsers/
+   chromium-1194/chrome-linux/chrome'})`, cek debounce timing +
+   sinkronisasi qty antara list & cart sheet.
+4. **Urutan qty/satuan struk in-app** (`6f1fbc4`) — `"pcs 1 x"` →
+   `"1 pcs x"`, menyamakan dengan versi cetak/share yang sudah benar.
+5. **Reorder "Harga Lain" via drag-handle** (`b949268`) — kolom baru
+   `alt_prices.sortOrder` (`schemaVersion` 9→10), `getAltPrices()` ganti
+   urut ke `sortOrder ASC`, UI `ReorderableListView` + drag-handle di
+   `produk_form_screen.dart`. **Guard penting di migrasi:**
+   `if (from < 10 && from >= 8)` sebelum `addColumn(altPrices,
+   altPrices.sortOrder)` — kalau upgrade LANGSUNG dari versi < 8,
+   `createTable(altPrices)` di migrasi 7→8 SUDAH memakai skema Dart
+   TERKINI (otomatis termasuk `sortOrder`), jadi `addColumn` lagi akan
+   crash "duplicate column name". Ditemukan lewat full test suite (bukan
+   cuma test migrasi baru sendiri) — jangan lupa jalankan SEMUA test
+   setelah ubah `schemaVersion`, bukan cuma test yang baru ditulis.
 
-Test baru sesi ini (semua lolos revert-verify, termasuk kombinasi 2 nilai
-sekaligus untuk kasus #2 karena reverting satu nilai saja tidak cukup
-mereproduksi bug aslinya): `test/kasir_search_layout_test.dart` (jarak
-field↔scan, jarak label↔divider), `test/kasir_search_product_tap_test.dart`
-(3 skenario: tap + berisi teks, tap badan buka modal, tap + kosong tetap
-collapse). `flutter analyze` bersih, **137 test hijau**.
+**Item lain di PLAN.md (3, 4, 5, 8) BELUM dieksekusi** — lihat file itu untuk
+detail lengkap & alasan masing-masing masih menggantung (butuh data final
+dari user / keputusan desain / dependency ke item lain).
 
-### Sesi sebelumnya (commit `632a836`) — 2 fitur independen
-1. **Checkbox "kembalian sudah diambil"** di `receipt_screen.dart` —
-   kolom baru `transactions.changeTaken` (`schemaVersion` 8->9, `BoolColumn`
-   default false). Baris "Kembalian" diganti widget `_ChangeTakenRow`
-   (checkbox + label + nominal, tap di mana pun pada baris men-toggle).
-   `_toggleChangeTaken()` langsung `db.update(transactions)...write(...)`
-   — MURNI per-perangkat, TIDAK ikut LAN sync (konsisten dengan pola
-   `strukNote`/`internalNote` yang juga cuma diedit lokal setelah nota
-   dibuat — `transactions` ada di `appendOnlyTables`, sync tidak pernah
-   mengirim ulang baris yang sudah ada). Disembunyikan (`onChanged: null`)
-   untuk nota void.
-2. **Kolom cari kasir expand/collapse** — `_KasirTopbar` di
-   `kasir_screen.dart` diubah dari `StatelessWidget` jadi `StatefulWidget`
-   (`_KasirTopbarState`). State `_expanded` MURNI mengikuti
-   `searchFocus.hasFocus` lewat listener. Layout: `LayoutBuilder` + `Stack`
-   (`clipBehavior: Clip.none` supaya label tombol tidak terpotong) —
-   tombol-tombol topbar di `Positioned(right:0)` dengan
-   `AnimatedOpacity`+`IgnorePointer`, field cari di
-   `AnimatedPositioned(left:0)` dengan `Container(color: cs.surface)` di
-   baliknya (solid) supaya BENAR-BENAR menimpa tombol. Tombol x
-   (`suffixIcon`) hanya render saat expanded; `_onClearOrShrink()`: kosong
-   → `searchFocus.unfocus()`, berisi → `clear()` + `onSearch('')` TANPA
-   unfocus. Collapse-dari-luar: `Listener(behavior: translucent,
-   onPointerDown: unfocus)` + `NotificationListener<ScrollStartNotification>`
-   membungkus SELURUH body di bawah topbar. Teks yang sudah diketik TIDAK
-   PERNAH dihapus oleh jalur collapse-dari-luar.
-   **(Lebar collapsed & tinggi Stack di poin ini SUDAH DIPERBAIKI di sesi
-   berikutnya di atas — jangan pakai detail lama "128px width, 44px
-   height" sebagai acuan lagi.)**
+Test baru sesi ini (semua lolos revert-verify): `test/csv_import_dedup_test.dart`
+(Tier 1), `test/migration_v10_test.dart` (Tier 1, migrasi + ordering),
+`test/produk_form_reorder_alt_price_test.dart` (Tier 2 widget, simulasi drag
+gesture asli via `tester.startGesture`+`moveBy` bertahap — drag satu
+lompatan besar TIDAK cukup dikenali `ReorderableListView`, butuh beberapa
+event `pointermove` kecil). Test migrasi lama (`v7`, `v8`, `v9`) diperbarui
+fixture-nya (tambah tabel `alt_prices` minimal, assert versi akhir 10) supaya
+tetap valid setelah `schemaVersion` naik. **`flutter analyze` bersih, semua
+141 test hijau.**
 
-Test sesi itu: migrasi v8->v9 (`test/migration_v9_test.dart`, Tier 1,
-revert-verify kolom `change_taken`), toggle checkbox kembalian
-(`test/receipt_change_taken_test.dart`, Tier 2 widget, revert-verify tulis
-DB), 4 skenario kolom cari (`test/kasir_search_expand_test.dart`, Tier 2
-widget).
+**Catatan lingkungan sesi ini:** binary `flutter` ada di `/tmp/flutter/bin/flutter`
+di environment ini (BUKAN `/opt/flutter/bin` seperti disebut CLAUDE.md — itu
+mungkin beda per environment/container, cek `which flutter`/`find` dulu kalau
+command CLAUDE.md gagal). Playwright global ada di `/opt/node22/lib/node_modules`
+(`NODE_PATH` perlu di-set manual), Chromium executable di
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (bukan `chromium/chrome-linux/chrome`
+seperti disebut di system prompt — versi folder berubah, cek `find /opt/pw-browsers -iname "*chrome*"`
+kalau path itu gagal).
 
-### Sesi sebelumnya (commit `6dedc80`) — 3 perbaikan/fitur kecil independen
-1. **Modal Bayar**: chip "Bayar Nanti" (dulu campur di baris Metode
-   Pembayaran) sekarang jadi tombol dedicated sendiri di `payment_screen.dart`
-   — 2 tombol di bar bawah: `FilledButton` hijau (`Color(0xFF22C55E)`)
-   "Bayar {total}" + `FilledButton` merah (`scheme.error`) "Bayar Nanti".
-   `_onBayarNantiPressed()` set `_selectedMethodType='tempo'` lalu langsung
-   `_confirm()` — TIDAK ada dialog konfirmasi tambahan (sama seperti alur
-   lama, cuma dipicu tombol berbeda).
-2. **Harga Lain** (fitur baru — tabel `alt_prices`, `schemaVersion` 7->8):
-   harga alternatif berlabel bebas per satuan produk (mis. "Harga Toko A" =
-   3000), BEDA dari `price_tiers` (qty-tier) — murni pilihan manual, tidak
-   pernah dipilih otomatis oleh `PriceService.resolvePrice`. Dikelola di
-   `produk_form_screen.dart` (section "Harga Lain", pola sama persis dengan
-   "Harga Grosir" — delete-then-reinsert saat save). Tampil sebagai chip
-   tap-untuk-pakai di `ItemEntrySheet` (`getAltPrices()`, disatukan dengan
-   chip satuan & tier grosir yang sudah ada, lewat `_applyTierPrice()` yang
-   sama). Terdaftar sebagai master data satu-arah (host→klien) di
-   `lan_sync_service.dart`/`dumpSince`/`_allTables` (backup), mengikuti pola
-   `price_tiers` PERSIS (kalau nanti nambah tabel master data baru lagi, ikuti
-   4 titik ini: `@DriftDatabase(tables:...)`, `_allTables`, `masterData` di
-   `dumpSince`, `_kTableLabels` di `lan_sync_service.dart`).
-3. **Katalog Pesanan (eksperimental)** — 3 poles UX di `order_page_service.dart`
-   template: (a) dropdown varian pakai `openState` per productId + event
-   `toggle` supaya TIDAK collapse tiap `render()` ulang (dulu nutup lagi tiap
-   nambah qty varian) — hanya nutup kalau user sendiri tap ringkasan/induk;
-   (b) tombol toggle terang/gelap manual (`#themeBtn`, `data-theme` attr +
-   `localStorage`), menang atas `prefers-color-scheme` di kedua arah; (c)
-   font total diperbesar (`.cb-total` 16->21px, `.grand .gv` 20->27px).
-   **Perilaku JS ini TIDAK bisa dites lewat `flutter test`** (JS tidak
-   dieksekusi) — diverifikasi manual pakai Chromium headless (Playwright,
-   `/opt/pw-browsers/chromium`) generate HTML sungguhan lalu klik-klik. Kalau
-   nanti ubah template ini lagi, verifikasi ulang dengan cara yang sama
-   (lihat riwayat percakapan sesi ini untuk skrip contoh) — jangan cuma
-   percaya `flutter analyze`/`flutter test` hijau, itu tidak menyentuh JS
-   sama sekali.
-
-Test sesi itu: migrasi v7->v8 (`test/migration_v8_test.dart`, Tier 1,
-revert-verify tabel `alt_prices` benar-benar dibuat), `saveProduct` harga
-alternatif (`test/alt_prices_test.dart`, Tier 1, revert-verify replace +
-cascade-delete saat satuan dihapus), layout 2-tombol Bayar
-(`test/payment_screen_buttons_test.dart`, Tier 2 widget, revert-verify label
-hilang tertangkap).
+### Sesi sebelumnya (commit `50752cd`) — poles layout topbar kasir
+Lihat CHANGELOG untuk detail commit. Ringkasan: lebar collapsed field cari
+dihitung presisi dari lebar tombol nyata (bukan hardcode), tinggi Stack
+topbar diperbesar supaya label 2 baris tidak kepepet divider, tap
+"+"/badan-produk saat search aktif tidak lagi collapse field.
 
 ### Fitur eksperimental Katalog Pesanan (branch `claude/order-html-eksperimental`)
-Lengkap dua fase, menutup alur ujung-ke-ujung: generate HTML →
-kirim WA manual → pelanggan pilih barang → kasir tempel balik ke keranjang.
-
-### Fase 1 — generator HTML (commit `e422639`, `dc9c3ef`)
-- `lib/core/services/order_page_service.dart` — `OrderPageService.
-  generateHtml({db, storeName, storeWhatsapp})` → satu file HTML
-  self-contained (CSS+JS inline, tanpa CDN/font eksternal, tanpa hosting —
-  keputusan eksplisit user: kirim manual via WA). Pelanggan pilih barang
-  (termasuk varian, UX arrow-tap + auto-expand saat search cocok) lalu tekan
-  "Kirim via WhatsApp" — teks pesanan berformat manusia-bisa-baca + baris
-  kode mesin `#PSN:<productUnitId>=<qty>;...` di akhir.
-- `lib/features/pengaturan/order_share_screen.dart` — layar
-  `/pengaturan/katalog-pesanan` (badge "Eksperimental", owner-only), generate
-  → `Share.shareXFiles` (pola sama seperti share struk/katalog).
-- 6 test (`test/order_page_service_test.dart`) menemukan & membuktikan 2 bug
-  nyata sebelum dianggap selesai: varian bocor jadi baris induk terpisah
-  (`searchProducts()` tidak menyaring varian, beda dari `watchProducts()`),
-  dan XSS lewat data JSON yang belum di-escape `"</"` → `"<\/"` di dalam
-  `<script>`.
-
-### Fase 2 — parser & UI Tempel Pesanan (commit `ef9ab12`)
-- `lib/core/services/order_parser_service.dart` — `OrderParserService.
-  parse({db, text})` → `ParsedOrder`. Regex-extract baris `#PSN:...`, lookup
-  tiap `productUnitId` ke DB, **resolve harga LIVE via `PriceService`**
-  (bukan angka di teks — katalog terkirim bisa sudah basi beberapa hari),
-  dedup unitId dobel (gabung qty, bukan baris ganda), barang yang sudah
-  dihapus/dinonaktifkan masuk `ParsedOrder.notFound` tanpa menggagalkan
-  baris valid lain. Ikut extract `Nama:`/`HP:`/`Catatan:` (nilai `-` atau
-  kosong dianggap null).
-- `lib/features/kasir/widgets/paste_order_sheet.dart` — `PasteOrderSheet`
-  (bottom sheet): tempel teks → preview daftar item + notFound → isi
-  keranjang. `_ensureParentInCart()` sengaja DUPLIKAT self-contained (bukan
-  reuse method private `kasir_screen.dart`) — sesuai keputusan user sesi
-  sebelumnya bahwa kasir utama TIDAK boleh disentuh oleh fitur eksperimental
-  ini, hanya ditambah tombol baru.
-- `lib/features/kasir/kasir_screen.dart` — perubahan ADDITIF saja: tombol
-  baru "Tempel Pesanan" (`Icons.content_paste_go_rounded`) di topbar,
-  hanya tampil di mode kasir normal (bukan mode katalog/tambah-belanjaan).
-- 6 test parser (Tier 1 DB, `test/order_parser_service_test.dart`) + 1 test
-  layout (Tier 2 widget, `test/kasir_topbar_layout_test.dart`, render
-  `KasirScreen` di lebar 360dp) membuktikan tombol baru TIDAK memicu
-  `RenderFlex` overflow — CLAUDE.md mencatat topbar kasir historis rawan
-  kasus ini. Kedua kelas regresi (dedup dimatikan, lebar label dipaksa 200)
-  diverifikasi lewat revert-sementara: tanpa fix, test gagal dengan pesan
-  yang sesuai; dengan fix, hijau lagi.
+Lengkap dua fase (generate HTML → kirim WA → pelanggan pilih barang → kasir
+tempel balik ke keranjang), ditambah optimasi performa sesi ini (lihat di
+atas). Detail arsitektur lengkap ada di `lib/core/services/order_page_service.dart`
+(generator) & `lib/core/services/order_parser_service.dart` (parser).
 
 ### Yang SENGAJA belum dibangun (deferred, bukan lupa)
 - Hosting "link hidup" (GitHub Pages dkk) untuk Katalog Pesanan — user pilih
-  TIDAK sekarang (kirim manual via WA). Opsi & tradeoff sudah didiskusikan
-  kalau nanti mau dipertimbangkan ulang.
+  TIDAK sekarang (kirim manual via WA).
 - UX varian (arrow-tap + auto-expand-on-search) hanya ada di HTML generated,
-  belum diseragamkan ke kasir utama (yang masih pakai long-press). Perubahan
-  terpisah, perlu dikonfirmasi ulang user kalau mau diselaraskan.
+  belum diseragamkan ke kasir utama (yang masih pakai long-press).
 - Belum ada PR untuk branch `claude/order-html-eksperimental` — menunggu
   instruksi user.
+- Item 8 PLAN.md (bawa UI pilih-harga ItemEntrySheet ke HTML) — masih
+  diskusi kelayakan, belum ada keputusan scope.
 
 ## Ringkasan Sesi Audit Sebelumnya (masih berlaku, tidak diulang detail)
 14 bug hasil audit kode menyeluruh sudah diperbaiki & dirilis sebagai
-v2.1.1+3 (lihat CHANGELOG untuk daftar commit `7d1fc6f`, `81f1af6`,
-`c1bafd7`, `b6fefbe`). PR #2 sudah di-merge ke `main`. Build APK v2.1.1+3
-sukses (dev pre-release di GitHub Releases).
+v2.1.1+3 (lihat CHANGELOG). PR #2 sudah di-merge ke `main`.
 
 ## Temuan yang SENGAJA Belum Diperbaiki (kandidat diskusi, dari audit)
 - **Multi-satuan + varian bercampur**: invariant `storedQty induk = base +
@@ -230,23 +132,34 @@ sukses (dev pre-release di GitHub Releases).
 - Cart meta tab = shrink-wrap kiri, **bukan** full-width.
 - Animasi scan yang dipilih = **Opsi E** (garis pulse hijau), dari 8 opsi.
 - Referensi proyek tinggal di `docs/reference/` (jangan hapus) — termasuk
-  `Mockup.zip` & `Contoh_Dataset.rar` yang masih ada & dipakai aktif.
+  `Mockup.zip` & `Contoh_Dataset.rar` yang masih ada & dipakai aktif untuk
+  perencanaan migrasi data (lihat PLAN.md Item 3-5).
 - Ekspor pakai `FilePicker.saveFile`, bukan `Printing.sharePdf`.
 - Katalog Pesanan (eksperimental): tanpa hosting, kasir utama tidak
-  disentuh (hanya tombol baru ditambah), Fase 1 (HTML) + Fase 2 (parser +
-  Tempel Pesanan) sudah selesai keduanya.
+  disentuh (hanya tombol baru ditambah).
 - Harga Lain (`alt_prices`) TIDAK pernah dipilih otomatis oleh
-  `PriceService.resolvePrice` — murni manual/tap, beda filosofi dari
-  `price_tiers` (qty-tier) yang auto-resolve berdasar qty. Jangan campur
-  logikanya kalau nanti ada perubahan price resolver.
+  `PriceService.resolvePrice` — murni manual/tap. Urutan tampilnya sekarang
+  bisa diatur user via drag-handle di form Produk (`sortOrder` kolom).
+- Claude TIDAK punya akses berkelanjutan ke database toko user (offline-first,
+  terenkripsi SQLCipher) — alur migrasi data dari dataset lama selalu:
+  user kirim data mentah → Claude olah format → user import sendiri lewat
+  fitur di app. Lihat "Konteks" di PLAN.md.
 
 ## Menggantung / Kandidat Berikutnya
+- **PLAN.md Item 3** (konversi format `Products.csv` + fix rasio multi-satuan
+  hilang, 31% katalog terdampak) — prioritas TINGGI, harus selesai SEBELUM
+  data produk diimpor ke DB live. Menunggu user siap kirim/konfirmasi data
+  final.
+- **PLAN.md Item 4** (importer pelanggan + poin loyalty, fitur baru) —
+  menunggu user jawab 3 pertanyaan desain (overwrite vs delta poin, kunci
+  pencocokan, penanganan nama kembar).
+- **PLAN.md Item 5** (import riwayat transaksi dari dataset lama) — setelah
+  Item 3 selesai, dan setelah user konfirmasi cakupan tanggal file
+  `Transaksi ...xlsx` yang tersedia.
+- **PLAN.md Item 8** (bawa UI pilih-harga ke HTML Katalog) — menunggu
+  keputusan user soal trade-off kompleksitas vs manfaat.
 - Saran fitur audit di atas menunggu keputusan user.
-- Belum ada PR untuk branch `claude/order-html-eksperimental` — menunggu
-  instruksi user (buka PR / hal lain).
-- Kalau Katalog Pesanan terbukti kepakai di lapangan: pertimbangkan lagi
-  opsi hosting "link hidup" atau penyeragaman UX varian ke kasir utama
-  (keduanya sengaja ditunda, lihat di atas).
+- Belum ada PR untuk branch `claude/order-html-eksperimental`.
 
 ## Preferensi User
 - Untuk fitur bervisual (mis. animasi), **usulkan beberapa opsi desain dulu**
@@ -258,3 +171,6 @@ sukses (dev pre-release di GitHub Releases).
 - Untuk fitur baru berisiko/besar: diskusikan cakupan dulu (boleh
   dipersempit dari proposal awal), baru eksekusi setelah "eksekusi semua"
   atau konfirmasi serupa.
+- Untuk rencana kerja yang didiskusikan tapi belum dieksekusi ("jangan
+  coding dulu"): masukkan ke PLAN.md secara komprehensif, jangan cuma
+  disimpan di riwayat chat.

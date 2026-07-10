@@ -8,6 +8,33 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Juli 2026
+
+### ✨ Fitur Baru
+- **Urutan "Harga Lain" bisa diatur.** Di pengaturan produk (tab Produk),
+  daftar Harga Lain sekarang punya ikon geser (drag-handle) di tiap baris —
+  tahan lalu seret untuk mengubah urutannya. Urutan ini otomatis diikuti
+  saat memilih harga lewat chip di kasir, jadi harga yang paling sering
+  dipakai bisa ditaruh paling depan.
+
+### 🐛 Perbaikan
+- **Katalog Pesanan (halaman HTML untuk pelanggan) tidak lagi lag di HP
+  low-end.** Pencarian produk dan tombol tambah/kurang jumlah kini jauh
+  lebih responsif, terutama untuk toko dengan katalog besar.
+- **Pencarian pelanggan di layar Bayar kini menampilkan semua hasil,
+  bisa di-scroll.** Sebelumnya hanya 5–8 nama teratas yang ditampilkan,
+  jadi pelanggan yang urutan namanya jatuh di belakang (mis. tidak muncul
+  saat mengetik sebagian nama) bisa "hilang" dari daftar padahal sebenarnya
+  ada.
+- **Struk in-app: urutan jumlah & satuan dibalik jadi lebih wajar dibaca**
+  ("1 pcs" alih-alih "pcs 1"), menyamakan dengan struk versi cetak/kirim
+  yang memang sudah begitu.
+- **Impor produk dari CSV: produk dengan nama & satuan sama tapi barcode
+  berbeda tidak lagi terbuang diam-diam saat impor.** Ini penyebab kasus
+  "Sedap Goreng per dus tidak ada" yang sempat dilaporkan — dua varian
+  barang dengan barcode berbeda dianggap duplikat dan salah satu dibuang
+  tanpa pemberitahuan apa pun.
+
 ## 8 Juli 2026
 
 ### ✨ Fitur Baru

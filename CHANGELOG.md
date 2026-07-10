@@ -8,6 +8,14 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-10
+
+- `b949268` — feat: reorder "Harga Lain" via drag-handle di form Produk (schemaVersion 10)
+- `c1a9efe` — perf: optimasi halaman HTML Katalog Pesanan untuk HP low-end
+- `3bff1b6` — fix: kunci dedup importer CSV ikut barcode/kode produk (silent data loss)
+- `ea6e952` — fix: dropdown pelanggan scroll sungguhan, hapus pemotongan .take(N)
+- `6f1fbc4` — fix: urutan qty/satuan di struk in-app (1 pcs x, bukan pcs 1 x)
+
 ## 2026-07-08
 
 - `50752cd` — fix: rapikan layout topbar kasir + kecualikan tap produk dari collapse cari

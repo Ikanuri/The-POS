@@ -6,7 +6,7 @@ dari file ini (lihat aturan di [CLAUDE.md](CLAUDE.md) §Perencanaan). Riwayat
 teknis pekerjaan yang SUDAH selesai ada di [CHANGELOG.md](CHANGELOG.md), bukan
 di sini.
 
-_Terakhir diperbarui: 8 Juli 2026._
+_Terakhir diperbarui: 10 Juli 2026._
 
 ---
 
@@ -25,90 +25,6 @@ satunya sumber kebenaran). Jadi update data dari dataset selalu berbentuk:
 user kirim data mentah → Claude olah/format jadi bentuk yang bisa diimpor →
 user jalankan import sendiri di app lewat fitur yang sudah ada (atau yang
 akan dibangun). Bukan Claude yang menulis langsung ke database terenkripsi.
-
----
-
-## Item 1 — Fix dropdown pelanggan: hapus `.take(N)`, ganti fixed-height + scroll sungguhan
-
-**Prioritas:** Tinggi. Kecil, jelas, tidak berisiko ke alur lain. Bisa
-dikerjakan kapan saja, independen dari item lain.
-
-**Masalah saat ini:**
-- `lib/features/kasir/payment_screen.dart` — dropdown saran pelanggan di
-  field "Cari pelanggan atau ketik nama…" adalah `Container` biasa (BUKAN
-  scrollable) berisi `Column` dari `_custSuggestions.take(5)`.
-- `lib/features/kasir/widgets/cart_meta_pickers.dart` (`_CustomerPickerSheet`,
-  dipakai dari cart bar) — sudah pakai `ListView` di dalam
-  `ConstrainedBox(maxHeight: ...)`, TAPI tetap `.take(8)` diterapkan ke
-  `_results` SEBELUM masuk ke `ListView`. Jadi walau widget-nya scrollable,
-  data di baliknya sudah kepotong duluan — scroll tidak menolong apa pun
-  kalau hasil aslinya lebih dari 8.
-- Di kedua tempat, `db.searchCustomers(q)` (query DB) **TIDAK ada batasan** —
-  pembatasan cuma terjadi di layer tampilan (UI), bukan di query.
-
-**Bug turunan yang ikut kesolusi otomatis:** pelanggan "Mbak Ima" tidak
-ditemukan saat mengetik "ima" (baru muncul kalau ketik "mbak i"). Root cause:
-query "ima" itu substring generik, bisa cocok ke BANYAK nama pelanggan lain
-yang kebetulan mengandung "ima" di mana saja (Fatima, Karima, Halima, dst),
-diurutkan alfabetis, lalu dipotong ke 5/8 teratas — kalau "Mbak Ima" jatuh di
-urutan alfabetis setelah itu, dia tersingkir. Query "mbak i" jauh lebih
-spesifik → hasil match jauh lebih sedikit → muat di 5/8 besar.
-
-**Solusi yang disepakati:** Tinggi kontainer dikunci (~5 baris kelihatan),
-tapi isinya SEMUA hasil match dari `searchCustomers()` (tanpa `.take()`),
-benar-benar scrollable untuk sisanya.
-
-**Dampak performa (sudah dianalisis, TIDAK jadi penghalang):** Nyaris nol.
-Loop pengambilan hutang per-pelanggan (`getCustomerOutstandingDebt`) SUDAH
-dijalankan untuk SELURUH hasil pencarian sebelum `.take()` diterapkan — jadi
-kerja berat itu sudah terjadi hari ini juga, terlepas dari berapa yang
-ditampilkan. Menghapus `.take()` murni perubahan lapisan tampilan.
-Rekomendasi teknis tambahan: pakai `ListView.builder` (lazy-render) bukan
-`ListView(children: [...])` (eager) untuk berjaga-jaga kalau toko punya
-sangat banyak pelanggan + query sangat umum (1-2 huruf) — mencegah ratusan
-widget dibangun sekaligus di memori.
-
-**File yang terlibat:**
-- `lib/features/kasir/payment_screen.dart` (dropdown pelanggan di layar Bayar)
-- `lib/features/kasir/widgets/cart_meta_pickers.dart` (`_CustomerPickerSheet`,
-  picker dari cart bar)
-
----
-
-## Item 2 — Fix bug dedup importer produk (silent data loss)
-
-**Prioritas:** Tinggi. Bug ini sudah nyata terjadi (bukan hipotesis) dan
-menyebabkan kehilangan data tanpa pemberitahuan apa pun ke user.
-
-**Masalah:** Di `lib/core/services/csv_import_service.dart`, kunci deteksi
-baris-duplikat-dalam-satu-file adalah:
-```dart
-final dedupKey = '${name.toLowerCase()}|$unitTypeId'; // baris ~136
-```
-Cuma nama + tipe satuan — **TIDAK melibatkan barcode maupun kode produk sama
-sekali**. Kalau ada dua baris dengan nama+satuan sama tapi barcode/harga
-BEDA (SKU yang sesungguhnya berbeda), baris kedua otomatis dianggap
-"duplikat" dan **dilewati diam-diam** (`duplicates++; continue;` — tanpa
-error, tanpa peringatan ke user).
-
-**Bukti nyata (ditemukan langsung di `docs/reference/Products.csv`):**
-```
-Sedap Goreng;108500;113000;0;6;14;11060048;Dos;1
-Sedap Goreng;108500;111000;0;;14;25588880;Dos;1
-```
-Dua baris "Sedap Goreng" satuan Dos (`unitTypeId=14`), tapi **barcode beda**
-(`11060048` vs `25588880`) dan **harga beda** (113000 vs 111000). Baris kedua
-pasti dibuang oleh logika dedup ini — inilah penyebab konkret "Sedap Goreng
-per dus tidak ada" yang dilaporkan user.
-
-**Solusi yang perlu diputuskan lalu diimplementasikan:** kunci dedup harus
-ikut mempertimbangkan barcode/kode_produk, bukan cuma nama+satuan. Perlu
-keputusan desain kecil: kalau barcode kosong di kedua baris (tidak ada
-identitas kuat sama sekali), tetap anggap duplikat (fallback ke perilaku
-lama) atau tidak?
-
-**File yang terlibat:** `lib/core/services/csv_import_service.dart`
-(fungsi utama `importFromBytes`, sekitar baris 135-141).
 
 ---
 
@@ -258,8 +174,9 @@ kemungkinan besar file BARU `lib/core/services/customer_import_service.dart`
 
 ## Item 5 — Import riwayat transaksi dari dataset lama (fitur baru + jadi data stress-test nyata)
 
-**Prioritas:** Setelah Item 2 & 3 selesai (lihat alasan ketergantungan di
-3b). User sudah konfirmasi punya beberapa file rentang tanggal (bukan cuma
+**Prioritas:** Setelah Item 3 selesai (lihat alasan ketergantungan di
+3b — bug dedup importer di Item 2 sudah selesai dikerjakan, lihat
+CHANGELOG). User sudah konfirmasi punya beberapa file rentang tanggal (bukan cuma
 satu hari), tapi **belum diketahui apakah cakupannya mendekati riwayat penuh
 toko (Maret 2024–sekarang, sesuai rekap bulanan di file `Penjualan`) atau
 cuma beberapa sampel** — perlu dikonfirmasi user sebelum estimasi skala
@@ -306,12 +223,11 @@ Item 1, ditemukan langsung sebagai bukti nyata di dataset ini.)
    dari kondisi sesungguhnya.
 
 **Ketergantungan (urutan tidak boleh dibalik):** HARUS dikerjakan setelah
-Item 2 (fix dedup) & Item 3 terutama 3b (fix rasio multi-satuan). Alasan:
-pencocokan nama produk di kolom "Rincian" bergantung penuh pada katalog
-yang sudah lengkap & berstruktur benar. Kalau katalog masih ada SKU hilang
-(Item 2) atau strukturnya kacau (Item 3b — "Sedap Goreng" jadi banyak
-entitas tak berhubungan), baris rincian transaksi yang menyebut produk itu
-otomatis ikut gagal/salah cocok juga — dua-tiga bug akan saling menumpuk
+Item 3 terutama 3b (fix rasio multi-satuan) selesai. Alasan: pencocokan
+nama produk di kolom "Rincian" bergantung penuh pada katalog yang sudah
+lengkap & berstruktur benar. Kalau strukturnya kacau (Item 3b — "Sedap
+Goreng" jadi banyak entitas tak berhubungan), baris rincian transaksi yang
+menyebut produk itu otomatis ikut gagal/salah cocok juga — bug akan menumpuk
 kalau urutan pengerjaan dibalik.
 
 **Risiko/keputusan yang perlu diantisipasi saat implementasi (belum
@@ -336,69 +252,6 @@ diputuskan):**
 
 ---
 
-## Item 6 — Optimasi performa halaman HTML Katalog Pesanan (lag di HP low-end)
-
-**Prioritas:** Bisa dikerjakan kapan saja, independen dari item lain (cuma
-menyentuh `lib/core/services/order_page_service.dart`, murni perbaikan
-performa — TIDAK mengubah tampilan/perilaku sama sekali).
-
-**Keluhan:** halaman HTML katalog pesanan (dibuka pelanggan lewat WhatsApp)
-terasa lag di HP low-end.
-
-**Root cause yang ditemukan (di `_htmlTemplate` / JS-nya):**
-1. **Tidak ada debounce di kolom cari** — tiap satu huruf diketik memicu
-   `renderList()` yang menghancurkan (`list.innerHTML = ''`) lalu membangun
-   ULANG SELURUH daftar produk dari nol. Untuk katalog ratusan/ribuan
-   produk, ini kerja berat berulang di SETIAP huruf.
-2. **Tap tombol +/− pada stepper qty memicu render ulang SELURUH daftar**,
-   bukan cuma baris yang berubah — `setQty()` memanggil `render()` yang
-   menjalankan `renderList()` + `renderCartBar()` + `renderCartSheet()`
-   sekaligus, padahal cuma satu angka di satu baris yang sebenarnya butuh
-   diperbarui.
-3. **`renderCartSheet()` selalu ikut dijalankan tiap qty berubah**, walau
-   sheet keranjang sedang TERTUTUP (kerja sia-sia, hasilnya tidak terlihat
-   sampai sheet dibuka).
-4. Baris ditempel ke DOM satu-satu langsung (`list.appendChild(row)` di
-   dalam loop) alih-alih disiapkan dulu di `DocumentFragment` lalu ditempel
-   sekali — menyebabkan reflow bertahap per baris, bukan sekali di akhir.
-
-**Solusi yang disepakati (semua TIDAK mengubah UI/UX, murni cara kerja di
-balik layar):**
-- **(A)** Debounce input pencarian (~120ms setelah user berhenti mengetik) —
-  dampak performa PALING BESAR, effort kecil.
-- **(B)** Saat tap +/−, update HANYA elemen qty/stepper baris yang
-  bersangkutan — jangan panggil `renderList()` ulang.
-- **(C)** `renderCartSheet()` cuma dijalankan kalau sheet keranjang sedang
-  terbuka (skip kalau tertutup, render on-demand saat dibuka).
-- **(D)** Bangun baris via `DocumentFragment` dulu, tempel ke `#list` sekali
-  di akhir loop (bukan `appendChild` per baris langsung ke DOM aktif).
-
-**Urutan implementasi disarankan:** A+B dulu (dampak terbesar, saling lepas
-dari C/D), lalu C+D sebagai penyempurnaan tambahan kalau masih terasa
-kurang mulus.
-
----
-
-## Item 7 — Urutan qty/satuan di struk in-app dibalik ("pcs 1 x" → "1 pcs x")
-
-**Prioritas:** Kecil, jelas, siap dikerjakan kapan saja.
-
-**Masalah:** Di struk in-app (`_itemCheckRow` di `receipt_screen.dart` baris
-~221-223), urutan teks baris item saat ini **satuan dulu baru qty**
-(`"pcs 1 × Rp2.500"`), harusnya **qty dulu baru satuan**
-(`"1 pcs × Rp2.500"`).
-
-**Bonus konsistensi:** versi struk untuk cetak/share (fungsi capture-gambar
-di file yang sama, baris ~2033) **SUDAH** memakai urutan qty-dulu
-(`'$pad$qtyStr ${unitNames[...]} x ...'`) — jadi perbaikan ini juga
-menyamakan urutan antara tampilan in-app dan hasil cetak/share yang
-sebelumnya berbeda satu sama lain.
-
-**File yang terlibat:** `lib/features/kasir/receipt_screen.dart`
-(`_itemCheckRow`, sekitar baris 215-224).
-
----
-
 ## Item 8 — Bawa UI/UX "pilih harga" modal ItemEntrySheet ke halaman HTML (didiskusikan, BELUM diputuskan)
 
 **Status:** Masih tahap diskusi kelayakan — user bertanya "bisakah", belum
@@ -419,10 +272,11 @@ menunggu keputusan user):**
   sana berarti duplikasi LOGIKA price-resolving (`PriceService`) ke JS
   murni — dua tempat yang harus dijaga tetap sinkron kalau logika harga
   berubah di masa depan.
-  - **Kaitan dengan Item 6:** semakin banyak UI/interaktivitas ditambahkan ke
-    HTML ini, semakin besar risiko masalah performa (Item 6) muncul lagi di
-    tempat baru — perlu diperhatikan bareng, bukan ditambah dulu baru
-    dioptimasi belakangan.
+  - **Kaitan dengan optimasi performa HTML yang sudah dikerjakan** (debounce
+    cari, update per-baris, dll — lihat CHANGELOG): semakin banyak
+    UI/interaktivitas ditambahkan ke HTML ini, semakin besar risiko masalah
+    performa serupa muncul lagi di tempat baru — perlu diperhatikan bareng,
+    bukan ditambah dulu baru dioptimasi belakangan.
 - **Relevansi ke pelanggan vs ke kasir:** tier grosir/harga alternatif itu
   fitur yang biasanya dipakai KASIR/OWNER untuk situasi tawar-menawar
   khusus, bukan sesuatu yang biasanya perlu dipilih PELANGGAN sendiri saat
@@ -434,84 +288,15 @@ menunggu keputusan user):**
 
 ---
 
-## Item 9 — Reorder "Harga Lain" di tab Produk (urutan tampil chip di ItemEntrySheet ikut berubah)
-
-**Status:** Siap eksekusi — desain teknis lengkap, tidak ada pertanyaan
-menggantung (kontrol reorder sudah dikonfirmasi user: drag-handle).
-
-**Konteks:** dropdown terpisah untuk "Harga Lain" (dibahas sebelumnya) TIDAK
-jadi dikerjakan — user konfirmasi chip yang sudah ada di `ItemEntrySheet`
-sudah cukup untuk kebutuhan pilih-harga. Sebagai gantinya, user mengusulkan
-fitur BARU: kemampuan **mengurutkan ulang (reorder)** daftar "Harga Lain" di
-form edit produk (tab Produk), supaya urutan chip yang muncul di
-`ItemEntrySheet` bisa diatur sesuai preferensi toko (mis. harga yang paling
-sering dipakai ditaruh paling depan/kiri, bukan sekadar urutan input).
-
-**Analisis teknis (sudah dicek ke kode):**
-- Tabel `alt_prices` (dibuat sesi sebelumnya untuk fitur "Harga Lain")
-  **belum punya kolom urutan eksplisit**. `AppDatabase.getAltPrices()`
-  saat ini mengurutkan berdasar `createdAt ASC`.
-- Masalahnya: di `produk_form_screen.dart`, SEMUA baris harga-lain dalam
-  satu kali simpan memakai **timestamp `now` yang SAMA** (`createdAt:
-  Value(now)`, `now` diambil sekali sebelum loop) — jadi urutan tampil
-  hasil `ORDER BY created_at ASC` untuk baris-baris dengan timestamp
-  identik itu **tidak terjamin/tidak eksplisit** (kebetulan sering
-  mengikuti urutan insert di SQLite, tapi ini bukan jaminan resmi, apalagi
-  kalau nanti ada perubahan cara insert). Reorder yang andal butuh kolom
-  urutan sendiri, bukan mengandalkan `createdAt`.
-
-**Rancangan solusi:**
-1. **Migrasi schema baru** (`schemaVersion` 9→10): tambah kolom
-   `sortOrder` (integer) ke tabel `alt_prices`.
-   `getAltPrices()` diubah urut berdasar `sortOrder ASC` (bukan
-   `createdAt` lagi).
-2. **UI reorder di form Produk** (`produk_form_screen.dart`, bagian
-   "Harga Lain" ~baris disebut di Item sebelumnya): tambah kontrol urutan
-   di tiap baris. **Keputusan (dikonfirmasi user): drag-handle**, alasan
-   eksplisit — "supaya saya bisa bebas drag sambil scroll". Implikasi
-   teknis: kalau daftar "Harga Lain" cukup panjang hingga melebihi area
-   layar, drag harus tetap bisa dilakukan sambil list auto-scroll (bukan
-   cuma reorder dalam area yang kelihatan saja) — pastikan implementasi
-   pakai widget yang mendukung auto-scroll-saat-drag (mis.
-   `ReorderableListView` bawaan Flutter sudah punya perilaku ini secara
-   default selama dibungkus scrollable yang benar; kalau "Harga Lain" ini
-   dirender di dalam `SingleChildScrollView`/`Column` form yang lebih
-   besar alih-alih list mandiri, perlu dicek ulang agar auto-scroll tetap
-   jalan — mungkin perlu `ReorderableListView` dengan `shrinkWrap: true` +
-   `physics: NeverScrollableScrollPhysics` di dalam parent scroll, atau
-   pola drag-scroll manual kalau itu tidak cukup mulus).
-3. Saat simpan (`saveProduct`), `sortOrder` diisi dari POSISI baris di
-   list form saat itu (index 0, 1, 2, ...) — otomatis konsisten dengan
-   pola delete-then-reinsert yang sudah dipakai untuk harga-lain (tidak
-   perlu logika tambahan di luar itu).
-4. **`ItemEntrySheet` TIDAK PERLU diubah sama sekali** — chip harga-lain di
-   sana sudah otomatis mengikuti urutan hasil `getAltPrices()`, jadi begitu
-   query-nya diurut oleh `sortOrder`, tampilannya otomatis ikut berubah.
-
-**File yang terlibat:**
-- `lib/core/database/tables/pricing_tables.dart` (tambah kolom `sortOrder`
-  ke `AltPrices`)
-- `lib/core/database/app_database.dart` (migrasi `schemaVersion` 9→10,
-  `getAltPrices()` ganti `orderBy`)
-- `lib/features/produk/produk_form_screen.dart` (UI reorder + isi
-  `sortOrder` saat simpan)
-- Test migrasi baru mengikuti pola `test/migration_v9_test.dart` (Tier 1,
-  wajib revert-verify sesuai metode test di `CLAUDE.md`)
-
----
-
 ## Urutan eksekusi yang disarankan
 
-1. **Item 1, Item 2, Item 6, Item 7, Item 9** bisa dikerjakan bersamaan
-   sekarang — kecil/jelas/independen, tidak berisiko ke alur lain, tidak
-   saling bergantung satu sama lain.
-2. **Item 3** (3a konversi format + 3b fix rasio multi-satuan, keduanya di
+1. **Item 3** (3a konversi format + 3b fix rasio multi-satuan, keduanya di
    file yang sama jadi wajar dikerjakan sekaligus) — mulai begitu user siap
    kirim/konfirmasi data produk final yang mau diimpor.
-3. **Item 5** setelah Item 2 & 3 selesai (ketergantungan struktural, lihat
+2. **Item 5** setelah Item 3 selesai (ketergantungan struktural, lihat
    penjelasan di atas) — dan setelah user konfirmasi cakupan tanggal file
    `Transaksi ...xlsx` yang tersedia.
-4. **Item 4** independen, bisa disisipkan kapan saja setelah user menjawab
+3. **Item 4** independen, bisa disisipkan kapan saja setelah user menjawab
    3 pertanyaan desain di atas.
-5. **Item 8** menunggu keputusan user soal trade-off (kompleksitas HTML vs
+4. **Item 8** menunggu keputusan user soal trade-off (kompleksitas HTML vs
    manfaat, relevansi ke pelanggan vs kasir).
