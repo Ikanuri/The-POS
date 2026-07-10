@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Pengingat backup.** Di Pengaturan → Backup & Restore kini ada kartu
+  status "Backup terakhir: X hari lalu" (warnanya berubah makin lama makin
+  merah) dan tombol "Pengingat Backup Otomatis" (interval harian/mingguan).
+  Bila aktif, aplikasi mengingatkan lewat notifikasi kecil saat dibuka jika
+  sudah lama tidak mencadangkan data.
 - **Peringatan stok menipis.** Di pengaturan produk kini ada kolom "Stok
   Minimum" — isi angka ambangnya (kosongkan bila tidak ingin dipantau). Di
   tab Produk muncul chip "Stok Menipis (jumlah)" berwarna merah untuk

@@ -9,8 +9,8 @@ PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user.
 SELESAI sejauh ini: Item 22 (warna chip/banner), Item 10 (metode bayar
 pelunasan), Item 20 (edit produk di modal), Item 14 (edit/hapus metode
 bayar), Item 9 (pengeluaran + Laba Bersih), Item 12 (Buku Hutang), Item 18 (beralih pesanan), Item 16 (atribusi varian per-satuan +
-fix minus), Item 19 (Harga Lain dropdown), Item 11 (stok menipis, schemaVersion
-11). Sisa Item 13,15,17,21 antre,
+fix minus), Item 19 (Harga Lain dropdown), Item 11 (stok menipis, schemaVersion 11), Item 13 (pengingat backup).
+Sisa Item 15,17,21 antre,
 semua keputusan desain sudah final di PLAN.md)._
 **Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
 pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/

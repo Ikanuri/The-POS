@@ -291,28 +291,6 @@ menunggu keputusan user):**
 
 ---
 
-## Item 13 — Backup Otomatis Terjadwal + Pengingat
-
-**Prioritas:** Rendah-sedang. Tidak butuh tabel baru — cukup key baru di
-tabel `Settings` yang sudah dipakai untuk key-value seperti
-`loyalty_point_threshold`, `last_archive_year`.
-
-**Desain UI/UX:** Card baru di `backup_screen.dart` (di atas tombol backup
-manual yang sudah ada): toggle "Backup Otomatis" + dropdown interval
-(Harian/Mingguan), teks pengingat "Backup terakhir: X hari lalu" dengan
-warna dinamis (netral→kuning→merah berdasar usia).
-
-**DIPUTUSKAN:** trigger cek cukup saat app dibuka (`main.dart`, bandingkan
-`now` vs setting terakhir backup + interval) — TANPA `WorkManager`/
-background service. Device yang jarang dibuka otomatis jarang jadi sumber
-data penting yang butuh backup mendesak, jadi ini bukan celah berarti.
-
-**File:** `lib/features/pengaturan/backup_screen.dart`, `lib/main.dart`
-(cek saat start), service backup manual yang sudah ada (dipakai ulang, bukan
-dibuat baru).
-
----
-
 ## Item 15 — Tutup Kasir Harian (Rekap Kas)
 
 **Prioritas:** Sedang. **Butuh tabel baru** (belum ada tabel shift/rekap
