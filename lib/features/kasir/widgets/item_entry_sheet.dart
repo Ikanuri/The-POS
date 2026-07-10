@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/models/cart_item.dart';
@@ -71,6 +72,8 @@ class _VariantOption {
 class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   bool _loading = true;
   bool _canOverride = false;
+  /// Tombol edit produk hanya untuk owner/asisten (bukan kasir). Item 20.
+  bool _canEditProduct = false;
   List<_UnitOption> _options = [];
   int _selectedIdx = 0;
 
@@ -109,6 +112,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     final priceService = PriceService(db);
 
     bool canOverride = device.deviceRole != 'kasir';
+    final canEditProduct = device.deviceRole != 'kasir';
     if (!canOverride) {
       canOverride = await db.isPermissionEnabled('override_harga');
     }
@@ -207,6 +211,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _options = opts;
       _variants = variants;
       _canOverride = canOverride;
+      _canEditProduct = canEditProduct;
       _selectedIdx = selIdx;
       _qty = qty;
       _price = price;
@@ -319,6 +324,19 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     Navigator.of(context).pop();
   }
 
+  /// Buka form edit produk (owner/asisten). Tutup sheet dulu lalu push route
+  /// `/produk/:id` via GoRouter — ProdukFormScreen menutup diri dengan
+  /// `context.pop()` GoRouter, jadi tidak boleh di-push lewat Navigator biasa,
+  /// dan tidak boleh menumpuk di atas modal sheet (barrier sheet menutupinya).
+  /// Katalog kasir auto-refresh via stream `watchProducts`, jadi perubahan
+  /// harga/stok langsung tercermin saat produk di-tap lagi.
+  void _editProduct() {
+    final router = GoRouter.of(context);
+    final id = widget.product.id;
+    Navigator.of(context).pop(); // tutup sheet
+    router.push('/produk/$id');
+  }
+
   /// Hapus item (satuan terpilih) dari keranjang. Hanya muncul saat item
   /// memang sudah ada di keranjang (modal dibuka dari keranjang).
   void _delete() {
@@ -382,6 +400,14 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                   style:
                                       Theme.of(context).textTheme.titleMedium),
                             ),
+                            if (_canEditProduct)
+                              IconButton(
+                                icon: Icon(Icons.edit_outlined,
+                                    color: scheme.onSurfaceVariant),
+                                tooltip: 'Edit produk',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: _editProduct,
+                              ),
                             if (_existsInCart)
                               IconButton(
                                 icon: Icon(Icons.delete_outline,

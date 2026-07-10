@@ -15,6 +15,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (Tunai, transfer, QRIS, dsb) — sebelumnya semua pelunasan selalu tercatat
   sebagai "tunai" walau pelanggan membayar lewat transfer. Pilihan metode
   muncul di dialog Bayar di layar Struk, Riwayat Transaksi, dan Laporan.
+- **Edit produk langsung dari layar Kasir.** Saat menekan produk di kasir,
+  kini ada tombol edit (ikon pensil) di pojok modal — buka pengaturan produk
+  itu tanpa harus pindah ke tab Produk. Hanya muncul untuk Owner & Asisten.
 - **Urutan "Harga Lain" bisa diatur.** Di pengaturan produk (tab Produk),
   daftar Harga Lain sekarang punya ikon geser (drag-handle) di tiap baris —
   tahan lalu seret untuk mengubah urutannya. Urutan ini otomatis diikuti

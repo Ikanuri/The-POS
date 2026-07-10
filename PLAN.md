@@ -644,28 +644,6 @@ harga).
 
 ---
 
-## Item 20 — Tombol edit produk di modal tap item kasir (permission-gated)
-
-**Prioritas:** Sedang. **Proposal user.** Reuse layar form yang sudah ada,
-tidak bikin form baru.
-
-**Solusi UI:** ikon **edit (pensil)** di header `ItemEntrySheet`, sebelah
-ikon hapus yang sudah ada (baris 385-392). Tap → push `produk_form_screen`
-untuk produk itu → saat kembali, modal reload (`_load()`) agar harga/stok
-yang berubah langsung tercermin. Dipilih "edit" bukan "settings" (gear = konfig
-app; edit = ubah detail entitas ini).
-
-**Keputusan permission: DIPUTUSKAN — owner & asisten saja, TANPA izin baru.**
-Tombol edit disembunyikan total untuk role Kasir (gate
-`device.deviceRole != 'kasir'`, pola sama seperti pengecekan `canOverride`
-awal di `_load()`) — tidak perlu toggle baru di `kKasirPermissionKeys`,
-tidak perlu seeding/migrasi tambahan.
-
-**File:** `lib/features/kasir/widgets/item_entry_sheet.dart`,
-(bila izin baru) `app_database.dart` + `kasir_permissions_screen.dart`.
-
----
-
 ## Item 21 — Sync UI persisten lintas tab + status progres (global state)
 
 **Prioritas:** Sedang. **Proposal user, DISETUJUI PENUH** — status progres
@@ -741,9 +719,8 @@ siap dieksekusi tanpa menunggu klarifikasi lagi.
 Semua keputusan desain SUDAH DIJAWAB user — daftar ini siap dieksekusi
 tanpa menunggu klarifikasi lagi.
 
-9. ~~**Item 22**~~ **SELESAI** (commit di CHANGELOG) — fix tema chip terpilih
-   sistemik + banner sukses/gagal. **Item 20** (tombol edit di modal,
-   owner/asisten saja tanpa izin baru) — SIAP, quick win, scope kecil.
+9. ~~**Item 22, 10, 20**~~ **SELESAI** (lihat CHANGELOG) — warna chip/banner,
+   metode bayar pelunasan, tombol edit produk di modal kasir.
 10. **Item 18** (beralih pesanan tanpa hold, label auto-generate timestamp)
     — SIAP, prioritas tinggi (rush-hour, paling terasa manfaatnya).
 11. **Item 16** (atribusi varian per-satuan + fix minus, cascade delete
@@ -755,9 +732,8 @@ tanpa menunggu klarifikasi lagi.
 13. **Item 19** (Harga Lain menempel ke satuan — redesain dari chip row ke
     dropdown per-satuan) — SIAP, desain final.
 
-**Quick-win paling murah lintas semua item:** Item 20, Item 14 (edit/hapus
-metode bayar) — scope kecil, tanpa migrasi, tanpa keputusan desain
-menggantung. (Item 22 & Item 10 sudah selesai.)
+**Quick-win tersisa:** Item 14 (edit/hapus metode bayar) — scope kecil,
+tanpa migrasi. (Item 22, 10, 20 sudah selesai.)
 
 **Semua keputusan desain Item 9-22 SUDAH DIJAWAB** — tidak ada lagi yang
 menggantung, seluruh daftar siap dieksekusi berurutan sesuai prioritas di

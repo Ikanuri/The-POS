@@ -6,9 +6,9 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 10 Juli 2026 (mulai eksekusi backlog besar Item 9-22 di
 PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user.
-SELESAI sejauh ini: Item 22 (warna chip/banner), Item 10 (pilih metode bayar
-saat pelunasan hutang). Sisa Item 9,11-21 antre, semua keputusan desain sudah
-final di PLAN.md)._
+SELESAI sejauh ini: Item 22 (warna chip/banner), Item 10 (metode bayar
+pelunasan hutang), Item 20 (tombol edit produk di modal kasir). Sisa Item
+9,11-19,21 antre, semua keputusan desain sudah final di PLAN.md)._
 
 ## Lingkungan sesi ini (PENTING untuk sesi lanjutan)
 Flutter TIDAK terpasang default di environment ini — dipasang manual ke
