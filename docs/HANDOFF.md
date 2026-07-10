@@ -42,61 +42,42 @@ tersendiri; test Item 18 sengaja meng-konsumsi exception ini.
 
 ## Di Mana Kita Sekarang
 
-### Sesi terbaru — audit dataset toko lama → `PLAN.md` → eksekusi 5 item
-Sesi ini dimulai dari pertanyaan user soal update data berkala dari dataset
-toko lama (`docs/reference/Contoh_Dataset.rar`, `Products.csv`), berkembang
-jadi audit besar (bug dropdown pelanggan, bug importer CSV, bug rasio
-multi-satuan hilang saat import, dll). Semua temuan dimasukkan ke
-[PLAN.md](../PLAN.md) (aturan proses ada di CLAUDE.md §Perencanaan — SETIAP
-rencana kerja masuk situ, dihapus begitu selesai dieksekusi). Lalu user minta
-eksekusi 5 item yang sudah "siap dikerjakan sekarang" sekaligus:
+### Sesi terbaru — eksekusi backlog Item 9-22 (12 dari 13 SELESAI)
+User menyetujui eksekusi seluruh saran fitur + bug + proposal (Item 9-22 di
+PLAN.md) dan mendelegasikan penuh ("Anda yang lebih tahu"). Dieksekusi 12 item
+berturut-turut, tiap item: kode + test berjenjang + **revert-verify** + full
+suite hijau + `flutter analyze` bersih + docs, satu commit per item, push ke
+`claude/project-gaps-incomplete-wpgdp8`. Baseline 141 test → **184 test hijau**.
 
-1. **Fix dropdown pelanggan** (`ea6e952`) — hapus
-   `.take(5)`/`.take(8)` di `payment_screen.dart` &
-   `cart_meta_pickers.dart`, ganti `ListView.builder` lazy dengan tinggi
-   terkunci. Ini juga menyelesaikan bug "Mbak Ima tidak ketemu saat ketik
-   ima" (root cause: dipotong sebelum sempat scroll).
-2. **Fix dedup importer CSV** (`3bff1b6`) — kunci dedup lama cuma
-   `nama|unitTypeId`, sekarang prioritas `barcode` → `kode_produk` →
-   fallback nama+satuan. Bug nyata: 2 baris "Sedap Goreng" satuan Dos
-   dengan barcode beda di `Products.csv` user, salah satu dulu terbuang
-   diam-diam.
-3. **Optimasi performa HTML Katalog Pesanan** (`c1a9efe`) — debounce
-   search ~120ms, update stepper per-baris (bukan `renderList()` penuh),
-   `renderCartSheet()` cuma jalan kalau sheet terbuka, `DocumentFragment`
-   untuk batch render baris. **Diverifikasi pakai Chromium headless
-   (Playwright)** — bukan cuma `flutter test` (JS tidak tereksekusi di
-   situ). Skrip verifikasi: buat HTML sample 300 produk, load via
-   `playwright.chromium.launch({executablePath: '/opt/pw-browsers/
-   chromium-1194/chrome-linux/chrome'})`, cek debounce timing +
-   sinkronisasi qty antara list & cart sheet.
-4. **Urutan qty/satuan struk in-app** (`6f1fbc4`) — `"pcs 1 x"` →
-   `"1 pcs x"`, menyamakan dengan versi cetak/share yang sudah benar.
-5. **Reorder "Harga Lain" via drag-handle** (`b949268`) — kolom baru
-   `alt_prices.sortOrder` (`schemaVersion` 9→10), `getAltPrices()` ganti
-   urut ke `sortOrder ASC`, UI `ReorderableListView` + drag-handle di
-   `produk_form_screen.dart`. **Guard penting di migrasi:**
-   `if (from < 10 && from >= 8)` sebelum `addColumn(altPrices,
-   altPrices.sortOrder)` — kalau upgrade LANGSUNG dari versi < 8,
-   `createTable(altPrices)` di migrasi 7→8 SUDAH memakai skema Dart
-   TERKINI (otomatis termasuk `sortOrder`), jadi `addColumn` lagi akan
-   crash "duplicate column name". Ditemukan lewat full test suite (bukan
-   cuma test migrasi baru sendiri) — jangan lupa jalankan SEMUA test
-   setelah ubah `schemaVersion`, bukan cuma test yang baru ditulis.
+Selesai (lihat CHANGELOG untuk hash): **22** warna chip terpilih (fix tema
+sistemik `chipTheme.labelStyle` state-aware, kena 8 titik) + banner sukses
+hijau/gagal merah • **10** metode bayar pelunasan hutang (dialog reusable
+`debt_payment_dialog.dart`) • **20** tombol edit produk di modal kasir
+(owner/asisten) • **14** edit/hapus metode bayar • **9** pengeluaran + Laba
+Bersih (`ExpensesScreen`; Laba Bersih = Laba Kotor − daily_expense −
+change_given) • **12** Buku Hutang (tab Laporan ke-5) • **18** beralih pesanan
+tertahan auto-hold (tanpa dialog "Ganti Keranjang") • **16** atribusi varian
+per-satuan (`CartItem.parentProductUnitId` + `belongsToParent`, cascade delete)
++ fix tombol minus • **19** Harga Lain/grosir → dropdown di field Harga •
+**11** stok menipis (`ProductUnits.minStock`, **schemaVersion 11**) badge+filter
+• **13** pengingat backup (cek saat app dibuka, `BackupReminder`) • **15**
+Tutup Kasir harian (tabel `cash_closings`, **schemaVersion 12**).
 
-**Item lain di PLAN.md (3, 4, 5, 8) BELUM dieksekusi** — lihat file itu untuk
-detail lengkap & alasan masing-masing masih menggantung (butuh data final
-dari user / keputusan desain / dependency ke item lain).
+**schemaVersion sekarang 12.** Migrasi baru: v11 addColumn `product_units.
+min_stock` (tanpa guard `from>=X` — product_units cuma di base schema); v12
+createTable `cash_closings`. Fixture migrasi test v7-v10 ditambah tabel
+`product_units` minimal + assert versi akhir 12.
 
-Test baru sesi ini (semua lolos revert-verify): `test/csv_import_dedup_test.dart`
-(Tier 1), `test/migration_v10_test.dart` (Tier 1, migrasi + ordering),
-`test/produk_form_reorder_alt_price_test.dart` (Tier 2 widget, simulasi drag
-gesture asli via `tester.startGesture`+`moveBy` bertahap — drag satu
-lompatan besar TIDAK cukup dikenali `ReorderableListView`, butuh beberapa
-event `pointermove` kecil). Test migrasi lama (`v7`, `v8`, `v9`) diperbarui
-fixture-nya (tambah tabel `alt_prices` minimal, assert versi akhir 10) supaya
-tetap valid setelah `schemaVersion` naik. **`flutter analyze` bersih, semua
-141 test hijau.**
+### ⚠️ MENGGANTUNG — Item 21+17 (sync) BELUM dikerjakan (sengaja ditunda)
+Satu-satunya item backlog yang belum: **Item 21** (angkat state sync ke
+provider global + banner persisten di shell + lepaskan lifecycle host dari
+`SyncScreen.dispose` yang kini `stopHost()` total) & **Item 17** (persist
+`_pendingQueue` in-memory ke DB agar selamat restart, lalu majukan watermark
+upload). **Sengaja ditunda ke sesi fokus** karena menyentuh infrastruktur sync
+multi-device yang KRITIS — bagian "majukan watermark upload" berisiko
+kehilangan data diam-diam bila salah (persis yang dicegah full-dump sekarang),
+dan butuh test round-trip HTTP asli (HttpOverrides escape-hatch, lihat
+CLAUDE.md §Metode Test level 3). Detail lengkap masih di PLAN.md Item 17 & 21.
 
 **Catatan lingkungan sesi ini:** binary `flutter` ada di `/tmp/flutter/bin/flutter`
 di environment ini (BUKAN `/opt/flutter/bin` seperti disebut CLAUDE.md — itu
