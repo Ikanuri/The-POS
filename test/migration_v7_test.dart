@@ -20,6 +20,8 @@ void main() {
     // ── 1. Bangun DB "v6" mentah: hanya tabel yang disentuh migrasi, TANPA
     //       indeks pembayaran (persis kondisi instalasi lama). ─────────────
     final v6 = raw.sqlite3.open(path);
+    // product_units diperlukan agar migrasi v11 (addColumn min_stock) tak gagal.
+    v6.execute('CREATE TABLE product_units(id TEXT PRIMARY KEY, product_id TEXT, unit_type_id INTEGER, is_base_unit INTEGER, ratio_to_base REAL, is_non_stock INTEGER);');
     v6.execute('''
       CREATE TABLE transactions(
         id TEXT PRIMARY KEY, local_id TEXT UNIQUE, kasir_id TEXT, customer_id TEXT,
@@ -79,7 +81,7 @@ void main() {
     // menambah alt_prices, change_taken & sort_order, tapi test ini fokus
     // ke migrasi 6->7).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 10);
+    expect(ver.data.values.first, 11);
 
     // Data lama tetap utuh setelah migrasi.
     final pay = await db.customSelect(

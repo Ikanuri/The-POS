@@ -1120,9 +1120,22 @@ class $ProductUnitsTable extends ProductUnits
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_non_stock" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _minStockMeta =
+      const VerificationMeta('minStock');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, productId, unitTypeId, isBaseUnit, ratioToBase, isNonStock];
+  late final GeneratedColumn<int> minStock = GeneratedColumn<int>(
+      'min_stock', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        productId,
+        unitTypeId,
+        isBaseUnit,
+        ratioToBase,
+        isNonStock,
+        minStock
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1168,6 +1181,10 @@ class $ProductUnitsTable extends ProductUnits
           isNonStock.isAcceptableOrUnknown(
               data['is_non_stock']!, _isNonStockMeta));
     }
+    if (data.containsKey('min_stock')) {
+      context.handle(_minStockMeta,
+          minStock.isAcceptableOrUnknown(data['min_stock']!, _minStockMeta));
+    }
     return context;
   }
 
@@ -1189,6 +1206,8 @@ class $ProductUnitsTable extends ProductUnits
           .read(DriftSqlType.double, data['${effectivePrefix}ratio_to_base'])!,
       isNonStock: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_non_stock'])!,
+      minStock: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}min_stock']),
     );
   }
 
@@ -1205,13 +1224,18 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
   final bool isBaseUnit;
   final double ratioToBase;
   final bool isNonStock;
+
+  /// Item 11: ambang stok menipis, disimpan di baris satuan DASAR saja
+  /// (stok selalu dianker ke satuan dasar). null = tidak dipantau.
+  final int? minStock;
   const ProductUnit(
       {required this.id,
       required this.productId,
       this.unitTypeId,
       required this.isBaseUnit,
       required this.ratioToBase,
-      required this.isNonStock});
+      required this.isNonStock,
+      this.minStock});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1223,6 +1247,9 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
     map['is_base_unit'] = Variable<bool>(isBaseUnit);
     map['ratio_to_base'] = Variable<double>(ratioToBase);
     map['is_non_stock'] = Variable<bool>(isNonStock);
+    if (!nullToAbsent || minStock != null) {
+      map['min_stock'] = Variable<int>(minStock);
+    }
     return map;
   }
 
@@ -1236,6 +1263,9 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       isBaseUnit: Value(isBaseUnit),
       ratioToBase: Value(ratioToBase),
       isNonStock: Value(isNonStock),
+      minStock: minStock == null && nullToAbsent
+          ? const Value.absent()
+          : Value(minStock),
     );
   }
 
@@ -1249,6 +1279,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       isBaseUnit: serializer.fromJson<bool>(json['isBaseUnit']),
       ratioToBase: serializer.fromJson<double>(json['ratioToBase']),
       isNonStock: serializer.fromJson<bool>(json['isNonStock']),
+      minStock: serializer.fromJson<int?>(json['minStock']),
     );
   }
   @override
@@ -1261,6 +1292,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       'isBaseUnit': serializer.toJson<bool>(isBaseUnit),
       'ratioToBase': serializer.toJson<double>(ratioToBase),
       'isNonStock': serializer.toJson<bool>(isNonStock),
+      'minStock': serializer.toJson<int?>(minStock),
     };
   }
 
@@ -1270,7 +1302,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           Value<int?> unitTypeId = const Value.absent(),
           bool? isBaseUnit,
           double? ratioToBase,
-          bool? isNonStock}) =>
+          bool? isNonStock,
+          Value<int?> minStock = const Value.absent()}) =>
       ProductUnit(
         id: id ?? this.id,
         productId: productId ?? this.productId,
@@ -1278,6 +1311,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
         isBaseUnit: isBaseUnit ?? this.isBaseUnit,
         ratioToBase: ratioToBase ?? this.ratioToBase,
         isNonStock: isNonStock ?? this.isNonStock,
+        minStock: minStock.present ? minStock.value : this.minStock,
       );
   ProductUnit copyWithCompanion(ProductUnitsCompanion data) {
     return ProductUnit(
@@ -1291,6 +1325,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           data.ratioToBase.present ? data.ratioToBase.value : this.ratioToBase,
       isNonStock:
           data.isNonStock.present ? data.isNonStock.value : this.isNonStock,
+      minStock: data.minStock.present ? data.minStock.value : this.minStock,
     );
   }
 
@@ -1302,14 +1337,15 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           ..write('unitTypeId: $unitTypeId, ')
           ..write('isBaseUnit: $isBaseUnit, ')
           ..write('ratioToBase: $ratioToBase, ')
-          ..write('isNonStock: $isNonStock')
+          ..write('isNonStock: $isNonStock, ')
+          ..write('minStock: $minStock')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(
-      id, productId, unitTypeId, isBaseUnit, ratioToBase, isNonStock);
+      id, productId, unitTypeId, isBaseUnit, ratioToBase, isNonStock, minStock);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1319,7 +1355,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           other.unitTypeId == this.unitTypeId &&
           other.isBaseUnit == this.isBaseUnit &&
           other.ratioToBase == this.ratioToBase &&
-          other.isNonStock == this.isNonStock);
+          other.isNonStock == this.isNonStock &&
+          other.minStock == this.minStock);
 }
 
 class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
@@ -1329,6 +1366,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
   final Value<bool> isBaseUnit;
   final Value<double> ratioToBase;
   final Value<bool> isNonStock;
+  final Value<int?> minStock;
   final Value<int> rowid;
   const ProductUnitsCompanion({
     this.id = const Value.absent(),
@@ -1337,6 +1375,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.isBaseUnit = const Value.absent(),
     this.ratioToBase = const Value.absent(),
     this.isNonStock = const Value.absent(),
+    this.minStock = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProductUnitsCompanion.insert({
@@ -1346,6 +1385,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.isBaseUnit = const Value.absent(),
     this.ratioToBase = const Value.absent(),
     this.isNonStock = const Value.absent(),
+    this.minStock = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         productId = Value(productId);
@@ -1356,6 +1396,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     Expression<bool>? isBaseUnit,
     Expression<double>? ratioToBase,
     Expression<bool>? isNonStock,
+    Expression<int>? minStock,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1365,6 +1406,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       if (isBaseUnit != null) 'is_base_unit': isBaseUnit,
       if (ratioToBase != null) 'ratio_to_base': ratioToBase,
       if (isNonStock != null) 'is_non_stock': isNonStock,
+      if (minStock != null) 'min_stock': minStock,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1376,6 +1418,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       Value<bool>? isBaseUnit,
       Value<double>? ratioToBase,
       Value<bool>? isNonStock,
+      Value<int?>? minStock,
       Value<int>? rowid}) {
     return ProductUnitsCompanion(
       id: id ?? this.id,
@@ -1384,6 +1427,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       isBaseUnit: isBaseUnit ?? this.isBaseUnit,
       ratioToBase: ratioToBase ?? this.ratioToBase,
       isNonStock: isNonStock ?? this.isNonStock,
+      minStock: minStock ?? this.minStock,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1409,6 +1453,9 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     if (isNonStock.present) {
       map['is_non_stock'] = Variable<bool>(isNonStock.value);
     }
+    if (minStock.present) {
+      map['min_stock'] = Variable<int>(minStock.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1424,6 +1471,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
           ..write('isBaseUnit: $isBaseUnit, ')
           ..write('ratioToBase: $ratioToBase, ')
           ..write('isNonStock: $isNonStock, ')
+          ..write('minStock: $minStock, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -10604,6 +10652,7 @@ typedef $$ProductUnitsTableCreateCompanionBuilder = ProductUnitsCompanion
   Value<bool> isBaseUnit,
   Value<double> ratioToBase,
   Value<bool> isNonStock,
+  Value<int?> minStock,
   Value<int> rowid,
 });
 typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
@@ -10614,6 +10663,7 @@ typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
   Value<bool> isBaseUnit,
   Value<double> ratioToBase,
   Value<bool> isNonStock,
+  Value<int?> minStock,
   Value<int> rowid,
 });
 
@@ -10723,6 +10773,9 @@ class $$ProductUnitsTableFilterComposer
 
   ColumnFilters<bool> get isNonStock => $composableBuilder(
       column: $table.isNonStock, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get minStock => $composableBuilder(
+      column: $table.minStock, builder: (column) => ColumnFilters(column));
 
   $$ProductsTableFilterComposer get productId {
     final $$ProductsTableFilterComposer composer = $composerBuilder(
@@ -10853,6 +10906,9 @@ class $$ProductUnitsTableOrderingComposer
   ColumnOrderings<bool> get isNonStock => $composableBuilder(
       column: $table.isNonStock, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get minStock => $composableBuilder(
+      column: $table.minStock, builder: (column) => ColumnOrderings(column));
+
   $$ProductsTableOrderingComposer get productId {
     final $$ProductsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -10897,6 +10953,9 @@ class $$ProductUnitsTableAnnotationComposer
 
   GeneratedColumn<bool> get isNonStock => $composableBuilder(
       column: $table.isNonStock, builder: (column) => column);
+
+  GeneratedColumn<int> get minStock =>
+      $composableBuilder(column: $table.minStock, builder: (column) => column);
 
   $$ProductsTableAnnotationComposer get productId {
     final $$ProductsTableAnnotationComposer composer = $composerBuilder(
@@ -11039,6 +11098,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<bool> isBaseUnit = const Value.absent(),
             Value<double> ratioToBase = const Value.absent(),
             Value<bool> isNonStock = const Value.absent(),
+            Value<int?> minStock = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion(
@@ -11048,6 +11108,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             isBaseUnit: isBaseUnit,
             ratioToBase: ratioToBase,
             isNonStock: isNonStock,
+            minStock: minStock,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -11057,6 +11118,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<bool> isBaseUnit = const Value.absent(),
             Value<double> ratioToBase = const Value.absent(),
             Value<bool> isNonStock = const Value.absent(),
+            Value<int?> minStock = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion.insert(
@@ -11066,6 +11128,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             isBaseUnit: isBaseUnit,
             ratioToBase: ratioToBase,
             isNonStock: isNonStock,
+            minStock: minStock,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

@@ -79,6 +79,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _kodeCtrl = TextEditingController();
+  // Item 11: ambang stok menipis (per-produk, disimpan di satuan dasar).
+  final _minStockCtrl = TextEditingController();
   bool _isLoading = false;
   bool _isEdit = false;
   bool _readOnly = false;
@@ -151,6 +153,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       _nameCtrl.text = product.name;
       _kodeCtrl.text = product.kodeProduk ?? '';
       final units = await db.getProductUnits(_productId!);
+      final baseUnit =
+          units.where((u) => u.isBaseUnit).firstOrNull ?? units.firstOrNull;
+      if (baseUnit?.minStock != null) {
+        _minStockCtrl.text = baseUnit!.minStock.toString();
+      }
       final entries = <_UnitEntry>[];
       for (final u in units) {
         final tiers = await db.getPriceTiers(u.id);
@@ -363,6 +370,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         createdAt: _isEdit ? const Value.absent() : Value(now),
       );
 
+      final minStockVal = int.tryParse(_minStockCtrl.text.trim());
       final unitCompanions = _units
           .map((u) => ProductUnitsCompanion(
                 id: Value(u.id),
@@ -371,6 +379,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 isBaseUnit: Value(u.isBaseUnit),
                 ratioToBase: Value(u.ratioToBase),
                 isNonStock: const Value(false),
+                // Ambang stok menipis hanya di satuan dasar (Item 11).
+                minStock: Value(u.isBaseUnit ? minStockVal : null),
               ))
           .toList();
 
@@ -488,6 +498,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _kodeCtrl.dispose();
+    _minStockCtrl.dispose();
     super.dispose();
   }
 
@@ -609,6 +620,21 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Kode Produk',
                               hintText: 'Contoh: IMI-001 (opsional)',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // Item 11: ambang stok menipis (satuan dasar).
+                          TextFormField(
+                            controller: _minStockCtrl,
+                            readOnly: _readOnly,
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => _markDirty(),
+                            decoration: const InputDecoration(
+                              labelText: 'Stok Minimum',
+                              hintText: 'Kosongkan bila tidak dipantau',
+                              helperText:
+                                  'Peringatan muncul bila stok satuan dasar '
+                                  'di bawah angka ini',
                             ),
                           ),
                           const SizedBox(height: 12),

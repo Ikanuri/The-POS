@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Peringatan stok menipis.** Di pengaturan produk kini ada kolom "Stok
+  Minimum" — isi angka ambangnya (kosongkan bila tidak ingin dipantau). Di
+  tab Produk muncul chip "Stok Menipis (jumlah)" berwarna merah untuk
+  menyaring produk yang stoknya sudah di bawah ambang, agar cepat tahu apa
+  yang perlu segera di-restock.
 - **Pilihan "Harga Lain" & grosir di kasir kini lebih rapi.** Saat menekan
   produk, harga grosir dan Harga Lain milik satuan yang dipilih dikumpulkan
   dalam satu tombol "Harga lain" di bawah kolom harga (dengan angka jumlah

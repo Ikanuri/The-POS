@@ -100,7 +100,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -186,6 +186,13 @@ class AppDatabase extends _$AppDatabase {
             // TERKINI (sudah termasuk sort_order) — addColumn lagi di sini
             // akan gagal "duplicate column name".
             await m.addColumn(altPrices, altPrices.sortOrder);
+          }
+          if (from < 11) {
+            // Ambang "stok menipis" per satuan dasar (Item 11). ProductUnits
+            // hanya dibuat di base schema (onCreate), TIDAK di createTable
+            // migrasi inkremental mana pun — jadi tak perlu guard `from >= X`
+            // seperti alt_prices.sortOrder; addColumn aman untuk semua upgrade.
+            await m.addColumn(productUnits, productUnits.minStock);
           }
         },
         beforeOpen: (details) async {
@@ -515,6 +522,38 @@ class AppDatabase extends _$AppDatabase {
       out[r.data['uid'] as String] = (r.data['qty'] as num).toDouble();
     }
     return out;
+  }
+
+  // ───────────────────────── Stok menipis (Item 11) ────────────────────────
+
+  /// SQL: baris satuan DASAR aktif yang punya ambang minStock DAN stok
+  /// terkini (stock_after ledger terbaru) < ambang. Diurut paling kritis dulu.
+  static const _lowStockSql = '''
+    SELECT * FROM (
+      SELECT pu.product_id AS pid, p.name AS name, pu.min_stock AS min_stock,
+        COALESCE((SELECT sl.stock_after FROM stock_ledger sl
+                  WHERE sl.product_unit_id = pu.id
+                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      WHERE pu.is_base_unit = 1 AND pu.min_stock IS NOT NULL AND p.is_active = 1
+    ) WHERE stock < min_stock
+    ORDER BY (stock - min_stock) ASC''';
+
+  /// Stream jumlah produk yang stoknya menipis (untuk badge tab Produk).
+  Stream<int> watchLowStockCount() {
+    return customSelect(
+      'SELECT COUNT(*) AS c FROM ($_lowStockSql)',
+      readsFrom: {productUnits, products, stockLedger},
+    ).watchSingle().map((r) => (r.data['c'] as int?) ?? 0);
+  }
+
+  /// Set id produk yang stoknya menipis (untuk filter daftar Produk).
+  Future<Set<String>> getLowStockProductIds() async {
+    final rows = await customSelect(_lowStockSql,
+            readsFrom: {productUnits, products, stockLedger})
+        .get();
+    return rows.map((r) => r.data['pid'] as String).toSet();
   }
 
   Future<bool> isPermissionEnabled(String key) async {

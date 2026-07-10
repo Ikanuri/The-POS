@@ -21,6 +21,17 @@ final _groupsProvider = FutureProvider<List<ProductGroup>>((ref) {
   return db.getAllProductGroups();
 });
 
+/// Item 11 — filter "Stok Menipis" aktif/tidak, jumlah untuk badge, & set id.
+final _lowStockFilterProvider = StateProvider<bool>((ref) => false);
+final _lowStockCountProvider = StreamProvider<int>((ref) {
+  return ref.watch(databaseProvider).watchLowStockCount();
+});
+final _lowStockIdsProvider = FutureProvider.autoDispose<Set<String>>((ref) {
+  // Re-hitung saat daftar produk berubah (mis. stok disesuaikan).
+  ref.watch(_lowStockCountProvider);
+  return ref.watch(databaseProvider).getLowStockProductIds();
+});
+
 final _canEditProdukProvider = FutureProvider.autoDispose<bool>((ref) async {
   final device = ref.watch(deviceProvider);
   if (device.isOwner || device.deviceRole == 'asisten') return true;
@@ -52,6 +63,10 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
     final productsAsync =
         ref.watch(_productsStreamProvider((query, groupId)));
     final groupsAsync = ref.watch(_groupsProvider);
+    final lowStockFilter = ref.watch(_lowStockFilterProvider);
+    final lowStockCount = ref.watch(_lowStockCountProvider).valueOrNull ?? 0;
+    final lowStockIds =
+        ref.watch(_lowStockIdsProvider).valueOrNull ?? const <String>{};
     final baseCanEdit = device.isOwner || device.deviceRole == 'asisten';
     final canEdit =
         ref.watch(_canEditProdukProvider).valueOrNull ?? baseCanEdit;
@@ -119,12 +134,29 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   children: [
+                    if (lowStockCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: FilterChip(
+                          avatar: Icon(Icons.warning_amber_rounded,
+                              size: 16, color: scheme.error),
+                          label: Text('Stok Menipis ($lowStockCount)',
+                              style: const TextStyle(fontSize: 12)),
+                          selected: lowStockFilter,
+                          selectedColor: scheme.errorContainer,
+                          onSelected: (v) => ref
+                              .read(_lowStockFilterProvider.notifier)
+                              .state = v,
+                        ),
+                      ),
                     _GroupChip(
                       label: 'Semua',
-                      selected: groupId == null,
-                      onTap: () => ref
-                          .read(_selectedGroupProvider.notifier)
-                          .state = null,
+                      selected: groupId == null && !lowStockFilter,
+                      onTap: () {
+                        ref.read(_lowStockFilterProvider.notifier).state =
+                            false;
+                        ref.read(_selectedGroupProvider.notifier).state = null;
+                      },
                     ),
                     ...named.map((g) => _GroupChip(
                           label: g.name!,
@@ -142,7 +174,12 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
           ),
           Expanded(
             child: productsAsync.when(
-              data: (prods) {
+              data: (allProds) {
+                final prods = lowStockFilter
+                    ? allProds
+                        .where((p) => lowStockIds.contains(p.id))
+                        .toList()
+                    : allProds;
                 if (prods.isEmpty) {
                   return Center(
                     child: Column(

@@ -291,41 +291,6 @@ menunggu keputusan user):**
 
 ---
 
-## Item 11 — Peringatan Stok Menipis
-
-**Prioritas:** Sedang-tinggi. **Butuh migrasi schema** (kolom baru, mis.
-`minStock` di `ProductUnits` — `product_tables.dart`, `schemaVersion` 10→11).
-**Wajib pakai guard versi lama** seperti kasus `alt_prices.sortOrder`
-kemarin (`if (from < 11 && from >= X)` sebelum `addColumn`, cek dulu di
-migrasi mana `ProductUnits` terakhir di-`createTable` dengan skema Dart
-terkini) — kalau lupa, upgrade dari versi sangat lama bisa crash "duplicate
-column name".
-
-**Desain UI/UX:**
-- Badge merah kecil di tab "Produk" (bottom-nav / app bar
-  `produk_list_screen.dart`) menampilkan jumlah produk di bawah ambang.
-- Field opsional "Stok Minimum" di `produk_form_screen.dart`, nempel ke
-  grup field stok yang sudah ada (kosong = tidak dipantau).
-- Filter chip "Stok Menipis" di `produk_list_screen.dart` (bukan layar
-  terpisah).
-
-**DIPUTUSKAN: ambang per-produk saja, disimpan di baris satuan DASAR**
-(`ProductUnits` yang `isBaseUnit = true`). Dikonfirmasi lewat cek kode
-`currentStock()`/`_baseUnitOf()` (`app_database.dart` baris ~306-351): stok
-**selalu** disimpan sebagai SATU angka di satuan dasar (`stockLedger`) —
-stok satuan lain (Dus/Pak/dst) murni hasil bagi dari angka itu dengan
-`ratioToBase`, bukan angka independen. Ambang per-satuan bisa saling
-kontradiksi (mis. minStock Dus=1 vs minStock Pcs=20 dengan rasio 1:12 bisa
-menunjuk ke stok fisik yang sama tapi memberi sinyal "aman" & "menipis"
-sekaligus). Field "Stok Minimum" di form produk cukup muncul SEKALI per
-produk, bukan berulang per satuan.
-
-**File:** `lib/core/database/tables/product_tables.dart`,
-`lib/core/database/app_database.dart` (migrasi), `produk_form_screen.dart`,
-`produk_list_screen.dart`.
-
----
-
 ## Item 13 — Backup Otomatis Terjadwal + Pengingat
 
 **Prioritas:** Rendah-sedang. Tidak butuh tabel baru — cukup key baru di

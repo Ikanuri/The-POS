@@ -25,6 +25,12 @@ void main() {
         id TEXT PRIMARY KEY, product_unit_id TEXT, label TEXT,
         price INTEGER, created_at INTEGER);
     ''');
+    // product_units diperlukan agar migrasi v11 (addColumn min_stock) tak gagal.
+    v9.execute('''
+      CREATE TABLE product_units(
+        id TEXT PRIMARY KEY, product_id TEXT, unit_type_id INTEGER,
+        is_base_unit INTEGER, ratio_to_base REAL, is_non_stock INTEGER);
+    ''');
     v9.execute(
         "INSERT INTO alt_prices(id, product_unit_id, label, price, created_at) "
         "VALUES('a1','u1','Harga Toko A',3000,1700000000)");
@@ -60,7 +66,7 @@ void main() {
     expect(updated.sortOrder, 5);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 10);
+    expect(ver.data.values.first, 11);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
