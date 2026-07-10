@@ -436,9 +436,8 @@ menunggu keputusan user):**
 
 ## Item 9 — Reorder "Harga Lain" di tab Produk (urutan tampil chip di ItemEntrySheet ikut berubah)
 
-**Status:** Diusulkan user, siap dirancang teknis — tidak ada ambiguitas
-scope besar seperti item lain (bukan pertanyaan trade-off, murni fitur baru
-yang diminta langsung).
+**Status:** Siap eksekusi — desain teknis lengkap, tidak ada pertanyaan
+menggantung (kontrol reorder sudah dikonfirmasi user: drag-handle).
 
 **Konteks:** dropdown terpisah untuk "Harga Lain" (dibahas sebelumnya) TIDAK
 jadi dikerjakan — user konfirmasi chip yang sudah ada di `ItemEntrySheet`
@@ -468,14 +467,19 @@ sering dipakai ditaruh paling depan/kiri, bukan sekadar urutan input).
    `createdAt` lagi).
 2. **UI reorder di form Produk** (`produk_form_screen.dart`, bagian
    "Harga Lain" ~baris disebut di Item sebelumnya): tambah kontrol urutan
-   di tiap baris — draft dua opsi, perlu dipilih salah satu:
-   - **Drag-handle (`ReorderableListView`)** — geser baris naik/turun
-     langsung, terasa lebih modern, tapi butuh area sentuh drag-handle
-     yang cukup besar di layar kecil.
-   - **Tombol panah naik/turun** — lebih konsisten dengan pola tombol
-     `IconButton` yang sudah dipakai di form ini (mis. tombol hapus tier
-     grosir), lebih mudah diakses tanpa gestur drag, tapi butuh beberapa
-     tap untuk pindah jauh.
+   di tiap baris. **Keputusan (dikonfirmasi user): drag-handle**, alasan
+   eksplisit — "supaya saya bisa bebas drag sambil scroll". Implikasi
+   teknis: kalau daftar "Harga Lain" cukup panjang hingga melebihi area
+   layar, drag harus tetap bisa dilakukan sambil list auto-scroll (bukan
+   cuma reorder dalam area yang kelihatan saja) — pastikan implementasi
+   pakai widget yang mendukung auto-scroll-saat-drag (mis.
+   `ReorderableListView` bawaan Flutter sudah punya perilaku ini secara
+   default selama dibungkus scrollable yang benar; kalau "Harga Lain" ini
+   dirender di dalam `SingleChildScrollView`/`Column` form yang lebih
+   besar alih-alih list mandiri, perlu dicek ulang agar auto-scroll tetap
+   jalan — mungkin perlu `ReorderableListView` dengan `shrinkWrap: true` +
+   `physics: NeverScrollableScrollPhysics` di dalam parent scroll, atau
+   pola drag-scroll manual kalau itu tidak cukup mulus).
 3. Saat simpan (`saveProduct`), `sortOrder` diisi dari POSISI baris di
    list form saat itu (index 0, 1, 2, ...) — otomatis konsisten dengan
    pola delete-then-reinsert yang sudah dipakai untuk harga-lain (tidak
@@ -483,9 +487,6 @@ sering dipakai ditaruh paling depan/kiri, bukan sekadar urutan input).
 4. **`ItemEntrySheet` TIDAK PERLU diubah sama sekali** — chip harga-lain di
    sana sudah otomatis mengikuti urutan hasil `getAltPrices()`, jadi begitu
    query-nya diurut oleh `sortOrder`, tampilannya otomatis ikut berubah.
-
-**Pertanyaan desain kecil yang masih perlu dijawab user:** drag-handle atau
-tombol panah naik/turun untuk kontrol reorder-nya? (lihat poin 2 di atas)
 
 **File yang terlibat:**
 - `lib/core/database/tables/pricing_tables.dart` (tambah kolom `sortOrder`
@@ -501,9 +502,9 @@ tombol panah naik/turun untuk kontrol reorder-nya? (lihat poin 2 di atas)
 
 ## Urutan eksekusi yang disarankan
 
-1. **Item 1, Item 2, Item 6, Item 7** bisa dikerjakan bersamaan sekarang —
-   kecil/jelas/independen, tidak berisiko ke alur lain, tidak saling
-   bergantung satu sama lain.
+1. **Item 1, Item 2, Item 6, Item 7, Item 9** bisa dikerjakan bersamaan
+   sekarang — kecil/jelas/independen, tidak berisiko ke alur lain, tidak
+   saling bergantung satu sama lain.
 2. **Item 3** (3a konversi format + 3b fix rasio multi-satuan, keduanya di
    file yang sama jadi wajar dikerjakan sekaligus) — mulai begitu user siap
    kirim/konfirmasi data produk final yang mau diimpor.
@@ -514,6 +515,3 @@ tombol panah naik/turun untuk kontrol reorder-nya? (lihat poin 2 di atas)
    3 pertanyaan desain di atas.
 5. **Item 8** menunggu keputusan user soal trade-off (kompleksitas HTML vs
    manfaat, relevansi ke pelanggan vs kasir).
-6. **Item 9** (reorder Harga Lain) bisa masuk kelompok "siap dikerjakan
-   sekarang" seperti poin 1 begitu user jawab 1 pertanyaan kecil (drag-
-   handle vs tombol panah) — tidak bergantung ke item lain.
