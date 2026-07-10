@@ -100,7 +100,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -176,6 +176,16 @@ class AppDatabase extends _$AppDatabase {
             // Centang "kembalian sudah diambil" di struk — mencegah kembalian
             // diserahkan dua kali untuk nota yang barangnya diambil belakangan.
             await m.addColumn(transactions, transactions.changeTaken);
+          }
+          if (from < 10 && from >= 8) {
+            // Urutan tampil "Harga Lain" bisa direorder (drag-handle) di
+            // form Produk — butuh kolom urutan eksplisit, tidak bisa lagi
+            // mengandalkan createdAt (lihat komentar di tabel AltPrices).
+            // Guard `from >= 8`: kalau upgrade langsung dari versi < 8,
+            // `createTable(altPrices)` di atas SUDAH memakai definisi tabel
+            // TERKINI (sudah termasuk sort_order) — addColumn lagi di sini
+            // akan gagal "duplicate column name".
+            await m.addColumn(altPrices, altPrices.sortOrder);
           }
         },
         beforeOpen: (details) async {
@@ -283,12 +293,13 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
-  /// Harga alternatif berlabel untuk satu satuan produk, diurut waktu dibuat.
+  /// Harga alternatif berlabel untuk satu satuan produk, diurut sesuai
+  /// posisi hasil drag-reorder user di form Produk (bukan waktu dibuat).
   /// Beda dari [getPriceTiers]: bukan tier qty, murni pilihan cepat manual.
   Future<List<AltPrice>> getAltPrices(String productUnitId) {
     return (select(altPrices)
           ..where((t) => t.productUnitId.equals(productUnitId))
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
   }
 

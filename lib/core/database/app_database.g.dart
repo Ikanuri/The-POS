@@ -2141,9 +2141,17 @@ class $AltPricesTable extends AltPrices
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _sortOrderMeta =
+      const VerificationMeta('sortOrder');
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+      'sort_order', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   @override
   List<GeneratedColumn> get $columns =>
-      [id, productUnitId, label, price, createdAt];
+      [id, productUnitId, label, price, createdAt, sortOrder];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2183,6 +2191,10 @@ class $AltPricesTable extends AltPrices
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     }
+    if (data.containsKey('sort_order')) {
+      context.handle(_sortOrderMeta,
+          sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
+    }
     return context;
   }
 
@@ -2202,6 +2214,8 @@ class $AltPricesTable extends AltPrices
           .read(DriftSqlType.int, data['${effectivePrefix}price'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      sortOrder: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sort_order'])!,
     );
   }
 
@@ -2217,12 +2231,14 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
   final String label;
   final int price;
   final DateTime createdAt;
+  final int sortOrder;
   const AltPrice(
       {required this.id,
       required this.productUnitId,
       required this.label,
       required this.price,
-      required this.createdAt});
+      required this.createdAt,
+      required this.sortOrder});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2231,6 +2247,7 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
     map['label'] = Variable<String>(label);
     map['price'] = Variable<int>(price);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['sort_order'] = Variable<int>(sortOrder);
     return map;
   }
 
@@ -2241,6 +2258,7 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
       label: Value(label),
       price: Value(price),
       createdAt: Value(createdAt),
+      sortOrder: Value(sortOrder),
     );
   }
 
@@ -2253,6 +2271,7 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
       label: serializer.fromJson<String>(json['label']),
       price: serializer.fromJson<int>(json['price']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
     );
   }
   @override
@@ -2264,6 +2283,7 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
       'label': serializer.toJson<String>(label),
       'price': serializer.toJson<int>(price),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'sortOrder': serializer.toJson<int>(sortOrder),
     };
   }
 
@@ -2272,13 +2292,15 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
           String? productUnitId,
           String? label,
           int? price,
-          DateTime? createdAt}) =>
+          DateTime? createdAt,
+          int? sortOrder}) =>
       AltPrice(
         id: id ?? this.id,
         productUnitId: productUnitId ?? this.productUnitId,
         label: label ?? this.label,
         price: price ?? this.price,
         createdAt: createdAt ?? this.createdAt,
+        sortOrder: sortOrder ?? this.sortOrder,
       );
   AltPrice copyWithCompanion(AltPricesCompanion data) {
     return AltPrice(
@@ -2289,6 +2311,7 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
       label: data.label.present ? data.label.value : this.label,
       price: data.price.present ? data.price.value : this.price,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
     );
   }
 
@@ -2299,13 +2322,15 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
           ..write('productUnitId: $productUnitId, ')
           ..write('label: $label, ')
           ..write('price: $price, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('sortOrder: $sortOrder')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, productUnitId, label, price, createdAt);
+  int get hashCode =>
+      Object.hash(id, productUnitId, label, price, createdAt, sortOrder);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2314,7 +2339,8 @@ class AltPrice extends DataClass implements Insertable<AltPrice> {
           other.productUnitId == this.productUnitId &&
           other.label == this.label &&
           other.price == this.price &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.sortOrder == this.sortOrder);
 }
 
 class AltPricesCompanion extends UpdateCompanion<AltPrice> {
@@ -2323,6 +2349,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
   final Value<String> label;
   final Value<int> price;
   final Value<DateTime> createdAt;
+  final Value<int> sortOrder;
   final Value<int> rowid;
   const AltPricesCompanion({
     this.id = const Value.absent(),
@@ -2330,6 +2357,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
     this.label = const Value.absent(),
     this.price = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AltPricesCompanion.insert({
@@ -2338,6 +2366,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
     required String label,
     required int price,
     this.createdAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         productUnitId = Value(productUnitId),
@@ -2349,6 +2378,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
     Expression<String>? label,
     Expression<int>? price,
     Expression<DateTime>? createdAt,
+    Expression<int>? sortOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2357,6 +2387,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
       if (label != null) 'label': label,
       if (price != null) 'price': price,
       if (createdAt != null) 'created_at': createdAt,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2367,6 +2398,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
       Value<String>? label,
       Value<int>? price,
       Value<DateTime>? createdAt,
+      Value<int>? sortOrder,
       Value<int>? rowid}) {
     return AltPricesCompanion(
       id: id ?? this.id,
@@ -2374,6 +2406,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
       label: label ?? this.label,
       price: price ?? this.price,
       createdAt: createdAt ?? this.createdAt,
+      sortOrder: sortOrder ?? this.sortOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2396,6 +2429,9 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2410,6 +2446,7 @@ class AltPricesCompanion extends UpdateCompanion<AltPrice> {
           ..write('label: $label, ')
           ..write('price: $price, ')
           ..write('createdAt: $createdAt, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -11719,6 +11756,7 @@ typedef $$AltPricesTableCreateCompanionBuilder = AltPricesCompanion Function({
   required String label,
   required int price,
   Value<DateTime> createdAt,
+  Value<int> sortOrder,
   Value<int> rowid,
 });
 typedef $$AltPricesTableUpdateCompanionBuilder = AltPricesCompanion Function({
@@ -11727,6 +11765,7 @@ typedef $$AltPricesTableUpdateCompanionBuilder = AltPricesCompanion Function({
   Value<String> label,
   Value<int> price,
   Value<DateTime> createdAt,
+  Value<int> sortOrder,
   Value<int> rowid,
 });
 
@@ -11768,6 +11807,9 @@ class $$AltPricesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnFilters(column));
 
   $$ProductUnitsTableFilterComposer get productUnitId {
     final $$ProductUnitsTableFilterComposer composer = $composerBuilder(
@@ -11811,6 +11853,9 @@ class $$AltPricesTableOrderingComposer
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnOrderings(column));
+
   $$ProductUnitsTableOrderingComposer get productUnitId {
     final $$ProductUnitsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -11852,6 +11897,9 @@ class $$AltPricesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
   $$ProductUnitsTableAnnotationComposer get productUnitId {
     final $$ProductUnitsTableAnnotationComposer composer = $composerBuilder(
@@ -11902,6 +11950,7 @@ class $$AltPricesTableTableManager extends RootTableManager<
             Value<String> label = const Value.absent(),
             Value<int> price = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<int> sortOrder = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               AltPricesCompanion(
@@ -11910,6 +11959,7 @@ class $$AltPricesTableTableManager extends RootTableManager<
             label: label,
             price: price,
             createdAt: createdAt,
+            sortOrder: sortOrder,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -11918,6 +11968,7 @@ class $$AltPricesTableTableManager extends RootTableManager<
             required String label,
             required int price,
             Value<DateTime> createdAt = const Value.absent(),
+            Value<int> sortOrder = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               AltPricesCompanion.insert(
@@ -11926,6 +11977,7 @@ class $$AltPricesTableTableManager extends RootTableManager<
             label: label,
             price: price,
             createdAt: createdAt,
+            sortOrder: sortOrder,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

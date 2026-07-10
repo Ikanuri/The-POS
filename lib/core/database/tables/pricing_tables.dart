@@ -26,6 +26,10 @@ class AltPrices extends Table {
   TextColumn get label => text()();
   IntColumn get price => integer()(); // Rupiah bulat
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  // Urutan tampil chip di ItemEntrySheet, diatur lewat drag-reorder di form
+  // Produk. TIDAK bisa mengandalkan createdAt: saveProduct menulis semua
+  // baris harga-lain dalam satu batch dengan timestamp yang sama persis.
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};

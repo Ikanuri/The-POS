@@ -399,16 +399,21 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
       final altPrices = <String, List<AltPricesCompanion>>{};
       for (final u in _units) {
-        altPrices[u.id] = u.altPrices
+        final validAlts = u.altPrices
             .where((a) => a.label.trim().isNotEmpty && a.price > 0)
-            .map((a) => AltPricesCompanion.insert(
-                  id: _uuid.v4(),
-                  productUnitId: u.id,
-                  label: a.label.trim(),
-                  price: a.price,
-                  createdAt: Value(now),
-                ))
             .toList();
+        altPrices[u.id] = [
+          for (var i = 0; i < validAlts.length; i++)
+            AltPricesCompanion.insert(
+              id: _uuid.v4(),
+              productUnitId: u.id,
+              label: validAlts[i].label.trim(),
+              price: validAlts[i].price,
+              createdAt: Value(now),
+              // Posisi baris di form saat simpan — hasil drag-reorder user.
+              sortOrder: Value(i),
+            ),
+        ];
       }
 
       final barcodes = <String, List<ProductBarcodesCompanion>>{};
@@ -1359,6 +1364,16 @@ class _UnitCardState extends State<_UnitCard> {
     widget.onChanged(widget.entry.copyWith(altPrices: List.from(_altPrices)));
   }
 
+  void _reorderAltPrice(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex -= 1;
+    setState(() {
+      _altPrices.insert(newIndex, _altPrices.removeAt(oldIndex));
+      _altLabelCtrl.insert(newIndex, _altLabelCtrl.removeAt(oldIndex));
+      _altPriceCtrl.insert(newIndex, _altPriceCtrl.removeAt(oldIndex));
+    });
+    widget.onChanged(widget.entry.copyWith(altPrices: List.from(_altPrices)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1668,56 +1683,81 @@ class _UnitCardState extends State<_UnitCard> {
                     ),
               ),
               const SizedBox(height: 4),
-              for (var i = 0; i < _altPrices.length; i++) ...[
-                const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _altLabelCtrl[i],
-                        readOnly: widget.readOnly,
-                        decoration: const InputDecoration(
-                          labelText: 'Nama Harga',
-                          hintText: 'mis. Harga Toko A',
-                          isDense: true,
+              // Drag-handle untuk reorder — cukup ditaruh di dalam Column
+              // form yang sudah scrollable (SingleChildScrollView/ListView
+              // ancestor), auto-scroll saat drag mendekati tepi layar
+              // otomatis ditangani Flutter lewat Scrollable ancestor itu.
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: _altPrices.length,
+                onReorder: widget.readOnly ? (_, __) {} : _reorderAltPrice,
+                itemBuilder: (context, i) {
+                  return Padding(
+                    key: ValueKey(_altPrices[i].id),
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (!widget.readOnly)
+                          ReorderableDragStartListener(
+                            index: i,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Icon(Icons.drag_handle,
+                                  size: 18, color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _altLabelCtrl[i],
+                            readOnly: widget.readOnly,
+                            decoration: const InputDecoration(
+                              labelText: 'Nama Harga',
+                              hintText: 'mis. Harga Toko A',
+                              isDense: true,
+                            ),
+                            onChanged: widget.readOnly
+                                ? null
+                                : (_) => _syncAltPrice(i),
+                          ),
                         ),
-                        onChanged:
-                            widget.readOnly ? null : (_) => _syncAltPrice(i),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 110,
-                      child: TextFormField(
-                        controller: _altPriceCtrl[i],
-                        readOnly: widget.readOnly,
-                        decoration: const InputDecoration(
-                          labelText: 'Nominal',
-                          isDense: true,
-                          prefixText: 'Rp ',
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 110,
+                          child: TextFormField(
+                            controller: _altPriceCtrl[i],
+                            readOnly: widget.readOnly,
+                            decoration: const InputDecoration(
+                              labelText: 'Nominal',
+                              isDense: true,
+                              prefixText: 'Rp ',
+                            ),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                            onChanged: widget.readOnly
+                                ? null
+                                : (_) => _syncAltPrice(i),
+                          ),
                         ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
+                        if (!widget.readOnly) ...[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: Icon(Icons.remove_circle_outline,
+                                size: 18, color: scheme.error),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => _removeAltPrice(i),
+                            tooltip: 'Hapus harga',
+                          ),
                         ],
-                        onChanged:
-                            widget.readOnly ? null : (_) => _syncAltPrice(i),
-                      ),
+                      ],
                     ),
-                    if (!widget.readOnly) ...[
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: Icon(Icons.remove_circle_outline,
-                            size: 18, color: scheme.error),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => _removeAltPrice(i),
-                        tooltip: 'Hapus harga',
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+                  );
+                },
+              ),
             ],
 
             if (!widget.readOnly) ...[

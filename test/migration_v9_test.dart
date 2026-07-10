@@ -19,6 +19,9 @@ void main() {
     if (file.existsSync()) file.deleteSync();
 
     // ── 1. Bangun DB "v8" mentah: transactions TANPA kolom change_taken. ──
+    // alt_prices ikut dibuat (tanpa sort_order) — DB v8 ASLI sudah punya
+    // tabel ini sejak migrasi 7->8, jadi fixture harus konsisten supaya
+    // migrasi lanjutan 9->10 (nambah sort_order) tidak "no such table".
     final v8 = raw.sqlite3.open(path);
     v8.execute('''
       CREATE TABLE transactions(
@@ -27,6 +30,9 @@ void main() {
         change_amount INTEGER, payment_method TEXT, internal_note TEXT,
         struk_note TEXT, employee_name TEXT, points_earned INTEGER,
         created_at INTEGER, synced_at INTEGER);
+      CREATE TABLE alt_prices(
+        id TEXT PRIMARY KEY, product_unit_id TEXT, label TEXT,
+        price INTEGER, created_at INTEGER);
     ''');
     v8.execute(
         "INSERT INTO transactions(id, local_id, status, total, paid, change_amount, "
@@ -61,7 +67,7 @@ void main() {
     expect(updated.changeTaken, isTrue);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 9);
+    expect(ver.data.values.first, 10);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
