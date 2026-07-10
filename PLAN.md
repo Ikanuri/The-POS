@@ -434,48 +434,68 @@ menunggu keputusan user):**
 
 ---
 
-## Item 9 — Dropdown "Harga Lain" di sisi kanan input Harga (ItemEntrySheet) — TUMPANG TINDIH dengan fitur yang sudah ada, perlu klarifikasi scope
+## Item 9 — Reorder "Harga Lain" di tab Produk (urutan tampil chip di ItemEntrySheet ikut berubah)
 
-**Status:** Perlu klarifikasi dari user sebelum dikerjakan — kemungkinan
-duplikat dari fitur yang SUDAH ADA.
+**Status:** Diusulkan user, siap dirancang teknis — tidak ada ambiguitas
+scope besar seperti item lain (bukan pertanyaan trade-off, murni fitur baru
+yang diminta langsung).
 
-**Permintaan:** tambahkan dropdown pilihan harga di sisi kanan field input
-"Harga" di `ItemEntrySheet` (modal tap badan produk di tab Kasir), sumber
-datanya dari harga alternatif per-satuan yang dikonfigurasi di tab Produk
-("Harga Lain").
+**Konteks:** dropdown terpisah untuk "Harga Lain" (dibahas sebelumnya) TIDAK
+jadi dikerjakan — user konfirmasi chip yang sudah ada di `ItemEntrySheet`
+sudah cukup untuk kebutuhan pilih-harga. Sebagai gantinya, user mengusulkan
+fitur BARU: kemampuan **mengurutkan ulang (reorder)** daftar "Harga Lain" di
+form edit produk (tab Produk), supaya urutan chip yang muncul di
+`ItemEntrySheet` bisa diatur sesuai preferensi toko (mis. harga yang paling
+sering dipakai ditaruh paling depan/kiri, bukan sekadar urutan input).
 
-**Catatan penting:** fitur untuk MEMILIH harga alternatif per-satuan lewat
-tap **SUDAH ADA** di `ItemEntrySheet` — baris chip horizontal "Pilih harga"
-di atas field qty/harga sudah menampilkan chip untuk satuan dasar, tier
-grosir, DAN harga alternatif (`_PriceChip`, dari `getAltPrices()`), tap
-salah satu chip langsung mengisi field harga. Jadi secara FUNGSI, ini sudah
-terpenuhi — pertanyaannya cuma soal BENTUK UI-nya (chip vs dropdown).
+**Analisis teknis (sudah dicek ke kode):**
+- Tabel `alt_prices` (dibuat sesi sebelumnya untuk fitur "Harga Lain")
+  **belum punya kolom urutan eksplisit**. `AppDatabase.getAltPrices()`
+  saat ini mengurutkan berdasar `createdAt ASC`.
+- Masalahnya: di `produk_form_screen.dart`, SEMUA baris harga-lain dalam
+  satu kali simpan memakai **timestamp `now` yang SAMA** (`createdAt:
+  Value(now)`, `now` diambil sekali sebelum loop) — jadi urutan tampil
+  hasil `ORDER BY created_at ASC` untuk baris-baris dengan timestamp
+  identik itu **tidak terjamin/tidak eksplisit** (kebetulan sering
+  mengikuti urutan insert di SQLite, tapi ini bukan jaminan resmi, apalagi
+  kalau nanti ada perubahan cara insert). Reorder yang andal butuh kolom
+  urutan sendiri, bukan mengandalkan `createdAt`.
 
-**Trade-off chip (yang sudah ada) vs dropdown (yang diminta) — perlu
-keputusan user:**
-- **Chip (sekarang):** semua opsi harga langsung terlihat tanpa tap
-  tambahan, cocok kalau opsi harga sedikit (2-4). Kalau harga alternatif
-  per satuan banyak (5+), baris chip bisa jadi panjang & perlu discroll
-  horizontal — makin banyak opsi, makin ramai secara visual.
-- **Dropdown (diminta):** lebih ringkas secara vertikal, skalanya lebih
-  bagus untuk banyak opsi harga, pola UI yang familiar (dropdown di sebelah
-  field). TAPI butuh 1 tap ekstra untuk membuka sebelum bisa pilih (chip
-  cuma butuh 1 tap langsung), dan opsi tidak terlihat sekaligus sekilas mata
-  seperti chip.
-- Kemungkinan opsi ketiga: **dropdown MENGGANTIKAN chip sepenuhnya** (bukan
-  keduanya sekaligus, supaya tidak ada 2 cara berbeda memilih hal yang sama
-  di layar yang sama — berpotensi membingungkan).
+**Rancangan solusi:**
+1. **Migrasi schema baru** (`schemaVersion` 9→10): tambah kolom
+   `sortOrder` (integer) ke tabel `alt_prices`.
+   `getAltPrices()` diubah urut berdasar `sortOrder ASC` (bukan
+   `createdAt` lagi).
+2. **UI reorder di form Produk** (`produk_form_screen.dart`, bagian
+   "Harga Lain" ~baris disebut di Item sebelumnya): tambah kontrol urutan
+   di tiap baris — draft dua opsi, perlu dipilih salah satu:
+   - **Drag-handle (`ReorderableListView`)** — geser baris naik/turun
+     langsung, terasa lebih modern, tapi butuh area sentuh drag-handle
+     yang cukup besar di layar kecil.
+   - **Tombol panah naik/turun** — lebih konsisten dengan pola tombol
+     `IconButton` yang sudah dipakai di form ini (mis. tombol hapus tier
+     grosir), lebih mudah diakses tanpa gestur drag, tapi butuh beberapa
+     tap untuk pindah jauh.
+3. Saat simpan (`saveProduct`), `sortOrder` diisi dari POSISI baris di
+   list form saat itu (index 0, 1, 2, ...) — otomatis konsisten dengan
+   pola delete-then-reinsert yang sudah dipakai untuk harga-lain (tidak
+   perlu logika tambahan di luar itu).
+4. **`ItemEntrySheet` TIDAK PERLU diubah sama sekali** — chip harga-lain di
+   sana sudah otomatis mengikuti urutan hasil `getAltPrices()`, jadi begitu
+   query-nya diurut oleh `sortOrder`, tampilannya otomatis ikut berubah.
 
-**Pertanyaan yang perlu dijawab user sebelum eksekusi:**
-1. Dropdown ini MENGGANTIKAN chip yang sudah ada, atau jadi TAMBAHAN di
-   samping chip (dua cara akses untuk hal yang sama)?
-2. Kalau menggantikan — chip untuk tier grosir & satuan dasar juga ikut
-   diganti jadi dropdown, atau cuma bagian "harga lain" saja yang jadi
-   dropdown sementara chip tier/satuan tetap seperti sekarang?
+**Pertanyaan desain kecil yang masih perlu dijawab user:** drag-handle atau
+tombol panah naik/turun untuk kontrol reorder-nya? (lihat poin 2 di atas)
 
-**File yang terlibat:** `lib/features/kasir/widgets/item_entry_sheet.dart`
-(bagian "Harga input" ~baris 567-622, dan bagian chip "Pilih harga"
-~baris 425-467).
+**File yang terlibat:**
+- `lib/core/database/tables/pricing_tables.dart` (tambah kolom `sortOrder`
+  ke `AltPrices`)
+- `lib/core/database/app_database.dart` (migrasi `schemaVersion` 9→10,
+  `getAltPrices()` ganti `orderBy`)
+- `lib/features/produk/produk_form_screen.dart` (UI reorder + isi
+  `sortOrder` saat simpan)
+- Test migrasi baru mengikuti pola `test/migration_v9_test.dart` (Tier 1,
+  wajib revert-verify sesuai metode test di `CLAUDE.md`)
 
 ---
 
@@ -494,5 +514,6 @@ keputusan user:**
    3 pertanyaan desain di atas.
 5. **Item 8** menunggu keputusan user soal trade-off (kompleksitas HTML vs
    manfaat, relevansi ke pelanggan vs kasir).
-6. **Item 9** menunggu jawaban 2 pertanyaan scope (ganti chip atau
-   tambahan) sebelum eksekusi.
+6. **Item 9** (reorder Harga Lain) bisa masuk kelompok "siap dikerjakan
+   sekarang" seperti poin 1 begitu user jawab 1 pertanyaan kecil (drag-
+   handle vs tombol panah) — tidak bergantung ke item lain.
