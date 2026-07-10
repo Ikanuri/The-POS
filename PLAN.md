@@ -6,8 +6,9 @@ dari file ini (lihat aturan di [CLAUDE.md](CLAUDE.md) §Perencanaan). Riwayat
 teknis pekerjaan yang SUDAH selesai ada di [CHANGELOG.md](CHANGELOG.md), bukan
 di sini.
 
-_Terakhir diperbarui: 10 Juli 2026 (tambah Item 9-15, saran fitur dari audit yang
-disetujui user untuk dieksekusi — desain UI/UX sudah dibahas, belum ada kode)._
+_Terakhir diperbarui: 10 Juli 2026 (tambah Item 9-15 dari saran audit, lalu
+Item 16-22 dari diskusi bug keranjang + 5 proposal besar user + fix sync
+approval. Semua desain UI/UX sudah dibahas, belum ada kode)._
 
 ---
 
@@ -485,6 +486,225 @@ migrasi `app_database.dart` (`schemaVersion` naik), layar baru (mis.
 
 ---
 
+## Item 16 — Atribusi varian per-satuan (`parentProductUnitId`) + fix tombol minus
+
+**Prioritas:** Sedang-tinggi (integritas data keranjang). **Disetujui user.**
+Tidak butuh migrasi schema DB — perubahan di model `CartItem` (in-memory +
+JSON prefs), bukan tabel Drift.
+
+**Masalah 1 — varian nyasar ke satuan yang salah:** di `cart_provider.dart`,
+varian dikaitkan ke induk lewat `parentProductId` (identitas PRODUK), bukan
+baris satuan spesifik. Semua pencarian induk pakai
+`c.productId == item.parentProductId` (di `addItem`, `_setVariantQty`,
+`removeItem`, `effectiveQtyFor`, `cartTotalOf`) — ambil baris non-varian
+PERTAMA yang cocok. Kalau satu produk punya ≥2 baris satuan non-varian di
+keranjang (mis. Dus + Pcs), qty varian bisa "menempel" ke satuan yang salah —
+invariant `storedQty = base + Σvarian` benar secara total tapi salah secara
+ATRIBUSI per-satuan → konversi stok antar-satuan bisa meleset.
+
+**Solusi:** tambah field `parentProductUnitId` di `CartItem` (selain
+`parentProductId` yang tetap dipertahankan untuk tampilan/grup). Ganti semua
+pencarian induk dari match `productId` ke match `productUnitId` eksak. Titik
+pengisian: di `item_entry_sheet.dart` `_submit()` (baris ~303-318) saat
+membuat CartItem varian, isi `parentProductUnitId` = `sel.unit.id` (satuan
+induk yang sedang aktif dipilih).
+
+**Masalah 2 (gabung, tema sama) — tombol minus salah baris:** `_decrementProduct`
+(`kasir_screen.dart` ~1822) selalu ambil `items.first` saat produk punya >1
+baris satuan di keranjang → minus mengurangi satuan yang salah. **Solusi
+(revisi dari usulan sheet-disambiguasi yang di-reject user karena sama-sama
+butuh cari produk):** kalau `items.length > 1`, tombol minus jadi no-op +
+banner singkat "produk ini punya beberapa satuan, atur di keranjang". Kasus
+umum (1 satuan) tetap langsung seperti sekarang — nol friksi di jalur yang
+sudah benar.
+
+**Pertanyaan desain (Masalah 1) yang masih menggantung:**
+- Kalau baris satuan induk varian dihapus dari cart, varian yang nempel ke
+  situ ikut terhapus, atau "pindah" ke satuan lain produk yang sama (kalau
+  ada)? (Perilaku `_delete` sekarang menghapus semua varian bila tak ada
+  baris induk tersisa — perlu disesuaikan ke level per-`productUnitId`.)
+
+**File:** `lib/core/models/cart_item.dart`, `lib/features/kasir/cart_provider.dart`,
+`lib/features/kasir/widgets/item_entry_sheet.dart`,
+`lib/features/kasir/kasir_screen.dart`.
+
+---
+
+## Item 17 — Persist antrian approval sync + majukan watermark upload (revisi dari catatan "ACK" lama)
+
+**Prioritas:** Sedang. **Disetujui arah oleh user** (usul: simpan state
+seperti pesanan tertahan). Menggantikan catatan lama di HANDOFF yang keliru
+membingkai ini sebagai "sync satu arah tanpa ACK".
+
+**Kondisi riil (dikoreksi setelah baca ulang `lan_sync_service.dart`):** sync
+SUDAH dua arah, host SUDAH punya hak review (antrian approval manual, bukan
+auto-merge), arah host→klien SUDAH pakai watermark (`last_sync_download_at`).
+Yang jadi akar masalah SEMPIT: `_pendingQueue` (baris ~79) adalah
+`static final [...]` — **cuma di memori host**. Kalau host restart sebelum
+owner approve, antrian hilang. KARENA itu arah klien→host sengaja tetap
+**full-dump** selamanya (komentar eksplisit baris ~486-498) sebagai pengaman —
+bukan karena bidirectionality belum ada.
+
+**Solusi:** persist `_pendingQueue` ke tabel DB baru (pola sama seperti
+`held_orders` yang selamat dari app-kill). Urutan KRITIS yang harus dijaga:
+simpan ke DB **sebelum** host membalas "diterima" ke klien (di handler baris
+~421-447). Begitu itu dijamin, watermark upload klien boleh dimajukan →
+klien berhenti kirim-ulang seluruh riwayat tiap sync.
+
+**Klarifikasi timeout WiFi (dari pertanyaan user):** BUKAN masalah — koneksi
+HTTP klien ditutup langsung setelah host membalas `pending_approval` (baris
+431-447), approval terjadi async tanpa koneksi terbuka. Jadi tidak ada
+sambungan yang digantung menunggu owner.
+
+**File:** `lib/core/services/lan_sync_service.dart`, tabel baru + migrasi
+`app_database.dart` (schemaVersion naik).
+
+---
+
+## Item 18 — Beralih antar pesanan tertahan tanpa "tahan" manual (auto-save)
+
+**Prioritas:** Tinggi (menghilangkan bottleneck rush-hour). **Proposal user.**
+Tidak butuh migrasi — infra `held_orders` sudah ada.
+
+**Kondisi sekarang:** `_resumeHeld` (`kasir_screen.dart` ~1006) memunculkan
+dialog "Ganti Keranjang?" yang memperingatkan keranjang aktif akan HILANG.
+Untuk beralih tanpa kehilangan, user harus `_holdCurrent` (dengan label) dulu.
+
+**Solusi:** model "tab pesanan" — tap pesanan tertahan lain → keranjang aktif
+otomatis di-hold balik (bukan dibuang) → pesanan tujuan dibuka. Hapus dialog
+peringatan (tak ada lagi yang hilang). Item terakhir yang di-add otomatis
+ikut tersimpan (state cart sudah dipersist ke prefs tiap perubahan via
+`_persist`, jadi konsisten).
+
+**Keputusan desain yang HARUS dijawab (inti kerumitan) — label auto-save:**
+keranjang aktif butuh label untuk disimpan balik. Aturan:
+- Ada pelanggan terpilih → pakai namanya (sudah jadi perilaku `_holdCurrent`).
+- Dibuka dari pesanan tertahan → kembalikan label aslinya (perlu simpan
+  "sedang mengedit held order id X" di state).
+- Walk-in tanpa nama & tanpa label → **auto-generate** ("Tanpa Nama · 14:32"
+  / "Pesanan N") ATAU minta label sekali? **Rekomendasi: auto-generate
+  timestamp** (nol-friksi, sesuai tujuan user), bisa di-rename nanti.
+  MENUNGGU KONFIRMASI USER.
+
+**File:** `lib/features/kasir/kasir_screen.dart` (`_resumeHeld`,
+`_holdCurrent`, tracking "active held id"), `cart_provider.dart` bila perlu.
+
+---
+
+## Item 19 — Template harga custom di kasir — ⚠️ MENUNGGU KLARIFIKASI (sebagian besar SUDAH ADA)
+
+**Prioritas:** Ditahan sampai user klarifikasi. **Proposal user, tapi
+kemungkinan besar sudah ada.**
+
+**Negasi jujur:** fitur yang diminta ("template harga biar cepat, bukan ketik
+manual, settings di bawah harga grosir di form produk") **sudah ada** sebagai
+**"Harga Lain" (`alt_prices`)**:
+- Form produk sudah punya section "Harga Lain" di bawah harga grosir (tambah
+  harga berlabel custom), sudah bisa drag-reorder (sesi kemarin).
+- Modal tap item kasir SUDAH menampilkan alt_prices sebagai chip tap
+  (`item_entry_sheet.dart` baris 466-474) — persis "template tap, bukan ketik".
+
+**Yang perlu user jawab sebelum ini jadi item build — apa yang KURANG dari
+"Harga Lain" sekarang?** Kemungkinan yang dimaksud beda:
+- (a) Template **relatif** (mis. "modal + 10%", ikut berubah kalau modal
+  berubah) — ini benar-benar baru.
+- (b) Template **global** reusable lintas produk (satu "Reseller −5%" untuk
+  semua produk) — baru & lebih besar.
+- (c) Hanya masalah discoverability (fitur ada tapi kurang kelihatan).
+
+**File (bila jadi build, tergantung jawaban):** kemungkinan
+`produk_form_screen.dart` + `item_entry_sheet.dart` + `price_service.dart`.
+
+---
+
+## Item 20 — Tombol edit produk di modal tap item kasir (permission-gated)
+
+**Prioritas:** Sedang. **Proposal user.** Reuse layar form yang sudah ada,
+tidak bikin form baru.
+
+**Solusi UI:** ikon **edit (pensil)** di header `ItemEntrySheet`, sebelah
+ikon hapus yang sudah ada (baris 385-392). Tap → push `produk_form_screen`
+untuk produk itu → saat kembali, modal reload (`_load()`) agar harga/stok
+yang berubah langsung tercermin. Dipilih "edit" bukan "settings" (gear = konfig
+app; edit = ubah detail entitas ini).
+
+**Keputusan permission (HARUS dijawab):** belum ada izin `edit_produk`. Owner
+& Asisten default akses penuh. Untuk Kasir:
+- **Rekomendasi:** tambah izin baru `edit_produk` di `kKasirPermissionKeys`
+  (+ label/desc di `kasir_permissions_screen.dart`) — konsisten pola izin
+  lain, owner dapat kontrol penuh. Ingat: izin baru butuh masuk seeding di
+  `app_database.dart` (baris ~209) — cek apakah butuh migrasi untuk device
+  lama yang tabel permission-nya sudah ter-seed.
+- Alternatif lebih sederhana: sembunyikan tombol untuk role kasir sepenuhnya
+  (owner/asisten only), tanpa izin baru.
+
+**File:** `lib/features/kasir/widgets/item_entry_sheet.dart`,
+(bila izin baru) `app_database.dart` + `kasir_permissions_screen.dart`.
+
+---
+
+## Item 21 — Sync UI persisten lintas tab + status progres (global state)
+
+**Prioritas:** Sedang. **Proposal user.** Refactor menengah.
+
+**Temuan tambahan (lebih dalam dari keluhan user):** `sync_screen.dart`
+`dispose()` (baris 42-43) memanggil `LanSyncService.stopHost()` → meninggalkan
+layar Sync mematikan server host TOTAL, bukan cuma UI-nya hilang. State sync
+(`_syncing`, `_queue`) juga lokal ke layar.
+
+**Solusi:** angkat state sync ke **provider global Riverpod**, lepaskan
+lifecycle host dari `SyncScreen`, render **banner inline persisten di level
+shell** (`main_shell.dart`) yang bertahan di tab/halaman manapun sampai proses
+selesai/dibatalkan (baik sisi host maupun klien).
+
+**Soal "tidak realtime" (antrian muncul sekaligus) — batasan protokol:**
+klien kirim SEMUA tabel dalam SATU request HTTP, jadi di host memang datang
+sekaligus. "Realtime per-baris" TIDAK mungkin tanpa merombak protokol.
+Yang bisa & sebaiknya diperbaiki: status progres sisi KLIEN (Menyambung →
+Mengirim → Menunggu persetujuan) + animasi halus saat item baru masuk antrian
+host. Jangan overpromise "per baris".
+
+**File:** provider baru (mis. `lib/core/providers/sync_state_provider.dart`),
+`lib/core/services/lan_sync_service.dart`, `lib/features/shell/main_shell.dart`,
+`lib/features/pengaturan/sync_screen.dart` (baca dari provider global).
+
+---
+
+## Item 22 — Warna banner inline: sukses = hijau soft, gagal = merah (light & dark)
+
+**Prioritas:** Rendah, scope kecil. **Proposal user.**
+
+**Kondisi sekarang:** `inline_banner.dart` (baris 88-114) — `success` pakai
+`scheme.primaryContainer` = terakota (warna brand), jadi sukses & info mirip.
+
+**Solusi:** `success` → hijau soft, `error` → merah eksplisit. **Wajib bikin
+2 varian (light & dark) untuk masing-masing** — bukan hardcode satu set.
+Alasan: case `warning` sekarang (baris 102-107) hardcode warna terang saja →
+kontras jelek di dark mode; jangan ulangi pola itu. Deteksi brightness via
+`Theme.of(context).brightness` seperti pola di `_AddControl`
+(`kasir_screen.dart`).
+
+**File:** `lib/core/widgets/inline_banner.dart`.
+
+---
+
+## Catatan lintas-item — perbaikan UX permission (murah, opsional)
+
+Dari audit flow permission (bonus request user): perubahan izin owner **tidak
+instan** ke HP kasir — baru berlaku setelah sync manual berikutnya (izin
+mengalir sebagai master-data owner→kasir). UX-nya membingungkan ("sudah saya
+matikan kok kasir masih bisa?"). Perbaikan murah: tambah teks info
+"Perubahan berlaku setelah HP kasir sync berikutnya" di `kasir_permissions_screen.dart`
+& `asisten_permissions_screen.dart`.
+
+**KAITAN PENTING ke Item 9 (Pengeluaran):** izin `input_pengeluaran` &
+`input_pembelian` sekarang SENGAJA disembunyikan dari UI Izin Kasir
+(`_kHiddenPermissionKeys`, `kasir_permissions_screen.dart` baris 12) karena
+fiturnya belum ada. Saat Item 9 dibangun, **keluarkan `input_pengeluaran`
+dari daftar hidden itu** supaya owner bisa mengaturnya — mudah terlewat.
+
+---
+
 ## Urutan eksekusi yang disarankan
 
 1. **Item 3** (3a konversi format + 3b fix rasio multi-satuan, keduanya di
@@ -506,3 +726,22 @@ migrasi `app_database.dart` (`schemaVersion` naik), layar baru (mis.
 8. **Item 15** — butuh tabel baru (migrasi schema paling besar dari
    ketujuh item ini), kerjakan setelah pertanyaan desain (per-device vs
    per-kasir) dijawab.
+
+### Item 16-22 (dari diskusi bug keranjang + 5 proposal user)
+
+9. **Item 22** (warna banner) & **Item 20** (tombol edit di modal) — quick
+   win, scope kecil. Item 20 tunggu keputusan permission (`edit_produk` baru
+   vs owner/asisten-only).
+10. **Item 18** (beralih pesanan tanpa hold) — prioritas tinggi (rush-hour),
+    tunggu keputusan label auto-save.
+11. **Item 16** (atribusi varian per-satuan + fix minus) — integritas data,
+    tunggu keputusan perilaku hapus induk.
+12. **Item 21** (sync UI persisten) & **Item 17** (persist antrian approval)
+    — keduanya menyentuh area sync, wajar dikerjakan berdekatan/sekaligus.
+    Item 17 butuh migrasi (tabel baru).
+13. **Item 19** (template harga custom) — DITAHAN, tunggu klarifikasi user
+    (fitur sebagian besar sudah ada sebagai "Harga Lain"/`alt_prices`).
+
+**Quick-win paling murah lintas semua item:** Item 22 (warna banner),
+Item 14 (edit/hapus metode bayar), Item 10 (metode bayar pelunasan) —
+scope kecil, tanpa migrasi, tanpa keputusan desain menggantung.

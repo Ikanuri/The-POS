@@ -111,8 +111,11 @@ v2.1.1+3 (lihat CHANGELOG). PR #2 sudah di-merge ke `main`.
 - Tombol minus di kartu produk (`_decrementProduct`) selalu mengurangi baris
   satuan PERTAMA bila produk ada di keranjang dengan >1 satuan.
 - **Upload sync klien→host masih full-dump** (sengaja — antrian approval
-  host hanya di memori; watermark upload butuh mekanisme ACK approve dari
-  host, pekerjaan tersendiri).
+  host (`_pendingQueue`) hanya di memori, hilang bila host restart sebelum
+  approve; full-dump adalah pengaman agar data tak hilang permanen). Bukan
+  "sync satu arah tanpa ACK" — sync SUDAH dua arah & host SUDAH punya review
+  manual. Fix presisi = persist `_pendingQueue` ke DB (pola `held_orders`)
+  lalu majukan watermark upload. Detail di PLAN.md Item 17.
 - Fitur "hantu" yang tabel-nya ada tapi tanpa UI: `expenses` (paling layak
   dibangun — lihat saran fitur), `suppliers/purchases/purchase_items`,
   `customer_groups/customer_group_prices`.
