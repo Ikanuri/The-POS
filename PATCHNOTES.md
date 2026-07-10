@@ -11,6 +11,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Pencatatan Pengeluaran + Laba Bersih.** Ada menu baru Pengaturan →
+  Pengeluaran untuk mencatat biaya (operasional, ambil pribadi, bayar
+  supplier, uang keluar laci) lengkap dengan nominal, kategori, catatan, dan
+  tanggal. Di Laporan (tab Ringkasan) kini muncul baris **Pengeluaran** dan
+  **Laba Bersih** (= Laba Kotor − pengeluaran operasional & uang keluar laci;
+  "ambil pribadi" dan "bayar supplier" tidak ikut dikurangi agar laba tidak
+  salah hitung). Kasir bisa diberi izin mencatat pengeluaran lewat Izin Kasir.
 - **Saat melunasi/menambah bayar hutang, kini bisa memilih metode bayar**
   (Tunai, transfer, QRIS, dsb) — sebelumnya semua pelunasan selalu tercatat
   sebagai "tunai" walau pelanggan membayar lewat transfer. Pilihan metode

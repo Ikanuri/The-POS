@@ -9,7 +9,9 @@ import '../../core/providers/device_provider.dart';
 /// supplier) — disembunyikan dari UI agar owner tidak menyalakan toggle yang
 /// tidak berefek apa pun. Key-nya tetap di DB & tetap tersinkron, sehingga
 /// begitu fiturnya dibangun tinggal dihapus dari daftar ini.
-const _kHiddenPermissionKeys = {'input_pengeluaran', 'input_pembelian'};
+/// `input_pengeluaran` sudah punya UI (Item 9) → tidak lagi disembunyikan.
+/// `input_pembelian` masih belum ada fiturnya.
+const _kHiddenPermissionKeys = {'input_pembelian'};
 
 final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
   final db = ref.watch(databaseProvider);

@@ -32,6 +32,15 @@ final loyaltyRuleProvider =
   return (threshold: t, pointsPer: p < 1 ? 1 : p);
 });
 
+/// Boleh membuka layar Pengeluaran: owner/asisten selalu; kasir bila izin
+/// `input_pengeluaran` aktif.
+final _canInputExpenseProvider = FutureProvider<bool>((ref) async {
+  final device = ref.watch(deviceProvider);
+  if (device.canSeeReports) return true;
+  final db = ref.watch(databaseProvider);
+  return db.isPermissionEnabled('input_pengeluaran');
+});
+
 class PengaturanScreen extends ConsumerWidget {
   const PengaturanScreen({super.key});
 
@@ -95,6 +104,18 @@ class PengaturanScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pengaturan/metode-bayar'),
                 ),
+                Builder(builder: (context) {
+                  final canExpense =
+                      ref.watch(_canInputExpenseProvider).valueOrNull ?? false;
+                  if (!canExpense) return const SizedBox.shrink();
+                  return ListTile(
+                    leading: const Icon(Icons.money_off_outlined),
+                    title: const Text('Pengeluaran'),
+                    subtitle: const Text('Catat biaya operasional & kas keluar'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/pengeluaran'),
+                  );
+                }),
                 ListTile(
                   leading: const Icon(Icons.badge_outlined),
                   title: const Text('Pegawai Toko'),

@@ -18,6 +18,7 @@ import '../../features/pengaturan/pair_device_screen.dart';
 import '../../features/pengaturan/payment_methods_screen.dart';
 import '../../features/pengaturan/pengaturan_screen.dart';
 import '../../features/pengaturan/employee_screen.dart';
+import '../../features/pengaturan/expenses_screen.dart';
 import '../../features/pengaturan/printer_screen.dart';
 import '../../features/pengaturan/store_info_screen.dart';
 import '../../features/pengaturan/sync_screen.dart';
@@ -154,6 +155,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: 'metode-bayar',
                   builder: (_, __) => const PaymentMethodsScreen()),
+              GoRoute(
+                  path: 'pengeluaran',
+                  builder: (_, __) => const ExpensesScreen()),
               GoRoute(
                   path: 'pegawai', builder: (_, __) => const EmployeeScreen()),
               GoRoute(

@@ -7,8 +7,12 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 _Terakhir diperbarui: 10 Juli 2026 (mulai eksekusi backlog besar Item 9-22 di
 PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user.
 SELESAI sejauh ini: Item 22 (warna chip/banner), Item 10 (metode bayar
-pelunasan hutang), Item 20 (tombol edit produk di modal kasir). Sisa Item
-9,11-19,21 antre, semua keputusan desain sudah final di PLAN.md)._
+pelunasan), Item 20 (edit produk di modal), Item 14 (edit/hapus metode
+bayar), Item 9 (pengeluaran + Laba Bersih). Sisa Item 11-13,15-19,21 antre,
+semua keputusan desain sudah final di PLAN.md)._
+**Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
+pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
+bulan Indonesia MANUAL (lihat `expenses_screen.dart` `_idDays`/`_idMonths`).
 
 ## Lingkungan sesi ini (PENTING untuk sesi lanjutan)
 Flutter TIDAK terpasang default di environment ini — dipasang manual ke

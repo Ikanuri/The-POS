@@ -291,53 +291,6 @@ menunggu keputusan user):**
 
 ---
 
-## Item 9 — Pencatatan Pengeluaran + Laba Bersih di Laporan
-
-**Prioritas:** Tinggi, dan **murah untuk dikerjakan** — tabel `Expenses`
-(`lib/core/database/tables/ledger_tables.dart`) **sudah ada lengkap** (kolom
-`type` enum `daily_expense | owner_withdrawal | supplier_payment |
-change_given`, `amount`, `note`, `kasirId`, dll), dan izin kasir
-`input_pengeluaran` **sudah terdaftar** di `KasirPermissions`
-(`settings_tables.dart`). Jadi ini **murni pekerjaan UI**, tidak perlu
-migrasi schema.
-
-**Desain UI/UX (disepakati user):**
-- Entry cepat: tombol "+ Pengeluaran" di `ringkasan_screen.dart` (dashboard,
-  dipakai harian) — bottom sheet input (pola sama seperti `_AddMethodSheet`
-  di `payment_methods_screen.dart`): nominal (`ThousandsSeparatorFormatter`),
-  kategori (pakai enum `type` yang sudah ada di tabel), catatan opsional,
-  tanggal (default hari ini).
-- Layar riwayat baru (`ExpensesScreen`): list dikelompokkan per tanggal,
-  swipe-to-delete / tap untuk edit.
-- Di `ringkasan_tab.dart`/`laporan_screen.dart`: tambah baris "Pengeluaran"
-  dan "Laba Bersih = Laba Kotor − Pengeluaran" nempel ke card total yang
-  sudah ada (bukan card baru).
-
-**Keputusan 1 — rumus Laba Bersih: DIPUTUSKAN.** Laba Bersih = Laba Kotor −
-(`daily_expense` + `change_given`) saja. `owner_withdrawal` &
-`supplier_payment` **dikeluarkan dari rumus** — dikonfirmasi lewat cek kode
-`getReportTotals`/summary (`app_database.dart` baris ~1669): Laba Kotor
-sudah memotong modal barang lewat `cost_at_sale` per item terjual, jadi
-`supplier_payment` (pembelian stok) akan dihitung DOBEL kalau ikut
-dikurangkan lagi di Laba Bersih. `owner_withdrawal` bukan biaya bisnis,
-murni pengambilan laba pribadi.
-**Catatan:** SEMUA 4 kategori (`daily_expense`, `owner_withdrawal`,
-`supplier_payment`, `change_given`) tetap **bisa dicatat/dipilih** di UI
-Pengeluaran (untuk kelengkapan riwayat kas, sesuai keinginan user meski
-belum aktif dipakai sekarang) — cuma 2 dari 4 yang masuk hitungan Laba
-Bersih.
-
-**Keputusan 2 — visibilitas antar-kasir: DIPUTUSKAN.** Kasir bisa **lihat
-semua** catatan pengeluaran (transparansi kas bersama), tapi **hanya bisa
-hapus miliknya sendiri** (filter berdasar `kasirId` saat aksi hapus).
-
-**File yang terlibat:** `lib/features/ringkasan/ringkasan_screen.dart`,
-file baru `lib/features/pengaturan/expenses_screen.dart`,
-`lib/features/laporan/tabs/ringkasan_tab.dart`,
-`lib/core/router/app_router.dart` (route baru).
-
----
-
 ## Item 11 — Peringatan Stok Menipis
 
 **Prioritas:** Sedang-tinggi. **Butuh migrasi schema** (kolom baru, mis.
@@ -673,10 +626,8 @@ dari daftar hidden itu** supaya owner bisa mengaturnya — mudah terlewat.
 Semua keputusan desain Item 9-15 SUDAH FINAL (lihat detail di tiap item) —
 siap dieksekusi tanpa menunggu klarifikasi lagi.
 
-5. **Item 9, 10, 12, 14** — bisa dikerjakan lebih dulu/kapan saja, TIDAK
-   butuh migrasi schema, risiko rendah (murni UI + query). Kandidat "quick
-   win" karena sebagian besar tabel/kolom pendukungnya sudah ada. Item 10
-   khususnya paling murah — infrastruktur DB sudah 100% siap.
+5. ~~**Item 9, 10, 14**~~ **SELESAI**. Tersisa **Item 12** (buku hutang,
+   tanpa migrasi, murni tab+query).
 6. **Item 11** — butuh migrasi schema kecil (1 kolom baru di `ProductUnits`).
 7. **Item 13** — independen, prioritas rendah, bisa disisipkan kapan saja.
 8. **Item 15** — butuh tabel baru (migrasi schema paling besar dari

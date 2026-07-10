@@ -1453,6 +1453,61 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  // ───────────────────────── Expenses (pengeluaran) ────────────────────────
+
+  /// Jenis expense yang dihitung sebagai pengurang Laba Bersih.
+  /// `daily_expense` = biaya operasional; `change_given` = uang keluar laci
+  /// tanpa transaksi. `owner_withdrawal` (ambil laba pribadi) &
+  /// `supplier_payment` (modal barang — SUDAH terhitung di HPP lewat
+  /// cost_at_sale) SENGAJA tidak dihitung agar Laba Bersih tidak dobel/salah.
+  static const netProfitExpenseTypes = ['daily_expense', 'change_given'];
+
+  Future<void> addExpense({
+    required String type,
+    required int amount,
+    String? note,
+    String? kasirId,
+    DateTime? createdAt,
+  }) async {
+    final id = const Uuid().v4();
+    await into(expenses).insert(ExpensesCompanion.insert(
+      id: id,
+      localId: id,
+      type: type,
+      amount: amount,
+      note: Value(note),
+      kasirId: Value(kasirId),
+      createdAt:
+          createdAt == null ? const Value.absent() : Value(createdAt),
+    ));
+  }
+
+  Future<void> deleteExpense(String id) =>
+      (delete(expenses)..where((t) => t.id.equals(id))).go();
+
+  /// Semua pengeluaran dalam rentang [from]..[to], terbaru dulu.
+  Stream<List<Expense>> watchExpenses(DateTime from, DateTime to) {
+    return (select(expenses)
+          ..where((t) =>
+              t.createdAt.isBiggerOrEqualValue(from) &
+              t.createdAt.isSmallerOrEqualValue(to))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  /// Total pengeluaran yang mengurangi Laba Bersih (daily_expense +
+  /// change_given) dalam rentang.
+  Future<int> getNetProfitExpenseTotal(DateTime from, DateTime to) async {
+    final amountSum = expenses.amount.sum();
+    final row = await (selectOnly(expenses)
+          ..addColumns([amountSum])
+          ..where(expenses.type.isIn(netProfitExpenseTypes) &
+              expenses.createdAt.isBiggerOrEqualValue(from) &
+              expenses.createdAt.isSmallerOrEqualValue(to)))
+        .getSingle();
+    return row.read(amountSum) ?? 0;
+  }
+
   /// Lunasi beberapa nota sekaligus (gabung nota) dengan distribusi FIFO:
   /// nota terlama dilunasi lebih dulu, sisa uang mengalir ke nota berikutnya.
   /// Setiap nota mendapat satu entri pembayaran ber-`paidAt` sama → jejak
