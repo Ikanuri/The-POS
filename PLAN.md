@@ -794,8 +794,8 @@ dari daftar hidden itu** supaya owner bisa mengaturnya — mudah terlewat.
 
 ### Item 16-22 (dari diskusi bug keranjang + 5 proposal user)
 
-Semua keputusan desain SUDAH DIJAWAB user kecuali satu (lihat penutup di
-bawah) — daftar ini siap dieksekusi tanpa menunggu klarifikasi lagi.
+Semua keputusan desain SUDAH DIJAWAB user — daftar ini siap dieksekusi
+tanpa menunggu klarifikasi lagi.
 
 9. **Item 22** (fix tema chip terpilih — sistemik, sekali fix kena 8 titik
    pemakaian + banner reuse warna semantik yang sudah ada) & **Item 20**
