@@ -58,10 +58,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   final Map<String, bool> _checked = {};
   bool get _allChecked =>
       _items.isNotEmpty && _items.every((i) => _checked[i.id] == true);
-  Set<String> get _checkedIds => _checked.entries
-      .where((e) => e.value)
-      .map((e) => e.key)
-      .toSet();
+  Set<String> get _checkedIds =>
+      _checked.entries.where((e) => e.value).map((e) => e.key).toSet();
 
   /// Timeline pembayaran ditampilkan hanya bila informatif: ada >1 pembayaran
   /// (cicilan), atau satu pembayaran yang waktunya jauh dari waktu nota dibuat
@@ -134,16 +132,20 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           rows.add(_AddedSeparator(time: label, scheme: scheme));
         }
       }
-      rows.add(_itemCheckRow(parent, scheme, isVariant: false, showProfit: showProfit));
+      rows.add(_itemCheckRow(parent, scheme,
+          isVariant: false, showProfit: showProfit));
       for (final child in _childrenOf(parent)) {
-        rows.add(_itemCheckRow(child, scheme, isVariant: true, parent: parent, showProfit: showProfit));
+        rows.add(_itemCheckRow(child, scheme,
+            isVariant: true, parent: parent, showProfit: showProfit));
       }
     }
     return rows;
   }
 
   Widget _itemCheckRow(TransactionItem item, ColorScheme scheme,
-      {required bool isVariant, TransactionItem? parent, bool showProfit = false}) {
+      {required bool isVariant,
+      TransactionItem? parent,
+      bool showProfit = false}) {
     final checked = _checked[item.id] ?? false;
     final hasChildren = !isVariant && _childrenOf(item).isNotEmpty;
     final effQty = _itemEffQty(item);
@@ -152,7 +154,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ? ((item.priceAtSale - item.costAtSale) * effQty).round()
         : 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final profitColor = isDark ? const Color(0xFF81C784) : const Color(0xFF388E3C);
+    final profitColor =
+        isDark ? const Color(0xFF81C784) : const Color(0xFF388E3C);
 
     return GestureDetector(
       onLongPress: isPlaceholder ? null : () => _editItemNote(item),
@@ -215,8 +218,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             fontSize: 11, color: scheme.onSurfaceVariant),
                         children: [
                           TextSpan(
-                            text: '${_unitNames[item.productUnitId] ?? ''} '
-                                '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
+                            text: '${effQty % 1 == 0 ? effQty.toInt() : effQty} '
+                                '${_unitNames[item.productUnitId] ?? ''} × '
                                 '${formatRupiah(item.priceAtSale)}',
                           ),
                           if (item.priceOverridden &&
@@ -256,8 +259,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             : Text(
                 formatRupiah((item.priceAtSale * effQty).round()),
                 style: TextStyle(
-                    fontSize: isVariant ? 12 : 13,
-                    fontWeight: FontWeight.w600),
+                    fontSize: isVariant ? 12 : 13, fontWeight: FontWeight.w600),
               ),
       ),
     );
@@ -280,8 +282,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           if (item.itemNote != null)
             TextButton(
               onPressed: () => Navigator.pop(ctx, ''),
@@ -296,8 +297,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     ctrl.dispose();
     if (result == null || !mounted) return;
     final db = ref.read(databaseProvider);
-    await (db.update(db.transactionItems)
-          ..where((t) => t.id.equals(item.id)))
+    await (db.update(db.transactionItems)..where((t) => t.id.equals(item.id)))
         .write(TransactionItemsCompanion(
       itemNote: Value(result.isEmpty ? null : result),
     ));
@@ -314,8 +314,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Hanya terlihat di aplikasi, tidak muncul di struk cetak/share.',
-                style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            Text(
+                'Hanya terlihat di aplikasi, tidak muncul di struk cetak/share.',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
@@ -330,8 +333,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text),
               child: const Text('Simpan')),
@@ -360,7 +362,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Muncul di semua jenis struk (aplikasi, share, cetak).',
-                style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
@@ -375,8 +379,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text),
               child: const Text('Simpan')),
@@ -391,6 +394,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         .write(TransactionsCompanion(
       strukNote: Value(result.isEmpty ? null : result),
     ));
+    await _load();
+  }
+
+  /// Toggle centang "kembalian sudah diambil" — dipakai untuk nota yang
+  /// barangnya diambil belakangan, mencegah kasir memberi kembalian dua kali.
+  Future<void> _toggleChangeTaken(bool value) async {
+    final db = ref.read(databaseProvider);
+    await (db.update(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .write(TransactionsCompanion(changeTaken: Value(value)));
     await _load();
   }
 
@@ -411,8 +424,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final tx = _tx;
     if (tx == null) return;
     _custCtrl.text = _customer?.name ?? tx.customerName ?? '';
-    _custCtrl.selection = TextSelection(
-        baseOffset: 0, extentOffset: _custCtrl.text.length);
+    _custCtrl.selection =
+        TextSelection(baseOffset: 0, extentOffset: _custCtrl.text.length);
     setState(() {
       _editingCustomer = true;
       _custSuggestions = [];
@@ -648,7 +661,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.person_outline, size: 14, color: scheme.onSurfaceVariant),
+              Icon(Icons.person_outline,
+                  size: 14, color: scheme.onSurfaceVariant),
               const SizedBox(width: 6),
               Expanded(
                 child: TextField(
@@ -658,13 +672,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Nama pembeli',
-                    hintStyle: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    hintStyle:
+                        TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                     prefixText: 'Pelanggan: ',
-                    prefixStyle: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    prefixStyle:
+                        TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                     border: UnderlineInputBorder(
                         borderSide: BorderSide(color: scheme.outlineVariant)),
                     focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: scheme.primary, width: 1.5)),
+                        borderSide:
+                            BorderSide(color: scheme.primary, width: 1.5)),
                     contentPadding: const EdgeInsets.only(bottom: 2),
                   ),
                   onChanged: _onCustQueryChanged,
@@ -689,10 +706,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     InkWell(
                       onTap: () => _saveCustomer(id: c.id, name: null),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 7),
                         child: Row(
                           children: [
-                            Icon(Icons.person_outline, size: 14, color: scheme.onSurfaceVariant),
+                            Icon(Icons.person_outline,
+                                size: 14, color: scheme.onSurfaceVariant),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(c.name,
@@ -739,8 +758,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               autofocus: true,
               keyboardType: TextInputType.number,
               inputFormatters: const [ThousandsSeparatorFormatter()],
-              decoration:
-                  const InputDecoration(prefixText: 'Rp ', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  prefixText: 'Rp ', border: OutlineInputBorder()),
             ),
           ],
         ),
@@ -771,8 +790,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       );
       await _load();
       if (change > 0) {
-        messenger.showSnackBar(SnackBar(
-            content: Text('Kembalian ${formatRupiah(change)}')));
+        messenger.showSnackBar(
+            SnackBar(content: Text('Kembalian ${formatRupiah(change)}')));
       }
     }
   }
@@ -792,8 +811,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // terpisah & tidak ada refund tunai, karena memang belum ada uang masuk.
     // Nota sudah lunas: tetap nota retur terpisah + refund (uang sudah
     // benar-benar berpindah).
-    final isUnpaidTx =
-        _tx!.status == 'tempo' || _tx!.status == 'kurang_bayar';
+    final isUnpaidTx = _tx!.status == 'tempo' || _tx!.status == 'kurang_bayar';
 
     // Qty yang sudah pernah diretur sebelumnya (cegah double-retur). Untuk
     // nota belum lunas ini selalu kosong (baris sudah dikurangi in-place),
@@ -861,8 +879,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             dense: true,
                             contentPadding: EdgeInsets.zero,
                             title: Text(
-                                _productNames[item.productId] ??
-                                    item.productId,
+                                _productNames[item.productId] ?? item.productId,
                                 style: const TextStyle(fontSize: 13)),
                             subtitle: Text(
                                 'Maks ${maxQty % 1 == 0 ? maxQty.toInt() : maxQty} · ${formatRupiah(item.priceAtSale)}',
@@ -871,14 +888,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(
-                                      Icons.remove_circle_outline,
+                                  icon: const Icon(Icons.remove_circle_outline,
                                       size: 20),
                                   visualDensity: VisualDensity.compact,
                                   onPressed: q <= 0
                                       ? null
-                                      : () => setSheet(() =>
-                                          returnQty[item.id] = q - 1),
+                                      : () => setSheet(
+                                          () => returnQty[item.id] = q - 1),
                                 ),
                                 SizedBox(
                                   width: 28,
@@ -895,8 +911,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   visualDensity: VisualDensity.compact,
                                   onPressed: q >= maxQty
                                       ? null
-                                      : () => setSheet(() =>
-                                          returnQty[item.id] = q + 1),
+                                      : () => setSheet(
+                                          () => returnQty[item.id] = q + 1),
                                 ),
                               ],
                             ),
@@ -950,12 +966,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   isDense: true,
                                   value: refundMethodId,
                                   items: [
-                                    ...paymentMethods.map((m) => DropdownMenuItem(
-                                          value: m.id,
-                                          child: Text(m.name,
-                                              style:
-                                                  const TextStyle(fontSize: 13)),
-                                        )),
+                                    ...paymentMethods
+                                        .map((m) => DropdownMenuItem(
+                                              value: m.id,
+                                              child: Text(m.name,
+                                                  style: const TextStyle(
+                                                      fontSize: 13)),
+                                            )),
                                     if (!paymentMethods
                                         .any((m) => m.type == 'tunai'))
                                       const DropdownMenuItem(
@@ -986,7 +1003,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   : 'Total Refund',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700)),
                         ),
                         const SizedBox(width: 8),
                         Text(formatRupiah(refund),
@@ -1000,8 +1018,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       onPressed: refund <= 0
                           ? null
                           : () => Navigator.of(ctx).pop(true),
-                      style: FilledButton.styleFrom(
-                          backgroundColor: scheme.error),
+                      style:
+                          FilledButton.styleFrom(backgroundColor: scheme.error),
                       child: const Text('Konfirmasi Retur'),
                     ),
                   ],
@@ -1037,7 +1055,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       await _load();
       if (mounted) {
         messenger.showSnackBar(const SnackBar(
-            content: Text('Retur dicatat, hutang berkurang, stok dikembalikan')));
+            content:
+                Text('Retur dicatat, hutang berkurang, stok dikembalikan')));
       }
       return;
     }
@@ -1060,11 +1079,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     if (returnItems.isEmpty) return;
 
     // Terjemahkan id metode terpilih kembali ke `type` (yang disimpan DB).
-    final refundMethod = paymentMethods
-            .where((m) => m.id == refundMethodId)
-            .firstOrNull
-            ?.type ??
-        'tunai';
+    final refundMethod =
+        paymentMethods.where((m) => m.id == refundMethodId).firstOrNull?.type ??
+            'tunai';
     await db.addReturnTransaction(
       originalTxId: _tx!.id,
       localId: localId,
@@ -1073,8 +1090,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       refundMethod: refundMethod,
     );
     if (mounted) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Retur dicatat, stok dikembalikan')));
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Retur dicatat, stok dikembalikan')));
     }
   }
 
@@ -1176,8 +1193,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              Text('Bagikan Struk',
-                  style: Theme.of(ctx).textTheme.titleMedium),
+              Text('Bagikan Struk', style: Theme.of(ctx).textTheme.titleMedium),
               const SizedBox(height: 12),
               Flexible(
                 child: SingleChildScrollView(
@@ -1192,9 +1208,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       customerName: _customerDisplay(_tx!),
                       customerAddress: _customer?.address?.trim() ?? '',
                       employeeName: _employeeForReceipt,
-                      storeName: prefs.name.isNotEmpty
-                          ? prefs.name
-                          : device.storeName,
+                      storeName:
+                          prefs.name.isNotEmpty ? prefs.name : device.storeName,
                       storeAddress: prefs.address,
                       storePhone: prefs.phone,
                       storeWhatsapp: prefs.whatsapp,
@@ -1226,8 +1241,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           as RenderRepaintBoundary?;
       if (boundary == null) return;
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
 
       final dir = await getTemporaryDirectory();
@@ -1264,8 +1278,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
 
     final tx = _tx!;
-    final isKurangBayar =
-        tx.status == 'kurang_bayar' || tx.status == 'tempo';
+    final isKurangBayar = tx.status == 'kurang_bayar' || tx.status == 'tempo';
     final isVoid = tx.status == 'void';
     final isRetur = tx.internalNote?.startsWith('RETUR:') ?? false;
 
@@ -1293,7 +1306,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 CheckedPopupMenuItem<String>(
                   value: 'toggle_profit',
                   checked: _showProfit,
-                  child: const Text('Tampilkan Laba', style: TextStyle(fontSize: 13)),
+                  child: const Text('Tampilkan Laba',
+                      style: TextStyle(fontSize: 13)),
                 ),
               ],
             ),
@@ -1342,13 +1356,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               ? 'Transaksi Tempo'
                               : 'Kurang Bayar')
                           : 'Transaksi Berhasil',
-                      style:
-                          Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: isKurangBayar
-                                    ? scheme.onErrorContainer
-                                    : scheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w700,
-                              ),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: isKurangBayar
+                                ? scheme.onErrorContainer
+                                : scheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
                     Text(
                       tx.localId,
@@ -1381,37 +1394,47 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       Text(
                         device.storeName.toUpperCase(),
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5),
                       ),
                       if (_storeAddress.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(_storeAddress,
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                            style: TextStyle(
+                                fontSize: 12, color: scheme.onSurfaceVariant)),
                       ],
-                      if (_storePhone.isNotEmpty || _storeWhatsapp.isNotEmpty) ...[
+                      if (_storePhone.isNotEmpty ||
+                          _storeWhatsapp.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
                           [
                             if (_storePhone.isNotEmpty) 'Telp: $_storePhone',
-                            if (_storeWhatsapp.isNotEmpty) 'WA: $_storeWhatsapp',
+                            if (_storeWhatsapp.isNotEmpty)
+                              'WA: $_storeWhatsapp',
                           ].join('   '),
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant),
                         ),
                       ],
                       if (_storeTelegram.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text('Telegram: $_storeTelegram',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                            style: TextStyle(
+                                fontSize: 12, color: scheme.onSurfaceVariant)),
                       ],
                       if (_receiptHeader.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(_receiptHeader,
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                            style: TextStyle(
+                                fontSize: 12, color: scheme.onSurfaceVariant)),
                       ],
                     ],
                   ),
@@ -1425,7 +1448,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.badge_outlined, size: 14, color: scheme.onSurfaceVariant),
+                          Icon(Icons.badge_outlined,
+                              size: 14, color: scheme.onSurfaceVariant),
                           const SizedBox(width: 6),
                           // Nama device bebas diisi user saat setup — bisa panjang.
                           // Dibungkus Expanded + ellipsis agar tanggal di kanan
@@ -1434,11 +1458,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             child: Text('Kasir: ${device.deviceName}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant)),
                           ),
                           const SizedBox(width: 6),
                           Text(_formatDateTime(tx.createdAt),
-                              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant)),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -1450,10 +1478,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               onTap: _enterEditCustomer,
                               child: Row(
                                 children: [
-                                  Icon(Icons.person_outline, size: 14, color: scheme.onSurfaceVariant),
+                                  Icon(Icons.person_outline,
+                                      size: 14, color: scheme.onSurfaceVariant),
                                   const SizedBox(width: 6),
                                   Text('Pelanggan: ',
-                                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: scheme.onSurfaceVariant)),
                                   Expanded(
                                     child: Text(
                                       _customerDisplay(tx),
@@ -1461,19 +1492,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: _customer != null || tx.customerName != null
+                                        color: _customer != null ||
+                                                tx.customerName != null
                                             ? scheme.primary
                                             : scheme.onSurfaceVariant,
-                                        fontWeight: _customer != null || tx.customerName != null
+                                        fontWeight: _customer != null ||
+                                                tx.customerName != null
                                             ? FontWeight.w600
                                             : FontWeight.normal,
-                                        fontStyle: (_customer == null && tx.customerName == null)
+                                        fontStyle: (_customer == null &&
+                                                tx.customerName == null)
                                             ? FontStyle.italic
                                             : FontStyle.normal,
                                       ),
                                     ),
                                   ),
-                                  Icon(Icons.edit_outlined, size: 12, color: scheme.primary),
+                                  Icon(Icons.edit_outlined,
+                                      size: 12, color: scheme.primary),
                                 ],
                               ),
                             ),
@@ -1485,8 +1520,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           child: Text(
                             _customer!.address!.trim(),
                             style: TextStyle(
-                                fontSize: 11,
-                                color: scheme.onSurfaceVariant),
+                                fontSize: 11, color: scheme.onSurfaceVariant),
                           ),
                         ),
                       // Pegawai yang melayani — hanya tampil bila diinput.
@@ -1541,10 +1575,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     _checked[i.id] = target;
                   }
                 }),
-                icon: Icon(
-                    _allChecked
-                        ? Icons.remove_done
-                        : Icons.done_all,
+                icon: Icon(_allChecked ? Icons.remove_done : Icons.done_all,
                     size: 18),
                 label: Text(_allChecked ? 'Hapus Tanda' : 'Tandai Semua',
                     style: const TextStyle(fontSize: 12)),
@@ -1570,9 +1601,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         _SummaryRow('Dibayar',
                             '${_methodLabel(tx.paymentMethod)} · ${formatRupiah(tx.paid)}'),
                       if (tx.changeAmount > 0)
-                        _SummaryRow(
-                            'Kembalian', formatRupiah(tx.changeAmount),
-                            color: scheme.tertiary),
+                        _ChangeTakenRow(
+                          amount: formatRupiah(tx.changeAmount),
+                          taken: tx.changeTaken,
+                          color: scheme.tertiary,
+                          onChanged: isVoid ? null : _toggleChangeTaken,
+                        ),
                       if (isKurangBayar)
                         _SummaryRow(
                           'Sisa Tagihan',
@@ -1581,16 +1615,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           bold: true,
                         ),
                       if (tx.pointsEarned > 0)
-                        _SummaryRow(
-                            'Poin Didapat', '+${tx.pointsEarned} poin',
+                        _SummaryRow('Poin Didapat', '+${tx.pointsEarned} poin',
                             color: scheme.tertiary),
                     ],
                   ),
                 ),
                 // Catatan nota — di bawah total, dalam card yang sama
-                if (tx.strukNote?.isNotEmpty == true || (!isVoid && !isRetur)) ...[
+                if (tx.strukNote?.isNotEmpty == true ||
+                    (!isVoid && !isRetur)) ...[
                   const Divider(height: 1),
-                  _buildStrukNoteBlock(scheme, tx, editable: !isVoid && !isRetur),
+                  _buildStrukNoteBlock(scheme, tx,
+                      editable: !isVoid && !isRetur),
                 ],
               ],
             ),
@@ -1635,16 +1670,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     onPressed: () => _showVoid(context),
                     icon: const Icon(Icons.cancel_outlined, size: 18),
                     label: const Text('Batalkan'),
-                    style: OutlinedButton.styleFrom(
-                        foregroundColor: scheme.error),
+                    style:
+                        OutlinedButton.styleFrom(foregroundColor: scheme.error),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _showReturSheet(context),
-                    icon: const Icon(Icons.assignment_return_outlined,
-                        size: 18),
+                    icon:
+                        const Icon(Icons.assignment_return_outlined, size: 18),
                     label: const Text('Retur'),
                   ),
                 ),
@@ -1693,7 +1728,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       totalLaba += ((item.priceAtSale - item.costAtSale) * effQty).round();
     }
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final profitColor = isDark ? const Color(0xFF81C784) : const Color(0xFF388E3C);
+    final profitColor =
+        isDark ? const Color(0xFF81C784) : const Color(0xFF388E3C);
     return _SummaryRow(
       totalLaba >= 0 ? 'Total Laba' : 'Total Rugi',
       formatRupiah(totalLaba.abs()),
@@ -1939,8 +1975,7 @@ class _ReceiptPaper extends StatelessWidget {
         children: [
           Text(storeName.toUpperCase(),
               textAlign: TextAlign.center,
-              style: _mono.copyWith(
-                  fontSize: 16, fontWeight: FontWeight.w900)),
+              style: _mono.copyWith(fontSize: 16, fontWeight: FontWeight.w900)),
           if (storeAddress.isNotEmpty)
             Text(storeAddress,
                 textAlign: TextAlign.center,
@@ -1970,8 +2005,7 @@ class _ReceiptPaper extends StatelessWidget {
             ],
           ),
           Text(customerName,
-              style: _mono.copyWith(
-                  fontSize: 16, fontWeight: FontWeight.w900)),
+              style: _mono.copyWith(fontSize: 16, fontWeight: FontWeight.w900)),
           if (customerAddress.isNotEmpty)
             Text(customerAddress, style: _mono.copyWith(fontSize: 11)),
           const _DashedLine(),
@@ -1985,14 +2019,12 @@ class _ReceiptPaper extends StatelessWidget {
             // dijual bersama varian tampil kosong).
             final effQty = item.qty;
             final isPlaceholder = !isVar && effQty == 0;
-            final qtyStr = effQty % 1 == 0
-                ? effQty.toInt().toString()
-                : effQty.toString();
+            final qtyStr =
+                effQty % 1 == 0 ? effQty.toInt().toString() : effQty.toString();
             return [
               Text('$mark$namePrefix${productNames[item.productId] ?? ''}',
                   style: _mono.copyWith(
-                      fontWeight:
-                          isVar ? FontWeight.w400 : FontWeight.w700)),
+                      fontWeight: isVar ? FontWeight.w400 : FontWeight.w700)),
               if (!isPlaceholder)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2089,8 +2121,7 @@ class _ReceiptPaper extends StatelessWidget {
           ],
           const _DashedLine(),
           Text('Terima kasih!',
-              textAlign: TextAlign.center,
-              style: _mono.copyWith(fontSize: 11)),
+              textAlign: TextAlign.center, style: _mono.copyWith(fontSize: 11)),
         ],
       ),
     );
@@ -2102,8 +2133,7 @@ class _ReceiptPaper extends StatelessWidget {
     return false;
   }
 
-  String _fmtDateTime(DateTime dt) =>
-      '${dt.day}/${dt.month} '
+  String _fmtDateTime(DateTime dt) => '${dt.day}/${dt.month} '
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
   String _methodShort(String m) => switch (m) {
@@ -2201,6 +2231,56 @@ class _Blockquote extends StatelessWidget {
   }
 }
 
+/// Baris "Kembalian" dengan checkbox "sudah diambil" — mencegah kembalian
+/// diserahkan dua kali pada nota yang barangnya diambil belakangan.
+class _ChangeTakenRow extends StatelessWidget {
+  const _ChangeTakenRow({
+    required this.amount,
+    required this.taken,
+    required this.color,
+    required this.onChanged,
+  });
+
+  final String amount;
+  final bool taken;
+  final Color color;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onChanged == null ? null : () => onChanged!(!taken),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: Checkbox(
+                    value: taken,
+                    onChanged: onChanged == null
+                        ? null
+                        : (v) => onChanged!(v ?? false),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Text('Kembalian', style: TextStyle(color: color)),
+              ],
+            ),
+            Text(amount, style: TextStyle(color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SummaryRow extends StatelessWidget {
   const _SummaryRow(
     this.label,
@@ -2223,13 +2303,11 @@ class _SummaryRow extends StatelessWidget {
         children: [
           Text(label,
               style: TextStyle(
-                  fontWeight:
-                      bold ? FontWeight.w700 : FontWeight.normal,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.normal,
                   color: color)),
           Text(value,
               style: TextStyle(
-                  fontWeight:
-                      bold ? FontWeight.w700 : FontWeight.normal,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.normal,
                   color: color)),
         ],
       ),

@@ -1,0 +1,177 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart' hide isNotNull;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/services/order_page_service.dart';
+
+/// Test Tier 1 (DB murni) untuk fitur eksperimental "Katalog Pesanan".
+/// Membuktikan katalog yang di-embed di HTML benar-benar mencerminkan data
+/// aktif di database — bukan sekadar template ter-render.
+
+Future<String> _addProduct(
+  AppDatabase db, {
+  required String name,
+  required int price,
+  int costPrice = 0,
+  bool isActive = true,
+  String? parentProductId,
+  int unitTypeId = 2, // Pcs
+}) async {
+  final productId = 'p-${DateTime.now().microsecondsSinceEpoch}-$name';
+  final unitId = '$productId-u';
+  await db.into(db.products).insert(ProductsCompanion.insert(
+        id: productId,
+        name: name,
+        isActive: Value(isActive),
+        parentProductId: Value(parentProductId),
+      ));
+  await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+        id: unitId,
+        productId: productId,
+        unitTypeId: Value(unitTypeId),
+        isBaseUnit: const Value(true),
+      ));
+  await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+        id: '$unitId-t1',
+        productUnitId: unitId,
+        minQty: const Value(1),
+        price: price,
+        costPrice: Value(costPrice),
+      ));
+  return productId;
+}
+
+Future<String> _unitIdOf(AppDatabase db, String productId) async {
+  final u = await (db.select(db.productUnits)
+        ..where((t) => t.productId.equals(productId)))
+      .getSingle();
+  return u.id;
+}
+
+Map<String, dynamic> _extractEmbeddedData(String html) {
+  // jsonEncode selalu menghasilkan satu baris (tanpa newline literal, hanya
+  // \n ter-escape di dalam string) — cukup tangkap sampai akhir baris. Pola
+  // dotAll+greedy sebelumnya menangkap sampai `};` TERAKHIR di seluruh
+  // <script> (banyak fungsi JS lain juga diakhiri `};`), menghasilkan JSON
+  // tidak valid.
+  final match = RegExp(r'^var DATA = (.+);$', multiLine: true).firstMatch(html);
+  expect(match, isNotNull, reason: 'HTML harus memuat blok `var DATA = {...}`');
+  return jsonDecode(match!.group(1)!) as Map<String, dynamic>;
+}
+
+void main() {
+  test('katalog HTML memuat produk aktif berharga valid, mengecualikan yang '
+      'tidak aktif / harga 0', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+
+    await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    await _addProduct(db, name: 'Nonaktif', price: 10000, isActive: false);
+    await _addProduct(db, name: 'Belum Diberi Harga', price: 0);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final names =
+        (data['products'] as List).map((p) => p['name']).toSet();
+
+    expect(names, contains('Gula Pasir'));
+    expect(names, isNot(contains('Nonaktif')),
+        reason: 'produk isActive=false tidak boleh muncul di katalog publik');
+    expect(names, isNot(contains('Belum Diberi Harga')),
+        reason: 'produk tanpa harga valid (0) membingungkan pelanggan bila '
+            'ditampilkan sebagai Rp 0');
+    expect(result.productCount, 1);
+    await db.close();
+  });
+
+  test('varian ikut ter-embed di bawah produk induknya dengan harga sendiri',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+
+    final parentId =
+        await _addProduct(db, name: 'Pop Ice', price: 2000);
+    await _addProduct(db,
+        name: 'Coklat', price: 2500, parentProductId: parentId);
+    await _addProduct(db,
+        name: 'Stroberi', price: 2500, parentProductId: parentId);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+
+    // Varian TIDAK boleh muncul sebagai baris induk terpisah — hanya
+    // bersarang di bawah 'Pop Ice', sama seperti katalog kasir.
+    expect(products.map((p) => p['name']), ['Pop Ice']);
+    final variants = products.first['variants'] as List;
+    expect(variants.map((v) => v['name']).toSet(), {'Coklat', 'Stroberi'});
+    expect(variants.first['price'], anyOf(2500, 2500));
+    await db.close();
+  });
+
+  test('identitas baris pakai productUnitId asli — parsing di fase '
+      'berikutnya bisa lookup langsung ke DB tanpa kodeProduk', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId =
+        await _addProduct(db, name: 'Minyak Goreng', price: 32000);
+    final unitId = await _unitIdOf(db, productId);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+
+    expect(products.first['unitId'], unitId,
+        reason: 'unitId di katalog harus persis productUnitId di DB, bukan '
+            'kodeProduk (yang boleh kosong/tidak unik)');
+    await db.close();
+  });
+
+  test('nomor WhatsApp toko disaring hanya digit sebelum di-embed', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Beras', price: 65000);
+
+    final result = await OrderPageService.generateHtml(
+      db: db,
+      storeName: 'Toko Berkah',
+      storeWhatsapp: '+62 812-3456-7890',
+    );
+    final data = _extractEmbeddedData(result.html);
+    expect(data['waNumber'], '6281234567890');
+    await db.close();
+  });
+
+  test('nama toko & konten HTML tidak menyisipkan tag/skrip berbahaya '
+      '(XSS) walau nama toko mengandung karakter aneh', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Gula', price: 15000);
+
+    final result = await OrderPageService.generateHtml(
+      db: db,
+      storeName: 'Toko "Berkah" </script><script>alert(1)</script>',
+    );
+    // Tag </script> mentah tidak boleh muncul apa adanya di dalam blok data
+    // (harus ter-escape "<\/script>"), supaya browser tidak menutup blok
+    // <script> lebih awal lalu mengeksekusi sisipan HTML sebagai skrip baru.
+    expect(result.html.contains('</script><script>alert'), isFalse);
+    await db.close();
+  });
+
+  test('produk tanpa satuan dasar (data rusak) dilewati dengan aman, '
+      'bukan crash', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    // Produk tanpa productUnits sama sekali.
+    await db.into(db.products).insert(
+        ProductsCompanion.insert(id: 'p-broken', name: 'Rusak'));
+    await _addProduct(db, name: 'Sabun', price: 5000);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final names = (data['products'] as List).map((p) => p['name']).toSet();
+    expect(names, {'Sabun'});
+    await db.close();
+  });
+}

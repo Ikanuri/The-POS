@@ -17,7 +17,7 @@ thermal Bluetooth dan barcode scanner. Tanpa backend cloud.
 - **State:** Riverpod v2.5 — banyak dipakai `StateNotifierProvider.family`.
 - **Routing:** GoRouter v14 — `ShellRoute` untuk shell bottom-nav utama.
 - **DB:** Drift ORM + SQLCipher (`sqlcipher_flutter_libs`). Schema saat ini
-  `schemaVersion = 7` di `lib/core/database/app_database.dart`.
+  `schemaVersion = 9` di `lib/core/database/app_database.dart`.
 - **Ekspor:** `pdf` + `excel`, dikirim lewat `file_picker` (`saveFile`).
 - **Chart:** `fl_chart`. **Scanner:** `mobile_scanner` (kamera) + HID keyboard
   (scanner eksternal). **Printer:** `print_bluetooth_thermal` + native Kotlin RFCOMM.
@@ -117,6 +117,18 @@ sesuai apa yang disentuh, jangan lompat ke widget test kalau cukup test DB:
 5. Setelah semua test baru hijau: jalankan **seluruh** `flutter test` (bukan
    cuma file baru) untuk pastikan tidak ada regresi di tempat lain, plus
    `flutter analyze` bersih — baru commit.
+
+## Perencanaan — [PLAN.md](PLAN.md)
+
+- **Setiap ada rencana kerja** (fitur/fix yang didiskusikan tapi belum
+  dieksekusi — termasuk hasil sesi analisis/diskusi "jangan coding dulu"),
+  **masukkan ke `PLAN.md`** di root, komprehensif (detail teknis: file,
+  akar masalah, bukti; maupun non-teknis: prioritas, ketergantungan,
+  pertanyaan desain yang menggantung).
+- **Setiap satu item di `PLAN.md` selesai dieksekusi** (sudah dikerjakan &
+  di-commit), **hapus item itu dari `PLAN.md`** — jangan dibiarkan
+  menumpuk. `PLAN.md` isinya HANYA rencana yang masih menggantung, bukan
+  log riwayat (riwayat teknis ada di [CHANGELOG.md](CHANGELOG.md)).
 
 ## Git
 

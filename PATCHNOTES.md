@@ -8,6 +8,87 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Juli 2026
+
+### ✨ Fitur Baru
+- **Urutan "Harga Lain" bisa diatur.** Di pengaturan produk (tab Produk),
+  daftar Harga Lain sekarang punya ikon geser (drag-handle) di tiap baris —
+  tahan lalu seret untuk mengubah urutannya. Urutan ini otomatis diikuti
+  saat memilih harga lewat chip di kasir, jadi harga yang paling sering
+  dipakai bisa ditaruh paling depan.
+
+### 🐛 Perbaikan
+- **Katalog Pesanan (halaman HTML untuk pelanggan) tidak lagi lag di HP
+  low-end.** Pencarian produk dan tombol tambah/kurang jumlah kini jauh
+  lebih responsif, terutama untuk toko dengan katalog besar.
+- **Pencarian pelanggan di layar Bayar kini menampilkan semua hasil,
+  bisa di-scroll.** Sebelumnya hanya 5–8 nama teratas yang ditampilkan,
+  jadi pelanggan yang urutan namanya jatuh di belakang (mis. tidak muncul
+  saat mengetik sebagian nama) bisa "hilang" dari daftar padahal sebenarnya
+  ada.
+- **Struk in-app: urutan jumlah & satuan dibalik jadi lebih wajar dibaca**
+  ("1 pcs" alih-alih "pcs 1"), menyamakan dengan struk versi cetak/kirim
+  yang memang sudah begitu.
+- **Impor produk dari CSV: produk dengan nama & satuan sama tapi barcode
+  berbeda tidak lagi terbuang diam-diam saat impor.** Ini penyebab kasus
+  "Sedap Goreng per dus tidak ada" yang sempat dilaporkan — dua varian
+  barang dengan barcode berbeda dianggap duplikat dan salah satu dibuang
+  tanpa pemberitahuan apa pun.
+
+## 8 Juli 2026
+
+### ✨ Fitur Baru
+- **Checkbox "Kembalian" di struk — cegah kembalian diberikan dua kali.**
+  Untuk nota yang barangnya diambil belakangan, sekarang ada centang kecil
+  di samping baris "Kembalian" di struk. Setelah kembalian benar-benar
+  diserahkan ke pembeli, tinggal dicentang — jadi kasir lain (atau kasir
+  yang sama, lupa) tidak salah kasih kembalian lagi saat pembeli kembali
+  mengambil barang.
+- **Kolom cari di layar Kasir kini melebar otomatis saat disentuh.**
+  Sebelumnya kolom cari selalu berdesakan dengan tombol-tombol di
+  sampingnya (scan, antrian, riwayat, dll). Sekarang kolom cari tampil
+  ringkas dulu, lalu melebar mulus menutupi tombol-tombol itu begitu
+  disentuh — ada tombol "x" untuk menghapus teks atau mengecilkan lagi
+  kolomnya. Tap di luar kolom (mis. di daftar produk kosong) otomatis
+  mengecilkan kolom lagi tanpa menghapus kata yang sudah diketik. Tap
+  tombol "+" atau badan produk hasil pencarian TIDAK ikut mengecilkan
+  kolom — jadi bisa tap beberapa barang hasil cari berturut-turut tanpa
+  kolom cari tiba-tiba menutup.
+- **Tombol Bayar Nanti kini terpisah, tidak lagi campur dengan Metode
+  Pembayaran.** Di layar Bayar, sekarang ada 2 tombol besar di bagian
+  bawah: **"Bayar [jumlah]"** (hijau, untuk pembayaran tunai/QRIS/dll seperti
+  biasa) dan **"Bayar Nanti"** (merah, langsung mencatat sebagai hutang).
+  Lebih jelas dan tidak perlu mencari-cari chip "Bayar Nanti" di antara
+  metode pembayaran lain.
+- **Harga Lain di pengaturan produk.** Selain harga grosir, sekarang produk
+  bisa punya harga alternatif dengan nama bebas — misal harga jual "Sedap
+  Goreng" normalnya Rp 2.850, tapi bisa ditambah harga bernama "Harga Toko
+  A" senilai Rp 3.000. Saat di kasir, tap produk lalu pilih harga itu
+  langsung dari daftar chip harga, tidak perlu ketik manual. Atur lewat
+  Kelola Produk → pilih produk → "Tambah Harga Lain".
+
+### 🧪 Eksperimental
+- **Katalog Pesanan: dropdown varian tidak lagi otomatis tertutup.**
+  Sebelumnya, tiap kali menambah jumlah varian (mis. pilih rasa), daftar
+  variannya langsung tertutup lagi — merepotkan kalau mau pilih beberapa
+  rasa sekaligus. Sekarang tetap terbuka sampai pelanggan sendiri yang
+  menutupnya dengan tap nama produknya.
+- **Katalog Pesanan: ada tombol ganti tampilan terang/gelap** (ikon
+  matahari/bulan di pojok kanan atas), pilihan tersimpan otomatis untuk
+  kunjungan berikutnya. Teks Total di halaman ini juga diperbesar supaya
+  lebih mudah dibaca.
+- **Katalog Pesanan kini bisa langsung ditempel ke keranjang kasir.**
+  Sebelumnya, kasir harus membaca pesanan WhatsApp dari pelanggan satu-satu
+  dan menginputnya manual. Sekarang, cukup salin (copy) teks pesanan yang
+  dikirim pelanggan, buka layar Kasir, tekan tombol baru "Tempel Pesanan" di
+  pojok atas, lalu tempel — barang, jumlah, dan nama pelanggan otomatis
+  terisi ke keranjang. Harga yang dipakai selalu harga TERBARU di aplikasi
+  (bukan harga lama yang mungkin tertulis di pesanan), dan barang yang sudah
+  dihapus/dinonaktifkan sejak katalog dikirim akan ditandai jelas sebagai
+  "tidak ditemukan" tanpa mengganggu barang lain yang valid.
+
+---
+
 ## 7 Juli 2026
 
 ### 🛠️ Perbaikan yang Terasa
@@ -41,6 +122,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Pengaturan Izin Kasir dirapikan**: dua izin yang fiturnya memang belum
   ada di aplikasi ("Input Pengeluaran" & "Input Pembelian") disembunyikan
   agar tidak membingungkan.
+
+### 🧪 Eksperimental
+- **Katalog Pesanan (baru, tahap awal).** Di Pengaturan → Eksperimental,
+  owner sekarang bisa membuat & membagikan satu file "Katalog Pesanan" ke
+  pelanggan lewat WhatsApp. Pelanggan buka file itu di HP-nya (tanpa perlu
+  internet), pilih sendiri barang & jumlahnya — termasuk varian (mis.
+  pilihan rasa) — lalu tekan "Kirim via WhatsApp" untuk mengirim pesanan
+  yang sudah rapi terformat. **Catatan penting**: file ini TIDAK otomatis
+  ter-update — tiap kali harga berubah, perlu dibuat & dikirim ulang. (Lihat
+  pembaruan 8 Juli: kasir kini bisa menempel pesanan ini langsung ke
+  keranjang, tidak perlu input manual lagi.)
 
 ---
 

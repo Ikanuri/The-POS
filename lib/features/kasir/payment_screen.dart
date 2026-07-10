@@ -73,7 +73,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     // Pra-isi pelanggan & pegawai dari metadata keranjang (dipilih di cart bar
     // kasir). Mode tambah belanjaan mengikuti transaksi asli → tidak pra-isi.
-    final meta = _isAddMode ? const CartMeta() : ref.read(cartMetaProvider(_cartId));
+    final meta =
+        _isAddMode ? const CartMeta() : ref.read(cartMetaProvider(_cartId));
     Customer? preCustomer;
     Map<String, (int, int)> preDebts = {};
     if (meta.customerId != null) {
@@ -259,14 +260,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   int get _total => _totalOverride ?? _cartTotal;
 
-  int get _paid =>
-      _selectedMethodType == 'tunai' ? _tendered : _total;
+  int get _paid => _selectedMethodType == 'tunai' ? _tendered : _total;
 
   int get _change => (_paid - _total).clamp(0, double.maxFinite.toInt());
 
   Future<void> _editTotal() async {
-    final ctrl = TextEditingController(
-        text: ThousandsSeparatorFormatter.format(_total));
+    final ctrl =
+        TextEditingController(text: ThousandsSeparatorFormatter.format(_total));
     final result = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -325,8 +325,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       var allowNegative = (await db.getSetting('allow_negative_stock')) == '1';
       // Asisten bisa diberi izin khusus override stok minus meski setting
       // global OFF (mis. owner sedang tidak di tempat).
-      if (!allowNegative &&
-          ref.read(deviceProvider).deviceRole == 'asisten') {
+      if (!allowNegative && ref.read(deviceProvider).deviceRole == 'asisten') {
         allowNegative = await db.isPermissionEnabled('asisten_stok_minus');
       }
       if (!allowNegative) {
@@ -371,9 +370,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       final isTempo = _selectedMethodType == 'tempo';
       final paidAmount = isTempo ? 0 : _paid;
-      final status = isTempo
-          ? 'tempo'
-          : (paidAmount < _total ? 'kurang_bayar' : 'lunas');
+      final status =
+          isTempo ? 'tempo' : (paidAmount < _total ? 'kurang_bayar' : 'lunas');
 
       // Customer resolution
       final customerId = _selectedCustomer?.id;
@@ -385,12 +383,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // Aturan: setiap kelipatan [threshold] rupiah → [pointsPer] poin.
       int pointsEarned = 0;
       final loyaltyThreshold =
-          int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ?? 0;
+          int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ??
+              0;
       final loyaltyPointsPer =
           int.tryParse(await db.getSetting('loyalty_points_per') ?? '') ?? 1;
       if (customerId != null && loyaltyThreshold > 0 && !isTempo) {
-        pointsEarned =
-            (_total / loyaltyThreshold).floor() * (loyaltyPointsPer < 1 ? 1 : loyaltyPointsPer);
+        pointsEarned = (_total / loyaltyThreshold).floor() *
+            (loyaltyPointsPer < 1 ? 1 : loyaltyPointsPer);
       }
 
       final txId = _uuid.v4();
@@ -596,434 +595,437 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-          title: Text(_isAddMode ? 'Bayar Selisih' : 'Pembayaran')),
+      appBar: AppBar(title: Text(_isAddMode ? 'Bayar Selisih' : 'Pembayaran')),
       body: Column(
         children: [
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-          // Order summary
-          Card(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Row(
+                // Order summary
+                Card(
+                  child: Column(
                     children: [
-                      Text('Ringkasan Pesanan',
-                          style: Theme.of(context).textTheme.titleSmall),
-                      const Spacer(),
-                      Text('${cart.length} item',
-                          style: TextStyle(
-                              color: scheme.onSurfaceVariant, fontSize: 12)),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: Row(
+                          children: [
+                            Text('Ringkasan Pesanan',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const Spacer(),
+                            Text('${cart.length} item',
+                                style: TextStyle(
+                                    color: scheme.onSurfaceVariant,
+                                    fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      ...() {
+                        // effectiveQty helper for display (same logic as transaction save)
+                        double itemEffQty(CartItem item) {
+                          if (item.isVariant) return item.qty;
+                          final varSum = cart
+                              .where((c) =>
+                                  c.isVariant &&
+                                  c.parentProductId == item.productId)
+                              .fold(0.0, (s, c) => s + c.qty);
+                          return (item.qty - varSum)
+                              .clamp(0.0, double.infinity);
+                        }
+
+                        return orderCartItems(cart).map((item) {
+                          final eq = itemEffQty(item);
+                          final isPlaceholder = !item.isVariant && eq == 0;
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.only(
+                                left: item.isVariant ? 32 : 16, right: 16),
+                            title: Row(
+                              children: [
+                                if (item.isVariant)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 4),
+                                    child: Icon(Icons.subdirectory_arrow_right,
+                                        size: 13,
+                                        color: scheme.onSurfaceVariant),
+                                  ),
+                                Expanded(
+                                  child: Text(item.productName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: item.isVariant
+                                              ? scheme.onSurfaceVariant
+                                              : null)),
+                                ),
+                              ],
+                            ),
+                            subtitle: isPlaceholder
+                                ? Text('via varian',
+                                    style: TextStyle(
+                                        fontSize: 11, color: scheme.primary))
+                                : Text(
+                                    '${item.unitName} × ${eq % 1 == 0 ? eq.toInt() : eq}',
+                                    style: const TextStyle(fontSize: 11)),
+                            trailing: isPlaceholder
+                                ? null
+                                : Text(formatRupiah((item.price * eq).round()),
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600)),
+                          );
+                        });
+                      }(),
+                      const Divider(height: 1),
+                      InkWell(
+                        onTap: _editTotal,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  const Text('Total',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700)),
+                                  const SizedBox(width: 6),
+                                  Icon(Icons.edit,
+                                      size: 13, color: scheme.tertiary),
+                                  const Spacer(),
+                                  Text(
+                                    formatRupiah(_total),
+                                    style: TextStyle(
+                                        color: _totalOverride != null
+                                            ? scheme.tertiary
+                                            : scheme.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                              if (_totalOverride != null)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      'Asli ${formatRupiah(_cartTotal)} · diubah manual',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: scheme.onSurfaceVariant,
+                                          fontStyle: FontStyle.italic),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                ...() {
-                    // effectiveQty helper for display (same logic as transaction save)
-                    double itemEffQty(CartItem item) {
-                      if (item.isVariant) return item.qty;
-                      final varSum = cart
-                          .where((c) =>
-                              c.isVariant &&
-                              c.parentProductId == item.productId)
-                          .fold(0.0, (s, c) => s + c.qty);
-                      return (item.qty - varSum)
-                          .clamp(0.0, double.infinity);
-                    }
+                const SizedBox(height: 16),
 
-                    return orderCartItems(cart).map((item) {
-                      final eq = itemEffQty(item);
-                      final isPlaceholder = !item.isVariant && eq == 0;
-                      return ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.only(
-                            left: item.isVariant ? 32 : 16, right: 16),
-                        title: Row(
-                          children: [
-                            if (item.isVariant)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Icon(
-                                    Icons.subdirectory_arrow_right,
-                                    size: 13,
-                                    color: scheme.onSurfaceVariant),
+                // Pelanggan & pegawai mengikuti transaksi asli saat tambah
+                // belanjaan — tidak ditampilkan/diubah di mode bayar selisih.
+                if (!_isAddMode) ...[
+                  // Customer picker
+                  Text('Pelanggan',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_selectedCustomer != null) ...[
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: scheme.primaryContainer,
+                                  child: Text(
+                                    (_selectedCustomer!.name.isEmpty
+                                            ? '?'
+                                            : _selectedCustomer!.name[0])
+                                        .toUpperCase(),
+                                    style: TextStyle(
+                                        color: scheme.onPrimaryContainer,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(_selectedCustomer!.name,
+                                      style: TextStyle(color: scheme.primary)),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 18),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedCustomer = null;
+                                      _custCtrl.clear();
+                                      _custNameManual = '';
+                                    });
+                                    _syncMetaCustomer();
+                                  },
+                                ),
+                              ],
+                            ),
+                            if ((_custDebts[_selectedCustomer!.id]?.$1 ?? 0) >
+                                0)
+                              Container(
+                                margin: const EdgeInsets.only(top: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: scheme.errorContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded,
+                                        size: 16,
+                                        color: scheme.onErrorContainer),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Pelanggan ini memiliki hutang ${formatRupiah(_custDebts[_selectedCustomer!.id]!.$1)} di ${_custDebts[_selectedCustomer!.id]!.$2} nota',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: scheme.onErrorContainer),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            Expanded(
-                              child: Text(item.productName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: item.isVariant
-                                          ? scheme.onSurfaceVariant
-                                          : null)),
-                            ),
-                          ],
-                        ),
-                        subtitle: isPlaceholder
-                            ? Text('via varian',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: scheme.primary))
-                            : Text(
-                                '${item.unitName} × ${eq % 1 == 0 ? eq.toInt() : eq}',
-                                style: const TextStyle(fontSize: 11)),
-                        trailing: isPlaceholder
-                            ? null
-                            : Text(
-                                formatRupiah((item.price * eq).round()),
-                                style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600)),
-                      );
-                    });
-                  }(),
-                const Divider(height: 1),
-                InkWell(
-                  onTap: _editTotal,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            const Text('Total',
-                                style:
-                                    TextStyle(fontWeight: FontWeight.w700)),
-                            const SizedBox(width: 6),
-                            Icon(Icons.edit, size: 13, color: scheme.tertiary),
-                            const Spacer(),
-                            Text(
-                              formatRupiah(_total),
-                              style: TextStyle(
-                                  color: _totalOverride != null
-                                      ? scheme.tertiary
-                                      : scheme.primary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16),
-                            ),
-                          ],
-                        ),
-                        if (_totalOverride != null)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text(
-                                'Asli ${formatRupiah(_cartTotal)} · diubah manual',
-                                style: TextStyle(
-                                    fontSize: 11,
+                          ] else ...[
+                            TextField(
+                              key: _custFieldKey,
+                              controller: _custCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'Cari pelanggan atau ketik nama…',
+                                prefixIcon:
+                                    const Icon(Icons.person_outline, size: 18),
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                                suffixText:
+                                    _custCtrl.text.isEmpty ? 'Umum' : null,
+                                suffixStyle: TextStyle(
                                     color: scheme.onSurfaceVariant,
                                     fontStyle: FontStyle.italic),
                               ),
-                            ],
-                          ),
-                      ],
+                              // Saat field difokus, gulir ke atas agar dropdown saran
+                              // muncul di atas keyboard (beri jeda untuk animasi keyboard).
+                              onTap: () => _scrollCustIntoView(delayMs: 300),
+                              onChanged: (v) {
+                                setState(() {
+                                  _custNameManual = v;
+                                });
+                                _searchCustomers(v);
+                              },
+                            ),
+                            if (_custDropdownOpen)
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                decoration: BoxDecoration(
+                                  color: scheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border:
+                                      Border.all(color: scheme.outlineVariant),
+                                ),
+                                constraints: const BoxConstraints(maxHeight: 240),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  itemCount: _custSuggestions.length,
+                                  itemBuilder: (context, index) {
+                                    final c = _custSuggestions[index];
+                                    final debt = _custDebts[c.id];
+                                    final hasDebt = debt != null && debt.$1 > 0;
+                                    return ListTile(
+                                      dense: true,
+                                      leading: CircleAvatar(
+                                        radius: 12,
+                                        backgroundColor:
+                                            scheme.primaryContainer,
+                                        child: Text(
+                                            (c.name.isEmpty ? '?' : c.name[0])
+                                                .toUpperCase(),
+                                            style: TextStyle(
+                                                color:
+                                                    scheme.onPrimaryContainer,
+                                                fontSize: 10)),
+                                      ),
+                                      title: Text(c.name,
+                                          style: const TextStyle(fontSize: 13)),
+                                      subtitle: hasDebt
+                                          ? Text(
+                                              'Hutang: ${formatRupiah(debt.$1)} (${debt.$2} nota)',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: scheme.error))
+                                          : null,
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedCustomer = c;
+                                          _custCtrl.text = c.name;
+                                          _custDropdownOpen = false;
+                                        });
+                                        _syncMetaCustomer();
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-          // Pelanggan & pegawai mengikuti transaksi asli saat tambah
-          // belanjaan — tidak ditampilkan/diubah di mode bayar selisih.
-          if (!_isAddMode) ...[
-          // Customer picker
-          Text('Pelanggan',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_selectedCustomer != null) ...[
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 14,
-                          backgroundColor: scheme.primaryContainer,
-                          child: Text(
-                            (_selectedCustomer!.name.isEmpty ? '?' : _selectedCustomer!.name[0]).toUpperCase(),
-                            style: TextStyle(
-                                color: scheme.onPrimaryContainer,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(_selectedCustomer!.name,
-                              style: TextStyle(color: scheme.primary)),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () {
-                            setState(() {
-                              _selectedCustomer = null;
-                              _custCtrl.clear();
-                              _custNameManual = '';
-                            });
-                            _syncMetaCustomer();
-                          },
-                        ),
-                      ],
-                    ),
-                    if ((_custDebts[_selectedCustomer!.id]?.$1 ?? 0) > 0)
-                      Container(
-                        margin: const EdgeInsets.only(top: 8),
+                  // Pegawai picker — dipilih dari daftar (tanpa keyboard, sehingga
+                  // tidak menutupi field lain).
+                  Text('Pegawai (yang melayani)',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _pickEmployee,
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: scheme.errorContainer,
-                          borderRadius: BorderRadius.circular(8),
+                            horizontal: 12, vertical: 12),
+                        child: Row(
+                          children: [
+                            Icon(Icons.badge_outlined,
+                                size: 18, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _selectedEmployee?.name ??
+                                    'Pilih pegawai (opsional)',
+                                style: TextStyle(
+                                  color: _selectedEmployee != null
+                                      ? scheme.primary
+                                      : scheme.onSurfaceVariant,
+                                  fontWeight: _selectedEmployee != null
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  fontStyle: _selectedEmployee == null
+                                      ? FontStyle.italic
+                                      : FontStyle.normal,
+                                ),
+                              ),
+                            ),
+                            if (_selectedEmployee != null)
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () {
+                                  setState(() => _selectedEmployee = null);
+                                  _syncMetaEmployee();
+                                },
+                              )
+                            else
+                              Icon(Icons.expand_more,
+                                  color: scheme.onSurfaceVariant),
+                          ],
                         ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Payment method
+                Text('Metode Pembayaran',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ..._methods.map((m) {
+                      final selected = m.id == _selectedMethodId;
+                      return ChoiceChip(
+                        label: Text(m.name),
+                        selected: selected,
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedMethodId = m.id;
+                            _selectedMethodType = m.type;
+                          });
+                        },
+                        selectedColor: scheme.primaryContainer,
+                      );
+                    }),
+                    // Bayar Nanti (tempo) TIDAK lagi dipilih lewat chip di sini —
+                    // sudah punya tombol khusus sendiri di bar bawah.
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                if (_selectedMethodType == 'qris') ...[
+                  _QrisDisplay(
+                      methods: _methods, selectedId: _selectedMethodId),
+                ],
+
+                if (_selectedMethodType == 'tempo') ...[
+                  Card(
+                    color: scheme.tertiaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.schedule,
+                              color: scheme.onTertiaryContainer),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Bayar Nanti: barang diserahkan / dipesan sekarang, '
+                              'dibayar belakangan. Dicatat sebagai hutang penuh '
+                              '(${formatRupiah(_total)}). Tagih lewat Riwayat Transaksi.',
+                              style: TextStyle(
+                                  color: scheme.onTertiaryContainer,
+                                  fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_selectedCustomer == null) ...[
+                    const SizedBox(height: 8),
+                    Card(
+                      color: scheme.errorContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
                             Icon(Icons.warning_amber_rounded,
-                                size: 16, color: scheme.onErrorContainer),
+                                color: scheme.onErrorContainer, size: 18),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Pelanggan ini memiliki hutang ${formatRupiah(_custDebts[_selectedCustomer!.id]!.$1)} di ${_custDebts[_selectedCustomer!.id]!.$2} nota',
+                                'Pilih pelanggan terdaftar agar hutang bisa dilacak '
+                                'akumulatif. Tanpa pelanggan, hutang hanya tercatat di nota ini.',
                                 style: TextStyle(
-                                    fontSize: 12,
-                                    color: scheme.onErrorContainer),
+                                    color: scheme.onErrorContainer,
+                                    fontSize: 12),
                               ),
                             ),
                           ],
                         ),
                       ),
-                  ] else ...[
-                    TextField(
-                      key: _custFieldKey,
-                      controller: _custCtrl,
-                      decoration: InputDecoration(
-                        hintText: 'Cari pelanggan atau ketik nama…',
-                        prefixIcon: const Icon(Icons.person_outline, size: 18),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        suffixText: _custCtrl.text.isEmpty ? 'Umum' : null,
-                        suffixStyle: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontStyle: FontStyle.italic),
-                      ),
-                      // Saat field difokus, gulir ke atas agar dropdown saran
-                      // muncul di atas keyboard (beri jeda untuk animasi keyboard).
-                      onTap: () => _scrollCustIntoView(delayMs: 300),
-                      onChanged: (v) {
-                        setState(() {
-                          _custNameManual = v;
-                        });
-                        _searchCustomers(v);
-                      },
                     ),
-                    if (_custDropdownOpen)
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: scheme.outlineVariant),
-                        ),
-                        child: Column(
-                          children: _custSuggestions.take(5).map((c) {
-                            final debt = _custDebts[c.id];
-                            final hasDebt = debt != null && debt.$1 > 0;
-                            return ListTile(
-                              dense: true,
-                              leading: CircleAvatar(
-                                radius: 12,
-                                backgroundColor: scheme.primaryContainer,
-                                child: Text((c.name.isEmpty ? '?' : c.name[0]).toUpperCase(),
-                                    style: TextStyle(
-                                        color: scheme.onPrimaryContainer,
-                                        fontSize: 10)),
-                              ),
-                              title: Text(c.name,
-                                  style: const TextStyle(fontSize: 13)),
-                              subtitle: hasDebt
-                                  ? Text(
-                                      'Hutang: ${formatRupiah(debt.$1)} (${debt.$2} nota)',
-                                      style: TextStyle(
-                                          fontSize: 11, color: scheme.error))
-                                  : null,
-                              onTap: () {
-                                setState(() {
-                                  _selectedCustomer = c;
-                                  _custCtrl.text = c.name;
-                                  _custDropdownOpen = false;
-                                });
-                                _syncMetaCustomer();
-                              },
-                            );
-                          }).toList(),
-                        ),
-                      ),
                   ],
                 ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Pegawai picker — dipilih dari daftar (tanpa keyboard, sehingga
-          // tidak menutupi field lain).
-          Text('Pegawai (yang melayani)',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Card(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _pickEmployee,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.badge_outlined,
-                        size: 18, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _selectedEmployee?.name ?? 'Pilih pegawai (opsional)',
-                        style: TextStyle(
-                          color: _selectedEmployee != null
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
-                          fontWeight: _selectedEmployee != null
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                          fontStyle: _selectedEmployee == null
-                              ? FontStyle.italic
-                              : FontStyle.normal,
-                        ),
-                      ),
-                    ),
-                    if (_selectedEmployee != null)
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () {
-                          setState(() => _selectedEmployee = null);
-                          _syncMetaEmployee();
-                        },
-                      )
-                    else
-                      Icon(Icons.expand_more, color: scheme.onSurfaceVariant),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ],
-
-          // Payment method
-          Text('Metode Pembayaran',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ..._methods.map((m) {
-                final selected = m.id == _selectedMethodId;
-                return ChoiceChip(
-                  label: Text(m.name),
-                  selected: selected,
-                  onSelected: (_) {
-                    setState(() {
-                      _selectedMethodId = m.id;
-                      _selectedMethodType = m.type;
-                    });
-                  },
-                  selectedColor: scheme.primaryContainer,
-                );
-              }),
-              // Bayar Nanti (tempo / pre-order) — selalu tersedia.
-              // showCheckmark:false agar ikon jam & centang tidak tumpang tindih
-              // saat chip terpilih.
-              ChoiceChip(
-                showCheckmark: false,
-                avatar: Icon(Icons.schedule,
-                    size: 16,
-                    color: _selectedMethodType == 'tempo'
-                        ? scheme.onTertiaryContainer
-                        : scheme.onSurfaceVariant),
-                label: const Text('Bayar Nanti'),
-                selected: _selectedMethodType == 'tempo',
-                onSelected: (_) {
-                  setState(() {
-                    _selectedMethodId = 'pm-tempo';
-                    _selectedMethodType = 'tempo';
-                    _tendered = 0;
-                  });
-                },
-                selectedColor: scheme.tertiaryContainer,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          if (_selectedMethodType == 'qris') ...[
-            _QrisDisplay(methods: _methods, selectedId: _selectedMethodId),
-          ],
-
-          if (_selectedMethodType == 'tempo') ...[
-            Card(
-              color: scheme.tertiaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Icon(Icons.schedule, color: scheme.onTertiaryContainer),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Bayar Nanti: barang diserahkan / dipesan sekarang, '
-                        'dibayar belakangan. Dicatat sebagai hutang penuh '
-                        '(${formatRupiah(_total)}). Tagih lewat Riwayat Transaksi.',
-                        style: TextStyle(
-                            color: scheme.onTertiaryContainer, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_selectedCustomer == null) ...[
-              const SizedBox(height: 8),
-              Card(
-                color: scheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning_amber_rounded,
-                          color: scheme.onErrorContainer, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Pilih pelanggan terdaftar agar hutang bisa dilacak '
-                          'akumulatif. Tanpa pelanggan, hutang hanya tercatat di nota ini.',
-                          style: TextStyle(
-                              color: scheme.onErrorContainer, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ],
 
                 const SizedBox(height: 16),
               ],
@@ -1034,18 +1036,44 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       bottomNavigationBar: Padding(
         padding: EdgeInsets.fromLTRB(
             16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-        child: FilledButton(
-          onPressed: (_isSaving || !_bayarEnabled) ? null : _onBayarPressed,
-          style:
-              FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-          child: _isSaving
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : Text(_bayarLabel(), style: const TextStyle(fontSize: 16)),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: FilledButton(
+                onPressed:
+                    (_isSaving || !_bayarEnabled) ? null : _onBayarPressed,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  backgroundColor: const Color(0xFF22C55E),
+                  foregroundColor: Colors.white,
+                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(_bayarLabel(), style: const TextStyle(fontSize: 16)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton(
+                onPressed:
+                    (_isSaving || !_bayarEnabled) ? null : _onBayarNantiPressed,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Colors.white,
+                ),
+                child:
+                    const Text('Bayar Nanti', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1055,15 +1083,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// diinput nanti di sheet keypad — jadi tidak butuh _tendered di sini.
   bool get _bayarEnabled => ref.read(cartProvider(_cartId)).isNotEmpty;
 
-  String _bayarLabel() {
-    if (_selectedMethodType == 'tempo') {
-      return 'Simpan Hutang ${formatRupiah(_total)}';
-    }
-    if (_selectedMethodType == 'tunai') {
-      return 'Bayar ${formatRupiah(_total)}';
-    }
-    return 'Konfirmasi ${formatRupiah(_total)}';
-  }
+  String _bayarLabel() => 'Bayar ${formatRupiah(_total)}';
 
   /// Tap "Bayar": untuk tunai buka sheet keypad (slide-up) lalu konfirmasi
   /// dengan tombol ✓; untuk metode lain langsung konfirmasi.
@@ -1082,6 +1102,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     await _confirm();
   }
 
+  /// Tap "Bayar Nanti": catat sebagai hutang penuh (tempo), tanpa keypad
+  /// tunai — dedicated button, bukan lagi lewat chip Metode Pembayaran.
+  Future<void> _onBayarNantiPressed() async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _selectedMethodId = 'pm-tempo';
+      _selectedMethodType = 'tempo';
+      _tendered = 0;
+    });
+    await _confirm();
+  }
 }
 
 /// Sheet keypad tunai yang slide-up saat tombol "Bayar" ditekan.
@@ -1300,9 +1331,7 @@ class _Keypad extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(3),
           child: Material(
-            color: isAction
-                ? scheme.surfaceContainerHighest
-                : scheme.surface,
+            color: isAction ? scheme.surfaceContainerHighest : scheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
               side: BorderSide(color: scheme.outlineVariant, width: 0.5),
@@ -1318,9 +1347,8 @@ class _Keypad extends StatelessWidget {
                     style: TextStyle(
                       fontSize: k.length > 1 && !isAction ? 16 : 20,
                       fontWeight: FontWeight.w600,
-                      color: isAction
-                          ? scheme.onSurfaceVariant
-                          : scheme.onSurface,
+                      color:
+                          isAction ? scheme.onSurfaceVariant : scheme.onSurface,
                     ),
                   ),
                 ),
@@ -1333,8 +1361,7 @@ class _Keypad extends StatelessWidget {
 
     return Column(
       children: [
-        for (final row in _rows)
-          Row(children: [for (final k in row) key(k)]),
+        for (final row in _rows) Row(children: [for (final k in row) key(k)]),
         Row(children: [key('0', flex: 2), key('000', flex: 2)]),
       ],
     );
@@ -1342,8 +1369,7 @@ class _Keypad extends StatelessWidget {
 }
 
 class _QrisDisplay extends StatelessWidget {
-  const _QrisDisplay(
-      {required this.methods, required this.selectedId});
+  const _QrisDisplay({required this.methods, required this.selectedId});
   final List<PaymentMethod> methods;
   final String selectedId;
 

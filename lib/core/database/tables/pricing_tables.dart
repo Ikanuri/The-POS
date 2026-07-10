@@ -16,6 +16,25 @@ class PriceTiers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Harga alternatif berlabel (mis. "Harga Toko A" = 3000) — BUKAN tier
+/// berjenjang minQty seperti [PriceTiers]. Murni pilihan cepat yang tampil
+/// sebagai chip tap-untuk-pakai di kasir (`ItemEntrySheet`), tidak pernah
+/// dipilih otomatis oleh `PriceService.resolvePrice`.
+class AltPrices extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get productUnitId => text().references(ProductUnits, #id)();
+  TextColumn get label => text()();
+  IntColumn get price => integer()(); // Rupiah bulat
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  // Urutan tampil chip di ItemEntrySheet, diatur lewat drag-reorder di form
+  // Produk. TIDAK bisa mengandalkan createdAt: saveProduct menulis semua
+  // baris harga-lain dalam satu batch dengan timestamp yang sama persis.
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Harga khusus per group pelanggan — prioritas tertinggi di price resolver.
 class CustomerGroupPrices extends Table {
   TextColumn get id => text()();

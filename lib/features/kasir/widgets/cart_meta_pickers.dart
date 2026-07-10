@@ -150,9 +150,11 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
               ConstrainedBox(
                 constraints: BoxConstraints(
                     maxHeight: MediaQuery.of(context).size.height * 0.4),
-                child: ListView(
+                child: ListView.builder(
                   shrinkWrap: true,
-                  children: _results.take(8).map((c) {
+                  itemCount: _results.length,
+                  itemBuilder: (context, index) {
+                    final c = _results[index];
                     final debt = _debts[c.id];
                     final hasDebt = debt != null && debt.$1 > 0;
                     return ListTile(
@@ -176,7 +178,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                       onTap: () =>
                           Navigator.pop(context, CustomerPick(c.id, c.name)),
                     );
-                  }).toList(),
+                  },
                 ),
               ),
           ],

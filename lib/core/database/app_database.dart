@@ -70,6 +70,7 @@ const kAsistenPermissionKeys = <String>[
   ProductUnits,
   ProductBarcodes,
   PriceTiers,
+  AltPrices,
   CustomerGroups,
   CustomerGroupPrices,
   Customers,
@@ -99,7 +100,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 10;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -165,6 +166,27 @@ class AppDatabase extends _$AppDatabase {
               await customStatement(stmt);
             }
           }
+          if (from < 8) {
+            // Harga alternatif berlabel per satuan produk (mis. "Harga Toko
+            // A" = 3000) — tap-untuk-pakai di kasir, terpisah dari tier
+            // minQty di price_tiers.
+            await m.createTable(altPrices);
+          }
+          if (from < 9) {
+            // Centang "kembalian sudah diambil" di struk — mencegah kembalian
+            // diserahkan dua kali untuk nota yang barangnya diambil belakangan.
+            await m.addColumn(transactions, transactions.changeTaken);
+          }
+          if (from < 10 && from >= 8) {
+            // Urutan tampil "Harga Lain" bisa direorder (drag-handle) di
+            // form Produk — butuh kolom urutan eksplisit, tidak bisa lagi
+            // mengandalkan createdAt (lihat komentar di tabel AltPrices).
+            // Guard `from >= 8`: kalau upgrade langsung dari versi < 8,
+            // `createTable(altPrices)` di atas SUDAH memakai definisi tabel
+            // TERKINI (sudah termasuk sort_order) — addColumn lagi di sini
+            // akan gagal "duplicate column name".
+            await m.addColumn(altPrices, altPrices.sortOrder);
+          }
         },
         beforeOpen: (details) async {
           // Arsip dibuka read-only (query_only = ON) — jangan menulis apa pun.
@@ -176,14 +198,17 @@ class AppDatabase extends _$AppDatabase {
             b.insertAll(
               unitTypes,
               _kDefaultUnitTypes.entries.map(
-                (e) => UnitTypesCompanion.insert(id: Value(e.key), name: e.value),
+                (e) =>
+                    UnitTypesCompanion.insert(id: Value(e.key), name: e.value),
               ),
               mode: InsertMode.insertOrReplace,
             );
             b.insertAll(
               kasirPermissions,
-              [...kKasirPermissionKeys, ...kAsistenPermissionKeys]
-                  .map((k) => KasirPermissionsCompanion.insert(permissionKey: k)),
+              [
+                ...kKasirPermissionKeys,
+                ...kAsistenPermissionKeys
+              ].map((k) => KasirPermissionsCompanion.insert(permissionKey: k)),
               mode: InsertMode.insertOrIgnore,
             );
           });
@@ -206,14 +231,17 @@ class AppDatabase extends _$AppDatabase {
       // Satuan legacy. ID 7 & 8 di sistem lama = 'Biji', merge ke ID 12.
       b.insertAll(
         unitTypes,
-        _kDefaultUnitTypes.entries
-            .map((e) => UnitTypesCompanion.insert(id: Value(e.key), name: e.value)),
+        _kDefaultUnitTypes.entries.map(
+            (e) => UnitTypesCompanion.insert(id: Value(e.key), name: e.value)),
         mode: InsertMode.insertOrIgnore,
       );
       // Group produk legacy 3–20, nama diisi manual.
       b.insertAll(
         productGroups,
-        [for (var i = 3; i <= 20; i++) ProductGroupsCompanion.insert(id: Value(i))],
+        [
+          for (var i = 3; i <= 20; i++)
+            ProductGroupsCompanion.insert(id: Value(i))
+        ],
         mode: InsertMode.insertOrIgnore,
       );
       // Permission kasir & asisten, semua default OFF.
@@ -226,7 +254,8 @@ class AppDatabase extends _$AppDatabase {
       // Metode bayar bawaan: tunai selalu ada, tidak bisa dihapus di UI.
       b.insert(
         paymentMethods,
-        PaymentMethodsCompanion.insert(id: 'pm-tunai', type: 'tunai', name: 'Tunai'),
+        PaymentMethodsCompanion.insert(
+            id: 'pm-tunai', type: 'tunai', name: 'Tunai'),
         mode: InsertMode.insertOrIgnore,
       );
     });
@@ -261,6 +290,16 @@ class AppDatabase extends _$AppDatabase {
     return (select(priceTiers)
           ..where((t) => t.productUnitId.equals(productUnitId))
           ..orderBy([(t) => OrderingTerm.desc(t.minQty)]))
+        .get();
+  }
+
+  /// Harga alternatif berlabel untuk satu satuan produk, diurut sesuai
+  /// posisi hasil drag-reorder user di form Produk (bukan waktu dibuat).
+  /// Beda dari [getPriceTiers]: bukan tier qty, murni pilihan cepat manual.
+  Future<List<AltPrice>> getAltPrices(String productUnitId) {
+    return (select(altPrices)
+          ..where((t) => t.productUnitId.equals(productUnitId))
+          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
   }
 
@@ -415,8 +454,9 @@ class AppDatabase extends _$AppDatabase {
         'WHERE product_unit_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
         variables: [Variable.withString(baseUnitId)],
       ).getSingleOrNull();
-      final currentBase =
-          baseLastRow != null ? (baseLastRow.data['stock_after'] as num).toDouble() : 0.0;
+      final currentBase = baseLastRow != null
+          ? (baseLastRow.data['stock_after'] as num).toDouble()
+          : 0.0;
 
       final contrib = nonBaseStock * ratio;
       await into(stockLedger).insert(StockLedgerCompanion.insert(
@@ -437,7 +477,8 @@ class AppDatabase extends _$AppDatabase {
   /// penghitung yang sama, sehingga menghitung jumlah transaksi hari ini +1
   /// mentah bisa bertabrakan. Method ini mencari sequence bebas berikutnya
   /// dengan memeriksa localId yang sudah ada.
-  Future<String> generateUniqueLocalId(String deviceCode, [DateTime? at]) async {
+  Future<String> generateUniqueLocalId(String deviceCode,
+      [DateTime? at]) async {
     final now = at ?? DateTime.now();
     final datePart = '${now.year}'
         '${now.month.toString().padLeft(2, '0')}'
@@ -516,13 +557,11 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Varian (produk anak) aktif milik [parentProductId], urut nama.
-  Future<List<Product>> getVariants(String parentProductId) =>
-      (select(products)
-            ..where((t) =>
-                t.parentProductId.equals(parentProductId) &
-                t.isActive.equals(true))
-            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
-          .get();
+  Future<List<Product>> getVariants(String parentProductId) => (select(products)
+        ..where((t) =>
+            t.parentProductId.equals(parentProductId) & t.isActive.equals(true))
+        ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+      .get();
 
   /// Ambil satu produk berdasarkan id (mis. saat membuka modal edit item dari
   /// keranjang). Mengembalikan null bila tidak ditemukan.
@@ -542,8 +581,7 @@ class AppDatabase extends _$AppDatabase {
   Future<Map<String, String>> getParentMap(List<String> productIds) async {
     if (productIds.isEmpty) return {};
     final rows = await (select(products)
-          ..where((t) =>
-              t.id.isIn(productIds) & t.parentProductId.isNotNull()))
+          ..where((t) => t.id.isIn(productIds) & t.parentProductId.isNotNull()))
         .get();
     return {for (final r in rows) r.id: r.parentProductId!};
   }
@@ -633,8 +671,8 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.productId.equals(variantProductId)))
           .get();
       if (units.isEmpty) return;
-      final unit = units.firstWhere((u) => u.isBaseUnit,
-          orElse: () => units.first);
+      final unit =
+          units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
 
       if (isNonStock != null) {
         await (update(productUnits)..where((t) => t.id.equals(unit.id)))
@@ -643,8 +681,8 @@ class AppDatabase extends _$AppDatabase {
 
       // Tier harga dasar (minQty == 1): update bila ada, selainnya buat baru.
       final baseTier = await (select(priceTiers)
-            ..where((t) =>
-                t.productUnitId.equals(unit.id) & t.minQty.equals(1)))
+            ..where(
+                (t) => t.productUnitId.equals(unit.id) & t.minQty.equals(1)))
           .getSingleOrNull();
       if (baseTier != null) {
         await (update(priceTiers)..where((t) => t.id.equals(baseTier.id)))
@@ -667,7 +705,8 @@ class AppDatabase extends _$AppDatabase {
       final bc = barcode?.trim() ?? '';
       if (bc.isEmpty) {
         if (existing != null) {
-          await (delete(productBarcodes)..where((t) => t.id.equals(existing.id)))
+          await (delete(productBarcodes)
+                ..where((t) => t.id.equals(existing.id)))
               .go();
         }
       } else if (existing != null) {
@@ -699,11 +738,10 @@ class AppDatabase extends _$AppDatabase {
   Future<List<UnitType>> getAllUnitTypes() =>
       (select(unitTypes)..orderBy([(t) => OrderingTerm.asc(t.name)])).get();
 
-  Future<List<ProductGroup>> getAllProductGroups() =>
-      (select(productGroups)
-            ..where((t) => t.name.isNotNull())
-            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
-          .get();
+  Future<List<ProductGroup>> getAllProductGroups() => (select(productGroups)
+        ..where((t) => t.name.isNotNull())
+        ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+      .get();
 
   /// Peta id produk → nama kategori untuk sekumpulan id (dipakai katalog untuk
   /// mengelompokkan produk per kategori). Hanya satu query untuk produk + grup.
@@ -712,8 +750,7 @@ class AppDatabase extends _$AppDatabase {
     if (ids.isEmpty) return {};
     final groups = await getAllProductGroups();
     final groupName = {for (final g in groups) g.id: g.name};
-    final rows =
-        await (select(products)..where((t) => t.id.isIn(ids))).get();
+    final rows = await (select(products)..where((t) => t.id.isIn(ids))).get();
     final map = <String, String>{};
     for (final p in rows) {
       final gid = p.productGroupId;
@@ -732,9 +769,9 @@ class AppDatabase extends _$AppDatabase {
       await (update(productGroups)..where((t) => t.id.equals(emptySlot.id)))
           .write(ProductGroupsCompanion(name: Value(name)));
     } else {
-      final rows = await customSelect(
-              'SELECT MAX(id) as mx FROM product_groups')
-          .getSingleOrNull();
+      final rows =
+          await customSelect('SELECT MAX(id) as mx FROM product_groups')
+              .getSingleOrNull();
       final nextId = (rows?.data['mx'] as int? ?? 20) + 1;
       await into(productGroups).insert(
           ProductGroupsCompanion.insert(id: Value(nextId), name: Value(name)));
@@ -746,8 +783,7 @@ class AppDatabase extends _$AppDatabase {
           .write(ProductGroupsCompanion(name: Value(newName)));
 
   Future<void> deleteProductGroup(int id) async {
-    await (update(products)
-          ..where((t) => t.productGroupId.equals(id)))
+    await (update(products)..where((t) => t.productGroupId.equals(id)))
         .write(const ProductsCompanion(productGroupId: Value(null)));
     await (update(productGroups)..where((t) => t.id.equals(id)))
         .write(const ProductGroupsCompanion(name: Value(null)));
@@ -767,6 +803,7 @@ class AppDatabase extends _$AppDatabase {
     required List<ProductUnitsCompanion> units,
     required Map<String, List<PriceTiersCompanion>> tiersByUnitTempId,
     required Map<String, List<ProductBarcodesCompanion>> barcodesByUnitTempId,
+    Map<String, List<AltPricesCompanion>> altPricesByUnitTempId = const {},
   }) async {
     return transaction(() async {
       final productId = product.id.value;
@@ -780,6 +817,9 @@ class AppDatabase extends _$AppDatabase {
       for (final existing in existingUnits) {
         if (!newUnitIds.contains(existing.id)) {
           await (delete(priceTiers)
+                ..where((t) => t.productUnitId.equals(existing.id)))
+              .go();
+          await (delete(altPrices)
                 ..where((t) => t.productUnitId.equals(existing.id)))
               .go();
           await (delete(productBarcodes)
@@ -798,12 +838,20 @@ class AppDatabase extends _$AppDatabase {
         await into(productUnits).insertOnConflictUpdate(unit);
 
         // Always replace tiers to keep them in sync with the form.
-        await (delete(priceTiers)
-              ..where((t) => t.productUnitId.equals(unitId)))
+        await (delete(priceTiers)..where((t) => t.productUnitId.equals(unitId)))
             .go();
         final tiers = tiersByUnitTempId[unitId] ?? [];
         if (tiers.isNotEmpty) {
           await batch((b) => b.insertAll(priceTiers, tiers));
+        }
+
+        // Sama seperti tiers: selalu ganti seluruh harga alternatif agar
+        // tetap sinkron dengan form (tidak menumpuk baris lama).
+        await (delete(altPrices)..where((t) => t.productUnitId.equals(unitId)))
+            .go();
+        final altPriceList = altPricesByUnitTempId[unitId] ?? [];
+        if (altPriceList.isNotEmpty) {
+          await batch((b) => b.insertAll(altPrices, altPriceList));
         }
 
         final barcodes = barcodesByUnitTempId[unitId] ?? [];
@@ -956,9 +1004,8 @@ class AppDatabase extends _$AppDatabase {
     final newPaid = payRows.isEmpty ? tx.paid : sumPay;
 
     final isTempo = tx.status == 'tempo' && newPaid == 0;
-    final newStatus = isTempo
-        ? 'tempo'
-        : (newPaid < newTotal ? 'kurang_bayar' : 'lunas');
+    final newStatus =
+        isTempo ? 'tempo' : (newPaid < newTotal ? 'kurang_bayar' : 'lunas');
     final newChange = newPaid > newTotal ? newPaid - newTotal : 0;
 
     await (update(transactions)..where((t) => t.id.equals(txId))).write(
@@ -1007,9 +1054,8 @@ class AppDatabase extends _$AppDatabase {
     final list = ids.toList();
     for (var i = 0; i < list.length; i += 500) {
       final chunk = list.sublist(i, (i + 500).clamp(0, list.length));
-      final rows = await (select(transactions)
-            ..where((t) => t.id.isIn(chunk)))
-          .get();
+      final rows =
+          await (select(transactions)..where((t) => t.id.isIn(chunk))).get();
       for (final t in rows) {
         dates.add(_dateKey(t.createdAt));
       }
@@ -1025,8 +1071,7 @@ class AppDatabase extends _$AppDatabase {
       final items = await (select(transactionItems)
             ..where((t) => t.transactionId.equals(txId)))
           .get();
-      final tx = await (select(transactions)
-            ..where((t) => t.id.equals(txId)))
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
           .getSingleOrNull();
       if (tx == null || tx.status == 'void') return;
 
@@ -1094,7 +1139,8 @@ class AppDatabase extends _$AppDatabase {
           ],
           updates: {customers},
         );
-        await into(loyaltyPointLedger).insert(LoyaltyPointLedgerCompanion.insert(
+        await into(loyaltyPointLedger)
+            .insert(LoyaltyPointLedgerCompanion.insert(
           id: const Uuid().v4(),
           customerId: tx.customerId!,
           type: 'adjust',
@@ -1189,8 +1235,9 @@ class AppDatabase extends _$AppDatabase {
           orig.pointsEarned > 0 &&
           orig.total > 0) {
         final proportion = (refundTotal / orig.total).clamp(0.0, 1.0);
-        final pointsToReverse =
-            (orig.pointsEarned * proportion).round().clamp(0, orig.pointsEarned);
+        final pointsToReverse = (orig.pointsEarned * proportion)
+            .round()
+            .clamp(0, orig.pointsEarned);
         if (pointsToReverse > 0) {
           await customUpdate(
             'UPDATE customers SET loyalty_points = loyalty_points - ? WHERE id = ?',
@@ -1200,8 +1247,8 @@ class AppDatabase extends _$AppDatabase {
             ],
             updates: {customers},
           );
-          await into(loyaltyPointLedger).insert(
-              LoyaltyPointLedgerCompanion.insert(
+          await into(loyaltyPointLedger)
+              .insert(LoyaltyPointLedgerCompanion.insert(
             id: const Uuid().v4(),
             customerId: orig.customerId!,
             type: 'adjust',
@@ -1274,8 +1321,7 @@ class AppDatabase extends _$AppDatabase {
               .go();
         } else {
           final newSubtotal = (item.priceAtSale * newQty).round();
-          await (update(transactionItems)
-                ..where((t) => t.id.equals(item.id)))
+          await (update(transactionItems)..where((t) => t.id.equals(item.id)))
               .write(TransactionItemsCompanion(
             qty: Value(newQty),
             subtotal: Value(newSubtotal),
@@ -1286,7 +1332,8 @@ class AppDatabase extends _$AppDatabase {
 
       // Jejak audit ringan di timeline pembayaran (amount 0 → tidak
       // memengaruhi jumlah dibayar, murni catatan "kapan ada retur").
-      await into(transactionPayments).insert(TransactionPaymentsCompanion.insert(
+      await into(transactionPayments)
+          .insert(TransactionPaymentsCompanion.insert(
         id: const Uuid().v4(),
         transactionId: txId,
         amount: 0,
@@ -1303,7 +1350,8 @@ class AppDatabase extends _$AppDatabase {
       // _reconcileTransactionTotals mempertahankan status 'tempo' selama
       // paid == 0, walau totalnya sudah jadi 0 (seluruh isi nota diretur).
       // Nota tanpa tagihan tersisa seharusnya tidak lagi "menggantung".
-      final after = await (select(transactions)..where((t) => t.id.equals(txId)))
+      final after = await (select(transactions)
+            ..where((t) => t.id.equals(txId)))
           .getSingleOrNull();
       if (after != null && after.total <= 0 && after.status != 'lunas') {
         await (update(transactions)..where((t) => t.id.equals(txId))).write(
@@ -1382,7 +1430,8 @@ class AppDatabase extends _$AppDatabase {
       final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
           .getSingleOrNull();
       if (tx == null || tx.status == 'void') return 0;
-      await into(transactionPayments).insert(TransactionPaymentsCompanion.insert(
+      await into(transactionPayments)
+          .insert(TransactionPaymentsCompanion.insert(
         id: const Uuid().v4(),
         transactionId: txId,
         amount: amount,
@@ -1511,10 +1560,10 @@ class AppDatabase extends _$AppDatabase {
   /// makin lama toko beroperasi. Dengan cari product id dulu, langkah kedua
   /// bisa pakai `idx_ti_product` (sudah ada) untuk lompat langsung ke baris
   /// yang relevan — biaya pencarian jadi lepas dari volume riwayat transaksi.
-  Future<List<String>> _matchingProductIds(String q) => (select(products)
-        ..where((p) => p.name.lower().contains(q.toLowerCase())))
-      .map((p) => p.id)
-      .get();
+  Future<List<String>> _matchingProductIds(String q) =>
+      (select(products)..where((p) => p.name.lower().contains(q.toLowerCase())))
+          .map((p) => p.id)
+          .get();
 
   /// Set id transaksi yang memuat produk dengan nama mengandung [q].
   Future<Set<String>> findTxIdsWithProduct(String q) async {
@@ -1555,8 +1604,7 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Daily summary ─────────────────────────
 
-  static String _dateKey(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-'
+  static String _dateKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
@@ -1639,10 +1687,8 @@ class AppDatabase extends _$AppDatabase {
       "FROM transactions WHERE status != 'void'",
       readsFrom: {transactions},
     ).get();
-    final allDates = rows
-        .map((r) => r.data['d'] as String?)
-        .whereType<String>()
-        .toSet();
+    final allDates =
+        rows.map((r) => r.data['d'] as String?).whereType<String>().toSet();
 
     final existing = await (selectOnly(dailySummaries)
           ..addColumns([dailySummaries.date]))
@@ -1663,8 +1709,7 @@ class AppDatabase extends _$AppDatabase {
     for (final r in txRows) {
       final ca = r['created_at'];
       if (ca is int) {
-        dates.add(_dateKey(
-            DateTime.fromMillisecondsSinceEpoch(ca * 1000)));
+        dates.add(_dateKey(DateTime.fromMillisecondsSinceEpoch(ca * 1000)));
       }
     }
     for (final d in dates) {
@@ -1900,13 +1945,30 @@ class AppDatabase extends _$AppDatabase {
   // ───────────────────────── Backup / Restore ─────────────────────────
 
   static const _allTables = [
-    'app_settings', 'products', 'product_groups', 'unit_types',
-    'product_units', 'product_barcodes', 'price_tiers',
-    'customer_groups', 'customer_group_prices', 'customers',
-    'transactions', 'transaction_items', 'transaction_payments', 'held_orders',
-    'stock_ledger', 'expenses', 'loyalty_point_ledger',
-    'suppliers', 'purchases', 'purchase_items',
-    'kasir_permissions', 'payment_methods', 'daily_summaries',
+    'app_settings',
+    'products',
+    'product_groups',
+    'unit_types',
+    'product_units',
+    'product_barcodes',
+    'price_tiers',
+    'alt_prices',
+    'customer_groups',
+    'customer_group_prices',
+    'customers',
+    'transactions',
+    'transaction_items',
+    'transaction_payments',
+    'held_orders',
+    'stock_ledger',
+    'expenses',
+    'loyalty_point_ledger',
+    'suppliers',
+    'purchases',
+    'purchase_items',
+    'kasir_permissions',
+    'payment_methods',
+    'daily_summaries',
     'employees',
   ];
 
@@ -1965,16 +2027,25 @@ class AppDatabase extends _$AppDatabase {
   ///   • Klien mengirim ke atas  → includeMasterData = false, supaya perubahan
   ///     harga di perangkat asisten/kasir TIDAK menimpa data owner.
   /// Data append-only (transaksi, stok, pembayaran, dll) selalu ikut.
-  Future<Map<String, List<Map<String, Object?>>>> dumpSince(
-      DateTime since, {
-      bool includeMasterData = true}) async {
+  Future<Map<String, List<Map<String, Object?>>>> dumpSince(DateTime since,
+      {bool includeMasterData = true}) async {
     const appendOnly = [
-      'transactions', 'transaction_items', 'transaction_payments',
-      'stock_ledger', 'loyalty_point_ledger', 'expenses',
+      'transactions',
+      'transaction_items',
+      'transaction_payments',
+      'stock_ledger',
+      'loyalty_point_ledger',
+      'expenses',
     ];
     const masterData = [
-      'products', 'product_units', 'price_tiers', 'product_barcodes',
-      'customers', 'customer_groups', 'customer_group_prices',
+      'products',
+      'product_units',
+      'price_tiers',
+      'alt_prices',
+      'product_barcodes',
+      'customers',
+      'customer_groups',
+      'customer_group_prices',
     ];
 
     final dump = <String, List<Map<String, Object?>>>{};
@@ -2003,7 +2074,9 @@ class AppDatabase extends _$AppDatabase {
       }
       final rows = await customSelect(
         sql,
-        variables: [for (var i = 0; i < varCount; i++) Variable.withInt(sinceSec)],
+        variables: [
+          for (var i = 0; i < varCount; i++) Variable.withInt(sinceSec)
+        ],
       ).get();
       dump[t] = rows.map((r) => r.data).toList();
     }
@@ -2036,8 +2109,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Merge rows from sync payload (INSERT OR IGNORE for ledger, last-write-wins for master).
-  Future<int> mergeRows(
-      String tableName, List<Map<String, Object?>> rows, bool isAppendOnly) async {
+  Future<int> mergeRows(String tableName, List<Map<String, Object?>> rows,
+      bool isAppendOnly) async {
     var count = 0;
     await transaction(() async {
       for (var row in rows) {

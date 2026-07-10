@@ -34,6 +34,7 @@ class _UnitOption {
     required this.costPrice,
     required this.stock,
     required this.tiers,
+    this.altPrices = const [],
     this.barcode,
   });
 
@@ -43,6 +44,8 @@ class _UnitOption {
   final int costPrice;
   final double stock;
   final List<PriceTier> tiers; // minQty DESC
+  /// Harga alternatif berlabel (bukan tier qty) — mis. "Harga Toko A".
+  final List<AltPrice> altPrices;
   final String? barcode;
 }
 
@@ -122,6 +125,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       );
       final stock = await db.currentStock(u.id);
       final tiers = await db.getPriceTiers(u.id);
+      final altPriceList = await db.getAltPrices(u.id);
       final barcodes = await db.getProductBarcodes(u.id);
       opts.add(_UnitOption(
         unit: u,
@@ -130,6 +134,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         costPrice: resolved.costPrice,
         stock: stock,
         tiers: tiers,
+        altPrices: altPriceList,
         barcode: barcodes
             .where((b) => b.isPrimary)
             .map((b) => b.barcode)
@@ -233,8 +238,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
 
   String _fmtQty(double q) => q % 1 == 0 ? q.toInt().toString() : q.toString();
 
-  _UnitOption? get _sel =>
-      _options.isEmpty ? null : _options[_selectedIdx];
+  _UnitOption? get _sel => _options.isEmpty ? null : _options[_selectedIdx];
 
   void _selectUnit(int idx) {
     // Bila satuan yang dipilih sudah ada di keranjang, ikuti catatan & status
@@ -325,12 +329,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     // Bila tidak ada lagi baris induk produk ini, hapus juga varian-variannya
     // agar tidak tertinggal sebagai item yatim di keranjang.
     final remaining = ref.read(cartProvider(widget.cartId));
-    final hasParentLine = remaining
-        .any((c) => !c.isVariant && c.productId == widget.product.id);
+    final hasParentLine =
+        remaining.any((c) => !c.isVariant && c.productId == widget.product.id);
     if (!hasParentLine) {
       for (final c in remaining
-          .where((c) =>
-              c.isVariant && c.parentProductId == widget.product.id)
+          .where((c) => c.isVariant && c.parentProductId == widget.product.id)
           .toList()) {
         notifier.removeItem(c.productUnitId);
       }
@@ -422,9 +425,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // ── Harga lain (satuan + tier) ────────────────────────
+                  // ── Harga lain (satuan + tier + harga alternatif) ─────
                   if (_options.length > 1 ||
-                      (_sel?.tiers.length ?? 0) > 1) ...[
+                      (_sel?.tiers.length ?? 0) > 1 ||
+                      (_sel?.altPrices.isNotEmpty ?? false)) ...[
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text('Pilih harga',
@@ -459,6 +463,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       _priceOverridden && _price == t.price,
                                   onTap: () => _applyTierPrice(t.price),
                                 ),
+                          // Harga alternatif berlabel (mis. "Harga Toko A").
+                          if (_sel != null)
+                            for (final a in _sel!.altPrices)
+                              _PriceChip(
+                                label: a.label,
+                                price: a.price,
+                                selected: _priceOverridden && _price == a.price,
+                                onTap: () => _applyTierPrice(a.price),
+                              ),
                         ],
                       ),
                     ),
@@ -532,7 +545,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       onChanged: (v) {
                                         final q = double.tryParse(v.trim());
                                         setState(() {
-                                          _qty = (q != null && q >= 0) ? q.clamp(0, 9999) : 0;
+                                          _qty = (q != null && q >= 0)
+                                              ? q.clamp(0, 9999)
+                                              : 0;
                                         });
                                       },
                                     ),
@@ -861,4 +876,3 @@ class _PriceChip extends StatelessWidget {
     );
   }
 }
-

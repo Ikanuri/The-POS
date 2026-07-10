@@ -25,6 +25,7 @@ import 'cart_provider.dart';
 import 'widgets/cart_meta_pickers.dart';
 import 'widgets/cart_sheet.dart';
 import 'widgets/item_entry_sheet.dart';
+import 'widgets/paste_order_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
 
 const _kasirUuid = Uuid();
@@ -200,14 +201,20 @@ class _ScanGuidePainter extends CustomPainter {
     canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(cLen, 0), corner);
     canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(0, cLen), corner);
     // Kanan-atas
-    canvas.drawLine(rect.topRight, rect.topRight + const Offset(-cLen, 0), corner);
-    canvas.drawLine(rect.topRight, rect.topRight + const Offset(0, cLen), corner);
+    canvas.drawLine(
+        rect.topRight, rect.topRight + const Offset(-cLen, 0), corner);
+    canvas.drawLine(
+        rect.topRight, rect.topRight + const Offset(0, cLen), corner);
     // Kiri-bawah
-    canvas.drawLine(rect.bottomLeft, rect.bottomLeft + const Offset(cLen, 0), corner);
-    canvas.drawLine(rect.bottomLeft, rect.bottomLeft + const Offset(0, -cLen), corner);
+    canvas.drawLine(
+        rect.bottomLeft, rect.bottomLeft + const Offset(cLen, 0), corner);
+    canvas.drawLine(
+        rect.bottomLeft, rect.bottomLeft + const Offset(0, -cLen), corner);
     // Kanan-bawah
-    canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(-cLen, 0), corner);
-    canvas.drawLine(rect.bottomRight, rect.bottomRight + const Offset(0, -cLen), corner);
+    canvas.drawLine(
+        rect.bottomRight, rect.bottomRight + const Offset(-cLen, 0), corner);
+    canvas.drawLine(
+        rect.bottomRight, rect.bottomRight + const Offset(0, -cLen), corner);
 
     // Garis tengah — merah normal, menebal & hijau sesaat saat pulse aktif.
     final color = Color.lerp(
@@ -309,8 +316,7 @@ final _catalogDetailProvider =
       unitCount: 0,
     );
   }
-  final base =
-      units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+  final base = units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
   final resolved =
       await PriceService(db).resolvePrice(productUnitId: base.id, qty: 1);
   final unitType = await (db.select(db.unitTypes)
@@ -448,9 +454,8 @@ const _kAvatarGradients = [
   [Color(0xFF4E8B8B), Color(0xFF3A7474)],
 ];
 
-List<Color> _gradFor(String name) =>
-    _kAvatarGradients[(name.isEmpty ? 0 : name.codeUnitAt(0)) %
-        _kAvatarGradients.length];
+List<Color> _gradFor(String name) => _kAvatarGradients[
+    (name.isEmpty ? 0 : name.codeUnitAt(0)) % _kAvatarGradients.length];
 
 class KasirScreen extends ConsumerStatefulWidget {
   const KasirScreen({super.key, this.addToTxId, this.catalogMode = false});
@@ -471,9 +476,8 @@ class KasirScreen extends ConsumerStatefulWidget {
 
 class _KasirScreenState extends ConsumerState<KasirScreen> {
   /// Slot keranjang aktif: katalog, tambah belanjaan, atau keranjang utama.
-  String get _cartId => widget.catalogMode
-      ? kCatalogCartId
-      : (widget.addToTxId ?? kMainCartId);
+  String get _cartId =>
+      widget.catalogMode ? kCatalogCartId : (widget.addToTxId ?? kMainCartId);
   bool get _isAddMode => widget.addToTxId != null;
   bool get _isCatalogMode => widget.catalogMode;
   static const _prefContinuous = 'scanner_continuous';
@@ -481,6 +485,30 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
+
+  /// Set oleh kartu/tile produk (lewat `onBeforeTap`) tepat sebelum tap
+  /// "+"/badan-produk terjadi, HANYA bila field cari sedang expanded &
+  /// berisi teks. Dibaca-lalu-direset oleh Listener pengecil field cari di
+  /// bawah topbar — mencegah field mengecil/kehilangan fokus akibat tap
+  /// yang sebenarnya membuka modal pilih harga / quick-add, bukan tap "di
+  /// luar" yang genuin. Listener descendant (kartu produk) selalu menerima
+  /// PointerDownEvent lebih dulu daripada Listener ancestor (urutan hit-test
+  /// Flutter: leaf → root), jadi flag ini sudah ter-set sebelum ancestor
+  /// memutuskan unfocus atau tidak.
+  bool _skipNextSearchCollapse = false;
+
+  /// true SELAMA modal ItemEntrySheet terbuka akibat tap badan produk (bukan
+  /// tap "+"biasa) yang dipicu saat field cari sedang expanded & berisi
+  /// teks — lihat `_openEntry`. Menahan `_KasirTopbar` tetap melebar walau
+  /// FocusNode field kehilangan fokus asli (diambil alih route/modal baru).
+  bool _searchForceExpanded = false;
+
+  void _markSkipSearchCollapse() {
+    if (_searchFocus.hasFocus && _searchCtrl.text.isNotEmpty) {
+      _skipNextSearchCollapse = true;
+    }
+  }
+
   bool _scannerOpen = false;
   MobileScannerController? _scannerCtrl;
   final _scanPulseController = ScanPulseController();
@@ -523,8 +551,12 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
 
-  void _showBanner(String msg, [InlineBannerType type = InlineBannerType.error]) {
-    setState(() { _bannerMsg = msg; _bannerType = type; });
+  void _showBanner(String msg,
+      [InlineBannerType type = InlineBannerType.error]) {
+    setState(() {
+      _bannerMsg = msg;
+      _bannerType = type;
+    });
   }
 
   Future<void> _initSwipeHint() async {
@@ -696,8 +728,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   Future<void> _ensureParentInCart(CartItem variantItem) async {
     if (!variantItem.isVariant || variantItem.parentProductId == null) return;
     final cart = ref.read(cartProvider(_cartId));
-    final hasParent = cart.any(
-        (c) => c.productId == variantItem.parentProductId && !c.isVariant);
+    final hasParent = cart
+        .any((c) => c.productId == variantItem.parentProductId && !c.isVariant);
     if (hasParent) return;
 
     final db = ref.read(databaseProvider);
@@ -731,7 +763,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         ));
   }
 
-  Future<void> _handleBarcode(String barcode, {bool fromExternal = false}) async {
+  Future<void> _handleBarcode(String barcode,
+      {bool fromExternal = false}) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     // Debounce lebih pendek untuk scanner eksternal (300 ms, cukup untuk
     // mencegah echo hardware) agar scan berturut produk sama responsif.
@@ -813,9 +846,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   Future<void> _openCartSheet({bool scrollToBottom = false}) async {
     if (_cartSheetOpen) return;
     _cartSheetOpen = true;
-    final payRoute = _isAddMode
-        ? '/kasir/tambah/${widget.addToTxId}/bayar'
-        : '/kasir/bayar';
+    final payRoute =
+        _isAddMode ? '/kasir/tambah/${widget.addToTxId}/bayar' : '/kasir/bayar';
     final editProductId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -828,7 +860,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     _cartSheetOpen = false;
     if (editProductId == null || !mounted) return;
 
-    final product = await ref.read(databaseProvider).getProductById(editProductId);
+    final product =
+        await ref.read(databaseProvider).getProductById(editProductId);
     if (product == null || !mounted) return;
     await showModalBottomSheet(
       context: context,
@@ -887,12 +920,24 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     });
   }
 
-  void _openEntry(Product product) {
-    showModalBottomSheet(
+  Future<void> _openEntry(Product product) async {
+    // Modal (route baru) mengambil alih fokus dari field cari secara alami
+    // lewat mekanisme FocusScope Flutter sendiri — beda dari tap "+" biasa
+    // yang cuma lewat Listener kita (lihat `_skipNextSearchCollapse`).
+    // `_searchForceExpanded` menahan kolom cari tetap lebar SELAMA modal
+    // terbuka, lalu fokus dikembalikan setelah modal ditutup.
+    final wasSearchActive =
+        _searchFocus.hasFocus && _searchCtrl.text.isNotEmpty;
+    if (wasSearchActive) setState(() => _searchForceExpanded = true);
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
     );
+    if (wasSearchActive && mounted) {
+      setState(() => _searchForceExpanded = false);
+      _searchFocus.requestFocus();
+    }
   }
 
   /// Tahan keranjang aktif. Bila pelanggan sudah dipilih, langsung pakai
@@ -946,8 +991,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                 onPressed: () => Navigator.of(ctx).pop(),
                 child: const Text('Batal')),
             FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(
-                  ctrl.text.trim().isEmpty ? 'Pesanan' : ctrl.text.trim()),
+              onPressed: () => Navigator.of(ctx)
+                  .pop(ctrl.text.trim().isEmpty ? 'Pesanan' : ctrl.text.trim()),
               child: const Text('Tahan'),
             ),
           ],
@@ -991,8 +1036,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     ref.read(cartMetaProvider(_cartId).notifier).replaceAll(parsed.meta);
     if (mounted) {
       setState(() => _heldPanelOpen = false);
-      _showBanner('Melanjutkan pesanan: ${order.label}',
-          InlineBannerType.success);
+      _showBanner(
+          'Melanjutkan pesanan: ${order.label}', InlineBannerType.success);
     }
   }
 
@@ -1121,6 +1166,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           _KasirTopbar(
             searchCtrl: _searchCtrl,
             searchFocus: _searchFocus,
+            forceExpanded: _searchForceExpanded,
             onSearch: (v) =>
                 ref.read(_kasirSearchProvider(_cartId).notifier).state = v,
             onScan: _openScanner,
@@ -1130,98 +1176,144 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
               isScrollControlled: true,
               builder: (_) => const TxHistorySheet(),
             ),
+            // EKSPERIMENTAL — Fase 2 fitur Katalog Pesanan. Hanya di mode
+            // kasir biasa (bukan katalog/tambah-belanjaan) agar tidak
+            // menambah kebingungan di alur yang sudah ada.
+            onPasteOrder: (!_isCatalogMode && !_isAddMode)
+                ? () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => PasteOrderSheet(cartId: _cartId),
+                    )
+                : null,
             heldCount: heldCount,
             isGrid: isGrid,
             onToggleGrid: () => ref.read(kasirGridProvider.notifier).toggle(),
             // Mode katalog: sembunyikan Antrian & Riwayat agar tak ambigu.
             showQueueAndHistory: !_isCatalogMode,
           ),
-          InlineBanner(
-            message: _bannerMsg,
-            type: _bannerType,
-            onDismiss: () => setState(() => _bannerMsg = null),
-          ),
-          // Panel pesanan ditahan — slide inline dari atas (mendorong katalog
-          // ke bawah, bukan overlay modal).
-          AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _heldPanelOpen
-                ? _HeldInlinePanel(
-                    onResume: _resumeHeld,
-                    onClose: () => setState(() => _heldPanelOpen = false),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
           Expanded(
-            child: productsAsync.when(
-              data: (prods) {
-                if (prods.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerLowest,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Icon(Icons.inventory_2_outlined,
-                              color: cs.onSurfaceVariant, size: 26),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          query.isEmpty
-                              ? 'Belum ada produk'
-                              : 'Produk tidak ditemukan',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
+            // Tap atau scroll di mana pun di bawah topbar keluar dari state
+            // input pencarian (fokus hilang → kolom shrink lewat listener di
+            // _KasirTopbar), TANPA menghapus teks yang sudah diketik.
+            // Listener (bukan GestureDetector) agar tap tetap diteruskan
+            // normal ke kartu produk/tombol di bawahnya, tidak "dicuri".
+            // Pengecualian: tap "+" / badan kartu produk (buka modal pilih
+            // harga dll.) SAAT field cari sedang expanded & berisi teks TIDAK
+            // mengecilkan/keluar dari field — lihat `_markSkipSearchCollapse`.
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) {
+                if (_skipNextSearchCollapse) {
+                  _skipNextSearchCollapse = false;
+                  return;
                 }
-                if (isGrid) {
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 180,
-                      mainAxisExtent: 138,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    itemCount: prods.length,
-                    itemBuilder: (_, i) => _ProductCard(
-                      product: prods[i],
-                      cartId: _cartId,
-                      onTapBody: () => _openEntry(prods[i]),
-                      onQuickAdd: _quickAdd,
-                      onOpenEntry: () => _openEntry(prods[i]),
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  itemCount: prods.length,
-                  separatorBuilder: (_, __) =>
-                      Divider(height: 1, indent: 62, color: cs.outlineVariant),
-                  itemBuilder: (_, i) => _ProductListTile(
-                    product: prods[i],
-                    cartId: _cartId,
-                    onTapBody: () => _openEntry(prods[i]),
-                    onQuickAdd: _quickAdd,
-                    onOpenEntry: () => _openEntry(prods[i]),
-                  ),
-                );
+                _searchFocus.unfocus();
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              child: NotificationListener<ScrollStartNotification>(
+                onNotification: (_) {
+                  _searchFocus.unfocus();
+                  return false;
+                },
+                child: Column(
+                  children: [
+                    InlineBanner(
+                      message: _bannerMsg,
+                      type: _bannerType,
+                      onDismiss: () => setState(() => _bannerMsg = null),
+                    ),
+                    // Panel pesanan ditahan — slide inline dari atas (mendorong
+                    // katalog ke bawah, bukan overlay modal).
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: _heldPanelOpen
+                          ? _HeldInlinePanel(
+                              onResume: _resumeHeld,
+                              onClose: () =>
+                                  setState(() => _heldPanelOpen = false),
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                    Expanded(
+                      child: productsAsync.when(
+                        data: (prods) {
+                          if (prods.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainerLowest,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Icon(Icons.inventory_2_outlined,
+                                        color: cs.onSurfaceVariant, size: 26),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    query.isEmpty
+                                        ? 'Belum ada produk'
+                                        : 'Produk tidak ditemukan',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          if (isGrid) {
+                            return GridView.builder(
+                              padding: const EdgeInsets.all(12),
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 180,
+                                mainAxisExtent: 138,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                              ),
+                              itemCount: prods.length,
+                              itemBuilder: (_, i) => _ProductCard(
+                                product: prods[i],
+                                cartId: _cartId,
+                                onTapBody: () => _openEntry(prods[i]),
+                                onQuickAdd: _quickAdd,
+                                onOpenEntry: () => _openEntry(prods[i]),
+                                onBeforeTap: _markSkipSearchCollapse,
+                              ),
+                            );
+                          }
+                          return ListView.separated(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            itemCount: prods.length,
+                            separatorBuilder: (_, __) => Divider(
+                                height: 1,
+                                indent: 62,
+                                color: cs.outlineVariant),
+                            itemBuilder: (_, i) => _ProductListTile(
+                              product: prods[i],
+                              cartId: _cartId,
+                              onTapBody: () => _openEntry(prods[i]),
+                              onQuickAdd: _quickAdd,
+                              onOpenEntry: () => _openEntry(prods[i]),
+                              onBeforeTap: _markSkipSearchCollapse,
+                            ),
+                          );
+                        },
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, _) => Center(child: Text('Error: $e')),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -1265,8 +1357,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                             _isAddMode ? null : cartNotifier.lastTouchedItem,
                         lastEffQty: cartNotifier.lastTouchedItem == null
                             ? 0
-                            : cartNotifier.effectiveQtyFor(
-                                cartNotifier.lastTouchedItem!),
+                            : cartNotifier
+                                .effectiveQtyFor(cartNotifier.lastTouchedItem!),
                         showSwipeHint: _swipeHintVisible,
                       ),
                     ),
@@ -1362,7 +1454,19 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
 // ─── Topbar ──────────────────────────────────────────────────────────────────
 
-class _KasirTopbar extends StatelessWidget {
+/// Durasi & kurva animasi expand/collapse kolom cari — dipakai bersama oleh
+/// field pencarian (lebar) dan tombol-tombol di sampingnya (opacity) supaya
+/// keduanya terasa satu gerakan (field "menimpa" tombol), bukan dua animasi
+/// terpisah yang kebetulan searah.
+const _kSearchAnimDuration = Duration(milliseconds: 260);
+const _kSearchAnimCurve = Curves.easeOutCubic;
+
+/// Jarak antar tombol topbar (scan↔antrian↔riwayat↔dst) — dipakai juga
+/// sebagai jarak field cari↔tombol scan saat collapsed, supaya "rapi"
+/// (jaraknya konsisten, bukan menimpa tombol scan).
+const _kTbGap = 4.0;
+
+class _KasirTopbar extends StatefulWidget {
   const _KasirTopbar({
     required this.searchCtrl,
     required this.searchFocus,
@@ -1374,6 +1478,8 @@ class _KasirTopbar extends StatelessWidget {
     required this.isGrid,
     required this.onToggleGrid,
     this.showQueueAndHistory = true,
+    this.onPasteOrder,
+    this.forceExpanded = false,
   });
 
   final TextEditingController searchCtrl;
@@ -1389,6 +1495,87 @@ class _KasirTopbar extends StatelessWidget {
   /// Tampilkan tombol Antrian (tahan) & Riwayat. Disembunyikan di mode katalog.
   final bool showQueueAndHistory;
 
+  /// EKSPERIMENTAL — buka sheet "Tempel Pesanan". null = sembunyikan tombol
+  /// (mode katalog / tambah belanjaan).
+  final VoidCallback? onPasteOrder;
+
+  /// true = tetap tampil expanded walau `searchFocus` kehilangan fokus asli
+  /// (dipakai saat modal ItemEntrySheet mengambil alih fokus dari route
+  /// baru) — lihat `_KasirScreenState._openEntry`.
+  final bool forceExpanded;
+
+  @override
+  State<_KasirTopbar> createState() => _KasirTopbarState();
+}
+
+class _KasirTopbarState extends State<_KasirTopbar> {
+  /// Mengikuti `searchFocus.hasFocus` — begitu field disentuh (dapat fokus)
+  /// kolom melebar; begitu fokus hilang (tap/scroll di luar, atau tombol x
+  /// saat kosong) kolom mengecil lagi. Teks yang sudah diketik TIDAK ikut
+  /// hilang saat collapse — hanya lebar visual yang berubah.
+  late bool _expanded = widget.searchFocus.hasFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.searchFocus.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.searchFocus.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (widget.searchFocus.hasFocus != _expanded) {
+      setState(() => _expanded = widget.searchFocus.hasFocus);
+    }
+  }
+
+  /// Status expanded yang benar-benar dipakai untuk render — gabungan fokus
+  /// asli field DAN `forceExpanded` (dipertahankan manual saat modal
+  /// mengambil fokus). Field `_expanded` sendiri tetap murni mengikuti fokus
+  /// asli (dipakai `didUpdateWidget` dkk.), jadi jangan disatukan.
+  bool get _visuallyExpanded => _expanded || widget.forceExpanded;
+
+  /// Lebar total baris tombol topbar (scan/antrian/riwayat/grid/tempel
+  /// pesanan) — dihitung persis dari ukuran `_TbBtn` (36px ikon-saja, 44px
+  /// yang punya label) + jarak antar-tombol, BUKAN ditaksir/hardcode. Field
+  /// cari collapsed harus berhenti tepat di sini + 1 jarak tombol supaya
+  /// tidak pernah menimpa tombol scan meski daftar tombol berubah per mode
+  /// (mis. mode katalog menyembunyikan Antrian & Riwayat).
+  double get _buttonRowWidth {
+    final widths = <double>[36]; // scan
+    if (widget.showQueueAndHistory) {
+      widths.addAll([44, 44]); // antrian, riwayat
+    }
+    widths.add(36); // grid toggle
+    if (widget.onPasteOrder != null) {
+      widths.add(44); // tempel pesanan
+    }
+    final total = widths.fold<double>(0, (a, b) => a + b);
+    final gaps = (widths.length - 1) * _kTbGap;
+    return total + gaps;
+  }
+
+  /// Lebar field cari saat collapsed: sisa ruang setelah baris tombol +
+  /// SATU jarak tombol (`_kTbGap`) — persis sama seperti jarak scan↔antrian.
+  double _collapsedWidth(double maxW) =>
+      (maxW - _buttonRowWidth - _kTbGap).clamp(44.0, maxW);
+
+  /// Tombol x di ujung kanan field (hanya tampil saat expanded): kosong →
+  /// shrink (unfocus, teks tetap seperti apa adanya/kosong); ada isi →
+  /// hapus semua karakter TAPI tetap expanded (tidak shrink).
+  void _onClearOrShrink() {
+    if (widget.searchCtrl.text.isEmpty) {
+      widget.searchFocus.unfocus();
+    } else {
+      widget.searchCtrl.clear();
+      widget.onSearch('');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1400,7 +1587,10 @@ class _KasirTopbar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(12, topPadding + 8, 12, 10),
+            // Bottom diperbesar (10 -> 16) supaya label 2 baris di bawah
+            // tombol (mis. "Riwayat Transaksi") tidak menyentuh/terpotong
+            // oleh divider di bawahnya — beri sedikit napas.
+            padding: EdgeInsets.fromLTRB(12, topPadding + 8, 12, 16),
             child: Row(
               // Sejajarkan kotak ikon di atas; keterangan menggantung di bawah
               // tanpa menggeser tombol lain (tetap rapi di HP & tablet).
@@ -1432,58 +1622,126 @@ class _KasirTopbar extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: searchCtrl,
-                    builder: (context, value, _) {
-                      return TextField(
-                        controller: searchCtrl,
-                        focusNode: searchFocus,
-                        decoration: InputDecoration(
-                          hintText: 'Cari produk…',
-                          prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                          suffixIcon: value.text.isNotEmpty
-                              ? IconButton(
-                                  icon:
-                                      const Icon(Icons.clear_rounded, size: 16),
-                                  onPressed: () {
-                                    searchCtrl.clear();
-                                    onSearch('');
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final maxW = constraints.maxWidth;
+                      return SizedBox(
+                        // 56 (bukan 44) — cukup untuk kotak ikon 36px + label
+                        // 2 baris di bawahnya (mis. "Riwayat Transaksi") tanpa
+                        // terpotong. clipBehavior none tetap dipasang sebagai
+                        // jaring pengaman tambahan.
+                        height: 56,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Baris tombol — di belakang, faded + non-tappable
+                            // saat kolom cari melebar "menimpa" nya.
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: AnimatedOpacity(
+                                duration: _kSearchAnimDuration,
+                                curve: _kSearchAnimCurve,
+                                opacity: _visuallyExpanded ? 0 : 1,
+                                child: IgnorePointer(
+                                  ignoring: _visuallyExpanded,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _TbBtn(
+                                          icon: Icons.qr_code_scanner_rounded,
+                                          onTap: widget.onScan),
+                                      if (widget.showQueueAndHistory) ...[
+                                        const SizedBox(width: 4),
+                                        _TbBtn(
+                                          icon: Icons
+                                              .pause_circle_outline_rounded,
+                                          onTap: widget.onHeld,
+                                          badgeCount: widget.heldCount,
+                                          label: 'Antrian',
+                                        ),
+                                        const SizedBox(width: 4),
+                                        _TbBtn(
+                                          icon: Icons.history_rounded,
+                                          onTap: widget.onHistory,
+                                          label: 'Riwayat\nTransaksi',
+                                        ),
+                                      ],
+                                      const SizedBox(width: 4),
+                                      _TbBtn(
+                                        icon: widget.isGrid
+                                            ? Icons.view_list_rounded
+                                            : Icons.grid_view_rounded,
+                                        onTap: widget.onToggleGrid,
+                                      ),
+                                      if (widget.onPasteOrder != null) ...[
+                                        const SizedBox(width: 4),
+                                        _TbBtn(
+                                          icon: Icons.content_paste_go_rounded,
+                                          onTap: widget.onPasteOrder!,
+                                          label: 'Tempel\nPesanan',
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Field cari — di depan, lebar dianimasikan dari
+                            // sempit (collapsed) sampai penuh (menimpa tombol).
+                            AnimatedPositioned(
+                              duration: _kSearchAnimDuration,
+                              curve: _kSearchAnimCurve,
+                              left: 0,
+                              top: 0,
+                              height: 44,
+                              width: _visuallyExpanded
+                                  ? maxW
+                                  : _collapsedWidth(maxW),
+                              child: Container(
+                                // Latar solid (bukan transparan) supaya benar-
+                                // benar "menimpa" tombol di belakangnya, bukan
+                                // cuma memotong ruang layout-nya.
+                                color: cs.surface,
+                                child: ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: widget.searchCtrl,
+                                  builder: (context, value, _) {
+                                    return TextField(
+                                      controller: widget.searchCtrl,
+                                      focusNode: widget.searchFocus,
+                                      decoration: InputDecoration(
+                                        hintText: 'Cari produk…',
+                                        prefixIcon: const Icon(
+                                            Icons.search_rounded,
+                                            size: 18),
+                                        suffixIcon: _visuallyExpanded
+                                            ? IconButton(
+                                                icon: const Icon(
+                                                    Icons.clear_rounded,
+                                                    size: 16),
+                                                onPressed: _onClearOrShrink,
+                                              )
+                                            : null,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                        isDense: true,
+                                      ),
+                                      onChanged: widget.onSearch,
+                                    );
                                   },
-                                )
-                              : null,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          isDense: true,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        onChanged: onSearch,
                       );
                     },
                   ),
-                ),
-                const SizedBox(width: 6),
-                _TbBtn(icon: Icons.qr_code_scanner_rounded, onTap: onScan),
-                if (showQueueAndHistory) ...[
-                  const SizedBox(width: 4),
-                  _TbBtn(
-                    icon: Icons.pause_circle_outline_rounded,
-                    onTap: onHeld,
-                    badgeCount: heldCount,
-                    label: 'Antrian',
-                  ),
-                  const SizedBox(width: 4),
-                  _TbBtn(
-                    icon: Icons.history_rounded,
-                    onTap: onHistory,
-                    label: 'Riwayat\nTransaksi',
-                  ),
-                ],
-                const SizedBox(width: 4),
-                _TbBtn(
-                  icon:
-                      isGrid ? Icons.view_list_rounded : Icons.grid_view_rounded,
-                  onTap: onToggleGrid,
                 ),
               ],
             ),
@@ -1616,7 +1874,8 @@ class _AddControl extends StatelessWidget {
           color: bgColor,
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
+            BoxShadow(
+                color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
           ],
         ),
         child: Center(
@@ -1675,6 +1934,7 @@ class _ProductCard extends ConsumerWidget {
     required this.onTapBody,
     required this.onQuickAdd,
     required this.onOpenEntry,
+    this.onBeforeTap,
   });
 
   final Product product;
@@ -1682,6 +1942,11 @@ class _ProductCard extends ConsumerWidget {
   final VoidCallback onTapBody;
   final void Function(Product, CatalogDetail) onQuickAdd;
   final VoidCallback onOpenEntry;
+
+  /// Dipanggil tepat sebelum tap (badan kartu ATAU tombol "+") diproses —
+  /// dipakai layar kasir untuk menahan field cari agar tidak mengecil bila
+  /// sedang expanded & berisi teks. Lihat `_markSkipSearchCollapse`.
+  final VoidCallback? onBeforeTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1694,100 +1959,104 @@ class _ProductCard extends ConsumerWidget {
         .where((c) => c.productId == product.id)
         .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
 
-    return Material(
-      color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTapBody,
+    return Listener(
+      onPointerDown: onBeforeTap == null ? null : (_) => onBeforeTap!(),
+      behavior: HitTestBehavior.translucent,
+      child: Material(
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(14),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant, width: 0.5),
-          ),
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: grad,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    product.name.isNotEmpty
-                        ? product.name[0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
+        child: InkWell(
+          onTap: onTapBody,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cs.outlineVariant, width: 0.5),
+            ),
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: grad,
                     ),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                product.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  height: 1.25,
-                ),
-              ),
-              const Spacer(),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: detailAsync.when(
-                      data: (d) => Text(
-                        formatRupiah(d.basePrice),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTheme.numStyle(context,
-                            size: 14, weight: FontWeight.w700),
+                  child: Center(
+                    child: Text(
+                      product.name.isNotEmpty
+                          ? product.name[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                       ),
-                      loading: () => const SizedBox(
-                        height: 14,
-                        width: 40,
-                        child: _PriceShimmer(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  product.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: detailAsync.when(
+                        data: (d) => Text(
+                          formatRupiah(d.basePrice),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.numStyle(context,
+                              size: 14, weight: FontWeight.w700),
+                        ),
+                        loading: () => const SizedBox(
+                          height: 14,
+                          width: 40,
+                          child: _PriceShimmer(),
+                        ),
+                        error: (_, __) => const SizedBox.shrink(),
                       ),
-                      error: (_, __) => const SizedBox.shrink(),
                     ),
-                  ),
-                  detailAsync.maybeWhen(
-                    data: (d) => _AddControl(
-                      qty: qty,
-                      size: 32,
-                      onTap: () {
-                        // "+" selalu menambah satuan dasar induk, walau produk
-                        // punya varian. Pilih varian via tahan item / ketuk body.
-                        if (d.baseUnitId.isEmpty) {
-                          onOpenEntry();
-                        } else {
-                          onQuickAdd(product, d);
-                        }
-                      },
-                      onMinus: qty > 0
-                          ? () => _decrementProduct(
-                              cart, notifier, product.id)
-                          : null,
+                    detailAsync.maybeWhen(
+                      data: (d) => _AddControl(
+                        qty: qty,
+                        size: 32,
+                        onTap: () {
+                          // "+" selalu menambah satuan dasar induk, walau produk
+                          // punya varian. Pilih varian via tahan item / ketuk body.
+                          if (d.baseUnitId.isEmpty) {
+                            onOpenEntry();
+                          } else {
+                            onQuickAdd(product, d);
+                          }
+                        },
+                        onMinus: qty > 0
+                            ? () =>
+                                _decrementProduct(cart, notifier, product.id)
+                            : null,
+                      ),
+                      orElse: () => const SizedBox(width: 32, height: 32),
                     ),
-                    orElse: () => const SizedBox(width: 32, height: 32),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1817,6 +2086,7 @@ class _ProductListTile extends ConsumerStatefulWidget {
     required this.onTapBody,
     required this.onQuickAdd,
     required this.onOpenEntry,
+    this.onBeforeTap,
   });
 
   final Product product;
@@ -1824,6 +2094,11 @@ class _ProductListTile extends ConsumerStatefulWidget {
   final VoidCallback onTapBody;
   final void Function(Product, CatalogDetail) onQuickAdd;
   final VoidCallback onOpenEntry;
+
+  /// Dipanggil tepat sebelum tap (badan tile, tombol "+", atau baris varian
+  /// di dropdown inline) diproses — dipakai layar kasir untuk menahan field
+  /// cari agar tidak mengecil bila sedang expanded & berisi teks.
+  final VoidCallback? onBeforeTap;
 
   @override
   ConsumerState<_ProductListTile> createState() => _ProductListTileState();
@@ -1844,138 +2119,144 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
     final qty = cart
         .where((c) => c.productId == product.id)
         .fold<double>(0, (s, c) => s + notifier.effectiveQtyFor(c));
-    final hasVariants = detailAsync.maybeWhen(
-        data: (d) => d.hasVariants, orElse: () => false);
+    final hasVariants =
+        detailAsync.maybeWhen(data: (d) => d.hasVariants, orElse: () => false);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: widget.onTapBody,
-          // Tahan item dengan varian → buka/tutup dropdown varian inline.
-          onLongPress:
-              hasVariants ? () => setState(() => _expanded = !_expanded) : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: grad,
+    return Listener(
+      onPointerDown:
+          widget.onBeforeTap == null ? null : (_) => widget.onBeforeTap!(),
+      behavior: HitTestBehavior.translucent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: widget.onTapBody,
+            // Tahan item dengan varian → buka/tutup dropdown varian inline.
+            onLongPress: hasVariants
+                ? () => setState(() => _expanded = !_expanded)
+                : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: grad,
+                      ),
+                      borderRadius: BorderRadius.circular(11),
                     ),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  child: Center(
-                    child: Text(
-                      product.name.isNotEmpty
-                          ? product.name[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
+                    child: Center(
+                      child: Text(
+                        product.name.isNotEmpty
+                            ? product.name[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              product.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13.5,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                product.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13.5,
+                                ),
                               ),
                             ),
-                          ),
-                          if (hasVariants) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              _expanded
-                                  ? Icons.expand_less_rounded
-                                  : Icons.expand_more_rounded,
-                              size: 16,
-                              color: cs.onSurfaceVariant,
-                            ),
+                            if (hasVariants) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                _expanded
+                                    ? Icons.expand_less_rounded
+                                    : Icons.expand_more_rounded,
+                                size: 16,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      detailAsync.when(
-                        data: (d) => Row(
-                          children: [
-                            Text(
-                              formatRupiah(d.basePrice),
-                              style: AppTheme.numStyle(context,
-                                  size: 13.5,
-                                  weight: FontWeight.w700,
-                                  color: cs.primary),
-                            ),
-                            Text(
-                              ' /${d.baseUnitName}',
-                              style: TextStyle(
-                                  fontSize: 11, color: cs.onSurfaceVariant),
-                            ),
-                            if (d.unitCount > 1)
+                        ),
+                        const SizedBox(height: 2),
+                        detailAsync.when(
+                          data: (d) => Row(
+                            children: [
                               Text(
-                                '  +${d.unitCount - 1} satuan',
+                                formatRupiah(d.basePrice),
+                                style: AppTheme.numStyle(context,
+                                    size: 13.5,
+                                    weight: FontWeight.w700,
+                                    color: cs.primary),
+                              ),
+                              Text(
+                                ' /${d.baseUnitName}',
                                 style: TextStyle(
                                     fontSize: 11, color: cs.onSurfaceVariant),
                               ),
-                          ],
+                              if (d.unitCount > 1)
+                                Text(
+                                  '  +${d.unitCount - 1} satuan',
+                                  style: TextStyle(
+                                      fontSize: 11, color: cs.onSurfaceVariant),
+                                ),
+                            ],
+                          ),
+                          loading: () => Text('…',
+                              style: TextStyle(
+                                  fontSize: 12, color: cs.onSurfaceVariant)),
+                          error: (_, __) => const SizedBox.shrink(),
                         ),
-                        loading: () => Text('…',
-                            style: TextStyle(
-                                fontSize: 12, color: cs.onSurfaceVariant)),
-                        error: (_, __) => const SizedBox.shrink(),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                detailAsync.maybeWhen(
-                  data: (d) => _AddControl(
-                    qty: qty,
-                    onTap: () {
-                      // "+" selalu menambah satuan dasar induk, walau punya
-                      // varian. Pilih varian via tahan item / ketuk body.
-                      if (d.baseUnitId.isEmpty) {
-                        widget.onOpenEntry();
-                      } else {
-                        widget.onQuickAdd(product, d);
-                      }
-                    },
-                    onMinus: qty > 0
-                        ? () => _decrementProduct(cart, notifier, product.id)
-                        : null,
+                  const SizedBox(width: 8),
+                  detailAsync.maybeWhen(
+                    data: (d) => _AddControl(
+                      qty: qty,
+                      onTap: () {
+                        // "+" selalu menambah satuan dasar induk, walau punya
+                        // varian. Pilih varian via tahan item / ketuk body.
+                        if (d.baseUnitId.isEmpty) {
+                          widget.onOpenEntry();
+                        } else {
+                          widget.onQuickAdd(product, d);
+                        }
+                      },
+                      onMinus: qty > 0
+                          ? () => _decrementProduct(cart, notifier, product.id)
+                          : null,
+                    ),
+                    orElse: () => const SizedBox(width: 34, height: 34),
                   ),
-                  orElse: () => const SizedBox(width: 34, height: 34),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        // Dropdown varian inline — mendorong item di bawahnya, bukan popup.
-        if (_expanded && hasVariants)
-          _VariantDropdown(
-            parent: product,
-            parentDetail: detailAsync.asData?.value,
-            cartId: widget.cartId,
-          ),
-      ],
+          // Dropdown varian inline — mendorong item di bawahnya, bukan popup.
+          if (_expanded && hasVariants)
+            _VariantDropdown(
+              parent: product,
+              parentDetail: detailAsync.asData?.value,
+              cartId: widget.cartId,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -2008,7 +2289,9 @@ class _VariantDropdown extends ConsumerWidget {
           padding: EdgeInsets.symmetric(vertical: 10),
           child: Center(
             child: SizedBox(
-                width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2)),
           ),
         ),
         error: (_, __) => const SizedBox.shrink(),
@@ -2204,8 +2487,7 @@ class _CartBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.keyboard_arrow_up_rounded,
-                    size: 14,
-                    color: cs.onSurfaceVariant.withOpacity(0.5)),
+                    size: 14, color: cs.onSurfaceVariant.withOpacity(0.5)),
                 const SizedBox(width: 3),
                 Text(
                   'Geser ke atas untuk lihat keranjang',
@@ -2314,8 +2596,8 @@ class _CatalogBar extends StatelessWidget {
                     foregroundColor: cs.onSurface,
                   ),
                   child: const Text('Lihat',
-                      style:
-                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2330,8 +2612,8 @@ class _CatalogBar extends StatelessWidget {
                     foregroundColor: cs.onSurface,
                   ),
                   child: const Text('Simpan',
-                      style:
-                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2344,8 +2626,8 @@ class _CatalogBar extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('Bagikan',
-                      style:
-                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600)),
                 ),
               ),
             ],
@@ -2413,8 +2695,8 @@ class _CatalogItemsSheet extends ConsumerWidget {
                       final item = ordered[i];
                       return ListTile(
                         dense: true,
-                        contentPadding:
-                            EdgeInsets.only(left: item.isVariant ? 30 : 16, right: 8),
+                        contentPadding: EdgeInsets.only(
+                            left: item.isVariant ? 30 : 16, right: 8),
                         leading: item.isVariant
                             ? Icon(Icons.subdirectory_arrow_right,
                                 size: 16, color: cs.onSurfaceVariant)
@@ -2473,8 +2755,8 @@ class _CartMetaTab extends ConsumerWidget {
 
   Future<void> _pickEmployee(BuildContext context, WidgetRef ref) async {
     final meta = ref.read(cartMetaProvider(cartId));
-    final pick = await showEmployeePickerSheet(context, ref,
-        currentId: meta.employeeId);
+    final pick =
+        await showEmployeePickerSheet(context, ref, currentId: meta.employeeId);
     if (pick == null) return;
     ref.read(cartMetaProvider(cartId).notifier).setEmployee(pick.id, pick.name);
   }
@@ -2596,7 +2878,8 @@ class _MetaChip extends StatelessWidget {
                 onTap: onClear,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 3),
-                  child: Icon(Icons.close, size: 14, color: cs.onSurfaceVariant),
+                  child:
+                      Icon(Icons.close, size: 14, color: cs.onSurfaceVariant),
                 ),
               ),
           ],
@@ -2686,7 +2969,8 @@ class _HeldInlinePanel extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(20),
                 child: Padding(
                   padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                  child:
+                      Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
                 ),
               ),
             ],

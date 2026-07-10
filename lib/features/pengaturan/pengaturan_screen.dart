@@ -26,7 +26,8 @@ final _showEmployeeProvider = FutureProvider<bool>((ref) async {
 final loyaltyRuleProvider =
     FutureProvider<({int threshold, int pointsPer})>((ref) async {
   final db = ref.watch(databaseProvider);
-  final t = int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ?? 0;
+  final t =
+      int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ?? 0;
   final p = int.tryParse(await db.getSetting('loyalty_points_per') ?? '') ?? 1;
   return (threshold: t, pointsPer: p < 1 ? 1 : p);
 });
@@ -136,8 +137,7 @@ class PengaturanScreen extends ConsumerWidget {
                     onTap: () => context.push('/pengaturan/izin-asisten'),
                   ),
                   Builder(builder: (context) {
-                    final rule =
-                        ref.watch(loyaltyRuleProvider).valueOrNull;
+                    final rule = ref.watch(loyaltyRuleProvider).valueOrNull;
                     final subtitle = rule == null || rule.threshold <= 0
                         ? 'Nonaktif — ketuk untuk mengatur'
                         : 'Setiap belanja ${formatRupiah(rule.threshold)} '
@@ -162,7 +162,8 @@ class PengaturanScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.wifi_outlined),
                   title: const Text('Sync WiFi'),
-                  subtitle: const Text('Sinkronisasi antar HP via jaringan lokal'),
+                  subtitle:
+                      const Text('Sinkronisasi antar HP via jaringan lokal'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pengaturan/sync'),
                 ),
@@ -201,6 +202,20 @@ class PengaturanScreen extends ConsumerWidget {
           ),
           if (device.isOwner) ...[
             const SizedBox(height: 8),
+            const _SectionHeader('Eksperimental'),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.science_outlined),
+                title: const Text('Katalog Pesanan'),
+                subtitle: const Text(
+                    'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/pengaturan/katalog-pesanan'),
+              ),
+            ),
+          ],
+          if (device.isOwner) ...[
+            const SizedBox(height: 8),
             const _SectionHeader('Manajemen Data'),
             Card(
               child: Column(
@@ -215,7 +230,8 @@ class PengaturanScreen extends ConsumerWidget {
                   ListTile(
                     leading: const Icon(Icons.folder_zip_outlined),
                     title: const Text('Buka Arsip'),
-                    subtitle: const Text('Lihat laporan tahun yang sudah diarsipkan'),
+                    subtitle:
+                        const Text('Lihat laporan tahun yang sudah diarsipkan'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.push('/pengaturan/arsip'),
                   ),
@@ -392,9 +408,8 @@ Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
         final barcodes = await db.getProductBarcodes(u.id);
         final barcode = barcodes.firstOrNull?.barcode ?? '';
         final stock = await db.currentStock(u.id);
-        final unitName = u.unitTypeId != null
-            ? (typeNameById[u.unitTypeId!] ?? '')
-            : '';
+        final unitName =
+            u.unitTypeId != null ? (typeNameById[u.unitTypeId!] ?? '') : '';
 
         buf.writeln([
           _escapeCsv(p.name),
@@ -445,4 +460,3 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
-

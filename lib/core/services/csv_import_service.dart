@@ -132,8 +132,17 @@ class CsvImportService {
         productGroupId = matched?.id;
       }
 
-      // Dedup check
-      final dedupKey = '${name.toLowerCase()}|$unitTypeId';
+      // Dedup check — prioritaskan barcode/kode produk (identitas SKU asli)
+      // di atas nama+satuan. Nama+satuan saja tidak cukup: dua SKU berbeda
+      // (barcode/harga beda) bisa punya nama+satuan yang sama persis (mis.
+      // "Sedap Goreng" per Dos dari 2 supplier), dan itu BUKAN duplikat.
+      // Fallback ke nama+satuan hanya dipakai kalau baris ini benar-benar
+      // tidak punya barcode maupun kode produk sama sekali.
+      final dedupKey = barcodeStr.isNotEmpty
+          ? 'bc|$barcodeStr'
+          : (kode.isNotEmpty
+              ? 'kode|$kode'
+              : '${name.toLowerCase()}|$unitTypeId');
       if (seen.contains(dedupKey)) {
         duplicates++;
         continue;

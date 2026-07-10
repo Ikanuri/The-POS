@@ -35,6 +35,7 @@ class SyncResult {
   });
   final int received;
   final int sent;
+
   /// true jika data yang dikirim klien sedang menunggu persetujuan owner.
   final bool pendingApproval;
 }
@@ -55,6 +56,7 @@ class PendingSyncItem {
   final DateTime arrivedAt;
   final Map<String, List<Map<String, Object?>>> tables;
   final DateTime since;
+
   /// Human-readable: "3 transaksi, 8 item"
   final String tablesSummary;
 }
@@ -84,8 +86,12 @@ class LanSyncService {
   /// Tabel append-only yang boleh diunggah klien ke host. Master data tidak
   /// pernah di-merge dari klien (alir satu arah host → bawahan).
   static const appendOnlyTables = {
-    'transactions', 'transaction_items', 'transaction_payments',
-    'stock_ledger', 'loyalty_point_ledger', 'expenses',
+    'transactions',
+    'transaction_items',
+    'transaction_payments',
+    'stock_ledger',
+    'loyalty_point_ledger',
+    'expenses',
   };
 
   /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi
@@ -112,10 +118,10 @@ class LanSyncService {
     _failedAttempts.clear();
     _lockoutUntil.clear();
 
-    final handler = const shelf.Pipeline()
-        .addHandler(_handleRequest);
+    final handler = const shelf.Pipeline().addHandler(_handleRequest);
 
-    _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, _kSyncPort);
+    _server =
+        await shelf_io.serve(handler, InternetAddress.anyIPv4, _kSyncPort);
 
     final networkInfo = NetworkInfo();
     final ip = await networkInfo.getWifiIP() ?? 'Unknown IP';
@@ -246,10 +252,8 @@ class LanSyncService {
 
     // Saring data dari tahun yang sudah ditutup-buku SEBELUM merge — lihat
     // dok [filterArchivedRows].
-    final archivedYears =
-        (await TutupBukuService.listArchivedYears()).toSet();
-    final tables =
-        await filterArchivedRows(_db!, item.tables, archivedYears);
+    final archivedYears = (await TutupBukuService.listArchivedYears()).toSet();
+    final tables = await filterArchivedRows(_db!, item.tables, archivedYears);
 
     int received = 0;
     final touchedTxIds = <String>{};
@@ -308,10 +312,11 @@ class LanSyncService {
       return shelf.Response.notFound('Not found');
     }
 
-    final ip = (request.context['shelf.io.connection_info']
-            as HttpConnectionInfo?)
-        ?.remoteAddress
-        .address ?? 'unknown';
+    final ip =
+        (request.context['shelf.io.connection_info'] as HttpConnectionInfo?)
+                ?.remoteAddress
+                .address ??
+            'unknown';
 
     // Rate-limiting: check lockout before reading body.
     final lockedUntil = _lockoutUntil[ip];
@@ -433,7 +438,8 @@ class LanSyncService {
         'status': 'pending_approval',
       };
       final outJson = jsonEncode(outPayload);
-      final encrypted = CryptoService.encryptText(outJson, Uint8List.fromList(key));
+      final encrypted =
+          CryptoService.encryptText(outJson, Uint8List.fromList(key));
 
       return shelf.Response.ok(
         base64Decode(encrypted),
@@ -454,6 +460,7 @@ class LanSyncService {
     'products': 'produk',
     'product_units': 'satuan',
     'price_tiers': 'harga',
+    'alt_prices': 'harga alternatif',
     'product_barcodes': 'barcode',
     'customers': 'pelanggan',
     'customer_groups': 'grup pelanggan',
@@ -532,7 +539,8 @@ class LanSyncService {
       'tables': outDump,
     };
     final payloadJson = jsonEncode(payload);
-    final encrypted = CryptoService.encryptText(payloadJson, Uint8List.fromList(key));
+    final encrypted =
+        CryptoService.encryptText(payloadJson, Uint8List.fromList(key));
     final encryptedBytes = base64Decode(encrypted);
 
     // B-3: Tambah nonce + timestamp + HMAC ke setiap request.
@@ -543,8 +551,7 @@ class LanSyncService {
       utf8.encode('$nonce:$tsStr:${base64Encode(encryptedBytes)}'),
       hmacKey,
     );
-    final hmacHex =
-        hmac.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final hmacHex = hmac.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
     final client = HttpClient();
     try {
@@ -571,7 +578,8 @@ class LanSyncService {
       final tables = respPayload['tables'] as Map<String, dynamic>? ?? {};
       final touchedTxIds = <String>{};
       for (final entry in tables.entries) {
-        final rows = (entry.value as List).cast<Map<String, dynamic>>().map((r) {
+        final rows =
+            (entry.value as List).cast<Map<String, dynamic>>().map((r) {
           return r.map<String, Object?>((k, v) => MapEntry(k, v));
         }).toList();
         // Klien menerima data dari host: master data di-merge last-write-wins
@@ -594,9 +602,9 @@ class LanSyncService {
       await _saveDownloadWatermark(db, downloadSyncStartedAt);
 
       final sent = outDump.values.fold<int>(0, (s, r) => s + r.length);
-      final isPending =
-          respPayload['status'] == 'pending_approval';
-      return SyncResult(received: received, sent: sent, pendingApproval: isPending);
+      final isPending = respPayload['status'] == 'pending_approval';
+      return SyncResult(
+          received: received, sent: sent, pendingApproval: isPending);
     } finally {
       client.close();
     }
