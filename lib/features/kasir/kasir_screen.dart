@@ -1833,11 +1833,25 @@ class _TbBtn extends StatelessWidget {
 
 /// Kurangi 1 satuan dasar produk [productId] dari keranjang. Item dihapus bila
 /// effective qty turun ke 0. Dipakai oleh tombol minus di kartu & list produk.
-void _decrementProduct(
-    List<CartItem> cart, CartNotifier notifier, String productId) {
-  final items = cart.where((c) => c.productId == productId);
-  if (items.isEmpty) return;
-  final item = items.first;
+///
+/// Item 16: bila produk punya >1 baris satuan NON-varian di keranjang (mis.
+/// Dus + Pcs), tombol minus TIDAK menebak baris mana yang dikurangi — beri
+/// info & arahkan atur lewat keranjang. Kasus umum (1 satuan) tetap langsung.
+void _decrementProduct(BuildContext context, List<CartItem> cart,
+    CartNotifier notifier, String productId) {
+  final unitLines =
+      cart.where((c) => c.productId == productId && !c.isVariant).toList();
+  if (unitLines.isEmpty) return;
+  if (unitLines.length > 1) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text('Produk ini punya beberapa satuan di keranjang — '
+            'atur jumlahnya lewat keranjang.'),
+      ));
+    return;
+  }
+  final item = unitLines.first;
   final eff = notifier.effectiveQtyFor(item);
   if (eff <= 1) {
     notifier.removeItem(item.productUnitId);
@@ -2061,8 +2075,8 @@ class _ProductCard extends ConsumerWidget {
                           }
                         },
                         onMinus: qty > 0
-                            ? () =>
-                                _decrementProduct(cart, notifier, product.id)
+                            ? () => _decrementProduct(
+                                context, cart, notifier, product.id)
                             : null,
                       ),
                       orElse: () => const SizedBox(width: 32, height: 32),
@@ -2253,7 +2267,8 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                         }
                       },
                       onMinus: qty > 0
-                          ? () => _decrementProduct(cart, notifier, product.id)
+                          ? () => _decrementProduct(
+                              context, cart, notifier, product.id)
                           : null,
                     ),
                     orElse: () => const SizedBox(width: 34, height: 34),

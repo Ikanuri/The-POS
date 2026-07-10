@@ -48,6 +48,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dipakai bisa ditaruh paling depan.
 
 ### 🐛 Perbaikan
+- **Perhitungan varian di keranjang lebih akurat.** Bila satu produk masuk
+  keranjang dalam beberapa satuan sekaligus (mis. per Dus dan per Pcs), varian
+  yang dipilih kini menempel ke satuan yang benar — sebelumnya bisa "menyeret"
+  hitungan satuan lain sehingga jumlah/stok terasa tidak pas.
+- **Tombol kurang (−) tidak lagi salah mengurangi.** Kalau sebuah produk ada
+  di keranjang dengan lebih dari satu satuan, menekan "−" di kartu produk kini
+  memberi info untuk mengatur lewat keranjang (bukan diam-diam mengurangi
+  satuan yang keliru).
 - **Katalog Pesanan (halaman HTML untuk pelanggan) tidak lagi lag di HP
   low-end.** Pencarian produk dan tombol tambah/kurang jumlah kini jauh
   lebih responsif, terutama untuk toko dengan katalog besar.

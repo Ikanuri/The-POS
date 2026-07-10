@@ -128,9 +128,8 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     // sehingga qty dasar induk tidak "tertelan" saat varian ditambah —
     // campur qty dasar + varian tetap akurat. Induk wajib sudah ada di cart
     // (dipasang lebih dulu oleh _ensureParentInCart sebagai placeholder qty 0).
-    if (item.isVariant && item.parentProductId != null) {
-      final pIdx = state.indexWhere(
-          (c) => !c.isVariant && c.productId == item.parentProductId);
+    if (item.isVariant) {
+      final pIdx = state.indexWhere((c) => item.belongsToParent(c));
       if (pIdx >= 0) {
         state = [
           for (var i = 0; i < state.length; i++)
@@ -167,7 +166,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       return;
     }
     final variantTotal = state
-        .where((c) => c.isVariant && c.parentProductId == item.productId)
+        .where((c) => c.belongsToParent(item))
         .fold(0.0, (s, c) => s + c.qty);
     final newStored = effectiveQty + variantTotal;
     if (newStored <= 0) {
@@ -191,7 +190,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       for (final c in state)
         if (c.productUnitId == variant.productUnitId)
           c.copyWith(qty: newQty)
-        else if (!c.isVariant && c.productId == variant.parentProductId)
+        else if (variant.belongsToParent(c))
           c.copyWith(qty: (c.qty + delta).clamp(0.0, double.infinity))
         else
           c,
@@ -203,7 +202,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   double effectiveQtyFor(CartItem item) {
     if (item.isVariant) return item.qty;
     final variantTotal = state
-        .where((c) => c.isVariant && c.parentProductId == item.productId)
+        .where((c) => c.belongsToParent(item))
         .fold(0.0, (s, c) => s + c.qty);
     return (item.qty - variantTotal).clamp(0.0, double.infinity);
   }
@@ -217,26 +216,26 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
         break;
       }
     }
-    if (removed != null && removed.isVariant && removed.parentProductId != null) {
+    if (removed == null) return;
+    if (removed.isVariant) {
+      // Cari baris satuan induk yang varian ini menempel (per-satuan, Item 16).
       CartItem? parent;
       for (final c in state) {
-        if (!c.isVariant && c.productId == removed.parentProductId) {
+        if (removed.belongsToParent(c)) {
           parent = c;
           break;
         }
       }
       if (parent != null) {
-        // Sisa varian lain yang masih ada (selain yang dihapus).
+        // Sisa varian lain milik induk yang SAMA (selain yang dihapus).
         final remainingVariantTotal = state
             .where((c) =>
-                c.isVariant &&
-                c.parentProductId == removed!.parentProductId &&
+                c.belongsToParent(parent!) &&
                 c.productUnitId != productUnitId)
             .fold(0.0, (s, c) => s + c.qty);
         // Effective qty induk = storedQty - Σ(semua varian saat ini).
         final allVariantTotal = state
-            .where((c) =>
-                c.isVariant && c.parentProductId == removed!.parentProductId)
+            .where((c) => c.belongsToParent(parent!))
             .fold(0.0, (s, c) => s + c.qty);
         final parentEffective =
             (parent.qty - allVariantTotal).clamp(0.0, double.infinity);
@@ -258,8 +257,21 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
             .toList();
         return;
       }
+      // Varian tanpa induk di cart → hapus saja.
+      state = state.where((c) => c.productUnitId != productUnitId).toList();
+      return;
     }
-    state = state.where((c) => c.productUnitId != productUnitId).toList();
+    // Baris NON-varian (induk): cascade-hapus varian yang menempel ke baris
+    // satuan ini (Item 16 — keputusan cascade delete, bukan pindah satuan).
+    final childUnitIds = state
+        .where((c) => c.belongsToParent(removed!))
+        .map((c) => c.productUnitId)
+        .toSet();
+    state = state
+        .where((c) =>
+            c.productUnitId != productUnitId &&
+            !childUnitIds.contains(c.productUnitId))
+        .toList();
   }
 
   /// Set / ganti item berdasarkan productUnitId (dipakai modal edit item).
@@ -317,7 +329,7 @@ int cartTotalOf(List<CartItem> items) {
       eff = it.qty;
     } else {
       final variantTotal = items
-          .where((c) => c.isVariant && c.parentProductId == it.productId)
+          .where((c) => c.belongsToParent(it))
           .fold(0.0, (s, c) => s + c.qty);
       eff = (it.qty - variantTotal).clamp(0.0, double.infinity);
     }
@@ -333,7 +345,7 @@ List<CartItem> orderCartItems(List<CartItem> cart) {
     if (!it.isVariant) {
       out.add(it);
       for (final c in cart) {
-        if (c.isVariant && c.parentProductId == it.productId) out.add(c);
+        if (c.belongsToParent(it)) out.add(c);
       }
     }
   }

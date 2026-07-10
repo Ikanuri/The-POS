@@ -318,6 +318,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         costPrice: v.costPrice,
         barcode: v.barcode,
         parentProductId: widget.product.id,
+        parentProductUnitId: sel.unit.id, // Item 16: menempel ke satuan aktif
         isVariant: true,
       ));
     }
@@ -343,19 +344,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     final sel = _sel;
     if (sel == null) return;
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
+    // removeItem sudah cascade-hapus varian yang menempel ke baris satuan ini
+    // (Item 16), jadi cukup panggil sekali.
     notifier.removeItem(sel.unit.id);
-    // Bila tidak ada lagi baris induk produk ini, hapus juga varian-variannya
-    // agar tidak tertinggal sebagai item yatim di keranjang.
-    final remaining = ref.read(cartProvider(widget.cartId));
-    final hasParentLine =
-        remaining.any((c) => !c.isVariant && c.productId == widget.product.id);
-    if (!hasParentLine) {
-      for (final c in remaining
-          .where((c) => c.isVariant && c.parentProductId == widget.product.id)
-          .toList()) {
-        notifier.removeItem(c.productUnitId);
-      }
-    }
     Navigator.of(context).pop();
   }
 

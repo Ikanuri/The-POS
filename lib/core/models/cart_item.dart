@@ -15,6 +15,7 @@ class CartItem {
     this.itemNote,
     this.barcode,
     this.parentProductId,
+    this.parentProductUnitId,
     this.isVariant = false,
   });
 
@@ -33,7 +34,25 @@ class CartItem {
   /// Bila item ini varian (produk anak), berisi id produk induk agar di
   /// keranjang & struk tampil bersarang di bawah induknya.
   final String? parentProductId;
+
+  /// Item 16: id SATUAN induk spesifik tempat varian ini menempel. Lebih
+  /// presisi dari [parentProductId] — bila satu produk punya >1 baris satuan
+  /// non-varian di keranjang (mis. Dus + Pcs), varian tahu menempel ke baris
+  /// satuan yang MANA. Null pada data lama (dipersist sebelum Item 16) →
+  /// fallback ke [parentProductId] di [belongsToParent].
+  final String? parentProductUnitId;
   final bool isVariant;
+
+  /// True bila varian ini menempel ke baris satuan induk [parentLine].
+  /// Prioritas [parentProductUnitId] (presisi per-satuan); fallback ke
+  /// [parentProductId] untuk data lama yang belum punya id satuan induk.
+  bool belongsToParent(CartItem parentLine) {
+    if (!isVariant || parentLine.isVariant) return false;
+    if (parentProductUnitId != null) {
+      return parentProductUnitId == parentLine.productUnitId;
+    }
+    return parentProductId == parentLine.productId;
+  }
 
   int get subtotal => (price * qty).round();
 
@@ -63,6 +82,7 @@ class CartItem {
             : itemNote as String?,
         barcode: barcode,
         parentProductId: parentProductId,
+        parentProductUnitId: parentProductUnitId,
         isVariant: isVariant,
       );
 
@@ -79,6 +99,7 @@ class CartItem {
         'itemNote': itemNote,
         'barcode': barcode,
         'parentProductId': parentProductId,
+        'parentProductUnitId': parentProductUnitId,
         'isVariant': isVariant,
       };
 
@@ -95,6 +116,7 @@ class CartItem {
         itemNote: json['itemNote'] as String?,
         barcode: json['barcode'] as String?,
         parentProductId: json['parentProductId'] as String?,
+        parentProductUnitId: json['parentProductUnitId'] as String?,
         isVariant: json['isVariant'] as bool? ?? false,
       );
 }
