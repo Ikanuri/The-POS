@@ -468,36 +468,6 @@ sambungan yang digantung menunggu owner.
 
 ---
 
-## Item 18 — Beralih antar pesanan tertahan tanpa "tahan" manual (auto-save)
-
-**Prioritas:** Tinggi (menghilangkan bottleneck rush-hour). **Proposal user.**
-Tidak butuh migrasi — infra `held_orders` sudah ada.
-
-**Kondisi sekarang:** `_resumeHeld` (`kasir_screen.dart` ~1006) memunculkan
-dialog "Ganti Keranjang?" yang memperingatkan keranjang aktif akan HILANG.
-Untuk beralih tanpa kehilangan, user harus `_holdCurrent` (dengan label) dulu.
-
-**Solusi:** model "tab pesanan" — tap pesanan tertahan lain → keranjang aktif
-otomatis di-hold balik (bukan dibuang) → pesanan tujuan dibuka. Hapus dialog
-peringatan (tak ada lagi yang hilang). Item terakhir yang di-add otomatis
-ikut tersimpan (state cart sudah dipersist ke prefs tiap perubahan via
-`_persist`, jadi konsisten).
-
-**Keputusan desain yang HARUS dijawab (inti kerumitan) — label auto-save:**
-keranjang aktif butuh label untuk disimpan balik. Aturan:
-- Ada pelanggan terpilih → pakai namanya (sudah jadi perilaku `_holdCurrent`).
-- Dibuka dari pesanan tertahan → kembalikan label aslinya (perlu simpan
-  "sedang mengedit held order id X" di state).
-- Walk-in tanpa nama & tanpa label → **DIPUTUSKAN: auto-generate label**
-  timestamp (mis. "Tanpa Nama · 14:32" / "Pesanan N") — nol-friksi sesuai
-  tujuan user (kecepatan), bisa di-rename belakangan dari panel pesanan
-  tertahan kalau perlu.
-
-**File:** `lib/features/kasir/kasir_screen.dart` (`_resumeHeld`,
-`_holdCurrent`, tracking "active held id"), `cart_provider.dart` bila perlu.
-
----
-
 ## Item 19 — Harga Lain (`alt_prices`) menempel ke satuan, bukan chip menumpuk
 
 **Prioritas:** Sedang. **Diklarifikasi user** — fiturnya ("Harga Lain") memang

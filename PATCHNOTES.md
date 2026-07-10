@@ -11,6 +11,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Beralih antar pesanan tertahan lebih cepat (tanpa kehilangan).** Saat
+  membuka pesanan tertahan lain sementara keranjang sedang berisi, keranjang
+  yang aktif kini **otomatis ditahan balik** (pakai nama pelanggan bila ada,
+  atau "Tanpa Nama + jam" untuk pembeli umum) — tidak lagi muncul peringatan
+  "Ganti Keranjang?" dan tidak ada yang hilang. Mempercepat layani banyak
+  pesanan sekaligus di jam sibuk.
 - **Buku Hutang terpusat.** Di Laporan ada tab baru **Hutang** yang
   menampilkan semua pelanggan yang masih berhutang, diurutkan dari yang
   **paling lama menunggak** (warna berubah hijau→kuning→merah sesuai umur

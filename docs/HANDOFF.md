@@ -8,8 +8,8 @@ _Terakhir diperbarui: 10 Juli 2026 (mulai eksekusi backlog besar Item 9-22 di
 PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user.
 SELESAI sejauh ini: Item 22 (warna chip/banner), Item 10 (metode bayar
 pelunasan), Item 20 (edit produk di modal), Item 14 (edit/hapus metode
-bayar), Item 9 (pengeluaran + Laba Bersih), Item 12 (Buku Hutang tab
-Laporan). Sisa Item 11,13,15-19,21 antre,
+bayar), Item 9 (pengeluaran + Laba Bersih), Item 12 (Buku Hutang), Item 18 (beralih pesanan auto-hold). Sisa Item
+11,13,15,16,17,19,21 antre,
 semua keputusan desain sudah final di PLAN.md)._
 **Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
 pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
@@ -32,6 +32,10 @@ Timer 0ms → binding lapor "Timer still pending". Fix: sebelum test selesai,
 unmount eksplisit lalu drain — `await tester.pumpWidget(const SizedBox()); await
 tester.pump(Duration(milliseconds: 10));` (lihat helper `drain` di
 `test/payment_method_edit_delete_test.dart`).
+**Overflow PRE-EXISTING (bukan bug baru):** cart bar `kasir_screen.dart:2500`
+(Row, ~8.8px) & kartu antrian `:3061` (Column, ~8px) overflow pada lebar 430px
+— muncul saat keranjang/panel antrian berisi. Kandidat perbaikan layout
+tersendiri; test Item 18 sengaja meng-konsumsi exception ini.
 
 ---
 
