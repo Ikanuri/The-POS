@@ -1365,6 +1365,44 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Customer debt ─────────────────────────
 
+  /// Buku hutang: pelanggan dengan nota belum lunas, diurut dari yang paling
+  /// lama menunggak (nota tertua yang belum lunas). Diturunkan dari tabel
+  /// transactions (lebih akurat dari kolom cache `customers.outstandingDebt`).
+  Future<List<DebtBookEntry>> getDebtBook() async {
+    final rows = await customSelect(
+      'SELECT c.id AS cid, c.name AS name, c.phone AS phone, '
+      'SUM(t.total - t.paid) AS debt, MIN(t.created_at) AS oldest, '
+      'COUNT(*) AS cnt '
+      'FROM transactions t JOIN customers c ON c.id = t.customer_id '
+      "WHERE t.status IN ('kurang_bayar', 'tempo') "
+      'GROUP BY c.id HAVING debt > 0 ORDER BY oldest ASC',
+      readsFrom: {transactions, customers},
+    ).get();
+    return rows.map((r) {
+      final oldest = r.data['oldest'] as int;
+      return DebtBookEntry(
+        customerId: r.data['cid'] as String,
+        name: r.data['name'] as String,
+        phone: r.data['phone'] as String?,
+        debt: (r.data['debt'] as num).toInt(),
+        oldest: DateTime.fromMillisecondsSinceEpoch(oldest * 1000),
+        count: r.data['cnt'] as int,
+      );
+    }).toList();
+  }
+
+  /// ID nota belum lunas milik pelanggan, terlama dulu (untuk pelunasan FIFO
+  /// via [settleMergedDebt]).
+  Future<List<String>> getUnpaidTxIds(String customerId) async {
+    final rows = await (select(transactions)
+          ..where((t) =>
+              t.customerId.equals(customerId) &
+              t.status.isIn(['kurang_bayar', 'tempo']))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    return rows.map((t) => t.id).toList();
+  }
+
   /// Total hutang akumulatif pelanggan + jumlah nota yang belum lunas.
   Future<(int debtTotal, int debtCount)> getCustomerOutstandingDebt(
       String customerId) async {
@@ -2363,3 +2401,25 @@ QueryExecutor _openConnection(String encryptionKey) {
 /// Turunkan key DB dari store_key. Dipanggil sebelum [AppDatabase.open].
 String deriveDatabaseKey(String storeKeyBase64) =>
     CryptoService.deriveDbKeyHex(storeKeyBase64);
+
+/// Satu baris buku hutang (Item 12): pelanggan + total hutang + nota tertua
+/// yang belum lunas (untuk menghitung umur menunggak).
+class DebtBookEntry {
+  const DebtBookEntry({
+    required this.customerId,
+    required this.name,
+    required this.phone,
+    required this.debt,
+    required this.oldest,
+    required this.count,
+  });
+
+  final String customerId;
+  final String name;
+  final String? phone;
+  final int debt;
+  final DateTime oldest;
+  final int count;
+
+  int get daysOverdue => DateTime.now().difference(oldest).inDays;
+}

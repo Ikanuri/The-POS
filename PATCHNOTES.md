@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Buku Hutang terpusat.** Di Laporan ada tab baru **Hutang** yang
+  menampilkan semua pelanggan yang masih berhutang, diurutkan dari yang
+  **paling lama menunggak** (warna berubah hijau→kuning→merah sesuai umur
+  tunggakan). Ketuk nama pelanggan untuk melihat total hutang & langsung
+  menekan **Lunasi** (bisa pilih metode bayar). Ada juga kolom cari nama.
 - **Pencatatan Pengeluaran + Laba Bersih.** Ada menu baru Pengaturan →
   Pengeluaran untuk mencatat biaya (operasional, ambil pribadi, bayar
   supplier, uang keluar laci) lengkap dengan nominal, kategori, catatan, dan

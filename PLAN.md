@@ -326,28 +326,6 @@ produk, bukan berulang per satuan.
 
 ---
 
-## Item 12 — Buku Hutang Terpusat
-
-**Prioritas:** Sedang. **Tidak butuh migrasi schema** — `Customers.
-outstandingDebt` sudah ada (`customer_tables.dart`). Murni tab baru + query
-agregat.
-
-**Desain UI/UX:** tab baru di `laporan_screen.dart` (sejajar
-`pelanggan_tab.dart`, `produk_tab.dart`). List pelanggan dengan
-`outstandingDebt > 0`, urut dari **paling lama menunggak** (bukan
-alfabetis), subtitle "menunggak X hari" berwarna gradasi (hijau→kuning→
-merah). Tap baris → detail + tombol "Lunasi" langsung.
-
-**DIPUTUSKAN:** "umur menunggak" dihitung dari nota **tertua** yang belum
-lunas (`Transactions.createdAt` dengan `status` `tempo` / `kurang_bayar`) —
-paling relevan untuk tujuan "siapa yang paling mendesak ditagih".
-
-**File:** file baru `lib/features/laporan/tabs/hutang_tab.dart`,
-`laporan_screen.dart`, query agregat baru di `app_database.dart` (ikuti
-pola `getReportTotals` — hindari N+1 per pelanggan).
-
----
-
 ## Item 13 — Backup Otomatis Terjadwal + Pengingat
 
 **Prioritas:** Rendah-sedang. Tidak butuh tabel baru — cukup key baru di
@@ -626,8 +604,7 @@ dari daftar hidden itu** supaya owner bisa mengaturnya — mudah terlewat.
 Semua keputusan desain Item 9-15 SUDAH FINAL (lihat detail di tiap item) —
 siap dieksekusi tanpa menunggu klarifikasi lagi.
 
-5. ~~**Item 9, 10, 14**~~ **SELESAI**. Tersisa **Item 12** (buku hutang,
-   tanpa migrasi, murni tab+query).
+5. ~~**Item 9, 10, 12, 14**~~ **SELESAI** (semua tanpa migrasi).
 6. **Item 11** — butuh migrasi schema kecil (1 kolom baru di `ProductUnits`).
 7. **Item 13** — independen, prioritas rendah, bisa disisipkan kapan saja.
 8. **Item 15** — butuh tabel baru (migrasi schema paling besar dari
