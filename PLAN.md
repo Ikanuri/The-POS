@@ -291,40 +291,6 @@ menunggu keputusan user):**
 
 ---
 
-## Item 15 — Tutup Kasir Harian (Rekap Kas)
-
-**Prioritas:** Sedang. **Butuh tabel baru** (belum ada tabel shift/rekap
-kas sama sekali) → migrasi schema baru.
-
-**PENTING — jangan tertukar dengan fitur "Tutup Buku" yang SUDAH ADA**
-(`tutup_buku_screen.dart`, `tutup_buku_service.dart`): itu untuk **arsip
-tahunan** (pindahkan transaksi tahun lalu ke file arsip terpisah). Fitur
-ini beda total — rekap **harian** kas fisik vs sistem. Nama UI harus jelas
-beda, usul: **"Tutup Kasir"**.
-
-**Desain UI/UX:** entry di `ringkasan_screen.dart` (dipicu di akhir shift)
-+ section di `pengaturan_screen.dart`. Alur: dialog/sheet menampilkan rekap
-otomatis (total tunai/non-tunai/jumlah transaksi hari ini, dari query yang
-sama pola `getReportTotals`) sebagai read-only, lalu field input manual
-"Uang Fisik di Laci". Selisih dihitung otomatis, ditampilkan besar +
-berwarna (hijau=pas, merah=kurang, kuning=lebih). Setelah konfirmasi,
-tersimpan sebagai satu entri riwayat per hari (list riwayat terpisah, pola
-mirip `arsip_screen.dart`).
-
-**DIPUTUSKAN: satu entri per DEVICE per hari** (tanpa pemisahan per-kasir).
-Alasan user: sesuai desain app ini (multi-device + sync), tiap device
-biasanya dipegang satu orang; kalaupun device dipinjam-pakai antar-kasir di
-hari yang sama, total kas tetap rekonsiliasi benar selama semua transaksi
-lewat app — yang dicek Tutup Kasir sebenarnya adalah **kecocokan kas fisik
-di device itu**, bukan atribusi per-orang, jadi per-device sudah tepat
-sebagai unit rekonsiliasi.
-
-**File:** tabel baru (mis. `lib/core/database/tables/cash_closing_tables.dart`),
-migrasi `app_database.dart` (`schemaVersion` naik), layar baru (mis.
-`lib/features/kasir/tutup_kasir_screen.dart`).
-
----
-
 ## Item 17 — Persist antrian approval sync + majukan watermark upload (revisi dari catatan "ACK" lama)
 
 **Prioritas:** Sedang. **Disetujui arah oleh user** (usul: simpan state

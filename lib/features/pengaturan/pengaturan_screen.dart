@@ -242,6 +242,14 @@ class PengaturanScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   ListTile(
+                    leading: const Icon(Icons.point_of_sale_outlined),
+                    title: const Text('Tutup Kasir'),
+                    subtitle:
+                        const Text('Rekap kas harian: sistem vs uang fisik'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/tutup-kasir'),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.archive_outlined),
                     title: const Text('Tutup Buku'),
                     subtitle: const Text('Arsipkan transaksi tahun lalu'),

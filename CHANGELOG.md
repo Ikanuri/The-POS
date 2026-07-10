@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-10
 
+- `3222785` — feat: Tutup Kasir harian — rekap kas sistem vs fisik + selisih + riwayat (tabel cash_closings, schemaVersion 12) — Item 15
 - `7c527a8` — feat: pengingat backup (cek saat app dibuka, kartu status + toggle interval) — Item 13
 - `14e75fd` — feat: peringatan stok menipis (kolom min_stock, schemaVersion 11) — badge + filter di Produk — Item 11
 - `e1a3e02` — feat: Harga Lain & tier grosir jadi dropdown menempel di field Harga (bukan chip menumpuk) — Item 19

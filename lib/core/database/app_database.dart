@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../services/crypto_service.dart';
 import 'tables/app_settings_table.dart';
+import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
 import 'tables/employee_tables.dart';
 import 'tables/ledger_tables.dart';
@@ -88,6 +89,7 @@ const kAsistenPermissionKeys = <String>[
   PaymentMethods,
   DailySummaries,
   Employees,
+  CashClosings,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -100,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -193,6 +195,10 @@ class AppDatabase extends _$AppDatabase {
             // migrasi inkremental mana pun — jadi tak perlu guard `from >= X`
             // seperti alt_prices.sortOrder; addColumn aman untuk semua upgrade.
             await m.addColumn(productUnits, productUnits.minStock);
+          }
+          if (from < 12) {
+            // Tutup Kasir harian — rekap kas fisik vs sistem (Item 15).
+            await m.createTable(cashClosings);
           }
         },
         beforeOpen: (details) async {
@@ -555,6 +561,40 @@ class AppDatabase extends _$AppDatabase {
         .get();
     return rows.map((r) => r.data['pid'] as String).toSet();
   }
+
+  // ───────────────────────── Tutup Kasir (Item 15) ─────────────────────────
+
+  /// Rekap kas hari ini: total tunai (paid), non-tunai (paid), jumlah nota.
+  /// Non-void; 'tempo' (belum dibayar) tidak dihitung sebagai kas masuk.
+  Future<({int cash, int nonCash, int txCount})> getTodayCashRecap(
+      DateTime from, DateTime to) async {
+    final row = await customSelect(
+      "SELECT "
+      "COALESCE(SUM(CASE WHEN payment_method='tunai' THEN paid ELSE 0 END),0) AS cash, "
+      "COALESCE(SUM(CASE WHEN payment_method NOT IN ('tunai','tempo') THEN paid ELSE 0 END),0) AS noncash, "
+      "COUNT(*) AS cnt "
+      "FROM transactions WHERE status != 'void' "
+      "AND created_at >= ? AND created_at <= ?",
+      variables: [
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactions},
+    ).getSingle();
+    return (
+      cash: (row.data['cash'] as num).toInt(),
+      nonCash: (row.data['noncash'] as num).toInt(),
+      txCount: row.data['cnt'] as int,
+    );
+  }
+
+  /// Simpan/timpa tutup kasir untuk (tanggal, device) — satu entri per hari.
+  Future<void> saveCashClosing(CashClosingsCompanion entry) =>
+      into(cashClosings).insertOnConflictUpdate(entry);
+
+  Stream<List<CashClosing>> watchCashClosings() =>
+      (select(cashClosings)..orderBy([(t) => OrderingTerm.desc(t.date)]))
+          .watch();
 
   Future<bool> isPermissionEnabled(String key) async {
     final row = await (select(kasirPermissions)
@@ -2102,6 +2142,7 @@ class AppDatabase extends _$AppDatabase {
     'payment_methods',
     'daily_summaries',
     'employees',
+    'cash_closings',
   ];
 
   Future<Map<String, List<Map<String, Object?>>>> dumpAllTables() async {

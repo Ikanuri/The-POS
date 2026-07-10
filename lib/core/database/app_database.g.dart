@@ -9890,6 +9890,535 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
   }
 }
 
+class $CashClosingsTable extends CashClosings
+    with TableInfo<$CashClosingsTable, CashClosing> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CashClosingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<String> date = GeneratedColumn<String>(
+      'date', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _deviceCodeMeta =
+      const VerificationMeta('deviceCode');
+  @override
+  late final GeneratedColumn<String> deviceCode = GeneratedColumn<String>(
+      'device_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _systemCashMeta =
+      const VerificationMeta('systemCash');
+  @override
+  late final GeneratedColumn<int> systemCash = GeneratedColumn<int>(
+      'system_cash', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _systemNonCashMeta =
+      const VerificationMeta('systemNonCash');
+  @override
+  late final GeneratedColumn<int> systemNonCash = GeneratedColumn<int>(
+      'system_non_cash', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _txCountMeta =
+      const VerificationMeta('txCount');
+  @override
+  late final GeneratedColumn<int> txCount = GeneratedColumn<int>(
+      'tx_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _physicalCashMeta =
+      const VerificationMeta('physicalCash');
+  @override
+  late final GeneratedColumn<int> physicalCash = GeneratedColumn<int>(
+      'physical_cash', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _differenceMeta =
+      const VerificationMeta('difference');
+  @override
+  late final GeneratedColumn<int> difference = GeneratedColumn<int>(
+      'difference', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        date,
+        deviceCode,
+        systemCash,
+        systemNonCash,
+        txCount,
+        physicalCash,
+        difference,
+        note,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cash_closings';
+  @override
+  VerificationContext validateIntegrity(Insertable<CashClosing> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('device_code')) {
+      context.handle(
+          _deviceCodeMeta,
+          deviceCode.isAcceptableOrUnknown(
+              data['device_code']!, _deviceCodeMeta));
+    }
+    if (data.containsKey('system_cash')) {
+      context.handle(
+          _systemCashMeta,
+          systemCash.isAcceptableOrUnknown(
+              data['system_cash']!, _systemCashMeta));
+    } else if (isInserting) {
+      context.missing(_systemCashMeta);
+    }
+    if (data.containsKey('system_non_cash')) {
+      context.handle(
+          _systemNonCashMeta,
+          systemNonCash.isAcceptableOrUnknown(
+              data['system_non_cash']!, _systemNonCashMeta));
+    }
+    if (data.containsKey('tx_count')) {
+      context.handle(_txCountMeta,
+          txCount.isAcceptableOrUnknown(data['tx_count']!, _txCountMeta));
+    }
+    if (data.containsKey('physical_cash')) {
+      context.handle(
+          _physicalCashMeta,
+          physicalCash.isAcceptableOrUnknown(
+              data['physical_cash']!, _physicalCashMeta));
+    } else if (isInserting) {
+      context.missing(_physicalCashMeta);
+    }
+    if (data.containsKey('difference')) {
+      context.handle(
+          _differenceMeta,
+          difference.isAcceptableOrUnknown(
+              data['difference']!, _differenceMeta));
+    } else if (isInserting) {
+      context.missing(_differenceMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+        {date, deviceCode},
+      ];
+  @override
+  CashClosing map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CashClosing(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}date'])!,
+      deviceCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}device_code']),
+      systemCash: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}system_cash'])!,
+      systemNonCash: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}system_non_cash'])!,
+      txCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}tx_count'])!,
+      physicalCash: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}physical_cash'])!,
+      difference: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}difference'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $CashClosingsTable createAlias(String alias) {
+    return $CashClosingsTable(attachedDatabase, alias);
+  }
+}
+
+class CashClosing extends DataClass implements Insertable<CashClosing> {
+  final String id;
+  final String date;
+  final String? deviceCode;
+
+  /// Kas tunai yang diharapkan (dari penjualan tunai hari itu).
+  final int systemCash;
+
+  /// Total non-tunai (transfer/QRIS/dll) — informasi, tidak masuk selisih laci.
+  final int systemNonCash;
+  final int txCount;
+
+  /// Uang fisik yang dihitung di laci.
+  final int physicalCash;
+
+  /// physicalCash − systemCash (positif = lebih, negatif = kurang).
+  final int difference;
+  final String? note;
+  final DateTime createdAt;
+  const CashClosing(
+      {required this.id,
+      required this.date,
+      this.deviceCode,
+      required this.systemCash,
+      required this.systemNonCash,
+      required this.txCount,
+      required this.physicalCash,
+      required this.difference,
+      this.note,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['date'] = Variable<String>(date);
+    if (!nullToAbsent || deviceCode != null) {
+      map['device_code'] = Variable<String>(deviceCode);
+    }
+    map['system_cash'] = Variable<int>(systemCash);
+    map['system_non_cash'] = Variable<int>(systemNonCash);
+    map['tx_count'] = Variable<int>(txCount);
+    map['physical_cash'] = Variable<int>(physicalCash);
+    map['difference'] = Variable<int>(difference);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CashClosingsCompanion toCompanion(bool nullToAbsent) {
+    return CashClosingsCompanion(
+      id: Value(id),
+      date: Value(date),
+      deviceCode: deviceCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceCode),
+      systemCash: Value(systemCash),
+      systemNonCash: Value(systemNonCash),
+      txCount: Value(txCount),
+      physicalCash: Value(physicalCash),
+      difference: Value(difference),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CashClosing.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CashClosing(
+      id: serializer.fromJson<String>(json['id']),
+      date: serializer.fromJson<String>(json['date']),
+      deviceCode: serializer.fromJson<String?>(json['deviceCode']),
+      systemCash: serializer.fromJson<int>(json['systemCash']),
+      systemNonCash: serializer.fromJson<int>(json['systemNonCash']),
+      txCount: serializer.fromJson<int>(json['txCount']),
+      physicalCash: serializer.fromJson<int>(json['physicalCash']),
+      difference: serializer.fromJson<int>(json['difference']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'date': serializer.toJson<String>(date),
+      'deviceCode': serializer.toJson<String?>(deviceCode),
+      'systemCash': serializer.toJson<int>(systemCash),
+      'systemNonCash': serializer.toJson<int>(systemNonCash),
+      'txCount': serializer.toJson<int>(txCount),
+      'physicalCash': serializer.toJson<int>(physicalCash),
+      'difference': serializer.toJson<int>(difference),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CashClosing copyWith(
+          {String? id,
+          String? date,
+          Value<String?> deviceCode = const Value.absent(),
+          int? systemCash,
+          int? systemNonCash,
+          int? txCount,
+          int? physicalCash,
+          int? difference,
+          Value<String?> note = const Value.absent(),
+          DateTime? createdAt}) =>
+      CashClosing(
+        id: id ?? this.id,
+        date: date ?? this.date,
+        deviceCode: deviceCode.present ? deviceCode.value : this.deviceCode,
+        systemCash: systemCash ?? this.systemCash,
+        systemNonCash: systemNonCash ?? this.systemNonCash,
+        txCount: txCount ?? this.txCount,
+        physicalCash: physicalCash ?? this.physicalCash,
+        difference: difference ?? this.difference,
+        note: note.present ? note.value : this.note,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  CashClosing copyWithCompanion(CashClosingsCompanion data) {
+    return CashClosing(
+      id: data.id.present ? data.id.value : this.id,
+      date: data.date.present ? data.date.value : this.date,
+      deviceCode:
+          data.deviceCode.present ? data.deviceCode.value : this.deviceCode,
+      systemCash:
+          data.systemCash.present ? data.systemCash.value : this.systemCash,
+      systemNonCash: data.systemNonCash.present
+          ? data.systemNonCash.value
+          : this.systemNonCash,
+      txCount: data.txCount.present ? data.txCount.value : this.txCount,
+      physicalCash: data.physicalCash.present
+          ? data.physicalCash.value
+          : this.physicalCash,
+      difference:
+          data.difference.present ? data.difference.value : this.difference,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashClosing(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('systemCash: $systemCash, ')
+          ..write('systemNonCash: $systemNonCash, ')
+          ..write('txCount: $txCount, ')
+          ..write('physicalCash: $physicalCash, ')
+          ..write('difference: $difference, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, date, deviceCode, systemCash,
+      systemNonCash, txCount, physicalCash, difference, note, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CashClosing &&
+          other.id == this.id &&
+          other.date == this.date &&
+          other.deviceCode == this.deviceCode &&
+          other.systemCash == this.systemCash &&
+          other.systemNonCash == this.systemNonCash &&
+          other.txCount == this.txCount &&
+          other.physicalCash == this.physicalCash &&
+          other.difference == this.difference &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt);
+}
+
+class CashClosingsCompanion extends UpdateCompanion<CashClosing> {
+  final Value<String> id;
+  final Value<String> date;
+  final Value<String?> deviceCode;
+  final Value<int> systemCash;
+  final Value<int> systemNonCash;
+  final Value<int> txCount;
+  final Value<int> physicalCash;
+  final Value<int> difference;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const CashClosingsCompanion({
+    this.id = const Value.absent(),
+    this.date = const Value.absent(),
+    this.deviceCode = const Value.absent(),
+    this.systemCash = const Value.absent(),
+    this.systemNonCash = const Value.absent(),
+    this.txCount = const Value.absent(),
+    this.physicalCash = const Value.absent(),
+    this.difference = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CashClosingsCompanion.insert({
+    required String id,
+    required String date,
+    this.deviceCode = const Value.absent(),
+    required int systemCash,
+    this.systemNonCash = const Value.absent(),
+    this.txCount = const Value.absent(),
+    required int physicalCash,
+    required int difference,
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        date = Value(date),
+        systemCash = Value(systemCash),
+        physicalCash = Value(physicalCash),
+        difference = Value(difference);
+  static Insertable<CashClosing> custom({
+    Expression<String>? id,
+    Expression<String>? date,
+    Expression<String>? deviceCode,
+    Expression<int>? systemCash,
+    Expression<int>? systemNonCash,
+    Expression<int>? txCount,
+    Expression<int>? physicalCash,
+    Expression<int>? difference,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (date != null) 'date': date,
+      if (deviceCode != null) 'device_code': deviceCode,
+      if (systemCash != null) 'system_cash': systemCash,
+      if (systemNonCash != null) 'system_non_cash': systemNonCash,
+      if (txCount != null) 'tx_count': txCount,
+      if (physicalCash != null) 'physical_cash': physicalCash,
+      if (difference != null) 'difference': difference,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CashClosingsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? date,
+      Value<String?>? deviceCode,
+      Value<int>? systemCash,
+      Value<int>? systemNonCash,
+      Value<int>? txCount,
+      Value<int>? physicalCash,
+      Value<int>? difference,
+      Value<String?>? note,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return CashClosingsCompanion(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      deviceCode: deviceCode ?? this.deviceCode,
+      systemCash: systemCash ?? this.systemCash,
+      systemNonCash: systemNonCash ?? this.systemNonCash,
+      txCount: txCount ?? this.txCount,
+      physicalCash: physicalCash ?? this.physicalCash,
+      difference: difference ?? this.difference,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<String>(date.value);
+    }
+    if (deviceCode.present) {
+      map['device_code'] = Variable<String>(deviceCode.value);
+    }
+    if (systemCash.present) {
+      map['system_cash'] = Variable<int>(systemCash.value);
+    }
+    if (systemNonCash.present) {
+      map['system_non_cash'] = Variable<int>(systemNonCash.value);
+    }
+    if (txCount.present) {
+      map['tx_count'] = Variable<int>(txCount.value);
+    }
+    if (physicalCash.present) {
+      map['physical_cash'] = Variable<int>(physicalCash.value);
+    }
+    if (difference.present) {
+      map['difference'] = Variable<int>(difference.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashClosingsCompanion(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('systemCash: $systemCash, ')
+          ..write('systemNonCash: $systemNonCash, ')
+          ..write('txCount: $txCount, ')
+          ..write('physicalCash: $physicalCash, ')
+          ..write('difference: $difference, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -9924,6 +10453,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
   late final $DailySummariesTable dailySummaries = $DailySummariesTable(this);
   late final $EmployeesTable employees = $EmployeesTable(this);
+  late final $CashClosingsTable cashClosings = $CashClosingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9953,7 +10483,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         kasirPermissions,
         paymentMethods,
         dailySummaries,
-        employees
+        employees,
+        cashClosings
       ];
 }
 
@@ -16612,6 +17143,256 @@ typedef $$EmployeesTableProcessedTableManager = ProcessedTableManager<
     (Employee, BaseReferences<_$AppDatabase, $EmployeesTable, Employee>),
     Employee,
     PrefetchHooks Function()>;
+typedef $$CashClosingsTableCreateCompanionBuilder = CashClosingsCompanion
+    Function({
+  required String id,
+  required String date,
+  Value<String?> deviceCode,
+  required int systemCash,
+  Value<int> systemNonCash,
+  Value<int> txCount,
+  required int physicalCash,
+  required int difference,
+  Value<String?> note,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$CashClosingsTableUpdateCompanionBuilder = CashClosingsCompanion
+    Function({
+  Value<String> id,
+  Value<String> date,
+  Value<String?> deviceCode,
+  Value<int> systemCash,
+  Value<int> systemNonCash,
+  Value<int> txCount,
+  Value<int> physicalCash,
+  Value<int> difference,
+  Value<String?> note,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$CashClosingsTableFilterComposer
+    extends Composer<_$AppDatabase, $CashClosingsTable> {
+  $$CashClosingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get systemCash => $composableBuilder(
+      column: $table.systemCash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get systemNonCash => $composableBuilder(
+      column: $table.systemNonCash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get txCount => $composableBuilder(
+      column: $table.txCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get physicalCash => $composableBuilder(
+      column: $table.physicalCash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get difference => $composableBuilder(
+      column: $table.difference, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$CashClosingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CashClosingsTable> {
+  $$CashClosingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get systemCash => $composableBuilder(
+      column: $table.systemCash, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get systemNonCash => $composableBuilder(
+      column: $table.systemNonCash,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get txCount => $composableBuilder(
+      column: $table.txCount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get physicalCash => $composableBuilder(
+      column: $table.physicalCash,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get difference => $composableBuilder(
+      column: $table.difference, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$CashClosingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CashClosingsTable> {
+  $$CashClosingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => column);
+
+  GeneratedColumn<int> get systemCash => $composableBuilder(
+      column: $table.systemCash, builder: (column) => column);
+
+  GeneratedColumn<int> get systemNonCash => $composableBuilder(
+      column: $table.systemNonCash, builder: (column) => column);
+
+  GeneratedColumn<int> get txCount =>
+      $composableBuilder(column: $table.txCount, builder: (column) => column);
+
+  GeneratedColumn<int> get physicalCash => $composableBuilder(
+      column: $table.physicalCash, builder: (column) => column);
+
+  GeneratedColumn<int> get difference => $composableBuilder(
+      column: $table.difference, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CashClosingsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $CashClosingsTable,
+    CashClosing,
+    $$CashClosingsTableFilterComposer,
+    $$CashClosingsTableOrderingComposer,
+    $$CashClosingsTableAnnotationComposer,
+    $$CashClosingsTableCreateCompanionBuilder,
+    $$CashClosingsTableUpdateCompanionBuilder,
+    (
+      CashClosing,
+      BaseReferences<_$AppDatabase, $CashClosingsTable, CashClosing>
+    ),
+    CashClosing,
+    PrefetchHooks Function()> {
+  $$CashClosingsTableTableManager(_$AppDatabase db, $CashClosingsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CashClosingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CashClosingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CashClosingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> date = const Value.absent(),
+            Value<String?> deviceCode = const Value.absent(),
+            Value<int> systemCash = const Value.absent(),
+            Value<int> systemNonCash = const Value.absent(),
+            Value<int> txCount = const Value.absent(),
+            Value<int> physicalCash = const Value.absent(),
+            Value<int> difference = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CashClosingsCompanion(
+            id: id,
+            date: date,
+            deviceCode: deviceCode,
+            systemCash: systemCash,
+            systemNonCash: systemNonCash,
+            txCount: txCount,
+            physicalCash: physicalCash,
+            difference: difference,
+            note: note,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String date,
+            Value<String?> deviceCode = const Value.absent(),
+            required int systemCash,
+            Value<int> systemNonCash = const Value.absent(),
+            Value<int> txCount = const Value.absent(),
+            required int physicalCash,
+            required int difference,
+            Value<String?> note = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CashClosingsCompanion.insert(
+            id: id,
+            date: date,
+            deviceCode: deviceCode,
+            systemCash: systemCash,
+            systemNonCash: systemNonCash,
+            txCount: txCount,
+            physicalCash: physicalCash,
+            difference: difference,
+            note: note,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CashClosingsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $CashClosingsTable,
+    CashClosing,
+    $$CashClosingsTableFilterComposer,
+    $$CashClosingsTableOrderingComposer,
+    $$CashClosingsTableAnnotationComposer,
+    $$CashClosingsTableCreateCompanionBuilder,
+    $$CashClosingsTableUpdateCompanionBuilder,
+    (
+      CashClosing,
+      BaseReferences<_$AppDatabase, $CashClosingsTable, CashClosing>
+    ),
+    CashClosing,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -16666,4 +17447,6 @@ class $AppDatabaseManager {
       $$DailySummariesTableTableManager(_db, _db.dailySummaries);
   $$EmployeesTableTableManager get employees =>
       $$EmployeesTableTableManager(_db, _db.employees);
+  $$CashClosingsTableTableManager get cashClosings =>
+      $$CashClosingsTableTableManager(_db, _db.cashClosings);
 }

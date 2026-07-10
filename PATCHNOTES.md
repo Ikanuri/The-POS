@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Tutup Kasir harian.** Menu baru (Pengaturan → Tutup Kasir) menampilkan
+  rekap otomatis penjualan tunai, non-tunai, dan jumlah nota hari ini. Tinggal
+  masukkan jumlah uang fisik di laci, dan aplikasi menghitung selisihnya
+  (hijau = pas, merah = kurang, kuning/tosca = lebih). Tersimpan sebagai
+  riwayat harian. (Beda dari "Tutup Buku" yang mengarsipkan transaksi tahunan.)
 - **Pengingat backup.** Di Pengaturan → Backup & Restore kini ada kartu
   status "Backup terakhir: X hari lalu" (warnanya berubah makin lama makin
   merah) dan tombol "Pengingat Backup Otomatis" (interval harian/mingguan).
