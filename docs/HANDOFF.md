@@ -21,6 +21,12 @@ Baseline sebelum eksekusi: 141 test hijau; setelah Item 22: 149 hijau.
 Google Fonts butuh binding aktif — di test, JANGAN panggil `AppTheme.light()/dark()`
 di badan `main()` (fase collection); bangun theme DI DALAM `testWidgets`
 (lihat `test/chip_and_banner_color_test.dart`).
+**Gotcha widget test + drift StreamProvider yang MEMUTASI db:** saat provider
+di-dispose di akhir test, drift `StreamQueryStore.markAsClosed` menjadwalkan
+Timer 0ms → binding lapor "Timer still pending". Fix: sebelum test selesai,
+unmount eksplisit lalu drain — `await tester.pumpWidget(const SizedBox()); await
+tester.pump(Duration(milliseconds: 10));` (lihat helper `drain` di
+`test/payment_method_edit_delete_test.dart`).
 
 ---
 

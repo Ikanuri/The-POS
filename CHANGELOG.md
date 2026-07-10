@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-10
 
+- `6b83b87` — feat: edit metode pembayaran (reuse sheet) + hapus via swipe bila nonaktif — Item 14
 - `fa436d0` — feat: tombol edit produk di modal kasir (owner/asisten saja) — Item 20
 - `03f984d` — feat: pilih metode bayar saat pelunasan/tambah bayar hutang (dialog reusable, ganti hardcode tunai)
 - `7f93726` — fix: warna chip terpilih (tema, sistemik) + banner sukses hijau/gagal merah light & dark

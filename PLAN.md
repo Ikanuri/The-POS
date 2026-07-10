@@ -417,38 +417,6 @@ dibuat baru).
 
 ---
 
-## Item 14 — Edit/Hapus Metode Pembayaran
-
-**Prioritas:** Rendah, scope kecil. Tidak butuh migrasi schema.
-
-**Desain UI/UX:** reuse `_AddMethodSheet` (`payment_methods_screen.dart`)
-untuk edit (prefilled dari `method`, param opsional — satu form untuk
-add & edit). Hapus via swipe (`Dismissible`) dengan konfirmasi kalau metode
-pernah dipakai di transaksi.
-
-**Temuan teknis penting (mempengaruhi desain "hapus"):**
-`Transactions.paymentMethod` (`transaction_tables.dart`) menyimpan **STRING
-KATEGORI** (`tunai | transfer | qris | ewallet | tempo`), **BUKAN** id
-spesifik baris `PaymentMethods`. Kalau ada 2 metode dengan `type` yang sama
-(mis. dua bank berbeda, keduanya `type='bank'`), tidak ada cara membedakan
-dari data transaksi metode SPESIFIK mana yang benar-benar dipakai —
-transaksi cuma tahu kategorinya, bukan nama banknya. Jadi cek "pernah
-dipakai" untuk satu baris metode spesifik **tidak bisa akurat 100%** dari
-data yang ada sekarang.
-
-**DIPUTUSKAN:** pakai opsi heuristik — izinkan hapus asal metode sudah
-di-nonaktifkan (`isActive=false`) dulu, TANPA cek referential ke `type`.
-Alasan tambahan: menghapus baris `PaymentMethods` **tidak merusak riwayat
-transaksi** (`Transactions.paymentMethod` adalah string mandiri, bukan
-foreign key ke tabel ini) — jadi risiko teknisnya rendah. Tambahkan 1 baris
-peringatan di dialog konfirmasi hapus ("pastikan metode ini benar tidak
-dipakai lagi") sebagai pengaman sosial. Metode "Tunai" tetap tidak bisa
-dihapus/nonaktifkan (guard `isTunai` yang sudah ada dipertahankan).
-
-**File:** `lib/features/pengaturan/payment_methods_screen.dart`.
-
----
-
 ## Item 15 — Tutup Kasir Harian (Rekap Kas)
 
 **Prioritas:** Sedang. **Butuh tabel baru** (belum ada tabel shift/rekap
@@ -732,8 +700,7 @@ tanpa menunggu klarifikasi lagi.
 13. **Item 19** (Harga Lain menempel ke satuan — redesain dari chip row ke
     dropdown per-satuan) — SIAP, desain final.
 
-**Quick-win tersisa:** Item 14 (edit/hapus metode bayar) — scope kecil,
-tanpa migrasi. (Item 22, 10, 20 sudah selesai.)
+(Item 22, 10, 20, 14 sudah selesai — semua quick-win tanpa migrasi.)
 
 **Semua keputusan desain Item 9-22 SUDAH DIJAWAB** — tidak ada lagi yang
 menggantung, seluruh daftar siap dieksekusi berurutan sesuai prioritas di

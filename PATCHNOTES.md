@@ -18,6 +18,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Edit produk langsung dari layar Kasir.** Saat menekan produk di kasir,
   kini ada tombol edit (ikon pensil) di pojok modal — buka pengaturan produk
   itu tanpa harus pindah ke tab Produk. Hanya muncul untuk Owner & Asisten.
+- **Metode pembayaran bisa diedit & dihapus.** Di Pengaturan → Metode
+  Pembayaran, ketuk sebuah metode untuk mengubah namanya/detailnya, atau
+  geser ke kiri untuk menghapus (metode harus dinonaktifkan dulu; "Tunai"
+  tidak bisa dihapus). Sebelumnya metode hanya bisa ditambah & diaktif/
+  nonaktifkan.
 - **Urutan "Harga Lain" bisa diatur.** Di pengaturan produk (tab Produk),
   daftar Harga Lain sekarang punya ikon geser (drag-handle) di tiap baris —
   tahan lalu seret untuk mengubah urutannya. Urutan ini otomatis diikuti
