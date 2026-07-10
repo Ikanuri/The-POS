@@ -218,8 +218,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             fontSize: 11, color: scheme.onSurfaceVariant),
                         children: [
                           TextSpan(
-                            text: '${_unitNames[item.productUnitId] ?? ''} '
-                                '${effQty % 1 == 0 ? effQty.toInt() : effQty} × '
+                            text: '${effQty % 1 == 0 ? effQty.toInt() : effQty} '
+                                '${_unitNames[item.productUnitId] ?? ''} × '
                                 '${formatRupiah(item.priceAtSale)}',
                           ),
                           if (item.priceOverridden &&
