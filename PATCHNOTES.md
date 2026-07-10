@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Pilihan "Harga Lain" & grosir di kasir kini lebih rapi.** Saat menekan
+  produk, harga grosir dan Harga Lain milik satuan yang dipilih dikumpulkan
+  dalam satu tombol "Harga lain" di bawah kolom harga (dengan angka jumlah
+  pilihan) — tidak lagi berupa deretan chip yang menumpuk saat opsinya banyak.
+  Chip di atas kini khusus untuk memilih satuan.
 - **Beralih antar pesanan tertahan lebih cepat (tanpa kehilangan).** Saat
   membuka pesanan tertahan lain sementara keranjang sedang berisi, keranjang
   yang aktif kini **otomatis ditahan balik** (pakai nama pelanggan bila ada,

@@ -269,6 +269,67 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     });
   }
 
+  /// Daftar pilihan harga untuk satuan terpilih: harga dasar + tier grosir
+  /// (minQty>1) + Harga Lain. Item 19 — dipakai dropdown di sebelah field
+  /// Harga (menggantikan chip yang menumpuk).
+  List<({String label, int price})> _priceOptions() {
+    final sel = _sel;
+    if (sel == null) return const [];
+    return [
+      (label: 'Harga dasar', price: sel.basePrice),
+      for (final t in sel.tiers.reversed)
+        if (t.minQty > 1)
+          (
+            label: 'Grosir ≥${_fmtQty(t.minQty.toDouble())} ${sel.unitName}',
+            price: t.price
+          ),
+      for (final a in sel.altPrices) (label: a.label, price: a.price),
+    ];
+  }
+
+  Widget _buildPriceMenuButton(ColorScheme scheme) {
+    final opts = _priceOptions();
+    return PopupMenuButton<int>(
+      tooltip: 'Harga lain',
+      onSelected: (i) => _applyTierPrice(opts[i].price),
+      itemBuilder: (_) => [
+        for (var i = 0; i < opts.length; i++)
+          PopupMenuItem<int>(
+            value: i,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(child: Text(opts[i].label)),
+                const SizedBox(width: 16),
+                Text(formatRupiah(opts[i].price),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: scheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sell_outlined,
+                size: 13, color: scheme.onSecondaryContainer),
+            const SizedBox(width: 4),
+            Text('Harga lain (${opts.length - 1})',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSecondaryContainer)),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _setQty(double q) {
     setState(() {
       _qty = q.clamp(0, 9999);
@@ -442,13 +503,14 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // ── Harga lain (satuan + tier + harga alternatif) ─────
-                  if (_options.length > 1 ||
-                      (_sel?.tiers.length ?? 0) > 1 ||
-                      (_sel?.altPrices.isNotEmpty ?? false)) ...[
+                  // ── Pilih satuan (chip) — hanya bila >1 satuan. Item 19:
+                  // tier grosir & Harga Lain TIDAK lagi dicampur di sini;
+                  // pindah ke dropdown di sebelah field Harga (skalabel &
+                  // menempel ke satuan terpilih).
+                  if (_options.length > 1) ...[
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('Pilih harga',
+                      child: Text('Pilih satuan',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -468,27 +530,6 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               selected: i == _selectedIdx && !_priceOverridden,
                               onTap: () => _selectUnit(i),
                             ),
-                          // Tier qty untuk satuan terpilih (mis. grosir).
-                          if (_sel != null)
-                            for (final t in _sel!.tiers.reversed)
-                              if (t.minQty > 1)
-                                _PriceChip(
-                                  label:
-                                      '≥${_fmtQty(t.minQty.toDouble())} ${_sel!.unitName}',
-                                  price: t.price,
-                                  selected:
-                                      _priceOverridden && _price == t.price,
-                                  onTap: () => _applyTierPrice(t.price),
-                                ),
-                          // Harga alternatif berlabel (mis. "Harga Toko A").
-                          if (_sel != null)
-                            for (final a in _sel!.altPrices)
-                              _PriceChip(
-                                label: a.label,
-                                price: a.price,
-                                selected: _priceOverridden && _price == a.price,
-                                onTap: () => _applyTierPrice(a.price),
-                              ),
                         ],
                       ),
                     ),
@@ -634,6 +675,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                   setState(() {});
                                 },
                               ),
+                              // Item 19: dropdown tier grosir + Harga Lain
+                              // milik satuan terpilih, menempel di bawah field.
+                              if (_priceOptions().length > 1) ...[
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: _buildPriceMenuButton(scheme),
+                                ),
+                              ],
                             ],
                           ),
                         ),

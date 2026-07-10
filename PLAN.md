@@ -413,51 +413,6 @@ sambungan yang digantung menunggu owner.
 
 ---
 
-## Item 19 — Harga Lain (`alt_prices`) menempel ke satuan, bukan chip menumpuk
-
-**Prioritas:** Sedang. **Diklarifikasi user** — fiturnya ("Harga Lain") memang
-sudah ada (form produk + chip tap di modal kasir), tapi UI/UX chip
-horizontalnya berpotensi menumpuk & tidak efisien kalau satu satuan punya
-banyak tier grosir + banyak Harga Lain sekaligus.
-
-**Kondisi sekarang (`item_entry_sheet.dart` baris ~429-479):** satu baris
-`ListView` horizontal TUNGGAL berisi SEMUA jenis chip bercampur — chip
-satuan (Dus/Pcs/dst) + chip tier grosir milik satuan terpilih + chip Harga
-Lain milik satuan terpilih — tidak dipisah secara visual. Kalau satuan
-terpilih itu sendiri punya banyak tier & banyak Harga Lain (mis. 3 tier + 5
-Harga Lain = 8+ chip), baris ini cuma bisa dilihat dengan scroll horizontal
-panjang — kurang efisien, dan secara visual tidak "menempel" jelas ke satuan
-mana yang sedang aktif.
-
-**Solusi yang saya usulkan (sesuai arah user — "stick" ke satuan):** pisahkan
-dua hal yang sekarang tercampur:
-- **Baris chip satuan** (Dus/Pcs/dst) tetap seperti sekarang — jumlahnya
-  biasanya sedikit (2-4), chip horizontal cocok untuk switch cepat antar
-  satuan.
-- **Tier grosir + Harga Lain milik satuan terpilih** dipindah dari chip row
-  ke **tombol kecil (ikon "expand_more"/tag) tepat di sebelah kanan input
-  field "Harga"**. Tap tombol → buka **menu popup vertikal** (`showMenu`,
-  bisa scroll) berisi daftar harga milik satuan yang SEDANG dipilih: "Harga
-  dasar", "Grosir ≥5 → RpX", "Harga Lain: Toko A → RpY", dst. Tap salah satu
-  langsung isi ke field harga (logika sama seperti `_applyTierPrice`
-  sekarang, cuma beda titik pemicu). Badge kecil di tombol (mis. angka
-  jumlah opsi) supaya kasir tahu ada berapa banyak pilihan tanpa perlu buka
-  dulu.
-- **Kenapa dropdown, bukan hold-tap ke chip satuan:** tombol yang terlihat
-  lebih *discoverable* untuk kasir baru dibanding gesture tersembunyi
-  (hold-tap tidak ada petunjuk visual bahwa itu bisa ditekan lama).
-
-**Manfaat:** skalabel ke berapa pun jumlah Harga Lain (menu vertikal scroll,
-bukan horizontal makin panjang), baris chip satuan jadi ringkas & fokus, dan
-harga tier/Harga Lain otomatis "menempel" ke input harga milik satuan yang
-aktif — bukan tercampur dengan pemilihan satuan.
-
-**File:** `lib/features/kasir/widgets/item_entry_sheet.dart` (rombak seksi
-"Pilih harga" baris ~429-479, tambah widget dropdown baru di sebelah field
-harga).
-
----
-
 ## Item 21 — Sync UI persisten lintas tab + status progres (global state)
 
 **Prioritas:** Sedang. **Proposal user, DISETUJUI PENUH** — status progres
