@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-10
 
+- `7f93726` — fix: warna chip terpilih (tema, sistemik) + banner sukses hijau/gagal merah light & dark
 - `b949268` — feat: reorder "Harga Lain" via drag-handle di form Produk (schemaVersion 10)
 - `c1a9efe` — perf: optimasi halaman HTML Katalog Pesanan untuk HP low-end
 - `3bff1b6` — fix: kunci dedup importer CSV ikut barcode/kode produk (silent data loss)

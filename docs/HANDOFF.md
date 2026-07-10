@@ -4,9 +4,22 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 10 Juli 2026 (eksekusi 5 item PLAN.md: fix dropdown
-pelanggan, fix dedup importer CSV, optimasi performa HTML Katalog Pesanan,
-urutan qty/satuan struk, reorder Harga Lain — commit `6f1fbc4`..`b949268`)._
+_Terakhir diperbarui: 10 Juli 2026 (mulai eksekusi backlog besar Item 9-22 di
+PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user. Item 22
+SELESAI: fix warna chip terpilih (tema, sistemik) + banner sukses/gagal.
+Sisa Item 9-21 antre, semua keputusan desain sudah final di PLAN.md)._
+
+## Lingkungan sesi ini (PENTING untuk sesi lanjutan)
+Flutter TIDAK terpasang default di environment ini — dipasang manual ke
+`/tmp/flutter` (versi **3.24.5 stable**, samakan dengan CI `build-apk.yml`).
+Jalankan `export PATH="/tmp/flutter/bin:$PATH"` tiap sesi baru, `flutter pub get`,
+lalu `flutter analyze` + `flutter test`. Kalau `/tmp/flutter` sudah hilang
+(container di-reclaim), unduh ulang:
+`curl -sSL -o /tmp/flutter.tar.xz "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz" && tar xf /tmp/flutter.tar.xz -C /tmp`.
+Baseline sebelum eksekusi: 141 test hijau; setelah Item 22: 149 hijau.
+Google Fonts butuh binding aktif — di test, JANGAN panggil `AppTheme.light()/dark()`
+di badan `main()` (fase collection); bangun theme DI DALAM `testWidgets`
+(lihat `test/chip_and_banner_color_test.dart`).
 
 ---
 

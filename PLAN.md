@@ -723,61 +723,6 @@ host. Jangan overpromise "per baris".
 
 ---
 
-## Item 22 — Warna state UI gelap/terang: banner + chip terpilih (bug SISTEMIK, bukan cuma banner)
-
-**Prioritas:** Rendah-sedang, scope kecil tapi menyebar ke banyak file.
-**Proposal user, DIPERLUAS** setelah user minta crosscheck ("tombol jenis
-pembayaran di modal checkout juga buram di dark mode") — dan ternyata ini
-BUKAN kasus terisolasi, ada bug di level tema yang berdampak ke 6 file.
-
-### Bagian A — Banner inline (sukses/gagal)
-
-**Kondisi sekarang:** `inline_banner.dart` (baris 88-114) — `success` pakai
-`scheme.primaryContainer` = terakota (warna brand), jadi sukses & info mirip.
-
-**Solusi — REUSE warna semantik yang SUDAH ADA, jangan bikin baru:**
-`app_theme.dart` sudah punya helper theme-aware persis untuk kasus ini:
-`AppTheme.changeFg(isDark)`/`changeBg(isDark)` (hijau — dipakai untuk
-"kembalian") dan `AppTheme.debtFg(isDark)`/`debtBg(isDark)` (merah — dipakai
-untuk "hutang"). Pakai keduanya untuk `success`/`error` di banner supaya
-konsisten dengan warna hijau/merah yang sudah dikenal user di tempat lain
-di app, bukan menambah pasangan warna baru. Case `warning` (baris 102-107,
-hardcode warna terang saja, kontras jelek di dark mode) ikut dibetulkan
-dengan pola yang sama (state-aware, bukan hardcode satu set).
-
-### Bagian B — TEMUAN BARU dari crosscheck user: `ChoiceChip`/`FilterChip` terpilih buram di dark mode — bug DI LEVEL TEMA
-
-**Akar masalah (dikonfirmasi):** `chipTheme` global (`app_theme.dart` baris
-234-239) set `labelStyle` dengan **satu warna TETAP**
-(`isDark ? _dInk2 : _lInk2`) yang **tidak berubah** saat chip dalam state
-`selected` — padahal background chip saat selected berubah jadi
-`scheme.primaryContainer` (lewat parameter `selectedColor` yang diberikan
-per-pemakaian). Warna teks yang didesain kontras di atas background netral
-jadi kurang kontras di atas `primaryContainer`, terutama di dark mode —
-persis "buram" yang dilaporkan user di chip metode pembayaran.
-
-**Ini bug SISTEMIK** — pola sama dipakai identik di 6 file / 8 titik, tidak
-satupun override `labelStyle` lokal untuk state selected:
-`payment_screen.dart` baris 956-966 (chip metode bayar — akar laporan
-user), `tx_history_sheet.dart` (3×, baris 319-343 & 454-460),
-`pair_device_screen.dart` (2×), `price_preview_screen.dart` (2×),
-`produk_list_screen.dart` (1×, baris 211-216).
-
-**Solusi yang benar — fix SEKALI di level tema, bukan per-file:** ubah
-`chipTheme.labelStyle` di `app_theme.dart` jadi resolve berdasar state
-(`WidgetStateProperty`/`WidgetStateTextStyle`, cek `WidgetState.selected`) —
-kalau selected, pakai warna kontras terhadap `primaryContainer` (mis.
-`scheme.onPrimaryContainer`); kalau tidak, warna default seperti sekarang.
-Satu perbaikan ini otomatis membetulkan SEMUA 8 titik pemakaian di atas
-sekaligus (termasuk pemakaian baru di masa depan) — jauh lebih efisien
-daripada menambal tiap file satu-satu.
-
-**File:** `lib/core/theme/app_theme.dart` (fix utama, Bagian B — otomatis
-memperbaiki 6 file lain tanpa disentuh), `lib/core/widgets/inline_banner.dart`
-(Bagian A).
-
----
-
 ## Catatan lintas-item — perbaikan UX permission (murah, opsional)
 
 Dari audit flow permission (bonus request user): perubahan izin owner **tidak
@@ -824,10 +769,9 @@ siap dieksekusi tanpa menunggu klarifikasi lagi.
 Semua keputusan desain SUDAH DIJAWAB user — daftar ini siap dieksekusi
 tanpa menunggu klarifikasi lagi.
 
-9. **Item 22** (fix tema chip terpilih — sistemik, sekali fix kena 8 titik
-   pemakaian + banner reuse warna semantik yang sudah ada) & **Item 20**
-   (tombol edit di modal, owner/asisten saja tanpa izin baru) — SIAP,
-   quick win, scope kecil.
+9. ~~**Item 22**~~ **SELESAI** (commit di CHANGELOG) — fix tema chip terpilih
+   sistemik + banner sukses/gagal. **Item 20** (tombol edit di modal,
+   owner/asisten saja tanpa izin baru) — SIAP, quick win, scope kecil.
 10. **Item 18** (beralih pesanan tanpa hold, label auto-generate timestamp)
     — SIAP, prioritas tinggi (rush-hour, paling terasa manfaatnya).
 11. **Item 16** (atribusi varian per-satuan + fix minus, cascade delete
@@ -839,10 +783,9 @@ tanpa menunggu klarifikasi lagi.
 13. **Item 19** (Harga Lain menempel ke satuan — redesain dari chip row ke
     dropdown per-satuan) — SIAP, desain final.
 
-**Quick-win paling murah lintas semua item:** Item 22 (satu perubahan file
-tema, kena 8 titik pemakaian sekaligus), Item 20, Item 14 (edit/hapus
+**Quick-win paling murah lintas semua item:** Item 20, Item 14 (edit/hapus
 metode bayar), Item 10 (metode bayar pelunasan) — scope kecil, tanpa
-migrasi, tanpa keputusan desain menggantung.
+migrasi, tanpa keputusan desain menggantung. (Item 22 sudah selesai.)
 
 **Semua keputusan desain Item 9-22 SUDAH DIJAWAB** — tidak ada lagi yang
 menggantung, seluruh daftar siap dieksekusi berurutan sesuai prioritas di

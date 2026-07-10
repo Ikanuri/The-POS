@@ -34,6 +34,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   "Sedap Goreng per dus tidak ada" yang sempat dilaporkan — dua varian
   barang dengan barcode berbeda dianggap duplikat dan salah satu dibuang
   tanpa pemberitahuan apa pun.
+- **Tombol/chip yang sedang dipilih kini lebih jelas terbaca, terutama di
+  Mode Gelap.** Sebelumnya teks pada pilihan aktif (mis. tombol jenis
+  pembayaran di layar Bayar) tampak buram/samar. Sekaligus, notifikasi
+  "berhasil" kini berwarna hijau dan "gagal" berwarna merah (sebelumnya
+  keduanya senada warna aksen), jadi lebih cepat dikenali sekilas.
 
 ## 8 Juli 2026
 

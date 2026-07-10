@@ -235,7 +235,17 @@ class AppTheme {
         shape: const StadiumBorder(),
         side: BorderSide(color: line, width: 0.75),
         backgroundColor: field,
-        labelStyle: TextStyle(fontSize: 11.5, color: isDark ? _dInk2 : _lInk2),
+        // Warna label RESOLVE per-state: saat chip terpilih, background jadi
+        // primaryContainer (accent-tinted) — warna muted default jadi buram di
+        // atasnya (terutama dark mode). Pakai onPrimaryContainer yang kontras
+        // saat selected. RawChip me-resolve WidgetStateColor pada label.
+        labelStyle: TextStyle(
+          fontSize: 11.5,
+          color: WidgetStateColor.resolveWith((states) =>
+              states.contains(WidgetState.selected)
+                  ? scheme.onPrimaryContainer
+                  : (isDark ? _dInk2 : _lInk2)),
+        ),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: isDark ? _dCard : _lInk,
