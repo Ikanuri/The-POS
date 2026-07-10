@@ -518,11 +518,22 @@ banner singkat "produk ini punya beberapa satuan, atur di keranjang". Kasus
 umum (1 satuan) tetap langsung seperti sekarang — nol friksi di jalur yang
 sudah benar.
 
-**Pertanyaan desain (Masalah 1) yang masih menggantung:**
-- Kalau baris satuan induk varian dihapus dari cart, varian yang nempel ke
-  situ ikut terhapus, atau "pindah" ke satuan lain produk yang sama (kalau
-  ada)? (Perilaku `_delete` sekarang menghapus semua varian bila tak ada
-  baris induk tersisa — perlu disesuaikan ke level per-`productUnitId`.)
+**Keputusan desain (Masalah 1): DIPUTUSKAN — cascade delete, varian ikut
+terhapus** (bukan pindah ke satuan lain). Alasan:
+1. Reattach otomatis bisa diam-diam mengubah makna varian (mis. "3 dus rasa
+   Goreng" jadi "3 pcs rasa Goreng" kalau dipindah paksa ke baris Pcs) —
+   qty/konteksnya tidak otomatis valid di satuan lain.
+2. Konsisten dengan perilaku `_delete` yang SUDAH ADA sekarang (cascade
+   delete di level `productId` bila tak ada baris induk tersisa) — Item 16
+   cuma mempersempit ke level `productUnitId` yang presisi, bukan konsep
+   baru.
+3. Lebih sederhana (tidak ada pertanyaan lanjutan "pindah ke baris yang
+   mana" kalau ada beberapa satuan tersisa) dan biaya salah-hapus rendah
+   (kasir tinggal buka modal lagi untuk re-add).
+
+**Penyempurnaan UX wajib disertakan:** tampilkan `InlineBanner` singkat saat
+cascade terjadi (mis. "Baris Dus dihapus, 3 Goreng ikut terhapus") — supaya
+tidak terasa sebagai data hilang diam-diam.
 
 **File:** `lib/core/models/cart_item.dart`, `lib/features/kasir/cart_provider.dart`,
 `lib/features/kasir/widgets/item_entry_sheet.dart`,
@@ -792,9 +803,8 @@ bawah) — daftar ini siap dieksekusi tanpa menunggu klarifikasi lagi.
    quick win, scope kecil.
 10. **Item 18** (beralih pesanan tanpa hold, label auto-generate timestamp)
     — SIAP, prioritas tinggi (rush-hour, paling terasa manfaatnya).
-11. **Item 16** (atribusi varian per-satuan + fix minus) — integritas data.
-    **Satu-satunya pertanyaan desain yang masih terbuka** di seluruh Item
-    9-22 (lihat penutup).
+11. **Item 16** (atribusi varian per-satuan + fix minus, cascade delete
+    varian + banner notice) — SIAP, integritas data.
 12. **Item 21** (sync UI persisten, status progres — disetujui penuh) &
     **Item 17** (persist antrian approval) — SIAP, keduanya menyentuh area
     sync, wajar dikerjakan berdekatan/sekaligus. Item 17 butuh migrasi
@@ -807,7 +817,6 @@ tema, kena 8 titik pemakaian sekaligus), Item 20, Item 14 (edit/hapus
 metode bayar), Item 10 (metode bayar pelunasan) — scope kecil, tanpa
 migrasi, tanpa keputusan desain menggantung.
 
-**Satu-satunya keputusan desain yang masih terbuka di seluruh Item 9-22:**
-Item 16 — kalau baris satuan induk sebuah varian dihapus dari keranjang,
-apakah variannya ikut terhapus, atau "pindah" nempel ke baris satuan lain
-dari produk yang sama (kalau ada)?
+**Semua keputusan desain Item 9-22 SUDAH DIJAWAB** — tidak ada lagi yang
+menggantung, seluruh daftar siap dieksekusi berurutan sesuai prioritas di
+atas.
