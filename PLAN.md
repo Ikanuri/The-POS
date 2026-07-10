@@ -338,34 +338,6 @@ file baru `lib/features/pengaturan/expenses_screen.dart`,
 
 ---
 
-## Item 10 — Pilih Metode Bayar saat Pelunasan Hutang
-
-**Prioritas:** Sedang. Scope kecil tapi dampak nyata: saat ini SEMUA
-pelunasan hutang (Tambah Bayar & pelunasan gabung nota) tercatat hardcode
-`'tunai'` di `payment_screen.dart` — walau pelanggan sebenarnya bayar via
-transfer/QRIS, rekap "uang tunai" di laporan jadi tidak cocok dengan uang
-fisik di laci.
-
-**Desain UI/UX:** chip horizontal (pola `_PriceChip` di `ItemEntrySheet`)
-berisi metode bayar aktif (`PaymentMethods` where `isActive`), ditaruh di
-atas field nominal pada dialog Tambah Bayar & pelunasan gabung nota. Default
-= Tunai.
-
-**TERJAWAB — bukan pertanyaan desain lagi, cuma pekerjaan implementasi.**
-`addPaymentToTransaction()` (`app_database.dart` baris ~1419) **SUDAH**
-punya parameter `method` dan sudah menyimpannya ke `transaction_payments.method`
-— infrastrukturnya lengkap. Yang hardcode `method: 'tunai'` ada di **3 titik
-pemanggil**: `tx_history_sheet.dart` baris ~1076, `transaksi_tab.dart` baris
-~264, dan `receipt_screen.dart` baris ~785 (pola sama). Pekerjaannya cuma
-tambah chip pemilihan metode di ke-3 dialog itu, lalu ganti hardcode jadi
-metode terpilih.
-
-**File:** `lib/features/kasir/widgets/tx_history_sheet.dart`,
-`lib/features/laporan/tabs/transaksi_tab.dart`,
-`lib/features/kasir/receipt_screen.dart`.
-
----
-
 ## Item 11 — Peringatan Stok Menipis
 
 **Prioritas:** Sedang-tinggi. **Butuh migrasi schema** (kolom baru, mis.
@@ -784,8 +756,8 @@ tanpa menunggu klarifikasi lagi.
     dropdown per-satuan) — SIAP, desain final.
 
 **Quick-win paling murah lintas semua item:** Item 20, Item 14 (edit/hapus
-metode bayar), Item 10 (metode bayar pelunasan) — scope kecil, tanpa
-migrasi, tanpa keputusan desain menggantung. (Item 22 sudah selesai.)
+metode bayar) — scope kecil, tanpa migrasi, tanpa keputusan desain
+menggantung. (Item 22 & Item 10 sudah selesai.)
 
 **Semua keputusan desain Item 9-22 SUDAH DIJAWAB** — tidak ada lagi yang
 menggantung, seluruh daftar siap dieksekusi berurutan sesuai prioritas di

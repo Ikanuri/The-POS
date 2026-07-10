@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/input_formatters.dart';
+import '../../kasir/widgets/debt_payment_dialog.dart';
 
 final _transaksiTabProvider =
     StreamProvider.family<List<Transaction>, DateTimeRange>((ref, range) {
@@ -220,48 +220,18 @@ class _TxTile extends ConsumerWidget {
   Future<void> _tambahBayar(
       BuildContext ctx, WidgetRef ref, Transaction tx) async {
     final remaining = tx.total - tx.paid;
-    final ctrl = TextEditingController();
-    final result = await showDialog<int>(
-      context: ctx,
-      builder: (d) => AlertDialog(
-        title: const Text('Tambah Bayar'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Sisa tagihan: ${formatRupiah(remaining)}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              // Konsisten dengan dialog bayar lain — tanpa formatter, input
-              // "10.000" gagal di-parse diam-diam dan tidak terjadi apa-apa.
-              inputFormatters: const [ThousandsSeparatorFormatter()],
-              decoration: const InputDecoration(
-                  prefixText: 'Rp ', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => d.pop(), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () =>
-                d.pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
-            child: const Text('Bayar'),
-          ),
-        ],
-      ),
-    );
+    final db = ref.read(databaseProvider);
+    final result = await showDebtPaymentDialog(ctx, db,
+        remaining: remaining, title: 'Tambah Bayar', prefillRemaining: false);
 
-    if (result != null && result > 0) {
-      final db = ref.read(databaseProvider);
+    if (result != null && result.amount > 0) {
       final device = ref.read(deviceProvider);
       // Satu jalur DB yang sama dengan Tambah Bayar di struk & riwayat:
       // paid penuh + status + kembalian dihitung di addPaymentToTransaction.
       await db.addPaymentToTransaction(
         txId: tx.id,
-        amount: result,
-        method: 'tunai',
+        amount: result.amount,
+        method: result.method,
         kasirId: device.deviceCode,
       );
       if (ctx.mounted) Navigator.of(ctx).pop();

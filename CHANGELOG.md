@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-10
 
+- `03f984d` — feat: pilih metode bayar saat pelunasan/tambah bayar hutang (dialog reusable, ganti hardcode tunai)
 - `7f93726` — fix: warna chip terpilih (tema, sistemik) + banner sukses hijau/gagal merah light & dark
 - `b949268` — feat: reorder "Harga Lain" via drag-handle di form Produk (schemaVersion 10)
 - `c1a9efe` — perf: optimasi halaman HTML Katalog Pesanan untuk HP low-end

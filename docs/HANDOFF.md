@@ -5,9 +5,10 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 10 Juli 2026 (mulai eksekusi backlog besar Item 9-22 di
-PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user. Item 22
-SELESAI: fix warna chip terpilih (tema, sistemik) + banner sukses/gagal.
-Sisa Item 9-21 antre, semua keputusan desain sudah final di PLAN.md)._
+PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user.
+SELESAI sejauh ini: Item 22 (warna chip/banner), Item 10 (pilih metode bayar
+saat pelunasan hutang). Sisa Item 9,11-21 antre, semua keputusan desain sudah
+final di PLAN.md)._
 
 ## Lingkungan sesi ini (PENTING untuk sesi lanjutan)
 Flutter TIDAK terpasang default di environment ini — dipasang manual ke

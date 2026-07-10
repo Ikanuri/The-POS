@@ -11,6 +11,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Saat melunasi/menambah bayar hutang, kini bisa memilih metode bayar**
+  (Tunai, transfer, QRIS, dsb) — sebelumnya semua pelunasan selalu tercatat
+  sebagai "tunai" walau pelanggan membayar lewat transfer. Pilihan metode
+  muncul di dialog Bayar di layar Struk, Riwayat Transaksi, dan Laporan.
 - **Urutan "Harga Lain" bisa diatur.** Di pengaturan produk (tab Produk),
   daftar Harga Lain sekarang punya ikon geser (drag-handle) di tiap baris —
   tahan lalu seret untuk mengubah urutannya. Urutan ini otomatis diikuti

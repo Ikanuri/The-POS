@@ -14,7 +14,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/input_formatters.dart';
+import 'widgets/debt_payment_dialog.dart';
 import 'widgets/tx_history_sheet.dart';
 
 class ReceiptScreen extends ConsumerStatefulWidget {
@@ -742,40 +742,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _showTambahBayar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final ctrl = TextEditingController();
     final remaining = _tx!.total - _tx!.paid;
-    final result = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tambah Bayar'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Sisa tagihan: ${formatRupiah(remaining)}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [ThousandsSeparatorFormatter()],
-              decoration: const InputDecoration(
-                  prefixText: 'Rp ', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => ctx.pop(), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () =>
-                ctx.pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
-            child: const Text('Bayar'),
-          ),
-        ],
-      ),
-    );
+    final db = ref.read(databaseProvider);
+    final result = await showDebtPaymentDialog(context, db,
+        remaining: remaining, title: 'Tambah Bayar', prefillRemaining: false);
 
-    if (result != null && result > 0 && mounted) {
-      final db = ref.read(databaseProvider);
+    if (result != null && result.amount > 0 && mounted) {
       final device = ref.read(deviceProvider);
       // Uang diterima dicatat PENUH (paid boleh > total → kembalian
       // diturunkan dari paid - total), lewat satu jalur DB yang konsisten
@@ -784,8 +756,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       // menimpanya kembali ke 0 dan info "Kembali Rp X" hilang.
       final change = await db.addPaymentToTransaction(
         txId: widget.transactionId,
-        amount: result,
-        method: 'tunai',
+        amount: result.amount,
+        method: result.method,
         kasirId: device.deviceCode,
       );
       await _load();
