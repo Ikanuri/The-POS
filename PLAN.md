@@ -336,10 +336,154 @@ diputuskan):**
 
 ---
 
+## Item 6 — Optimasi performa halaman HTML Katalog Pesanan (lag di HP low-end)
+
+**Prioritas:** Bisa dikerjakan kapan saja, independen dari item lain (cuma
+menyentuh `lib/core/services/order_page_service.dart`, murni perbaikan
+performa — TIDAK mengubah tampilan/perilaku sama sekali).
+
+**Keluhan:** halaman HTML katalog pesanan (dibuka pelanggan lewat WhatsApp)
+terasa lag di HP low-end.
+
+**Root cause yang ditemukan (di `_htmlTemplate` / JS-nya):**
+1. **Tidak ada debounce di kolom cari** — tiap satu huruf diketik memicu
+   `renderList()` yang menghancurkan (`list.innerHTML = ''`) lalu membangun
+   ULANG SELURUH daftar produk dari nol. Untuk katalog ratusan/ribuan
+   produk, ini kerja berat berulang di SETIAP huruf.
+2. **Tap tombol +/− pada stepper qty memicu render ulang SELURUH daftar**,
+   bukan cuma baris yang berubah — `setQty()` memanggil `render()` yang
+   menjalankan `renderList()` + `renderCartBar()` + `renderCartSheet()`
+   sekaligus, padahal cuma satu angka di satu baris yang sebenarnya butuh
+   diperbarui.
+3. **`renderCartSheet()` selalu ikut dijalankan tiap qty berubah**, walau
+   sheet keranjang sedang TERTUTUP (kerja sia-sia, hasilnya tidak terlihat
+   sampai sheet dibuka).
+4. Baris ditempel ke DOM satu-satu langsung (`list.appendChild(row)` di
+   dalam loop) alih-alih disiapkan dulu di `DocumentFragment` lalu ditempel
+   sekali — menyebabkan reflow bertahap per baris, bukan sekali di akhir.
+
+**Solusi yang disepakati (semua TIDAK mengubah UI/UX, murni cara kerja di
+balik layar):**
+- **(A)** Debounce input pencarian (~120ms setelah user berhenti mengetik) —
+  dampak performa PALING BESAR, effort kecil.
+- **(B)** Saat tap +/−, update HANYA elemen qty/stepper baris yang
+  bersangkutan — jangan panggil `renderList()` ulang.
+- **(C)** `renderCartSheet()` cuma dijalankan kalau sheet keranjang sedang
+  terbuka (skip kalau tertutup, render on-demand saat dibuka).
+- **(D)** Bangun baris via `DocumentFragment` dulu, tempel ke `#list` sekali
+  di akhir loop (bukan `appendChild` per baris langsung ke DOM aktif).
+
+**Urutan implementasi disarankan:** A+B dulu (dampak terbesar, saling lepas
+dari C/D), lalu C+D sebagai penyempurnaan tambahan kalau masih terasa
+kurang mulus.
+
+---
+
+## Item 7 — Urutan qty/satuan di struk in-app dibalik ("pcs 1 x" → "1 pcs x")
+
+**Prioritas:** Kecil, jelas, siap dikerjakan kapan saja.
+
+**Masalah:** Di struk in-app (`_itemCheckRow` di `receipt_screen.dart` baris
+~221-223), urutan teks baris item saat ini **satuan dulu baru qty**
+(`"pcs 1 × Rp2.500"`), harusnya **qty dulu baru satuan**
+(`"1 pcs × Rp2.500"`).
+
+**Bonus konsistensi:** versi struk untuk cetak/share (fungsi capture-gambar
+di file yang sama, baris ~2033) **SUDAH** memakai urutan qty-dulu
+(`'$pad$qtyStr ${unitNames[...]} x ...'`) — jadi perbaikan ini juga
+menyamakan urutan antara tampilan in-app dan hasil cetak/share yang
+sebelumnya berbeda satu sama lain.
+
+**File yang terlibat:** `lib/features/kasir/receipt_screen.dart`
+(`_itemCheckRow`, sekitar baris 215-224).
+
+---
+
+## Item 8 — Bawa UI/UX "pilih harga" modal ItemEntrySheet ke halaman HTML (didiskusikan, BELUM diputuskan)
+
+**Status:** Masih tahap diskusi kelayakan — user bertanya "bisakah", belum
+ada keputusan scope final. Dicatat supaya tidak hilang dari radar.
+
+**Ide:** modal `ItemEntrySheet` di tab Kasir (tap badan produk) sudah punya
+UI pilih harga yang cukup kaya: chip horizontal untuk satuan + tier grosir +
+harga alternatif (`_PriceChip`), qty stepper, dst. User bertanya apakah UI/UX
+serupa ini bisa juga ditambahkan ke halaman HTML Katalog Pesanan (yang saat
+ini pemilihan varian di HTML masih pakai `<details>` dropdown sederhana +
+stepper polos, tanpa konsep "harga lain"/tier grosir sama sekali).
+
+**Trade-off yang perlu dipertimbangkan sebelum lanjut (belum final,
+menunggu keputusan user):**
+- **Kompleksitas vs manfaat:** HTML katalog ini sengaja dibuat SEDERHANA
+  (statis, tanpa framework, tanpa build step) supaya tetap ringan & mudah
+  dirawat sebagai satu file. Menambahkan sistem "harga lain"/tier grosir ke
+  sana berarti duplikasi LOGIKA price-resolving (`PriceService`) ke JS
+  murni — dua tempat yang harus dijaga tetap sinkron kalau logika harga
+  berubah di masa depan.
+  - **Kaitan dengan Item 6:** semakin banyak UI/interaktivitas ditambahkan ke
+    HTML ini, semakin besar risiko masalah performa (Item 6) muncul lagi di
+    tempat baru — perlu diperhatikan bareng, bukan ditambah dulu baru
+    dioptimasi belakangan.
+- **Relevansi ke pelanggan vs ke kasir:** tier grosir/harga alternatif itu
+  fitur yang biasanya dipakai KASIR/OWNER untuk situasi tawar-menawar
+  khusus, bukan sesuatu yang biasanya perlu dipilih PELANGGAN sendiri saat
+  memesan dari HP-nya. Perlu dipikirkan: apakah relevan pelanggan melihat/
+  memilih opsi harga alternatif sendiri, atau ini cuma perlu tetap jadi
+  keputusan kasir saat pesanan diproses di tab Kasir (lewat "Tempel
+  Pesanan")?
+- **Menunggu keputusan user** sebelum ada rencana teknis lebih rinci.
+
+---
+
+## Item 9 — Dropdown "Harga Lain" di sisi kanan input Harga (ItemEntrySheet) — TUMPANG TINDIH dengan fitur yang sudah ada, perlu klarifikasi scope
+
+**Status:** Perlu klarifikasi dari user sebelum dikerjakan — kemungkinan
+duplikat dari fitur yang SUDAH ADA.
+
+**Permintaan:** tambahkan dropdown pilihan harga di sisi kanan field input
+"Harga" di `ItemEntrySheet` (modal tap badan produk di tab Kasir), sumber
+datanya dari harga alternatif per-satuan yang dikonfigurasi di tab Produk
+("Harga Lain").
+
+**Catatan penting:** fitur untuk MEMILIH harga alternatif per-satuan lewat
+tap **SUDAH ADA** di `ItemEntrySheet` — baris chip horizontal "Pilih harga"
+di atas field qty/harga sudah menampilkan chip untuk satuan dasar, tier
+grosir, DAN harga alternatif (`_PriceChip`, dari `getAltPrices()`), tap
+salah satu chip langsung mengisi field harga. Jadi secara FUNGSI, ini sudah
+terpenuhi — pertanyaannya cuma soal BENTUK UI-nya (chip vs dropdown).
+
+**Trade-off chip (yang sudah ada) vs dropdown (yang diminta) — perlu
+keputusan user:**
+- **Chip (sekarang):** semua opsi harga langsung terlihat tanpa tap
+  tambahan, cocok kalau opsi harga sedikit (2-4). Kalau harga alternatif
+  per satuan banyak (5+), baris chip bisa jadi panjang & perlu discroll
+  horizontal — makin banyak opsi, makin ramai secara visual.
+- **Dropdown (diminta):** lebih ringkas secara vertikal, skalanya lebih
+  bagus untuk banyak opsi harga, pola UI yang familiar (dropdown di sebelah
+  field). TAPI butuh 1 tap ekstra untuk membuka sebelum bisa pilih (chip
+  cuma butuh 1 tap langsung), dan opsi tidak terlihat sekaligus sekilas mata
+  seperti chip.
+- Kemungkinan opsi ketiga: **dropdown MENGGANTIKAN chip sepenuhnya** (bukan
+  keduanya sekaligus, supaya tidak ada 2 cara berbeda memilih hal yang sama
+  di layar yang sama — berpotensi membingungkan).
+
+**Pertanyaan yang perlu dijawab user sebelum eksekusi:**
+1. Dropdown ini MENGGANTIKAN chip yang sudah ada, atau jadi TAMBAHAN di
+   samping chip (dua cara akses untuk hal yang sama)?
+2. Kalau menggantikan — chip untuk tier grosir & satuan dasar juga ikut
+   diganti jadi dropdown, atau cuma bagian "harga lain" saja yang jadi
+   dropdown sementara chip tier/satuan tetap seperti sekarang?
+
+**File yang terlibat:** `lib/features/kasir/widgets/item_entry_sheet.dart`
+(bagian "Harga input" ~baris 567-622, dan bagian chip "Pilih harga"
+~baris 425-467).
+
+---
+
 ## Urutan eksekusi yang disarankan
 
-1. **Item 1 & Item 2** bisa dikerjakan bersamaan sekarang — kecil, jelas,
-   tidak berisiko ke alur lain, tidak saling bergantung.
+1. **Item 1, Item 2, Item 6, Item 7** bisa dikerjakan bersamaan sekarang —
+   kecil/jelas/independen, tidak berisiko ke alur lain, tidak saling
+   bergantung satu sama lain.
 2. **Item 3** (3a konversi format + 3b fix rasio multi-satuan, keduanya di
    file yang sama jadi wajar dikerjakan sekaligus) — mulai begitu user siap
    kirim/konfirmasi data produk final yang mau diimpor.
@@ -348,3 +492,7 @@ diputuskan):**
    `Transaksi ...xlsx` yang tersedia.
 4. **Item 4** independen, bisa disisipkan kapan saja setelah user menjawab
    3 pertanyaan desain di atas.
+5. **Item 8** menunggu keputusan user soal trade-off (kompleksitas HTML vs
+   manfaat, relevansi ke pelanggan vs kasir).
+6. **Item 9** menunggu jawaban 2 pertanyaan scope (ganti chip atau
+   tambahan) sebelum eksekusi.
