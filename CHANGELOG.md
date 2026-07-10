@@ -10,18 +10,18 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-10
 
-- `3222785` — feat: Tutup Kasir harian — rekap kas sistem vs fisik + selisih + riwayat (tabel cash_closings, schemaVersion 12) — Item 15
-- `7c527a8` — feat: pengingat backup (cek saat app dibuka, kartu status + toggle interval) — Item 13
-- `14e75fd` — feat: peringatan stok menipis (kolom min_stock, schemaVersion 11) — badge + filter di Produk — Item 11
-- `e1a3e02` — feat: Harga Lain & tier grosir jadi dropdown menempel di field Harga (bukan chip menumpuk) — Item 19
-- `403ace2` — fix: atribusi varian per-satuan (parentProductUnitId) + tombol minus tak menebak saat >1 satuan — Item 16
-- `8a4db0f` — feat: beralih antar pesanan tertahan auto-hold keranjang aktif (tanpa dialog, tanpa kehilangan) — Item 18
-- `72d98d3` — feat: Buku Hutang terpusat (tab Laporan, urut umur menunggak, lunasi langsung) — Item 12
-- `4db49c4` — feat: pencatatan pengeluaran + Laba Bersih di laporan (ExpensesScreen, unhide izin input_pengeluaran) — Item 9
-- `6b83b87` — feat: edit metode pembayaran (reuse sheet) + hapus via swipe bila nonaktif — Item 14
-- `fa436d0` — feat: tombol edit produk di modal kasir (owner/asisten saja) — Item 20
-- `03f984d` — feat: pilih metode bayar saat pelunasan/tambah bayar hutang (dialog reusable, ganti hardcode tunai)
-- `7f93726` — fix: warna chip terpilih (tema, sistemik) + banner sukses hijau/gagal merah light & dark
+- `15c50b8` — feat: Tutup Kasir harian — rekap kas sistem vs fisik + selisih + riwayat (tabel cash_closings, schemaVersion 12) — Item 15
+- `56d42f1` — feat: pengingat backup (cek saat app dibuka, kartu status + toggle interval) — Item 13
+- `33ecd4f` — feat: peringatan stok menipis (kolom min_stock, schemaVersion 11) — badge + filter di Produk — Item 11
+- `9af9cb6` — feat: Harga Lain & tier grosir jadi dropdown menempel di field Harga (bukan chip menumpuk) — Item 19
+- `4bd4d97` — fix: atribusi varian per-satuan (parentProductUnitId) + tombol minus tak menebak saat >1 satuan — Item 16
+- `b48f7c2` — feat: beralih antar pesanan tertahan auto-hold keranjang aktif (tanpa dialog, tanpa kehilangan) — Item 18
+- `320a0dc` — feat: Buku Hutang terpusat (tab Laporan, urut umur menunggak, lunasi langsung) — Item 12
+- `b5ebaff` — feat: pencatatan pengeluaran + Laba Bersih di laporan (ExpensesScreen, unhide izin input_pengeluaran) — Item 9
+- `eaa5ea6` — feat: edit metode pembayaran (reuse sheet) + hapus via swipe bila nonaktif — Item 14
+- `dbdc779` — feat: tombol edit produk di modal kasir (owner/asisten saja) — Item 20
+- `fd4ed1e` — feat: pilih metode bayar saat pelunasan/tambah bayar hutang (dialog reusable, ganti hardcode tunai)
+- `f8f65e9` — fix: warna chip terpilih (tema, sistemik) + banner sukses hijau/gagal merah light & dark
 - `b949268` — feat: reorder "Harga Lain" via drag-handle di form Produk (schemaVersion 10)
 - `c1a9efe` — perf: optimasi halaman HTML Katalog Pesanan untuk HP low-end
 - `3bff1b6` — fix: kunci dedup importer CSV ikut barcode/kode produk (silent data loss)
