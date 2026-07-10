@@ -6,7 +6,8 @@ dari file ini (lihat aturan di [CLAUDE.md](CLAUDE.md) §Perencanaan). Riwayat
 teknis pekerjaan yang SUDAH selesai ada di [CHANGELOG.md](CHANGELOG.md), bukan
 di sini.
 
-_Terakhir diperbarui: 10 Juli 2026._
+_Terakhir diperbarui: 10 Juli 2026 (tambah Item 9-15, saran fitur dari audit yang
+disetujui user untuk dieksekusi — desain UI/UX sudah dibahas, belum ada kode)._
 
 ---
 
@@ -288,6 +289,202 @@ menunggu keputusan user):**
 
 ---
 
+## Item 9 — Pencatatan Pengeluaran + Laba Bersih di Laporan
+
+**Prioritas:** Tinggi, dan **murah untuk dikerjakan** — tabel `Expenses`
+(`lib/core/database/tables/ledger_tables.dart`) **sudah ada lengkap** (kolom
+`type` enum `daily_expense | owner_withdrawal | supplier_payment |
+change_given`, `amount`, `note`, `kasirId`, dll), dan izin kasir
+`input_pengeluaran` **sudah terdaftar** di `KasirPermissions`
+(`settings_tables.dart`). Jadi ini **murni pekerjaan UI**, tidak perlu
+migrasi schema.
+
+**Desain UI/UX (disepakati user):**
+- Entry cepat: tombol "+ Pengeluaran" di `ringkasan_screen.dart` (dashboard,
+  dipakai harian) — bottom sheet input (pola sama seperti `_AddMethodSheet`
+  di `payment_methods_screen.dart`): nominal (`ThousandsSeparatorFormatter`),
+  kategori (pakai enum `type` yang sudah ada di tabel), catatan opsional,
+  tanggal (default hari ini).
+- Layar riwayat baru (`ExpensesScreen`): list dikelompokkan per tanggal,
+  swipe-to-delete / tap untuk edit.
+- Di `ringkasan_tab.dart`/`laporan_screen.dart`: tambah baris "Pengeluaran"
+  dan "Laba Bersih = Laba Kotor − Pengeluaran" nempel ke card total yang
+  sudah ada (bukan card baru).
+
+**Pertanyaan desain yang menggantung:**
+1. "Laba Bersih" pakai SEMUA jenis `type` expense, atau cuma `daily_expense`
+   (biaya operasional riil)? `owner_withdrawal` (ambil uang pribadi owner)
+   bukan biaya bisnis — kalau ikut dihitung, "Laba Bersih" jadi salah
+   representasi.
+2. Kasir dengan izin `input_pengeluaran` bisa lihat/hapus catatan
+   pengeluaran kasir LAIN, atau cuma miliknya sendiri?
+
+**File yang terlibat:** `lib/features/ringkasan/ringkasan_screen.dart`,
+file baru `lib/features/pengaturan/expenses_screen.dart`,
+`lib/features/laporan/tabs/ringkasan_tab.dart`,
+`lib/core/router/app_router.dart` (route baru).
+
+---
+
+## Item 10 — Pilih Metode Bayar saat Pelunasan Hutang
+
+**Prioritas:** Sedang. Scope kecil tapi dampak nyata: saat ini SEMUA
+pelunasan hutang (Tambah Bayar & pelunasan gabung nota) tercatat hardcode
+`'tunai'` di `payment_screen.dart` — walau pelanggan sebenarnya bayar via
+transfer/QRIS, rekap "uang tunai" di laporan jadi tidak cocok dengan uang
+fisik di laci.
+
+**Desain UI/UX:** chip horizontal (pola `_PriceChip` di `ItemEntrySheet`)
+berisi metode bayar aktif (`PaymentMethods` where `isActive`), ditaruh di
+atas field nominal pada dialog Tambah Bayar & pelunasan gabung nota. Default
+= Tunai.
+
+**Pertanyaan desain:** perlu dicek struktur record pelunasan sebagian
+(partial payment) saat implementasi — field mana yang menyimpan metode
+bayar untuk PELUNASAN (beda dari `Transactions.paymentMethod` milik
+transaksi awal)?
+
+**File:** `lib/features/kasir/payment_screen.dart`.
+
+---
+
+## Item 11 — Peringatan Stok Menipis
+
+**Prioritas:** Sedang-tinggi. **Butuh migrasi schema** (kolom baru, mis.
+`minStock` di `ProductUnits` — `product_tables.dart`, `schemaVersion` 10→11).
+**Wajib pakai guard versi lama** seperti kasus `alt_prices.sortOrder`
+kemarin (`if (from < 11 && from >= X)` sebelum `addColumn`, cek dulu di
+migrasi mana `ProductUnits` terakhir di-`createTable` dengan skema Dart
+terkini) — kalau lupa, upgrade dari versi sangat lama bisa crash "duplicate
+column name".
+
+**Desain UI/UX:**
+- Badge merah kecil di tab "Produk" (bottom-nav / app bar
+  `produk_list_screen.dart`) menampilkan jumlah produk di bawah ambang.
+- Field opsional "Stok Minimum" di `produk_form_screen.dart`, nempel ke
+  grup field stok yang sudah ada (kosong = tidak dipantau).
+- Filter chip "Stok Menipis" di `produk_list_screen.dart` (bukan layar
+  terpisah).
+
+**Pertanyaan desain:** ambang disimpan **per satuan** (`ProductUnits`, tiap
+baris punya nilai sendiri) atau **per produk di satuan dasar saja**? Karena
+satu produk bisa punya banyak satuan dengan `ratioToBase` beda-beda, ambang
+yang masuk akal secara bisnis biasanya cukup di satuan dasar saja — perlu
+dikonfirmasi user.
+
+**File:** `lib/core/database/tables/product_tables.dart`,
+`lib/core/database/app_database.dart` (migrasi), `produk_form_screen.dart`,
+`produk_list_screen.dart`.
+
+---
+
+## Item 12 — Buku Hutang Terpusat
+
+**Prioritas:** Sedang. **Tidak butuh migrasi schema** — `Customers.
+outstandingDebt` sudah ada (`customer_tables.dart`). Murni tab baru + query
+agregat.
+
+**Desain UI/UX:** tab baru di `laporan_screen.dart` (sejajar
+`pelanggan_tab.dart`, `produk_tab.dart`). List pelanggan dengan
+`outstandingDebt > 0`, urut dari **paling lama menunggak** (bukan
+alfabetis), subtitle "menunggak X hari" berwarna gradasi (hijau→kuning→
+merah). Tap baris → detail + tombol "Lunasi" langsung.
+
+**Pertanyaan desain:** "umur menunggak" dihitung dari kapan? Kalau
+pelanggan punya beberapa nota belum lunas, dihitung dari nota **tertua**
+yang belum lunas (`Transactions.createdAt` dengan `status` `tempo` /
+`kurang_bayar`) — perlu dikonfirmasi ini logikanya sudah benar.
+
+**File:** file baru `lib/features/laporan/tabs/hutang_tab.dart`,
+`laporan_screen.dart`, query agregat baru di `app_database.dart` (ikuti
+pola `getReportTotals` — hindari N+1 per pelanggan).
+
+---
+
+## Item 13 — Backup Otomatis Terjadwal + Pengingat
+
+**Prioritas:** Rendah-sedang. Tidak butuh tabel baru — cukup key baru di
+tabel `Settings` yang sudah dipakai untuk key-value seperti
+`loyalty_point_threshold`, `last_archive_year`.
+
+**Desain UI/UX:** Card baru di `backup_screen.dart` (di atas tombol backup
+manual yang sudah ada): toggle "Backup Otomatis" + dropdown interval
+(Harian/Mingguan), teks pengingat "Backup terakhir: X hari lalu" dengan
+warna dinamis (netral→kuning→merah berdasar usia).
+
+**Pertanyaan desain:** trigger cek dijalankan di mana? Opsi termurah = cek
+saat app dibuka (`main.dart`, bandingkan `now` vs setting terakhir backup +
+interval) — tidak perlu `WorkManager`/background service karena app ini
+tipikal dibuka tiap hari untuk operasional. Perlu dikonfirmasi ini cukup,
+atau user mau proteksi lebih (device yang jarang dibuka tetap kena
+reminder).
+
+**File:** `lib/features/pengaturan/backup_screen.dart`, `lib/main.dart`
+(cek saat start), service backup manual yang sudah ada (dipakai ulang, bukan
+dibuat baru).
+
+---
+
+## Item 14 — Edit/Hapus Metode Pembayaran
+
+**Prioritas:** Rendah, scope kecil. Tidak butuh migrasi schema.
+
+**Desain UI/UX:** reuse `_AddMethodSheet` (`payment_methods_screen.dart`)
+untuk edit (prefilled dari `method`, param opsional — satu form untuk
+add & edit). Hapus via swipe (`Dismissible`) dengan konfirmasi kalau metode
+pernah dipakai di transaksi.
+
+**Temuan teknis penting (mempengaruhi desain "hapus"):**
+`Transactions.paymentMethod` (`transaction_tables.dart`) menyimpan **STRING
+KATEGORI** (`tunai | transfer | qris | ewallet | tempo`), **BUKAN** id
+spesifik baris `PaymentMethods`. Kalau ada 2 metode dengan `type` yang sama
+(mis. dua bank berbeda, keduanya `type='bank'`), tidak ada cara membedakan
+dari data transaksi metode SPESIFIK mana yang benar-benar dipakai —
+transaksi cuma tahu kategorinya, bukan nama banknya. Jadi cek "pernah
+dipakai" untuk satu baris metode spesifik **tidak bisa akurat 100%** dari
+data yang ada sekarang.
+
+**Pertanyaan desain:** terima keterbatasan ini dan izinkan hapus asal
+metode sudah di-nonaktifkan (`isActive=false`) dulu selama minimal
+beberapa waktu (heuristik, bukan cek pasti), atau cek referential
+berdasar `type` saja (konservatif — bisa jadi overprotect, menolak hapus
+metode yang sebenarnya tidak pernah dipakai)? Metode "Tunai" tetap tidak
+bisa dihapus/nonaktifkan (guard `isTunai` yang sudah ada dipertahankan).
+
+**File:** `lib/features/pengaturan/payment_methods_screen.dart`.
+
+---
+
+## Item 15 — Tutup Kasir Harian (Rekap Kas)
+
+**Prioritas:** Sedang. **Butuh tabel baru** (belum ada tabel shift/rekap
+kas sama sekali) → migrasi schema baru.
+
+**PENTING — jangan tertukar dengan fitur "Tutup Buku" yang SUDAH ADA**
+(`tutup_buku_screen.dart`, `tutup_buku_service.dart`): itu untuk **arsip
+tahunan** (pindahkan transaksi tahun lalu ke file arsip terpisah). Fitur
+ini beda total — rekap **harian** kas fisik vs sistem. Nama UI harus jelas
+beda, usul: **"Tutup Kasir"**.
+
+**Desain UI/UX:** entry di `ringkasan_screen.dart` (dipicu di akhir shift)
++ section di `pengaturan_screen.dart`. Alur: dialog/sheet menampilkan rekap
+otomatis (total tunai/non-tunai/jumlah transaksi hari ini, dari query yang
+sama pola `getReportTotals`) sebagai read-only, lalu field input manual
+"Uang Fisik di Laci". Selisih dihitung otomatis, ditampilkan besar +
+berwarna (hijau=pas, merah=kurang, kuning=lebih). Setelah konfirmasi,
+tersimpan sebagai satu entri riwayat per hari (list riwayat terpisah, pola
+mirip `arsip_screen.dart`).
+
+**Pertanyaan desain:** satu entri per **device** per hari, atau per
+**device + kasir** (kalau ada beberapa kasir gantian shift di HP yang
+sama dalam sehari — rekap gabungan atau terpisah per kasir)?
+
+**File:** tabel baru (mis. `lib/core/database/tables/cash_closing_tables.dart`),
+migrasi `app_database.dart` (`schemaVersion` naik), layar baru (mis.
+`lib/features/kasir/tutup_kasir_screen.dart`).
+
+---
+
 ## Urutan eksekusi yang disarankan
 
 1. **Item 3** (3a konversi format + 3b fix rasio multi-satuan, keduanya di
@@ -300,3 +497,12 @@ menunggu keputusan user):**
    3 pertanyaan desain di atas.
 4. **Item 8** menunggu keputusan user soal trade-off (kompleksitas HTML vs
    manfaat, relevansi ke pelanggan vs kasir).
+5. **Item 9, 10, 12, 14** — bisa dikerjakan lebih dulu/kapan saja, TIDAK
+   butuh migrasi schema, risiko rendah (murni UI + query). Kandidat "quick
+   win" karena sebagian besar tabel/kolom pendukungnya sudah ada.
+6. **Item 11** — butuh migrasi schema kecil (1 kolom baru), kerjakan
+   setelah pertanyaan desain (ambang per-satuan vs per-produk) dijawab.
+7. **Item 13** — independen, prioritas rendah, bisa disisipkan kapan saja.
+8. **Item 15** — butuh tabel baru (migrasi schema paling besar dari
+   ketujuh item ini), kerjakan setelah pertanyaan desain (per-device vs
+   per-kasir) dijawab.
