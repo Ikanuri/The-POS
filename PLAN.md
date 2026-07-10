@@ -8,7 +8,8 @@ di sini.
 
 _Terakhir diperbarui: 10 Juli 2026 (tambah Item 9-15 dari saran audit, lalu
 Item 16-22 dari diskusi bug keranjang + 5 proposal besar user + fix sync
-approval. Semua desain UI/UX sudah dibahas, belum ada kode)._
+approval. Semua keputusan desain Item 9-22 SUDAH FINAL — lihat Item 3-8
+untuk sisa item yang masih menunggu data/keputusan user. Belum ada kode)._
 
 ---
 
@@ -312,13 +313,23 @@ migrasi schema.
   dan "Laba Bersih = Laba Kotor − Pengeluaran" nempel ke card total yang
   sudah ada (bukan card baru).
 
-**Pertanyaan desain yang menggantung:**
-1. "Laba Bersih" pakai SEMUA jenis `type` expense, atau cuma `daily_expense`
-   (biaya operasional riil)? `owner_withdrawal` (ambil uang pribadi owner)
-   bukan biaya bisnis — kalau ikut dihitung, "Laba Bersih" jadi salah
-   representasi.
-2. Kasir dengan izin `input_pengeluaran` bisa lihat/hapus catatan
-   pengeluaran kasir LAIN, atau cuma miliknya sendiri?
+**Keputusan 1 — rumus Laba Bersih: DIPUTUSKAN.** Laba Bersih = Laba Kotor −
+(`daily_expense` + `change_given`) saja. `owner_withdrawal` &
+`supplier_payment` **dikeluarkan dari rumus** — dikonfirmasi lewat cek kode
+`getReportTotals`/summary (`app_database.dart` baris ~1669): Laba Kotor
+sudah memotong modal barang lewat `cost_at_sale` per item terjual, jadi
+`supplier_payment` (pembelian stok) akan dihitung DOBEL kalau ikut
+dikurangkan lagi di Laba Bersih. `owner_withdrawal` bukan biaya bisnis,
+murni pengambilan laba pribadi.
+**Catatan:** SEMUA 4 kategori (`daily_expense`, `owner_withdrawal`,
+`supplier_payment`, `change_given`) tetap **bisa dicatat/dipilih** di UI
+Pengeluaran (untuk kelengkapan riwayat kas, sesuai keinginan user meski
+belum aktif dipakai sekarang) — cuma 2 dari 4 yang masuk hitungan Laba
+Bersih.
+
+**Keputusan 2 — visibilitas antar-kasir: DIPUTUSKAN.** Kasir bisa **lihat
+semua** catatan pengeluaran (transparansi kas bersama), tapi **hanya bisa
+hapus miliknya sendiri** (filter berdasar `kasirId` saat aksi hapus).
 
 **File yang terlibat:** `lib/features/ringkasan/ringkasan_screen.dart`,
 file baru `lib/features/pengaturan/expenses_screen.dart`,
@@ -340,12 +351,18 @@ berisi metode bayar aktif (`PaymentMethods` where `isActive`), ditaruh di
 atas field nominal pada dialog Tambah Bayar & pelunasan gabung nota. Default
 = Tunai.
 
-**Pertanyaan desain:** perlu dicek struktur record pelunasan sebagian
-(partial payment) saat implementasi — field mana yang menyimpan metode
-bayar untuk PELUNASAN (beda dari `Transactions.paymentMethod` milik
-transaksi awal)?
+**TERJAWAB — bukan pertanyaan desain lagi, cuma pekerjaan implementasi.**
+`addPaymentToTransaction()` (`app_database.dart` baris ~1419) **SUDAH**
+punya parameter `method` dan sudah menyimpannya ke `transaction_payments.method`
+— infrastrukturnya lengkap. Yang hardcode `method: 'tunai'` ada di **3 titik
+pemanggil**: `tx_history_sheet.dart` baris ~1076, `transaksi_tab.dart` baris
+~264, dan `receipt_screen.dart` baris ~785 (pola sama). Pekerjaannya cuma
+tambah chip pemilihan metode di ke-3 dialog itu, lalu ganti hardcode jadi
+metode terpilih.
 
-**File:** `lib/features/kasir/payment_screen.dart`.
+**File:** `lib/features/kasir/widgets/tx_history_sheet.dart`,
+`lib/features/laporan/tabs/transaksi_tab.dart`,
+`lib/features/kasir/receipt_screen.dart`.
 
 ---
 
@@ -367,11 +384,16 @@ column name".
 - Filter chip "Stok Menipis" di `produk_list_screen.dart` (bukan layar
   terpisah).
 
-**Pertanyaan desain:** ambang disimpan **per satuan** (`ProductUnits`, tiap
-baris punya nilai sendiri) atau **per produk di satuan dasar saja**? Karena
-satu produk bisa punya banyak satuan dengan `ratioToBase` beda-beda, ambang
-yang masuk akal secara bisnis biasanya cukup di satuan dasar saja — perlu
-dikonfirmasi user.
+**DIPUTUSKAN: ambang per-produk saja, disimpan di baris satuan DASAR**
+(`ProductUnits` yang `isBaseUnit = true`). Dikonfirmasi lewat cek kode
+`currentStock()`/`_baseUnitOf()` (`app_database.dart` baris ~306-351): stok
+**selalu** disimpan sebagai SATU angka di satuan dasar (`stockLedger`) —
+stok satuan lain (Dus/Pak/dst) murni hasil bagi dari angka itu dengan
+`ratioToBase`, bukan angka independen. Ambang per-satuan bisa saling
+kontradiksi (mis. minStock Dus=1 vs minStock Pcs=20 dengan rasio 1:12 bisa
+menunjuk ke stok fisik yang sama tapi memberi sinyal "aman" & "menipis"
+sekaligus). Field "Stok Minimum" di form produk cukup muncul SEKALI per
+produk, bukan berulang per satuan.
 
 **File:** `lib/core/database/tables/product_tables.dart`,
 `lib/core/database/app_database.dart` (migrasi), `produk_form_screen.dart`,
@@ -391,10 +413,9 @@ agregat.
 alfabetis), subtitle "menunggak X hari" berwarna gradasi (hijau→kuning→
 merah). Tap baris → detail + tombol "Lunasi" langsung.
 
-**Pertanyaan desain:** "umur menunggak" dihitung dari kapan? Kalau
-pelanggan punya beberapa nota belum lunas, dihitung dari nota **tertua**
-yang belum lunas (`Transactions.createdAt` dengan `status` `tempo` /
-`kurang_bayar`) — perlu dikonfirmasi ini logikanya sudah benar.
+**DIPUTUSKAN:** "umur menunggak" dihitung dari nota **tertua** yang belum
+lunas (`Transactions.createdAt` dengan `status` `tempo` / `kurang_bayar`) —
+paling relevan untuk tujuan "siapa yang paling mendesak ditagih".
 
 **File:** file baru `lib/features/laporan/tabs/hutang_tab.dart`,
 `laporan_screen.dart`, query agregat baru di `app_database.dart` (ikuti
@@ -413,12 +434,10 @@ manual yang sudah ada): toggle "Backup Otomatis" + dropdown interval
 (Harian/Mingguan), teks pengingat "Backup terakhir: X hari lalu" dengan
 warna dinamis (netral→kuning→merah berdasar usia).
 
-**Pertanyaan desain:** trigger cek dijalankan di mana? Opsi termurah = cek
-saat app dibuka (`main.dart`, bandingkan `now` vs setting terakhir backup +
-interval) — tidak perlu `WorkManager`/background service karena app ini
-tipikal dibuka tiap hari untuk operasional. Perlu dikonfirmasi ini cukup,
-atau user mau proteksi lebih (device yang jarang dibuka tetap kena
-reminder).
+**DIPUTUSKAN:** trigger cek cukup saat app dibuka (`main.dart`, bandingkan
+`now` vs setting terakhir backup + interval) — TANPA `WorkManager`/
+background service. Device yang jarang dibuka otomatis jarang jadi sumber
+data penting yang butuh backup mendesak, jadi ini bukan celah berarti.
 
 **File:** `lib/features/pengaturan/backup_screen.dart`, `lib/main.dart`
 (cek saat start), service backup manual yang sudah ada (dipakai ulang, bukan
@@ -445,12 +464,14 @@ transaksi cuma tahu kategorinya, bukan nama banknya. Jadi cek "pernah
 dipakai" untuk satu baris metode spesifik **tidak bisa akurat 100%** dari
 data yang ada sekarang.
 
-**Pertanyaan desain:** terima keterbatasan ini dan izinkan hapus asal
-metode sudah di-nonaktifkan (`isActive=false`) dulu selama minimal
-beberapa waktu (heuristik, bukan cek pasti), atau cek referential
-berdasar `type` saja (konservatif — bisa jadi overprotect, menolak hapus
-metode yang sebenarnya tidak pernah dipakai)? Metode "Tunai" tetap tidak
-bisa dihapus/nonaktifkan (guard `isTunai` yang sudah ada dipertahankan).
+**DIPUTUSKAN:** pakai opsi heuristik — izinkan hapus asal metode sudah
+di-nonaktifkan (`isActive=false`) dulu, TANPA cek referential ke `type`.
+Alasan tambahan: menghapus baris `PaymentMethods` **tidak merusak riwayat
+transaksi** (`Transactions.paymentMethod` adalah string mandiri, bukan
+foreign key ke tabel ini) — jadi risiko teknisnya rendah. Tambahkan 1 baris
+peringatan di dialog konfirmasi hapus ("pastikan metode ini benar tidak
+dipakai lagi") sebagai pengaman sosial. Metode "Tunai" tetap tidak bisa
+dihapus/nonaktifkan (guard `isTunai` yang sudah ada dipertahankan).
 
 **File:** `lib/features/pengaturan/payment_methods_screen.dart`.
 
@@ -476,9 +497,13 @@ berwarna (hijau=pas, merah=kurang, kuning=lebih). Setelah konfirmasi,
 tersimpan sebagai satu entri riwayat per hari (list riwayat terpisah, pola
 mirip `arsip_screen.dart`).
 
-**Pertanyaan desain:** satu entri per **device** per hari, atau per
-**device + kasir** (kalau ada beberapa kasir gantian shift di HP yang
-sama dalam sehari — rekap gabungan atau terpisah per kasir)?
+**DIPUTUSKAN: satu entri per DEVICE per hari** (tanpa pemisahan per-kasir).
+Alasan user: sesuai desain app ini (multi-device + sync), tiap device
+biasanya dipegang satu orang; kalaupun device dipinjam-pakai antar-kasir di
+hari yang sama, total kas tetap rekonsiliasi benar selama semua transaksi
+lewat app — yang dicek Tutup Kasir sebenarnya adalah **kecocokan kas fisik
+di device itu**, bukan atribusi per-orang, jadi per-device sudah tepat
+sebagai unit rekonsiliasi.
 
 **File:** tabel baru (mis. `lib/core/database/tables/cash_closing_tables.dart`),
 migrasi `app_database.dart` (`schemaVersion` naik), layar baru (mis.
@@ -782,15 +807,17 @@ dari daftar hidden itu** supaya owner bisa mengaturnya — mudah terlewat.
    3 pertanyaan desain di atas.
 4. **Item 8** menunggu keputusan user soal trade-off (kompleksitas HTML vs
    manfaat, relevansi ke pelanggan vs kasir).
+Semua keputusan desain Item 9-15 SUDAH FINAL (lihat detail di tiap item) —
+siap dieksekusi tanpa menunggu klarifikasi lagi.
+
 5. **Item 9, 10, 12, 14** — bisa dikerjakan lebih dulu/kapan saja, TIDAK
    butuh migrasi schema, risiko rendah (murni UI + query). Kandidat "quick
-   win" karena sebagian besar tabel/kolom pendukungnya sudah ada.
-6. **Item 11** — butuh migrasi schema kecil (1 kolom baru), kerjakan
-   setelah pertanyaan desain (ambang per-satuan vs per-produk) dijawab.
+   win" karena sebagian besar tabel/kolom pendukungnya sudah ada. Item 10
+   khususnya paling murah — infrastruktur DB sudah 100% siap.
+6. **Item 11** — butuh migrasi schema kecil (1 kolom baru di `ProductUnits`).
 7. **Item 13** — independen, prioritas rendah, bisa disisipkan kapan saja.
 8. **Item 15** — butuh tabel baru (migrasi schema paling besar dari
-   ketujuh item ini), kerjakan setelah pertanyaan desain (per-device vs
-   per-kasir) dijawab.
+   ketujuh item ini).
 
 ### Item 16-22 (dari diskusi bug keranjang + 5 proposal user)
 
