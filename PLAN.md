@@ -581,39 +581,58 @@ keranjang aktif butuh label untuk disimpan balik. Aturan:
 - Ada pelanggan terpilih → pakai namanya (sudah jadi perilaku `_holdCurrent`).
 - Dibuka dari pesanan tertahan → kembalikan label aslinya (perlu simpan
   "sedang mengedit held order id X" di state).
-- Walk-in tanpa nama & tanpa label → **auto-generate** ("Tanpa Nama · 14:32"
-  / "Pesanan N") ATAU minta label sekali? **Rekomendasi: auto-generate
-  timestamp** (nol-friksi, sesuai tujuan user), bisa di-rename nanti.
-  MENUNGGU KONFIRMASI USER.
+- Walk-in tanpa nama & tanpa label → **DIPUTUSKAN: auto-generate label**
+  timestamp (mis. "Tanpa Nama · 14:32" / "Pesanan N") — nol-friksi sesuai
+  tujuan user (kecepatan), bisa di-rename belakangan dari panel pesanan
+  tertahan kalau perlu.
 
 **File:** `lib/features/kasir/kasir_screen.dart` (`_resumeHeld`,
 `_holdCurrent`, tracking "active held id"), `cart_provider.dart` bila perlu.
 
 ---
 
-## Item 19 — Template harga custom di kasir — ⚠️ MENUNGGU KLARIFIKASI (sebagian besar SUDAH ADA)
+## Item 19 — Harga Lain (`alt_prices`) menempel ke satuan, bukan chip menumpuk
 
-**Prioritas:** Ditahan sampai user klarifikasi. **Proposal user, tapi
-kemungkinan besar sudah ada.**
+**Prioritas:** Sedang. **Diklarifikasi user** — fiturnya ("Harga Lain") memang
+sudah ada (form produk + chip tap di modal kasir), tapi UI/UX chip
+horizontalnya berpotensi menumpuk & tidak efisien kalau satu satuan punya
+banyak tier grosir + banyak Harga Lain sekaligus.
 
-**Negasi jujur:** fitur yang diminta ("template harga biar cepat, bukan ketik
-manual, settings di bawah harga grosir di form produk") **sudah ada** sebagai
-**"Harga Lain" (`alt_prices`)**:
-- Form produk sudah punya section "Harga Lain" di bawah harga grosir (tambah
-  harga berlabel custom), sudah bisa drag-reorder (sesi kemarin).
-- Modal tap item kasir SUDAH menampilkan alt_prices sebagai chip tap
-  (`item_entry_sheet.dart` baris 466-474) — persis "template tap, bukan ketik".
+**Kondisi sekarang (`item_entry_sheet.dart` baris ~429-479):** satu baris
+`ListView` horizontal TUNGGAL berisi SEMUA jenis chip bercampur — chip
+satuan (Dus/Pcs/dst) + chip tier grosir milik satuan terpilih + chip Harga
+Lain milik satuan terpilih — tidak dipisah secara visual. Kalau satuan
+terpilih itu sendiri punya banyak tier & banyak Harga Lain (mis. 3 tier + 5
+Harga Lain = 8+ chip), baris ini cuma bisa dilihat dengan scroll horizontal
+panjang — kurang efisien, dan secara visual tidak "menempel" jelas ke satuan
+mana yang sedang aktif.
 
-**Yang perlu user jawab sebelum ini jadi item build — apa yang KURANG dari
-"Harga Lain" sekarang?** Kemungkinan yang dimaksud beda:
-- (a) Template **relatif** (mis. "modal + 10%", ikut berubah kalau modal
-  berubah) — ini benar-benar baru.
-- (b) Template **global** reusable lintas produk (satu "Reseller −5%" untuk
-  semua produk) — baru & lebih besar.
-- (c) Hanya masalah discoverability (fitur ada tapi kurang kelihatan).
+**Solusi yang saya usulkan (sesuai arah user — "stick" ke satuan):** pisahkan
+dua hal yang sekarang tercampur:
+- **Baris chip satuan** (Dus/Pcs/dst) tetap seperti sekarang — jumlahnya
+  biasanya sedikit (2-4), chip horizontal cocok untuk switch cepat antar
+  satuan.
+- **Tier grosir + Harga Lain milik satuan terpilih** dipindah dari chip row
+  ke **tombol kecil (ikon "expand_more"/tag) tepat di sebelah kanan input
+  field "Harga"**. Tap tombol → buka **menu popup vertikal** (`showMenu`,
+  bisa scroll) berisi daftar harga milik satuan yang SEDANG dipilih: "Harga
+  dasar", "Grosir ≥5 → RpX", "Harga Lain: Toko A → RpY", dst. Tap salah satu
+  langsung isi ke field harga (logika sama seperti `_applyTierPrice`
+  sekarang, cuma beda titik pemicu). Badge kecil di tombol (mis. angka
+  jumlah opsi) supaya kasir tahu ada berapa banyak pilihan tanpa perlu buka
+  dulu.
+- **Kenapa dropdown, bukan hold-tap ke chip satuan:** tombol yang terlihat
+  lebih *discoverable* untuk kasir baru dibanding gesture tersembunyi
+  (hold-tap tidak ada petunjuk visual bahwa itu bisa ditekan lama).
 
-**File (bila jadi build, tergantung jawaban):** kemungkinan
-`produk_form_screen.dart` + `item_entry_sheet.dart` + `price_service.dart`.
+**Manfaat:** skalabel ke berapa pun jumlah Harga Lain (menu vertikal scroll,
+bukan horizontal makin panjang), baris chip satuan jadi ringkas & fokus, dan
+harga tier/Harga Lain otomatis "menempel" ke input harga milik satuan yang
+aktif — bukan tercampur dengan pemilihan satuan.
+
+**File:** `lib/features/kasir/widgets/item_entry_sheet.dart` (rombak seksi
+"Pilih harga" baris ~429-479, tambah widget dropdown baru di sebelah field
+harga).
 
 ---
 
@@ -628,15 +647,11 @@ untuk produk itu → saat kembali, modal reload (`_load()`) agar harga/stok
 yang berubah langsung tercermin. Dipilih "edit" bukan "settings" (gear = konfig
 app; edit = ubah detail entitas ini).
 
-**Keputusan permission (HARUS dijawab):** belum ada izin `edit_produk`. Owner
-& Asisten default akses penuh. Untuk Kasir:
-- **Rekomendasi:** tambah izin baru `edit_produk` di `kKasirPermissionKeys`
-  (+ label/desc di `kasir_permissions_screen.dart`) — konsisten pola izin
-  lain, owner dapat kontrol penuh. Ingat: izin baru butuh masuk seeding di
-  `app_database.dart` (baris ~209) — cek apakah butuh migrasi untuk device
-  lama yang tabel permission-nya sudah ter-seed.
-- Alternatif lebih sederhana: sembunyikan tombol untuk role kasir sepenuhnya
-  (owner/asisten only), tanpa izin baru.
+**Keputusan permission: DIPUTUSKAN — owner & asisten saja, TANPA izin baru.**
+Tombol edit disembunyikan total untuk role Kasir (gate
+`device.deviceRole != 'kasir'`, pola sama seperti pengecekan `canOverride`
+awal di `_load()`) — tidak perlu toggle baru di `kKasirPermissionKeys`,
+tidak perlu seeding/migrasi tambahan.
 
 **File:** `lib/features/kasir/widgets/item_entry_sheet.dart`,
 (bila izin baru) `app_database.dart` + `kasir_permissions_screen.dart`.
@@ -645,7 +660,9 @@ app; edit = ubah detail entitas ini).
 
 ## Item 21 — Sync UI persisten lintas tab + status progres (global state)
 
-**Prioritas:** Sedang. **Proposal user.** Refactor menengah.
+**Prioritas:** Sedang. **Proposal user, DISETUJUI PENUH** — status progres
+(Menyambung → Mengirim → Menunggu persetujuan) dikonfirmasi user persis
+gambaran yang diinginkan. Refactor menengah.
 
 **Temuan tambahan (lebih dalam dari keluhan user):** `sync_screen.dart`
 `dispose()` (baris 42-43) memanggil `LanSyncService.stopHost()` → meninggalkan
@@ -670,21 +687,58 @@ host. Jangan overpromise "per baris".
 
 ---
 
-## Item 22 — Warna banner inline: sukses = hijau soft, gagal = merah (light & dark)
+## Item 22 — Warna state UI gelap/terang: banner + chip terpilih (bug SISTEMIK, bukan cuma banner)
 
-**Prioritas:** Rendah, scope kecil. **Proposal user.**
+**Prioritas:** Rendah-sedang, scope kecil tapi menyebar ke banyak file.
+**Proposal user, DIPERLUAS** setelah user minta crosscheck ("tombol jenis
+pembayaran di modal checkout juga buram di dark mode") — dan ternyata ini
+BUKAN kasus terisolasi, ada bug di level tema yang berdampak ke 6 file.
+
+### Bagian A — Banner inline (sukses/gagal)
 
 **Kondisi sekarang:** `inline_banner.dart` (baris 88-114) — `success` pakai
 `scheme.primaryContainer` = terakota (warna brand), jadi sukses & info mirip.
 
-**Solusi:** `success` → hijau soft, `error` → merah eksplisit. **Wajib bikin
-2 varian (light & dark) untuk masing-masing** — bukan hardcode satu set.
-Alasan: case `warning` sekarang (baris 102-107) hardcode warna terang saja →
-kontras jelek di dark mode; jangan ulangi pola itu. Deteksi brightness via
-`Theme.of(context).brightness` seperti pola di `_AddControl`
-(`kasir_screen.dart`).
+**Solusi — REUSE warna semantik yang SUDAH ADA, jangan bikin baru:**
+`app_theme.dart` sudah punya helper theme-aware persis untuk kasus ini:
+`AppTheme.changeFg(isDark)`/`changeBg(isDark)` (hijau — dipakai untuk
+"kembalian") dan `AppTheme.debtFg(isDark)`/`debtBg(isDark)` (merah — dipakai
+untuk "hutang"). Pakai keduanya untuk `success`/`error` di banner supaya
+konsisten dengan warna hijau/merah yang sudah dikenal user di tempat lain
+di app, bukan menambah pasangan warna baru. Case `warning` (baris 102-107,
+hardcode warna terang saja, kontras jelek di dark mode) ikut dibetulkan
+dengan pola yang sama (state-aware, bukan hardcode satu set).
 
-**File:** `lib/core/widgets/inline_banner.dart`.
+### Bagian B — TEMUAN BARU dari crosscheck user: `ChoiceChip`/`FilterChip` terpilih buram di dark mode — bug DI LEVEL TEMA
+
+**Akar masalah (dikonfirmasi):** `chipTheme` global (`app_theme.dart` baris
+234-239) set `labelStyle` dengan **satu warna TETAP**
+(`isDark ? _dInk2 : _lInk2`) yang **tidak berubah** saat chip dalam state
+`selected` — padahal background chip saat selected berubah jadi
+`scheme.primaryContainer` (lewat parameter `selectedColor` yang diberikan
+per-pemakaian). Warna teks yang didesain kontras di atas background netral
+jadi kurang kontras di atas `primaryContainer`, terutama di dark mode —
+persis "buram" yang dilaporkan user di chip metode pembayaran.
+
+**Ini bug SISTEMIK** — pola sama dipakai identik di 6 file / 8 titik, tidak
+satupun override `labelStyle` lokal untuk state selected:
+`payment_screen.dart` baris 956-966 (chip metode bayar — akar laporan
+user), `tx_history_sheet.dart` (3×, baris 319-343 & 454-460),
+`pair_device_screen.dart` (2×), `price_preview_screen.dart` (2×),
+`produk_list_screen.dart` (1×, baris 211-216).
+
+**Solusi yang benar — fix SEKALI di level tema, bukan per-file:** ubah
+`chipTheme.labelStyle` di `app_theme.dart` jadi resolve berdasar state
+(`WidgetStateProperty`/`WidgetStateTextStyle`, cek `WidgetState.selected`) —
+kalau selected, pakai warna kontras terhadap `primaryContainer` (mis.
+`scheme.onPrimaryContainer`); kalau tidak, warna default seperti sekarang.
+Satu perbaikan ini otomatis membetulkan SEMUA 8 titik pemakaian di atas
+sekaligus (termasuk pemakaian baru di masa depan) — jauh lebih efisien
+daripada menambal tiap file satu-satu.
+
+**File:** `lib/core/theme/app_theme.dart` (fix utama, Bagian B — otomatis
+memperbaiki 6 file lain tanpa disentuh), `lib/core/widgets/inline_banner.dart`
+(Bagian A).
 
 ---
 
@@ -729,19 +783,31 @@ dari daftar hidden itu** supaya owner bisa mengaturnya — mudah terlewat.
 
 ### Item 16-22 (dari diskusi bug keranjang + 5 proposal user)
 
-9. **Item 22** (warna banner) & **Item 20** (tombol edit di modal) — quick
-   win, scope kecil. Item 20 tunggu keputusan permission (`edit_produk` baru
-   vs owner/asisten-only).
-10. **Item 18** (beralih pesanan tanpa hold) — prioritas tinggi (rush-hour),
-    tunggu keputusan label auto-save.
-11. **Item 16** (atribusi varian per-satuan + fix minus) — integritas data,
-    tunggu keputusan perilaku hapus induk.
-12. **Item 21** (sync UI persisten) & **Item 17** (persist antrian approval)
-    — keduanya menyentuh area sync, wajar dikerjakan berdekatan/sekaligus.
-    Item 17 butuh migrasi (tabel baru).
-13. **Item 19** (template harga custom) — DITAHAN, tunggu klarifikasi user
-    (fitur sebagian besar sudah ada sebagai "Harga Lain"/`alt_prices`).
+Semua keputusan desain SUDAH DIJAWAB user kecuali satu (lihat penutup di
+bawah) — daftar ini siap dieksekusi tanpa menunggu klarifikasi lagi.
 
-**Quick-win paling murah lintas semua item:** Item 22 (warna banner),
-Item 14 (edit/hapus metode bayar), Item 10 (metode bayar pelunasan) —
-scope kecil, tanpa migrasi, tanpa keputusan desain menggantung.
+9. **Item 22** (fix tema chip terpilih — sistemik, sekali fix kena 8 titik
+   pemakaian + banner reuse warna semantik yang sudah ada) & **Item 20**
+   (tombol edit di modal, owner/asisten saja tanpa izin baru) — SIAP,
+   quick win, scope kecil.
+10. **Item 18** (beralih pesanan tanpa hold, label auto-generate timestamp)
+    — SIAP, prioritas tinggi (rush-hour, paling terasa manfaatnya).
+11. **Item 16** (atribusi varian per-satuan + fix minus) — integritas data.
+    **Satu-satunya pertanyaan desain yang masih terbuka** di seluruh Item
+    9-22 (lihat penutup).
+12. **Item 21** (sync UI persisten, status progres — disetujui penuh) &
+    **Item 17** (persist antrian approval) — SIAP, keduanya menyentuh area
+    sync, wajar dikerjakan berdekatan/sekaligus. Item 17 butuh migrasi
+    (tabel baru).
+13. **Item 19** (Harga Lain menempel ke satuan — redesain dari chip row ke
+    dropdown per-satuan) — SIAP, desain final.
+
+**Quick-win paling murah lintas semua item:** Item 22 (satu perubahan file
+tema, kena 8 titik pemakaian sekaligus), Item 20, Item 14 (edit/hapus
+metode bayar), Item 10 (metode bayar pelunasan) — scope kecil, tanpa
+migrasi, tanpa keputusan desain menggantung.
+
+**Satu-satunya keputusan desain yang masih terbuka di seluruh Item 9-22:**
+Item 16 — kalau baris satuan induk sebuah varian dihapus dari keranjang,
+apakah variannya ikut terhapus, atau "pindah" nempel ke baris satuan lain
+dari produk yang sama (kalau ada)?
