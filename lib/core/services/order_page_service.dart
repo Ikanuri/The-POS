@@ -356,6 +356,7 @@ var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
 var byUnit = {}; // unitId -> {name, unit, price, parentName}
 var openState = {}; // productId -> bool, dropdown varian tetap terbuka/tertutup lewat re-render
+var sheetOpen = false; // hindari renderCartSheet() sia-sia saat sheet tertutup
 
 // ── Toggle terang/gelap manual — menimpa prefers-color-scheme, disimpan
 // per-browser lewat localStorage supaya pilihan bertahan saat file dibuka lagi.
@@ -419,13 +420,19 @@ function cartTotal(){
 
 function setQty(unitId, qty){
   if (qty <= 0) delete cart[unitId]; else cart[unitId] = qty;
-  render();
+  // Update HANYA stepper baris yang berubah (bukan renderList() penuh) —
+  // katalog bisa ratusan/ribuan baris, membangun ulang semuanya tiap tap
+  // +/- sangat berat di HP low-end padahal cuma satu angka yang berubah.
+  var old = document.querySelector('#list [data-unit="'+unitId+'"]');
+  if (old) old.replaceWith(buildStepper(unitId, qty));
+  renderCartBar();
+  if (sheetOpen) renderCartSheet();
 }
 
 function renderList(){
   var q = document.getElementById('q').value.trim().toLowerCase();
   var list = document.getElementById('list');
-  list.innerHTML = '';
+  var frag = document.createDocumentFragment();
   var shown = 0;
   DATA.products.forEach(function(p){
     var variants = p.variants || [];
@@ -489,15 +496,21 @@ function renderList(){
       main.appendChild(buildStepper(p.unitId, qty));
       row.appendChild(main);
     }
-    list.appendChild(row);
+    frag.appendChild(row);
   });
+  // Bangun semua baris di DocumentFragment dulu (di luar DOM aktif), baru
+  // ditempel sekali di akhir — mencegah reflow bertahap per baris.
+  list.innerHTML = '';
   if (shown === 0) {
     list.innerHTML = '<div class="empty">Produk "'+esc(q)+'" tidak ditemukan.</div>';
+  } else {
+    list.appendChild(frag);
   }
 }
 
 function buildStepper(unitId, qty){
   var wrap = document.createElement('div');
+  wrap.dataset.unit = unitId;
   if (qty > 0) {
     wrap.className = 'stepper';
     wrap.innerHTML =
@@ -565,15 +578,25 @@ document.getElementById('cartItems').addEventListener('click', function(e){
   setQty(id, btn.dataset.act === 'inc' ? cur + 1 : cur - 1);
 });
 
-function render(){ renderList(); renderCartBar(); renderCartSheet(); }
+function render(){ renderList(); renderCartBar(); if (sheetOpen) renderCartSheet(); }
 
-document.getElementById('q').addEventListener('input', renderList);
+// Debounce ~120ms — tiap huruf diketik memicu renderList() yang membangun
+// ulang SELURUH daftar produk; tanpa debounce ini kerja berat berulang di
+// setiap huruf, dampaknya paling besar untuk performa di HP low-end.
+var searchTimer = null;
+document.getElementById('q').addEventListener('input', function(){
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(renderList, 120);
+});
 
 function openSheet(){
+  sheetOpen = true;
+  renderCartSheet();
   document.getElementById('scrim').classList.add('show');
   document.getElementById('sheet').classList.add('show');
 }
 function closeSheet(){
+  sheetOpen = false;
   document.getElementById('scrim').classList.remove('show');
   document.getElementById('sheet').classList.remove('show');
 }
