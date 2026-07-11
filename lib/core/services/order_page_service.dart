@@ -3,11 +3,11 @@ import 'dart:convert';
 import '../database/app_database.dart';
 import 'price_service.dart';
 
-/// **EKSPERIMENTAL.** Generate halaman HTML self-contained (tanpa server,
-/// tanpa CDN) berisi katalog produk aktif yang bisa dibuka pelanggan dari
-/// WhatsApp untuk memilih barang, lalu mengirim balik teks pesanan siap
-/// dibaca kasir (format manusia + baris kode mesin `#PSN:` untuk fase
-/// tempel-otomatis ke keranjang di iterasi berikutnya).
+/// Generate halaman HTML self-contained (tanpa server, tanpa CDN) berisi
+/// katalog produk aktif yang bisa dibuka pelanggan dari WhatsApp untuk
+/// memilih barang, lalu mengirim balik teks pesanan siap dibaca kasir
+/// (format manusia + baris kode mesin `#PSN:` untuk tempel-otomatis ke
+/// keranjang lewat `PasteOrderSheet`/`OrderParserService`).
 ///
 /// Prinsip desain (selaras keputusan user):
 /// - **Tanpa hosting** — file dibagikan mentah lewat `share_plus`, sama

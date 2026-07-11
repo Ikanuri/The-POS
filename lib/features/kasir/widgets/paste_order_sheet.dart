@@ -9,9 +9,9 @@ import '../../../core/theme/app_theme.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 
-/// **EKSPERIMENTAL — Fase 2.** Sheet "Tempel Pesanan": kasir menempel teks
-/// pesanan yang dikirim balik pelanggan (hasil Katalog Pesanan, lihat
-/// `OrderPageService`) lalu semua item otomatis masuk keranjang kasir.
+/// Sheet "Tempel Pesanan": kasir menempel teks pesanan yang dikirim balik
+/// pelanggan (hasil Katalog Pesanan, lihat `OrderPageService`) lalu semua
+/// item otomatis masuk keranjang kasir.
 ///
 /// Harga & HPP SELALU di-resolve ulang dari DB lokal saat ini (lihat
 /// [OrderParserService]) — bukan dipercaya dari teks — jadi katalog yang
@@ -52,8 +52,7 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
   }
 
   /// Sama seperti `_ensureParentInCart` di layar kasir utama (dijaga sengaja
-  /// TIDAK dibagi/impor dari sana — kasir utama tidak disentuh sama sekali
-  /// untuk fitur eksperimental ini). Jaga invariant storedQty induk =
+  /// TIDAK dibagi/impor dari sana). Jaga invariant storedQty induk =
   /// base + Σvarian dengan menambahkan placeholder qty 0 untuk induk yang
   /// belum ada di keranjang sebelum varian ditambahkan.
   Future<void> _ensureParentInCart(ParsedOrderItem variantItem) async {
@@ -154,20 +153,6 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
                 children: [
                   Text('Tempel Pesanan',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: scheme.tertiaryContainer,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text('Eksperimental',
-                        style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onTertiaryContainer)),
-                  ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),

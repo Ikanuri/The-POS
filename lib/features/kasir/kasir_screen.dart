@@ -1190,9 +1190,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
               isScrollControlled: true,
               builder: (_) => const TxHistorySheet(),
             ),
-            // EKSPERIMENTAL — Fase 2 fitur Katalog Pesanan. Hanya di mode
-            // kasir biasa (bukan katalog/tambah-belanjaan) agar tidak
-            // menambah kebingungan di alur yang sudah ada.
+            // Tempel Pesanan (Katalog Pesanan). Hanya di mode kasir biasa
+            // (bukan katalog/tambah-belanjaan) agar tidak menambah
+            // kebingungan di alur yang sudah ada.
             onPasteOrder: (!_isCatalogMode && !_isAddMode)
                 ? () => showModalBottomSheet(
                       context: context,
@@ -1509,8 +1509,8 @@ class _KasirTopbar extends StatefulWidget {
   /// Tampilkan tombol Antrian (tahan) & Riwayat. Disembunyikan di mode katalog.
   final bool showQueueAndHistory;
 
-  /// EKSPERIMENTAL — buka sheet "Tempel Pesanan". null = sembunyikan tombol
-  /// (mode katalog / tambah belanjaan).
+  /// Buka sheet "Tempel Pesanan". null = sembunyikan tombol (mode katalog /
+  /// tambah belanjaan).
   final VoidCallback? onPasteOrder;
 
   /// true = tetap tampil expanded walau `searchFocus` kehilangan fokus asli

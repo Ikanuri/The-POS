@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-11
 
+- `0323d3f` — feat: cabut flag Eksperimental dari Tempel Pesanan
 - `d77e81e` — feat: info kembalian terakhir + centang di kalkulator bayar Tambah Belanjaan (+ highlight nominal Total)
 - `6173b57` — feat: Buku Hutang tampilkan daftar nota belum lunas per pelanggan (+ fix 2 overflow lama)
 - `5759c18` — feat: Riwayat Pembayaran tampilkan kembalian per baris + centang per baris
