@@ -32,6 +32,25 @@ final loyaltyRuleProvider =
   return (threshold: t, pointsPer: p < 1 ? 1 : p);
 });
 
+/// Boleh membuka layar Pengeluaran: owner/asisten selalu; kasir bila izin
+/// `input_pengeluaran` aktif.
+final _canInputExpenseProvider = FutureProvider<bool>((ref) async {
+  final device = ref.watch(deviceProvider);
+  if (device.canSeeReports) return true;
+  final db = ref.watch(databaseProvider);
+  return db.isPermissionEnabled('input_pengeluaran');
+});
+
+/// Izinkan kasir jual meski stok 0 (pre-order) — setting global. Dulu ada
+/// langsung di halaman Pengaturan, sempat dipindah ke dalam Izin Kasir
+/// (kurang terlihat), sekarang dikembalikan jadi entri terpisah di sini
+/// (owner selalu bebas tanpa toggle ini — lihat resolveAllowNegativeStock).
+final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final v = await db.getSetting('allow_negative_stock');
+  return v == '1';
+});
+
 class PengaturanScreen extends ConsumerWidget {
   const PengaturanScreen({super.key});
 
@@ -95,6 +114,18 @@ class PengaturanScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pengaturan/metode-bayar'),
                 ),
+                Builder(builder: (context) {
+                  final canExpense =
+                      ref.watch(_canInputExpenseProvider).valueOrNull ?? false;
+                  if (!canExpense) return const SizedBox.shrink();
+                  return ListTile(
+                    leading: const Icon(Icons.money_off_outlined),
+                    title: const Text('Pengeluaran'),
+                    subtitle: const Text('Catat biaya operasional & kas keluar'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/pengeluaran'),
+                  );
+                }),
                 ListTile(
                   leading: const Icon(Icons.badge_outlined),
                   title: const Text('Pegawai Toko'),
@@ -117,6 +148,24 @@ class PengaturanScreen extends ConsumerWidget {
                         await db.setSetting(
                             'receipt_show_employee', v ? '1' : '0');
                         ref.invalidate(_showEmployeeProvider);
+                      },
+                    );
+                  }),
+                  Builder(builder: (context) {
+                    final allow =
+                        ref.watch(_allowNegativeStockProvider).valueOrNull ??
+                            false;
+                    return SwitchListTile(
+                      secondary: const Icon(Icons.inventory_2_outlined),
+                      title: const Text('Izinkan Stok Minus'),
+                      subtitle: const Text(
+                          'Kasir bisa jual meski stok 0 (pre-order) — owner selalu bisa terlepas dari ini'),
+                      value: allow,
+                      onChanged: (v) async {
+                        final db = ref.read(databaseProvider);
+                        await db.setSetting(
+                            'allow_negative_stock', v ? '1' : '0');
+                        ref.invalidate(_allowNegativeStockProvider);
                       },
                     );
                   }),
@@ -190,6 +239,14 @@ class PengaturanScreen extends ConsumerWidget {
                     onTap: () => _exportProductsCsv(context, ref),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.storefront_outlined),
+                    title: const Text('Katalog Pesanan'),
+                    subtitle: const Text(
+                        'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/katalog-pesanan'),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.qr_code_2_outlined),
                     title: const Text('Pair Device Baru'),
                     subtitle: const Text('Tambah HP kasir / asisten via QR'),
@@ -206,11 +263,11 @@ class PengaturanScreen extends ConsumerWidget {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.science_outlined),
-                title: const Text('Katalog Pesanan'),
+                title: const Text('Import dari Griyo POS'),
                 subtitle: const Text(
-                    'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
+                    'Migrasi data produk dari file export Griyo POS'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/pengaturan/katalog-pesanan'),
+                onTap: () => context.push('/pengaturan/import-griyo'),
               ),
             ),
           ],
@@ -220,6 +277,14 @@ class PengaturanScreen extends ConsumerWidget {
             Card(
               child: Column(
                 children: [
+                  ListTile(
+                    leading: const Icon(Icons.point_of_sale_outlined),
+                    title: const Text('Tutup Kasir'),
+                    subtitle:
+                        const Text('Rekap kas harian: sistem vs uang fisik'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/tutup-kasir'),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.archive_outlined),
                     title: const Text('Tutup Buku'),

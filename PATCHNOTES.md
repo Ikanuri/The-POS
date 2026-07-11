@@ -8,9 +8,106 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 Juli 2026
+
+### ✨ Fitur Baru
+- **Kalkulator bayar di Tambah Belanjaan sekarang mengingatkan kembalian
+  yang belum diambil.** Kalau nota masih ada kembalian nganggur dari
+  pembayaran sebelumnya, muncul info nominalnya lengkap dengan centang
+  "Pakai kembalian" — tinggal dicentang saat dipakai buat belanja
+  tambahan, tidak perlu buka struk dulu untuk mencentangnya secara
+  terpisah.
+- **Riwayat kembalian per pembayaran di struk.** Nota yang dibayar lebih dari
+  sekali (mis. bayar sebagian dulu, dilunasi belakangan) sekarang menampilkan
+  kembalian tiap pembayaran secara terpisah di card "Riwayat Pembayaran",
+  lengkap dengan centang "sudah diambil" masing-masing — tidak lagi ambigu
+  "tadi bayar berapa? sisanya sudah dikembalikan belum?".
+- **Buku Hutang: lihat daftar nota yang belum lunas.** Tap nama pelanggan di
+  Buku Hutang sekarang menampilkan nota-nota mana saja yang masih menunggak
+  (nomor, tanggal, sisa) — tap salah satunya langsung membuka struknya.
+- **Menu baru: Import dari Griyo POS** (Pengaturan → Eksperimental). Khusus
+  untuk migrasi data produk dari Griyo POS — sama dengan Import Produk CSV
+  biasa, tapi bantuan formatnya disesuaikan untuk file export Griyo.
+- **Katalog Pesanan (HTML) sekarang jadi fitur resmi**, tidak lagi berlabel
+  "Eksperimental" — sudah cukup teruji untuk dipakai sehari-hari.
+
+### 🔧 Perbaikan
+- **Toggle "Izinkan Stok Minus" kembali ke halaman utama Pengaturan** —
+  sebelumnya harus masuk ke Pengaturan → Izin Kasir dulu (baris paling
+  bawah) untuk menemukannya.
+- **Owner sekarang selalu bisa jual meski stok kurang/habis.** Sebelumnya
+  owner ikut terblokir sama seperti kasir kalau "Izinkan Stok Minus"
+  sedang dimatikan — sekarang owner tidak terpengaruh pengaturan itu,
+  konsisten dengan hak akses owner lainnya.
+- **Tombol "Harga lain" di modal produk (kasir) sekarang menampilkan nama
+  harga yang sedang aktif** (mis. "Eceran"), bukan cuma angka hitungan
+  generik — jadi jelas harga mana yang sedang dipakai.
+- **Produk hasil import CSV tidak lagi hilang dari Katalog Pesanan (HTML).**
+  Sebelumnya, produk yang masuk lewat import CSV (termasuk dari Griyo POS)
+  tampil normal di tab Produk & kasir, tapi lenyap total saat katalog HTML
+  dibagikan ke pelanggan — kini muncul dengan benar.
+- **Import CSV dari Griyo POS sekarang berhasil.** Sebelumnya file export
+  Griyo (pemisah kolom titik-koma) selalu gagal total — semua baris ditolak
+  karena format kolomnya tidak dikenali. Sekarang terbaca otomatis, termasuk
+  kolom Satuan & Grup Produk milik Griyo yang berupa kode angka (otomatis
+  dipetakan ke satuan/grup yang benar seperti Pak, Dos, Slop — bukan
+  diseragamkan jadi "Kg" untuk semua produk). Hasil import kini juga
+  menandai produk dengan nama sama tapi kemasan berbeda (mis. sama-sama
+  "234 12" untuk Slop & Pak) supaya mudah digabungkan manual bila perlu.
+
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
+- **Tutup Kasir harian.** Menu baru (Pengaturan → Tutup Kasir) menampilkan
+  rekap otomatis penjualan tunai, non-tunai, dan jumlah nota hari ini. Tinggal
+  masukkan jumlah uang fisik di laci, dan aplikasi menghitung selisihnya
+  (hijau = pas, merah = kurang, kuning/tosca = lebih). Tersimpan sebagai
+  riwayat harian. (Beda dari "Tutup Buku" yang mengarsipkan transaksi tahunan.)
+- **Pengingat backup.** Di Pengaturan → Backup & Restore kini ada kartu
+  status "Backup terakhir: X hari lalu" (warnanya berubah makin lama makin
+  merah) dan tombol "Pengingat Backup Otomatis" (interval harian/mingguan).
+  Bila aktif, aplikasi mengingatkan lewat notifikasi kecil saat dibuka jika
+  sudah lama tidak mencadangkan data.
+- **Peringatan stok menipis.** Di pengaturan produk kini ada kolom "Stok
+  Minimum" — isi angka ambangnya (kosongkan bila tidak ingin dipantau). Di
+  tab Produk muncul chip "Stok Menipis (jumlah)" berwarna merah untuk
+  menyaring produk yang stoknya sudah di bawah ambang, agar cepat tahu apa
+  yang perlu segera di-restock.
+- **Pilihan "Harga Lain" & grosir di kasir kini lebih rapi.** Saat menekan
+  produk, harga grosir dan Harga Lain milik satuan yang dipilih dikumpulkan
+  dalam satu tombol "Harga lain" di bawah kolom harga (dengan angka jumlah
+  pilihan) — tidak lagi berupa deretan chip yang menumpuk saat opsinya banyak.
+  Chip di atas kini khusus untuk memilih satuan.
+- **Beralih antar pesanan tertahan lebih cepat (tanpa kehilangan).** Saat
+  membuka pesanan tertahan lain sementara keranjang sedang berisi, keranjang
+  yang aktif kini **otomatis ditahan balik** (pakai nama pelanggan bila ada,
+  atau "Tanpa Nama + jam" untuk pembeli umum) — tidak lagi muncul peringatan
+  "Ganti Keranjang?" dan tidak ada yang hilang. Mempercepat layani banyak
+  pesanan sekaligus di jam sibuk.
+- **Buku Hutang terpusat.** Di Laporan ada tab baru **Hutang** yang
+  menampilkan semua pelanggan yang masih berhutang, diurutkan dari yang
+  **paling lama menunggak** (warna berubah hijau→kuning→merah sesuai umur
+  tunggakan). Ketuk nama pelanggan untuk melihat total hutang & langsung
+  menekan **Lunasi** (bisa pilih metode bayar). Ada juga kolom cari nama.
+- **Pencatatan Pengeluaran + Laba Bersih.** Ada menu baru Pengaturan →
+  Pengeluaran untuk mencatat biaya (operasional, ambil pribadi, bayar
+  supplier, uang keluar laci) lengkap dengan nominal, kategori, catatan, dan
+  tanggal. Di Laporan (tab Ringkasan) kini muncul baris **Pengeluaran** dan
+  **Laba Bersih** (= Laba Kotor − pengeluaran operasional & uang keluar laci;
+  "ambil pribadi" dan "bayar supplier" tidak ikut dikurangi agar laba tidak
+  salah hitung). Kasir bisa diberi izin mencatat pengeluaran lewat Izin Kasir.
+- **Saat melunasi/menambah bayar hutang, kini bisa memilih metode bayar**
+  (Tunai, transfer, QRIS, dsb) — sebelumnya semua pelunasan selalu tercatat
+  sebagai "tunai" walau pelanggan membayar lewat transfer. Pilihan metode
+  muncul di dialog Bayar di layar Struk, Riwayat Transaksi, dan Laporan.
+- **Edit produk langsung dari layar Kasir.** Saat menekan produk di kasir,
+  kini ada tombol edit (ikon pensil) di pojok modal — buka pengaturan produk
+  itu tanpa harus pindah ke tab Produk. Hanya muncul untuk Owner & Asisten.
+- **Metode pembayaran bisa diedit & dihapus.** Di Pengaturan → Metode
+  Pembayaran, ketuk sebuah metode untuk mengubah namanya/detailnya, atau
+  geser ke kiri untuk menghapus (metode harus dinonaktifkan dulu; "Tunai"
+  tidak bisa dihapus). Sebelumnya metode hanya bisa ditambah & diaktif/
+  nonaktifkan.
 - **Urutan "Harga Lain" bisa diatur.** Di pengaturan produk (tab Produk),
   daftar Harga Lain sekarang punya ikon geser (drag-handle) di tiap baris —
   tahan lalu seret untuk mengubah urutannya. Urutan ini otomatis diikuti
@@ -18,6 +115,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dipakai bisa ditaruh paling depan.
 
 ### 🐛 Perbaikan
+- **Perhitungan varian di keranjang lebih akurat.** Bila satu produk masuk
+  keranjang dalam beberapa satuan sekaligus (mis. per Dus dan per Pcs), varian
+  yang dipilih kini menempel ke satuan yang benar — sebelumnya bisa "menyeret"
+  hitungan satuan lain sehingga jumlah/stok terasa tidak pas.
+- **Tombol kurang (−) tidak lagi salah mengurangi.** Kalau sebuah produk ada
+  di keranjang dengan lebih dari satu satuan, menekan "−" di kartu produk kini
+  memberi info untuk mengatur lewat keranjang (bukan diam-diam mengurangi
+  satuan yang keliru).
 - **Katalog Pesanan (halaman HTML untuk pelanggan) tidak lagi lag di HP
   low-end.** Pencarian produk dan tombol tambah/kurang jumlah kini jauh
   lebih responsif, terutama untuk toko dengan katalog besar.
@@ -34,6 +139,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   "Sedap Goreng per dus tidak ada" yang sempat dilaporkan — dua varian
   barang dengan barcode berbeda dianggap duplikat dan salah satu dibuang
   tanpa pemberitahuan apa pun.
+- **Tombol/chip yang sedang dipilih kini lebih jelas terbaca, terutama di
+  Mode Gelap.** Sebelumnya teks pada pilihan aktif (mis. tombol jenis
+  pembayaran di layar Bayar) tampak buram/samar. Sekaligus, notifikasi
+  "berhasil" kini berwarna hijau dan "gagal" berwarna merah (sebelumnya
+  keduanya senada warna aksen), jadi lebih cepat dikenali sekilas.
 
 ## 8 Juli 2026
 

@@ -10,6 +10,7 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
 import '../merged_receipt_screen.dart';
+import 'debt_payment_dialog.dart';
 
 /// Parameter query riwayat. Saat tidak ada filter aktif → 100 terakhir;
 /// saat ada filter aktif → sampai 1000 agar pencarian menjangkau data lama.
@@ -1026,57 +1027,22 @@ class _TxDetail extends ConsumerWidget {
   Future<void> _lunasi(BuildContext context, WidgetRef ref) async {
     final remaining = tx.total - tx.paid;
     if (remaining <= 0) return;
-    final ctrl = TextEditingController(
-        text: ThousandsSeparatorFormatter.format(remaining));
-    final result = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Lunasi Transaksi'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Sisa tagihan: ${formatRupiah(remaining)}',
-                style: const TextStyle(fontSize: 13)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [ThousandsSeparatorFormatter()],
-              decoration: const InputDecoration(
-                  prefixText: 'Rp ', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Batal')),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx)
-                .pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
-            child: const Text('Bayar'),
-          ),
-        ],
-      ),
-    );
-
-    ctrl.dispose();
-    if (result == null || result <= 0 || !context.mounted) return;
-
     final db = ref.read(databaseProvider);
+    final result = await showDebtPaymentDialog(context, db,
+        remaining: remaining, title: 'Lunasi Transaksi');
+    if (result == null || result.amount <= 0 || !context.mounted) return;
+
     final device = ref.read(deviceProvider);
     // Satu jalur DB yang sama dengan "Tambah Bayar" di struk: paid dicatat
     // PENUH (boleh > total → kembalian dari paid - total) supaya info
     // kembalian tidak tertimpa rekonsiliasi (sync / tambah belanjaan).
     final change = await db.addPaymentToTransaction(
       txId: tx.id,
-      amount: result,
-      method: 'tunai',
+      amount: result.amount,
+      method: result.method,
       kasirId: device.deviceCode,
     );
-    final newPaid = tx.paid + result;
+    final newPaid = tx.paid + result.amount;
     final lunas = newPaid >= tx.total;
     onChanged();
     if (context.mounted) {

@@ -46,6 +46,10 @@ class ProductUnits extends Table {
   RealColumn get ratioToBase => real().withDefault(const Constant(1.0))();
   BoolColumn get isNonStock => boolean().withDefault(const Constant(false))();
 
+  /// Item 11: ambang stok menipis, disimpan di baris satuan DASAR saja
+  /// (stok selalu dianker ke satuan dasar). null = tidak dipantau.
+  IntColumn get minStock => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

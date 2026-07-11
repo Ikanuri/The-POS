@@ -3,8 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/services/backup_reminder.dart';
 import '../../core/services/db_export_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+
+/// Status backup (waktu terakhir + setting otomatis) untuk kartu pengingat.
+final _backupStatusProvider = FutureProvider.autoDispose<BackupStatus>((ref) {
+  return BackupReminder.load(ref.watch(databaseProvider));
+});
 
 class BackupScreen extends ConsumerStatefulWidget {
   const BackupScreen({super.key});
@@ -79,6 +86,8 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
         type: FileType.any,
       );
 
+      await BackupReminder.recordBackupNow(db); // Item 13: catat waktu backup
+      ref.invalidate(_backupStatusProvider);
       if (!mounted) return;
       showSuccess('Backup berhasil disimpan');
     } catch (e) {
@@ -181,6 +190,19 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
                 : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                _BackupStatusCard(
+                  onToggleAuto: (v) async {
+                    final db = ref.read(databaseProvider);
+                    await BackupReminder.setAutoEnabled(db, v);
+                    ref.invalidate(_backupStatusProvider);
+                  },
+                  onIntervalChanged: (d) async {
+                    final db = ref.read(databaseProvider);
+                    await BackupReminder.setIntervalDays(db, d);
+                    ref.invalidate(_backupStatusProvider);
+                  },
+                ),
+                const SizedBox(height: 12),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -273,4 +295,97 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
   }
 
   String _p(int n) => n.toString().padLeft(2, '0');
+}
+
+/// Item 13 — kartu status backup: kapan terakhir backup (warna sesuai usia) +
+/// toggle pengingat otomatis + interval.
+class _BackupStatusCard extends ConsumerWidget {
+  const _BackupStatusCard(
+      {required this.onToggleAuto, required this.onIntervalChanged});
+
+  final ValueChanged<bool> onToggleAuto;
+  final ValueChanged<int> onIntervalChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final statusAsync = ref.watch(_backupStatusProvider);
+
+    return statusAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (s) {
+        final days = s.daysSince;
+        final Color ageColor;
+        final String lastLabel;
+        if (days == null) {
+          ageColor = AppTheme.debtFg(isDark);
+          lastLabel = 'Belum pernah backup';
+        } else if (days == 0) {
+          ageColor = AppTheme.changeFg(isDark);
+          lastLabel = 'Backup terakhir: hari ini';
+        } else {
+          ageColor = days >= (s.autoEnabled ? s.intervalDays : 7)
+              ? AppTheme.debtFg(isDark)
+              : (days >= 3
+                  ? (isDark ? const Color(0xFFF0B54A) : const Color(0xFFB8791A))
+                  : scheme.onSurfaceVariant);
+          lastLabel = 'Backup terakhir: $days hari lalu';
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.history_outlined, size: 18, color: ageColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(lastLabel,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, color: ageColor)),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Pengingat Backup Otomatis'),
+                  subtitle: const Text(
+                      'Ingatkan saat aplikasi dibuka bila sudah lama tak backup',
+                      style: TextStyle(fontSize: 11)),
+                  value: s.autoEnabled,
+                  onChanged: onToggleAuto,
+                ),
+                if (s.autoEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        const Text('Ingatkan tiap'),
+                        const SizedBox(width: 12),
+                        DropdownButton<int>(
+                          value: s.intervalDays,
+                          items: const [
+                            DropdownMenuItem(value: 1, child: Text('Harian')),
+                            DropdownMenuItem(value: 7, child: Text('Mingguan')),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) onIntervalChanged(v);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

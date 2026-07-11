@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/services/backup_reminder.dart';
 
 class _TabItem {
   const _TabItem(this.path, this.label, this.icon, this.selectedIcon);
@@ -21,13 +22,41 @@ const _allTabs = [
   _TabItem('/pengaturan', 'Pengaturan', Icons.settings_outlined, Icons.settings),
 ];
 
-class MainShell extends ConsumerWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends ConsumerState<MainShell> {
+  @override
+  void initState() {
+    super.initState();
+    // Item 13: pengingat backup berbasis "cek saat app dibuka" (sekali).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkBackupReminder());
+  }
+
+  Future<void> _checkBackupReminder() async {
+    final status = await BackupReminder.load(ref.read(databaseProvider));
+    if (!mounted || !status.overdue) return;
+    final days = status.daysSince;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      duration: const Duration(seconds: 8),
+      content: Text(days == null
+          ? 'Data belum pernah dicadangkan. Backup sekarang?'
+          : 'Sudah $days hari belum backup. Cadangkan sekarang?'),
+      action: SnackBarAction(
+        label: 'Backup',
+        onPressed: () => context.push('/pengaturan/backup'),
+      ),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final device = ref.watch(deviceProvider);
     // Tab Laporan disembunyikan dari kasir.
     final tabs = device.canSeeReports
@@ -40,7 +69,7 @@ class MainShell extends ConsumerWidget {
 
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(

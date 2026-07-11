@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 enum InlineBannerType { success, error, warning, info }
 
 /// Mixin agar layar mudah memakai banner mengambang tanpa boilerplate.
@@ -84,27 +86,40 @@ class _InlineBannerState extends State<InlineBanner> {
   Widget build(BuildContext context) {
     final msg = widget.message;
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final (Color bg, Color fg, Color accent, IconData ico) =
         switch (widget.type) {
+      // Sukses = HIJAU soft, Gagal = MERAH — pakai warna semantik yang sama
+      // dengan "kembalian"/"hutang" di kasir (AppTheme.change*/debt*), sudah
+      // theme-aware light & dark, agar konsisten di seluruh app.
       InlineBannerType.success => (
-          scheme.primaryContainer,
-          scheme.onPrimaryContainer,
-          scheme.primary,
+          AppTheme.changeBg(isDark),
+          AppTheme.changeFg(isDark),
+          AppTheme.changeFg(isDark),
           Icons.check_circle_rounded,
         ),
       InlineBannerType.error => (
-          scheme.errorContainer,
-          scheme.onErrorContainer,
-          scheme.error,
+          AppTheme.debtBg(isDark),
+          AppTheme.debtFg(isDark),
+          AppTheme.debtFg(isDark),
           Icons.error_rounded,
         ),
-      InlineBannerType.warning => (
-          const Color(0xFFFFEDD5),
-          const Color(0xFF7C4A00),
-          const Color(0xFFF97316),
-          Icons.warning_rounded,
-        ),
+      // Warning: sediakan varian dark eksplisit (dulu hardcode terang saja →
+      // kontras jelek di dark mode).
+      InlineBannerType.warning => isDark
+          ? (
+              const Color(0x40F97316),
+              const Color(0xFFFFD9A0),
+              const Color(0xFFF97316),
+              Icons.warning_rounded,
+            )
+          : (
+              const Color(0xFFFFEDD5),
+              const Color(0xFF7C4A00),
+              const Color(0xFFF97316),
+              Icons.warning_rounded,
+            ),
       InlineBannerType.info => (
           scheme.secondaryContainer,
           scheme.onSecondaryContainer,

@@ -4,69 +4,249 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 10 Juli 2026 (eksekusi 5 item PLAN.md: fix dropdown
-pelanggan, fix dedup importer CSV, optimasi performa HTML Katalog Pesanan,
-urutan qty/satuan struk, reorder Harga Lain — commit `6f1fbc4`..`b949268`)._
+_Terakhir diperbarui: 11 Juli 2026 (sesi kembalian per-pembayaran + Buku
+Hutang + Tambah Belanjaan). **schemaVersion sekarang 13** (TIDAK ada migrasi
+baru dari Poin 1 — murni fitur UI, tidak menyentuh skema). Baseline sebelum
+sesi ini: 210 test hijau → **213 test hijau** setelah semuanya (3 poin).
+Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item 17+21 — sync — masih
+sengaja ditunda, lihat bagian "MENGGANTUNG" di bawah — TIDAK berubah dari
+sebelumnya).
+
+**Sesi ini — 3 proposal fitur baru dari user, didiskusikan "jangan coding
+dulu" lalu disepakati via Q&A panjang, ketiganya SELESAI dieksekusi:**
+1. **Poin 1 (kembalian dari Tambah Belanjaan, nota SAMA saja — lintas
+   nota/gabungan di-pending user) — SELESAI** (`d77e81e`), tapi scope-nya
+   BERUBAH dari proposal awal setelah diskusi lanjutan dengan user. Awalnya
+   direncanakan sebagai "reuse otomatis" (kembalian lama dipakai sebagai
+   kredit, sistem yang mengurangi) — ini mentok di tegangan desain: `changeGiven`
+   per baris pembayaran sengaja immutable-historis (lihat Poin 2), tapi
+   reuse otomatis perlu MENGURANGI baris lama, bertentangan langsung. User
+   lalu mengusulkan pendekatan yang jauh lebih sederhana dan sama sekali
+   menghindari tegangan itu: **jangan otomatis sama sekali** — cukup
+   TAMPILKAN info "kembalian terakhir yang belum diambil" di kalkulator
+   bayar Tambah Belanjaan, kasir tetap INPUT MANUAL nominal yang diterima
+   (disimulasikan sebagai kejadian pembayaran baru yang sungguhan — bukan
+   kredit otomatis). Ini menghilangkan tegangan sepenuhnya karena TIDAK ADA
+   mutasi data lama sama sekali: baris lama (`pay1`) tetap utuh selamanya,
+   baris baru (`pay2`, dari pembayaran manual kasir) dihitung normal lewat
+   `_computePaymentChangeGiven()` yang SUDAH ADA dari Poin 2 — tidak ada
+   kode DB baru. User lalu menambahkan 1 penyempurnaan: di samping info
+   nominal itu, ada CENTANG "Pakai kembalian" yang fungsinya SAMA PERSIS
+   dengan centang di Ringkasan struk (`_toggleChangeTaken`) — supaya kasir
+   tidak perlu buka struk dulu untuk menandai kembalian lama sebagai
+   "dipakai/diambil" (mengurangi risiko lupa saat rush hour). Centang ini
+   PURE UPDATE (bukan INSERT) ke baris yang sama, jadi klik berkali-kali
+   tidak menghasilkan riwayat baru — cuma menimpa nilai boolean terakhir
+   (dikonfirmasi eksplisit ke user saat ditanya). Centang & nominal manual
+   di kalkulator SENGAJA DIBIARKAN LEPAS/independen (tidak saling
+   memvalidasi) — keputusan eksplisit user. Diimplementasi di
+   `_CashKeypadSheet` (`payment_screen.dart`), murni tambahan UI + 1 query
+   `SELECT ... ORDER BY paid_at DESC LIMIT 1` di `_load()`. Sekalian:
+   user minta highlight nominal "Total" di header kalkulator (sebelumnya
+   teks kecil rata, "kayak NPC cameo") — dibuat sebagian bold+besar via
+   `Text.rich`, pola yang sama diterapkan ke info kembalian baru. Test
+   helper `test/helpers/pump_app.dart` diperluas dengan parameter opsional
+   `initialPrefs` (seed SharedPreferences sebelum render, dibutuhkan untuk
+   seed keranjang cart Tambah Belanjaan di widget test — parameter opsional
+   dengan default `{}`, tidak mengubah perilaku test lain yang sudah ada).
+2. **Poin 2 (kembalian per-baris pembayaran + centang per-baris di Riwayat
+   Pembayaran) — SELESAI** (`399a742`, `5759c18`). Desain final (kesepakatan
+   user via Q&A): Ringkasan nota SELALU tampilkan kembalian pembayaran
+   TERAKHIR saja (bukan akumulatif — kalau akumulatif, centang kembalian
+   jadi tidak ada gunanya). Card Riwayat Pembayaran tampilkan kembalian tiap
+   baris yang punya kembalian sendiri (termasuk pembayaran PERTAMA kalau
+   nota dilunasi belakangan), dengan centang "sudah diambil" per baris —
+   TANPA timestamp terpisah (pakai timestamp `paidAt` milik baris itu,
+   karena kembalian & pembayaran dianggap satu momen). Skema baru:
+   `TransactionPayments.changeGiven`/`.changeTaken` (schemaVersion 13, kolom
+   ditambah via migrasi, bukan tabel baru). Formula kunci penghindar
+   dobel-hitung ada di `_computePaymentChangeGiven()`
+   (`app_database.dart`): `thisChange = (priorPaid + newPaymentAmount −
+   currentTotal) − priorChangeSum`, lalu di-clamp ke 0 kalau negatif. Ada
+   fallback ke `transactions.paid` kalau belum ada baris `TransactionPayments`
+   sama sekali (nota legacy/pre-backfill) — pola sama seperti
+   `_reconcileTransactionTotals`. Kasus khusus: sisa lebih di
+   `settleMergedDebt` (pelunasan hutang gabungan beberapa nota) sekarang ikut
+   tersimpan di baris pembayaran nota TERAKHIR (sebelumnya cuma tampil
+   sekali di SnackBar, TIDAK PERNAH tersimpan di mana pun — temuan bug nyata
+   selama analisis, bukan cuma penyempurnaan).
+3. **Poin 3 (Buku Hutang: lihat nota mana saja yang belum lunas per
+   pelanggan) — SELESAI** (`6173b57`). User pilih extend modal detail
+   pelanggan yang SUDAH ADA (bukan route/layar baru) — `getUnpaidTxDetails()`
+   query baru + `DraggableScrollableSheet` di `hutang_tab.dart`, tap nota
+   langsung `context.push('/kasir/struk/${tx.id}')`.
+
+**Bug tersembunyi ditemukan selama sesi ini (di luar 3 poin di atas, murni
+dari widget test baru):**
+- **2 overflow RenderFlex PRE-EXISTING di `hutang_tab.dart`** (baris ringkasan
+  jumlah pelanggan+total, & baris total-hutang di modal detail) — baru
+  ketahuan sekarang karena ini PERTAMA KALINYA `HutangTab` dapat widget test
+  sama sekali. Sudah diperbaiki sekalian (`Expanded`+ellipsis, pola yang
+  sama dipakai berkali-kali sesi-sesi sebelumnya).
+- **`formatRupiah` pakai non-breaking space (U+00A0)**, bukan spasi biasa,
+  antara "Rp" dan angka — literal string test `find.text('Rp 5.000')`
+  gagal match walau teks yang sama persis tampil di layar (`find.text`
+  0 widget padahal dump manual `Text.data` menunjukkan teks itu render 2x).
+  Butuh ~1 jam debug (test debug DB-level vs widget-level dump vs re-run
+  isolasi file, semua "membuktikan" data benar sebelum akhirnya ketemu lewat
+  `codeUnits` dump: `160` bukan `32` di posisi spasi). **Sudah dicatat di
+  CLAUDE.md §Gotcha** supaya tidak terulang — pakai `formatRupiah(x)` untuk
+  bangun string expected di test, jangan hardcode literal "Rp X.XXX".
+  Pelajaran tambahan: `findsWidgets` (>=1) terlalu longgar untuk revert-verify
+  saat ada 2 lokasi render yang sengaja duplikat (Ringkasan + Riwayat
+  Pembayaran) — harus `findsNWidgets(2)` biar revert-verify benar-benar bisa
+  gagal saat salah satu lokasi sengaja dimatikan untuk pembuktian.
+
+---
+
+## Sesi sebelumnya (11 Juli, sebelum sesi kembalian di atas) — Griyo POS import
+User upload sampel CSV export Griyo POS untuk migrasi
+data toko lama → ditemukan & diperbaiki bug import CSV (`63d0f2d`): parser
+cuma kenal pemisah `,` (Griyo pakai `;`), alias kolom tidak cocok header asli
+Griyo ("Produk"/"Kode Produk"/"Grup Produk"/"Harga Jual"/"Harga Pokok"), dan
+kolom Satuan/Grup Produk berisi ID legacy MENTAH (bukan nama teks) yang
+sebenarnya sudah match `_kDefaultUnitTypes`/grup 3-20 di `_seedDefaults`
+(app_database.dart) tapi importer tidak pernah memakainya sebagai ID
+langsung. Keputusan desain: import tetap FLAT (user pilih ini, bukan
+auto-gabung baris nama-sama-satuan-beda jadi 1 produk multi-satuan) karena
+CSV Griyo tidak menyertakan rasio konversi antar satuan — digabung manual
+lewat Edit Produk bila perlu, dibantu counter `sameNameDifferentUnit` baru
+di hasil import. Behavior import: UPSERT per baris, BUKAN overwrite/replace
+katalog — baris yang cocok (barcode→SKU→nama+satuan) ke produk lama HANYA
+update harga (stok tidak disentuh sama sekali di re-import), baris baru
+di-append sebagai produk baru (opening stock ledger dari kolom Stok), dan
+produk lama yang TIDAK ada di file CSV dibiarkan utuh (tidak dihapus). Lalu
+dirapikan jadi fitur bernama "Import dari Griyo POS", diflag Eksperimental
+(`CsvImportScreen(griyoMode: true)`, route `/pengaturan/import-griyo`) —
+dan flag Eksperimental yang lama di Katalog Pesanan (HTML,
+`order_share_screen.dart`) DICABUT karena sudah jadi fitur native (dipindah
+dari section Eksperimental ke Sinkronisasi di `pengaturan_screen.dart`).
+
+**Bug susulan ditemukan & diperbaiki (`e4baa92`):** user lapor "import dari
+Griyo, tab Produk normal, tapi Katalog Pesanan HTML kosong". Akar masalah:
+`csv_import_service.dart` membuat `ProductUnits` TANPA `isBaseUnit: true`
+(defaultnya `false`) — beda dari tambah produk manual yang selalu set true.
+`OrderPageService._buildCatalogJson()` mensyaratkan ada unit `isBaseUnit`
+TANPA fallback (beda dari ~10 titik lain di app — kasir_screen,
+produk_form_screen, item_entry_sheet, paste_order_sheet, `_baseUnitOf()`,
+`_matchExistingUnit()` — yang semua pakai pola `?? units.first`), jadi
+produk hasil import selalu dilewati diam-diam dari katalog HTML. Fix 2
+lapis: (1) importer sekarang set `isBaseUnit: true` (akar masalah), (2)
+`order_page_service.dart` ditambah fallback yang sama seperti pola di
+seluruh app (juga otomatis memperbaiki produk lama yang sudah kadung
+ter-import sebelum fix, tanpa migrasi data). **Pelajaran untuk importer
+baru (mis. Item 4, import pelanggan):** field yang di-skip saat insert
+lewat importer bisa punya default DB yang diam-diam melanggar asumsi kode
+lain — cek SEMUA titik baca sebelum menganggap importer beres, bukan cuma
+"tampil di 1 layar" saja.
+
+**Item 4 (import pelanggan dari Griyo POS) — ANALISIS SELESAI, implementasi
+BELUM dimulai.** User upload `Pelanggan.xlsx` (493 baris: Pelanggan, Alamat,
+Telepon, Barcode, Keterangan, Poin, Piutang — semua kolom TEXT termasuk
+angka, minimal 1 Piutang dalam notasi ilmiah butuh `double.tryParse` bukan
+`int.tryParse`). Keputusan user: Piutang lama TIDAK dibawa (mulai nol
+bersih — alasan: `outstandingDebt` cuma cache, Buku Hutang hitung fresh
+dari transaksi, isi field itu langsung bikin 2 tempat beda angka); baris
+"-" (bucket piutang tanpa nama, ~Rp1,2jt) DILEWATI. Detail lengkap +
+keputusan kecil sisa (nama duplikat, whitespace) ada di PLAN.md Item 4.
+
+**2 fix susulan (user lapor setelah pakai fitur import Griyo, `c8a79f1` +
+`9e52f61`):**
+1. Tombol "Harga lain" di `item_entry_sheet.dart` sekarang menampilkan nama
+   opsi harga yang aktif (mis. "Eceran") — sebelumnya selalu label generik
+   "Harga lain (N)" walau user sudah memilih opsi tertentu. Derived getter
+   `_selectedPriceLabel` (cocokkan `_price` ke `_priceOptions()`), HANYA
+   aktif kalau `_priceOverridden` (supaya default/harga-dasar tetap tampil
+   label generik, tidak breaking existing test).
+2. **Bug nyata ditemukan**: owner ikut ter-block saat setting global
+   "Izinkan Stok Minus" OFF — sama seperti kasir, TIDAK ADA bypass khusus
+   owner (beda dari semua izin lain: override harga, input stok, dst yang
+   semuanya tanpa syarat untuk owner). Root cause di
+   `payment_screen.dart::_confirm()` C-5 check. Fix: extract jadi
+   `resolveAllowNegativeStock(db, device)` (top-level function, testable
+   Tier 1 tanpa drive seluruh widget PaymentScreen) + tambah
+   `if (device.isOwner) return true;` unconditional. **Tidak ada test
+   sebelumnya untuk fitur stok-minus ini sama sekali** — baru dibuat
+   `test/allow_negative_stock_test.dart`.
+3. **User tanya balik "toggle itu dulu ada, kok sekarang tidak?"** — dicek
+   `git log`, ternyata dulu toggle "Izinkan Stok Minus" memang ada langsung
+   di halaman utama Pengaturan, lalu di komit `1b292eb` (SEBELUM sesi ini)
+   dipindah masuk ke dalam Izin Kasir (kurang terlihat). Bukan bug kode,
+   murni penempatan UI. User minta dibuatkan **entri terpisah lagi** (bukan
+   dikembalikan sebagai bagian Izin Kasir, bukan juga cuma taruh di kedua
+   tempat) → `cb87507`: dipindah balik jadi `SwitchListTile` sendiri di
+   `pengaturan_screen.dart` (section "Toko", owner-only), dicabut total
+   dari `kasir_permissions_screen.dart`. Provider `_allowNegativeStockProvider`
+   ikut pindah lokasi (masing-masing file private, tidak dibagi)._
+**Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
+pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
+bulan Indonesia MANUAL (lihat `expenses_screen.dart` `_idDays`/`_idMonths`).
+
+## Lingkungan sesi ini (PENTING untuk sesi lanjutan)
+Flutter TIDAK terpasang default di environment ini — dipasang manual ke
+`/tmp/flutter` (versi **3.24.5 stable**, samakan dengan CI `build-apk.yml`).
+Jalankan `export PATH="/tmp/flutter/bin:$PATH"` tiap sesi baru, `flutter pub get`,
+lalu `flutter analyze` + `flutter test`. Kalau `/tmp/flutter` sudah hilang
+(container di-reclaim), unduh ulang:
+`curl -sSL -o /tmp/flutter.tar.xz "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz" && tar xf /tmp/flutter.tar.xz -C /tmp`.
+Baseline sebelum eksekusi: 141 test hijau; setelah Item 22: 149 hijau; setelah
+sesi kembalian per-pembayaran + Tambah Belanjaan (lihat atas): 213 hijau.
+Google Fonts butuh binding aktif — di test, JANGAN panggil `AppTheme.light()/dark()`
+di badan `main()` (fase collection); bangun theme DI DALAM `testWidgets`
+(lihat `test/chip_and_banner_color_test.dart`).
+**Gotcha widget test + drift StreamProvider yang MEMUTASI db:** saat provider
+di-dispose di akhir test, drift `StreamQueryStore.markAsClosed` menjadwalkan
+Timer 0ms → binding lapor "Timer still pending". Fix: sebelum test selesai,
+unmount eksplisit lalu drain — `await tester.pumpWidget(const SizedBox()); await
+tester.pump(Duration(milliseconds: 10));` (lihat helper `drain` di
+`test/payment_method_edit_delete_test.dart`).
+**Overflow PRE-EXISTING (bukan bug baru):** cart bar `kasir_screen.dart:2500`
+(Row, ~8.8px) & kartu antrian `:3061` (Column, ~8px) overflow pada lebar 430px
+— muncul saat keranjang/panel antrian berisi. Kandidat perbaikan layout
+tersendiri; test Item 18 sengaja meng-konsumsi exception ini.
 
 ---
 
 ## Di Mana Kita Sekarang
 
-### Sesi terbaru — audit dataset toko lama → `PLAN.md` → eksekusi 5 item
-Sesi ini dimulai dari pertanyaan user soal update data berkala dari dataset
-toko lama (`docs/reference/Contoh_Dataset.rar`, `Products.csv`), berkembang
-jadi audit besar (bug dropdown pelanggan, bug importer CSV, bug rasio
-multi-satuan hilang saat import, dll). Semua temuan dimasukkan ke
-[PLAN.md](../PLAN.md) (aturan proses ada di CLAUDE.md §Perencanaan — SETIAP
-rencana kerja masuk situ, dihapus begitu selesai dieksekusi). Lalu user minta
-eksekusi 5 item yang sudah "siap dikerjakan sekarang" sekaligus:
+### Sesi sebelumnya — eksekusi backlog Item 9-22 (12 dari 13 SELESAI)
+User menyetujui eksekusi seluruh saran fitur + bug + proposal (Item 9-22 di
+PLAN.md) dan mendelegasikan penuh ("Anda yang lebih tahu"). Dieksekusi 12 item
+berturut-turut, tiap item: kode + test berjenjang + **revert-verify** + full
+suite hijau + `flutter analyze` bersih + docs, satu commit per item, push ke
+`claude/project-gaps-incomplete-wpgdp8`. Baseline 141 test → **184 test hijau**.
 
-1. **Fix dropdown pelanggan** (`ea6e952`) — hapus
-   `.take(5)`/`.take(8)` di `payment_screen.dart` &
-   `cart_meta_pickers.dart`, ganti `ListView.builder` lazy dengan tinggi
-   terkunci. Ini juga menyelesaikan bug "Mbak Ima tidak ketemu saat ketik
-   ima" (root cause: dipotong sebelum sempat scroll).
-2. **Fix dedup importer CSV** (`3bff1b6`) — kunci dedup lama cuma
-   `nama|unitTypeId`, sekarang prioritas `barcode` → `kode_produk` →
-   fallback nama+satuan. Bug nyata: 2 baris "Sedap Goreng" satuan Dos
-   dengan barcode beda di `Products.csv` user, salah satu dulu terbuang
-   diam-diam.
-3. **Optimasi performa HTML Katalog Pesanan** (`c1a9efe`) — debounce
-   search ~120ms, update stepper per-baris (bukan `renderList()` penuh),
-   `renderCartSheet()` cuma jalan kalau sheet terbuka, `DocumentFragment`
-   untuk batch render baris. **Diverifikasi pakai Chromium headless
-   (Playwright)** — bukan cuma `flutter test` (JS tidak tereksekusi di
-   situ). Skrip verifikasi: buat HTML sample 300 produk, load via
-   `playwright.chromium.launch({executablePath: '/opt/pw-browsers/
-   chromium-1194/chrome-linux/chrome'})`, cek debounce timing +
-   sinkronisasi qty antara list & cart sheet.
-4. **Urutan qty/satuan struk in-app** (`6f1fbc4`) — `"pcs 1 x"` →
-   `"1 pcs x"`, menyamakan dengan versi cetak/share yang sudah benar.
-5. **Reorder "Harga Lain" via drag-handle** (`b949268`) — kolom baru
-   `alt_prices.sortOrder` (`schemaVersion` 9→10), `getAltPrices()` ganti
-   urut ke `sortOrder ASC`, UI `ReorderableListView` + drag-handle di
-   `produk_form_screen.dart`. **Guard penting di migrasi:**
-   `if (from < 10 && from >= 8)` sebelum `addColumn(altPrices,
-   altPrices.sortOrder)` — kalau upgrade LANGSUNG dari versi < 8,
-   `createTable(altPrices)` di migrasi 7→8 SUDAH memakai skema Dart
-   TERKINI (otomatis termasuk `sortOrder`), jadi `addColumn` lagi akan
-   crash "duplicate column name". Ditemukan lewat full test suite (bukan
-   cuma test migrasi baru sendiri) — jangan lupa jalankan SEMUA test
-   setelah ubah `schemaVersion`, bukan cuma test yang baru ditulis.
+Selesai (lihat CHANGELOG untuk hash): **22** warna chip terpilih (fix tema
+sistemik `chipTheme.labelStyle` state-aware, kena 8 titik) + banner sukses
+hijau/gagal merah • **10** metode bayar pelunasan hutang (dialog reusable
+`debt_payment_dialog.dart`) • **20** tombol edit produk di modal kasir
+(owner/asisten) • **14** edit/hapus metode bayar • **9** pengeluaran + Laba
+Bersih (`ExpensesScreen`; Laba Bersih = Laba Kotor − daily_expense −
+change_given) • **12** Buku Hutang (tab Laporan ke-5) • **18** beralih pesanan
+tertahan auto-hold (tanpa dialog "Ganti Keranjang") • **16** atribusi varian
+per-satuan (`CartItem.parentProductUnitId` + `belongsToParent`, cascade delete)
++ fix tombol minus • **19** Harga Lain/grosir → dropdown di field Harga •
+**11** stok menipis (`ProductUnits.minStock`, **schemaVersion 11**) badge+filter
+• **13** pengingat backup (cek saat app dibuka, `BackupReminder`) • **15**
+Tutup Kasir harian (tabel `cash_closings`, **schemaVersion 12**).
 
-**Item lain di PLAN.md (3, 4, 5, 8) BELUM dieksekusi** — lihat file itu untuk
-detail lengkap & alasan masing-masing masih menggantung (butuh data final
-dari user / keputusan desain / dependency ke item lain).
+**schemaVersion 12** (Item 15, sesi ini): v11 addColumn `product_units.
+min_stock` (tanpa guard `from>=X` — product_units cuma di base schema); v12
+createTable `cash_closings`. **schemaVersion 13** (sesi kembalian, lihat
+bagian atas): addColumn `transaction_payments.change_given` +
+`.change_taken`. Fixture migrasi test v7-v10 ditambah tabel `product_units`
++ `transaction_payments` minimal, assert versi akhir 13.
 
-Test baru sesi ini (semua lolos revert-verify): `test/csv_import_dedup_test.dart`
-(Tier 1), `test/migration_v10_test.dart` (Tier 1, migrasi + ordering),
-`test/produk_form_reorder_alt_price_test.dart` (Tier 2 widget, simulasi drag
-gesture asli via `tester.startGesture`+`moveBy` bertahap — drag satu
-lompatan besar TIDAK cukup dikenali `ReorderableListView`, butuh beberapa
-event `pointermove` kecil). Test migrasi lama (`v7`, `v8`, `v9`) diperbarui
-fixture-nya (tambah tabel `alt_prices` minimal, assert versi akhir 10) supaya
-tetap valid setelah `schemaVersion` naik. **`flutter analyze` bersih, semua
-141 test hijau.**
+### ⚠️ MENGGANTUNG — Item 21+17 (sync) BELUM dikerjakan (sengaja ditunda)
+Satu-satunya item backlog yang belum: **Item 21** (angkat state sync ke
+provider global + banner persisten di shell + lepaskan lifecycle host dari
+`SyncScreen.dispose` yang kini `stopHost()` total) & **Item 17** (persist
+`_pendingQueue` in-memory ke DB agar selamat restart, lalu majukan watermark
+upload). **Sengaja ditunda ke sesi fokus** karena menyentuh infrastruktur sync
+multi-device yang KRITIS — bagian "majukan watermark upload" berisiko
+kehilangan data diam-diam bila salah (persis yang dicegah full-dump sekarang),
+dan butuh test round-trip HTTP asli (HttpOverrides escape-hatch, lihat
+CLAUDE.md §Metode Test level 3). Detail lengkap masih di PLAN.md Item 17 & 21.
 
 **Catatan lingkungan sesi ini:** binary `flutter` ada di `/tmp/flutter/bin/flutter`
 di environment ini (BUKAN `/opt/flutter/bin` seperti disebut CLAUDE.md — itu
@@ -111,8 +291,11 @@ v2.1.1+3 (lihat CHANGELOG). PR #2 sudah di-merge ke `main`.
 - Tombol minus di kartu produk (`_decrementProduct`) selalu mengurangi baris
   satuan PERTAMA bila produk ada di keranjang dengan >1 satuan.
 - **Upload sync klien→host masih full-dump** (sengaja — antrian approval
-  host hanya di memori; watermark upload butuh mekanisme ACK approve dari
-  host, pekerjaan tersendiri).
+  host (`_pendingQueue`) hanya di memori, hilang bila host restart sebelum
+  approve; full-dump adalah pengaman agar data tak hilang permanen). Bukan
+  "sync satu arah tanpa ACK" — sync SUDAH dua arah & host SUDAH punya review
+  manual. Fix presisi = persist `_pendingQueue` ke DB (pola `held_orders`)
+  lalu majukan watermark upload. Detail di PLAN.md Item 17.
 - Fitur "hantu" yang tabel-nya ada tapi tanpa UI: `expenses` (paling layak
   dibangun — lihat saran fitur), `suppliers/purchases/purchase_items`,
   `customer_groups/customer_group_prices`.

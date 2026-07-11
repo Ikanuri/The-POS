@@ -1009,27 +1009,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       _showBanner('Data pesanan rusak — tidak ada item yang bisa dipulihkan');
       return;
     }
-    final cart = ref.read(cartProvider(_cartId));
-    if (cart.isNotEmpty) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Ganti Keranjang?'),
-          content: const Text(
-              'Keranjang saat ini akan diganti dengan pesanan yang ditahan. '
-              'Tahan dulu keranjang aktif jika tidak ingin hilang.'),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Batal')),
-            FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Ganti')),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
+    // Item 18: keranjang aktif TIDAK dibuang saat beralih — otomatis ditahan
+    // balik (tanpa dialog, tanpa kehilangan) supaya kasir bisa lompat antar
+    // pesanan cepat di jam sibuk.
+    final autoHeldLabel = await _autoHoldCurrentIfAny();
     if (!mounted) return;
     await ref.read(databaseProvider).deleteHeldOrder(order.id);
     ref.read(cartProvider(_cartId).notifier).replaceAll(parsed.items);
@@ -1037,8 +1020,39 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (mounted) {
       setState(() => _heldPanelOpen = false);
       _showBanner(
-          'Melanjutkan pesanan: ${order.label}', InlineBannerType.success);
+          autoHeldLabel != null
+              ? 'Pesanan "$autoHeldLabel" ditahan · lanjut: ${order.label}'
+              : 'Melanjutkan pesanan: ${order.label}',
+          InlineBannerType.success);
     }
+  }
+
+  /// Tahan keranjang aktif secara OTOMATIS (tanpa dialog label) sebelum
+  /// beralih ke pesanan lain. Label: nama pelanggan bila ada, selain itu
+  /// dibuat otomatis dari jam (nol-friksi). Mengembalikan label yang dipakai,
+  /// atau null bila keranjang kosong (tidak ada yang perlu disimpan).
+  Future<String?> _autoHoldCurrentIfAny() async {
+    final cart = ref.read(cartProvider(_cartId));
+    if (cart.isEmpty) return null;
+    final meta = ref.read(cartMetaProvider(_cartId));
+    final label = meta.hasCustomer ? meta.customerName! : _autoHoldLabel();
+    final payload = jsonEncode({
+      'items': cart.map((c) => c.toJson()).toList(),
+      'meta': meta.toJson(),
+    });
+    await ref
+        .read(databaseProvider)
+        .holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
+    ref.read(cartProvider(_cartId).notifier).clear();
+    ref.read(cartMetaProvider(_cartId).notifier).clear();
+    return label;
+  }
+
+  String _autoHoldLabel() {
+    final now = DateTime.now();
+    final hh = now.hour.toString().padLeft(2, '0');
+    final mm = now.minute.toString().padLeft(2, '0');
+    return 'Tanpa Nama $hh:$mm';
   }
 
   /// Tambah cepat 1 satuan dasar (produk satuan tunggal).
@@ -1819,11 +1833,25 @@ class _TbBtn extends StatelessWidget {
 
 /// Kurangi 1 satuan dasar produk [productId] dari keranjang. Item dihapus bila
 /// effective qty turun ke 0. Dipakai oleh tombol minus di kartu & list produk.
-void _decrementProduct(
-    List<CartItem> cart, CartNotifier notifier, String productId) {
-  final items = cart.where((c) => c.productId == productId);
-  if (items.isEmpty) return;
-  final item = items.first;
+///
+/// Item 16: bila produk punya >1 baris satuan NON-varian di keranjang (mis.
+/// Dus + Pcs), tombol minus TIDAK menebak baris mana yang dikurangi — beri
+/// info & arahkan atur lewat keranjang. Kasus umum (1 satuan) tetap langsung.
+void _decrementProduct(BuildContext context, List<CartItem> cart,
+    CartNotifier notifier, String productId) {
+  final unitLines =
+      cart.where((c) => c.productId == productId && !c.isVariant).toList();
+  if (unitLines.isEmpty) return;
+  if (unitLines.length > 1) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text('Produk ini punya beberapa satuan di keranjang — '
+            'atur jumlahnya lewat keranjang.'),
+      ));
+    return;
+  }
+  final item = unitLines.first;
   final eff = notifier.effectiveQtyFor(item);
   if (eff <= 1) {
     notifier.removeItem(item.productUnitId);
@@ -2047,8 +2075,8 @@ class _ProductCard extends ConsumerWidget {
                           }
                         },
                         onMinus: qty > 0
-                            ? () =>
-                                _decrementProduct(cart, notifier, product.id)
+                            ? () => _decrementProduct(
+                                context, cart, notifier, product.id)
                             : null,
                       ),
                       orElse: () => const SizedBox(width: 32, height: 32),
@@ -2239,7 +2267,8 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                         }
                       },
                       onMinus: qty > 0
-                          ? () => _decrementProduct(cart, notifier, product.id)
+                          ? () => _decrementProduct(
+                              context, cart, notifier, product.id)
                           : null,
                     ),
                     orElse: () => const SizedBox(width: 34, height: 34),

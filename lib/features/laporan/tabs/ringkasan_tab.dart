@@ -12,6 +12,8 @@ final _ringkasanTabProvider =
   // Baca dari ringkasan harian ter-materialisasi (O(hari)) alih-alih memindai
   // seluruh transaksi + item (O(transaksi)).
   final summaries = await db.getDailySummaries(range.start, range.end);
+  final expenses =
+      await db.getNetProfitExpenseTotal(range.start, range.end);
 
   var revenue = 0;
   var cogs = 0;
@@ -44,6 +46,7 @@ final _ringkasanTabProvider =
     txCount: txCount,
     cogs: cogs,
     profit: revenue - cogs,
+    expenses: expenses,
     byMethod: byMethod,
     daily: daily,
   );
@@ -75,6 +78,15 @@ class RingkasanTab extends ConsumerWidget {
               _KpiItem('HPP', formatRupiah(data.cogs), scheme.onSurfaceVariant),
               _KpiItem('Laba Kotor', formatRupiah(data.profit),
                   data.profit >= 0 ? scheme.tertiary : scheme.error),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _KpiRow(
+            items: [
+              _KpiItem('Pengeluaran', formatRupiah(data.expenses),
+                  data.expenses > 0 ? scheme.error : scheme.onSurfaceVariant),
+              _KpiItem('Laba Bersih', formatRupiah(data.netProfit),
+                  data.netProfit >= 0 ? scheme.tertiary : scheme.error),
             ],
           ),
           const SizedBox(height: 20),
@@ -320,6 +332,7 @@ class _RingkasanTabData {
     required this.txCount,
     required this.cogs,
     required this.profit,
+    required this.expenses,
     required this.byMethod,
     required this.daily,
   });
@@ -328,6 +341,12 @@ class _RingkasanTabData {
   final int txCount;
   final int cogs;
   final int profit;
+
+  /// Pengeluaran yang mengurangi Laba Bersih (daily_expense + change_given).
+  final int expenses;
   final Map<String, int> byMethod;
   final Map<DateTime, int> daily;
+
+  /// Laba Bersih = Laba Kotor − Pengeluaran.
+  int get netProfit => profit - expenses;
 }

@@ -48,7 +48,7 @@ class PaymentMethodsScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _AddMethodSheet(),
+      builder: (_) => const _AddMethodSheet(),
     );
   }
 }
@@ -62,21 +62,82 @@ class _MethodTile extends ConsumerWidget {
     final isTunai = method.type == 'tunai';
     final scheme = Theme.of(context).colorScheme;
 
-    return SwitchListTile(
-      secondary: Icon(_typeIcon(method.type)),
+    Future<void> toggle(bool v) async {
+      final db = ref.read(databaseProvider);
+      await (db.update(db.paymentMethods)
+            ..where((t) => t.id.equals(method.id)))
+          .write(PaymentMethodsCompanion(isActive: Value(v)));
+    }
+
+    final tile = ListTile(
+      leading: Icon(_typeIcon(method.type)),
       title: Text(method.name),
       subtitle: Text(_typeLabel(method.type),
-          style:
-              TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-      value: method.isActive,
-      onChanged: isTunai
-          ? null
-          : (v) async {
-              final db = ref.read(databaseProvider);
-              await (db.update(db.paymentMethods)
-                    ..where((t) => t.id.equals(method.id)))
-                  .write(PaymentMethodsCompanion(isActive: Value(v)));
-            },
+          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+      // Tap judul → edit (kecuali Tunai, konsisten dgn tak bisa dinonaktifkan).
+      onTap: isTunai ? null : () => _showEditSheet(context, method),
+      trailing: Switch(
+        value: method.isActive,
+        onChanged: isTunai ? null : toggle,
+      ),
+    );
+
+    // Tunai tidak bisa dihapus. Metode lain: hapus via swipe, TAPI hanya bila
+    // sudah dinonaktifkan dulu (isActive=false) — menghapus baris ini tidak
+    // merusak riwayat transaksi (paymentMethod di transaksi = string mandiri,
+    // bukan foreign key), jadi aman.
+    if (isTunai) return tile;
+
+    return Dismissible(
+      key: ValueKey('pm-${method.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: scheme.errorContainer,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: Icon(Icons.delete_outline, color: scheme.error),
+      ),
+      confirmDismiss: (_) async {
+        if (method.isActive) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content:
+                  Text('Nonaktifkan metode ini dulu sebelum menghapus.')));
+          return false;
+        }
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Hapus ${method.name}?'),
+            content: const Text(
+                'Metode ini akan dihapus permanen. Pastikan benar-benar tidak '
+                'dipakai lagi. Riwayat transaksi lama tidak terpengaruh.'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Batal')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Hapus')),
+            ],
+          ),
+        );
+        return ok ?? false;
+      },
+      onDismissed: (_) async {
+        final db = ref.read(databaseProvider);
+        await (db.delete(db.paymentMethods)
+              ..where((t) => t.id.equals(method.id)))
+            .go();
+      },
+      child: tile,
+    );
+  }
+
+  void _showEditSheet(BuildContext context, PaymentMethod method) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _AddMethodSheet(existing: method),
     );
   }
 
@@ -99,15 +160,30 @@ class _MethodTile extends ConsumerWidget {
 }
 
 class _AddMethodSheet extends ConsumerStatefulWidget {
+  const _AddMethodSheet({this.existing});
+
+  /// null = tambah baru; non-null = edit metode ini (prefill + update).
+  final PaymentMethod? existing;
+
   @override
   ConsumerState<_AddMethodSheet> createState() => _AddMethodSheetState();
 }
 
 class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
-  final _nameCtrl = TextEditingController();
-  final _dataCtrl = TextEditingController();
-  final _qrCtrl = TextEditingController();
-  String _type = 'bank';
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _dataCtrl;
+  late final TextEditingController _qrCtrl;
+  late String _type;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _nameCtrl = TextEditingController(text: e?.name ?? '');
+    _dataCtrl = TextEditingController(text: e?.data ?? '');
+    _qrCtrl = TextEditingController(text: e?.qrValue ?? '');
+    _type = e?.type ?? 'bank';
+  }
 
   @override
   void dispose() {
@@ -126,7 +202,10 @@ class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Tambah Metode Pembayaran',
+          Text(
+              widget.existing == null
+                  ? 'Tambah Metode Pembayaran'
+                  : 'Edit Metode Pembayaran',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
@@ -184,23 +263,35 @@ class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
               if (_nameCtrl.text.trim().isEmpty) return;
               final db = ref.read(databaseProvider);
               final navigator = Navigator.of(context);
-              await db.into(db.paymentMethods).insert(
-                    PaymentMethodsCompanion.insert(
-                      id: _pmUuid.v4(),
-                      type: _type,
-                      name: _nameCtrl.text.trim(),
-                      data: Value(_dataCtrl.text.trim().isEmpty
-                          ? null
-                          : _dataCtrl.text.trim()),
-                      qrValue: Value(_qrCtrl.text.trim().isEmpty
-                          ? null
-                          : _qrCtrl.text.trim()),
-                    ),
-                  );
+              final data =
+                  _dataCtrl.text.trim().isEmpty ? null : _dataCtrl.text.trim();
+              final qr =
+                  _qrCtrl.text.trim().isEmpty ? null : _qrCtrl.text.trim();
+              final e = widget.existing;
+              if (e == null) {
+                await db.into(db.paymentMethods).insert(
+                      PaymentMethodsCompanion.insert(
+                        id: _pmUuid.v4(),
+                        type: _type,
+                        name: _nameCtrl.text.trim(),
+                        data: Value(data),
+                        qrValue: Value(qr),
+                      ),
+                    );
+              } else {
+                await (db.update(db.paymentMethods)
+                      ..where((t) => t.id.equals(e.id)))
+                    .write(PaymentMethodsCompanion(
+                  type: Value(_type),
+                  name: Value(_nameCtrl.text.trim()),
+                  data: Value(data),
+                  qrValue: Value(qr),
+                ));
+              }
               if (!mounted) return;
               navigator.pop();
             },
-            child: const Text('Tambah'),
+            child: Text(widget.existing == null ? 'Tambah' : 'Simpan'),
           ),
         ],
       ),

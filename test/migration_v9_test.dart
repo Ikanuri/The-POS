@@ -23,6 +23,8 @@ void main() {
     // tabel ini sejak migrasi 7->8, jadi fixture harus konsisten supaya
     // migrasi lanjutan 9->10 (nambah sort_order) tidak "no such table".
     final v8 = raw.sqlite3.open(path);
+    // product_units diperlukan agar migrasi v11 (addColumn min_stock) tak gagal.
+    v8.execute('CREATE TABLE product_units(id TEXT PRIMARY KEY, product_id TEXT, unit_type_id INTEGER, is_base_unit INTEGER, ratio_to_base REAL, is_non_stock INTEGER);');
     v8.execute('''
       CREATE TABLE transactions(
         id TEXT PRIMARY KEY, local_id TEXT UNIQUE, kasir_id TEXT, customer_id TEXT,
@@ -33,6 +35,9 @@ void main() {
       CREATE TABLE alt_prices(
         id TEXT PRIMARY KEY, product_unit_id TEXT, label TEXT,
         price INTEGER, created_at INTEGER);
+      CREATE TABLE transaction_payments(
+        id TEXT PRIMARY KEY, transaction_id TEXT, amount INTEGER, method TEXT,
+        paid_at INTEGER, kasir_id TEXT, note TEXT);
     ''');
     v8.execute(
         "INSERT INTO transactions(id, local_id, status, total, paid, change_amount, "
@@ -67,7 +72,7 @@ void main() {
     expect(updated.changeTaken, isTrue);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 10);
+    expect(ver.data.values.first, 13);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

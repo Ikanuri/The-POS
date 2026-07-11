@@ -9,7 +9,9 @@ import '../../core/providers/device_provider.dart';
 /// supplier) — disembunyikan dari UI agar owner tidak menyalakan toggle yang
 /// tidak berefek apa pun. Key-nya tetap di DB & tetap tersinkron, sehingga
 /// begitu fiturnya dibangun tinggal dihapus dari daftar ini.
-const _kHiddenPermissionKeys = {'input_pengeluaran', 'input_pembelian'};
+/// `input_pengeluaran` sudah punya UI (Item 9) → tidak lagi disembunyikan.
+/// `input_pembelian` masih belum ada fiturnya.
+const _kHiddenPermissionKeys = {'input_pembelian'};
 
 final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
   final db = ref.watch(databaseProvider);
@@ -22,14 +24,6 @@ final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
               kKasirPermissionKeys.contains(p.permissionKey) &&
               !_kHiddenPermissionKeys.contains(p.permissionKey))
           .toList());
-});
-
-/// Izinkan stok minus — setting global (bukan per-permission), tapi sekarang
-/// dikelola di layar Izin Kasir agar tidak berserakan di halaman pengaturan.
-final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final v = await db.getSetting('allow_negative_stock');
-  return v == '1';
 });
 
 class KasirPermissionsScreen extends ConsumerWidget {
@@ -59,36 +53,11 @@ class KasirPermissionsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             ...perms.map((p) => _PermissionTile(permission: p)),
-            const _AllowNegativeStockTile(),
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
-    );
-  }
-}
-
-/// Toggle stok minus (setting global). Dipindah ke sini agar menyatu dengan
-/// izin kasir lain — kasir bisa jual meski stok 0 (pre-order).
-class _AllowNegativeStockTile extends ConsumerWidget {
-  const _AllowNegativeStockTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final allow = ref.watch(_allowNegativeStockProvider).valueOrNull ?? false;
-    return SwitchListTile(
-      title: const Text('Izinkan Stok Minus'),
-      subtitle: Text('Kasir bisa jual meski stok 0 (pre-order)',
-          style: TextStyle(
-              fontSize: 11,
-              color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      value: allow,
-      onChanged: (v) async {
-        final db = ref.read(databaseProvider);
-        await db.setSetting('allow_negative_stock', v ? '1' : '0');
-        ref.invalidate(_allowNegativeStockProvider);
-      },
     );
   }
 }

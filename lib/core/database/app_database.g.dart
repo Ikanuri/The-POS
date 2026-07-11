@@ -1120,9 +1120,22 @@ class $ProductUnitsTable extends ProductUnits
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_non_stock" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _minStockMeta =
+      const VerificationMeta('minStock');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, productId, unitTypeId, isBaseUnit, ratioToBase, isNonStock];
+  late final GeneratedColumn<int> minStock = GeneratedColumn<int>(
+      'min_stock', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        productId,
+        unitTypeId,
+        isBaseUnit,
+        ratioToBase,
+        isNonStock,
+        minStock
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1168,6 +1181,10 @@ class $ProductUnitsTable extends ProductUnits
           isNonStock.isAcceptableOrUnknown(
               data['is_non_stock']!, _isNonStockMeta));
     }
+    if (data.containsKey('min_stock')) {
+      context.handle(_minStockMeta,
+          minStock.isAcceptableOrUnknown(data['min_stock']!, _minStockMeta));
+    }
     return context;
   }
 
@@ -1189,6 +1206,8 @@ class $ProductUnitsTable extends ProductUnits
           .read(DriftSqlType.double, data['${effectivePrefix}ratio_to_base'])!,
       isNonStock: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_non_stock'])!,
+      minStock: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}min_stock']),
     );
   }
 
@@ -1205,13 +1224,18 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
   final bool isBaseUnit;
   final double ratioToBase;
   final bool isNonStock;
+
+  /// Item 11: ambang stok menipis, disimpan di baris satuan DASAR saja
+  /// (stok selalu dianker ke satuan dasar). null = tidak dipantau.
+  final int? minStock;
   const ProductUnit(
       {required this.id,
       required this.productId,
       this.unitTypeId,
       required this.isBaseUnit,
       required this.ratioToBase,
-      required this.isNonStock});
+      required this.isNonStock,
+      this.minStock});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1223,6 +1247,9 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
     map['is_base_unit'] = Variable<bool>(isBaseUnit);
     map['ratio_to_base'] = Variable<double>(ratioToBase);
     map['is_non_stock'] = Variable<bool>(isNonStock);
+    if (!nullToAbsent || minStock != null) {
+      map['min_stock'] = Variable<int>(minStock);
+    }
     return map;
   }
 
@@ -1236,6 +1263,9 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       isBaseUnit: Value(isBaseUnit),
       ratioToBase: Value(ratioToBase),
       isNonStock: Value(isNonStock),
+      minStock: minStock == null && nullToAbsent
+          ? const Value.absent()
+          : Value(minStock),
     );
   }
 
@@ -1249,6 +1279,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       isBaseUnit: serializer.fromJson<bool>(json['isBaseUnit']),
       ratioToBase: serializer.fromJson<double>(json['ratioToBase']),
       isNonStock: serializer.fromJson<bool>(json['isNonStock']),
+      minStock: serializer.fromJson<int?>(json['minStock']),
     );
   }
   @override
@@ -1261,6 +1292,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       'isBaseUnit': serializer.toJson<bool>(isBaseUnit),
       'ratioToBase': serializer.toJson<double>(ratioToBase),
       'isNonStock': serializer.toJson<bool>(isNonStock),
+      'minStock': serializer.toJson<int?>(minStock),
     };
   }
 
@@ -1270,7 +1302,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           Value<int?> unitTypeId = const Value.absent(),
           bool? isBaseUnit,
           double? ratioToBase,
-          bool? isNonStock}) =>
+          bool? isNonStock,
+          Value<int?> minStock = const Value.absent()}) =>
       ProductUnit(
         id: id ?? this.id,
         productId: productId ?? this.productId,
@@ -1278,6 +1311,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
         isBaseUnit: isBaseUnit ?? this.isBaseUnit,
         ratioToBase: ratioToBase ?? this.ratioToBase,
         isNonStock: isNonStock ?? this.isNonStock,
+        minStock: minStock.present ? minStock.value : this.minStock,
       );
   ProductUnit copyWithCompanion(ProductUnitsCompanion data) {
     return ProductUnit(
@@ -1291,6 +1325,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           data.ratioToBase.present ? data.ratioToBase.value : this.ratioToBase,
       isNonStock:
           data.isNonStock.present ? data.isNonStock.value : this.isNonStock,
+      minStock: data.minStock.present ? data.minStock.value : this.minStock,
     );
   }
 
@@ -1302,14 +1337,15 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           ..write('unitTypeId: $unitTypeId, ')
           ..write('isBaseUnit: $isBaseUnit, ')
           ..write('ratioToBase: $ratioToBase, ')
-          ..write('isNonStock: $isNonStock')
+          ..write('isNonStock: $isNonStock, ')
+          ..write('minStock: $minStock')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(
-      id, productId, unitTypeId, isBaseUnit, ratioToBase, isNonStock);
+      id, productId, unitTypeId, isBaseUnit, ratioToBase, isNonStock, minStock);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1319,7 +1355,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           other.unitTypeId == this.unitTypeId &&
           other.isBaseUnit == this.isBaseUnit &&
           other.ratioToBase == this.ratioToBase &&
-          other.isNonStock == this.isNonStock);
+          other.isNonStock == this.isNonStock &&
+          other.minStock == this.minStock);
 }
 
 class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
@@ -1329,6 +1366,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
   final Value<bool> isBaseUnit;
   final Value<double> ratioToBase;
   final Value<bool> isNonStock;
+  final Value<int?> minStock;
   final Value<int> rowid;
   const ProductUnitsCompanion({
     this.id = const Value.absent(),
@@ -1337,6 +1375,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.isBaseUnit = const Value.absent(),
     this.ratioToBase = const Value.absent(),
     this.isNonStock = const Value.absent(),
+    this.minStock = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProductUnitsCompanion.insert({
@@ -1346,6 +1385,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.isBaseUnit = const Value.absent(),
     this.ratioToBase = const Value.absent(),
     this.isNonStock = const Value.absent(),
+    this.minStock = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         productId = Value(productId);
@@ -1356,6 +1396,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     Expression<bool>? isBaseUnit,
     Expression<double>? ratioToBase,
     Expression<bool>? isNonStock,
+    Expression<int>? minStock,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1365,6 +1406,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       if (isBaseUnit != null) 'is_base_unit': isBaseUnit,
       if (ratioToBase != null) 'ratio_to_base': ratioToBase,
       if (isNonStock != null) 'is_non_stock': isNonStock,
+      if (minStock != null) 'min_stock': minStock,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1376,6 +1418,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       Value<bool>? isBaseUnit,
       Value<double>? ratioToBase,
       Value<bool>? isNonStock,
+      Value<int?>? minStock,
       Value<int>? rowid}) {
     return ProductUnitsCompanion(
       id: id ?? this.id,
@@ -1384,6 +1427,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       isBaseUnit: isBaseUnit ?? this.isBaseUnit,
       ratioToBase: ratioToBase ?? this.ratioToBase,
       isNonStock: isNonStock ?? this.isNonStock,
+      minStock: minStock ?? this.minStock,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1409,6 +1453,9 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     if (isNonStock.present) {
       map['is_non_stock'] = Variable<bool>(isNonStock.value);
     }
+    if (minStock.present) {
+      map['min_stock'] = Variable<int>(minStock.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1424,6 +1471,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
           ..write('isBaseUnit: $isBaseUnit, ')
           ..write('ratioToBase: $ratioToBase, ')
           ..write('isNonStock: $isNonStock, ')
+          ..write('minStock: $minStock, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5086,9 +5134,36 @@ class $TransactionPaymentsTable extends TransactionPayments
   late final GeneratedColumn<String> note = GeneratedColumn<String>(
       'note', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _changeGivenMeta =
+      const VerificationMeta('changeGiven');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, transactionId, amount, method, paidAt, kasirId, note];
+  late final GeneratedColumn<int> changeGiven = GeneratedColumn<int>(
+      'change_given', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _changeTakenMeta =
+      const VerificationMeta('changeTaken');
+  @override
+  late final GeneratedColumn<bool> changeTaken = GeneratedColumn<bool>(
+      'change_taken', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("change_taken" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        transactionId,
+        amount,
+        method,
+        paidAt,
+        kasirId,
+        note,
+        changeGiven,
+        changeTaken
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -5136,6 +5211,18 @@ class $TransactionPaymentsTable extends TransactionPayments
       context.handle(
           _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
     }
+    if (data.containsKey('change_given')) {
+      context.handle(
+          _changeGivenMeta,
+          changeGiven.isAcceptableOrUnknown(
+              data['change_given']!, _changeGivenMeta));
+    }
+    if (data.containsKey('change_taken')) {
+      context.handle(
+          _changeTakenMeta,
+          changeTaken.isAcceptableOrUnknown(
+              data['change_taken']!, _changeTakenMeta));
+    }
     return context;
   }
 
@@ -5159,6 +5246,10 @@ class $TransactionPaymentsTable extends TransactionPayments
           .read(DriftSqlType.string, data['${effectivePrefix}kasir_id']),
       note: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      changeGiven: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}change_given'])!,
+      changeTaken: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}change_taken'])!,
     );
   }
 
@@ -5177,6 +5268,22 @@ class TransactionPayment extends DataClass
   final DateTime paidAt;
   final String? kasirId;
   final String? note;
+
+  /// Kembalian yang dihasilkan OLEH pembayaran ini secara spesifik (bukan
+  /// akumulatif transaksi) — dihitung & disimpan SEKALI saat baris ini
+  /// dibuat (lihat `AppDatabase._computePaymentChangeGiven`). Immutable
+  /// setelahnya: fakta historis "saat itu kembaliannya segini" tidak boleh
+  /// berubah walau total transaksi berubah belakangan (mis. tambah
+  /// belanjaan) — beda dari `Transactions.changeAmount` yang selalu
+  /// dihitung ulang dari kondisi TERKINI.
+  final int changeGiven;
+
+  /// true bila kembalian baris pembayaran INI sudah diserahkan ke pembeli.
+  /// Per-pembayaran (bukan per-transaksi) — nota dengan beberapa pembayaran
+  /// (tambah bayar/tambah belanjaan) bisa punya beberapa kembalian terpisah,
+  /// masing-masing dengan status ambil sendiri-sendiri. Murni per-perangkat
+  /// (tidak ikut sync — sama seperti `Transactions.changeTaken`).
+  final bool changeTaken;
   const TransactionPayment(
       {required this.id,
       required this.transactionId,
@@ -5184,7 +5291,9 @@ class TransactionPayment extends DataClass
       required this.method,
       required this.paidAt,
       this.kasirId,
-      this.note});
+      this.note,
+      required this.changeGiven,
+      required this.changeTaken});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -5199,6 +5308,8 @@ class TransactionPayment extends DataClass
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    map['change_given'] = Variable<int>(changeGiven);
+    map['change_taken'] = Variable<bool>(changeTaken);
     return map;
   }
 
@@ -5213,6 +5324,8 @@ class TransactionPayment extends DataClass
           ? const Value.absent()
           : Value(kasirId),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      changeGiven: Value(changeGiven),
+      changeTaken: Value(changeTaken),
     );
   }
 
@@ -5227,6 +5340,8 @@ class TransactionPayment extends DataClass
       paidAt: serializer.fromJson<DateTime>(json['paidAt']),
       kasirId: serializer.fromJson<String?>(json['kasirId']),
       note: serializer.fromJson<String?>(json['note']),
+      changeGiven: serializer.fromJson<int>(json['changeGiven']),
+      changeTaken: serializer.fromJson<bool>(json['changeTaken']),
     );
   }
   @override
@@ -5240,6 +5355,8 @@ class TransactionPayment extends DataClass
       'paidAt': serializer.toJson<DateTime>(paidAt),
       'kasirId': serializer.toJson<String?>(kasirId),
       'note': serializer.toJson<String?>(note),
+      'changeGiven': serializer.toJson<int>(changeGiven),
+      'changeTaken': serializer.toJson<bool>(changeTaken),
     };
   }
 
@@ -5250,7 +5367,9 @@ class TransactionPayment extends DataClass
           String? method,
           DateTime? paidAt,
           Value<String?> kasirId = const Value.absent(),
-          Value<String?> note = const Value.absent()}) =>
+          Value<String?> note = const Value.absent(),
+          int? changeGiven,
+          bool? changeTaken}) =>
       TransactionPayment(
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
@@ -5259,6 +5378,8 @@ class TransactionPayment extends DataClass
         paidAt: paidAt ?? this.paidAt,
         kasirId: kasirId.present ? kasirId.value : this.kasirId,
         note: note.present ? note.value : this.note,
+        changeGiven: changeGiven ?? this.changeGiven,
+        changeTaken: changeTaken ?? this.changeTaken,
       );
   TransactionPayment copyWithCompanion(TransactionPaymentsCompanion data) {
     return TransactionPayment(
@@ -5271,6 +5392,10 @@ class TransactionPayment extends DataClass
       paidAt: data.paidAt.present ? data.paidAt.value : this.paidAt,
       kasirId: data.kasirId.present ? data.kasirId.value : this.kasirId,
       note: data.note.present ? data.note.value : this.note,
+      changeGiven:
+          data.changeGiven.present ? data.changeGiven.value : this.changeGiven,
+      changeTaken:
+          data.changeTaken.present ? data.changeTaken.value : this.changeTaken,
     );
   }
 
@@ -5283,14 +5408,16 @@ class TransactionPayment extends DataClass
           ..write('method: $method, ')
           ..write('paidAt: $paidAt, ')
           ..write('kasirId: $kasirId, ')
-          ..write('note: $note')
+          ..write('note: $note, ')
+          ..write('changeGiven: $changeGiven, ')
+          ..write('changeTaken: $changeTaken')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, transactionId, amount, method, paidAt, kasirId, note);
+  int get hashCode => Object.hash(id, transactionId, amount, method, paidAt,
+      kasirId, note, changeGiven, changeTaken);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5301,7 +5428,9 @@ class TransactionPayment extends DataClass
           other.method == this.method &&
           other.paidAt == this.paidAt &&
           other.kasirId == this.kasirId &&
-          other.note == this.note);
+          other.note == this.note &&
+          other.changeGiven == this.changeGiven &&
+          other.changeTaken == this.changeTaken);
 }
 
 class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
@@ -5312,6 +5441,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
   final Value<DateTime> paidAt;
   final Value<String?> kasirId;
   final Value<String?> note;
+  final Value<int> changeGiven;
+  final Value<bool> changeTaken;
   final Value<int> rowid;
   const TransactionPaymentsCompanion({
     this.id = const Value.absent(),
@@ -5321,6 +5452,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.paidAt = const Value.absent(),
     this.kasirId = const Value.absent(),
     this.note = const Value.absent(),
+    this.changeGiven = const Value.absent(),
+    this.changeTaken = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionPaymentsCompanion.insert({
@@ -5331,6 +5464,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.paidAt = const Value.absent(),
     this.kasirId = const Value.absent(),
     this.note = const Value.absent(),
+    this.changeGiven = const Value.absent(),
+    this.changeTaken = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         transactionId = Value(transactionId),
@@ -5344,6 +5479,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     Expression<DateTime>? paidAt,
     Expression<String>? kasirId,
     Expression<String>? note,
+    Expression<int>? changeGiven,
+    Expression<bool>? changeTaken,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5354,6 +5491,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       if (paidAt != null) 'paid_at': paidAt,
       if (kasirId != null) 'kasir_id': kasirId,
       if (note != null) 'note': note,
+      if (changeGiven != null) 'change_given': changeGiven,
+      if (changeTaken != null) 'change_taken': changeTaken,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5366,6 +5505,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       Value<DateTime>? paidAt,
       Value<String?>? kasirId,
       Value<String?>? note,
+      Value<int>? changeGiven,
+      Value<bool>? changeTaken,
       Value<int>? rowid}) {
     return TransactionPaymentsCompanion(
       id: id ?? this.id,
@@ -5375,6 +5516,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       paidAt: paidAt ?? this.paidAt,
       kasirId: kasirId ?? this.kasirId,
       note: note ?? this.note,
+      changeGiven: changeGiven ?? this.changeGiven,
+      changeTaken: changeTaken ?? this.changeTaken,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5403,6 +5546,12 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (changeGiven.present) {
+      map['change_given'] = Variable<int>(changeGiven.value);
+    }
+    if (changeTaken.present) {
+      map['change_taken'] = Variable<bool>(changeTaken.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5419,6 +5568,8 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
           ..write('paidAt: $paidAt, ')
           ..write('kasirId: $kasirId, ')
           ..write('note: $note, ')
+          ..write('changeGiven: $changeGiven, ')
+          ..write('changeTaken: $changeTaken, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9842,6 +9993,535 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
   }
 }
 
+class $CashClosingsTable extends CashClosings
+    with TableInfo<$CashClosingsTable, CashClosing> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CashClosingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<String> date = GeneratedColumn<String>(
+      'date', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _deviceCodeMeta =
+      const VerificationMeta('deviceCode');
+  @override
+  late final GeneratedColumn<String> deviceCode = GeneratedColumn<String>(
+      'device_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _systemCashMeta =
+      const VerificationMeta('systemCash');
+  @override
+  late final GeneratedColumn<int> systemCash = GeneratedColumn<int>(
+      'system_cash', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _systemNonCashMeta =
+      const VerificationMeta('systemNonCash');
+  @override
+  late final GeneratedColumn<int> systemNonCash = GeneratedColumn<int>(
+      'system_non_cash', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _txCountMeta =
+      const VerificationMeta('txCount');
+  @override
+  late final GeneratedColumn<int> txCount = GeneratedColumn<int>(
+      'tx_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _physicalCashMeta =
+      const VerificationMeta('physicalCash');
+  @override
+  late final GeneratedColumn<int> physicalCash = GeneratedColumn<int>(
+      'physical_cash', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _differenceMeta =
+      const VerificationMeta('difference');
+  @override
+  late final GeneratedColumn<int> difference = GeneratedColumn<int>(
+      'difference', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        date,
+        deviceCode,
+        systemCash,
+        systemNonCash,
+        txCount,
+        physicalCash,
+        difference,
+        note,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cash_closings';
+  @override
+  VerificationContext validateIntegrity(Insertable<CashClosing> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('device_code')) {
+      context.handle(
+          _deviceCodeMeta,
+          deviceCode.isAcceptableOrUnknown(
+              data['device_code']!, _deviceCodeMeta));
+    }
+    if (data.containsKey('system_cash')) {
+      context.handle(
+          _systemCashMeta,
+          systemCash.isAcceptableOrUnknown(
+              data['system_cash']!, _systemCashMeta));
+    } else if (isInserting) {
+      context.missing(_systemCashMeta);
+    }
+    if (data.containsKey('system_non_cash')) {
+      context.handle(
+          _systemNonCashMeta,
+          systemNonCash.isAcceptableOrUnknown(
+              data['system_non_cash']!, _systemNonCashMeta));
+    }
+    if (data.containsKey('tx_count')) {
+      context.handle(_txCountMeta,
+          txCount.isAcceptableOrUnknown(data['tx_count']!, _txCountMeta));
+    }
+    if (data.containsKey('physical_cash')) {
+      context.handle(
+          _physicalCashMeta,
+          physicalCash.isAcceptableOrUnknown(
+              data['physical_cash']!, _physicalCashMeta));
+    } else if (isInserting) {
+      context.missing(_physicalCashMeta);
+    }
+    if (data.containsKey('difference')) {
+      context.handle(
+          _differenceMeta,
+          difference.isAcceptableOrUnknown(
+              data['difference']!, _differenceMeta));
+    } else if (isInserting) {
+      context.missing(_differenceMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+        {date, deviceCode},
+      ];
+  @override
+  CashClosing map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CashClosing(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}date'])!,
+      deviceCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}device_code']),
+      systemCash: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}system_cash'])!,
+      systemNonCash: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}system_non_cash'])!,
+      txCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}tx_count'])!,
+      physicalCash: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}physical_cash'])!,
+      difference: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}difference'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $CashClosingsTable createAlias(String alias) {
+    return $CashClosingsTable(attachedDatabase, alias);
+  }
+}
+
+class CashClosing extends DataClass implements Insertable<CashClosing> {
+  final String id;
+  final String date;
+  final String? deviceCode;
+
+  /// Kas tunai yang diharapkan (dari penjualan tunai hari itu).
+  final int systemCash;
+
+  /// Total non-tunai (transfer/QRIS/dll) — informasi, tidak masuk selisih laci.
+  final int systemNonCash;
+  final int txCount;
+
+  /// Uang fisik yang dihitung di laci.
+  final int physicalCash;
+
+  /// physicalCash − systemCash (positif = lebih, negatif = kurang).
+  final int difference;
+  final String? note;
+  final DateTime createdAt;
+  const CashClosing(
+      {required this.id,
+      required this.date,
+      this.deviceCode,
+      required this.systemCash,
+      required this.systemNonCash,
+      required this.txCount,
+      required this.physicalCash,
+      required this.difference,
+      this.note,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['date'] = Variable<String>(date);
+    if (!nullToAbsent || deviceCode != null) {
+      map['device_code'] = Variable<String>(deviceCode);
+    }
+    map['system_cash'] = Variable<int>(systemCash);
+    map['system_non_cash'] = Variable<int>(systemNonCash);
+    map['tx_count'] = Variable<int>(txCount);
+    map['physical_cash'] = Variable<int>(physicalCash);
+    map['difference'] = Variable<int>(difference);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CashClosingsCompanion toCompanion(bool nullToAbsent) {
+    return CashClosingsCompanion(
+      id: Value(id),
+      date: Value(date),
+      deviceCode: deviceCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceCode),
+      systemCash: Value(systemCash),
+      systemNonCash: Value(systemNonCash),
+      txCount: Value(txCount),
+      physicalCash: Value(physicalCash),
+      difference: Value(difference),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CashClosing.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CashClosing(
+      id: serializer.fromJson<String>(json['id']),
+      date: serializer.fromJson<String>(json['date']),
+      deviceCode: serializer.fromJson<String?>(json['deviceCode']),
+      systemCash: serializer.fromJson<int>(json['systemCash']),
+      systemNonCash: serializer.fromJson<int>(json['systemNonCash']),
+      txCount: serializer.fromJson<int>(json['txCount']),
+      physicalCash: serializer.fromJson<int>(json['physicalCash']),
+      difference: serializer.fromJson<int>(json['difference']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'date': serializer.toJson<String>(date),
+      'deviceCode': serializer.toJson<String?>(deviceCode),
+      'systemCash': serializer.toJson<int>(systemCash),
+      'systemNonCash': serializer.toJson<int>(systemNonCash),
+      'txCount': serializer.toJson<int>(txCount),
+      'physicalCash': serializer.toJson<int>(physicalCash),
+      'difference': serializer.toJson<int>(difference),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CashClosing copyWith(
+          {String? id,
+          String? date,
+          Value<String?> deviceCode = const Value.absent(),
+          int? systemCash,
+          int? systemNonCash,
+          int? txCount,
+          int? physicalCash,
+          int? difference,
+          Value<String?> note = const Value.absent(),
+          DateTime? createdAt}) =>
+      CashClosing(
+        id: id ?? this.id,
+        date: date ?? this.date,
+        deviceCode: deviceCode.present ? deviceCode.value : this.deviceCode,
+        systemCash: systemCash ?? this.systemCash,
+        systemNonCash: systemNonCash ?? this.systemNonCash,
+        txCount: txCount ?? this.txCount,
+        physicalCash: physicalCash ?? this.physicalCash,
+        difference: difference ?? this.difference,
+        note: note.present ? note.value : this.note,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  CashClosing copyWithCompanion(CashClosingsCompanion data) {
+    return CashClosing(
+      id: data.id.present ? data.id.value : this.id,
+      date: data.date.present ? data.date.value : this.date,
+      deviceCode:
+          data.deviceCode.present ? data.deviceCode.value : this.deviceCode,
+      systemCash:
+          data.systemCash.present ? data.systemCash.value : this.systemCash,
+      systemNonCash: data.systemNonCash.present
+          ? data.systemNonCash.value
+          : this.systemNonCash,
+      txCount: data.txCount.present ? data.txCount.value : this.txCount,
+      physicalCash: data.physicalCash.present
+          ? data.physicalCash.value
+          : this.physicalCash,
+      difference:
+          data.difference.present ? data.difference.value : this.difference,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashClosing(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('systemCash: $systemCash, ')
+          ..write('systemNonCash: $systemNonCash, ')
+          ..write('txCount: $txCount, ')
+          ..write('physicalCash: $physicalCash, ')
+          ..write('difference: $difference, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, date, deviceCode, systemCash,
+      systemNonCash, txCount, physicalCash, difference, note, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CashClosing &&
+          other.id == this.id &&
+          other.date == this.date &&
+          other.deviceCode == this.deviceCode &&
+          other.systemCash == this.systemCash &&
+          other.systemNonCash == this.systemNonCash &&
+          other.txCount == this.txCount &&
+          other.physicalCash == this.physicalCash &&
+          other.difference == this.difference &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt);
+}
+
+class CashClosingsCompanion extends UpdateCompanion<CashClosing> {
+  final Value<String> id;
+  final Value<String> date;
+  final Value<String?> deviceCode;
+  final Value<int> systemCash;
+  final Value<int> systemNonCash;
+  final Value<int> txCount;
+  final Value<int> physicalCash;
+  final Value<int> difference;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const CashClosingsCompanion({
+    this.id = const Value.absent(),
+    this.date = const Value.absent(),
+    this.deviceCode = const Value.absent(),
+    this.systemCash = const Value.absent(),
+    this.systemNonCash = const Value.absent(),
+    this.txCount = const Value.absent(),
+    this.physicalCash = const Value.absent(),
+    this.difference = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CashClosingsCompanion.insert({
+    required String id,
+    required String date,
+    this.deviceCode = const Value.absent(),
+    required int systemCash,
+    this.systemNonCash = const Value.absent(),
+    this.txCount = const Value.absent(),
+    required int physicalCash,
+    required int difference,
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        date = Value(date),
+        systemCash = Value(systemCash),
+        physicalCash = Value(physicalCash),
+        difference = Value(difference);
+  static Insertable<CashClosing> custom({
+    Expression<String>? id,
+    Expression<String>? date,
+    Expression<String>? deviceCode,
+    Expression<int>? systemCash,
+    Expression<int>? systemNonCash,
+    Expression<int>? txCount,
+    Expression<int>? physicalCash,
+    Expression<int>? difference,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (date != null) 'date': date,
+      if (deviceCode != null) 'device_code': deviceCode,
+      if (systemCash != null) 'system_cash': systemCash,
+      if (systemNonCash != null) 'system_non_cash': systemNonCash,
+      if (txCount != null) 'tx_count': txCount,
+      if (physicalCash != null) 'physical_cash': physicalCash,
+      if (difference != null) 'difference': difference,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CashClosingsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? date,
+      Value<String?>? deviceCode,
+      Value<int>? systemCash,
+      Value<int>? systemNonCash,
+      Value<int>? txCount,
+      Value<int>? physicalCash,
+      Value<int>? difference,
+      Value<String?>? note,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return CashClosingsCompanion(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      deviceCode: deviceCode ?? this.deviceCode,
+      systemCash: systemCash ?? this.systemCash,
+      systemNonCash: systemNonCash ?? this.systemNonCash,
+      txCount: txCount ?? this.txCount,
+      physicalCash: physicalCash ?? this.physicalCash,
+      difference: difference ?? this.difference,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<String>(date.value);
+    }
+    if (deviceCode.present) {
+      map['device_code'] = Variable<String>(deviceCode.value);
+    }
+    if (systemCash.present) {
+      map['system_cash'] = Variable<int>(systemCash.value);
+    }
+    if (systemNonCash.present) {
+      map['system_non_cash'] = Variable<int>(systemNonCash.value);
+    }
+    if (txCount.present) {
+      map['tx_count'] = Variable<int>(txCount.value);
+    }
+    if (physicalCash.present) {
+      map['physical_cash'] = Variable<int>(physicalCash.value);
+    }
+    if (difference.present) {
+      map['difference'] = Variable<int>(difference.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashClosingsCompanion(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('systemCash: $systemCash, ')
+          ..write('systemNonCash: $systemNonCash, ')
+          ..write('txCount: $txCount, ')
+          ..write('physicalCash: $physicalCash, ')
+          ..write('difference: $difference, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -9876,6 +10556,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
   late final $DailySummariesTable dailySummaries = $DailySummariesTable(this);
   late final $EmployeesTable employees = $EmployeesTable(this);
+  late final $CashClosingsTable cashClosings = $CashClosingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9905,7 +10586,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         kasirPermissions,
         paymentMethods,
         dailySummaries,
-        employees
+        employees,
+        cashClosings
       ];
 }
 
@@ -10604,6 +11286,7 @@ typedef $$ProductUnitsTableCreateCompanionBuilder = ProductUnitsCompanion
   Value<bool> isBaseUnit,
   Value<double> ratioToBase,
   Value<bool> isNonStock,
+  Value<int?> minStock,
   Value<int> rowid,
 });
 typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
@@ -10614,6 +11297,7 @@ typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
   Value<bool> isBaseUnit,
   Value<double> ratioToBase,
   Value<bool> isNonStock,
+  Value<int?> minStock,
   Value<int> rowid,
 });
 
@@ -10723,6 +11407,9 @@ class $$ProductUnitsTableFilterComposer
 
   ColumnFilters<bool> get isNonStock => $composableBuilder(
       column: $table.isNonStock, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get minStock => $composableBuilder(
+      column: $table.minStock, builder: (column) => ColumnFilters(column));
 
   $$ProductsTableFilterComposer get productId {
     final $$ProductsTableFilterComposer composer = $composerBuilder(
@@ -10853,6 +11540,9 @@ class $$ProductUnitsTableOrderingComposer
   ColumnOrderings<bool> get isNonStock => $composableBuilder(
       column: $table.isNonStock, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get minStock => $composableBuilder(
+      column: $table.minStock, builder: (column) => ColumnOrderings(column));
+
   $$ProductsTableOrderingComposer get productId {
     final $$ProductsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -10897,6 +11587,9 @@ class $$ProductUnitsTableAnnotationComposer
 
   GeneratedColumn<bool> get isNonStock => $composableBuilder(
       column: $table.isNonStock, builder: (column) => column);
+
+  GeneratedColumn<int> get minStock =>
+      $composableBuilder(column: $table.minStock, builder: (column) => column);
 
   $$ProductsTableAnnotationComposer get productId {
     final $$ProductsTableAnnotationComposer composer = $composerBuilder(
@@ -11039,6 +11732,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<bool> isBaseUnit = const Value.absent(),
             Value<double> ratioToBase = const Value.absent(),
             Value<bool> isNonStock = const Value.absent(),
+            Value<int?> minStock = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion(
@@ -11048,6 +11742,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             isBaseUnit: isBaseUnit,
             ratioToBase: ratioToBase,
             isNonStock: isNonStock,
+            minStock: minStock,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -11057,6 +11752,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<bool> isBaseUnit = const Value.absent(),
             Value<double> ratioToBase = const Value.absent(),
             Value<bool> isNonStock = const Value.absent(),
+            Value<int?> minStock = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion.insert(
@@ -11066,6 +11762,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             isBaseUnit: isBaseUnit,
             ratioToBase: ratioToBase,
             isNonStock: isNonStock,
+            minStock: minStock,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -13799,6 +14496,8 @@ typedef $$TransactionPaymentsTableCreateCompanionBuilder
   Value<DateTime> paidAt,
   Value<String?> kasirId,
   Value<String?> note,
+  Value<int> changeGiven,
+  Value<bool> changeTaken,
   Value<int> rowid,
 });
 typedef $$TransactionPaymentsTableUpdateCompanionBuilder
@@ -13810,6 +14509,8 @@ typedef $$TransactionPaymentsTableUpdateCompanionBuilder
   Value<DateTime> paidAt,
   Value<String?> kasirId,
   Value<String?> note,
+  Value<int> changeGiven,
+  Value<bool> changeTaken,
   Value<int> rowid,
 });
 
@@ -13859,6 +14560,12 @@ class $$TransactionPaymentsTableFilterComposer
   ColumnFilters<String> get note => $composableBuilder(
       column: $table.note, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<int> get changeGiven => $composableBuilder(
+      column: $table.changeGiven, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get changeTaken => $composableBuilder(
+      column: $table.changeTaken, builder: (column) => ColumnFilters(column));
+
   $$TransactionsTableFilterComposer get transactionId {
     final $$TransactionsTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -13907,6 +14614,12 @@ class $$TransactionPaymentsTableOrderingComposer
   ColumnOrderings<String> get note => $composableBuilder(
       column: $table.note, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get changeGiven => $composableBuilder(
+      column: $table.changeGiven, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get changeTaken => $composableBuilder(
+      column: $table.changeTaken, builder: (column) => ColumnOrderings(column));
+
   $$TransactionsTableOrderingComposer get transactionId {
     final $$TransactionsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -13954,6 +14667,12 @@ class $$TransactionPaymentsTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<int> get changeGiven => $composableBuilder(
+      column: $table.changeGiven, builder: (column) => column);
+
+  GeneratedColumn<bool> get changeTaken => $composableBuilder(
+      column: $table.changeTaken, builder: (column) => column);
 
   $$TransactionsTableAnnotationComposer get transactionId {
     final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
@@ -14009,6 +14728,8 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<DateTime> paidAt = const Value.absent(),
             Value<String?> kasirId = const Value.absent(),
             Value<String?> note = const Value.absent(),
+            Value<int> changeGiven = const Value.absent(),
+            Value<bool> changeTaken = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion(
@@ -14019,6 +14740,8 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             paidAt: paidAt,
             kasirId: kasirId,
             note: note,
+            changeGiven: changeGiven,
+            changeTaken: changeTaken,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -14029,6 +14752,8 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<DateTime> paidAt = const Value.absent(),
             Value<String?> kasirId = const Value.absent(),
             Value<String?> note = const Value.absent(),
+            Value<int> changeGiven = const Value.absent(),
+            Value<bool> changeTaken = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion.insert(
@@ -14039,6 +14764,8 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             paidAt: paidAt,
             kasirId: kasirId,
             note: note,
+            changeGiven: changeGiven,
+            changeTaken: changeTaken,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -16549,6 +17276,256 @@ typedef $$EmployeesTableProcessedTableManager = ProcessedTableManager<
     (Employee, BaseReferences<_$AppDatabase, $EmployeesTable, Employee>),
     Employee,
     PrefetchHooks Function()>;
+typedef $$CashClosingsTableCreateCompanionBuilder = CashClosingsCompanion
+    Function({
+  required String id,
+  required String date,
+  Value<String?> deviceCode,
+  required int systemCash,
+  Value<int> systemNonCash,
+  Value<int> txCount,
+  required int physicalCash,
+  required int difference,
+  Value<String?> note,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$CashClosingsTableUpdateCompanionBuilder = CashClosingsCompanion
+    Function({
+  Value<String> id,
+  Value<String> date,
+  Value<String?> deviceCode,
+  Value<int> systemCash,
+  Value<int> systemNonCash,
+  Value<int> txCount,
+  Value<int> physicalCash,
+  Value<int> difference,
+  Value<String?> note,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$CashClosingsTableFilterComposer
+    extends Composer<_$AppDatabase, $CashClosingsTable> {
+  $$CashClosingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get systemCash => $composableBuilder(
+      column: $table.systemCash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get systemNonCash => $composableBuilder(
+      column: $table.systemNonCash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get txCount => $composableBuilder(
+      column: $table.txCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get physicalCash => $composableBuilder(
+      column: $table.physicalCash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get difference => $composableBuilder(
+      column: $table.difference, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$CashClosingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CashClosingsTable> {
+  $$CashClosingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get systemCash => $composableBuilder(
+      column: $table.systemCash, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get systemNonCash => $composableBuilder(
+      column: $table.systemNonCash,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get txCount => $composableBuilder(
+      column: $table.txCount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get physicalCash => $composableBuilder(
+      column: $table.physicalCash,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get difference => $composableBuilder(
+      column: $table.difference, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$CashClosingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CashClosingsTable> {
+  $$CashClosingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => column);
+
+  GeneratedColumn<int> get systemCash => $composableBuilder(
+      column: $table.systemCash, builder: (column) => column);
+
+  GeneratedColumn<int> get systemNonCash => $composableBuilder(
+      column: $table.systemNonCash, builder: (column) => column);
+
+  GeneratedColumn<int> get txCount =>
+      $composableBuilder(column: $table.txCount, builder: (column) => column);
+
+  GeneratedColumn<int> get physicalCash => $composableBuilder(
+      column: $table.physicalCash, builder: (column) => column);
+
+  GeneratedColumn<int> get difference => $composableBuilder(
+      column: $table.difference, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CashClosingsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $CashClosingsTable,
+    CashClosing,
+    $$CashClosingsTableFilterComposer,
+    $$CashClosingsTableOrderingComposer,
+    $$CashClosingsTableAnnotationComposer,
+    $$CashClosingsTableCreateCompanionBuilder,
+    $$CashClosingsTableUpdateCompanionBuilder,
+    (
+      CashClosing,
+      BaseReferences<_$AppDatabase, $CashClosingsTable, CashClosing>
+    ),
+    CashClosing,
+    PrefetchHooks Function()> {
+  $$CashClosingsTableTableManager(_$AppDatabase db, $CashClosingsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CashClosingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CashClosingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CashClosingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> date = const Value.absent(),
+            Value<String?> deviceCode = const Value.absent(),
+            Value<int> systemCash = const Value.absent(),
+            Value<int> systemNonCash = const Value.absent(),
+            Value<int> txCount = const Value.absent(),
+            Value<int> physicalCash = const Value.absent(),
+            Value<int> difference = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CashClosingsCompanion(
+            id: id,
+            date: date,
+            deviceCode: deviceCode,
+            systemCash: systemCash,
+            systemNonCash: systemNonCash,
+            txCount: txCount,
+            physicalCash: physicalCash,
+            difference: difference,
+            note: note,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String date,
+            Value<String?> deviceCode = const Value.absent(),
+            required int systemCash,
+            Value<int> systemNonCash = const Value.absent(),
+            Value<int> txCount = const Value.absent(),
+            required int physicalCash,
+            required int difference,
+            Value<String?> note = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CashClosingsCompanion.insert(
+            id: id,
+            date: date,
+            deviceCode: deviceCode,
+            systemCash: systemCash,
+            systemNonCash: systemNonCash,
+            txCount: txCount,
+            physicalCash: physicalCash,
+            difference: difference,
+            note: note,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CashClosingsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $CashClosingsTable,
+    CashClosing,
+    $$CashClosingsTableFilterComposer,
+    $$CashClosingsTableOrderingComposer,
+    $$CashClosingsTableAnnotationComposer,
+    $$CashClosingsTableCreateCompanionBuilder,
+    $$CashClosingsTableUpdateCompanionBuilder,
+    (
+      CashClosing,
+      BaseReferences<_$AppDatabase, $CashClosingsTable, CashClosing>
+    ),
+    CashClosing,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -16603,4 +17580,6 @@ class $AppDatabaseManager {
       $$DailySummariesTableTableManager(_db, _db.dailySummaries);
   $$EmployeesTableTableManager get employees =>
       $$EmployeesTableTableManager(_db, _db.employees);
+  $$CashClosingsTableTableManager get cashClosings =>
+      $$CashClosingsTableTableManager(_db, _db.cashClosings);
 }

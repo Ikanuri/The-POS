@@ -14,7 +14,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/input_formatters.dart';
+import 'widgets/debt_payment_dialog.dart';
 import 'widgets/tx_history_sheet.dart';
 
 class ReceiptScreen extends ConsumerStatefulWidget {
@@ -74,6 +74,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // tetap ditampilkan karena waktunya pasti berbeda.
     return _payments.first.paidAt != tx.createdAt;
   }
+
+  /// Kembalian di Ringkasan SELALU dari pembayaran TERAKHIR (bukan
+  /// akumulatif) — `_payments` sudah terurut ASC by paidAt dari
+  /// `getPaymentsForTx`, jadi `.last` = pembayaran paling baru.
+  TransactionPayment? get _latestPayment =>
+      _payments.isEmpty ? null : _payments.last;
 
   /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
   /// induknya tidak ada di transaksi ini).
@@ -397,13 +403,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     await _load();
   }
 
-  /// Toggle centang "kembalian sudah diambil" — dipakai untuk nota yang
-  /// barangnya diambil belakangan, mencegah kasir memberi kembalian dua kali.
-  Future<void> _toggleChangeTaken(bool value) async {
+  /// Toggle centang "kembalian sudah diambil" untuk SATU baris pembayaran
+  /// (kembalian sekarang per-pembayaran, bukan per-transaksi — nota dengan
+  /// beberapa pembayaran bisa punya beberapa kembalian terpisah) — dipakai
+  /// untuk nota yang barangnya diambil belakangan, mencegah kasir memberi
+  /// kembalian dua kali.
+  Future<void> _toggleChangeTaken(String paymentId, bool value) async {
     final db = ref.read(databaseProvider);
-    await (db.update(db.transactions)
-          ..where((t) => t.id.equals(widget.transactionId)))
-        .write(TransactionsCompanion(changeTaken: Value(value)));
+    await (db.update(db.transactionPayments)
+          ..where((t) => t.id.equals(paymentId)))
+        .write(TransactionPaymentsCompanion(changeTaken: Value(value)));
     await _load();
   }
 
@@ -742,40 +751,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _showTambahBayar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final ctrl = TextEditingController();
     final remaining = _tx!.total - _tx!.paid;
-    final result = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tambah Bayar'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Sisa tagihan: ${formatRupiah(remaining)}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [ThousandsSeparatorFormatter()],
-              decoration: const InputDecoration(
-                  prefixText: 'Rp ', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => ctx.pop(), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () =>
-                ctx.pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
-            child: const Text('Bayar'),
-          ),
-        ],
-      ),
-    );
+    final db = ref.read(databaseProvider);
+    final result = await showDebtPaymentDialog(context, db,
+        remaining: remaining, title: 'Tambah Bayar', prefillRemaining: false);
 
-    if (result != null && result > 0 && mounted) {
-      final db = ref.read(databaseProvider);
+    if (result != null && result.amount > 0 && mounted) {
       final device = ref.read(deviceProvider);
       // Uang diterima dicatat PENUH (paid boleh > total → kembalian
       // diturunkan dari paid - total), lewat satu jalur DB yang konsisten
@@ -784,8 +765,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       // menimpanya kembali ke 0 dan info "Kembali Rp X" hilang.
       final change = await db.addPaymentToTransaction(
         txId: widget.transactionId,
-        amount: result,
-        method: 'tunai',
+        amount: result.amount,
+        method: result.method,
         kasirId: device.deviceCode,
       );
       await _load();
@@ -1600,12 +1581,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       if (tx.paid > 0)
                         _SummaryRow('Dibayar',
                             '${_methodLabel(tx.paymentMethod)} · ${formatRupiah(tx.paid)}'),
-                      if (tx.changeAmount > 0)
+                      if ((_latestPayment?.changeGiven ?? 0) > 0)
                         _ChangeTakenRow(
-                          amount: formatRupiah(tx.changeAmount),
-                          taken: tx.changeTaken,
+                          amount: formatRupiah(_latestPayment!.changeGiven),
+                          taken: _latestPayment!.changeTaken,
                           color: scheme.tertiary,
-                          onChanged: isVoid ? null : _toggleChangeTaken,
+                          onChanged: isVoid
+                              ? null
+                              : (v) =>
+                                  _toggleChangeTaken(_latestPayment!.id, v),
                         ),
                       if (isKurangBayar)
                         _SummaryRow(
@@ -1640,7 +1624,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           // Timeline pembayaran — kapan tiap cicilan/pelunasan masuk.
           if (_showPaymentTimeline) ...[
             const SizedBox(height: 8),
-            _buildPaymentTimeline(scheme),
+            _buildPaymentTimeline(scheme, isVoid: isVoid),
           ],
           const SizedBox(height: 20),
 
@@ -1848,7 +1832,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   }
 
   /// Kartu riwayat pembayaran: tiap baris = waktu + metode + nominal.
-  Widget _buildPaymentTimeline(ColorScheme scheme) {
+  Widget _buildPaymentTimeline(ColorScheme scheme, {required bool isVoid}) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -1870,19 +1854,42 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             for (final p in _payments)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_formatDateTime(p.paidAt),
-                        style: TextStyle(
-                            fontSize: 12, color: scheme.onSurfaceVariant)),
-                    const SizedBox(width: 8),
-                    Text(_methodLabel(p.method),
-                        style: TextStyle(
-                            fontSize: 12, color: scheme.onSurfaceVariant)),
-                    const Spacer(),
-                    Text(formatRupiah(p.amount),
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(_formatDateTime(p.paidAt),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(_methodLabel(p.method),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant)),
+                        const SizedBox(width: 8),
+                        Text(formatRupiah(p.amount),
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    // Kembalian milik pembayaran INI (bukan akumulatif) —
+                    // nempel langsung di bawah nominalnya, satu momen yang
+                    // sama (lihat AppDatabase._computePaymentChangeGiven).
+                    if (p.changeGiven > 0)
+                      _ChangeTakenRow(
+                        amount: formatRupiah(p.changeGiven),
+                        taken: p.changeTaken,
+                        color: scheme.tertiary,
+                        onChanged: isVoid
+                            ? null
+                            : (v) => _toggleChangeTaken(p.id, v),
+                      ),
                   ],
                 ),
               ),

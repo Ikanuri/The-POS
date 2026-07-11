@@ -13,6 +13,7 @@ class CsvImportResult {
     required this.duplicates,
     required this.noBarcode,
     required this.errors,
+    this.sameNameDifferentUnit = 0,
   });
   final int imported;
 
@@ -23,6 +24,14 @@ class CsvImportResult {
   final int duplicates;
   final int noBarcode;
   final List<String> errors;
+
+  /// Produk baru yang nama-nya sama dengan produk lain (beda satuan) tapi
+  /// TIDAK digabung otomatis jadi satu produk multi-satuan — mis. export
+  /// legacy "1 baris = 1 SKU per kemasan" (Griyo POS: "234 12" muncul
+  /// sebagai baris terpisah untuk Slop & Pak). Info saja (bukan error) agar
+  /// user tahu ada kandidat yang mungkin perlu digabung manual lewat Edit
+  /// Produk, karena rasio konversi antar satuan tidak ada di CSV.
+  final int sameNameDifferentUnit;
 }
 
 /// Import produk dari CSV.
@@ -59,10 +68,18 @@ class CsvImportService {
     int updated = 0;
     int duplicates = 0;
     int noBarcode = 0;
+    int sameNameDifferentUnit = 0;
     final errors = <String>[];
+    final createdNames = <String>{};
 
     final unitTypes = await db.getAllUnitTypes();
     final groups = await db.getAllProductGroups();
+    // getAllProductGroups() cuma yang sudah dinamai (dipakai UI dropdown) —
+    // grup legacy 3-20 dari _seedDefaults sengaja TANPA nama ("diisi manual"
+    // belakangan user), jadi untuk validasi ID mentah dari CSV pakai daftar
+    // ID lengkap tanpa filter nama.
+    final allGroupIds =
+        (await db.select(db.productGroups).get()).map((g) => g.id).toSet();
     // Produk yang sudah ada — untuk mencocokkan baris CSV ke produk lama
     // (import ulang = update harga, bukan duplikasi katalog).
     final existingProducts = await db.searchProducts('');
@@ -98,38 +115,58 @@ class CsvImportService {
       final row = dataRows[rowIdx];
       if (row.isEmpty || row.every((c) => c.trim().isEmpty)) continue;
 
-      final name = sanitize(col(['nama', 'name', 'product_name', 'nama_produk'], row));
+      final name = sanitize(col(
+          ['nama', 'name', 'product_name', 'nama_produk', 'produk'], row));
       if (name.isEmpty) {
         errors.add('Baris ${rowIdx + 2}: nama produk kosong');
         continue;
       }
 
-      final kode = sanitize(col(['kode', 'kode_produk', 'code', 'sku'], row));
-      final grupName = col(['grup', 'group', 'kategori', 'category', 'group_name'], row);
+      final kode = sanitize(col(
+          ['kode', 'kode_produk', 'code', 'sku', 'kode produk'], row));
+      final grupName = col(
+          ['grup', 'group', 'kategori', 'category', 'group_name', 'grup produk'],
+          row);
       final satuanName = col(['satuan', 'unit', 'uom', 'unit_type'], row);
-      final hargaJual = _parseIntPrice(col(['harga_jual', 'harga', 'sell_price', 'price'], row));
-      final hargaBeli = _parseIntPrice(col(['harga_beli', 'cost', 'buy_price', 'cogs'], row));
+      final hargaJual = _parseIntPrice(col(
+          ['harga_jual', 'harga', 'sell_price', 'price', 'harga jual'], row));
+      final hargaBeli = _parseIntPrice(col(
+          ['harga_beli', 'cost', 'buy_price', 'cogs', 'harga pokok'], row));
       final stok = double.tryParse(col(['stok', 'stock', 'qty', 'quantity'], row)) ?? 0;
       final barcodeStr = col(['barcode', 'kode_barcode', 'ean', 'upc'], row);
 
-      // Resolve unit type — merge ID 7/8 → 1
+      // Resolve unit type. Export legacy (mis. Griyo POS) menaruh ID satuan
+      // MENTAH di kolom ini (angka), bukan nama teks — ID-nya sengaja dibuat
+      // sama dengan _kDefaultUnitTypes di app_database.dart. Kalau kolomnya
+      // murni angka, pakai langsung sebagai ID (merge legacy 7/8 → 12);
+      // kalau bukan angka, cocokkan sebagai nama seperti biasa.
       int unitTypeId = 1;
       if (satuanName.isNotEmpty) {
-        final matched = unitTypes.where(
-          (u) => u.name.toLowerCase() == satuanName.toLowerCase(),
-        ).firstOrNull;
-        if (matched != null) {
-          unitTypeId = (matched.id == 7 || matched.id == 8) ? 12 : matched.id;
+        final asId = int.tryParse(satuanName);
+        if (asId != null) {
+          final merged = (asId == 7 || asId == 8) ? 12 : asId;
+          if (unitTypes.any((u) => u.id == merged)) unitTypeId = merged;
+        } else {
+          final matched = unitTypes.where(
+            (u) => u.name.toLowerCase() == satuanName.toLowerCase(),
+          ).firstOrNull;
+          if (matched != null) unitTypeId = matched.id;
         }
       }
 
-      // Resolve group ID
+      // Resolve group ID — sama seperti satuan, export legacy pakai ID
+      // mentah (grup_produk 3-20 di _seedDefaults, tanpa nama).
       int? productGroupId;
       if (grupName.isNotEmpty) {
-        final matched = groups.where(
-          (g) => g.name?.toLowerCase() == grupName.toLowerCase(),
-        ).firstOrNull;
-        productGroupId = matched?.id;
+        final asId = int.tryParse(grupName);
+        if (asId != null) {
+          if (allGroupIds.contains(asId)) productGroupId = asId;
+        } else {
+          final matched = groups.where(
+            (g) => g.name?.toLowerCase() == grupName.toLowerCase(),
+          ).firstOrNull;
+          productGroupId = matched?.id;
+        }
       }
 
       // Dedup check — prioritaskan barcode/kode produk (identitas SKU asli)
@@ -182,6 +219,15 @@ class CsvImportService {
 
       if (barcodeStr.isEmpty) noBarcode++;
 
+      // Info non-blocking: nama sama dengan produk lain (satuan beda) tapi
+      // tidak digabung otomatis — lihat dokumentasi sameNameDifferentUnit.
+      final nameLower = name.toLowerCase();
+      if (createdNames.contains(nameLower) ||
+          existingProducts.any((p) => p.name.toLowerCase() == nameLower)) {
+        sameNameDifferentUnit++;
+      }
+      createdNames.add(nameLower);
+
       final productId = _uuid.v4();
       final unitId = _uuid.v4();
       final now = DateTime.now();
@@ -196,10 +242,17 @@ class CsvImportService {
         updatedAt: Value(now),
       );
 
+      // isBaseUnit: true — produk hasil import selalu cuma 1 satuan, jadi
+      // satuan itu SELALU satuan dasarnya (sama seperti tambah produk manual
+      // di produk_form_screen.dart). Tanpa ini, OrderPageService (katalog
+      // HTML) yang mensyaratkan ada satuan isBaseUnit (tanpa fallback, beda
+      // dari kasir/edit produk/dsb yang semua punya fallback `?? units.first`)
+      // akan melewati produk ini sama sekali dari katalog.
       final unit = ProductUnitsCompanion.insert(
         id: unitId,
         productId: productId,
         unitTypeId: Value(unitTypeId),
+        isBaseUnit: const Value(true),
       );
 
       final tiers = <PriceTiersCompanion>[
@@ -254,6 +307,7 @@ class CsvImportService {
       duplicates: duplicates,
       noBarcode: noBarcode,
       errors: errors,
+      sameNameDifferentUnit: sameNameDifferentUnit,
     );
   }
 
@@ -354,6 +408,7 @@ class CsvImportService {
   /// per-baris, supaya field ber-kutip multi-baris tidak terpotong.
   static List<List<String>> _parseCsv(String content) {
     final src = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final delimiter = _detectDelimiter(src);
     final result = <List<String>>[];
     var fields = <String>[];
     var field = StringBuffer();
@@ -384,7 +439,7 @@ class CsvImportService {
           inQuote = !inQuote;
         }
         rowHasContent = true;
-      } else if (c == ',' && !inQuote) {
+      } else if (c == delimiter && !inQuote) {
         endField();
       } else if (c == '\n' && !inQuote) {
         endRow();
@@ -395,5 +450,16 @@ class CsvImportService {
     }
     if (field.isNotEmpty || fields.isNotEmpty) endRow();
     return result;
+  }
+
+  /// Deteksi pemisah kolom dari baris header: `,` (default/Excel EN) atau
+  /// `;` (umum untuk export locale Indonesia, mis. Griyo POS). Dihitung dari
+  /// baris pertama saja — cukup untuk header, tidak perlu quote-aware karena
+  /// header jarang berisi field ber-kutip.
+  static String _detectDelimiter(String src) {
+    final firstLine = src.split('\n').first;
+    final semicolons = ';'.allMatches(firstLine).length;
+    final commas = ','.allMatches(firstLine).length;
+    return semicolons > commas ? ';' : ',';
   }
 }

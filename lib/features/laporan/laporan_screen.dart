@@ -7,6 +7,7 @@ import 'tabs/ringkasan_tab.dart';
 import 'tabs/produk_tab.dart';
 import 'tabs/pelanggan_tab.dart';
 import 'tabs/transaksi_tab.dart';
+import 'tabs/hutang_tab.dart';
 
 final dateRangeProvider = StateProvider<DateTimeRange>((ref) {
   final now = DateTime.now();
@@ -26,7 +27,7 @@ class LaporanScreen extends ConsumerStatefulWidget {
 class _LaporanScreenState extends ConsumerState<LaporanScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
-      TabController(length: 4, vsync: this);
+      TabController(length: 5, vsync: this);
 
   @override
   void dispose() {
@@ -70,11 +71,13 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Ringkasan'),
             Tab(text: 'Produk'),
             Tab(text: 'Pelanggan'),
             Tab(text: 'Transaksi'),
+            Tab(text: 'Hutang'),
           ],
         ),
       ),
@@ -85,18 +88,28 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
           ProdukTab(range: range),
           PelangganTab(range: range),
           TransaksiTab(range: range),
+          const HutangTab(),
         ],
       ),
     );
   }
 
   String _tabName(int i) =>
-      const ['Ringkasan', 'Produk', 'Pelanggan', 'Transaksi'][i];
+      const ['Ringkasan', 'Produk', 'Pelanggan', 'Transaksi', 'Hutang'][i];
+
+  /// Tab Hutang (index 4) tidak punya padanan [ReportTab] & tidak diekspor.
+  bool get _canExportCurrentTab =>
+      _tabController.index < ReportTab.values.length;
 
   String _fmt(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
 
   Future<void> _export(DateTimeRange range, String format) async {
+    if (!_canExportCurrentTab) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Tab Hutang tidak bisa diekspor.')));
+      return;
+    }
     final device = ref.read(deviceProvider);
     final tab = ReportTab.values[_tabController.index];
     // Indikasi proses untuk ekspor yang melibatkan tangkapan grafik.

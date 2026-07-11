@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../services/crypto_service.dart';
 import 'tables/app_settings_table.dart';
+import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
 import 'tables/employee_tables.dart';
 import 'tables/ledger_tables.dart';
@@ -88,6 +89,7 @@ const kAsistenPermissionKeys = <String>[
   PaymentMethods,
   DailySummaries,
   Employees,
+  CashClosings,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -100,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 13;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -186,6 +188,24 @@ class AppDatabase extends _$AppDatabase {
             // TERKINI (sudah termasuk sort_order) — addColumn lagi di sini
             // akan gagal "duplicate column name".
             await m.addColumn(altPrices, altPrices.sortOrder);
+          }
+          if (from < 11) {
+            // Ambang "stok menipis" per satuan dasar (Item 11). ProductUnits
+            // hanya dibuat di base schema (onCreate), TIDAK di createTable
+            // migrasi inkremental mana pun — jadi tak perlu guard `from >= X`
+            // seperti alt_prices.sortOrder; addColumn aman untuk semua upgrade.
+            await m.addColumn(productUnits, productUnits.minStock);
+          }
+          if (from < 12) {
+            // Tutup Kasir harian — rekap kas fisik vs sistem (Item 15).
+            await m.createTable(cashClosings);
+          }
+          if (from < 13) {
+            // Kembalian per-pembayaran (bukan cuma per-transaksi) — tiap
+            // baris transaction_payments punya kembaliannya sendiri +
+            // status sudah-diambil sendiri.
+            await m.addColumn(transactionPayments, transactionPayments.changeGiven);
+            await m.addColumn(transactionPayments, transactionPayments.changeTaken);
           }
         },
         beforeOpen: (details) async {
@@ -516,6 +536,72 @@ class AppDatabase extends _$AppDatabase {
     }
     return out;
   }
+
+  // ───────────────────────── Stok menipis (Item 11) ────────────────────────
+
+  /// SQL: baris satuan DASAR aktif yang punya ambang minStock DAN stok
+  /// terkini (stock_after ledger terbaru) < ambang. Diurut paling kritis dulu.
+  static const _lowStockSql = '''
+    SELECT * FROM (
+      SELECT pu.product_id AS pid, p.name AS name, pu.min_stock AS min_stock,
+        COALESCE((SELECT sl.stock_after FROM stock_ledger sl
+                  WHERE sl.product_unit_id = pu.id
+                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      WHERE pu.is_base_unit = 1 AND pu.min_stock IS NOT NULL AND p.is_active = 1
+    ) WHERE stock < min_stock
+    ORDER BY (stock - min_stock) ASC''';
+
+  /// Stream jumlah produk yang stoknya menipis (untuk badge tab Produk).
+  Stream<int> watchLowStockCount() {
+    return customSelect(
+      'SELECT COUNT(*) AS c FROM ($_lowStockSql)',
+      readsFrom: {productUnits, products, stockLedger},
+    ).watchSingle().map((r) => (r.data['c'] as int?) ?? 0);
+  }
+
+  /// Set id produk yang stoknya menipis (untuk filter daftar Produk).
+  Future<Set<String>> getLowStockProductIds() async {
+    final rows = await customSelect(_lowStockSql,
+            readsFrom: {productUnits, products, stockLedger})
+        .get();
+    return rows.map((r) => r.data['pid'] as String).toSet();
+  }
+
+  // ───────────────────────── Tutup Kasir (Item 15) ─────────────────────────
+
+  /// Rekap kas hari ini: total tunai (paid), non-tunai (paid), jumlah nota.
+  /// Non-void; 'tempo' (belum dibayar) tidak dihitung sebagai kas masuk.
+  Future<({int cash, int nonCash, int txCount})> getTodayCashRecap(
+      DateTime from, DateTime to) async {
+    final row = await customSelect(
+      "SELECT "
+      "COALESCE(SUM(CASE WHEN payment_method='tunai' THEN paid ELSE 0 END),0) AS cash, "
+      "COALESCE(SUM(CASE WHEN payment_method NOT IN ('tunai','tempo') THEN paid ELSE 0 END),0) AS noncash, "
+      "COUNT(*) AS cnt "
+      "FROM transactions WHERE status != 'void' "
+      "AND created_at >= ? AND created_at <= ?",
+      variables: [
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactions},
+    ).getSingle();
+    return (
+      cash: (row.data['cash'] as num).toInt(),
+      nonCash: (row.data['noncash'] as num).toInt(),
+      txCount: row.data['cnt'] as int,
+    );
+  }
+
+  /// Simpan/timpa tutup kasir untuk (tanggal, device) — satu entri per hari.
+  Future<void> saveCashClosing(CashClosingsCompanion entry) =>
+      into(cashClosings).insertOnConflictUpdate(entry);
+
+  Stream<List<CashClosing>> watchCashClosings() =>
+      (select(cashClosings)..orderBy([(t) => OrderingTerm.desc(t.date)]))
+          .watch();
 
   Future<bool> isPermissionEnabled(String key) async {
     final row = await (select(kasirPermissions)
@@ -952,8 +1038,25 @@ class AppDatabase extends _$AppDatabase {
           transactionItems,
           items.map((c) => c.copyWith(addedAt: Value(now))),
         );
-        if (payment != null) b.insert(transactionPayments, payment);
       });
+
+      if (payment != null) {
+        // Total SETELAH item susulan ini tapi SEBELUM _reconcileTransactionTotals
+        // (yang baru jalan belakangan) — dihitung manual dari total lama +
+        // subtotal item baru, supaya kembalian pembayaran ini dihitung
+        // terhadap total yang benar (bukan total lama yang belum termasuk
+        // tambahan barang).
+        final newItemsTotal =
+            items.fold<int>(0, (s, c) => s + c.subtotal.value);
+        final totalAfterAddition = tx.total + newItemsTotal;
+        final changeGiven = await _computePaymentChangeGiven(
+          txId: txId,
+          newPaymentAmount: payment.amount.value,
+          currentTotal: totalAfterAddition,
+        );
+        await into(transactionPayments)
+            .insert(payment.copyWith(changeGiven: Value(changeGiven)));
+      }
 
       // Potong stok.
       for (final s in stockItems) {
@@ -972,6 +1075,46 @@ class AppDatabase extends _$AppDatabase {
 
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
     });
+  }
+
+  /// Hitung kembalian milik SATU baris pembayaran baru pada transaksi [txId]:
+  /// total kembalian gabungan (Σpaid + pembayaran baru dikurangi [currentTotal])
+  /// dikurangi kembalian yang sudah "dimiliki" pembayaran-pembayaran
+  /// sebelumnya pada nota yang sama. Dipanggil SEKALI saat baris pembayaran
+  /// dibuat — hasilnya ditulis permanen ke baris itu, tidak pernah dihitung
+  /// ulang/ditimpa belakangan (beda dari `Transactions.changeAmount` yang
+  /// selalu representasi TERKINI).
+  ///
+  /// [currentTotal] wajib dioper eksplisit (bukan dibaca ulang dari
+  /// `transactions`) karena caller kadang perlu memakai total yang sudah
+  /// termasuk perubahan dalam operasi yang sama (mis. tambah belanjaan —
+  /// `transactions.total` belum terupdate sampai `_reconcileTransactionTotals`
+  /// jalan belakangan).
+  Future<int> _computePaymentChangeGiven({
+    required String txId,
+    required int newPaymentAmount,
+    required int currentTotal,
+  }) async {
+    final amountSum = transactionPayments.amount.sum();
+    final changeSum = transactionPayments.changeGiven.sum();
+    final row = await (selectOnly(transactionPayments)
+          ..addColumns([amountSum, changeSum])
+          ..where(transactionPayments.transactionId.equals(txId)))
+        .getSingle();
+    var priorPaid = row.read(amountSum);
+    final priorChangeSum = row.read(changeSum) ?? 0;
+    if (priorPaid == null) {
+      // Belum ada baris pembayaran sama sekali untuk nota ini (nota
+      // legacy/pre-backfill) — jatuhkan ke header `transactions.paid`,
+      // konsisten dengan fallback yang sama di `_reconcileTransactionTotals`.
+      final tx =
+          await (select(transactions)..where((t) => t.id.equals(txId)))
+              .getSingleOrNull();
+      priorPaid = tx?.paid ?? 0;
+    }
+    final aggregateChange = (priorPaid + newPaymentAmount) - currentTotal;
+    final thisChange = aggregateChange - priorChangeSum;
+    return thisChange > 0 ? thisChange : 0;
   }
 
   /// Hitung ulang `total` (Σ subtotal item) dan `paid` (Σ pembayaran) sebuah
@@ -1365,6 +1508,64 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Customer debt ─────────────────────────
 
+  /// Buku hutang: pelanggan dengan nota belum lunas, diurut dari yang paling
+  /// lama menunggak (nota tertua yang belum lunas). Diturunkan dari tabel
+  /// transactions (lebih akurat dari kolom cache `customers.outstandingDebt`).
+  Future<List<DebtBookEntry>> getDebtBook() async {
+    final rows = await customSelect(
+      'SELECT c.id AS cid, c.name AS name, c.phone AS phone, '
+      'SUM(t.total - t.paid) AS debt, MIN(t.created_at) AS oldest, '
+      'COUNT(*) AS cnt '
+      'FROM transactions t JOIN customers c ON c.id = t.customer_id '
+      "WHERE t.status IN ('kurang_bayar', 'tempo') "
+      'GROUP BY c.id HAVING debt > 0 ORDER BY oldest ASC',
+      readsFrom: {transactions, customers},
+    ).get();
+    return rows.map((r) {
+      final oldest = r.data['oldest'] as int;
+      return DebtBookEntry(
+        customerId: r.data['cid'] as String,
+        name: r.data['name'] as String,
+        phone: r.data['phone'] as String?,
+        debt: (r.data['debt'] as num).toInt(),
+        oldest: DateTime.fromMillisecondsSinceEpoch(oldest * 1000),
+        count: r.data['cnt'] as int,
+      );
+    }).toList();
+  }
+
+  /// ID nota belum lunas milik pelanggan, terlama dulu (untuk pelunasan FIFO
+  /// via [settleMergedDebt]).
+  Future<List<String>> getUnpaidTxIds(String customerId) async {
+    final rows = await (select(transactions)
+          ..where((t) =>
+              t.customerId.equals(customerId) &
+              t.status.isIn(['kurang_bayar', 'tempo']))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    return rows.map((t) => t.id).toList();
+  }
+
+  /// Nota belum lunas milik pelanggan, LENGKAP (nomor, tanggal, sisa),
+  /// terlama dulu — dipakai Buku Hutang untuk menampilkan daftar nota
+  /// individual (Item baru: "lihat nota mana saja yang belum lunas").
+  Future<List<UnpaidTxEntry>> getUnpaidTxDetails(String customerId) async {
+    final rows = await (select(transactions)
+          ..where((t) =>
+              t.customerId.equals(customerId) &
+              t.status.isIn(['kurang_bayar', 'tempo']))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    return rows
+        .map((t) => UnpaidTxEntry(
+              id: t.id,
+              localId: t.localId,
+              createdAt: t.createdAt,
+              sisa: t.total - t.paid,
+            ))
+        .toList();
+  }
+
   /// Total hutang akumulatif pelanggan + jumlah nota yang belum lunas.
   Future<(int debtTotal, int debtCount)> getCustomerOutstandingDebt(
       String customerId) async {
@@ -1430,6 +1631,11 @@ class AppDatabase extends _$AppDatabase {
       final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
           .getSingleOrNull();
       if (tx == null || tx.status == 'void') return 0;
+      final changeGiven = await _computePaymentChangeGiven(
+        txId: txId,
+        newPaymentAmount: amount,
+        currentTotal: tx.total,
+      );
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
         id: const Uuid().v4(),
@@ -1439,6 +1645,7 @@ class AppDatabase extends _$AppDatabase {
         paidAt: Value(ts),
         kasirId: Value(kasirId),
         note: Value(note),
+        changeGiven: Value(changeGiven),
       ));
       final newPaid = tx.paid + amount;
       final change = newPaid > tx.total ? newPaid - tx.total : 0;
@@ -1449,8 +1656,63 @@ class AppDatabase extends _$AppDatabase {
           changeAmount: Value(change),
         ),
       );
-      return change;
+      return changeGiven;
     });
+  }
+
+  // ───────────────────────── Expenses (pengeluaran) ────────────────────────
+
+  /// Jenis expense yang dihitung sebagai pengurang Laba Bersih.
+  /// `daily_expense` = biaya operasional; `change_given` = uang keluar laci
+  /// tanpa transaksi. `owner_withdrawal` (ambil laba pribadi) &
+  /// `supplier_payment` (modal barang — SUDAH terhitung di HPP lewat
+  /// cost_at_sale) SENGAJA tidak dihitung agar Laba Bersih tidak dobel/salah.
+  static const netProfitExpenseTypes = ['daily_expense', 'change_given'];
+
+  Future<void> addExpense({
+    required String type,
+    required int amount,
+    String? note,
+    String? kasirId,
+    DateTime? createdAt,
+  }) async {
+    final id = const Uuid().v4();
+    await into(expenses).insert(ExpensesCompanion.insert(
+      id: id,
+      localId: id,
+      type: type,
+      amount: amount,
+      note: Value(note),
+      kasirId: Value(kasirId),
+      createdAt:
+          createdAt == null ? const Value.absent() : Value(createdAt),
+    ));
+  }
+
+  Future<void> deleteExpense(String id) =>
+      (delete(expenses)..where((t) => t.id.equals(id))).go();
+
+  /// Semua pengeluaran dalam rentang [from]..[to], terbaru dulu.
+  Stream<List<Expense>> watchExpenses(DateTime from, DateTime to) {
+    return (select(expenses)
+          ..where((t) =>
+              t.createdAt.isBiggerOrEqualValue(from) &
+              t.createdAt.isSmallerOrEqualValue(to))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  /// Total pengeluaran yang mengurangi Laba Bersih (daily_expense +
+  /// change_given) dalam rentang.
+  Future<int> getNetProfitExpenseTotal(DateTime from, DateTime to) async {
+    final amountSum = expenses.amount.sum();
+    final row = await (selectOnly(expenses)
+          ..addColumns([amountSum])
+          ..where(expenses.type.isIn(netProfitExpenseTypes) &
+              expenses.createdAt.isBiggerOrEqualValue(from) &
+              expenses.createdAt.isSmallerOrEqualValue(to)))
+        .getSingle();
+    return row.read(amountSum) ?? 0;
   }
 
   /// Lunasi beberapa nota sekaligus (gabung nota) dengan distribusi FIFO:
@@ -1478,14 +1740,20 @@ class AppDatabase extends _$AppDatabase {
       final label = txs.map((t) => t.localId).join(', ');
       var remaining = amount;
       var totalApplied = 0;
+      // Baris pembayaran TERAKHIR yang dibuat di batch ini — kembalian sisa
+      // (kalau ada, setelah semua nota di batch ini terlunasi) nempel ke
+      // baris ini, bukan dihitung per-nota (tiap nota di loop ini tidak
+      // pernah overpay sendiri, `applied` selalu di-cap di `sisa`).
+      String? lastPaymentId;
       for (final tx in txs) {
         if (remaining <= 0) break;
         final sisa = tx.total - tx.paid;
         if (sisa <= 0) continue; // sudah lunas → lewati
         final applied = remaining < sisa ? remaining : sisa;
+        final paymentId = const Uuid().v4();
         await into(transactionPayments).insert(
           TransactionPaymentsCompanion.insert(
-            id: const Uuid().v4(),
+            id: paymentId,
             transactionId: tx.id,
             amount: applied,
             method: method,
@@ -1494,6 +1762,7 @@ class AppDatabase extends _$AppDatabase {
             note: Value('Gabung: $label'),
           ),
         );
+        lastPaymentId = paymentId;
         final newPaid = tx.paid + applied;
         await (update(transactions)..where((t) => t.id.equals(tx.id))).write(
           TransactionsCompanion(
@@ -1503,6 +1772,11 @@ class AppDatabase extends _$AppDatabase {
         );
         remaining -= applied;
         totalApplied += applied;
+      }
+      if (remaining > 0 && lastPaymentId != null) {
+        await (update(transactionPayments)
+              ..where((t) => t.id.equals(lastPaymentId!)))
+            .write(TransactionPaymentsCompanion(changeGiven: Value(remaining)));
       }
       return (totalApplied, remaining);
     });
@@ -1516,7 +1790,8 @@ class AppDatabase extends _$AppDatabase {
   Future<void> backfillMissingPayments() async {
     final rows = await customSelect(
       'SELECT t.id AS id, t.paid AS paid, t.payment_method AS method, '
-      't.kasir_id AS kasir, t.created_at AS created '
+      't.kasir_id AS kasir, t.created_at AS created, '
+      't.change_amount AS change_amount, t.change_taken AS change_taken '
       'FROM transactions t '
       "WHERE t.paid > 0 AND t.status != 'void' "
       'AND NOT EXISTS (SELECT 1 FROM transaction_payments p '
@@ -1540,6 +1815,12 @@ class AppDatabase extends _$AppDatabase {
             paidAt: Value(paidAt),
             kasirId: Value(r.data['kasir'] as String?),
             note: const Value('Migrasi data lama'),
+            // Satu-satunya pembayaran nota lama → warisi kembalian &
+            // status ambil dari header transaksi (sumber lama), supaya
+            // Ringkasan (sekarang baca dari baris pembayaran) tidak
+            // mendadak kosong untuk nota yang sudah ada sebelum migrasi ini.
+            changeGiven: Value((r.data['change_amount'] as int?) ?? 0),
+            changeTaken: Value((r.data['change_taken'] as int?) == 1),
           ),
         );
       }
@@ -1970,6 +2251,7 @@ class AppDatabase extends _$AppDatabase {
     'payment_methods',
     'daily_summaries',
     'employees',
+    'cash_closings',
   ];
 
   Future<Map<String, List<Map<String, Object?>>>> dumpAllTables() async {
@@ -2308,3 +2590,40 @@ QueryExecutor _openConnection(String encryptionKey) {
 /// Turunkan key DB dari store_key. Dipanggil sebelum [AppDatabase.open].
 String deriveDatabaseKey(String storeKeyBase64) =>
     CryptoService.deriveDbKeyHex(storeKeyBase64);
+
+/// Satu baris buku hutang (Item 12): pelanggan + total hutang + nota tertua
+/// yang belum lunas (untuk menghitung umur menunggak).
+class DebtBookEntry {
+  const DebtBookEntry({
+    required this.customerId,
+    required this.name,
+    required this.phone,
+    required this.debt,
+    required this.oldest,
+    required this.count,
+  });
+
+  final String customerId;
+  final String name;
+  final String? phone;
+  final int debt;
+  final DateTime oldest;
+  final int count;
+
+  int get daysOverdue => DateTime.now().difference(oldest).inDays;
+}
+
+/// Satu nota belum lunas — dipakai daftar detail di Buku Hutang.
+class UnpaidTxEntry {
+  const UnpaidTxEntry({
+    required this.id,
+    required this.localId,
+    required this.createdAt,
+    required this.sisa,
+  });
+
+  final String id;
+  final String localId;
+  final DateTime createdAt;
+  final int sisa;
+}
