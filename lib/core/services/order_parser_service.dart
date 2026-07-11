@@ -3,9 +3,8 @@ import '../models/cart_item.dart';
 import 'order_page_service.dart';
 import 'price_service.dart';
 
-/// **EKSPERIMENTAL — Fase 2.** Parser sisi kasir untuk teks pesanan pelanggan
-/// yang dihasilkan oleh [OrderPageService] — dipakai fitur "Tempel Pesanan"
-/// di layar kasir.
+/// Parser sisi kasir untuk teks pesanan pelanggan yang dihasilkan oleh
+/// [OrderPageService] — dipakai fitur "Tempel Pesanan" di layar kasir.
 ///
 /// Prinsip penting: harga & HPP **selalu di-resolve ulang dari DB lokal saat
 /// ini juga** (bukan dari angka yang mungkin tertulis di teks pesanan) —

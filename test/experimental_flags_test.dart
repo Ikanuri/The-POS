@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/features/kasir/widgets/paste_order_sheet.dart';
 import 'package:the_pos/features/pengaturan/csv_import_screen.dart';
 import 'package:the_pos/features/pengaturan/order_share_screen.dart';
 import 'package:the_pos/features/pengaturan/pengaturan_screen.dart';
@@ -54,6 +55,14 @@ void main() {
       (tester) async {
     await pumpWithFakeApp(tester, db: db, child: const OrderShareScreen());
 
+    expect(find.text('Eksperimental'), findsNothing);
+  });
+
+  testWidgets('PasteOrderSheet (Tempel Pesanan): TANPA badge Eksperimental',
+      (tester) async {
+    await pumpWithFakeApp(tester, db: db, child: const PasteOrderSheet());
+
+    expect(find.text('Tempel Pesanan'), findsOneWidget);
     expect(find.text('Eksperimental'), findsNothing);
   });
 }
