@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-11
 
+- `cb87507` — feat: pindah toggle "Izinkan Stok Minus" ke halaman utama Pengaturan (dari dalam Izin Kasir)
 - `9e52f61` — fix: owner selalu bisa override stok minus (sebelumnya ikut ke-block sama seperti kasir tanpa bypass khusus)
 - `c8a79f1` — fix: tombol "Harga lain" di modal item kasir tampilkan nama opsi terpilih (mis. "Eceran"), bukan cuma hitungan generik
 - `e4baa92` — fix: produk hasil import CSV hilang dari katalog HTML (isBaseUnit tidak pernah ditandai true, OrderPageService mensyaratkan itu tanpa fallback)

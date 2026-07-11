@@ -18,10 +18,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   "Eksperimental" — sudah cukup teruji untuk dipakai sehari-hari.
 
 ### 🔧 Perbaikan
+- **Toggle "Izinkan Stok Minus" kembali ke halaman utama Pengaturan** —
+  sebelumnya harus masuk ke Pengaturan → Izin Kasir dulu (baris paling
+  bawah) untuk menemukannya.
 - **Owner sekarang selalu bisa jual meski stok kurang/habis.** Sebelumnya
   owner ikut terblokir sama seperti kasir kalau "Izinkan Stok Minus"
-  (Pengaturan → Izin Kasir) sedang dimatikan — sekarang owner tidak
-  terpengaruh pengaturan itu, konsisten dengan hak akses owner lainnya.
+  sedang dimatikan — sekarang owner tidak terpengaruh pengaturan itu,
+  konsisten dengan hak akses owner lainnya.
 - **Tombol "Harga lain" di modal produk (kasir) sekarang menampilkan nama
   harga yang sedang aktif** (mis. "Eceran"), bukan cuma angka hitungan
   generik — jadi jelas harga mana yang sedang dipakai.

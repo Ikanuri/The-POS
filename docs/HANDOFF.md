@@ -65,15 +65,25 @@ keputusan kecil sisa (nama duplikat, whitespace) ada di PLAN.md Item 4.
    aktif kalau `_priceOverridden` (supaya default/harga-dasar tetap tampil
    label generik, tidak breaking existing test).
 2. **Bug nyata ditemukan**: owner ikut ter-block saat setting global
-   "Izinkan Stok Minus" (Pengaturan → Izin Kasir) OFF — sama seperti kasir,
-   TIDAK ADA bypass khusus owner (beda dari semua izin lain: override
-   harga, input stok, dst yang semuanya tanpa syarat untuk owner). Root
-   cause di `payment_screen.dart::_confirm()` C-5 check. Fix: extract jadi
+   "Izinkan Stok Minus" OFF — sama seperti kasir, TIDAK ADA bypass khusus
+   owner (beda dari semua izin lain: override harga, input stok, dst yang
+   semuanya tanpa syarat untuk owner). Root cause di
+   `payment_screen.dart::_confirm()` C-5 check. Fix: extract jadi
    `resolveAllowNegativeStock(db, device)` (top-level function, testable
    Tier 1 tanpa drive seluruh widget PaymentScreen) + tambah
    `if (device.isOwner) return true;` unconditional. **Tidak ada test
    sebelumnya untuk fitur stok-minus ini sama sekali** — baru dibuat
-   `test/allow_negative_stock_test.dart`._
+   `test/allow_negative_stock_test.dart`.
+3. **User tanya balik "toggle itu dulu ada, kok sekarang tidak?"** — dicek
+   `git log`, ternyata dulu toggle "Izinkan Stok Minus" memang ada langsung
+   di halaman utama Pengaturan, lalu di komit `1b292eb` (SEBELUM sesi ini)
+   dipindah masuk ke dalam Izin Kasir (kurang terlihat). Bukan bug kode,
+   murni penempatan UI. User minta dibuatkan **entri terpisah lagi** (bukan
+   dikembalikan sebagai bagian Izin Kasir, bukan juga cuma taruh di kedua
+   tempat) → `cb87507`: dipindah balik jadi `SwitchListTile` sendiri di
+   `pengaturan_screen.dart` (section "Toko", owner-only), dicabut total
+   dari `kasir_permissions_screen.dart`. Provider `_allowNegativeStockProvider`
+   ikut pindah lokasi (masing-masing file private, tidak dibagi)._
 **Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
 pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
 bulan Indonesia MANUAL (lihat `expenses_screen.dart` `_idDays`/`_idMonths`).
