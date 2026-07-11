@@ -11,6 +11,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 11 Juli 2026
 
 ### ✨ Fitur Baru
+- **Riwayat kembalian per pembayaran di struk.** Nota yang dibayar lebih dari
+  sekali (mis. bayar sebagian dulu, dilunasi belakangan) sekarang menampilkan
+  kembalian tiap pembayaran secara terpisah di card "Riwayat Pembayaran",
+  lengkap dengan centang "sudah diambil" masing-masing — tidak lagi ambigu
+  "tadi bayar berapa? sisanya sudah dikembalikan belum?".
+- **Buku Hutang: lihat daftar nota yang belum lunas.** Tap nama pelanggan di
+  Buku Hutang sekarang menampilkan nota-nota mana saja yang masih menunggak
+  (nomor, tanggal, sisa) — tap salah satunya langsung membuka struknya.
 - **Menu baru: Import dari Griyo POS** (Pengaturan → Eksperimental). Khusus
   untuk migrasi data produk dari Griyo POS — sama dengan Import Produk CSV
   biasa, tapi bantuan formatnya disesuaikan untuk file export Griyo.

@@ -4,9 +4,80 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 11 Juli 2026. Backlog Item 9-22 (PLAN.md) 12/13 SELESAI
-(Item 17+21 — sync — sengaja ditunda, lihat bagian "MENGGANTUNG" di bawah).
-Sesi ini (11 Juli): user upload sampel CSV export Griyo POS untuk migrasi
+_Terakhir diperbarui: 11 Juli 2026 (sesi kembalian per-pembayaran + Buku
+Hutang). **schemaVersion sekarang 13.** Baseline sebelum sesi ini: 210 test
+hijau, tetap 210 setelah (2 test file baru + edit ke 5 test file lama, net
+count sama karena ada test lama yang disatukan). Backlog Item 9-22 (PLAN.md)
+tetap 12/13 SELESAI (Item 17+21 — sync — masih sengaja ditunda, lihat bagian
+"MENGGANTUNG" di bawah — TIDAK berubah dari sebelumnya).
+
+**Sesi ini — 3 proposal fitur baru dari user, didiskusikan "jangan coding
+dulu" lalu disepakati via Q&A panjang, dieksekusi 2 dari 3 poin:**
+1. **Poin 1 (reuse kembalian sebagai kredit di Tambah Belanjaan, nota SAMA
+   saja — lintas nota/gabungan di-pending user) — BELUM dikerjakan.** Ada
+   tegangan desain yang belum diselesaikan: `changeGiven` per baris
+   pembayaran sengaja dibuat immutable-historis (lihat Poin 2 di bawah),
+   tapi "pakai kembalian sebagai kredit" secara alami perlu MENGURANGI
+   `changeGiven` baris lama itu — bertentangan langsung dengan prinsip
+   immutability yang jadi alasan seluruh redesign Poin 2. Opsi yang sudah
+   dipikirkan: (a) mutasi eksplisit baris lama sebagai pengecualian sempit
+   yang didokumentasikan, vs (b) pakai formula delta yang sama di baris $0
+   baru — tapi (b) terbukti TIDAK menampilkan sisa kredit dengan benar di
+   Ringkasan. **Belum dikomunikasikan ke user** — perlu didiskusikan lagi
+   sebelum implementasi, kemungkinan lewat pengungkapan risiko/kompleksitas
+   seperti pola Item 17+21 sebelumnya.
+2. **Poin 2 (kembalian per-baris pembayaran + centang per-baris di Riwayat
+   Pembayaran) — SELESAI** (`399a742`, `5759c18`). Desain final (kesepakatan
+   user via Q&A): Ringkasan nota SELALU tampilkan kembalian pembayaran
+   TERAKHIR saja (bukan akumulatif — kalau akumulatif, centang kembalian
+   jadi tidak ada gunanya). Card Riwayat Pembayaran tampilkan kembalian tiap
+   baris yang punya kembalian sendiri (termasuk pembayaran PERTAMA kalau
+   nota dilunasi belakangan), dengan centang "sudah diambil" per baris —
+   TANPA timestamp terpisah (pakai timestamp `paidAt` milik baris itu,
+   karena kembalian & pembayaran dianggap satu momen). Skema baru:
+   `TransactionPayments.changeGiven`/`.changeTaken` (schemaVersion 13, kolom
+   ditambah via migrasi, bukan tabel baru). Formula kunci penghindar
+   dobel-hitung ada di `_computePaymentChangeGiven()`
+   (`app_database.dart`): `thisChange = (priorPaid + newPaymentAmount −
+   currentTotal) − priorChangeSum`, lalu di-clamp ke 0 kalau negatif. Ada
+   fallback ke `transactions.paid` kalau belum ada baris `TransactionPayments`
+   sama sekali (nota legacy/pre-backfill) — pola sama seperti
+   `_reconcileTransactionTotals`. Kasus khusus: sisa lebih di
+   `settleMergedDebt` (pelunasan hutang gabungan beberapa nota) sekarang ikut
+   tersimpan di baris pembayaran nota TERAKHIR (sebelumnya cuma tampil
+   sekali di SnackBar, TIDAK PERNAH tersimpan di mana pun — temuan bug nyata
+   selama analisis, bukan cuma penyempurnaan).
+3. **Poin 3 (Buku Hutang: lihat nota mana saja yang belum lunas per
+   pelanggan) — SELESAI** (`6173b57`). User pilih extend modal detail
+   pelanggan yang SUDAH ADA (bukan route/layar baru) — `getUnpaidTxDetails()`
+   query baru + `DraggableScrollableSheet` di `hutang_tab.dart`, tap nota
+   langsung `context.push('/kasir/struk/${tx.id}')`.
+
+**Bug tersembunyi ditemukan selama sesi ini (di luar 3 poin di atas, murni
+dari widget test baru):**
+- **2 overflow RenderFlex PRE-EXISTING di `hutang_tab.dart`** (baris ringkasan
+  jumlah pelanggan+total, & baris total-hutang di modal detail) — baru
+  ketahuan sekarang karena ini PERTAMA KALINYA `HutangTab` dapat widget test
+  sama sekali. Sudah diperbaiki sekalian (`Expanded`+ellipsis, pola yang
+  sama dipakai berkali-kali sesi-sesi sebelumnya).
+- **`formatRupiah` pakai non-breaking space (U+00A0)**, bukan spasi biasa,
+  antara "Rp" dan angka — literal string test `find.text('Rp 5.000')`
+  gagal match walau teks yang sama persis tampil di layar (`find.text`
+  0 widget padahal dump manual `Text.data` menunjukkan teks itu render 2x).
+  Butuh ~1 jam debug (test debug DB-level vs widget-level dump vs re-run
+  isolasi file, semua "membuktikan" data benar sebelum akhirnya ketemu lewat
+  `codeUnits` dump: `160` bukan `32` di posisi spasi). **Sudah dicatat di
+  CLAUDE.md §Gotcha** supaya tidak terulang — pakai `formatRupiah(x)` untuk
+  bangun string expected di test, jangan hardcode literal "Rp X.XXX".
+  Pelajaran tambahan: `findsWidgets` (>=1) terlalu longgar untuk revert-verify
+  saat ada 2 lokasi render yang sengaja duplikat (Ringkasan + Riwayat
+  Pembayaran) — harus `findsNWidgets(2)` biar revert-verify benar-benar bisa
+  gagal saat salah satu lokasi sengaja dimatikan untuk pembuktian.
+
+---
+
+## Sesi sebelumnya (11 Juli, sebelum sesi kembalian di atas) — Griyo POS import
+User upload sampel CSV export Griyo POS untuk migrasi
 data toko lama → ditemukan & diperbaiki bug import CSV (`63d0f2d`): parser
 cuma kenal pemisah `,` (Griyo pakai `;`), alias kolom tidak cocok header asli
 Griyo ("Produk"/"Kode Produk"/"Grup Produk"/"Harga Jual"/"Harga Pokok"), dan
@@ -95,7 +166,8 @@ Jalankan `export PATH="/tmp/flutter/bin:$PATH"` tiap sesi baru, `flutter pub get
 lalu `flutter analyze` + `flutter test`. Kalau `/tmp/flutter` sudah hilang
 (container di-reclaim), unduh ulang:
 `curl -sSL -o /tmp/flutter.tar.xz "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz" && tar xf /tmp/flutter.tar.xz -C /tmp`.
-Baseline sebelum eksekusi: 141 test hijau; setelah Item 22: 149 hijau.
+Baseline sebelum eksekusi: 141 test hijau; setelah Item 22: 149 hijau; setelah
+sesi kembalian per-pembayaran (lihat atas): 210 hijau.
 Google Fonts butuh binding aktif — di test, JANGAN panggil `AppTheme.light()/dark()`
 di badan `main()` (fase collection); bangun theme DI DALAM `testWidgets`
 (lihat `test/chip_and_banner_color_test.dart`).
@@ -114,7 +186,7 @@ tersendiri; test Item 18 sengaja meng-konsumsi exception ini.
 
 ## Di Mana Kita Sekarang
 
-### Sesi terbaru — eksekusi backlog Item 9-22 (12 dari 13 SELESAI)
+### Sesi sebelumnya — eksekusi backlog Item 9-22 (12 dari 13 SELESAI)
 User menyetujui eksekusi seluruh saran fitur + bug + proposal (Item 9-22 di
 PLAN.md) dan mendelegasikan penuh ("Anda yang lebih tahu"). Dieksekusi 12 item
 berturut-turut, tiap item: kode + test berjenjang + **revert-verify** + full
@@ -135,10 +207,12 @@ per-satuan (`CartItem.parentProductUnitId` + `belongsToParent`, cascade delete)
 • **13** pengingat backup (cek saat app dibuka, `BackupReminder`) • **15**
 Tutup Kasir harian (tabel `cash_closings`, **schemaVersion 12**).
 
-**schemaVersion sekarang 12.** Migrasi baru: v11 addColumn `product_units.
+**schemaVersion 12** (Item 15, sesi ini): v11 addColumn `product_units.
 min_stock` (tanpa guard `from>=X` — product_units cuma di base schema); v12
-createTable `cash_closings`. Fixture migrasi test v7-v10 ditambah tabel
-`product_units` minimal + assert versi akhir 12.
+createTable `cash_closings`. **schemaVersion 13** (sesi kembalian, lihat
+bagian atas): addColumn `transaction_payments.change_given` +
+`.change_taken`. Fixture migrasi test v7-v10 ditambah tabel `product_units`
++ `transaction_payments` minimal, assert versi akhir 13.
 
 ### ⚠️ MENGGANTUNG — Item 21+17 (sync) BELUM dikerjakan (sengaja ditunda)
 Satu-satunya item backlog yang belum: **Item 21** (angkat state sync ke

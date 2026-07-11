@@ -72,6 +72,10 @@ lib/
   (`-`, `s/d`). Printer ESC/POS juga: sanitasi ke ASCII.
 - **Field harga IME desync** akibat pemisah ribuan — hati-hati saat mengubah
   formatting input angka.
+- **`formatRupiah` pakai non-breaking space (U+00A0)** antara "Rp" dan angka,
+  bukan spasi biasa. Di widget test, `find.text('Rp 5.000')` (literal spasi
+  biasa) TIDAK akan match walau teksnya tampil benar di layar — pakai
+  `find.text(formatRupiah(5000))` untuk membangun string yang dibandingkan.
 
 ## Perintah
 
