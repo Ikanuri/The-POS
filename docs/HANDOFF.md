@@ -5,27 +5,50 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 11 Juli 2026 (sesi kembalian per-pembayaran + Buku
-Hutang). **schemaVersion sekarang 13.** Baseline sebelum sesi ini: 210 test
-hijau, tetap 210 setelah (2 test file baru + edit ke 5 test file lama, net
-count sama karena ada test lama yang disatukan). Backlog Item 9-22 (PLAN.md)
-tetap 12/13 SELESAI (Item 17+21 — sync — masih sengaja ditunda, lihat bagian
-"MENGGANTUNG" di bawah — TIDAK berubah dari sebelumnya).
+Hutang + Tambah Belanjaan). **schemaVersion sekarang 13** (TIDAK ada migrasi
+baru dari Poin 1 — murni fitur UI, tidak menyentuh skema). Baseline sebelum
+sesi ini: 210 test hijau → **213 test hijau** setelah semuanya (3 poin).
+Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item 17+21 — sync — masih
+sengaja ditunda, lihat bagian "MENGGANTUNG" di bawah — TIDAK berubah dari
+sebelumnya).
 
 **Sesi ini — 3 proposal fitur baru dari user, didiskusikan "jangan coding
-dulu" lalu disepakati via Q&A panjang, dieksekusi 2 dari 3 poin:**
-1. **Poin 1 (reuse kembalian sebagai kredit di Tambah Belanjaan, nota SAMA
-   saja — lintas nota/gabungan di-pending user) — BELUM dikerjakan.** Ada
-   tegangan desain yang belum diselesaikan: `changeGiven` per baris
-   pembayaran sengaja dibuat immutable-historis (lihat Poin 2 di bawah),
-   tapi "pakai kembalian sebagai kredit" secara alami perlu MENGURANGI
-   `changeGiven` baris lama itu — bertentangan langsung dengan prinsip
-   immutability yang jadi alasan seluruh redesign Poin 2. Opsi yang sudah
-   dipikirkan: (a) mutasi eksplisit baris lama sebagai pengecualian sempit
-   yang didokumentasikan, vs (b) pakai formula delta yang sama di baris $0
-   baru — tapi (b) terbukti TIDAK menampilkan sisa kredit dengan benar di
-   Ringkasan. **Belum dikomunikasikan ke user** — perlu didiskusikan lagi
-   sebelum implementasi, kemungkinan lewat pengungkapan risiko/kompleksitas
-   seperti pola Item 17+21 sebelumnya.
+dulu" lalu disepakati via Q&A panjang, ketiganya SELESAI dieksekusi:**
+1. **Poin 1 (kembalian dari Tambah Belanjaan, nota SAMA saja — lintas
+   nota/gabungan di-pending user) — SELESAI** (`d77e81e`), tapi scope-nya
+   BERUBAH dari proposal awal setelah diskusi lanjutan dengan user. Awalnya
+   direncanakan sebagai "reuse otomatis" (kembalian lama dipakai sebagai
+   kredit, sistem yang mengurangi) — ini mentok di tegangan desain: `changeGiven`
+   per baris pembayaran sengaja immutable-historis (lihat Poin 2), tapi
+   reuse otomatis perlu MENGURANGI baris lama, bertentangan langsung. User
+   lalu mengusulkan pendekatan yang jauh lebih sederhana dan sama sekali
+   menghindari tegangan itu: **jangan otomatis sama sekali** — cukup
+   TAMPILKAN info "kembalian terakhir yang belum diambil" di kalkulator
+   bayar Tambah Belanjaan, kasir tetap INPUT MANUAL nominal yang diterima
+   (disimulasikan sebagai kejadian pembayaran baru yang sungguhan — bukan
+   kredit otomatis). Ini menghilangkan tegangan sepenuhnya karena TIDAK ADA
+   mutasi data lama sama sekali: baris lama (`pay1`) tetap utuh selamanya,
+   baris baru (`pay2`, dari pembayaran manual kasir) dihitung normal lewat
+   `_computePaymentChangeGiven()` yang SUDAH ADA dari Poin 2 — tidak ada
+   kode DB baru. User lalu menambahkan 1 penyempurnaan: di samping info
+   nominal itu, ada CENTANG "Pakai kembalian" yang fungsinya SAMA PERSIS
+   dengan centang di Ringkasan struk (`_toggleChangeTaken`) — supaya kasir
+   tidak perlu buka struk dulu untuk menandai kembalian lama sebagai
+   "dipakai/diambil" (mengurangi risiko lupa saat rush hour). Centang ini
+   PURE UPDATE (bukan INSERT) ke baris yang sama, jadi klik berkali-kali
+   tidak menghasilkan riwayat baru — cuma menimpa nilai boolean terakhir
+   (dikonfirmasi eksplisit ke user saat ditanya). Centang & nominal manual
+   di kalkulator SENGAJA DIBIARKAN LEPAS/independen (tidak saling
+   memvalidasi) — keputusan eksplisit user. Diimplementasi di
+   `_CashKeypadSheet` (`payment_screen.dart`), murni tambahan UI + 1 query
+   `SELECT ... ORDER BY paid_at DESC LIMIT 1` di `_load()`. Sekalian:
+   user minta highlight nominal "Total" di header kalkulator (sebelumnya
+   teks kecil rata, "kayak NPC cameo") — dibuat sebagian bold+besar via
+   `Text.rich`, pola yang sama diterapkan ke info kembalian baru. Test
+   helper `test/helpers/pump_app.dart` diperluas dengan parameter opsional
+   `initialPrefs` (seed SharedPreferences sebelum render, dibutuhkan untuk
+   seed keranjang cart Tambah Belanjaan di widget test — parameter opsional
+   dengan default `{}`, tidak mengubah perilaku test lain yang sudah ada).
 2. **Poin 2 (kembalian per-baris pembayaran + centang per-baris di Riwayat
    Pembayaran) — SELESAI** (`399a742`, `5759c18`). Desain final (kesepakatan
    user via Q&A): Ringkasan nota SELALU tampilkan kembalian pembayaran
@@ -167,7 +190,7 @@ lalu `flutter analyze` + `flutter test`. Kalau `/tmp/flutter` sudah hilang
 (container di-reclaim), unduh ulang:
 `curl -sSL -o /tmp/flutter.tar.xz "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz" && tar xf /tmp/flutter.tar.xz -C /tmp`.
 Baseline sebelum eksekusi: 141 test hijau; setelah Item 22: 149 hijau; setelah
-sesi kembalian per-pembayaran (lihat atas): 210 hijau.
+sesi kembalian per-pembayaran + Tambah Belanjaan (lihat atas): 213 hijau.
 Google Fonts butuh binding aktif — di test, JANGAN panggil `AppTheme.light()/dark()`
 di badan `main()` (fase collection); bangun theme DI DALAM `testWidgets`
 (lihat `test/chip_and_banner_color_test.dart`).

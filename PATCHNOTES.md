@@ -11,6 +11,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 11 Juli 2026
 
 ### ✨ Fitur Baru
+- **Kalkulator bayar di Tambah Belanjaan sekarang mengingatkan kembalian
+  yang belum diambil.** Kalau nota masih ada kembalian nganggur dari
+  pembayaran sebelumnya, muncul info nominalnya lengkap dengan centang
+  "Pakai kembalian" — tinggal dicentang saat dipakai buat belanja
+  tambahan, tidak perlu buka struk dulu untuk mencentangnya secara
+  terpisah.
 - **Riwayat kembalian per pembayaran di struk.** Nota yang dibayar lebih dari
   sekali (mis. bayar sebagian dulu, dilunasi belakangan) sekarang menampilkan
   kembalian tiap pembayaran secara terpisah di card "Riwayat Pembayaran",
