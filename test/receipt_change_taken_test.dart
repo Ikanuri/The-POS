@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,10 @@ import 'helpers/pump_app.dart';
 
 /// Widget test — checkbox "kembalian sudah diambil" di struk mencegah kasir
 /// memberi kembalian dua kali untuk nota yang barangnya diambil belakangan.
+/// Kembalian sekarang per-pembayaran (bukan per-transaksi) — Ringkasan baca
+/// dari baris `transaction_payments` TERAKHIR, jadi fixture harus menyertakan
+/// baris pembayaran itu (bukan cuma header transaksi), sama seperti data
+/// nyata yang selalu punya baris pembayaran di belakang `paid`.
 Future<void> _insertTx(AppDatabase db,
     {required String id,
     required String localId,
@@ -23,6 +28,15 @@ Future<void> _insertTx(AppDatabase db,
         changeAmount: changeAmount,
         paymentMethod: 'tunai',
       ));
+  if (paid > 0) {
+    await db.into(db.transactionPayments).insert(
+        TransactionPaymentsCompanion.insert(
+            id: '$id-pay',
+            transactionId: id,
+            amount: paid,
+            method: 'tunai',
+            changeGiven: Value(changeAmount)));
+  }
 }
 
 Future<void> _insertItem(AppDatabase db,
@@ -73,11 +87,12 @@ void main() {
     await tester.tap(find.text('Kembalian'));
     await tester.pumpAndSettle();
 
-    final tx = await (db.select(db.transactions)
-          ..where((t) => t.id.equals('tx1')))
+    final payment = await (db.select(db.transactionPayments)
+          ..where((t) => t.transactionId.equals('tx1')))
         .getSingle();
-    expect(tx.changeTaken, isTrue,
-        reason: 'tap baris Kembalian harus menulis changeTaken=true ke DB');
+    expect(payment.changeTaken, isTrue,
+        reason: 'tap baris Kembalian harus menulis changeTaken=true ke baris '
+            'pembayaran (bukan lagi ke header transaksi)');
 
     await db.close();
   });
