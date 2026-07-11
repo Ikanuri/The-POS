@@ -17,7 +17,21 @@ langsung. Keputusan desain: import tetap FLAT (user pilih ini, bukan
 auto-gabung baris nama-sama-satuan-beda jadi 1 produk multi-satuan) karena
 CSV Griyo tidak menyertakan rasio konversi antar satuan — digabung manual
 lewat Edit Produk bila perlu, dibantu counter `sameNameDifferentUnit` baru
-di hasil import._
+di hasil import. Fix ini TIDAK menyentuh logika rasio konversi stok
+(`ratioToBase`/`isBaseUnit`/`_baseUnitOf()`) — import CSV selalu bikin 1
+produk = 1 unit dengan `ratioToBase` default 1.0 (unchanged, sudah begitu
+sejak awal); `_baseUnitOf()` sudah toleran produk tanpa unit ber-`isBaseUnit`
+(fallback anggap unit itu sendiri sebagai basis). Behavior import: UPSERT
+per baris, BUKAN overwrite/replace katalog — baris yang cocok (barcode→SKU→
+nama+satuan) ke produk lama HANYA update harga (stok tidak disentuh sama
+sekali di re-import), baris baru di-append sebagai produk baru (opening
+stock ledger dari kolom Stok), dan produk lama yang TIDAK ada di file CSV
+dibiarkan utuh (tidak dihapus). Lalu dirapikan jadi fitur bernama "Import
+dari Griyo POS", diflag Eksperimental (`CsvImportScreen(griyoMode: true)`,
+route `/pengaturan/import-griyo`) — dan flag Eksperimental yang lama di
+Katalog Pesanan (HTML, `order_share_screen.dart`) DICABUT karena sudah jadi
+fitur native (dipindah dari section Eksperimental ke Sinkronisasi di
+`pengaturan_screen.dart`)._
 **Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
 pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
 bulan Indonesia MANUAL (lihat `expenses_screen.dart` `_idDays`/`_idMonths`).

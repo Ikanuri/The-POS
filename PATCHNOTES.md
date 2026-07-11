@@ -10,6 +10,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 11 Juli 2026
 
+### ✨ Fitur Baru
+- **Menu baru: Import dari Griyo POS** (Pengaturan → Eksperimental). Khusus
+  untuk migrasi data produk dari Griyo POS — sama dengan Import Produk CSV
+  biasa, tapi bantuan formatnya disesuaikan untuk file export Griyo.
+- **Katalog Pesanan (HTML) sekarang jadi fitur resmi**, tidak lagi berlabel
+  "Eksperimental" — sudah cukup teruji untuk dipakai sehari-hari.
+
 ### 🔧 Perbaikan
 - **Import CSV dari Griyo POS sekarang berhasil.** Sebelumnya file export
   Griyo (pemisah kolom titik-koma) selalu gagal total — semua baris ditolak
