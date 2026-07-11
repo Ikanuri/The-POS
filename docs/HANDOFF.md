@@ -4,14 +4,20 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 10 Juli 2026 (mulai eksekusi backlog besar Item 9-22 di
-PLAN.md — hasil diskusi saran audit + bug keranjang + 5 proposal user.
-SELESAI sejauh ini: Item 22 (warna chip/banner), Item 10 (metode bayar
-pelunasan), Item 20 (edit produk di modal), Item 14 (edit/hapus metode
-bayar), Item 9 (pengeluaran + Laba Bersih), Item 12 (Buku Hutang), Item 18 (beralih pesanan), Item 16 (atribusi varian per-satuan +
-fix minus), Item 19 (Harga Lain dropdown), Item 11 (stok menipis, schemaVersion 11), Item 13 (pengingat backup), Item 15 (Tutup Kasir, schemaVersion 12).
-Sisa Item 17,21 antre,
-semua keputusan desain sudah final di PLAN.md)._
+_Terakhir diperbarui: 11 Juli 2026. Backlog Item 9-22 (PLAN.md) 12/13 SELESAI
+(Item 17+21 — sync — sengaja ditunda, lihat bagian "MENGGANTUNG" di bawah).
+Sesi ini (11 Juli): user upload sampel CSV export Griyo POS untuk migrasi
+data toko lama → ditemukan & diperbaiki bug import CSV (`63d0f2d`): parser
+cuma kenal pemisah `,` (Griyo pakai `;`), alias kolom tidak cocok header asli
+Griyo ("Produk"/"Kode Produk"/"Grup Produk"/"Harga Jual"/"Harga Pokok"), dan
+kolom Satuan/Grup Produk berisi ID legacy MENTAH (bukan nama teks) yang
+sebenarnya sudah match `_kDefaultUnitTypes`/grup 3-20 di `_seedDefaults`
+(app_database.dart) tapi importer tidak pernah memakainya sebagai ID
+langsung. Keputusan desain: import tetap FLAT (user pilih ini, bukan
+auto-gabung baris nama-sama-satuan-beda jadi 1 produk multi-satuan) karena
+CSV Griyo tidak menyertakan rasio konversi antar satuan — digabung manual
+lewat Edit Produk bila perlu, dibantu counter `sameNameDifferentUnit` baru
+di hasil import._
 **Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
 pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
 bulan Indonesia MANUAL (lihat `expenses_screen.dart` `_idDays`/`_idMonths`).

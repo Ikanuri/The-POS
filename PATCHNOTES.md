@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 Juli 2026
+
+### 🔧 Perbaikan
+- **Import CSV dari Griyo POS sekarang berhasil.** Sebelumnya file export
+  Griyo (pemisah kolom titik-koma) selalu gagal total — semua baris ditolak
+  karena format kolomnya tidak dikenali. Sekarang terbaca otomatis, termasuk
+  kolom Satuan & Grup Produk milik Griyo yang berupa kode angka (otomatis
+  dipetakan ke satuan/grup yang benar seperti Pak, Dos, Slop — bukan
+  diseragamkan jadi "Kg" untuk semua produk). Hasil import kini juga
+  menandai produk dengan nama sama tapi kemasan berbeda (mis. sama-sama
+  "234 12" untuk Slop & Pak) supaya mudah digabungkan manual bila perlu.
+
 ## 10 Juli 2026
 
 ### ✨ Fitur Baru
