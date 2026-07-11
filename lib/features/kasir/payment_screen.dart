@@ -16,6 +16,22 @@ import 'cart_provider.dart';
 
 const _uuid = Uuid();
 
+/// C-5: apakah transaksi ini boleh lanjut walau stok kurang. Owner SELALU
+/// boleh (konsisten dengan izin lain — override harga, input stok, dst —
+/// yang semuanya tanpa syarat untuk owner). Asisten butuh izin eksplisit
+/// `asisten_stok_minus`. Kasir mengikuti setting global `allow_negative_stock`.
+/// Diekstrak dari `_confirm()` supaya bisa diuji langsung tanpa perlu
+/// mendorong seluruh alur widget PaymentScreen.
+Future<bool> resolveAllowNegativeStock(
+    AppDatabase db, DeviceIdentity device) async {
+  if (device.isOwner) return true;
+  var allow = (await db.getSetting('allow_negative_stock')) == '1';
+  if (!allow && device.deviceRole == 'asisten') {
+    allow = await db.isPermissionEnabled('asisten_stok_minus');
+  }
+  return allow;
+}
+
 class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({super.key, this.addToTxId});
 
@@ -322,12 +338,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final db = ref.read(databaseProvider);
 
       // C-5: Cek stok sebelum transaksi jika setting "izinkan stok minus" OFF.
-      var allowNegative = (await db.getSetting('allow_negative_stock')) == '1';
-      // Asisten bisa diberi izin khusus override stok minus meski setting
-      // global OFF (mis. owner sedang tidak di tempat).
-      if (!allowNegative && ref.read(deviceProvider).deviceRole == 'asisten') {
-        allowNegative = await db.isPermissionEnabled('asisten_stok_minus');
-      }
+      final device = ref.read(deviceProvider);
+      final allowNegative = await resolveAllowNegativeStock(db, device);
       if (!allowNegative) {
         final notifier = ref.read(cartProvider(_cartId).notifier);
         final shortages = <String>[];
@@ -361,7 +373,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         return;
       }
 
-      final device = ref.read(deviceProvider);
       final notifier = ref.read(cartProvider(_cartId).notifier);
       final now = DateTime.now();
 
