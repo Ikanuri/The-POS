@@ -59,6 +59,21 @@ class _CsvImportScreenState extends ConsumerState<CsvImportScreen>
               _ResultRow(label: 'Harga produk lama diperbarui', value: result2.updated, icon: Icons.update_outlined),
               _ResultRow(label: 'Duplikat dilewati', value: result2.duplicates, icon: Icons.skip_next_outlined),
               _ResultRow(label: 'Tanpa barcode', value: result2.noBarcode, icon: Icons.qr_code_outlined),
+              if (result2.sameNameDifferentUnit > 0) ...[
+                _ResultRow(
+                  label: 'Nama sama, satuan beda (cek manual)',
+                  value: result2.sameNameDifferentUnit,
+                  icon: Icons.warning_amber_outlined,
+                  color: Colors.orange,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Produk ini masuk sebagai entri terpisah (bukan 1 produk '
+                  'multi-satuan) karena rasio konversi antar satuan tidak '
+                  'ada di CSV. Gabung manual lewat Edit Produk bila perlu.',
+                  style: TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                ),
+              ],
               if (result2.errors.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text('${result2.errors.length} baris error:',
