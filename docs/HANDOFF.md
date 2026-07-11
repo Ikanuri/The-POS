@@ -14,12 +14,37 @@ lihat bagian "MENGGANTUNG" di bawah — TIDAK berubah dari sebelumnya).
 
 **PR #4** (`https://github.com/Ikanuri/The-POS/pull/4`, dibuat dari Claude
 Code UI mencakup commit-commit sesi ini) sudah **DI-MERGE ke `main`**
-(merge commit `b477b03`) atas instruksi user "Merge langsung saja" — dipakai
-merge biasa (bukan squash) supaya hash commit individual tetap match dengan
-yang tercatat di CHANGELOG.md. Commit SETELAH merge itu (cabut flag
-eksperimental Tempel Pesanan, `0323d3f`) masih menumpuk di branch
-`claude/project-gaps-incomplete-wpgdp8` yang sama — belum ada PR baru dibuat
-untuk ini, branch akan terus dipakai sampai ada instruksi lain dari user.
+(merge commit `b477b03`) atas instruksi user "Merge langsung saja". **PR #5**
+(susulan, cabut flag eksperimental) juga sudah **DI-MERGE** (merge commit
+`79241db`). Keduanya dipakai merge biasa (bukan squash) supaya hash commit
+individual tetap match dengan yang tercatat di CHANGELOG.md. Pola yang
+berlaku sekarang: user minta "merge langsung" berkali-kali sepanjang sesi
+setiap ada batch perubahan baru — begitu PR sebelumnya merged/closed, commit
+susulan di branch yang sama perlu PR BARU (PR lama tidak reopen otomatis
+walau branch-nya sama), baru di-merge lagi. Commit fix checkbox (`c3e975a`,
+di bawah) BELUM masuk PR/merge — masih di branch, menunggu instruksi
+selanjutnya.
+
+**Bug ditemukan user SETELAH PR #4 di-merge (`c3e975a`):** centang "Pakai
+kembalian" di kalkulator bayar Tambah Belanjaan (fitur baru Poin 1 sesi ini)
+tidak merespons tap sama sekali. Akar masalah: `_CashKeypadSheet` dibuka
+lewat `showModalBottomSheet`, yang builder-nya CUMA dievaluasi SEKALI saat
+sheet dibuka — `setState()` di parent (`_PaymentScreenState`, dipanggil dari
+`_toggleUnclaimedChangeTaken` setelah tulis DB sukses) TIDAK memicu rebuild
+sheet yang sudah terbuka. `Checkbox` di sheet baca `widget.unclaimedChangeTaken`
+langsung dari prop, yang beku di nilai saat sheet dibuka (selalu `false`) —
+jadi tulis-DB sukses tapi tampilan checkbox tidak pernah berubah, kelihatan
+seperti tidak merespons. **Pelajaran umum**: pola ini (baca state langsung
+dari `widget.xxx` di dalam sheet yang dibuka via `showModalBottomSheet`/
+`showDialog`) rawan terulang untuk fitur interaktif APAPUN di dalam sheet
+serupa — kalau state itu bisa berubah SETELAH sheet dibuka (baik dari
+callback internal sheet sendiri atau dari luar), sheet butuh state LOKAL
+sendiri (pola `late T _x = widget.x;` + `setState` lokal saat berubah, PERSIS
+seperti `_tendered` yang sudah lebih dulu ada di `_CashKeypadSheetState`) —
+jangan baca `widget.xxx` langsung di `build()` untuk nilai yang berubah
+sesudah sheet terbuka. Fix + test diperkuat dengan assert visual
+`Checkbox.value` (bukan cuma DB) supaya kelas bug ini tidak lolos lagi kalau
+terulang di fitur lain.
 
 **Flag "Eksperimental" tersisa cuma 1**: "Import dari Griyo POS" (Pengaturan).
 Tempel Pesanan (bagian Katalog Pesanan) sudah dicabut sesi ini menyusul
