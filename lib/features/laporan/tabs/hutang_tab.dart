@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
@@ -66,9 +67,14 @@ class _HutangTabState extends ConsumerState<HutangTab> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('${all.length} pelanggan berhutang',
-                        style: TextStyle(
-                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                    Expanded(
+                      child: Text('${all.length} pelanggan berhutang',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant)),
+                    ),
+                    const SizedBox(width: 8),
                     Text('Total ${formatRupiah(totalDebt)}',
                         style: AppTheme.numStyle(context,
                             size: 14,
@@ -121,14 +127,20 @@ class _HutangTabState extends ConsumerState<HutangTab> {
 
   Future<void> _showDetail(DebtBookEntry e) async {
     final scheme = Theme.of(context).colorScheme;
+    final db = ref.read(databaseProvider);
+    final unpaidTx = await db.getUnpaidTxDetails(e.customerId);
+    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (ctx, scrollController) => SafeArea(
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(16),
             children: [
               Text(e.name,
                   style: Theme.of(context).textTheme.titleMedium),
@@ -139,7 +151,11 @@ class _HutangTabState extends ConsumerState<HutangTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Total hutang (${e.count} nota)'),
+                  Expanded(
+                    child: Text('Total hutang (${e.count} nota)',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
                   Text(formatRupiah(e.debt),
                       style: AppTheme.numStyle(context,
                           size: 18,
@@ -164,12 +180,45 @@ class _HutangTabState extends ConsumerState<HutangTab> {
                   },
                 ),
               ),
+              const SizedBox(height: 16),
+              Text('Nota belum lunas',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant)),
+              const Divider(height: 12),
+              for (final tx in unpaidTx)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(tx.localId,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(_formatDate(tx.createdAt),
+                      style: TextStyle(
+                          fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  trailing: Text(formatRupiah(tx.sisa),
+                      style: AppTheme.numStyle(context,
+                          size: 13.5,
+                          weight: FontWeight.w700,
+                          color: AppTheme.debtFg(
+                              Theme.of(context).brightness ==
+                                  Brightness.dark))),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/kasir/struk/${tx.id}');
+                  },
+                ),
             ],
           ),
         ),
       ),
     );
   }
+
+  String _formatDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/${d.year} '
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
   Future<void> _lunasi(DebtBookEntry e) async {
     final db = ref.read(databaseProvider);
