@@ -77,6 +77,22 @@ class TransactionPayments extends Table {
   TextColumn get kasirId => text().nullable()();
   TextColumn get note => text().nullable()();
 
+  /// Kembalian yang dihasilkan OLEH pembayaran ini secara spesifik (bukan
+  /// akumulatif transaksi) — dihitung & disimpan SEKALI saat baris ini
+  /// dibuat (lihat `AppDatabase._computePaymentChangeGiven`). Immutable
+  /// setelahnya: fakta historis "saat itu kembaliannya segini" tidak boleh
+  /// berubah walau total transaksi berubah belakangan (mis. tambah
+  /// belanjaan) — beda dari `Transactions.changeAmount` yang selalu
+  /// dihitung ulang dari kondisi TERKINI.
+  IntColumn get changeGiven => integer().withDefault(const Constant(0))();
+
+  /// true bila kembalian baris pembayaran INI sudah diserahkan ke pembeli.
+  /// Per-pembayaran (bukan per-transaksi) — nota dengan beberapa pembayaran
+  /// (tambah bayar/tambah belanjaan) bisa punya beberapa kembalian terpisah,
+  /// masing-masing dengan status ambil sendiri-sendiri. Murni per-perangkat
+  /// (tidak ikut sync — sama seperti `Transactions.changeTaken`).
+  BoolColumn get changeTaken => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

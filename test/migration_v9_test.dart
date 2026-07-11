@@ -35,6 +35,9 @@ void main() {
       CREATE TABLE alt_prices(
         id TEXT PRIMARY KEY, product_unit_id TEXT, label TEXT,
         price INTEGER, created_at INTEGER);
+      CREATE TABLE transaction_payments(
+        id TEXT PRIMARY KEY, transaction_id TEXT, amount INTEGER, method TEXT,
+        paid_at INTEGER, kasir_id TEXT, note TEXT);
     ''');
     v8.execute(
         "INSERT INTO transactions(id, local_id, status, total, paid, change_amount, "
@@ -69,7 +72,7 @@ void main() {
     expect(updated.changeTaken, isTrue);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 12);
+    expect(ver.data.values.first, 13);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

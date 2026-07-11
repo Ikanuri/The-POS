@@ -31,6 +31,13 @@ void main() {
         id TEXT PRIMARY KEY, product_id TEXT, unit_type_id INTEGER,
         is_base_unit INTEGER, ratio_to_base REAL, is_non_stock INTEGER);
     ''');
+    // transaction_payments diperlukan agar migrasi v13 (addColumn
+    // change_given/change_taken) tak gagal.
+    v9.execute('''
+      CREATE TABLE transaction_payments(
+        id TEXT PRIMARY KEY, transaction_id TEXT, amount INTEGER, method TEXT,
+        paid_at INTEGER, kasir_id TEXT, note TEXT);
+    ''');
     v9.execute(
         "INSERT INTO alt_prices(id, product_unit_id, label, price, created_at) "
         "VALUES('a1','u1','Harga Toko A',3000,1700000000)");
@@ -66,7 +73,7 @@ void main() {
     expect(updated.sortOrder, 5);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 12);
+    expect(ver.data.values.first, 13);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

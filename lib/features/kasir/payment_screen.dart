@@ -461,6 +461,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 method: _selectedMethodType,
                 paidAt: Value(now),
                 kasirId: Value(device.deviceCode),
+                // Transaksi baru → tidak ada pembayaran sebelumnya, jadi
+                // kembalian pembayaran ini = kembalian keseluruhan (_change).
+                changeGiven: Value(_change),
               ),
             ]
           : <TransactionPaymentsCompanion>[];

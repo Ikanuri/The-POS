@@ -87,7 +87,7 @@ void main() {
     // Versi schema benar-benar naik ke skema terkini (10 — migrasi lanjutan
     // menambah change_taken & sort_order, tapi test ini fokus ke migrasi 7->8).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 12);
+    expect(ver.data.values.first, 13);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

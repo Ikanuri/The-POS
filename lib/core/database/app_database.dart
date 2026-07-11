@@ -102,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -199,6 +199,13 @@ class AppDatabase extends _$AppDatabase {
           if (from < 12) {
             // Tutup Kasir harian — rekap kas fisik vs sistem (Item 15).
             await m.createTable(cashClosings);
+          }
+          if (from < 13) {
+            // Kembalian per-pembayaran (bukan cuma per-transaksi) — tiap
+            // baris transaction_payments punya kembaliannya sendiri +
+            // status sudah-diambil sendiri.
+            await m.addColumn(transactionPayments, transactionPayments.changeGiven);
+            await m.addColumn(transactionPayments, transactionPayments.changeTaken);
           }
         },
         beforeOpen: (details) async {
@@ -1031,8 +1038,25 @@ class AppDatabase extends _$AppDatabase {
           transactionItems,
           items.map((c) => c.copyWith(addedAt: Value(now))),
         );
-        if (payment != null) b.insert(transactionPayments, payment);
       });
+
+      if (payment != null) {
+        // Total SETELAH item susulan ini tapi SEBELUM _reconcileTransactionTotals
+        // (yang baru jalan belakangan) — dihitung manual dari total lama +
+        // subtotal item baru, supaya kembalian pembayaran ini dihitung
+        // terhadap total yang benar (bukan total lama yang belum termasuk
+        // tambahan barang).
+        final newItemsTotal =
+            items.fold<int>(0, (s, c) => s + c.subtotal.value);
+        final totalAfterAddition = tx.total + newItemsTotal;
+        final changeGiven = await _computePaymentChangeGiven(
+          txId: txId,
+          newPaymentAmount: payment.amount.value,
+          currentTotal: totalAfterAddition,
+        );
+        await into(transactionPayments)
+            .insert(payment.copyWith(changeGiven: Value(changeGiven)));
+      }
 
       // Potong stok.
       for (final s in stockItems) {
@@ -1051,6 +1075,46 @@ class AppDatabase extends _$AppDatabase {
 
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
     });
+  }
+
+  /// Hitung kembalian milik SATU baris pembayaran baru pada transaksi [txId]:
+  /// total kembalian gabungan (Σpaid + pembayaran baru dikurangi [currentTotal])
+  /// dikurangi kembalian yang sudah "dimiliki" pembayaran-pembayaran
+  /// sebelumnya pada nota yang sama. Dipanggil SEKALI saat baris pembayaran
+  /// dibuat — hasilnya ditulis permanen ke baris itu, tidak pernah dihitung
+  /// ulang/ditimpa belakangan (beda dari `Transactions.changeAmount` yang
+  /// selalu representasi TERKINI).
+  ///
+  /// [currentTotal] wajib dioper eksplisit (bukan dibaca ulang dari
+  /// `transactions`) karena caller kadang perlu memakai total yang sudah
+  /// termasuk perubahan dalam operasi yang sama (mis. tambah belanjaan —
+  /// `transactions.total` belum terupdate sampai `_reconcileTransactionTotals`
+  /// jalan belakangan).
+  Future<int> _computePaymentChangeGiven({
+    required String txId,
+    required int newPaymentAmount,
+    required int currentTotal,
+  }) async {
+    final amountSum = transactionPayments.amount.sum();
+    final changeSum = transactionPayments.changeGiven.sum();
+    final row = await (selectOnly(transactionPayments)
+          ..addColumns([amountSum, changeSum])
+          ..where(transactionPayments.transactionId.equals(txId)))
+        .getSingle();
+    var priorPaid = row.read(amountSum);
+    final priorChangeSum = row.read(changeSum) ?? 0;
+    if (priorPaid == null) {
+      // Belum ada baris pembayaran sama sekali untuk nota ini (nota
+      // legacy/pre-backfill) — jatuhkan ke header `transactions.paid`,
+      // konsisten dengan fallback yang sama di `_reconcileTransactionTotals`.
+      final tx =
+          await (select(transactions)..where((t) => t.id.equals(txId)))
+              .getSingleOrNull();
+      priorPaid = tx?.paid ?? 0;
+    }
+    final aggregateChange = (priorPaid + newPaymentAmount) - currentTotal;
+    final thisChange = aggregateChange - priorChangeSum;
+    return thisChange > 0 ? thisChange : 0;
   }
 
   /// Hitung ulang `total` (Σ subtotal item) dan `paid` (Σ pembayaran) sebuah
@@ -1482,6 +1546,26 @@ class AppDatabase extends _$AppDatabase {
     return rows.map((t) => t.id).toList();
   }
 
+  /// Nota belum lunas milik pelanggan, LENGKAP (nomor, tanggal, sisa),
+  /// terlama dulu — dipakai Buku Hutang untuk menampilkan daftar nota
+  /// individual (Item baru: "lihat nota mana saja yang belum lunas").
+  Future<List<UnpaidTxEntry>> getUnpaidTxDetails(String customerId) async {
+    final rows = await (select(transactions)
+          ..where((t) =>
+              t.customerId.equals(customerId) &
+              t.status.isIn(['kurang_bayar', 'tempo']))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    return rows
+        .map((t) => UnpaidTxEntry(
+              id: t.id,
+              localId: t.localId,
+              createdAt: t.createdAt,
+              sisa: t.total - t.paid,
+            ))
+        .toList();
+  }
+
   /// Total hutang akumulatif pelanggan + jumlah nota yang belum lunas.
   Future<(int debtTotal, int debtCount)> getCustomerOutstandingDebt(
       String customerId) async {
@@ -1547,6 +1631,11 @@ class AppDatabase extends _$AppDatabase {
       final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
           .getSingleOrNull();
       if (tx == null || tx.status == 'void') return 0;
+      final changeGiven = await _computePaymentChangeGiven(
+        txId: txId,
+        newPaymentAmount: amount,
+        currentTotal: tx.total,
+      );
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
         id: const Uuid().v4(),
@@ -1556,6 +1645,7 @@ class AppDatabase extends _$AppDatabase {
         paidAt: Value(ts),
         kasirId: Value(kasirId),
         note: Value(note),
+        changeGiven: Value(changeGiven),
       ));
       final newPaid = tx.paid + amount;
       final change = newPaid > tx.total ? newPaid - tx.total : 0;
@@ -1566,7 +1656,7 @@ class AppDatabase extends _$AppDatabase {
           changeAmount: Value(change),
         ),
       );
-      return change;
+      return changeGiven;
     });
   }
 
@@ -1650,14 +1740,20 @@ class AppDatabase extends _$AppDatabase {
       final label = txs.map((t) => t.localId).join(', ');
       var remaining = amount;
       var totalApplied = 0;
+      // Baris pembayaran TERAKHIR yang dibuat di batch ini — kembalian sisa
+      // (kalau ada, setelah semua nota di batch ini terlunasi) nempel ke
+      // baris ini, bukan dihitung per-nota (tiap nota di loop ini tidak
+      // pernah overpay sendiri, `applied` selalu di-cap di `sisa`).
+      String? lastPaymentId;
       for (final tx in txs) {
         if (remaining <= 0) break;
         final sisa = tx.total - tx.paid;
         if (sisa <= 0) continue; // sudah lunas → lewati
         final applied = remaining < sisa ? remaining : sisa;
+        final paymentId = const Uuid().v4();
         await into(transactionPayments).insert(
           TransactionPaymentsCompanion.insert(
-            id: const Uuid().v4(),
+            id: paymentId,
             transactionId: tx.id,
             amount: applied,
             method: method,
@@ -1666,6 +1762,7 @@ class AppDatabase extends _$AppDatabase {
             note: Value('Gabung: $label'),
           ),
         );
+        lastPaymentId = paymentId;
         final newPaid = tx.paid + applied;
         await (update(transactions)..where((t) => t.id.equals(tx.id))).write(
           TransactionsCompanion(
@@ -1675,6 +1772,11 @@ class AppDatabase extends _$AppDatabase {
         );
         remaining -= applied;
         totalApplied += applied;
+      }
+      if (remaining > 0 && lastPaymentId != null) {
+        await (update(transactionPayments)
+              ..where((t) => t.id.equals(lastPaymentId!)))
+            .write(TransactionPaymentsCompanion(changeGiven: Value(remaining)));
       }
       return (totalApplied, remaining);
     });
@@ -1688,7 +1790,8 @@ class AppDatabase extends _$AppDatabase {
   Future<void> backfillMissingPayments() async {
     final rows = await customSelect(
       'SELECT t.id AS id, t.paid AS paid, t.payment_method AS method, '
-      't.kasir_id AS kasir, t.created_at AS created '
+      't.kasir_id AS kasir, t.created_at AS created, '
+      't.change_amount AS change_amount, t.change_taken AS change_taken '
       'FROM transactions t '
       "WHERE t.paid > 0 AND t.status != 'void' "
       'AND NOT EXISTS (SELECT 1 FROM transaction_payments p '
@@ -1712,6 +1815,12 @@ class AppDatabase extends _$AppDatabase {
             paidAt: Value(paidAt),
             kasirId: Value(r.data['kasir'] as String?),
             note: const Value('Migrasi data lama'),
+            // Satu-satunya pembayaran nota lama → warisi kembalian &
+            // status ambil dari header transaksi (sumber lama), supaya
+            // Ringkasan (sekarang baca dari baris pembayaran) tidak
+            // mendadak kosong untuk nota yang sudah ada sebelum migrasi ini.
+            changeGiven: Value((r.data['change_amount'] as int?) ?? 0),
+            changeTaken: Value((r.data['change_taken'] as int?) == 1),
           ),
         );
       }
@@ -2502,4 +2611,19 @@ class DebtBookEntry {
   final int count;
 
   int get daysOverdue => DateTime.now().difference(oldest).inDays;
+}
+
+/// Satu nota belum lunas — dipakai daftar detail di Buku Hutang.
+class UnpaidTxEntry {
+  const UnpaidTxEntry({
+    required this.id,
+    required this.localId,
+    required this.createdAt,
+    required this.sisa,
+  });
+
+  final String id;
+  final String localId;
+  final DateTime createdAt;
+  final int sisa;
 }
