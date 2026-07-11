@@ -54,7 +54,26 @@ angka, minimal 1 Piutang dalam notasi ilmiah butuh `double.tryParse` bukan
 bersih — alasan: `outstandingDebt` cuma cache, Buku Hutang hitung fresh
 dari transaksi, isi field itu langsung bikin 2 tempat beda angka); baris
 "-" (bucket piutang tanpa nama, ~Rp1,2jt) DILEWATI. Detail lengkap +
-keputusan kecil sisa (nama duplikat, whitespace) ada di PLAN.md Item 4._
+keputusan kecil sisa (nama duplikat, whitespace) ada di PLAN.md Item 4.
+
+**2 fix susulan (user lapor setelah pakai fitur import Griyo, `c8a79f1` +
+`9e52f61`):**
+1. Tombol "Harga lain" di `item_entry_sheet.dart` sekarang menampilkan nama
+   opsi harga yang aktif (mis. "Eceran") — sebelumnya selalu label generik
+   "Harga lain (N)" walau user sudah memilih opsi tertentu. Derived getter
+   `_selectedPriceLabel` (cocokkan `_price` ke `_priceOptions()`), HANYA
+   aktif kalau `_priceOverridden` (supaya default/harga-dasar tetap tampil
+   label generik, tidak breaking existing test).
+2. **Bug nyata ditemukan**: owner ikut ter-block saat setting global
+   "Izinkan Stok Minus" (Pengaturan → Izin Kasir) OFF — sama seperti kasir,
+   TIDAK ADA bypass khusus owner (beda dari semua izin lain: override
+   harga, input stok, dst yang semuanya tanpa syarat untuk owner). Root
+   cause di `payment_screen.dart::_confirm()` C-5 check. Fix: extract jadi
+   `resolveAllowNegativeStock(db, device)` (top-level function, testable
+   Tier 1 tanpa drive seluruh widget PaymentScreen) + tambah
+   `if (device.isOwner) return true;` unconditional. **Tidak ada test
+   sebelumnya untuk fitur stok-minus ini sama sekali** — baru dibuat
+   `test/allow_negative_stock_test.dart`._
 **Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
 pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
 bulan Indonesia MANUAL (lihat `expenses_screen.dart` `_idDays`/`_idMonths`).

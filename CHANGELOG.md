@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-11
 
+- `9e52f61` — fix: owner selalu bisa override stok minus (sebelumnya ikut ke-block sama seperti kasir tanpa bypass khusus)
+- `c8a79f1` — fix: tombol "Harga lain" di modal item kasir tampilkan nama opsi terpilih (mis. "Eceran"), bukan cuma hitungan generik
 - `e4baa92` — fix: produk hasil import CSV hilang dari katalog HTML (isBaseUnit tidak pernah ditandai true, OrderPageService mensyaratkan itu tanpa fallback)
 - `07fee39` — feat: pindah flag Eksperimental dari Katalog Pesanan (HTML, jadi native) ke menu baru "Import dari Griyo POS" (CsvImportScreen griyoMode)
 - `63d0f2d` — fix: import CSV format Griyo POS (pemisah ";", header & satuan/grup legacy) — parser hanya kenal ",", alias kolom tidak cocok header asli Griyo, kolom Satuan/Grup berisi ID legacy mentah bukan nama teks
