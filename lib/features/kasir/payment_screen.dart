@@ -1205,6 +1205,21 @@ class _CashKeypadSheet extends StatefulWidget {
 class _CashKeypadSheetState extends State<_CashKeypadSheet> {
   late int _tendered = widget.initial;
 
+  /// Mirror lokal `widget.unclaimedChangeTaken` — sheet ini dibuka via
+  /// `showModalBottomSheet`, yang builder-nya cuma dievaluasi SEKALI saat
+  /// dibuka. `setState` di parent (`_PaymentScreenState`) TIDAK memicu
+  /// rebuild sheet yang sudah terbuka, jadi kalau Checkbox baca langsung
+  /// `widget.unclaimedChangeTaken`, tampilannya beku di nilai awal walau
+  /// tulis-DB via callback berhasil — centang kelihatan "tidak bisa"
+  /// walau sebenarnya sudah tersimpan. State lokal ini memberi feedback
+  /// visual instan; penulisan DB tetap lewat callback ke parent.
+  late bool _changeTaken = widget.unclaimedChangeTaken;
+
+  void _toggleChangeTaken(bool value) {
+    setState(() => _changeTaken = value);
+    widget.onToggleUnclaimedChangeTaken?.call(value);
+  }
+
   int get _change =>
       (_tendered - widget.total).clamp(0, double.maxFinite.toInt());
   int get _shortfall =>
@@ -1307,8 +1322,7 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                 InkWell(
                   onTap: widget.onToggleUnclaimedChangeTaken == null
                       ? null
-                      : () => widget.onToggleUnclaimedChangeTaken!(
-                          !widget.unclaimedChangeTaken),
+                      : () => _toggleChangeTaken(!_changeTaken),
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
@@ -1322,14 +1336,12 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                                 width: 24,
                                 height: 24,
                                 child: Checkbox(
-                                  value: widget.unclaimedChangeTaken,
+                                  value: _changeTaken,
                                   onChanged: widget
                                               .onToggleUnclaimedChangeTaken ==
                                           null
                                       ? null
-                                      : (v) => widget
-                                          .onToggleUnclaimedChangeTaken!(
-                                              v ?? false),
+                                      : (v) => _toggleChangeTaken(v ?? false),
                                 ),
                               ),
                               const SizedBox(width: 4),
