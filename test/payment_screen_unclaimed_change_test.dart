@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
@@ -104,7 +105,8 @@ void main() {
 
   testWidgets(
       'centang "Pakai kembalian" menulis changeTaken=true ke baris '
-      'pembayaran sumbernya', (tester) async {
+      'pembayaran sumbernya DAN checkbox-nya sendiri tampil tercentang '
+      '(bukan cuma nulis DB tapi tampilan beku)', (tester) async {
     await seedTxWithUnclaimedChange();
 
     await pumpWithFakeApp(tester,
@@ -115,12 +117,26 @@ void main() {
     await tester.tap(find.text('Bayar ${formatRupiah(3000)}'));
     await tester.pumpAndSettle();
 
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+
     await tester.tap(find.text('Pakai kembalian'));
     await tester.pumpAndSettle();
+
+    // Sheet keypad dibuka via showModalBottomSheet — builder-nya cuma
+    // dievaluasi sekali saat dibuka, jadi kalau Checkbox baca langsung
+    // dari widget parent (bukan state lokal sheet), tampilannya akan BEKU
+    // di false walau tulis-DB di bawah ini sukses. Assert visual INI yang
+    // membuktikan bug "centang tidak bisa" tidak terulang.
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
 
     final pay1 = await (db.select(db.transactionPayments)
           ..where((t) => t.id.equals('pay1')))
         .getSingle();
     expect(pay1.changeTaken, isTrue);
+
+    // Toggle balik juga harus tampil (bukan cuma arah true).
+    await tester.tap(find.text('Pakai kembalian'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
   });
 }
