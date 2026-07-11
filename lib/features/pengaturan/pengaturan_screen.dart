@@ -41,6 +41,16 @@ final _canInputExpenseProvider = FutureProvider<bool>((ref) async {
   return db.isPermissionEnabled('input_pengeluaran');
 });
 
+/// Izinkan kasir jual meski stok 0 (pre-order) — setting global. Dulu ada
+/// langsung di halaman Pengaturan, sempat dipindah ke dalam Izin Kasir
+/// (kurang terlihat), sekarang dikembalikan jadi entri terpisah di sini
+/// (owner selalu bebas tanpa toggle ini — lihat resolveAllowNegativeStock).
+final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final v = await db.getSetting('allow_negative_stock');
+  return v == '1';
+});
+
 class PengaturanScreen extends ConsumerWidget {
   const PengaturanScreen({super.key});
 
@@ -138,6 +148,24 @@ class PengaturanScreen extends ConsumerWidget {
                         await db.setSetting(
                             'receipt_show_employee', v ? '1' : '0');
                         ref.invalidate(_showEmployeeProvider);
+                      },
+                    );
+                  }),
+                  Builder(builder: (context) {
+                    final allow =
+                        ref.watch(_allowNegativeStockProvider).valueOrNull ??
+                            false;
+                    return SwitchListTile(
+                      secondary: const Icon(Icons.inventory_2_outlined),
+                      title: const Text('Izinkan Stok Minus'),
+                      subtitle: const Text(
+                          'Kasir bisa jual meski stok 0 (pre-order) — owner selalu bisa terlepas dari ini'),
+                      value: allow,
+                      onChanged: (v) async {
+                        final db = ref.read(databaseProvider);
+                        await db.setSetting(
+                            'allow_negative_stock', v ? '1' : '0');
+                        ref.invalidate(_allowNegativeStockProvider);
                       },
                     );
                   }),
