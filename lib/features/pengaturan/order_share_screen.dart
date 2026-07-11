@@ -8,9 +8,9 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/order_page_service.dart';
 
-/// **EKSPERIMENTAL.** Generate & bagikan katalog pesanan HTML — file statis
-/// self-contained (tanpa server/hosting) yang bisa dibuka pelanggan dari
-/// WhatsApp untuk memilih barang sendiri, lalu kirim balik teks pesanan.
+/// Generate & bagikan katalog pesanan HTML — file statis self-contained
+/// (tanpa server/hosting) yang bisa dibuka pelanggan dari WhatsApp untuk
+/// memilih barang sendiri, lalu kirim balik teks pesanan.
 ///
 /// Sengaja TANPA hosting (keputusan user): tiap kali harga berubah, owner
 /// perlu tekan "Buat & Bagikan" lagi dan kirim ulang file ke pelanggan
@@ -80,27 +80,6 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: scheme.tertiaryContainer,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.science_outlined,
-                    size: 14, color: scheme.onTertiaryContainer),
-                const SizedBox(width: 5),
-                Text('Eksperimental',
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onTertiaryContainer)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),

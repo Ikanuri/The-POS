@@ -180,6 +180,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'import-csv',
                   builder: (_, __) => const CsvImportScreen()),
               GoRoute(
+                  path: 'import-griyo',
+                  builder: (_, __) => const CsvImportScreen(griyoMode: true)),
+              GoRoute(
                   path: 'katalog-pesanan',
                   builder: (_, __) => const OrderShareScreen()),
               GoRoute(

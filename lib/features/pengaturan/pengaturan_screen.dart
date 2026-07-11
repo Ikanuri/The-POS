@@ -211,6 +211,14 @@ class PengaturanScreen extends ConsumerWidget {
                     onTap: () => _exportProductsCsv(context, ref),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.storefront_outlined),
+                    title: const Text('Katalog Pesanan'),
+                    subtitle: const Text(
+                        'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/pengaturan/katalog-pesanan'),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.qr_code_2_outlined),
                     title: const Text('Pair Device Baru'),
                     subtitle: const Text('Tambah HP kasir / asisten via QR'),
@@ -227,11 +235,11 @@ class PengaturanScreen extends ConsumerWidget {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.science_outlined),
-                title: const Text('Katalog Pesanan'),
+                title: const Text('Import dari Griyo POS'),
                 subtitle: const Text(
-                    'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
+                    'Migrasi data produk dari file export Griyo POS'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/pengaturan/katalog-pesanan'),
+                onTap: () => context.push('/pengaturan/import-griyo'),
               ),
             ),
           ],
