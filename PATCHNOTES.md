@@ -11,6 +11,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 11 Juli 2026
 
 ### ✨ Fitur Baru
+- **"Tempel Pesanan" bukan lagi fitur eksperimental** — badge "Eksperimental"
+  di sheet-nya sudah dicabut, menyusul Katalog Pesanan (HTML) yang sudah
+  lebih dulu jadi fitur resmi.
 - **Kalkulator bayar di Tambah Belanjaan sekarang mengingatkan kembalian
   yang belum diambil.** Kalau nota masih ada kembalian nganggur dari
   pembayaran sebelumnya, muncul info nominalnya lengkap dengan centang

@@ -7,10 +7,25 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 _Terakhir diperbarui: 11 Juli 2026 (sesi kembalian per-pembayaran + Buku
 Hutang + Tambah Belanjaan). **schemaVersion sekarang 13** (TIDAK ada migrasi
 baru dari Poin 1 — murni fitur UI, tidak menyentuh skema). Baseline sebelum
-sesi ini: 210 test hijau → **213 test hijau** setelah semuanya (3 poin).
-Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item 17+21 — sync — masih
-sengaja ditunda, lihat bagian "MENGGANTUNG" di bawah — TIDAK berubah dari
-sebelumnya).
+sesi ini: 210 test hijau → **214 test hijau** setelah semuanya (3 poin +
+cabut flag eksperimental Tempel Pesanan, lihat bawah). Backlog Item 9-22
+(PLAN.md) tetap 12/13 SELESAI (Item 17+21 — sync — masih sengaja ditunda,
+lihat bagian "MENGGANTUNG" di bawah — TIDAK berubah dari sebelumnya).
+
+**PR #4** (`https://github.com/Ikanuri/The-POS/pull/4`, dibuat dari Claude
+Code UI mencakup commit-commit sesi ini) sudah **DI-MERGE ke `main`**
+(merge commit `b477b03`) atas instruksi user "Merge langsung saja" — dipakai
+merge biasa (bukan squash) supaya hash commit individual tetap match dengan
+yang tercatat di CHANGELOG.md. Commit SETELAH merge itu (cabut flag
+eksperimental Tempel Pesanan, `0323d3f`) masih menumpuk di branch
+`claude/project-gaps-incomplete-wpgdp8` yang sama — belum ada PR baru dibuat
+untuk ini, branch akan terus dipakai sampai ada instruksi lain dari user.
+
+**Flag "Eksperimental" tersisa cuma 1**: "Import dari Griyo POS" (Pengaturan).
+Tempel Pesanan (bagian Katalog Pesanan) sudah dicabut sesi ini menyusul
+Katalog Pesanan HTML yang sudah dicabut duluan — jadi seluruh alur Katalog
+Pesanan (generate → kirim WA → tempel balik) sekarang resmi, tidak ada lagi
+badge eksperimental di dalamnya.
 
 **Sesi ini — 3 proposal fitur baru dari user, didiskusikan "jangan coding
 dulu" lalu disepakati via Q&A panjang, ketiganya SELESAI dieksekusi:**
