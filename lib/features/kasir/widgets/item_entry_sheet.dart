@@ -287,8 +287,19 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     ];
   }
 
+  /// Label opsi harga yang lagi aktif — null kalau masih harga dasar
+  /// (tombol tampil generik "Harga lain (N)") ATAU harga hasil ketik manual
+  /// yang tak cocok opsi manapun. Begitu user pilih tier grosir/Harga Lain
+  /// (mis. "Eceran"), tombol ikut menampilkan nama opsi itu, bukan cuma
+  /// hitungan jumlah opsi statis.
+  String? get _selectedPriceLabel {
+    if (!_priceOverridden) return null;
+    return _priceOptions().where((o) => o.price == _price).firstOrNull?.label;
+  }
+
   Widget _buildPriceMenuButton(ColorScheme scheme) {
     final opts = _priceOptions();
+    final activeLabel = _selectedPriceLabel;
     return PopupMenuButton<int>(
       tooltip: 'Harga lain',
       onSelected: (i) => _applyTierPrice(opts[i].price),
@@ -319,11 +330,18 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
             Icon(Icons.sell_outlined,
                 size: 13, color: scheme.onSecondaryContainer),
             const SizedBox(width: 4),
-            Text('Harga lain (${opts.length - 1})',
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                activeLabel ?? 'Harga lain (${opts.length - 1})',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: scheme.onSecondaryContainer)),
+                    color: scheme.onSecondaryContainer),
+              ),
+            ),
           ],
         ),
       ),

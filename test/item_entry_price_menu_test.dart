@@ -59,4 +59,26 @@ void main() {
     // Field harga terisi 4.000.
     expect(priceField(tester).controller!.text, '4.000');
   });
+
+  testWidgets(
+      'tombol "Harga lain" ikut menampilkan nama opsi terpilih (mis. '
+      '"Harga Grosir"), bukan cuma hitungan statis', (tester) async {
+    await pumpWithFakeApp(tester, db: db, child: ItemEntrySheet(product: product));
+
+    await tester.tap(find.text('Harga lain (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Harga Grosir'));
+    await tester.pumpAndSettle();
+
+    // Tombol sekarang menampilkan nama opsi terpilih, bukan lagi generik.
+    expect(find.text('Harga Grosir'), findsOneWidget);
+    expect(find.text('Harga lain (1)'), findsNothing);
+
+    // Balik ke Harga dasar → tombol kembali ke label generik.
+    await tester.tap(find.text('Harga Grosir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Harga dasar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Harga lain (1)'), findsOneWidget);
+  });
 }
