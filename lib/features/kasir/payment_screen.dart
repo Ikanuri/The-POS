@@ -73,6 +73,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   List<Employee> _employees = [];
   Employee? _selectedEmployee;
 
+  /// Mode tambah belanjaan: kembalian pembayaran terakhir transaksi asli,
+  /// bila masih belum diambil — ditampilkan sebagai info di kalkulator bayar
+  /// (Poin 1) supaya kasir tahu ada uang kembalian yang bisa dipakai untuk
+  /// item susulan. Murni informasi + centang manual, TIDAK memengaruhi
+  /// jumlah yang diinput kasir (kasir tetap input manual, konsisten dengan
+  /// simulasi fisik: kembalian sudah diberikan, pelanggan bayar lagi pakai
+  /// uang itu).
+  ({String id, int amount})? _unclaimedChange;
+  bool _unclaimedChangeTaken = false;
+
   @override
   void initState() {
     super.initState();
@@ -112,10 +122,24 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       }
     }
 
+    ({String id, int amount})? unclaimedChange;
+    if (_isAddMode) {
+      final lastPay = await (db.select(db.transactionPayments)
+            ..where((t) => t.transactionId.equals(widget.addToTxId!))
+            ..orderBy([(t) => OrderingTerm.desc(t.paidAt)])
+            ..limit(1))
+          .getSingleOrNull();
+      if (lastPay != null && lastPay.changeGiven > 0 && !lastPay.changeTaken) {
+        unclaimedChange = (id: lastPay.id, amount: lastPay.changeGiven);
+      }
+    }
+
     if (mounted) {
       setState(() {
         _methods = methods;
         _employees = employees;
+        _unclaimedChange = unclaimedChange;
+        _unclaimedChangeTaken = false;
         if (methods.isNotEmpty) {
           _selectedMethodId = methods.first.id;
           _selectedMethodType = methods.first.type;
@@ -132,6 +156,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         _selectedEmployee = preEmployee;
       });
     }
+  }
+
+  /// Centang "Pakai kembalian" di kalkulator bayar (mode tambah belanjaan) —
+  /// menulis langsung ke baris pembayaran sumbernya, aksi yang SAMA persis
+  /// dengan centang kembalian di Ringkasan struk (lihat receipt_screen.dart
+  /// `_toggleChangeTaken`). Murni penanda "sudah dipakai/diambil", tidak
+  /// memengaruhi jumlah yang diinput kasir.
+  Future<void> _toggleUnclaimedChangeTaken(bool value) async {
+    final change = _unclaimedChange;
+    if (change == null) return;
+    final db = ref.read(databaseProvider);
+    await (db.update(db.transactionPayments)
+          ..where((t) => t.id.equals(change.id)))
+        .write(TransactionPaymentsCompanion(changeTaken: Value(value)));
+    if (mounted) setState(() => _unclaimedChangeTaken = value);
   }
 
   /// Tulis balik pilihan pelanggan/pegawai ke metadata keranjang agar tetap
@@ -1108,7 +1147,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _CashKeypadSheet(total: _total, initial: _tendered),
+        builder: (_) => _CashKeypadSheet(
+          total: _total,
+          initial: _tendered,
+          unclaimedChangeAmount: _unclaimedChange?.amount,
+          unclaimedChangeTaken: _unclaimedChangeTaken,
+          onToggleUnclaimedChangeTaken: _unclaimedChange == null
+              ? null
+              : _toggleUnclaimedChangeTaken,
+        ),
       );
       if (result == null) return; // dibatalkan
       setState(() => _tendered = result);
@@ -1133,9 +1180,23 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 /// Input jumlah uang lalu konfirmasi dengan tombol ✓ di pojok kanan bawah.
 /// Pop mengembalikan jumlah uang diterima; null bila dibatalkan.
 class _CashKeypadSheet extends StatefulWidget {
-  const _CashKeypadSheet({required this.total, required this.initial});
+  const _CashKeypadSheet({
+    required this.total,
+    required this.initial,
+    this.unclaimedChangeAmount,
+    this.unclaimedChangeTaken = false,
+    this.onToggleUnclaimedChangeTaken,
+  });
   final int total;
   final int initial;
+
+  /// Mode tambah belanjaan (Poin 1): kembalian pembayaran terakhir transaksi
+  /// asli yang masih belum diambil — null bila bukan mode tambah belanjaan
+  /// atau tidak ada kembalian nganggur. Murni informasi, tidak memengaruhi
+  /// [total]/nominal yang diinput kasir.
+  final int? unclaimedChangeAmount;
+  final bool unclaimedChangeTaken;
+  final ValueChanged<bool>? onToggleUnclaimedChangeTaken;
 
   @override
   State<_CashKeypadSheet> createState() => _CashKeypadSheetState();
@@ -1219,9 +1280,22 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Total ${formatRupiah(widget.total)}',
+                  Text.rich(
+                    TextSpan(
                       style: TextStyle(
-                          color: scheme.onSurfaceVariant, fontSize: 13)),
+                          color: scheme.onSurfaceVariant, fontSize: 13),
+                      children: [
+                        const TextSpan(text: 'Total '),
+                        TextSpan(
+                          text: formatRupiah(widget.total),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: scheme.onSurface),
+                        ),
+                      ],
+                    ),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
                     visualDensity: VisualDensity.compact,
@@ -1229,6 +1303,57 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                   ),
                 ],
               ),
+              if (widget.unclaimedChangeAmount != null)
+                InkWell(
+                  onTap: widget.onToggleUnclaimedChangeTaken == null
+                      ? null
+                      : () => widget.onToggleUnclaimedChangeTaken!(
+                          !widget.unclaimedChangeTaken),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Checkbox(
+                                  value: widget.unclaimedChangeTaken,
+                                  onChanged: widget
+                                              .onToggleUnclaimedChangeTaken ==
+                                          null
+                                      ? null
+                                      : (v) => widget
+                                          .onToggleUnclaimedChangeTaken!(
+                                              v ?? false),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text('Pakai kembalian',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: scheme.onSurfaceVariant)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(formatRupiah(widget.unclaimedChangeAmount!),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                color: AppTheme.changeFg(isDark))),
+                      ],
+                    ),
+                  ),
+                ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

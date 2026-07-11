@@ -41,10 +41,11 @@ Future<void> pumpWithFakeApp(
   required Widget child,
   DeviceIdentity? device,
   Size surfaceSize = const Size(430, 2400),
+  Map<String, Object> initialPrefs = const {},
 }) async {
   await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  SharedPreferences.setMockInitialValues({});
+  SharedPreferences.setMockInitialValues(initialPrefs);
 
   final fakeDevice = device ??
       const DeviceIdentity(
