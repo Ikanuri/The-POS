@@ -35,6 +35,10 @@ void main() {
     final biji = unitTypes.firstWhere((u) => u.id == 12);
     expect(units.first.unitTypeId, biji.id);
     expect(biji.name, 'Biji');
+    // isBaseUnit HARUS true — tanpa ini, produk hilang diam-diam dari
+    // katalog HTML (OrderPageService mensyaratkan satuan isBaseUnit, tanpa
+    // fallback seperti kasir/edit produk).
+    expect(units.first.isBaseUnit, isTrue);
 
     // Grup="6" (ID mentah legacy) harus terpetakan langsung sebagai ID grup.
     expect(products.first.productGroupId, 6);

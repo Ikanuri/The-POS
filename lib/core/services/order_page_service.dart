@@ -79,7 +79,11 @@ class OrderPageService {
     final out = <Map<String, Object?>>[];
     for (final p in parents) {
       final units = await db.getProductUnits(p.id);
-      final base = units.where((u) => u.isBaseUnit).firstOrNull;
+      // Fallback ke satuan pertama kalau tidak ada yang ditandai isBaseUnit
+      // (mis. produk lama hasil import CSV sebelum fix) — konsisten dengan
+      // pola dipakai di seluruh app (kasir_screen, produk_form_screen, dst),
+      // supaya produk begini tidak lenyap diam-diam dari katalog.
+      final base = units.where((u) => u.isBaseUnit).firstOrNull ?? units.firstOrNull;
       if (base == null) continue;
       final resolved =
           await priceService.resolvePrice(productUnitId: base.id, qty: 1);
@@ -89,7 +93,8 @@ class OrderPageService {
       final variants = await db.getVariants(p.id);
       for (final v in variants) {
         final vUnits = await db.getProductUnits(v.id);
-        final vBase = vUnits.where((u) => u.isBaseUnit).firstOrNull;
+        final vBase =
+            vUnits.where((u) => u.isBaseUnit).firstOrNull ?? vUnits.firstOrNull;
         if (vBase == null) continue;
         final vResolved =
             await priceService.resolvePrice(productUnitId: vBase.id, qty: 1);

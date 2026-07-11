@@ -242,10 +242,17 @@ class CsvImportService {
         updatedAt: Value(now),
       );
 
+      // isBaseUnit: true — produk hasil import selalu cuma 1 satuan, jadi
+      // satuan itu SELALU satuan dasarnya (sama seperti tambah produk manual
+      // di produk_form_screen.dart). Tanpa ini, OrderPageService (katalog
+      // HTML) yang mensyaratkan ada satuan isBaseUnit (tanpa fallback, beda
+      // dari kasir/edit produk/dsb yang semua punya fallback `?? units.first`)
+      // akan melewati produk ini sama sekali dari katalog.
       final unit = ProductUnitsCompanion.insert(
         id: unitId,
         productId: productId,
         unitTypeId: Value(unitTypeId),
+        isBaseUnit: const Value(true),
       );
 
       final tiers = <PriceTiersCompanion>[

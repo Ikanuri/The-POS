@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/services/csv_import_service.dart';
 import 'package:the_pos/core/services/order_page_service.dart';
 
 /// Test Tier 1 (DB murni) untuk fitur eksperimental "Katalog Pesanan".
@@ -172,6 +173,52 @@ void main() {
     final data = _extractEmbeddedData(result.html);
     final names = (data['products'] as List).map((p) => p['name']).toSet();
     expect(names, {'Sabun'});
+    await db.close();
+  });
+
+  test(
+      'produk PUNYA satuan tapi tidak ada yang ditandai isBaseUnit (data '
+      'lama sebelum fix import CSV) tetap muncul via fallback ke satuan '
+      'pertama, tidak hilang diam-diam', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.into(db.products).insert(
+        ProductsCompanion.insert(id: 'p-legacy', name: 'Produk Lama'));
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'u-legacy',
+          productId: 'p-legacy',
+          unitTypeId: const Value(2),
+          isBaseUnit: const Value(false), // simulasi data lama yang rusak
+        ));
+    await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+          id: 'u-legacy-t1',
+          productUnitId: 'u-legacy',
+          minQty: const Value(1),
+          price: 7500,
+        ));
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final names = (data['products'] as List).map((p) => p['name']).toSet();
+    expect(names, contains('Produk Lama'));
+    await db.close();
+  });
+
+  test(
+      'produk hasil Import CSV Griyo POS tampil di katalog HTML (regresi: '
+      'importer sempat tidak menandai isBaseUnit sama sekali, katalog HTML '
+      'jadi kosong walau tab Produk normal)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    const csv = 'Produk;Harga Pokok;Harga Jual;Stok;Grup Produk;Satuan;'
+        'Barcode;Kode Produk;Non Stok\n'
+        'Sedap Goreng;2700;2800;26;6;12;8998866200301;Biji;1\n';
+    await CsvImportService.importFromBytes(bytes: csv.codeUnits, db: db);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final names = (data['products'] as List).map((p) => p['name']).toSet();
+    expect(names, contains('Sedap Goreng'));
     await db.close();
   });
 }
