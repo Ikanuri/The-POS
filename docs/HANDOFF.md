@@ -17,21 +17,44 @@ langsung. Keputusan desain: import tetap FLAT (user pilih ini, bukan
 auto-gabung baris nama-sama-satuan-beda jadi 1 produk multi-satuan) karena
 CSV Griyo tidak menyertakan rasio konversi antar satuan — digabung manual
 lewat Edit Produk bila perlu, dibantu counter `sameNameDifferentUnit` baru
-di hasil import. Fix ini TIDAK menyentuh logika rasio konversi stok
-(`ratioToBase`/`isBaseUnit`/`_baseUnitOf()`) — import CSV selalu bikin 1
-produk = 1 unit dengan `ratioToBase` default 1.0 (unchanged, sudah begitu
-sejak awal); `_baseUnitOf()` sudah toleran produk tanpa unit ber-`isBaseUnit`
-(fallback anggap unit itu sendiri sebagai basis). Behavior import: UPSERT
-per baris, BUKAN overwrite/replace katalog — baris yang cocok (barcode→SKU→
-nama+satuan) ke produk lama HANYA update harga (stok tidak disentuh sama
-sekali di re-import), baris baru di-append sebagai produk baru (opening
-stock ledger dari kolom Stok), dan produk lama yang TIDAK ada di file CSV
-dibiarkan utuh (tidak dihapus). Lalu dirapikan jadi fitur bernama "Import
-dari Griyo POS", diflag Eksperimental (`CsvImportScreen(griyoMode: true)`,
-route `/pengaturan/import-griyo`) — dan flag Eksperimental yang lama di
-Katalog Pesanan (HTML, `order_share_screen.dart`) DICABUT karena sudah jadi
-fitur native (dipindah dari section Eksperimental ke Sinkronisasi di
-`pengaturan_screen.dart`)._
+di hasil import. Behavior import: UPSERT per baris, BUKAN overwrite/replace
+katalog — baris yang cocok (barcode→SKU→nama+satuan) ke produk lama HANYA
+update harga (stok tidak disentuh sama sekali di re-import), baris baru
+di-append sebagai produk baru (opening stock ledger dari kolom Stok), dan
+produk lama yang TIDAK ada di file CSV dibiarkan utuh (tidak dihapus). Lalu
+dirapikan jadi fitur bernama "Import dari Griyo POS", diflag Eksperimental
+(`CsvImportScreen(griyoMode: true)`, route `/pengaturan/import-griyo`) —
+dan flag Eksperimental yang lama di Katalog Pesanan (HTML,
+`order_share_screen.dart`) DICABUT karena sudah jadi fitur native (dipindah
+dari section Eksperimental ke Sinkronisasi di `pengaturan_screen.dart`).
+
+**Bug susulan ditemukan & diperbaiki (`e4baa92`):** user lapor "import dari
+Griyo, tab Produk normal, tapi Katalog Pesanan HTML kosong". Akar masalah:
+`csv_import_service.dart` membuat `ProductUnits` TANPA `isBaseUnit: true`
+(defaultnya `false`) — beda dari tambah produk manual yang selalu set true.
+`OrderPageService._buildCatalogJson()` mensyaratkan ada unit `isBaseUnit`
+TANPA fallback (beda dari ~10 titik lain di app — kasir_screen,
+produk_form_screen, item_entry_sheet, paste_order_sheet, `_baseUnitOf()`,
+`_matchExistingUnit()` — yang semua pakai pola `?? units.first`), jadi
+produk hasil import selalu dilewati diam-diam dari katalog HTML. Fix 2
+lapis: (1) importer sekarang set `isBaseUnit: true` (akar masalah), (2)
+`order_page_service.dart` ditambah fallback yang sama seperti pola di
+seluruh app (juga otomatis memperbaiki produk lama yang sudah kadung
+ter-import sebelum fix, tanpa migrasi data). **Pelajaran untuk importer
+baru (mis. Item 4, import pelanggan):** field yang di-skip saat insert
+lewat importer bisa punya default DB yang diam-diam melanggar asumsi kode
+lain — cek SEMUA titik baca sebelum menganggap importer beres, bukan cuma
+"tampil di 1 layar" saja.
+
+**Item 4 (import pelanggan dari Griyo POS) — ANALISIS SELESAI, implementasi
+BELUM dimulai.** User upload `Pelanggan.xlsx` (493 baris: Pelanggan, Alamat,
+Telepon, Barcode, Keterangan, Poin, Piutang — semua kolom TEXT termasuk
+angka, minimal 1 Piutang dalam notasi ilmiah butuh `double.tryParse` bukan
+`int.tryParse`). Keputusan user: Piutang lama TIDAK dibawa (mulai nol
+bersih — alasan: `outstandingDebt` cuma cache, Buku Hutang hitung fresh
+dari transaksi, isi field itu langsung bikin 2 tempat beda angka); baris
+"-" (bucket piutang tanpa nama, ~Rp1,2jt) DILEWATI. Detail lengkap +
+keputusan kecil sisa (nama duplikat, whitespace) ada di PLAN.md Item 4._
 **Gotcha locale:** app TIDAK memanggil `initializeDateFormatting` — jangan
 pakai `DateFormat(..., 'id')` (throw LocaleDataException). Format nama hari/
 bulan Indonesia MANUAL (lihat `expenses_screen.dart` `_idDays`/`_idMonths`).

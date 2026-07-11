@@ -18,6 +18,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   "Eksperimental" — sudah cukup teruji untuk dipakai sehari-hari.
 
 ### 🔧 Perbaikan
+- **Produk hasil import CSV tidak lagi hilang dari Katalog Pesanan (HTML).**
+  Sebelumnya, produk yang masuk lewat import CSV (termasuk dari Griyo POS)
+  tampil normal di tab Produk & kasir, tapi lenyap total saat katalog HTML
+  dibagikan ke pelanggan — kini muncul dengan benar.
 - **Import CSV dari Griyo POS sekarang berhasil.** Sebelumnya file export
   Griyo (pemisah kolom titik-koma) selalu gagal total — semua baris ditolak
   karena format kolomnya tidak dikenali. Sekarang terbaca otomatis, termasuk
