@@ -8,6 +8,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-12
+
+- `19e679d` — fix: Sisa Tagihan understated saat kembalian dipakai ulang sbg pembayaran baru (double-count di `paid`)
+
 ## 2026-07-11
 
 - `c3e975a` — fix: centang "Pakai kembalian" di kalkulator bayar tidak merespons tap (state beku di sheet showModalBottomSheet)

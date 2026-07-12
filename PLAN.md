@@ -6,11 +6,13 @@ dari file ini (lihat aturan di [CLAUDE.md](CLAUDE.md) §Perencanaan). Riwayat
 teknis pekerjaan yang SUDAH selesai ada di [CHANGELOG.md](CHANGELOG.md), bukan
 di sini.
 
-_Terakhir diperbarui: 11 Juli 2026. Item 9-22 SELESAI 12/13 (Item 17+21
+_Terakhir diperbarui: 12 Juli 2026. Item 9-22 SELESAI 12/13 (Item 17+21
 sengaja ditunda). Item 3a/3b SELESAI/terjawab lewat fitur baru "Import dari
 Griyo POS". Item 4 (import pelanggan Griyo) analisis+keputusan besar
-selesai, siap diimplementasi. Sisa menggantung: Item 3c, 5, 8 — lihat
-masing-masing untuk detail._
+selesai, siap diimplementasi. **Item 23 baru** (bug "Sisa Tagihan" understated
+saat kembalian dipakai ulang — scope Buku Hutang/Tutup Kasir/tempat lain
+masih menggantung, lihat detail). Sisa menggantung: Item 3c, 5, 8, 23 —
+lihat masing-masing untuk detail._
 
 ---
 
@@ -29,6 +31,51 @@ satunya sumber kebenaran). Jadi update data dari dataset selalu berbentuk:
 user kirim data mentah → Claude olah/format jadi bentuk yang bisa diimpor →
 user jalankan import sendiri di app lewat fitur yang sudah ada (atau yang
 akan dibangun). Bukan Claude yang menulis langsung ke database terenkripsi.
+
+---
+
+## Item 23 — Sisa lokasi lain yang masih pakai `paid` mentah (double-count kembalian reuse)
+
+**Konteks:** user laporkan "Sisa Tagihan" di struk salah hitung (understated)
+saat kembalian yang sudah pernah diberikan dipakai ulang sebagai pembayaran
+item tambahan — akar masalah: `paid` (Σ semua pembayaran) menghitung uang
+yang sama 2× (masuk sbg pembayaran baru, tanpa pernah dikurangi saat keluar
+sbg kembalian sebelumnya). **Sudah diperbaiki** (`19e679d`, 12 Juli) untuk:
+status `kurang_bayar`/`lunas` (`_reconcileTransactionTotals`,
+`addPaymentToTransaction`) + tampilan "Sisa Tagihan"/"Sisa hutang" di
+`receipt_screen.dart` (3 tempat: Ringkasan, prefill dialog Tambah Bayar,
+struk cetak/gambar) via helper `netRemainingOwed()`.
+
+**Scope yang SENGAJA belum disentuh** (dipilih user lewat poll — fokus dulu
+ke laporan spesifik, bukan sapu bersih semua turunan `total-paid`):
+- **Buku Hutang** (`getDebtBook`, `getUnpaidTxDetails` di app_database.dart)
+  — angka hutang pelanggan bisa understated dengan pola bug yang SAMA
+  (belum diverifikasi/diperbaiki).
+- **`settleMergedDebt`** (engine pelunasan hutang gabungan Buku Hutang) —
+  variabel `sisa` di dalamnya pakai `tx.total - tx.paid` mentah juga.
+- **Tutup Kasir** (`getTodayCashRecap`, dipakai `tutup_kasir_screen.dart`)
+  — TEMUAN LEBIH LUAS: "kas sistem" dihitung dari `SUM(paid)` mentah tanpa
+  dikurangi kembalian SAMA SEKALI, bahkan di transaksi normal TANPA reuse
+  kembalian — dugaan kuat "kas sistem" selalu overstated sebesar total
+  kembalian harian. Ini BEDA kategori dari bug reuse (lebih fundamental,
+  berpotensi bikin Tutup Kasir selalu "selisih" di toko manapun yang kasih
+  kembalian) — belum dikonfirmasi user apakah ini disengaja atau bug,
+  belum ada fix.
+- Tempat lain yang masih pakai pola `tx.total - tx.paid` mentah: `printer_
+  service.dart` (2×, struk cetak ESC/POS asli — beda dari `_ReceiptPaper`
+  di receipt_screen.dart yang SUDAH diperbaiki), `transaksi_tab.dart` (2×,
+  tab Laporan → Transaksi), `tx_history_sheet.dart` (3×, riwayat transaksi
+  di kasir), `merged_receipt_screen.dart` (nota gabungan).
+
+**Kalau ada laporan bug lanjutan dari salah satu tempat di atas**, akar
+masalahnya kemungkinan besar SAMA (pola `total-paid` mentah) — cek dulu
+apakah cukup diterapkan pola `netRemainingOwed()`-style (paid dikurangi Σ
+changeGiven) sebelum investigasi dari nol. **PENTING kalau nanti fix
+Tutup Kasir:** jangan asal kurangi `SUM(paid)` dengan Σ changeGiven murni —
+perlu pikirkan ulang apakah "kas sistem" harus juga netral terhadap
+`changeTaken` (kembalian yang belum diambil vs sudah), karena itu
+memengaruhi apakah uangnya SUNGGUHAN sudah keluar dari laci fisik atau
+belum.
 
 ---
 
