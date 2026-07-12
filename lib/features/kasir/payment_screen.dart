@@ -1246,10 +1246,21 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
     widget.onToggleUnclaimedChangeTaken?.call(value);
   }
 
+  /// Total yang SUNGGUHAN perlu dilunasi kasir — harga item susulan
+  /// ditambah sisa tagihan lama (kalau ada). Kembalian/kurang HARUS
+  /// dihitung terhadap ini, bukan [widget.total] mentah (item susulan
+  /// saja) — kalau tidak, kasir yang mengetik persis "Total yang perlu
+  /// ditagih" akan melihat pill "Kembalian" palsu sebesar sisa tagihan
+  /// lama, padahal setelah dikonfirmasi tidak ada kembalian sungguhan
+  /// (formula DB `_computePaymentChangeGiven` sudah benar; ini murni
+  /// preview di sheet yang dulu belum ikut dikoreksi).
+  int get _effectiveTotal => widget.total + (widget.existingShortfall ?? 0);
+
   int get _change =>
-      (_tendered - widget.total).clamp(0, double.maxFinite.toInt());
-  int get _shortfall =>
-      _tendered > 0 && _tendered < widget.total ? widget.total - _tendered : 0;
+      (_tendered - _effectiveTotal).clamp(0, double.maxFinite.toInt());
+  int get _shortfall => _tendered > 0 && _tendered < _effectiveTotal
+      ? _effectiveTotal - _tendered
+      : 0;
 
   void _press(String key) {
     setState(() {
@@ -1383,8 +1394,7 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                          formatRupiah(
-                              widget.total + widget.existingShortfall!),
+                          formatRupiah(_effectiveTotal),
                           style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 16,
@@ -1489,10 +1499,11 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                     label: const Text('Uang Pas'),
                     backgroundColor: scheme.primaryContainer,
                     side: BorderSide.none,
-                    onPressed: () => setState(() => _tendered = widget.total),
+                    onPressed: () =>
+                        setState(() => _tendered = _effectiveTotal),
                   ),
                   ...{10000, 20000, 50000, 100000}
-                      .where((d) => d >= widget.total)
+                      .where((d) => d >= _effectiveTotal)
                       .take(3)
                       .map((d) => ActionChip(
                             label: Text(formatRupiah(d)),
