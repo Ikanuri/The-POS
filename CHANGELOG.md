@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-12
 
+- `87cdaf0` — fix: "Dibayar" di Ringkasan struk tidak konsisten dgn Sisa Tagihan (Total != Dibayar+Sisa)
 - `19e679d` — fix: Sisa Tagihan understated saat kembalian dipakai ulang sbg pembayaran baru (double-count di `paid`)
 
 ## 2026-07-11

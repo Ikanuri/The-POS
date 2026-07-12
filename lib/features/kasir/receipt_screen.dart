@@ -30,6 +30,15 @@ int netRemainingOwed(Transaction tx, List<TransactionPayment> payments) {
   return remaining > 0 ? remaining : 0;
 }
 
+/// Dibayar bersih — pasangan [netRemainingOwed] supaya "Total = Dibayar +
+/// Sisa Tagihan" konsisten di Ringkasan on-screen (`paid` mentah dipakai
+/// apa adanya tetap di struk cetak/gambar, TIDAK di sini).
+int netPaidDisplay(Transaction tx, List<TransactionPayment> payments) {
+  final sumChangeGiven = payments.fold<int>(0, (s, p) => s + p.changeGiven);
+  final net = tx.paid - sumChangeGiven;
+  return net > 0 ? net : 0;
+}
+
 class ReceiptScreen extends ConsumerStatefulWidget {
   const ReceiptScreen({super.key, required this.transactionId});
   final String transactionId;
@@ -1593,7 +1602,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         _buildTotalProfitRow(scheme),
                       if (tx.paid > 0)
                         _SummaryRow('Dibayar',
-                            '${_methodLabel(tx.paymentMethod)} · ${formatRupiah(tx.paid)}'),
+                            '${_methodLabel(tx.paymentMethod)} · '
+                            '${formatRupiah(netPaidDisplay(tx, _payments))}'),
                       if ((_latestPayment?.changeGiven ?? 0) > 0)
                         _ChangeTakenRow(
                           amount: formatRupiah(_latestPayment!.changeGiven),

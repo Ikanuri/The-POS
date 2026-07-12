@@ -40,11 +40,16 @@ akan dibangun). Bukan Claude yang menulis langsung ke database terenkripsi.
 saat kembalian yang sudah pernah diberikan dipakai ulang sebagai pembayaran
 item tambahan — akar masalah: `paid` (Σ semua pembayaran) menghitung uang
 yang sama 2× (masuk sbg pembayaran baru, tanpa pernah dikurangi saat keluar
-sbg kembalian sebelumnya). **Sudah diperbaiki** (`19e679d`, 12 Juli) untuk:
-status `kurang_bayar`/`lunas` (`_reconcileTransactionTotals`,
-`addPaymentToTransaction`) + tampilan "Sisa Tagihan"/"Sisa hutang" di
-`receipt_screen.dart` (3 tempat: Ringkasan, prefill dialog Tambah Bayar,
-struk cetak/gambar) via helper `netRemainingOwed()`.
+sbg kembalian sebelumnya). **Sudah diperbaiki** (`19e679d` + susulan
+`87cdaf0`, 12 Juli) untuk: status `kurang_bayar`/`lunas`
+(`_reconcileTransactionTotals`, `addPaymentToTransaction`) + tampilan "Sisa
+Tagihan"/"Sisa hutang" DAN "Dibayar" di `receipt_screen.dart` (Ringkasan,
+prefill dialog Tambah Bayar, struk cetak/gambar untuk Sisa saja) via helper
+`netRemainingOwed()`/`netPaidDisplay()`. **Pelajaran dari `87cdaf0`**: kalau
+nanti perbaiki tempat lain di bawah, cek SEMUA baris nominal terkait di
+layar/struk yang sama (bukan cuma "Sisa"-nya) — "Dibayar" sempat kelewat
+diperbaiki sekalian padahal satu card yang sama dengan "Sisa Tagihan",
+ketahuan user karena Total != Dibayar+Sisa jadi tidak nyambung.
 
 **Scope yang SENGAJA belum disentuh** (dipilih user lewat poll — fokus dulu
 ke laporan spesifik, bukan sapu bersih semua turunan `total-paid`):
