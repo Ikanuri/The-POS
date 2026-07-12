@@ -15,6 +15,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   pernah diberikan dipakai lagi buat bayar belanja tambahan — sebelumnya
   angkanya lebih kecil dari yang seharusnya (uang yang sama sempat ke-hitung
   dua kali).
+- **"Dibayar" di Ringkasan struk sekarang cocok dengan Sisa Tagihan** —
+  sebelumnya Total tidak sama dengan Dibayar + Sisa Tagihan kalau kembalian
+  sempat dipakai ulang.
 
 ## 11 Juli 2026
 

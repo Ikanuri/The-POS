@@ -7,11 +7,29 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 _Terakhir diperbarui: 12 Juli 2026 (sesi kembalian per-pembayaran + Buku
 Hutang + Tambah Belanjaan, berlanjut ke sesi bugfix hari berikutnya).
 **schemaVersion tetap 13** (semua fix sesi lanjutan ini murni logika, tidak
-ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **218 test
+ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **219 test
 hijau** saat ini. Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item
-17+21 — sync — masih sengaja ditunda, TIDAK berubah). **Item 23 baru masuk
-PLAN.md** (lihat di bawah) — bug "Sisa Tagihan" + scope-scope terkait yang
-masih menggantung.
+17+21 — sync — masih sengaja ditunda, TIDAK berubah). **Item 23 masuk
+PLAN.md** (lihat di bawah) — bug "Sisa Tagihan"/"Dibayar" + scope-scope
+terkait yang masih menggantung.
+
+**Bug susulan langsung setelah PR #7 di-merge (`87cdaf0`):** user bandingkan
+lagi dengan app kompetitor — "Sisa Tagihan" sudah cocok (5.000=5.000), TAPI
+baris **"Dibayar"** di Ringkasan beda (The POS: Rp 60.000 mentah, app
+pembanding: Rp 55.000 bersih). Akar masalah lanjutan dari fix sebelumnya:
+saya sudah benarkan "Sisa Tagihan" jadi bersih tapi LUPA baris "Dibayar" di
+ATASNYA (satu card yang sama) masih baca `tx.paid` mentah — jadi Total
+(60.000) != Dibayar (60.000) + Sisa (5.000) = 65.000, tidak konsisten
+secara matematika DALAM SATU CARD YANG SAMA. Fix: helper baru
+`netPaidDisplay()` (pasangan `netRemainingOwed()`, `paid - Σ changeGiven`),
+dipakai HANYA di baris "Dibayar" Ringkasan on-screen — struk cetak/gambar
+(`_ReceiptPaper`, `printer_service.dart`) SENGAJA tidak disentuh (pasangan
+"Bayar../Kembali" di situ ikut konvensi cetak berbeda, sudah dikonfirmasi
+sebelumnya jangan diutak-atik). **Pelajaran**: kalau ada baris angka lain
+yang SATU CARD dengan baris yang baru diperbaiki, cek juga apa baris itu
+masih pakai basis lama (mentah) — user akan langsung notice kalau
+angka-angka di satu layar yang sama tidak "nyambung" secara matematika,
+walau masing-masing baris technically "benar" sendiri-sendiri.
 
 **Pola PR/merge sepanjang sesi ini:** user berkali-kali minta "merge
 langsung" tiap ada batch perubahan baru. **PR #4** (fitur Poin 1-3 awal) →
