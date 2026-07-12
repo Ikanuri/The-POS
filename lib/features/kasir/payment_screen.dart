@@ -13,6 +13,7 @@ import '../../core/utils/input_formatters.dart';
 import 'cart_meta_provider.dart';
 import 'discount_allocation.dart';
 import 'cart_provider.dart';
+import 'receipt_screen.dart' show netRemainingOwed;
 
 const _uuid = Uuid();
 
@@ -83,6 +84,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   ({String id, int amount})? _unclaimedChange;
   bool _unclaimedChangeTaken = false;
 
+  /// Mode tambah belanjaan: sisa tagihan nota ASLI (sebelum item susulan
+  /// ini), bila nota itu masih kurang bayar. `_total`/kalkulator kasir
+  /// SENGAJA tidak digabung dengan angka ini (bisa merusak alokasi
+  /// diskon/pembulatan per-item lewat `allocateCartTotal`) — murni info
+  /// terpisah supaya kasir tidak terkecoh "Total" kalkulator itu HANYA
+  /// harga item baru, bukan total yang perlu ditagih ke pelanggan.
+  int? _existingShortfall;
+
   @override
   void initState() {
     super.initState();
@@ -123,14 +132,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
 
     ({String id, int amount})? unclaimedChange;
+    int? existingShortfall;
     if (_isAddMode) {
-      final lastPay = await (db.select(db.transactionPayments)
-            ..where((t) => t.transactionId.equals(widget.addToTxId!))
-            ..orderBy([(t) => OrderingTerm.desc(t.paidAt)])
-            ..limit(1))
+      final origTx = await (db.select(db.transactions)
+            ..where((t) => t.id.equals(widget.addToTxId!)))
           .getSingleOrNull();
-      if (lastPay != null && lastPay.changeGiven > 0 && !lastPay.changeTaken) {
-        unclaimedChange = (id: lastPay.id, amount: lastPay.changeGiven);
+      if (origTx != null) {
+        final origPayments = await db.getPaymentsForTx(widget.addToTxId!);
+        final lastPay = origPayments.isEmpty ? null : origPayments.last;
+        if (lastPay != null &&
+            lastPay.changeGiven > 0 &&
+            !lastPay.changeTaken) {
+          unclaimedChange = (id: lastPay.id, amount: lastPay.changeGiven);
+        }
+        final shortfall = netRemainingOwed(origTx, origPayments);
+        if (shortfall > 0) existingShortfall = shortfall;
       }
     }
 
@@ -140,6 +156,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         _employees = employees;
         _unclaimedChange = unclaimedChange;
         _unclaimedChangeTaken = false;
+        _existingShortfall = existingShortfall;
         if (methods.isNotEmpty) {
           _selectedMethodId = methods.first.id;
           _selectedMethodType = methods.first.type;
@@ -1155,6 +1172,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           onToggleUnclaimedChangeTaken: _unclaimedChange == null
               ? null
               : _toggleUnclaimedChangeTaken,
+          existingShortfall: _existingShortfall,
         ),
       );
       if (result == null) return; // dibatalkan
@@ -1186,6 +1204,7 @@ class _CashKeypadSheet extends StatefulWidget {
     this.unclaimedChangeAmount,
     this.unclaimedChangeTaken = false,
     this.onToggleUnclaimedChangeTaken,
+    this.existingShortfall,
   });
   final int total;
   final int initial;
@@ -1197,6 +1216,13 @@ class _CashKeypadSheet extends StatefulWidget {
   final int? unclaimedChangeAmount;
   final bool unclaimedChangeTaken;
   final ValueChanged<bool>? onToggleUnclaimedChangeTaken;
+
+  /// Mode tambah belanjaan: sisa tagihan nota ASLI (sebelum item susulan
+  /// ini) — null bila bukan mode tambah belanjaan atau nota sudah lunas.
+  /// Murni informasi (supaya kasir tahu [total] di sini HANYA harga item
+  /// baru, bukan total yang perlu ditagih) — tidak memengaruhi [total]
+  /// atau alokasi diskon/pembulatan item.
+  final int? existingShortfall;
 
   @override
   State<_CashKeypadSheet> createState() => _CashKeypadSheetState();
@@ -1318,6 +1344,29 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                   ),
                 ],
               ),
+              if (widget.existingShortfall != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text('+ Sisa tagihan sebelumnya',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: scheme.onSurfaceVariant)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(formatRupiah(widget.existingShortfall!),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                              color: AppTheme.debtFg(isDark))),
+                    ],
+                  ),
+                ),
               if (widget.unclaimedChangeAmount != null)
                 InkWell(
                   onTap: widget.onToggleUnclaimedChangeTaken == null

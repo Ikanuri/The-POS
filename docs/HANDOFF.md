@@ -7,11 +7,28 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 _Terakhir diperbarui: 12 Juli 2026 (sesi kembalian per-pembayaran + Buku
 Hutang + Tambah Belanjaan, berlanjut ke sesi bugfix hari berikutnya).
 **schemaVersion tetap 13** (semua fix sesi lanjutan ini murni logika, tidak
-ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **219 test
+ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **221 test
 hijau** saat ini. Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item
 17+21 — sync — masih sengaja ditunda, TIDAK berubah). **Item 23 masuk
 PLAN.md** (lihat di bawah) — bug "Sisa Tagihan"/"Dibayar" + scope-scope
 terkait yang masih menggantung.
+
+**Temuan UX susulan dari user (bandingkan lagi dgn Griyo POS, `765734e`):**
+saat Tambah Belanjaan pada nota yang MASIH kurang bayar (mis. sisa 5.000
+dari penambahan sebelumnya), kalkulator bayar The POS hanya menampilkan
+"Total = harga item baru" (mis. 20.000), sementara Griyo menampilkan
+akumulatif (25.000 = 20.000 + sisa 5.000). Matematika The POS BENAR
+(hasil akhir sama, sudah diverifikasi), tapi bisa MENYESATKAN kasir —
+disangka "Total" kalkulator = semua yang perlu ditagih. User pilih
+"tampilkan, atau akumulatifkan jika lebih efisien". Keputusan implementasi:
+**TAMPILKAN sebagai info terpisah** ("+ Sisa tagihan sebelumnya", nominal
+merah, pola sama seperti info "Pakai kembalian" yang sudah ada), BUKAN
+diakumulasi ke `_total` — alasan: `_total` mengalir ke `allocateCartTotal`
+(alokasi proporsional diskon/pembulatan per-item), menggabungkan sisa lama
+ke situ akan mendistorsi harga item susulan yang tercatat. Sumber angka:
+`netRemainingOwed()` (helper yang sama dari fix Sisa Tagihan) atas nota
+asli + payment rows-nya, dihitung di `_load()` payment_screen.dart saat
+mode tambah belanjaan.
 
 **Bug susulan langsung setelah PR #7 di-merge (`87cdaf0`):** user bandingkan
 lagi dengan app kompetitor — "Sisa Tagihan" sudah cocok (5.000=5.000), TAPI
