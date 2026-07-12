@@ -5,13 +5,62 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 12 Juli 2026 (sesi kembalian per-pembayaran + Buku
-Hutang + Tambah Belanjaan, berlanjut ke sesi bugfix hari berikutnya).
+Hutang + Tambah Belanjaan, berlanjut ke sesi bugfix hari berikutnya, lalu
+sesi lanjutan lagi — fix kalkulator + harga dasar/per-qty, lihat paragraf
+baru di bawah).
 **schemaVersion tetap 13** (semua fix sesi lanjutan ini murni logika, tidak
-ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **221 test
+ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **226 test
 hijau** saat ini. Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item
 17+21 — sync — masih sengaja ditunda, TIDAK berubah). **Item 23 masuk
 PLAN.md** (lihat di bawah) — bug "Sisa Tagihan"/"Dibayar" + scope-scope
 terkait yang masih menggantung.
+
+**Sesi lanjutan (setelah `cd382ed`) — user lapor 4 poin sekaligus (screenshot
+kalkulator + 3 permintaan tampilan/bug):**
+1. Kalkulator kembalian PALSU (screenshot) — sudah dianalisis & dikonfirmasi
+   sebagai bug NYATA yang SAMA dengan yang sudah dijelaskan di paragraf
+   `cd382ed` di bawah (preview `_change`/`_shortfall` belum ikut
+   `existingShortfall`) — SELESAI, PR #11 merged.
+2. **Harga dasar di bawah nama produk (tab Produk) — SELESAI**
+   (`b1141f6`). User pilih scope sempit: cuma harga satuan DASAR/utama
+   (bukan semua satuan/tier). `getBaseUnitPrices()` baru di
+   `app_database.dart` — 1 query JOIN (`product_units`+`price_tiers` pada
+   `min_qty=1`+`is_base_unit=1`) untuk SEMUA produk sekaligus (hindari N+1
+   per baris `ListView`), dipakai via `FutureProvider.autoDispose` di
+   `produk_list_screen.dart`.
+3. **Harga per-qty di baris item keranjang kasir — SELESAI** (`d703c0b`).
+   User pilih pola "baris kecil di bawah nama item" (bukan cuma saat qty>1
+   — SELALU tampil, konsisten). Baris satuan di `cart_sheet.dart`
+   (`_CartItemTile`) sekarang `'${item.unitName} · ${formatRupiah(item.price)}'`
+   dibungkus `Flexible`+ellipsis (defensif, pola overflow-prevention yang
+   sudah dipakai berkali-kali sesi ini).
+4. **Bug input harga di modal edit item kasir ("tidak bisa input nominal,
+   cuma bisa hapus", "kasus ril di produk dengan 2 qty stepper di
+   keranjang") — BELUM diperbaiki, MENGGANTUNG.** Sudah diinvestigasi
+   (cek `_canOverride`/izin override harga, `ThousandsSeparatorFormatter`,
+   pola stacking modal CartSheet→ItemEntrySheet, resolusi `targetId` untuk
+   baris varian) — TIDAK ketemu akar masalah pasti dari baca kode statis
+   saja. Sudah tanya user klarifikasi "2 qty stepper" itu maksudnya produk
+   dengan varian (1 stepper produk utama + 1 stepper varian di modal yang
+   sama), ATAU produk yang sama masuk keranjang di 2 satuan berbeda
+   (mis. "Pak" & "Pcs") — **BELUM DIJAWAB user, jangan tebak-tebak fix
+   sebelum jawaban masuk** (bug menyentuh alur pembayaran/harga, prioritas
+   user selalu "laporkan dulu, jangan langsung eksekusi" untuk kelas bug
+   ini).
+
+**Gotcha widget test diperluas (harus di-broaden dari yang sudah ada di
+CLAUDE.md):** ketemu lagi kasus drift `StreamProvider` bikin test HANG
+selama 10 menit penuh (bukan langsung gagal) sebelum akhirnya muncul "Timer
+still pending" — kali ini `ProdukListScreen` (`_lowStockCountProvider`
+watch `watchLowStockCount()`) walau test-nya TIDAK memutasi DB sama sekali,
+cuma BACA. CLAUDE.md yang ada baru menyebut kasus "yang MEMUTASI db" — pada
+praktiknya SEMUA widget test layar yang punya StreamProvider drift butuh
+`drain()` di akhir test, bukan cuma yang mutasi. Sempat salah diagnosa
+sebagai lock/contention proses `flutter test` overlap (nyaris `kill -9` PID
+hasil `ps aux | grep`, DITOLAK tool-permission karena pattern-matched PID
+discovery tidak masuk exception "Session-Created Job Cleanup") sebelum
+akhirnya lihat output asli test yang gagal dan ketemu akar masalah
+sebenarnya.
 
 **Temuan UX susulan dari user (bandingkan lagi dgn Griyo POS, `765734e`):**
 saat Tambah Belanjaan pada nota yang MASIH kurang bayar (mis. sisa 5.000
