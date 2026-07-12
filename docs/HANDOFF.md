@@ -27,13 +27,17 @@ lengkap sistem lisensi offline yang SENGAJA belum dieksekusi)._
   statis) — SELESAI, inti `d9e1f2e` + badge kosmetik kartu kasir `5a18301`.
 - **25b** (hapus produk via swipe di tab Produk, pola sama seperti tab
   Pelanggan) — SELESAI, `29d7400`.
-- **MENGGANTUNG: 24b+24d** (payment gate role Pegawai — rename KOSMETIK
-  "Kasir"→"Pegawai" di UI, `deviceRole` internal TETAP `'kasir'`; permission
-  baru `terima_pembayaran` default OFF; tombol "Bayar" pegawai tanpa izin
-  jadi "Kirim ke Owner/Asisten" via `held_orders` bertanda khusus; checklist
-  centang struk ikut tersinkron sebagai bagian payload; notifikasi realtime
-  LAN ke pegawai saat owner selesai bayar, nyambung ke Item 21 sync UI
-  persisten yang juga masih menggantung). Detail lengkap masih di PLAN.md.
+- **24d SEBAGIAN SELESAI, SISA menggantung** (payment gate role Pegawai):
+  rename KOSMETIK "Kasir"→"Pegawai" di UI (`deviceRole` internal TETAP
+  `'kasir'`, TIDAK disentuh) + permission baru `terima_pembayaran` default
+  OFF — **SUDAH** di-commit (`4317c33`). **BELUM**: gate tombol "Bayar" jadi
+  "Kirim ke Owner/Asisten" via `held_orders` bertanda khusus (hati-hati:
+  `cart_sheet.dart` dipakai bersama mode kasir/Tambah Belanjaan/Katalog —
+  gate HANYA utk transaksi nyata, exclude `kCatalogCartId`), checklist
+  centang struk tersinkron sebagai bagian payload (24b), dan notifikasi
+  realtime LAN ke pegawai saat owner selesai bayar (nyambung ke Item 21
+  sync UI persisten yang juga masih menggantung). Detail lengkap di
+  PLAN.md Item 24 (24b/24d).
 - **25c (lisensi/aktivasi offline) — desain SUDAH FINAL & komprehensif,
   TAPI SENGAJA BELUM dieksekusi** atas instruksi eksplisit user ("eksekusi
   semua... kecuali aspek security"). Dokumentasi lengkap dikirim sebagai

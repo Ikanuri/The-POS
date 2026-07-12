@@ -41,6 +41,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   terdeteksi kamera ditahan dulu, baru diproses setelah tap tombol bidik.
   Berguna kalau banyak barcode berdekatan di rak dan mode otomatis rawan
   salah pindai.
+- Role device "Kasir" sekarang tampil sebagai **"Pegawai"** di semua layar
+  Pengaturan & pairing (murni penamaan, tidak mengubah cara kerja).
 
 ### 🔧 Perbaikan
 - **"Sisa Tagihan" di struk sekarang benar** saat kembalian yang sudah

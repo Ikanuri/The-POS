@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-12
 
+- `4317c33` — feat: rename kosmetik "Kasir"→"Pegawai" di UI + izin Terima Pembayaran (Item 24d, bagian 1)
 - `5a18301` — feat: tap-to-scan + redesign kapsul melayang scanner kasir (Item 24e+24f), + badge kosmetik "Habis" di kartu kasir (Item 25a — bagian kedua)
 - `d9e1f2e` — feat: tanda "Stok Habis" cepat dari modal kasir (Item 25a) — inti
 - `29d7400` — feat: hapus produk via swipe di tab Produk (Item 25b)

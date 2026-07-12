@@ -11,9 +11,10 @@ sengaja ditunda). Item 3a/3b SELESAI/terjawab lewat fitur baru "Import dari
 Griyo POS". Item 4 (import pelanggan Griyo) analisis+keputusan besar
 selesai, siap diimplementasi. **Item 23** (bug "Sisa Tagihan" understated
 saat kembalian dipakai ulang — scope Buku Hutang/Tutup Kasir/tempat lain
-masih menggantung). **Item 24**: 24a/24c/24e/24f SELESAI & di-commit; sisa
-**24b+24d** (payment gate role Pegawai + checklist tersinkron + notifikasi
-realtime) belum dimulai. **Item 25**: 25a/25b SELESAI & di-commit.
+masih menggantung). **Item 24**: 24a/24c/24e/24f SELESAI & di-commit; 24d
+SEBAGIAN (rename Pegawai + permission `terima_pembayaran` selesai) — sisa
+logika gate "Bayar", checklist tersinkron (24b), & notifikasi realtime
+belum dikerjakan. **Item 25**: 25a/25b SELESAI & di-commit.
 **25c (lisensi) desainnya SUDAH FINAL & komprehensif** (lihat dokumentasi
 terpisah yang dikirim ke user, `docs/keamanan-lisensi-offline.md` — TIDAK
 di-commit ke repo atas permintaan user, cuma dikirim sebagai file) —
@@ -112,9 +113,37 @@ kapan saja user siap, tanpa perlu didiskusikan ulang dari nol.
 
 ## Item 24 — Sisa: payment gate role Pegawai (24b+24d)
 
-**Status:** 24a, 24c, 24e, 24f SELESAI & sudah di-commit. **Sisa hanya
-24b+24d** (satu fitur terkait erat, lihat penjelasan di 24d) — belum
-dimulai.
+**Status:** 24a, 24c, 24e, 24f SELESAI & sudah di-commit. **24d SEBAGIAN
+mulai dikerjakan** (rename kosmetik "Kasir"→"Pegawai" di UI + permission
+`terima_pembayaran` default OFF sudah SELESAI & di-commit) — **SISA:**
+logika gerbang tombol "Bayar"→"Kirim ke Owner/Asisten", tag `held_orders`
+`awaitingPayment`, tampilan antrian khusus, checklist struk tersinkron
+(24b), dan notifikasi realtime. Detail lengkap tiap bagian masih di bawah
+(belum dihapus karena belum semua selesai).
+
+**Bagian yang SUDAH selesai (24d, sebagian):**
+- `kKasirPermissionKeys` (`app_database.dart`) — tambah `terima_pembayaran`,
+  default OFF (self-heal ke DB lama via `beforeOpen` insertOrIgnore, pola
+  yang sama seperti izin lain, TANPA migrasi schema).
+- `kasir_permissions_screen.dart` — label/deskripsi "Terima Pembayaran" +
+  AppBar/teks jadi "Izin Pegawai".
+- Rename kosmetik UI lain: `pengaturan_screen.dart` (roleLabel switch,
+  menu "Izin Pegawai", teks toggle stok minus), `pair_device_screen.dart`
+  (chip pilih role saat pairing), `pairing_screen.dart` (saran nama
+  device + roleLabel identitas). **`deviceRole` internal TETAP `'kasir'`**
+  di semua titik — TIDAK disentuh, sesuai catatan audit di bawah.
+- **SENGAJA TIDAK disentuh** (bukan role-label, konsep beda): tab
+  bottom-nav "Kasir" di `main_shell.dart` (nama FITUR/layar POS, bukan
+  role pegawai) & label "Kasir" di `transaksi_tab.dart` (atribusi generik
+  "siapa yang menjalankan kasir/proses jual", bukan tier permission).
+
+**Bagian yang MASIH tersisa (belum dikerjakan):** logika gate tombol
+"Bayar" di `cart_sheet.dart`/`kasir_screen.dart` (perlu hati-hati: cart
+sheet ini dipakai bersama untuk mode kasir utama, Tambah Belanjaan, DAN
+mode Katalog — gate HANYA berlaku utk transaksi nyata, exclude
+`kCatalogCartId`), tag `held_orders` + payload checklist (24b), tampilan
+antrian khusus di owner/asisten, dan notifikasi realtime (lihat catatan
+di 24d di bawah soal keterkaitannya dengan Item 21 yang sengaja ditunda).
 
 ### 24b — Persist + sinkronkan state centang item struk (LIHAT JUGA 24d)
 **File:** `lib/features/kasir/receipt_screen.dart` (`_checked`, baris ~80).
