@@ -107,9 +107,14 @@ void main() {
 
     expect(find.text('+ Sisa tagihan sebelumnya'), findsOneWidget);
     expect(find.text(formatRupiah(5000)), findsOneWidget);
-    // Total kalkulator TETAP harga item susulan saja (20.000) — tidak
-    // diakumulasi jadi 25.000 (biar alokasi harga/diskon item tidak rusak).
+    // Total kalkulator (baris header, dipakai alokasi harga item) TETAP
+    // harga item susulan saja (20.000) — tidak diakumulasi jadi 25.000
+    // (biar alokasi harga/diskon item tidak rusak).
     expect(find.text(formatRupiah(20000)), findsWidgets);
+    // TAPI kasir tidak perlu jumlah manual — angka gabungan sudah
+    // dihitungkan & ditampilkan sebagai baris terpisah.
+    expect(find.text('Total yang perlu ditagih'), findsOneWidget);
+    expect(find.text(formatRupiah(25000)), findsOneWidget);
     // Tidak ada "Pakai kembalian" — pay2 (pembayaran terakhir) changeGiven
     // 0, tidak ada kembalian nganggur di baris itu.
     expect(find.text('Pakai kembalian'), findsNothing);
@@ -154,5 +159,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('+ Sisa tagihan sebelumnya'), findsNothing);
+    expect(find.text('Total yang perlu ditagih'), findsNothing);
   });
 }
