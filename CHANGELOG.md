@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-12
 
+- `cd382ed` — fix: kalkulator tampilkan Kembalian palsu saat ada sisa tagihan lama (preview _change/_shortfall belum ikut existingShortfall)
 - `88c8deb` — fix: hitungkan "Total yang perlu ditagih" di kalkulator, bukan kasir yang jumlah manual
 - `765734e` — feat: info "+ Sisa tagihan sebelumnya" di kalkulator Tambah Belanjaan (kasir tahu Total kalkulator ≠ total yang perlu ditagih)
 - `87cdaf0` — fix: "Dibayar" di Ringkasan struk tidak konsisten dgn Sisa Tagihan (Total != Dibayar+Sisa)

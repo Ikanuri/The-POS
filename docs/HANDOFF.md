@@ -40,6 +40,24 @@ kasir tinggal baca angka jadi, tidak perlu jumlah manual sama sekali.
 `_total` (yang dipakai `allocateCartTotal`) tetap tidak disentuh — baris
 ini murni turunan tampilan.
 
+**User verifikasi mandiri dgn screenshot (`cd382ed`), nemu bug baru:**
+setelah tap "Total yang perlu ditagih" lalu ketik PERSIS angka itu di
+kalkulator, pill "Kembalian" tetap muncul PALSU sebesar `existingShortfall`
+(mis. bayar 84.400 pas, tapi pill nunjuk "Kembalian Rp 39.600"). Struk
+setelah dikonfirmasi TERNYATA benar (tidak ada kembalian tersimpan,
+matches `_computePaymentChangeGiven`) — jadi bug ini murni di PREVIEW
+kalkulator, bukan data tersimpan. Akar masalah: `_change`/`_shortfall`
+getter (dan tombol "Uang Pas" + filter nominal cepat) di
+`_CashKeypadSheetState` masih pakai `widget.total` mentah (item susulan
+saja), belum ikut disesuaikan saat `existingShortfall` ditambahkan
+sesi/commit sebelumnya (`765734e`). Fix: getter baru `_effectiveTotal`
+dipakai di SEMUA titik kalkulasi kembalian/tombol/quick-amount di sheet
+itu. **Pelajaran**: nambah field baru (`existingShortfall`) ke widget yang
+sudah punya logika kalkulasi established (_change/_shortfall) butuh audit
+SEMUA titik yang baca field lama (`widget.total`) yang relevan dgn
+kalkulasi, bukan cuma titik DISPLAY barunya sendiri — kelas bug yang sama
+persis dgn kasus "Dibayar" yang kelewat waktu fix Sisa Tagihan (`87cdaf0`).
+
 **Bug susulan langsung setelah PR #7 di-merge (`87cdaf0`):** user bandingkan
 lagi dengan app kompetitor — "Sisa Tagihan" sudah cocok (5.000=5.000), TAPI
 baris **"Dibayar"** di Ringkasan beda (The POS: Rp 60.000 mentah, app
