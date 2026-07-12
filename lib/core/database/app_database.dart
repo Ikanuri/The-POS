@@ -54,6 +54,9 @@ const kKasirPermissionKeys = <String>[
   'input_pembelian',
   'override_harga',
   'batal_transaksi',
+  // Item 24d — default OFF. Tanpa izin ini, tombol "Bayar" di kasir
+  // berubah jadi "Kirim ke Owner/Asisten" (lihat kasir_screen.dart).
+  'terima_pembayaran',
 ];
 
 /// Izin khusus role Asisten. Disimpan di tabel kasir_permissions yang sama

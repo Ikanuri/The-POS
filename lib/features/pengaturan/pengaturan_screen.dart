@@ -60,10 +60,13 @@ class PengaturanScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final scheme = Theme.of(context).colorScheme;
 
+    // Item 24d — label "Pegawai" KOSMETIK saja. Nilai internal deviceRole
+    // TETAP 'kasir' (lihat catatan di kKasirPermissionKeys/PLAN.md) — jangan
+    // ganti string switch di bawah jadi 'pegawai'.
     String roleLabel(String role) => switch (role) {
           'owner' => 'Owner',
           'asisten' => 'Asisten',
-          'kasir' => 'Kasir',
+          'kasir' => 'Pegawai',
           _ => role,
         };
 
@@ -159,7 +162,7 @@ class PengaturanScreen extends ConsumerWidget {
                       secondary: const Icon(Icons.inventory_2_outlined),
                       title: const Text('Izinkan Stok Minus'),
                       subtitle: const Text(
-                          'Kasir bisa jual meski stok 0 (pre-order) — owner selalu bisa terlepas dari ini'),
+                          'Pegawai bisa jual meski stok 0 (pre-order) — owner selalu bisa terlepas dari ini'),
                       value: allow,
                       onChanged: (v) async {
                         final db = ref.read(databaseProvider);
@@ -173,7 +176,7 @@ class PengaturanScreen extends ConsumerWidget {
                 if (device.isOwner) ...[
                   ListTile(
                     leading: const Icon(Icons.tune_outlined),
-                    title: const Text('Izin Kasir'),
+                    title: const Text('Izin Pegawai'),
                     subtitle: const Text('Override harga, input stok, dll'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.push('/pengaturan/izin-kasir'),

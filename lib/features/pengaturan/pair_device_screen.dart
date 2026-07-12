@@ -75,7 +75,7 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ChoiceChip(
-                  label: const Text('Kasir'),
+                  label: const Text('Pegawai'),
                   selected: _selectedRole == 'kasir',
                   onSelected: (_) =>
                       setState(() => _selectedRole = 'kasir'),

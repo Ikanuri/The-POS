@@ -49,7 +49,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
         return;
       }
       // Saran nama default berdasar role; perangkat bebas menggantinya.
-      _deviceName.text = payload.role == 'asisten' ? 'Asisten' : 'Kasir';
+      _deviceName.text = payload.role == 'asisten' ? 'Asisten' : 'Pegawai';
       setState(() => _payload = payload);
     } on PairingExpiredException catch (e) {
       setState(() => _error = e.toString());
@@ -169,7 +169,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   Widget _buildIdentityForm(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final payload = _payload!;
-    final roleLabel = payload.role == 'asisten' ? 'Asisten' : 'Kasir';
+    final roleLabel = payload.role == 'asisten' ? 'Asisten' : 'Pegawai';
 
     return Scaffold(
       appBar: AppBar(
