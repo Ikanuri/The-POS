@@ -17,6 +17,19 @@ import '../../core/theme/app_theme.dart';
 import 'widgets/debt_payment_dialog.dart';
 import 'widgets/tx_history_sheet.dart';
 
+/// Sisa tagihan yang BENAR: `total - paid` mentah bisa understate kalau
+/// kembalian yang sudah pernah diberikan (baris pembayaran manapun) dipakai
+/// ulang sebagai pembayaran baru — uang yang sama ke-hitung dobel di `paid`
+/// tanpa pernah dikurangi saat keluar sbg kembalian sebelumnya. `paid` &
+/// `changeAmount` sendiri TIDAK diubah (tetap dipakai apa adanya di struk
+/// cetak "Bayar../Kembali") — koreksi ini murni utk "berapa yang beneran
+/// masih harus dibayar".
+int netRemainingOwed(Transaction tx, List<TransactionPayment> payments) {
+  final sumChangeGiven = payments.fold<int>(0, (s, p) => s + p.changeGiven);
+  final remaining = tx.total - tx.paid + sumChangeGiven;
+  return remaining > 0 ? remaining : 0;
+}
+
 class ReceiptScreen extends ConsumerStatefulWidget {
   const ReceiptScreen({super.key, required this.transactionId});
   final String transactionId;
@@ -751,7 +764,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _showTambahBayar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final remaining = _tx!.total - _tx!.paid;
+    final remaining = netRemainingOwed(_tx!, _payments);
     final db = ref.read(databaseProvider);
     final result = await showDebtPaymentDialog(context, db,
         remaining: remaining, title: 'Tambah Bayar', prefillRemaining: false);
@@ -1594,7 +1607,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       if (isKurangBayar)
                         _SummaryRow(
                           'Sisa Tagihan',
-                          formatRupiah(tx.total - tx.paid),
+                          formatRupiah(netRemainingOwed(tx, _payments)),
                           color: scheme.error,
                           bold: true,
                         ),
@@ -1968,7 +1981,7 @@ class _ReceiptPaper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final remaining = tx.total - tx.paid;
+    final remaining = netRemainingOwed(tx, payments);
     final date =
         '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year} '
         '${tx.createdAt.hour.toString().padLeft(2, '0')}:${tx.createdAt.minute.toString().padLeft(2, '0')}';
