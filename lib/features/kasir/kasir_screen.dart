@@ -863,12 +863,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final product =
         await ref.read(databaseProvider).getProductById(editProductId);
     if (product == null || !mounted) return;
-    await showModalBottomSheet(
+    final navigatedAway = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
     );
-    // Buka lagi keranjang setelah edit, selama masih ada isinya.
+    // Buka lagi keranjang setelah edit, selama masih ada isinya — TAPI jangan
+    // kalau ItemEntrySheet ditutup karena navigasi ke layar lain (mis. tombol
+    // "Edit produk" → ProdukFormScreen, pop dengan `true`): membuka sheet
+    // lagi di situ akan menumpuk di belakang layar baru & membuat
+    // `_onHardwareKey` salah kira sheet keranjang masih aktif (menelan input
+    // digit yang seharusnya masuk ke field di layar baru itu).
+    if (navigatedAway == true) return;
     if (mounted && ref.read(cartProvider(_cartId)).isNotEmpty) _openCartSheet();
   }
 
