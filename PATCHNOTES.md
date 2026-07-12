@@ -35,6 +35,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   daftar nominal cepat masih menghitung berdasarkan harga barang saja
   (belum termasuk sisa tagihan), jadi bisa tampil "kembalian" padahal
   sebenarnya masih kurang bayar.
+- **Field harga produk sekarang bisa diketik lagi** setelah tap item di
+  keranjang lalu tap tombol "Edit produk" — sebelumnya field harga cuma
+  bisa dihapus, angka baru tidak bisa diketik sama sekali.
 
 ## 11 Juli 2026
 

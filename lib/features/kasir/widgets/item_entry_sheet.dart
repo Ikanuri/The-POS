@@ -410,10 +410,16 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   /// dan tidak boleh menumpuk di atas modal sheet (barrier sheet menutupinya).
   /// Katalog kasir auto-refresh via stream `watchProducts`, jadi perubahan
   /// harga/stok langsung tercermin saat produk di-tap lagi.
+  ///
+  /// Pop dengan `true` (bukan default/null) — penanda ke `_openCartSheet` di
+  /// kasir_screen.dart bahwa sheet ini ditutup karena PINDAH LAYAR, bukan
+  /// selesai edit biasa, supaya cart sheet TIDAK dibuka ulang otomatis di
+  /// belakang layar baru (kalau dibuka ulang, `_onHardwareKey` salah kira
+  /// cart sheet masih aktif dan menelan input keyboard di layar baru itu).
   void _editProduct() {
     final router = GoRouter.of(context);
     final id = widget.product.id;
-    Navigator.of(context).pop(); // tutup sheet
+    Navigator.of(context).pop(true); // tutup sheet, tandai "pindah layar"
     router.push('/produk/$id');
   }
 
