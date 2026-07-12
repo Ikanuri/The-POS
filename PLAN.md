@@ -184,26 +184,6 @@ sendiri kalau pegawai belum sempat (keduanya use-case yang disebut user).
 Auto-clear checklist saat semua item tercentang (bukan expiry berbasis
 waktu — sinyal alami "selesai" lebih masuk akal daripada timer arbitrer).
 
-### 24c — Katalog HTML: font & UI cart disamakan dengan app, default LIGHT
-**File:** `lib/core/services/order_page_service.dart`.
-
-**Temuan saat investigasi:** katalog HTML sekarang auto-ikut
-`prefers-color-scheme: dark` HP pelanggan (baris ~175-182) — kalau HP
-mereka dark mode, katalog otomatis gelap tanpa dipilih. User (demografi
-pelanggan 30an+) minta **default LIGHT selalu**, toggle manual (ikon
-matahari/bulan yang sudah ada, `data-theme` attribute) tetap dipertahankan
-untuk yang mau gelap.
-
-**Font:** samakan dengan app (Hanken Grotesk untuk UI, Newsreader untuk
-angka/harga) — aman di-embed sebagai `@font-face` base64 karena SATU file
-font berlaku untuk SEMUA produk (beda kasus dengan gambar produk yang
-dibahas & DITOLAK sesi ini karena skala per-produk — lihat riwayat chat,
-tidak masuk PLAN.md karena tidak jadi dieksekusi).
-
-**Scope UI:** modal cek keranjang (`.sheet-x`, `.ci-*`) & cart bar
-(`.cb-*`) ikut disamakan gaya/fontnya dengan app, bukan cuma daftar produk
-+ tombol +/- (yang sudah disepakati di diskusi awal).
-
 ### 24d — Payment gate untuk role Pegawai (rename kosmetik "Kasir"→"Pegawai" + handoff bayar + notifikasi realtime)
 **Konteks:** pegawai yang cuma boleh input barang & cek kelengkapan (TIDAK
 boleh terima uang) — pembayaran tetap wajib lewat owner/asisten yang pegang

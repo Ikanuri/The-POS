@@ -221,4 +221,31 @@ void main() {
     expect(names, contains('Sedap Goreng'));
     await db.close();
   });
+
+  test(
+      'Item 24c — default TERANG selalu (tidak ikut prefers-color-scheme '
+      'HP pelanggan), font Hanken Grotesk/Newsreader ter-embed', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // TIDAK ADA lagi auto-dark ikut OS pelanggan — dulu ada blok CSS
+    // `@media (prefers-color-scheme: dark)` + JS `matchMedia(...)` yang
+    // bikin katalog gelap tanpa dipilih; sekarang default HARUS selalu
+    // terang (cek marker fungsional, bukan sekadar substring bebas — teks
+    // "prefers-color-scheme" masih boleh muncul di komentar penjelas).
+    expect(result.html.contains('@media (prefers-color-scheme'), isFalse);
+    expect(result.html.contains('matchMedia'), isFalse);
+    expect(result.html.contains("saved = 'light'"), isTrue);
+
+    // Font disamakan dengan app (Hanken Grotesk = UI, Newsreader = angka),
+    // di-embed sebagai @font-face base64 (bukan cuma system-font fallback).
+    expect(result.html.contains("--font:'Hanken Grotesk'"), isTrue);
+    expect(result.html.contains("--serif:'Newsreader'"), isTrue);
+    expect(result.html.contains("font-family:'Hanken Grotesk'"), isTrue);
+    expect(result.html.contains("font-family:'Newsreader'"), isTrue);
+    expect(result.html.contains('data:font/woff2;base64,'), isTrue);
+
+    await db.close();
+  });
 }
