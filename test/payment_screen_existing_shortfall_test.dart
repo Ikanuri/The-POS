@@ -121,6 +121,35 @@ void main() {
   });
 
   testWidgets(
+      'tap "Uang Pas" saat ada sisa tagihan sebelumnya: preview kalkulator '
+      'harus Uang Pas (BUKAN pill Kembalian palsu) — kembalian/kurang '
+      'dihitung terhadap Total yang perlu ditagih, bukan harga item '
+      'susulan saja', (tester) async {
+    await seedTxWithExistingShortfall();
+
+    await pumpWithFakeApp(tester,
+        db: db,
+        initialPrefs: prefsWithCartItem(),
+        child: const PaymentScreen(addToTxId: 'tx1'));
+
+    await tester.tap(find.text('Bayar ${formatRupiah(20000)}'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Uang Pas'));
+    await tester.pumpAndSettle();
+
+    // "Diterima" harus jadi 25.000 (Total yang perlu ditagih), bukan
+    // 20.000 (harga item susulan saja).
+    expect(find.text(formatRupiah(25000)), findsWidgets);
+    // Pill harus "✓ Uang Pas" — BUKAN "Kembalian" (yang sebelum fix akan
+    // muncul palsu sebesar 5.000, sisa tagihan lama yang terlewat).
+    expect(find.text('✓ Uang Pas'), findsOneWidget);
+    expect(find.text('Kembalian'), findsNothing);
+    // Tombol konfirmasi harus polos "Bayar" — bukan "Bayar · Kembali X".
+    expect(find.text('Bayar'), findsOneWidget);
+  });
+
+  testWidgets(
       'info sisa tagihan sebelumnya TIDAK tampil kalau nota sudah lunas',
       (tester) async {
     await db.into(db.transactions).insert(TransactionsCompanion.insert(
