@@ -642,6 +642,22 @@ class AppDatabase extends _$AppDatabase {
     return q.watch();
   }
 
+  /// Harga dasar (tier minQty=1) tiap produk pada satuan DASARnya — dipakai
+  /// tab Produk utk tampilkan harga di bawah nama tanpa N+1 query per baris.
+  Future<Map<String, int>> getBaseUnitPrices() async {
+    final rows = await customSelect(
+      'SELECT pu.product_id AS product_id, pt.price AS price '
+      'FROM product_units pu '
+      'JOIN price_tiers pt ON pt.product_unit_id = pu.id AND pt.min_qty = 1 '
+      'WHERE pu.is_base_unit = 1',
+      readsFrom: {productUnits, priceTiers},
+    ).get();
+    return {
+      for (final r in rows)
+        r.data['product_id'] as String: (r.data['price'] as num).toInt(),
+    };
+  }
+
   /// Varian (produk anak) aktif milik [parentProductId], urut nama.
   Future<List<Product>> getVariants(String parentProductId) => (select(products)
         ..where((t) =>

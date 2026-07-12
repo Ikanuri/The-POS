@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
 
 final _searchQueryProvider = StateProvider<String>((ref) => '');
@@ -19,6 +20,14 @@ final _productsStreamProvider = StreamProvider.family<List<Product>, (String, in
 final _groupsProvider = FutureProvider<List<ProductGroup>>((ref) {
   final db = ref.watch(databaseProvider);
   return db.getAllProductGroups();
+});
+
+/// Harga dasar tiap produk (satuan dasar, tier minQty=1) — ditampilkan di
+/// bawah nama produk di daftar. Snapshot (bukan stream reaktif penuh),
+/// sama seperti pola `_groupsProvider` — cukup untuk kebutuhan tampilan,
+/// segar kembali saat layar ini dibuka ulang.
+final _basePricesProvider = FutureProvider.autoDispose<Map<String, int>>((ref) {
+  return ref.watch(databaseProvider).getBaseUnitPrices();
 });
 
 /// Item 11 — filter "Stok Menipis" aktif/tidak, jumlah untuk badge, & set id.
@@ -67,6 +76,8 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
     final lowStockCount = ref.watch(_lowStockCountProvider).valueOrNull ?? 0;
     final lowStockIds =
         ref.watch(_lowStockIdsProvider).valueOrNull ?? const <String>{};
+    final basePrices =
+        ref.watch(_basePricesProvider).valueOrNull ?? const <String, int>{};
     final baseCanEdit = device.isOwner || device.deviceRole == 'asisten';
     final canEdit =
         ref.watch(_canEditProdukProvider).valueOrNull ?? baseCanEdit;
@@ -216,6 +227,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                     product: prods[i],
                     canEdit: canEdit,
                     onOpen: _openForm,
+                    basePrice: basePrices[prods[i].id],
                   ),
                 );
               },
@@ -264,10 +276,15 @@ class _ProductTile extends ConsumerWidget {
     required this.product,
     required this.canEdit,
     required this.onOpen,
+    this.basePrice,
   });
   final Product product;
   final bool canEdit;
   final Future<void> Function(String route) onOpen;
+
+  /// Harga dasar (satuan dasar, tier minQty=1) — null bila produk belum
+  /// punya satuan/harga sama sekali.
+  final int? basePrice;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -282,9 +299,23 @@ class _ProductTile extends ConsumerWidget {
         ),
       ),
       title: Text(product.name),
-      subtitle: product.kodeProduk != null
-          ? Text(product.kodeProduk!,
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12))
+      subtitle: (product.kodeProduk != null || basePrice != null)
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (product.kodeProduk != null)
+                  Text(product.kodeProduk!,
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant, fontSize: 12)),
+                if (basePrice != null)
+                  Text(formatRupiah(basePrice!),
+                      style: AppTheme.numStyle(context,
+                          size: 12.5,
+                          weight: FontWeight.w600,
+                          color: scheme.onSurfaceVariant)),
+              ],
+            )
           : null,
       trailing: canEdit
           ? IconButton(
