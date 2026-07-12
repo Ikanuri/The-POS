@@ -242,9 +242,13 @@ class _CartItemTile extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Text(item.unitName,
-                    style: TextStyle(
-                        fontSize: 11, color: scheme.onSurfaceVariant)),
+                Flexible(
+                  child: Text('${item.unitName} · ${formatRupiah(item.price)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11, color: scheme.onSurfaceVariant)),
+                ),
                 if (item.priceOverridden) ...[
                   const SizedBox(width: 4),
                   Icon(Icons.edit, size: 10, color: scheme.tertiary),

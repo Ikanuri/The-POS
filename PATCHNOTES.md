@@ -16,6 +16,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   "+ Sisa tagihan sebelumnya" plus baris "Total yang perlu ditagih" yang
   sudah dijumlahkan — kasir tinggal baca angkanya, tidak perlu menjumlah
   sendiri harga barang baru dengan sisa lama.
+- **Harga dasar tampil di bawah nama produk** di tab Produk — tidak perlu
+  buka detail produk cuma untuk lihat harganya.
+- **Harga per-satuan tampil di keranjang kasir**, di bawah nama tiap item
+  (mis. "Karung · Rp 65.000"). Berguna kalau qty lebih dari 1 dan mau tahu
+  harga per 1 satuannya tanpa harus menghitung sendiri dari subtotal.
 
 ### 🔧 Perbaikan
 - **"Sisa Tagihan" di struk sekarang benar** saat kembalian yang sudah
@@ -25,6 +30,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **"Dibayar" di Ringkasan struk sekarang cocok dengan Sisa Tagihan** —
   sebelumnya Total tidak sama dengan Dibayar + Sisa Tagihan kalau kembalian
   sempat dipakai ulang.
+- **Kalkulator bayar sekarang hitung Kembalian dengan benar saat masih ada
+  sisa tagihan lama** — sebelumnya baris Kembalian, tombol "Uang Pas", dan
+  daftar nominal cepat masih menghitung berdasarkan harga barang saja
+  (belum termasuk sisa tagihan), jadi bisa tampil "kembalian" padahal
+  sebenarnya masih kurang bayar.
 
 ## 11 Juli 2026
 

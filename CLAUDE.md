@@ -76,6 +76,12 @@ lib/
   bukan spasi biasa. Di widget test, `find.text('Rp 5.000')` (literal spasi
   biasa) TIDAK akan match walau teksnya tampil benar di layar — pakai
   `find.text(formatRupiah(5000))` untuk membangun string yang dibandingkan.
+- **Widget test layar dengan drift `StreamProvider` (mis. `watchLowStockCount()`)
+  bisa HANG 10 menit penuh** lalu gagal "Timer is still pending" saat
+  disposal — berlaku walau test-nya cuma BACA (tidak memutasi DB sama
+  sekali). Selalu tutup test dengan `drain()`: `await tester.pumpWidget(const
+  SizedBox()); await tester.pump(const Duration(milliseconds: 10));` (lihat
+  `test/payment_method_edit_delete_test.dart`).
 
 ## Perintah
 
