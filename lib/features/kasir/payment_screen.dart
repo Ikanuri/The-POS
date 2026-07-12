@@ -1344,7 +1344,7 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                   ),
                 ],
               ),
-              if (widget.existingShortfall != null)
+              if (widget.existingShortfall != null) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(
@@ -1367,6 +1367,32 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                     ],
                   ),
                 ),
+                // Jumlahnya sudah dihitungkan — kasir tinggal baca angka
+                // ini, tidak perlu jumlah manual "Total + Sisa" sendiri.
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Text('Total yang perlu ditagih',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                          formatRupiah(
+                              widget.total + widget.existingShortfall!),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: AppTheme.debtFg(isDark))),
+                    ],
+                  ),
+                ),
+              ],
               if (widget.unclaimedChangeAmount != null)
                 InkWell(
                   onTap: widget.onToggleUnclaimedChangeTaken == null

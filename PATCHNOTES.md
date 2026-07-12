@@ -13,9 +13,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ### ✨ Fitur Baru
 - **Kalkulator bayar Tambah Belanjaan sekarang menampilkan sisa tagihan
   lama.** Kalau nota masih punya kurang bayar dari sebelumnya, muncul baris
-  "+ Sisa tagihan sebelumnya" di kalkulator — kasir langsung tahu total
-  yang ditampilkan hanya harga barang baru, bukan seluruh yang perlu
-  ditagih ke pelanggan.
+  "+ Sisa tagihan sebelumnya" plus baris "Total yang perlu ditagih" yang
+  sudah dijumlahkan — kasir tinggal baca angkanya, tidak perlu menjumlah
+  sendiri harga barang baru dengan sisa lama.
 
 ### 🔧 Perbaikan
 - **"Sisa Tagihan" di struk sekarang benar** saat kembalian yang sudah

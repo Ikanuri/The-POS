@@ -30,6 +30,16 @@ ke situ akan mendistorsi harga item susulan yang tercatat. Sumber angka:
 asli + payment rows-nya, dihitung di `_load()` payment_screen.dart saat
 mode tambah belanjaan.
 
+**Feedback langsung dari user setelah PR #9 merge (`88c8deb`):** "Jadi
+kasir masih harus menjumlah manual dan mengira ngira?" — benar, versi
+awal cuma tampilkan 2 baris terpisah (Total item baru + Sisa sebelumnya)
+tanpa hasil jumlahnya. Ditambah baris **"Total yang perlu ditagih"**
+(bold, warna sama seperti Sisa Tagihan) = `widget.total + widget.
+existingShortfall!` — dihitung langsung di `build()` (bukan state baru),
+kasir tinggal baca angka jadi, tidak perlu jumlah manual sama sekali.
+`_total` (yang dipakai `allocateCartTotal`) tetap tidak disentuh — baris
+ini murni turunan tampilan.
+
 **Bug susulan langsung setelah PR #7 di-merge (`87cdaf0`):** user bandingkan
 lagi dengan app kompetitor — "Sisa Tagihan" sudah cocok (5.000=5.000), TAPI
 baris **"Dibayar"** di Ringkasan beda (The POS: Rp 60.000 mentah, app
