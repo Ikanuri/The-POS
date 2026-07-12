@@ -6,10 +6,10 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 12 Juli 2026 (sesi kembalian per-pembayaran + Buku
 Hutang + Tambah Belanjaan, berlanjut ke sesi bugfix hari berikutnya, lalu
-sesi lanjutan lagi — fix kalkulator + harga dasar/per-qty, lihat paragraf
-baru di bawah).
+sesi lanjutan lagi — fix kalkulator + harga dasar/per-qty + bug field harga
+tak bisa diketik, lihat paragraf baru di bawah).
 **schemaVersion tetap 13** (semua fix sesi lanjutan ini murni logika, tidak
-ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **226 test
+ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **227 test
 hijau** saat ini. Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item
 17+21 — sync — masih sengaja ditunda, TIDAK berubah). **Item 23 masuk
 PLAN.md** (lihat di bawah) — bug "Sisa Tagihan"/"Dibayar" + scope-scope
@@ -34,19 +34,43 @@ kalkulator + 3 permintaan tampilan/bug):**
    (`_CartItemTile`) sekarang `'${item.unitName} · ${formatRupiah(item.price)}'`
    dibungkus `Flexible`+ellipsis (defensif, pola overflow-prevention yang
    sudah dipakai berkali-kali sesi ini).
-4. **Bug input harga di modal edit item kasir ("tidak bisa input nominal,
-   cuma bisa hapus", "kasus ril di produk dengan 2 qty stepper di
-   keranjang") — BELUM diperbaiki, MENGGANTUNG.** Sudah diinvestigasi
-   (cek `_canOverride`/izin override harga, `ThousandsSeparatorFormatter`,
-   pola stacking modal CartSheet→ItemEntrySheet, resolusi `targetId` untuk
-   baris varian) — TIDAK ketemu akar masalah pasti dari baca kode statis
-   saja. Sudah tanya user klarifikasi "2 qty stepper" itu maksudnya produk
-   dengan varian (1 stepper produk utama + 1 stepper varian di modal yang
-   sama), ATAU produk yang sama masuk keranjang di 2 satuan berbeda
-   (mis. "Pak" & "Pcs") — **BELUM DIJAWAB user, jangan tebak-tebak fix
-   sebelum jawaban masuk** (bug menyentuh alur pembayaran/harga, prioritas
-   user selalu "laporkan dulu, jangan langsung eksekusi" untuk kelas bug
-   ini).
+4. **Bug field "Harga Jual" tak bisa diketik di ProdukFormScreen setelah tap
+   "Edit produk" dari modal item keranjang — SELESAI** (`a2ad03d`). User
+   klarifikasi repro persis: tap item di keranjang → modal ItemEntrySheet →
+   tombol edit (pojok kanan atas) → navigasi ke ProdukFormScreen → field
+   Harga Jual cuma bisa DIHAPUS, digit baru tidak masuk sama sekali. **Akar
+   masalah** (dibuktikan via debug print manual, BUKAN tebakan): `_openCartSheet()`
+   di `kasir_screen.dart` selalu membuka lagi cart sheet setelah
+   `ItemEntrySheet` ditutup ("Buka lagi keranjang setelah edit, selama masih
+   ada isinya") — TANPA membedakan "ditutup krn selesai edit biasa" vs
+   "ditutup krn navigasi ke layar lain" (tombol Edit produk memanggil
+   `Navigator.pop()` lalu `router.push('/produk/$id')`). Reopen yang salah
+   ini men-set `_cartSheetOpen=true` LAGI persis saat user ada di
+   ProdukFormScreen, membuat guard di `_onHardwareKey`
+   (`if (!_cartSheetOpen && !isCurrent) return false;`) gagal bail-out —
+   handler HID keyboard global (dipasang `KasirScreen.initState` via
+   `HardwareKeyboard.instance.addHandler`, TETAP aktif walau KasirScreen
+   sudah tidak divisualisasikan karena masih ter-mount di bawah rute baru
+   dalam `ShellRoute` yang sama) lanjut menelan karakter digit sebagai
+   kemungkinan scan barcode (code>=0x20 masuk buffer, `return true`
+   consume) — sementara Backspace (code<0x20) LOLOS tanpa disentuh, cocok
+   PERSIS dengan laporan "hanya bisa hapus". **Fix**: `ItemEntrySheet._editProduct()`
+   sekarang `Navigator.pop(true)` (bukan default/null) sbg penanda "ditutup
+   krn navigasi", `_openCartSheet`-nya cek `if (navigatedAway == true) return;`
+   sebelum reopen. `_delete()` TIDAK disentuh (tetap pop default → reopen
+   normal tetap jalan). **Pelajaran metodologi penting**: sempat coba
+   membuktikan lewat widget test yang mensimulasikan `tester.sendKeyEvent(digit)`
+   lalu cek isi TextField — GAGAL total, bahkan di test kontrol tanpa
+   handler custom SAMA SEKALI (`sendKeyEvent` di Flutter test harness TIDAK
+   pernah mengalir ke text editing, karena karakter cuma masuk lewat kanal
+   IME/`enterText`, bukan raw hardware key event) — jadi test akhir yang
+   dipakai menguji GEJALA yang benar-benar observable: cart sheet TIDAK
+   boleh reopen di belakang ProdukFormScreen (`find.byType(CartSheet,
+   skipOffstage: false)` — perlu `skipOffstage:false` eksplisit karena
+   default `byType` skip elemen offstage, dan sheet yang salah kebuka lagi
+   itu MEMANG offstage/tak divisualisasikan). Root cause SEBELUM nemu
+   test yang benar dibuktikan lewat `print()` debug manual di 2 titik
+   (`_onHardwareKey` & `_openCartSheet`'s reopen check) — bukan tebakan.
 
 **Gotcha widget test diperluas (harus di-broaden dari yang sudah ada di
 CLAUDE.md):** ketemu lagi kasus drift `StreamProvider` bikin test HANG
