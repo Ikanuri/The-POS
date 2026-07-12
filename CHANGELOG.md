@@ -10,6 +10,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-12
 
+- `5a18301` — feat: tap-to-scan + redesign kapsul melayang scanner kasir (Item 24e+24f), + badge kosmetik "Habis" di kartu kasir (Item 25a — bagian kedua)
+- `d9e1f2e` — feat: tanda "Stok Habis" cepat dari modal kasir (Item 25a) — inti
+- `29d7400` — feat: hapus produk via swipe di tab Produk (Item 25b)
+- `6285481` — feat: katalog HTML default terang + font Hanken Grotesk/Newsreader (Item 24c)
+- `37ca76e` — feat: chip Uang Pas di modal Tambah Bayar/Lunasi (Item 24a)
 - `a2ad03d` — fix: field harga produk tak bisa diketik setelah tap "Edit produk" dari keranjang (cart sheet salah kebuka lagi di belakang ProdukFormScreen, HID handler menelan input digit)
 - `7950176` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk poin 2+3 (harga dasar & per-qty)
 - `d703c0b` — feat: tampilkan harga per-qty di baris item keranjang kasir (mis. "Karung · Rp 65.000")

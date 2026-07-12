@@ -11,22 +11,17 @@ sengaja ditunda). Item 3a/3b SELESAI/terjawab lewat fitur baru "Import dari
 Griyo POS". Item 4 (import pelanggan Griyo) analisis+keputusan besar
 selesai, siap diimplementasi. **Item 23** (bug "Sisa Tagihan" understated
 saat kembalian dipakai ulang — scope Buku Hutang/Tutup Kasir/tempat lain
-masih menggantung). **Item 24** (6 usulan fitur/penyesuaian dari sesi
-diskusi lanjutan — kalkulator Tambah Bayar, checklist struk tersinkron,
-katalog HTML disamakan POS, payment gate role Pegawai, tap-to-scan,
-redesign toggle scanner) — SEMUA sudah disetujui scope-nya lewat diskusi
-panjang, siap diimplementasi, kecuali 24f yang masih perlu 1 revisi visual.
-**Item 25** (tanda "Stok Habis" cepat dari modal kasir, hapus produk
-via swipe, gerbang aktivasi/lisensi offline) — 25b SELESAI, 25a SEDANG
-dieksekusi.
+masih menggantung). **Item 24**: 24a/24c/24e/24f SELESAI & di-commit; sisa
+**24b+24d** (payment gate role Pegawai + checklist tersinkron + notifikasi
+realtime) belum dimulai. **Item 25**: 25a/25b SELESAI & di-commit.
 **25c (lisensi) desainnya SUDAH FINAL & komprehensif** (lihat dokumentasi
 terpisah yang dikirim ke user, `docs/keamanan-lisensi-offline.md` — TIDAK
 di-commit ke repo atas permintaan user, cuma dikirim sebagai file) —
 **TAPI SENGAJA BELUM dieksekusi**, user eksplisit minta tunda eksekusinya
 walau desainnya sudah disetujui penuh. Jangan eksekusi 25c tanpa instruksi
 baru dari user.
-Sisa menggantung: Item 3c, 5, 8, 23, 25c — lihat masing-masing untuk
-detail._
+Sisa menggantung: Item 3c, 5, 8, 23, 24b+24d, 25c — lihat masing-masing
+untuk detail._
 
 ---
 
@@ -115,13 +110,11 @@ kapan saja user siap, tanpa perlu didiskusikan ulang dari nol.
 
 ---
 
-## Item 24 — 6 usulan fitur/penyesuaian (sesi diskusi lanjutan setelah fix Item 23)
+## Item 24 — Sisa: payment gate role Pegawai (24b+24d)
 
-**Status:** Semua 6 sub-item sudah disetujui user lewat diskusi (termasuk
-beberapa putaran koreksi scope) — siap diimplementasi. Urutan pengerjaan
-belum ditentukan; 24a/24c/24e relatif berdiri sendiri & murah, 24b+24d
-saling terkait erat (satu fitur, lihat penjelasan di 24d), 24f masih perlu
-mockup visual final sebelum coding.
+**Status:** 24a, 24c, 24e, 24f SELESAI & sudah di-commit. **Sisa hanya
+24b+24d** (satu fitur terkait erat, lihat penjelasan di 24d) — belum
+dimulai.
 
 ### 24b — Persist + sinkronkan state centang item struk (LIHAT JUGA 24d)
 **File:** `lib/features/kasir/receipt_screen.dart` (`_checked`, baris ~80).
@@ -202,29 +195,6 @@ badge+sheet dengan tombol "Setujui" besar (jalur utama) + isyarat geser-
 untuk-approve (percepatan opsional, bukan wajib). Tidak disimpan sebagai
 file permanen di repo — regenerasi kalau perlu rujukan visual lagi saat
 implementasi.
-
-### 24e — Tap-to-scan (mode Sekali maupun Berulang)
-**File:** `lib/features/kasir/kasir_screen.dart` (area scanner kamera,
-`MobileScanner`). Tambah sebagai **opsi tambahan** (toggle), BUKAN
-pengganti default — continuous-scan tetap default (kecepatan = nilai jual
-utama scanner kasir), tap-to-scan untuk situasi presisi lebih penting
-(rak dengan banyak barcode berdekatan, rawan salah pindai kalau auto-
-continuous).
-
-### 24f — Redesign kontrol scanner: kapsul melayang in-frame, BUKAN titik-tiga (BELUM final, perlu 1 revisi visual)
-**File:** `lib/features/kasir/kasir_screen.dart` (baris ~1084-1124: AppBar
-title mode + tombol flash + `PopupMenuButton` berisi toggle Berulang +
-pilihan durasi toast — semua sekarang terkubur di menu titik-tiga).
-
-**Referensi gaya (dari screenshot user, kamera bawaan MIUI):** BUKAN satu
-panel besar berisi banyak baris (draft awal sesi ini, sudah ditolak
-implisit) — melainkan **kapsul-kapsul kecil terpisah yang melayang tipis**
-langsung di atas feed kamera (persis seperti pill zoom "0.6 · 1X · 2" di
-screenshot), bukan dibungkus 1 kotak pengaturan besar.
-
-**BELUM SELESAI:** perlu 1 putaran revisi mockup visual mengikuti gaya
-kapsul-melayang ini sebelum implementasi — jangan langsung coding dari
-draft panel-besar yang sudah dikoreksi user.
 
 ---
 
