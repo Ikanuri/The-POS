@@ -17,7 +17,8 @@ katalog HTML disamakan POS, payment gate role Pegawai, tap-to-scan,
 redesign toggle scanner) — SEMUA sudah disetujui scope-nya lewat diskusi
 panjang, siap diimplementasi, kecuali 24f yang masih perlu 1 revisi visual.
 **Item 25** (tanda "Stok Habis" cepat dari modal kasir, hapus produk
-via swipe, gerbang aktivasi/lisensi offline) — 25a & 25b SEDANG dieksekusi.
+via swipe, gerbang aktivasi/lisensi offline) — 25b SELESAI, 25a SEDANG
+dieksekusi.
 **25c (lisensi) desainnya SUDAH FINAL & komprehensif** (lihat dokumentasi
 terpisah yang dikirim ke user, `docs/keamanan-lisensi-offline.md` — TIDAK
 di-commit ke repo atas permintaan user, cuma dikirim sebagai file) —
@@ -57,24 +58,6 @@ HTML BUKAN realtime/live (file statis terkirim via WA tidak punya koneksi
 balik) — flag di database update seketika, tapi baru tercermin di HTML
 saat owner **generate & kirim ulang** katalog berikutnya. User sudah paham
 & terima batasan ini.
-
-### 25b — Hapus produk via swipe di tab Produk (DISETUJUI, siap eksekusi)
-**File:** `lib/features/produk/produk_list_screen.dart` (tambah pola
-`Dismissible`), reuse persis pola `pelanggan_list_screen.dart` baris
-~347-361 (`Dismissible`, `DismissDirection.endToStart`, dialog konfirmasi,
-background `errorContainer` + icon hapus).
-
-**Temuan penting saat investigasi:** TIDAK ADA fungsi hapus produk
-permanen sama sekali di database (`deleteProduct()` tidak eksis — hanya
-`deleteProductGroup()` untuk kategori). Yang ADA: "Nonaktifkan Produk"
-(`produk_form_screen.dart` baris ~547/1115, set `isActive = false`,
-riwayat transaksi lama tetap aman/tidak disentuh). Ini SAMA dengan pola
-"hapus" pelanggan yang sudah ada (`_confirmDelete` pelanggan juga bukan
-hard-delete — teksnya eksplisit "riwayat transaksi tetap tersimpan").
-**Keputusan: swipe produk baru ini memanggil ulang logika "Nonaktifkan"
-yang SUDAH ADA**, bukan bikin hard-delete baru yang berisiko kalau produk
-itu ternyata masih dirujuk transaksi lama — user sudah setuju pendekatan
-ini.
 
 ### 25c — Gerbang aktivasi/lisensi offline anti-penyebaran tanpa izin (DESAIN FINAL, EKSEKUSI SENGAJA DITUNDA)
 
