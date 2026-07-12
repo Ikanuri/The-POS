@@ -4,26 +4,66 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 11 Juli 2026 (sesi kembalian per-pembayaran + Buku
-Hutang + Tambah Belanjaan). **schemaVersion sekarang 13** (TIDAK ada migrasi
-baru dari Poin 1 — murni fitur UI, tidak menyentuh skema). Baseline sebelum
-sesi ini: 210 test hijau → **214 test hijau** setelah semuanya (3 poin +
-cabut flag eksperimental Tempel Pesanan, lihat bawah). Backlog Item 9-22
-(PLAN.md) tetap 12/13 SELESAI (Item 17+21 — sync — masih sengaja ditunda,
-lihat bagian "MENGGANTUNG" di bawah — TIDAK berubah dari sebelumnya).
+_Terakhir diperbarui: 12 Juli 2026 (sesi kembalian per-pembayaran + Buku
+Hutang + Tambah Belanjaan, berlanjut ke sesi bugfix hari berikutnya).
+**schemaVersion tetap 13** (semua fix sesi lanjutan ini murni logika, tidak
+ada migrasi baru). Baseline sebelum sesi awal: 210 test hijau → **218 test
+hijau** saat ini. Backlog Item 9-22 (PLAN.md) tetap 12/13 SELESAI (Item
+17+21 — sync — masih sengaja ditunda, TIDAK berubah). **Item 23 baru masuk
+PLAN.md** (lihat di bawah) — bug "Sisa Tagihan" + scope-scope terkait yang
+masih menggantung.
 
-**PR #4** (`https://github.com/Ikanuri/The-POS/pull/4`, dibuat dari Claude
-Code UI mencakup commit-commit sesi ini) sudah **DI-MERGE ke `main`**
-(merge commit `b477b03`) atas instruksi user "Merge langsung saja". **PR #5**
-(susulan, cabut flag eksperimental) juga sudah **DI-MERGE** (merge commit
-`79241db`). Keduanya dipakai merge biasa (bukan squash) supaya hash commit
-individual tetap match dengan yang tercatat di CHANGELOG.md. Pola yang
-berlaku sekarang: user minta "merge langsung" berkali-kali sepanjang sesi
-setiap ada batch perubahan baru — begitu PR sebelumnya merged/closed, commit
-susulan di branch yang sama perlu PR BARU (PR lama tidak reopen otomatis
-walau branch-nya sama), baru di-merge lagi. Commit fix checkbox (`c3e975a`,
-di bawah) BELUM masuk PR/merge — masih di branch, menunggu instruksi
-selanjutnya.
+**Pola PR/merge sepanjang sesi ini:** user berkali-kali minta "merge
+langsung" tiap ada batch perubahan baru. **PR #4** (fitur Poin 1-3 awal) →
+merge `b477b03`. **PR #5** (cabut flag eksperimental Tempel Pesanan) →
+merge `79241db`. **PR #6** (fix checkbox kalkulator tidak merespons,
+`c3e975a`) → merge `592442d`. Semua pakai merge biasa (bukan squash) supaya
+hash commit individual match CHANGELOG.md. Begitu satu PR merged/closed,
+commit susulan di branch yang sama BUTUH PR baru (PR lama tidak reopen
+otomatis walau nama branch sama) — pola ini konsisten berulang, jangan
+kaget kalau perlu bikin PR #7, #8, dst untuk commit-commit berikutnya di
+branch `claude/project-gaps-incomplete-wpgdp8`.
+
+**Bug baru dilaporkan user SETELAH PR #6 (screenshot dibandingkan dengan
+app kompetitor):** "Sisa Tagihan" di struk understated (Rp 16.800,
+seharusnya Rp 18.100) saat kembalian yang sudah pernah diberikan (Rp 1.300)
+dipakai ulang sbg pembayaran item tambahan (persis skenario Poin 1 yang baru
+dibangun). **Akar masalah**: `paid` (Σ semua TransactionPayments.amount)
+menghitung uang yang sama 2× — masuk lagi sbg "pembayaran baru" tanpa
+pernah dikurangi saat keluar sbg kembalian sebelumnya. Investigasi lebih
+lanjut menemukan pola bug yang SAMA berpotensi ada di BANYAK tempat lain
+(Buku Hutang, Tutup Kasir, printer_service.dart, transaksi_tab.dart,
+tx_history_sheet.dart, merged_receipt_screen.dart, settleMergedDebt) — user
+diberi 2 pertanyaan lewat poll (scope mana yang mau difix + tx.paid
+diredefinisi net vs ditambal terpisah), user awalnya pilih "redefinisi
+tx.paid jadi net di satu sumber", TAPI saya temukan risiko baru saat mau
+eksekusi: itu akan MERUSAK pasangan "Bayar../Kembali" di struk cetak (yang
+assumsikan `paid` = uang mentah yang diserahkan, dipakai di SEMUA transaksi
+tunai berkembalian, bukan cuma kasus reuse) — poll susulan untuk
+konfirmasi ulang di-**dismiss** oleh user (user minta penjelasan gamblang
+dulu, bukan langsung pilih). Setelah dijelaskan ulang dengan analogi
+konkret, user pilih **Opsi 1: `tx.paid` TETAP mentah/gross (tidak diubah
+maknanya — aman utk struk cetak), tambah hitungan "net" TERPISAH khusus di
+titik yang butuh "sisa tagihan yang beneran"** — bukan redefinisi di satu
+sumber. Dieksekusi (`19e679d`, 12 Juli):
+- Status (`kurang_bayar`/`lunas`) di `_reconcileTransactionTotals` &
+  `addPaymentToTransaction` dihitung dari `paid - Σ changeGiven`
+  (`netPaidForStatus`), BUKAN `paid` mentah — `paid`/`changeAmount` yang
+  TERSIMPAN tidak disentuh sama sekali.
+- `receipt_screen.dart`: helper baru `netRemainingOwed(tx, payments)` = `total
+  - paid + Σ changeGiven` (clamp ≥0), dipakai di 3 tempat: Ringkasan struk
+  ("Sisa Tagihan"), prefill dialog Tambah Bayar, `_ReceiptPaper` (struk
+  cetak/gambar, "Sisa hutang"). Semua dari data yang SUDAH dimuat
+  (`_payments`/`payments`), tanpa query tambahan.
+- **SENGAJA TIDAK disentuh** (scope dipilih user via poll, bukan
+  "sapu bersih"): Buku Hutang, `settleMergedDebt`, Tutup Kasir (kas
+  sistem — malah temuan LEBIH LUAS, kemungkinan overstated bahkan tanpa
+  reuse sama sekali, kategori bug beda & belum dikonfirmasi user),
+  `printer_service.dart`, `transaksi_tab.dart`, `tx_history_sheet.dart`,
+  `merged_receipt_screen.dart`. **Detail lengkap + kenapa masing-masing
+  ditunda ada di PLAN.md Item 23** — cek situ dulu kalau ada laporan bug
+  serupa dari salah satu layar itu, kemungkinan besar akar masalahnya sama
+  persis, tinggal terapkan pola `netRemainingOwed()`-style.
 
 **Bug ditemukan user SETELAH PR #4 di-merge (`c3e975a`):** centang "Pakai
 kembalian" di kalkulator bayar Tambah Belanjaan (fitur baru Poin 1 sesi ini)

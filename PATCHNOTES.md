@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 12 Juli 2026
+
+### 🔧 Perbaikan
+- **"Sisa Tagihan" di struk sekarang benar** saat kembalian yang sudah
+  pernah diberikan dipakai lagi buat bayar belanja tambahan — sebelumnya
+  angkanya lebih kecil dari yang seharusnya (uang yang sama sempat ke-hitung
+  dua kali).
+
 ## 11 Juli 2026
 
 ### ✨ Fitur Baru

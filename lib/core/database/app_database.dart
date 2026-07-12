@@ -1146,9 +1146,19 @@ class AppDatabase extends _$AppDatabase {
     final sumPay = payRows.fold<int>(0, (s, p) => s + p.amount);
     final newPaid = payRows.isEmpty ? tx.paid : sumPay;
 
+    // Status HARUS dihitung dari `paid` dikurangi kembalian yang pernah
+    // diberikan (bukan `newPaid` mentah) — kalau tidak, kembalian lama yang
+    // dipakai ulang sbg pembayaran baru (mis. tambah belanjaan) ke-hitung
+    // dobel: uang yang sama masuk `paid` lagi tanpa pernah dikurangi saat
+    // keluar sbg kembalian sebelumnya. `paid`/`changeAmount` yang TERSIMPAN
+    // sengaja dibiarkan mentah (dipakai struk cetak sbg "Bayar..").
+    final sumChangeGiven = payRows.fold<int>(0, (s, p) => s + p.changeGiven);
+    final netPaidForStatus = newPaid - sumChangeGiven;
+
     final isTempo = tx.status == 'tempo' && newPaid == 0;
-    final newStatus =
-        isTempo ? 'tempo' : (newPaid < newTotal ? 'kurang_bayar' : 'lunas');
+    final newStatus = isTempo
+        ? 'tempo'
+        : (netPaidForStatus < newTotal ? 'kurang_bayar' : 'lunas');
     final newChange = newPaid > newTotal ? newPaid - newTotal : 0;
 
     await (update(transactions)..where((t) => t.id.equals(txId))).write(
@@ -1647,12 +1657,24 @@ class AppDatabase extends _$AppDatabase {
         note: Value(note),
         changeGiven: Value(changeGiven),
       ));
+      // Status dari `paid` dikurangi TOTAL kembalian yang pernah diberikan
+      // (termasuk baris ini) — sama alasannya seperti di
+      // `_reconcileTransactionTotals`: kembalian lama yang dipakai ulang
+      // sbg pembayaran ini jangan sampai ke-hitung dobel di `paid`.
+      final changeSum = transactionPayments.changeGiven.sum();
+      final sumRow = await (selectOnly(transactionPayments)
+            ..addColumns([changeSum])
+            ..where(transactionPayments.transactionId.equals(txId)))
+          .getSingle();
+      final sumChangeGiven = sumRow.read(changeSum) ?? 0;
       final newPaid = tx.paid + amount;
+      final netPaidForStatus = newPaid - sumChangeGiven;
       final change = newPaid > tx.total ? newPaid - tx.total : 0;
       await (update(transactions)..where((t) => t.id.equals(txId))).write(
         TransactionsCompanion(
           paid: Value(newPaid),
-          status: Value(newPaid >= tx.total ? 'lunas' : 'kurang_bayar'),
+          status:
+              Value(netPaidForStatus >= tx.total ? 'lunas' : 'kurang_bayar'),
           changeAmount: Value(change),
         ),
       );
