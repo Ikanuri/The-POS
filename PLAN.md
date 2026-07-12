@@ -32,33 +32,6 @@ detail._
 
 ## Item 25 — 3 usulan tambahan (lanjutan sesi Item 24)
 
-### 25a — Tanda "Stok Habis" cepat dari modal kasir (DISETUJUI, siap eksekusi)
-**Konteks:** penanda manual sementara/eksperimental, TERPISAH dari sistem
-stok resmi (yang belum diaudit) — akses cepat karena tap produk di kasir
-lebih praktis daripada buka tab Produk. Juga jadi placeholder kalau nanti
-fitur stok real sungguhan dibangun.
-
-**Desain teknis:**
-- Kolom boolean baru di tabel `products` (mis. `markedOutOfStock`, default
-  `false`) — level PRODUK (bukan per-satuan/`product_units`), karena kalau
-  barang fisik habis biasanya berlaku ke semua satuan jualnya sekaligus.
-  Butuh migrasi kecil (schemaVersion +1).
-- Icon toggle baru di `ItemEntrySheet` (`lib/features/kasir/widgets/item_entry_sheet.dart`,
-  baris ~466-489 area — satu Row dengan icon edit produk & hapus item yang
-  sudah ada), BUKAN di `produk_form_screen.dart` sesuai permintaan user.
-- `order_page_service.dart`: produk dengan flag ini render badge "Stok
-  Habis" + tombol tambah dinonaktifkan di JS katalog HTML.
-- Tab kasir (`kasir_screen.dart`, kartu produk grid): badge kosmetik kecil
-  di sebelah tombol + — **TIDAK menonaktifkan fungsi tombol**, supaya tidak
-  tabrakan dengan sistem izin "Izinkan Stok Minus" yang sudah ada &
-  independen.
-
-**Klarifikasi penting yang SUDAH dikonfirmasi user:** update ke katalog
-HTML BUKAN realtime/live (file statis terkirim via WA tidak punya koneksi
-balik) — flag di database update seketika, tapi baru tercermin di HTML
-saat owner **generate & kirim ulang** katalog berikutnya. User sudah paham
-& terima batasan ini.
-
 ### 25c — Gerbang aktivasi/lisensi offline anti-penyebaran tanpa izin (DESAIN FINAL, EKSEKUSI SENGAJA DITUNDA)
 
 **Konteks nyata dari user:** seseorang minta akses app ini (sudah

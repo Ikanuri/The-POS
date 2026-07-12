@@ -74,6 +74,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   bool _canOverride = false;
   /// Tombol edit produk hanya untuk owner/asisten (bukan kasir). Item 20.
   bool _canEditProduct = false;
+  /// Item 25a — tanda cepat "stok habis" manual, terpisah dari sistem stok
+  /// resmi. Semua role bisa toggle (akses cepat, bukan izin ter-audit).
+  late bool _markedOutOfStock = widget.product.markedOutOfStock;
   List<_UnitOption> _options = [];
   int _selectedIdx = 0;
 
@@ -423,6 +426,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     router.push('/produk/$id');
   }
 
+  /// Item 25a — tandai/lepas "stok habis" cepat, tanpa buka form Produk.
+  Future<void> _toggleOutOfStock() async {
+    final next = !_markedOutOfStock;
+    setState(() => _markedOutOfStock = next);
+    await ref
+        .read(databaseProvider)
+        .setMarkedOutOfStock(widget.product.id, next);
+  }
+
   /// Hapus item (satuan terpilih) dari keranjang. Hanya muncul saat item
   /// memang sudah ada di keranjang (modal dibuka dari keranjang).
   void _delete() {
@@ -475,6 +487,21 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               child: Text(widget.product.name,
                                   style:
                                       Theme.of(context).textTheme.titleMedium),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                _markedOutOfStock
+                                    ? Icons.remove_shopping_cart
+                                    : Icons.remove_shopping_cart_outlined,
+                                color: _markedOutOfStock
+                                    ? scheme.error
+                                    : scheme.onSurfaceVariant,
+                              ),
+                              tooltip: _markedOutOfStock
+                                  ? 'Tandai stok tersedia lagi'
+                                  : 'Tandai stok habis',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: _toggleOutOfStock,
                             ),
                             if (_canEditProduct)
                               IconButton(

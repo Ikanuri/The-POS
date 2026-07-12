@@ -10,6 +10,13 @@ class Products extends Table {
   /// pilihan add-on di modal entri item induk.
   TextColumn get parentProductId => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  /// Item 25a — tanda cepat "stok habis" manual, TERPISAH dari sistem stok
+  /// resmi (belum diaudit). Diset lewat modal item kasir (bukan form
+  /// Produk) untuk akses cepat. Kosmetik di kasir (tidak menonaktifkan
+  /// fungsi + — itu wewenang izin "Izinkan Stok Minus"), tapi benar-benar
+  /// menonaktifkan tombol tambah di katalog HTML statis.
+  BoolColumn get markedOutOfStock =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 

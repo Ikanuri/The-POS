@@ -117,6 +117,9 @@ class OrderPageService {
         'unit': typeNameById[base.unitTypeId ?? 1] ?? 'Satuan',
         'price': resolved.price,
         'variants': variantsOut,
+        // Item 25a — tanda cepat "stok habis" manual (bukan sistem stok
+        // resmi). Katalog HTML statis: tombol tambah dinonaktifkan + badge.
+        'outOfStock': p.markedOutOfStock,
       });
     }
     return out;
@@ -233,6 +236,8 @@ body{
 .stepper .n{min-width:22px;text-align:center;font-weight:700;font-size:13px;}
 .add-btn{border:none;background:var(--accent);color:#fff;border-radius:999px;
   padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;flex-shrink:0;}
+.oos-badge{background:var(--warn);color:#fff;border-radius:999px;
+  padding:7px 12px;font-size:11.5px;font-weight:700;flex-shrink:0;}
 .chev{width:28px;height:28px;border:none;background:transparent;cursor:pointer;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
   color:var(--ink-3);transition:transform .15s;}
@@ -492,6 +497,16 @@ function renderList(){
       });
       det.appendChild(vlist);
       row.appendChild(det);
+    } else if (p.outOfStock) {
+      // Item 25a — tanda stok habis manual: badge menggantikan tombol
+      // tambah, tidak bisa dipesan lewat katalog HTML statis ini.
+      var mainOos = document.createElement('div');
+      mainOos.className = 'prow-main';
+      mainOos.innerHTML =
+        '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
+          '<div class="prow-meta">'+rp(p.price)+' /'+esc(p.unit)+'</div></div>' +
+          '<span class="oos-badge">Stok Habis</span>';
+      row.appendChild(mainOos);
     } else {
       var qty = cart[p.unitId] || 0;
       var main = document.createElement('div');

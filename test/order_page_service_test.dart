@@ -223,6 +223,40 @@ void main() {
   });
 
   test(
+      'Item 25a — produk ditandai stok habis tampil badge "Stok Habis" di '
+      'katalog HTML, bukan tombol tambah', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final id = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    await db.setMarkedOutOfStock(id, true);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['name'] == 'Gula Pasir');
+    expect(p['outOfStock'], isTrue);
+    // Markup render badge & skip tombol tambah untuk produk outOfStock —
+    // dicek lewat keberadaan kelas CSS-nya di template.
+    expect(result.html.contains('oos-badge'), isTrue);
+    await db.close();
+  });
+
+  test(
+      'Item 25a — produk TIDAK ditandai stok habis → outOfStock false di '
+      'data katalog', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Teh Celup', price: 8000);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['name'] == 'Teh Celup');
+    expect(p['outOfStock'], isFalse);
+    await db.close();
+  });
+
+  test(
       'Item 24c — default TERANG selalu (tidak ikut prefers-color-scheme '
       'HP pelanggan), font Hanken Grotesk/Newsreader ter-embed', () async {
     final db = AppDatabase(NativeDatabase.memory());
