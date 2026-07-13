@@ -17,7 +17,9 @@ logika gate "Bayar" jadi QR (**mekanisme kirim SUDAH DIPUTUSKAN: QR,
 gabung ke scanner kasir yang sudah ada, hasil scan masuk antrian
 `held_orders` — lihat detail lengkap di 24d**), checklist tersinkron
 (24b), & (sengaja TANPA notifikasi otomatis arah balik di versi awal)
-belum dikerjakan. **Item 25**: 25a/25b SELESAI & di-commit.
+belum dikerjakan. **Item 25**: 25a/25b SELESAI & di-commit. **Item 26**
+(3 penyempurnaan kecil: catatan per-produk di katalog HTML, posisi tombol
+Uang Pas & keypad "00"/"0" di kalkulator bayar) — SEDANG dieksekusi.
 **25c (lisensi) desainnya SUDAH FINAL & komprehensif** (lihat dokumentasi
 terpisah yang dikirim ke user, `docs/keamanan-lisensi-offline.md` — TIDAK
 di-commit ke repo atas permintaan user, cuma dikirim sebagai file) —
@@ -309,6 +311,74 @@ badge+sheet dengan tombol "Setujui" besar (jalur utama) + isyarat geser-
 untuk-approve (percepatan opsional, bukan wajib). Tidak disimpan sebagai
 file permanen di repo — regenerasi kalau perlu rujukan visual lagi saat
 implementasi.
+
+---
+
+## Item 26 — 3 penyempurnaan kecil (disetujui langsung, tidak ada yang perlu
+didiskusikan — siap eksekusi & merge ke main)
+
+### 26a — Catatan per-produk di katalog HTML
+**Konteks:** pelanggan yang pesan lewat katalog HTML statis ("Tempel
+Pesanan") sekarang cuma bisa isi 1 catatan GLOBAL untuk seluruh pesanan
+(`Catatan:` di form nama/HP) — belum bisa kasih catatan per-produk (mis.
+"yang matang", "warna merah", "size L").
+
+**Reuse infrastruktur yang SUDAH ADA (dicek langsung di kode):**
+`CartItem.itemNote`/kolom DB `item_note` SUDAH lengkap end-to-end (diisi
+kasir manual via `item_entry_sheet.dart`, tampil di `cart_sheet.dart`,
+`receipt_screen.dart`, ikut cetak struk `printer_service.dart`) — tinggal
+diisi dari sumber baru (parser pesanan HTML), TIDAK perlu kolom/field baru
+di Dart/DB sama sekali.
+
+**Implementasi:**
+- `order_page_service.dart` (JS): tambah `<input class="tfield ci-note">`
+  kecil di tiap baris `renderCartSheet()` (bukan di kartu grid produk —
+  supaya tidak mengotori grid untuk barang yang belum dipesan), state baru
+  `var cartNotes = {}` (`{unitId: teks}`), CSS baru `.ci-note` (varian
+  compact dari `.tfield` yang sudah ada, bukan reuse langsung — field di
+  form utama terlalu besar untuk baris keranjang yang padat).
+- `buildOrderText()`: `codeParts.push(id+'='+qty)` diperluas jadi
+  `id+'='+qty+(note ? ':'+encodeURIComponent(note) : '')` — pakai
+  `encodeURIComponent` supaya catatan bebas-karakter (termasuk `;`/`=`)
+  tidak bentrok dengan delimiter format `#PSN:` yang sudah ada. Baris lama
+  tanpa catatan (`id=qty`, tanpa `:`) tetap valid (backward-compatible).
+- `order_parser_service.dart`: `ParsedOrderItem` tambah field `itemNote`
+  (nullable) + parsing segmen `:notasi` opsional (split by `:` setelah
+  ambil qty, `Uri.decodeComponent()` kalau ada) → `toCartItem()` teruskan
+  ke `CartItem(itemNote: ...)`.
+- Baris item gabungan qty (kasus barcode sama muncul 2x, lihat
+  `seenAt`/`prev.qty+qty`) — catatan TIDAK digabung/concat (ambiguous),
+  cukup pakai catatan dari kemunculan TERAKHIR (paling simpel, jarang
+  terjadi di praktik nyata).
+
+### 26b — Tombol "Uang Pas" pindah ke sebelah kiri tombol "Bayar"
+**File:** `lib/features/kasir/payment_screen.dart`, `_CashKeypadSheet`
+(sheet keypad tunai utama — BUKAN `debt_payment_dialog.dart`, itu dialog
+TextField terpisah tanpa keypad custom, tidak disentuh).
+
+**Alasan (dari user):** sekarang `ActionChip('Uang Pas')` nangkring di
+`Wrap` bareng chip pecahan uang (10rb/20rb/dst) di ATAS keypad, sementara
+tombol "Bayar" sendirian di PALING BAWAH — jauh secara visual, gampang
+salah pencet kalau buru-buru.
+
+**Perubahan:** keluarkan "Uang Pas" dari `Wrap` (Wrap cuma sisa chip
+pecahan uang bulat), taruh sebagai tombol di baris PALING BAWAH bareng
+"Bayar" — "Uang Pas" di KIRI (sekunder, lebih sempit), "Bayar" di KANAN
+(primer/aksi utama, lebih lebar) — pola tombol sekunder-kiri/primer-kanan
+yang lazim.
+
+### 26c — Tombol "00" dipindah berjajar dengan "0", diletakkan di tengah
+**File:** `lib/features/kasir/payment_screen.dart`, `_Keypad._rows` +
+baris terakhir keypad.
+
+**Kondisi sekarang:** baris ke-3 = `7 8 9 00`, baris terakhir (sendirian)
+= `0 (flex 2) | 000 (flex 2)`. User minta "00" pindah berjajar dengan "0".
+
+**Implementasi (tukar posisi, TANPA menghilangkan tombol apa pun,
+`_press()` sudah generic per-string jadi aman ditukar tanpa ubah logika):**
+baris ke-3 jadi `7 8 9 000`, baris terakhir jadi `0 (flex 2) | 00 (flex 2)`
+— "0"+"00" jadi satu baris penuh di paling bawah/tengah keypad, "000"
+pindah ke slot yang ditinggalkan "00" di baris digit.
 
 ---
 
