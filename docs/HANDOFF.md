@@ -4,12 +4,70 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (lanjutan). Batch 18-item bugfix/UX kasir +
-katalog HTML SELESAI & di-commit (5 commit, hash lihat CHANGELOG tanggal
-ini). **schemaVersion naik ke 15** (kolom `checkedItemIds` + `voided`).
-Full `flutter test`: **318 test hijau**, `flutter analyze` bersih._
+_Terakhir diperbarui: 13 Juli 2026 (lanjutan ke-2). Batch 18-item + 3 laporan
+follow-up (user test langsung setelah PR batch 18-item di-merge) SELESAI &
+di-commit (8 commit total, hash lihat CHANGELOG tanggal ini). **schemaVersion
+naik ke 15** (kolom `checkedItemIds` + `voided`). Full `flutter test`:
+**322 test hijau**, `flutter analyze` bersih._
 
-## Batch 18-item bugfix/UX kasir + katalog HTML (sesi ini)
+## Follow-up round setelah user test PR batch 18-item (3 laporan baru)
+
+Setelah PR batch 18-item di-merge, user langsung test & kirim 3 laporan baru
+(2 screenshot + 1 laporan tekstual):
+
+1. **Batalkan Pembayaran tidak muncul untuk pelunasan pertama kali** — akar
+   masalah: `_showPaymentTimeline` (satu-satunya tempat tombol itu berada)
+   sengaja menyembunyikan Riwayat Pembayaran untuk "penjualan tunai
+   seketika" (1 pembayaran, `paidAt == createdAt`) — padahal itu skenario
+   PALING UMUM. Fix: getter disederhanakan jadi selalu true bila ada ≥1
+   pembayaran (`receipt_screen.dart`). Efek samping: baris "Kembalian" jadi
+   tampil 2x untuk nota 1-pembayaran (Ringkasan + Riwayat) — pola yang SAMA
+   dgn nota 2-pembayaran, `receipt_change_taken_test.dart` disesuaikan.
+2. **Katalog HTML modal tap-item (baru dibuat sesi sebelumnya) TERLALU JAUH
+   dari desain yang diminta** — user kirim screenshot app kasir asli sbg
+   referensi persis. Redesain ulang signifikan di `order_page_service.dart`:
+   - Baris produk kini punya kontrol +/- lingkaran meniru `_AddControl` app
+     kasir (bukan badge angka/chevron polos) — lingkaran "+" oranye → angka
+     hijau + minus merah begitu ada qty, fungsi `buildProwControls()`/
+     `prowQuickAdd()`/`prowDecrement()` baru.
+   - **Field harga custom yang bisa diketik pelanggan DIHAPUS TOTAL**
+     (bukan cuma dikecualikan dari kode mesin seperti versi sebelumnya) —
+     `cartPriceOverride`, `priceFor()`, anotasi "(harga custom)" semua
+     dicabut. Harga di modal sekarang MURNI tampilan (`#itemPriceDisplay`,
+     ikut satuan/varian terpilih).
+   - Field jumlah jadi `<input>` beneran (bisa diketik langsung, mis. utk
+     qty desimal), bukan cuma `<span>` statis.
+   - `.cb-count` (badge jumlah item keranjang) dibuat lingkaran DIJAMIN via
+     `aspect-ratio:1` + ukuran diperbesar — sebelumnya sempat tampak lonjong
+     di screenshot user (dugaan: interaksi font-scaling browser HP).
+   - SEMUA ukuran font di halaman dinaikkan (demografi pelanggan lebih
+     terbiasa teks besar, "tidak apa-apa makan space" per instruksi user).
+   - Stok TIDAK ditampilkan di modal (diputuskan via `AskUserQuestion` —
+     user pilih rekomendasi: jangan expose jumlah stok toko ke publik).
+3. **Scan pesanan pegawai via scanner HID TERTENTU masih salah rute ke
+   Tempel Pesanan** (bukan antrian) — root cause BERBEDA dari bug serupa
+   yang "sudah diperbaiki" sesi sebelumnya (`2ee8068`, soal timing merge
+   fragmen). Kali ini: scanner tsb sama sekali TIDAK menerjemahkan newline
+   di dalam payload QR jadi keystroke Enter (beda dari scanner yang sudah
+   ditangani), jadi kode mesin & baris `Pegawai:` menyatu tanpa newline di
+   SATU string ("...=2Pegawai: Budi") — regex `^Pegawai:` (butuh awal
+   baris) gagal cocok, employeeName null. Fix di lapisan PARSER (bukan
+   lapisan HID kasir_screen.dart yang sudah ada): `OrderParserService.
+   parse()` sekarang punya `_normalizeMetaLineBreaks()` — sisipkan newline
+   di depan marker `Pegawai:`/`Nama:`/`HP:`/`Catatan:` bila menempel tanpa
+   pemisah, SEBELUM regex line-based dijalankan. **BELUM dikonfirmasi user**
+   di scanner fisik aslinya (diverifikasi via unit test yang mensimulasikan
+   payload fused, bukan hardware sungguhan) — kalau masih terjadi, curigai
+   scanner INI mungkin juga tidak kirim Enter di akhir seluruh payload sama
+   sekali (beda lagi failure mode-nya, perlu log/laporan lebih rinci).
+
+**Catatan penting**: item "Uang Pas di modal Tambah Bayar sejajar kiri
+tombol Bayar" yang disebut user di laporan #1 ternyata **SUDAH benar** di
+kode (`debt_payment_dialog.dart`, dari fix sesi sebelumnya) — tidak ada
+perubahan diperlukan, kemungkinan user menguji build lama atau cuma
+menegaskan ulang requirement yang sudah terpenuhi.
+
+## Batch 18-item bugfix/UX kasir + katalog HTML (sesi sebelumnya)
 
 User kirim 18 laporan bug/permintaan sekaligus (kasir, struk, katalog HTML)
 + 2 screenshot bug. Instruksi eksplisit: "eksekusi dan merge, tidak perlu
@@ -168,8 +226,17 @@ verifikasi riil lewat CI. Jalan sbg root menghasilkan warning "Woah!..."
 yang tidak menggagalkan perintah, aman diabaikan.
 
 ## Menggantung / Kandidat Berikutnya
-- **Item 13** (katalog HTML "belum identik" UI app) — BLOCKED, menunggu
-  screenshot/spesifik dari user (lihat detail di batch sesi ini di atas).
+- **Item 13 lama (katalog HTML "belum identik" UI app) — kemungkinan
+  TERJAWAB** lewat redesain modal tap-item follow-up round #2 (user kirim
+  screenshot referensi app kasir asli, sudah ditindaklanjuti — lihat
+  section follow-up di atas). Belum ada konfirmasi eksplisit user bahwa
+  ini SUDAH cukup — kalau ada laporan susulan soal visual katalog HTML,
+  lanjutkan dari situ, bukan dari nol.
+- **Scan pesanan pegawai via HID — fix BELUM dikonfirmasi di hardware
+  fisik** (lihat detail follow-up #3 di atas) — kalau user lapor masih
+  gagal setelah fix ini, kemungkinan scanner itu juga tidak kirim Enter
+  di akhir SELURUH payload, minta detail/log lebih lanjut sebelum coba
+  fix lain.
 - **Item 23 sisa** (`printer_service.dart printReceipt` tunggal,
   `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
   Hutang, Tutup Kasir "kas sistem" overstated) — lihat PLAN.md.
