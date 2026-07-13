@@ -88,7 +88,10 @@ lib/
 - Analisa: `/opt/flutter/bin/flutter analyze` (binary di `/opt/flutter/bin`;
   jalankan tanpa root bila memungkinkan — peringatan root tidak menggagalkan).
 - Wajib `flutter analyze` bersih (0 issue) sebelum commit.
-- Build APK via GitHub Actions (`.github/`), single arm64-v8a.
+- Build APK via GitHub Actions (`.github/`), fat APK armeabi-v7a +
+  arm64-v8a (HP kelas bawah/lama masih banyak yang 32-bit murni — crash
+  nyata pernah terjadi di Infinix Smart 8 saat APK cuma arm64-v8a, lihat
+  CHANGELOG). Jangan persempit balik ke arm64-v8a saja tanpa alasan kuat.
 
 ## Metode Test Sebelum Rilis — WAJIB dipakai untuk fitur/fix baru
 

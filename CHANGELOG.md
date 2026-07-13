@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `fb8ba80` — fix: build APK utk armeabi-v7a + arm64-v8a — akar masalah crash Infinix Smart 8 TERKONFIRMASI
+- `f47e67b` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF — crash Infinix Smart 8 masih belum selesai
 - `2c5ddf9` — fix: pindahkan crash log ke folder Downloads publik (Android/data terblokir File Manager) + jaring lebih awal
 - `c48ec4b` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk fix tap-to-scan race + HID #PSN:
 - `2ee8068` — fix: deteksi basi tap-to-scan + kode #PSN: pecah jadi beberapa scan di HID eksternal
