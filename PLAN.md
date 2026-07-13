@@ -13,7 +13,10 @@ selesai, siap diimplementasi. **Item 23** (bug "Sisa Tagihan" understated
 saat kembalian dipakai ulang — scope Buku Hutang/Tutup Kasir/tempat lain
 masih menggantung). **Item 24**: 24a/24c/24e/24f SELESAI & di-commit; 24d
 SEBAGIAN (rename Pegawai + permission `terima_pembayaran` selesai) — sisa
-logika gate "Bayar", checklist tersinkron (24b), & notifikasi realtime
+logika gate "Bayar" jadi QR (**mekanisme kirim SUDAH DIPUTUSKAN: QR,
+gabung ke scanner kasir yang sudah ada, hasil scan masuk antrian
+`held_orders` — lihat detail lengkap di 24d**), checklist tersinkron
+(24b), & (sengaja TANPA notifikasi otomatis arah balik di versi awal)
 belum dikerjakan. **Item 25**: 25a/25b SELESAI & di-commit.
 **25c (lisensi) desainnya SUDAH FINAL & komprehensif** (lihat dokumentasi
 terpisah yang dikirim ke user, `docs/keamanan-lisensi-offline.md` — TIDAK
@@ -145,95 +148,87 @@ mode Katalog — gate HANYA berlaku utk transaksi nyata, exclude
 antrian khusus di owner/asisten, dan notifikasi realtime (lihat catatan
 di 24d di bawah soal keterkaitannya dengan Item 21 yang sengaja ditunda).
 
-### Opsi A untuk mekanisme kirim — HandoffService jaringan LAN terpisah (BELUM DIPUTUSKAN, dibandingkan dengan Opsi B/QR di bawah)
+### Mekanisme kirim pesanan pegawai — KEPUTUSAN FINAL: QR, gabung ke scanner kasir yang sudah ada
 
-**Konteks:** `LanSyncService`/`SyncScreen` (sync bulk produk/harga/transaksi)
-TETAP manual & terikat layar seperti sekarang (TIDAK disentuh) — opsi ini
-usul servis KEDUA yang terpisah total, khusus untuk fitur handoff+notifikasi
-24d, supaya realtime tanpa perlu menunggu Item 21 (yang scope-nya jauh
-lebih besar & berisiko: bulk data + antrian approval).
+**Riwayat singkat:** 2 opsi dibandingkan (A = servis jaringan LAN
+terpisah/realtime, B = QR offline reuse "Tempel Pesanan"). **User pilih
+Opsi B**, dengan 2 penyempurnaan tambahan hasil diskusi (lihat di bawah)
+— Opsi A ditolak/tidak dieksekusi (disimpan sebagai catatan riwayat
+keputusan, bukan rencana aktif).
 
-**Arsitektur:**
-- Servis baru `HandoffService`, port terpisah dari sync bulk (mis. 8626),
-  endpoint generic `POST /message {type, fromDeviceCode, fromIp, payload}`.
-- **Berjalan di SEMUA device** (bukan cuma owner sbg host) karena pesan
-  2 arah: pegawai→owner (kirim keranjang), owner→pegawai (notif lunas).
-- **Dinyalakan di level aplikasi** (provider top-level, mulai jalan begitu
-  device identity siap) — BUKAN di dalam suatu screen (beda dari
-  `LanSyncService` yang `dispose()`-nya mematikan host total). Hidup
-  selama app terbuka di layar manapun, mati kalau app benar2 ditutup.
-
-**Alur:** pegawai tap "Kirim ke Owner/Asisten" → simpan lokal dulu ke
-`held_orders` pegawai sendiri (status `'mengirim'`, anti-hilang kalau
-kirim gagal) → POST ke IP owner (dari data pairing) → owner terima, tulis
-langsung ke `held_orders` LOKAL owner (`awaitingPayment=true` + nama
-pegawai + waktu + checklist) → `watchHeldOrders()` yg SUDAH ADA otomatis
-notify UI owner (tanpa provider baru) → owner bayar normal → sistem
-`held_orders` selesai → kirim balik `payment_done` ke IP pegawai → pegawai
-dapat banner "Transaksi [nota] lunas" (reuse `InlineBannerStateMixin`).
-
-**Keamanan:** reuse `storeKey` dari pairing yang sudah ada (bukan sistem
-auth baru).
-
-**Batas jujur:** "realtime selama app foreground" saja, bukan garansi
-keras — HP di-minimize/layar dikunci lama bisa dibekukan OS. Addressing
-pakai IP terakhir dari pairing QR (bisa berubah kalau DHCP re-lease) —
-kalau gagal connect, perlu pesan jelas + opsi scan ulang QR.
-
-**Kenapa TIDAK menyentuh Item 21:** beda port/endpoint, trigger langsung
-tulis DB lokal + StreamProvider reaktif (bukan lewat `_pendingQueue`
-approval yang khusus dibuat untuk data BULK finansial). `held_orders`
-tetap tidak ikut protokol `/sync` bulk.
-
-### Opsi B untuk mekanisme kirim — QR, reuse "Tempel Pesanan" (SEDANG DIPERTIMBANGKAN, kemungkinan lebih disukai)
-
-**Ide:** tombol yang sebelumnya "Bayar" (saat pegawai tanpa izin
+**Ide inti:** tombol yang sebelumnya "Bayar" (saat pegawai tanpa izin
 `terima_pembayaran`) beralih fungsi jadi **tampilkan QR** berisi data
-pesanan (bukan network call sama sekali). Fitur "Tempel Pesanan" yang
-sudah ada ditambah opsi baru **"Scan Pesanan Pegawai"** — owner scan QR
-itu pakai kamera, langsung ter-paste sebagai keranjang transaksi riil di
-device owner.
+pesanan — sama sekali tanpa network call. QR itu di-scan owner/asisten,
+lalu **masuk ke ANTRIAN** (`held_orders` bertanda `awaitingPayment`),
+BUKAN langsung ke keranjang aktif — lihat alasan di bagian "penyempurnaan
+2" di bawah.
 
-**Kenapa ini secara teknis SANGAT murah (reuse besar-besaran, sudah dicek
-kode nyatanya):**
+**Kenapa QR (bukan servis jaringan) — reuse besar-besaran, sudah dicek
+kode nyatanya:**
 - **QR generate**: `qr_flutter` + widget `QrSyncDisplay`
   (`lib/core/widgets/qr_sync_widgets.dart`) sudah ada & dipakai fitur
-  pairing device — tinggal reuse, bukan bikin dari nol.
-- **QR scan**: `showQrSyncScanner()` (file sama) sudah ada, & `MobileScanner`
-  yang dipakai scanner barcode kasir (Item 24e/24f) SUDAH mendeteksi SEMUA
-  format termasuk QR tanpa konfigurasi tambahan (`formats: []` default =
-  semua format).
+  pairing device — tinggal reuse.
 - **Format payload SUDAH kompak by design**: fitur "Tempel Pesanan" (lihat
   `order_page_service.dart`/`order_parser_service.dart`) TIDAK
   menyimpan nama/harga produk di teks pesanan — cuma
   `#PSN:unitId=qty;unitId=qty;...` (+ baris `Nama:`/`HP:`/`Catatan:`
   opsional). Harga & nama produk **selalu di-resolve ulang dari DB lokal
-  saat paste**, sudah ada penanganan barang yang terhapus/nonaktif
+  saat parse**, sudah ada penanganan barang yang terhapus/nonaktif
   (`ParsedOrder.notFound`). Format sekompak ini sangat muat di QR (kapasitas
   QR standar ~2900 karakter alfanumerik) bahkan untuk keranjang berisi
-  puluhan item — TIDAK perlu format baru, tinggal extend baris (mis.
-  `Pegawai: <nama>`) & feed teksnya ke `OrderParserService.parse()` yang
-  SUDAH ADA, bukan dari hasil scan tempel manual.
-- **Sepenuhnya OFFLINE** — tidak butuh WiFi/LAN/jaringan sama sekali
-  (beda dari Opsi A), cocok dgn prinsip offline-first app ini bahkan lebih
-  murni dari Opsi A.
+  puluhan item.
+- **Sepenuhnya OFFLINE** — tidak butuh WiFi/LAN/jaringan sama sekali,
+  paling murni sesuai prinsip offline-first app ini.
 
-**Batas jujur — TIDAK menyelesaikan arah balik (notifikasi "lunas" ke
-pegawai) sama sekali.** QR cuma 1 arah per-scan (fisik, butuh 2 orang
-sama-sama pegang HP momen itu). Opsi paling simpel: **JANGAN bangun
+**Penyempurnaan 1 (dari diskusi) — scan-nya GABUNG ke scanner kasir yang
+sudah ada, BUKAN scanner terpisah di dalam "Tempel Pesanan":**
+- Owner tinggal tap ikon scan yang **sudah biasa dipakai** (hasil redesign
+  Item 24e/24f) — tidak perlu navigasi ke sheet "Tempel Pesanan" dulu.
+- **Scanner eksternal (Bluetooth/USB OTG) otomatis ikut bisa baca — GRATIS,
+  tanpa kode terpisah** — karena `_handleBarcode()` di `kasir_screen.dart`
+  sudah jadi titik temu untuk input kamera MAUPUN input HID eksternal
+  (yang "mengetik" hasil scan). Scanner eksternal yang dipakai toko ini
+  SUDAH support QR (dikonfirmasi user), jadi tidak ada gap kompatibilitas.
+  `MobileScanner` kamera juga sudah mendeteksi SEMUA format termasuk QR
+  tanpa konfigurasi tambahan (`formats: []` default = semua format).
+- **Implementasi**: 1 pengecekan di awal `_handleBarcode()` — kalau teks
+  hasil scan diawali `#PSN:` DAN mengandung baris `Pegawai: <nama>` →
+  branch ke alur import-pesanan-pegawai (bukan cari produk by barcode).
+  Kalau `#PSN:` TANPA baris `Pegawai:` → tetap perilaku "Tempel Pesanan"
+  customer yang sudah ada (tidak berubah). Baris `Pegawai:` jadi
+  pembeda dua jenis kode `#PSN:` (dari pelanggan vs dari pegawai) —
+  reuse total, tanpa format/prefix baru.
+- "Tempel Pesanan" (sheet) tetap dipakai sebagai tempat **preview/
+  konfirmasi isi sebelum final** (bagian yang memang reusable), hanya
+  pemicunya (scan) pindah ke scanner utama kasir.
+
+**Penyempurnaan 2 (dari diskusi) — hasil scan masuk ANTRIAN, bukan
+langsung ke keranjang aktif owner:**
+- Alasan: owner bisa saja sedang di tengah melayani transaksi lain
+  (keranjang aktifnya sudah berisi barang customer lain) — kalau hasil
+  scan pegawai langsung digabung ke situ, 2 transaksi berbeda bisa
+  campur aduk. Masuk ke `held_orders` (`awaitingPayment=true` + nama
+  pegawai + jam kirim, badge "Menunggu Anda Bayar") jauh lebih aman —
+  owner proses kapan siap, bahkan bisa terima beberapa handoff dari
+  beberapa pegawai sekaligus saat rush hour tanpa saling tabrak.
+- **Insight penting**: dengan ini, Opsi A (jaringan) dan Opsi B (QR)
+  SEBENARNYA cuma beda di jalur pengiriman (transport) — keduanya
+  bermuara ke tempat yang PERSIS sama (`held_orders` bertanda
+  `awaitingPayment`). Jadi desain "antrian + card 'Menunggu Anda Bayar'"
+  dari Opsi A tetap dipakai penuh di sini, tidak sia-sia.
+
+**Batas jujur — TIDAK ada notifikasi otomatis arah balik (owner→pegawai
+"transaksi lunas") di versi ini.** QR cuma 1 arah per-scan (fisik, butuh
+2 orang sama-sama berdekatan momen itu). **Keputusan: JANGAN bangun
 notifikasi otomatis arah balik untuk versi awal** — pegawai sudah tahu
-lewat interaksi fisik (serah-terima), owner bisa bilang langsung/dari
-struk. Kalau nanti dirasa perlu, notifikasi arah balik bisa jadi QR kecil
-kedua yang owner tunjukkan balik setelah bayar (masih 100% offline, tanpa
-infra jaringan Opsi A) — TAPI ini scope terpisah, jangan digabung
-otomatis tanpa keputusan eksplisit.
+lewat interaksi fisik (serah-terima), owner bisa bilang langsung. Kalau
+nanti dirasa perlu, bisa jadi scope terpisah nanti (QR kecil balik, atau
+Opsi A khusus untuk arah ini) — TAPI jangan digabung otomatis tanpa
+keputusan eksplisit baru.
 
-**Keterbatasan lain:** butuh owner & pegawai berdekatan fisik saat
-handoff (untuk toko grosir/retail kecil yang jadi target app ini, ini
-realistis — bukan skenario multi-cabang jauh).
-
-**Belum diputuskan Opsi A vs B** — user sedang membandingkan, tunggu
-keputusan sebelum eksekusi bagian ini.
+**Keterbatasan lain (diterima):** butuh owner & pegawai berdekatan fisik
+saat handoff — untuk toko grosir/retail kecil yang jadi target app ini,
+ini realistis (bukan skenario multi-cabang jauh).
 
 ### 24b — Persist + sinkronkan state centang item struk (LIHAT JUGA 24d)
 **File:** `lib/features/kasir/receipt_screen.dart` (`_checked`, baris ~80).
