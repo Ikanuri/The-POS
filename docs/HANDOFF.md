@@ -4,13 +4,14 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (Item 24 SELESAI SEPENUHNYA — payment
-gate role Pegawai lewat QR + antrian handoff + sheet verifikasi checklist)._
+_Terakhir diperbarui: 13 Juli 2026 (Item 24 SELESAI SEPENUHNYA, plus 2
+bugfix susulan: tap-to-scan mengulang barang lama, atribusi pelanggan/
+pegawai tertukar di kartu antrian)._
 
 **schemaVersion tetap 14** (tidak ada migrasi baru sesi ini — seluruh Item 24
-murni reuse `CartItem`, `CartMeta`, dan payload JSON blob `held_orders` yang
-sudah ada, tanpa skema DB baru). Full `flutter test`: **264 test hijau**,
-`flutter analyze` bersih.
++ bugfix susulan murni reuse `CartItem`, `CartMeta`, dan payload JSON blob
+`held_orders` yang sudah ada, tanpa skema DB baru). Full `flutter test`:
+**270 test hijau**, `flutter analyze` bersih.
 
 ## Item 24 (payment gate role Pegawai) — SELESAI SEPENUHNYA
 
@@ -25,21 +26,27 @@ Semua sub-item (24a–24f) selesai & di-commit. Ringkasan alur akhir:
    Katalog `kCatalogCartId` TIDAK PERNAH digerbang). Tap membuka
    `_HandoffQrSheet`: QR (`qr_flutter`) berisi kode mesin
    `OrderParserService.encodeHandoff()` (format `#PSN:...` sama seperti
-   katalog HTML + baris `Pegawai: <nama>`). "Sudah Dikirim, Kosongkan
-   Keranjang" HANYA mengosongkan cart lokal pegawai — TIDAK menulis
-   `held_orders` di device pegawai (itu tugas device OWNER saat scan) —
-   commit `1f18000`.
+   katalog HTML + baris `Pegawai: <nama>` + `Nama: <pelanggan>` opsional).
+   "Sudah Dikirim, Kosongkan Keranjang" HANYA mengosongkan cart lokal
+   pegawai — TIDAK menulis `held_orders` di device pegawai (itu tugas
+   device OWNER saat scan) — commit `1f18000`.
 3. **Scan sisi owner**: `kasir_screen.dart` `_handleBarcode()` deteksi
    prefix `#PSN:` PALING AWAL (sebelum cabang `fromExternal`/
    `_continuousScan` — berlaku utk kamera MAUPUN scanner eksternal HID satu
    titik integrasi) → `_handleOrderCode()`. Ada baris `Pegawai:` →
-   `db.holdOrder(...)` dengan payload `awaitingPayment: true`, TIDAK
-   langsung ke keranjang aktif (supaya tidak bentrok transaksi owner yang
-   sedang berjalan). Tanpa baris `Pegawai:` (pesanan pelanggan biasa dari
-   katalog HTML) → alur LAMA tetap jalan, buka `PasteOrderSheet` pra-diisi
-   & otomatis diproses — commit `1f18000`. Badge merah "Menunggu Anda
-   Bayar" di `_HeldCard` utk order `awaitingPayment` (panel `SizedBox`
-   dinaikkan ke height 128 dari 86 supaya badge muat tanpa overflow).
+   `db.holdOrder(...)` dengan payload `awaitingPayment: true` + `employeeName`
+   TERPISAH dari `meta`/`label`, TIDAK langsung ke keranjang aktif (supaya
+   tidak bentrok transaksi owner yang sedang berjalan). Tanpa baris
+   `Pegawai:` (pesanan pelanggan biasa dari katalog HTML) → alur LAMA tetap
+   jalan, buka `PasteOrderSheet` pra-diisi & otomatis diproses — commit
+   `1f18000`, disempurnakan `c146695`.
+   - **`label` kartu antrian = nama PELANGGAN** (`parsed.customerName`,
+     fallback `'Tanpa Nama'`), **BUKAN nama pegawai** — nama pegawai
+     pengirim + jam masuk tampil di **tab folder terpisah** di atas kartu
+     (`_HeldCardWithTab`, pakai `_TabPainter` yang sama dgn tab pelanggan/
+     pegawai di atas cart bar). Badge merah "Menunggu Anda Bayar" tetap di
+     dalam kartu seperti sebelumnya. Panel `SizedBox` dinaikkan ke height
+     152 (dari 128) supaya tab + badge muat tanpa overflow.
 4. **24b — sheet "Verifikasi Pesanan"** (commit `b04e064`): tap kartu
    antrian `awaitingPayment` BUKA sheet checklist dulu (bukan langsung
    resume) — pegawai bacakan barang, owner centang tiap yang cocok, baru
@@ -49,59 +56,82 @@ Semua sub-item (24a–24f) selesai & di-commit. Ringkasan alur akhir:
    pegawai, bukan fitur hold umum.
    - **Scope sengaja disederhanakan setelah klarifikasi user**: murni
      **1 device (owner saja)** — pegawai TIDAK ikut mencentang sendiri di
-     device-nya, tidak ada sinkronisasi lintas device sama sekali. Owner
-     bacakan-dengar-centang adalah satu-satunya sumber data.
+     device-nya, tidak ada sinkronisasi lintas device sama sekali.
    - Centangan disimpan sbg array `checked` sejajar index `items` di
-     `held_orders.cartJson` yang sudah ada (TANPA migrasi schema) — setiap
-     tap checkbox langsung `db.updateHeldOrder(id, cartJson)` (method baru
-     di `AppDatabase`), jadi tahan kalau owner sempat tertunda (app
-     background dll), sama seperti pesanan ditahan lainnya.
+     `held_orders.cartJson` (TANPA migrasi schema) — setiap tap checkbox
+     langsung `db.updateHeldOrder(id, cartJson)` (method baru di
+     `AppDatabase`), **WAJIB tulis balik `meta`/`employeeName` ASLI dari
+     payload** (bug pernah terjadi: `_toggle` sempat menulis balik
+     `CartMeta()` kosong tiap centang, menghapus atribusi pelanggan/
+     pegawai yang sudah kebawa QR — diperbaiki `c146695`).
    - **Checklist SELESAI tugasnya begitu "Lanjut ke Keranjang" ditekan** —
-     TIDAK menempel ke `transaction_items`/`ReceiptScreen` sama sekali
-     (`ReceiptScreen`'s `_checked` yang sudah ada, murni post-payment,
-     TIDAK disentuh — tetap terpisah, tidak digabung).
+     TIDAK menempel ke `transaction_items`/`ReceiptScreen` sama sekali.
    - Tombol "Lanjut ke Keranjang" TIDAK dikunci walau belum semua
      tercentang — checklist ini alat bantu visual, bukan gerbang wajib.
 5. **Notifikasi realtime arah balik (owner→pegawai "transaksi lunas")
    SENGAJA TIDAK dibangun** — keputusan final, bukan item menggantung.
 6. **Transport**: QR-lewat-scanner-kasir-yang-sudah-ada (opsi servis
    jaringan terpisah port 8626 sempat didesain lalu SENGAJA ditolak user
-   demi kesederhanaan — histori di CHANGELOG sekitar commit
-   `9f9cb18`/`5d65188` kalau perlu detail perbandingan opsi).
+   demi kesederhanaan).
 
-**Item 24 tidak ada sisa pekerjaan.** Kalau ada permintaan lanjutan (mis.
-checklist post-payment ikut sinkron lintas device, atau notifikasi
-balik) — itu scope BARU, bukan kelanjutan otomatis dari desain saat ini
-(desain saat ini sudah eksplisit menolak keduanya demi kesederhanaan).
+**Item 24 tidak ada sisa pekerjaan** (2 bugfix susulan di atas sudah masuk).
+Kalau ada permintaan lanjutan (mis. checklist post-payment ikut sinkron
+lintas device, atau notifikasi balik) — itu scope BARU, bukan kelanjutan
+otomatis dari desain saat ini.
+
+## Bugfix susulan Item 24e (di luar Item 24, commit `c146695`)
+
+**Tap-to-scan mengulang barang terakhir walau kamera tidak lihat apa-apa**:
+`_pendingBarcode` (kasir_screen.dart) tidak pernah di-null-kan setelah
+`_confirmPendingScan()` memprosesnya — tombol bidik tetap "enabled" (masih
+menyimpan barcode LAMA), jadi tap lagi (kamera diarahkan ke mana pun, tanpa
+barcode sama sekali) mengulang barang yang sama. Fix: `setState(() =>
+_pendingBarcode = null)` segera setelah dipakai.
 
 ## Gotcha teknis baru sesi ini (selain yang sudah ada di CLAUDE.md)
 
-- **Double `Navigator.pop()` sinkron back-to-back bisa bikin
-  `pumpAndSettle()` macet selamanya** di widget test (animasi popping
-  nested-lalu-parent sheet tidak pernah konvergen). Fix: cuma pop route
-  TERDEKAT/terdalam, biarkan pemanggil/pengguna tutup route luar terpisah.
-- **`await someDriftTable.watch().first` langsung di dalam body
-  `testWidgets` bisa HANG selamanya**, walau cuma baca sekali (bukan
-  `StreamProvider`) — perluasan dari gotcha "drift StreamProvider hang 10
-  menit" yang sudah ada di CLAUDE.md. Fix: pakai query one-shot
-  (`await db.select(db.tabelnya).get()`), JANGAN `.watch()...first`.
-- **Cara diagnosis hang widget test yang terbukti jalan**: `timeout <N>
-  flutter test ...` (bash) + `tester.pump(Duration(...))` bertahap +
-  `tester.takeException()` (bukan `pumpAndSettle()` buta) untuk mempersempit
-  await mana yang tidak pernah selesai.
-- **Menambah sheet modal baru DI ATAS `KasirScreen` otomatis aman dari
-  gangguan scanner HID eksternal** — TIDAK perlu penanganan khusus. Handler
-  HID global (`_onHardwareKey`) berhenti intercept begitu
-  `ModalRoute.of(context)?.isCurrent` jadi false (sheet baru jadi topmost),
-  KECUALI kalau sengaja di-carve-out lewat flag `_cartSheetOpen` (dipakai
-  HANYA oleh `CartSheet` demi continuous-scan). Sheet baru manapun (spt
-  `_VerifyOrderSheet`) TIDAK boleh reuse flag itu — biarkan HID berhenti
-  intercept seperti sheet lain (`PasteOrderSheet`, dialog, dll), aman
-  karena sheet tanpa text field tidak butuh input scanner sama sekali.
-- Nambah konten visual baru (badge dll) ke `Column` di dalam
-  `SizedBox`-constrained horizontal `ListView` item bisa overflow kalau
-  tinggi container tetap tidak dinaikkan — pola berulang, ketahuan dari
-  widget test (bukan cuma visual).
+- **Test regresi bisa "lolos palsu" gara-gara debounce internal, bukan
+  karena fix beneran jalan** — kasus nyata: `_handleBarcode` punya
+  debounce 1.5 detik per-barcode-yang-sama (`DateTime.now()`, REAL
+  wall-clock, TIDAK ikut fast-forward `tester.pump(Duration(...))`). Test
+  "tap shutter dua kali cepat lalu cek qty tetap 1" LOLOS baik dgn fix
+  MAUPUN dgn bug sengaja dikembalikan (revert-verify gagal mendeteksi) —
+  karena tap kedua di widget test terjadi hampir seketika (real time),
+  jadi debounce SENDIRI sudah mencegah double-add, bukan fix-nya. Fix
+  test: assert **state internal langsung lewat representasi UI**
+  (`Icon.color` tombol bidik: abu-abu = `_pendingBarcode == null`) alih-
+  alih re-trigger aksi yang punya side-channel independen (debounce) yang
+  bisa menutupi bug. **Pelajaran umum**: kalau revert-verify tiba-tiba
+  LOLOS (tidak gagal) padahal harusnya gagal, curigai ada mekanisme LAIN
+  (debounce, cache, dsb) yang kebetulan menutupi efek bug — ganti
+  pendekatan assertion ke sinyal yang lebih langsung.
+- **`Column(mainAxisSize: MainAxisSize.min)` yang membungkus widget ber-
+  `Spacer()` di dalam SLOT `ListView` horizontal (mis. utk nambah "tab" di
+  atas kartu) bikin `Spacer()` itu CRASH** ("RenderFlex children have
+  non-zero flex but incoming height constraints are unbounded") — item
+  ListView horizontal dapat height TIGHT dari `SizedBox` pembungkus, tapi
+  `Column` mainAxisSize.min memberi height UNBOUNDED ke children non-flex-
+  nya sendiri, jadi widget anak yang px-nya bergantung pada height induk
+  (`Spacer`) kehilangan constraint itu. Fix: bungkus widget-yang-punya-
+  `Spacer()` dengan `Expanded` (BUKAN taruh langsung), dan JANGAN pakai
+  `mainAxisSize: MainAxisSize.min` di Column pembungkusnya (biar `Expanded`
+  benar-benar dapat sisa ruang, bukan collapse ke 0) — lihat
+  `_HeldCardWithTab` (kasir_screen.dart).
+- Double `Navigator.pop()` sinkron back-to-back bisa bikin `pumpAndSettle()`
+  macet selamanya di widget test — cuma pop route TERDEKAT/terdalam.
+- `await someDriftTable.watch().first` langsung di `testWidgets` bisa HANG
+  selamanya (perluasan gotcha drift StreamProvider di CLAUDE.md) — pakai
+  query one-shot (`db.select(db.tabelnya).get()`).
+- Diagnosis hang widget test: `timeout <N> flutter test ...` + `tester.pump
+  (Duration(...))` bertahap + `tester.takeException()`, bukan
+  `pumpAndSettle()` buta.
+- Sheet modal baru di atas `KasirScreen` otomatis aman dari HID scanner
+  eksternal (`_onHardwareKey` berhenti intercept begitu bukan topmost route)
+  — JANGAN reuse flag `_cartSheetOpen` (khusus `CartSheet` demi
+  continuous-scan) di sheet baru manapun.
+- Nambah konten visual baru (badge/tab dll) ke kartu horizontal-ListView
+  butuh cek ulang `SizedBox` height pembungkusnya — pola overflow berulang,
+  ketahuan dari widget test.
 
 ## Lingkungan sesi ini
 Flutter TIDAK terpasang default — dipasang manual ke `/tmp/flutter`
@@ -136,6 +166,11 @@ menggagalkan perintah (aman diabaikan).
   "apakah ini ganggu scanner eksternal?" sebelum eksekusi) — jangan buru-
   buru eksekusi desain awal kalau user masih mengajukan pertanyaan
   klarifikasi, itu biasanya sinyal scope akan menyempit/berubah.
+- **User melaporkan bug dgn observasi presisi** (mis. "tap lagi dgn kamera
+  diarahkan ke manapun, bahkan tanpa barcode" — detail yang langsung
+  mengarah ke akar masalah `_pendingBarcode` tak dikosongkan) — baca
+  laporan bug user kata per kata, biasanya sudah menunjuk lokasi/skenario
+  presisi, jangan disederhanakan saat reproduksi.
 - Rencana yang didiskusikan tapi belum dieksekusi → masuk PLAN.md
   komprehensif, jangan cuma tersimpan di riwayat chat.
 - Perubahan sensitif/berisiko (mis. aspek security) — tunda eksekusi
@@ -143,6 +178,6 @@ menggagalkan perintah (aman diabaikan).
   penuh (lihat 25c).
 - Untuk perubahan kecil yang jelas (tidak ambigu) — user eksplisit minta
   langsung eksekusi + merge ke main tanpa menunggu konfirmasi tambahan
-  (lihat pola Item 26), TAPI kalau ada keputusan desain yang genuinely
-  ambigu (banyak interpretasi valid) — tetap ajukan dulu sebelum eksekusi,
-  jangan diasumsikan sepihak.
+  (lihat pola Item 26 & bugfix `c146695`), TAPI kalau ada keputusan desain
+  yang genuinely ambigu (banyak interpretasi valid) — tetap ajukan dulu
+  sebelum eksekusi, jangan diasumsikan sepihak.

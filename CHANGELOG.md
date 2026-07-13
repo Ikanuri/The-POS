@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `c146695` — fix: scan tap-to-scan mengulang barang lama + atribusi pelanggan/pegawai tertukar di antrian
+- `386b275` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF/PLAN untuk Item 24b
 - `b04e064` — feat: sheet Verifikasi Pesanan sebelum lanjut bayar antrian handoff (Item 24b)
 - `610d8b6` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF/PLAN untuk Item 24d-core
 - `1f18000` — feat: gerbang pembayaran Pegawai via QR + antrian handoff (Item 24d)
