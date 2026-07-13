@@ -86,6 +86,7 @@ void main() {
 
     // Isi nominal manual (tidak di-prefill) lalu Bayar.
     await tester.enterText(find.byType(TextField), '15000');
+    await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Bayar'));
     await tester.pumpAndSettle();
 
@@ -119,7 +120,7 @@ void main() {
     // Field kosong (prefillRemaining: false) sebelum chip ditap.
     expect(find.text('84.500'), findsNothing);
 
-    await tester.tap(find.widgetWithText(ActionChip, 'Uang Pas'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Uang Pas'));
     await tester.pumpAndSettle();
 
     expect(find.text('84.500'), findsOneWidget);
@@ -129,5 +130,44 @@ void main() {
 
     expect(result, isNotNull);
     expect(result!.amount, 84500);
+  });
+
+  testWidgets(
+      'Item 11 — tombol Bayar TIDAK menyala saat field kosong, menyala '
+      'begitu diisi', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showDebtPaymentDialog(context, db,
+                remaining: 20000, title: 'Tambah Bayar',
+                prefillRemaining: false),
+            child: const Text('buka'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('buka'));
+    await tester.pumpAndSettle();
+
+    FilledButton bayarButton() =>
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Bayar'));
+
+    expect(bayarButton().onPressed, isNull,
+        reason: 'field masih kosong, belum ada nominal');
+
+    await tester.enterText(find.byType(TextField), '5000');
+    await tester.pump();
+    expect(bayarButton().onPressed, isNotNull,
+        reason: 'sudah ada nominal > 0');
+
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+    expect(bayarButton().onPressed, isNull,
+        reason: 'dikosongkan lagi -> mati lagi');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
   });
 }

@@ -784,6 +784,7 @@ class PrinterService {
   static Future<bool> printMergedReceipt({
     required List<Transaction> txs,
     required Map<String, List<TransactionItem>> itemsByTx,
+    Map<String, List<TransactionPayment>> paymentsByTx = const {},
     required Map<String, String> productNames,
     required Map<String, String> unitNames,
     required String customerName,
@@ -807,6 +808,7 @@ class PrinterService {
     final bytes = await _buildMergedBytes(
       txs: txs,
       itemsByTx: itemsByTx,
+      paymentsByTx: paymentsByTx,
       productNames: productNames,
       unitNames: unitNames,
       customerName: customerName,
@@ -836,6 +838,7 @@ class PrinterService {
   static Future<Uint8List> _buildMergedBytes({
     required List<Transaction> txs,
     required Map<String, List<TransactionItem>> itemsByTx,
+    Map<String, List<TransactionPayment>> paymentsByTx = const {},
     required Map<String, String> productNames,
     required Map<String, String> unitNames,
     required String customerName,
@@ -901,9 +904,20 @@ class PrinterService {
     // ── Per-nota (terpisah) ───────────────────────────────────────────────
     var grandTotal = 0;
     var grandPaid = 0;
+    var grandSisa = 0;
     for (final tx in txs) {
       grandTotal += tx.total;
-      grandPaid += tx.paid;
+      final pays = paymentsByTx[tx.id] ?? const <TransactionPayment>[];
+      final sumChangeGiven = pays
+          .where((p) => !p.voided)
+          .fold<int>(0, (s, p) => s + p.changeGiven);
+      // NET (dikurangi kembalian yg dipakai ulang sbg pembayaran) — bukan
+      // `tx.paid` mentah, sama akar masalah dgn Item 23 di struk tunggal.
+      final rawNetPaid = tx.paid - sumChangeGiven;
+      final netPaid = rawNetPaid > 0 ? rawNetPaid : 0;
+      final txSisa = tx.total - netPaid;
+      grandPaid += netPaid;
+      grandSisa += txSisa > 0 ? txSisa : 0;
       final items = itemsByTx[tx.id] ?? const <TransactionItem>[];
       out.addAll(gen.text(_sep(w)));
       out.addAll(gen.text(
@@ -942,10 +956,9 @@ class PrinterService {
       out.addAll(gen.text(
           _rowLR('Subtotal nota', 'Rp ${_fmtNum(tx.total)}', w),
           styles: const PosStyles(bold: true)));
-      final sisa = tx.total - tx.paid;
-      if (sisa > 0) {
+      if (txSisa > 0) {
         out.addAll(
-            gen.text(_rowLR('  Sisa', 'Rp ${_fmtNum(sisa)}', w)));
+            gen.text(_rowLR('  Sisa', 'Rp ${_fmtNum(txSisa)}', w)));
       }
     }
 
@@ -964,7 +977,26 @@ class PrinterService {
         styles: const PosStyles(bold: true)));
     out.addAll(wideNominal('Rp ${_fmtNum(grandTotal)}'));
     out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandPaid)}', w)));
-    final grandSisa = grandTotal - grandPaid;
+
+    // Item 9 — uang tender ASLI (gross) dari pembayaran terakhir yg
+    // menghasilkan kembalian, lintas semua nota tergabung.
+    TransactionPayment? latestWithChange;
+    for (final pays in paymentsByTx.values) {
+      for (final p in pays) {
+        if (p.voided || p.changeGiven <= 0) continue;
+        if (latestWithChange == null ||
+            p.paidAt.isAfter(latestWithChange.paidAt)) {
+          latestWithChange = p;
+        }
+      }
+    }
+    if (latestWithChange != null) {
+      out.addAll(gen.text(_rowLR(
+          'Uang Diterima', 'Rp ${_fmtNum(latestWithChange.amount)}', w)));
+      out.addAll(gen.text(_rowLR(
+          'Kembalian', 'Rp ${_fmtNum(latestWithChange.changeGiven)}', w)));
+    }
+
     out.addAll(gen.text('Sisa',
         styles: const PosStyles(bold: true)));
     out.addAll(wideNominal('Rp ${_fmtNum(grandSisa)}'));

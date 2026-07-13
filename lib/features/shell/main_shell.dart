@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/license_provider.dart';
 import '../../core/services/backup_reminder.dart';
 
 class _TabItem {
@@ -37,6 +38,20 @@ class _MainShellState extends ConsumerState<MainShell> {
     super.initState();
     // Item 13: pengingat backup berbasis "cek saat app dibuka" (sekali).
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkBackupReminder());
+    // Item 25c: peringatan H-7 sebelum masa berlaku lisensi habis.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkLicenseExpiry());
+  }
+
+  void _checkLicenseExpiry() {
+    final days = ref.read(licenseProvider).daysUntilExpiry;
+    if (days == null || days < 0 || days > 7) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      duration: const Duration(seconds: 8),
+      content: Text(days == 0
+          ? 'Aktivasi berakhir hari ini — hubungi developer untuk perpanjang.'
+          : 'Aktivasi akan berakhir dalam $days hari — hubungi developer '
+              'untuk perpanjang.'),
+    ));
   }
 
   Future<void> _checkBackupReminder() async {

@@ -23,11 +23,12 @@ final _groupsProvider = FutureProvider<List<ProductGroup>>((ref) {
 });
 
 /// Harga dasar tiap produk (satuan dasar, tier minQty=1) — ditampilkan di
-/// bawah nama produk di daftar. Snapshot (bukan stream reaktif penuh),
-/// sama seperti pola `_groupsProvider` — cukup untuk kebutuhan tampilan,
-/// segar kembali saat layar ini dibuka ulang.
-final _basePricesProvider = FutureProvider.autoDispose<Map<String, int>>((ref) {
-  return ref.watch(databaseProvider).getBaseUnitPrices();
+/// bawah nama produk di daftar. Item 17 — StreamProvider reaktif (bukan
+/// snapshot sekali) supaya langsung ikut berubah begitu harga diedit di
+/// form Produk, walau layar daftar ini tidak pernah benar-benar ditutup
+/// (Navigator.push tidak dispose widget di baliknya).
+final _basePricesProvider = StreamProvider.autoDispose<Map<String, int>>((ref) {
+  return ref.watch(databaseProvider).watchBaseUnitPrices();
 });
 
 /// Item 11 — filter "Stok Menipis" aktif/tidak, jumlah untuk badge, & set id.

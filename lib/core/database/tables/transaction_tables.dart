@@ -36,6 +36,12 @@ class Transactions extends Table {
   /// internalNote setelah nota dibuat).
   BoolColumn get changeTaken => boolean().withDefault(const Constant(false))();
 
+  /// ID baris `transaction_items` yang sudah dicentang "diverifikasi/
+  /// diserahkan" di struk in-app — JSON array of String. null/kosong =
+  /// belum ada yang dicentang. Murni per-perangkat (tidak ikut sync — sama
+  /// seperti `changeTaken`/`internalNote` setelah nota dibuat).
+  TextColumn get checkedItemIds => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
 
@@ -92,6 +98,14 @@ class TransactionPayments extends Table {
   /// masing-masing dengan status ambil sendiri-sendiri. Murni per-perangkat
   /// (tidak ikut sync — sama seperti `Transactions.changeTaken`).
   BoolColumn get changeTaken => boolean().withDefault(const Constant(false))();
+
+  /// true bila pembayaran ini DIBATALKAN (fitur "Batalkan Pembayaran") —
+  /// baris TETAP tersimpan sbg jejak audit (kapan pernah dibayar, lalu
+  /// dibatalkan), tapi TIDAK ikut dihitung ke `Transactions.paid`/status
+  /// nota. Beda dari void transaksi (`Transactions.status = 'void'`, yang
+  /// membatalkan SELURUH nota + stok + poin) — ini murni membatalkan SATU
+  /// baris pembayaran, item & stok tidak tersentuh.
+  BoolColumn get voided => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};

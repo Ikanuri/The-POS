@@ -74,7 +74,7 @@ void main() {
     expect(updated.changeTaken, isTrue);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 14);
+    expect(ver.data.values.first, 15);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

@@ -630,10 +630,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                   IconButton(
                                     icon: const Icon(
                                         Icons.remove_circle_outline,
-                                        size: 24),
-                                    visualDensity: VisualDensity.compact,
+                                        size: 26),
                                     onPressed: () => _setQty(_qty - 1),
                                   ),
+                                  const SizedBox(width: 2),
                                   Expanded(
                                     child: TextField(
                                       controller: _qtyCtrl,
@@ -661,10 +661,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       },
                                     ),
                                   ),
+                                  const SizedBox(width: 2),
                                   IconButton(
                                     icon: const Icon(Icons.add_circle_outline,
-                                        size: 24),
-                                    visualDensity: VisualDensity.compact,
+                                        size: 26),
                                     onPressed: () => _setQty(_qty + 1),
                                   ),
                                 ],
@@ -912,10 +912,10 @@ class _VariantRow extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.remove_circle_outline, size: 22),
-            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.remove_circle_outline, size: 24),
             onPressed: qty <= 0 ? null : onMinus,
           ),
+          const SizedBox(width: 2),
           SizedBox(
             width: 24,
             child: Text(
@@ -924,9 +924,9 @@ class _VariantRow extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
+          const SizedBox(width: 2),
           IconButton(
-            icon: const Icon(Icons.add_circle_outline, size: 22),
-            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.add_circle_outline, size: 24),
             onPressed: onPlus,
           ),
         ],

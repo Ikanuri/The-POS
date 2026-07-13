@@ -29,6 +29,23 @@ void main() {
     v13.execute(
         "INSERT INTO products(id, name, is_active, created_at, updated_at) "
         "VALUES('p1','Sedap Goreng',1,1700000000,1700000000)");
+    // Tabel lain yang TIDAK relevan utk test ini tapi HARUS ada supaya
+    // migrasi lanjutan (mis. v14->v15, kolom checked_item_ids/voided) tidak
+    // gagal "no such table" saat AppDatabase membuka DB ini sampai versi
+    // TERKINI (bukan cuma berhenti di 14).
+    v13.execute('''
+      CREATE TABLE transactions(
+        id TEXT PRIMARY KEY, local_id TEXT UNIQUE, status TEXT NOT NULL,
+        total INTEGER NOT NULL, paid INTEGER NOT NULL,
+        change_amount INTEGER NOT NULL, payment_method TEXT NOT NULL,
+        created_at INTEGER NOT NULL);
+    ''');
+    v13.execute('''
+      CREATE TABLE transaction_payments(
+        id TEXT PRIMARY KEY, transaction_id TEXT NOT NULL,
+        amount INTEGER NOT NULL, method TEXT NOT NULL,
+        paid_at INTEGER NOT NULL);
+    ''');
 
     final preCols = v13
         .select('PRAGMA table_info(products)')
@@ -50,7 +67,7 @@ void main() {
     expect(p.name, 'Sedap Goreng', reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 14);
+    expect(ver.data.values.first, 15);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

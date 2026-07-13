@@ -105,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -213,6 +213,12 @@ class AppDatabase extends _$AppDatabase {
           if (from < 14) {
             // Tanda cepat "stok habis" manual per produk (Item 25a).
             await m.addColumn(products, products.markedOutOfStock);
+          }
+          if (from < 15) {
+            // Centang verifikasi serah-terima jadi permanen (dulu murni
+            // lokal, tidak disimpan) + "Batalkan Pembayaran" per-baris.
+            await m.addColumn(transactions, transactions.checkedItemIds);
+            await m.addColumn(transactionPayments, transactionPayments.voided);
           }
         },
         beforeOpen: (details) async {
@@ -663,6 +669,23 @@ class AppDatabase extends _$AppDatabase {
       for (final r in rows)
         r.data['product_id'] as String: (r.data['price'] as num).toInt(),
     };
+  }
+
+  /// Item 17 — versi reaktif [getBaseUnitPrices]: harga di daftar produk
+  /// ikut ter-update begitu tier harga diubah di form Produk, tanpa perlu
+  /// layar ditutup-buka ulang (`_basePricesProvider` sebelumnya snapshot
+  /// sekali, tidak refresh selama widget masih hidup di Navigator stack).
+  Stream<Map<String, int>> watchBaseUnitPrices() {
+    return customSelect(
+      'SELECT pu.product_id AS product_id, pt.price AS price '
+      'FROM product_units pu '
+      'JOIN price_tiers pt ON pt.product_unit_id = pu.id AND pt.min_qty = 1 '
+      'WHERE pu.is_base_unit = 1',
+      readsFrom: {productUnits, priceTiers},
+    ).watch().map((rows) => {
+          for (final r in rows)
+            r.data['product_id'] as String: (r.data['price'] as num).toInt(),
+        });
   }
 
   /// Varian (produk anak) aktif milik [parentProductId], urut nama.
@@ -1128,7 +1151,8 @@ class AppDatabase extends _$AppDatabase {
     final changeSum = transactionPayments.changeGiven.sum();
     final row = await (selectOnly(transactionPayments)
           ..addColumns([amountSum, changeSum])
-          ..where(transactionPayments.transactionId.equals(txId)))
+          ..where(transactionPayments.transactionId.equals(txId) &
+              transactionPayments.voided.equals(false)))
         .getSingle();
     var priorPaid = row.read(amountSum);
     final priorChangeSum = row.read(changeSum) ?? 0;
@@ -1169,11 +1193,16 @@ class AppDatabase extends _$AppDatabase {
         .get();
     final newTotal = itemRows.fold<int>(0, (s, i) => s + i.subtotal);
 
-    final payRows = await (select(transactionPayments)
+    final allPayRows = await (select(transactionPayments)
           ..where((t) => t.transactionId.equals(txId)))
         .get();
+    // Baris yang dibatalkan ("Batalkan Pembayaran") TETAP tersimpan sbg
+    // jejak audit (lihat TransactionPayments.voided) tapi TIDAK ikut
+    // dihitung ke paid/status — perlakukan seolah pembayaran itu tak pernah
+    // terjadi secara finansial.
+    final payRows = allPayRows.where((p) => !p.voided).toList();
     final sumPay = payRows.fold<int>(0, (s, p) => s + p.amount);
-    final newPaid = payRows.isEmpty ? tx.paid : sumPay;
+    final newPaid = allPayRows.isEmpty ? tx.paid : sumPay;
 
     // Status HARUS dihitung dari `paid` dikurangi kembalian yang pernah
     // diberikan (bukan `newPaid` mentah) — kalau tidak, kembalian lama yang
@@ -1545,6 +1574,95 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Item 5 — edit baris item di nota BELUM LUNAS langsung (bukan retur
+  /// terpisah): ubah harga dan/atau catatan, atau hapus (via [newQty] = 0).
+  /// Qty TIDAK BISA dinaikkan lewat sini (cuma dikurangi/dihapus) — sama
+  /// batasan dgn [returnUnpaidTransactionItems], yang fungsi ini pinjam pola
+  /// rekonsiliasinya. Tanpa refund tunai (memang belum ada uang masuk).
+  Future<void> editUnpaidTransactionItem({
+    required String txId,
+    required String transactionItemId,
+    required double newQty,
+    required int newPrice,
+    String? newNote,
+    required String kasirId,
+  }) async {
+    await transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null || tx.status == 'void') return;
+      if (tx.status != 'tempo' && tx.status != 'kurang_bayar') {
+        throw StateError(
+            'editUnpaidTransactionItem hanya untuk nota belum lunas '
+            '(status saat ini: ${tx.status})');
+      }
+      final item = await (select(transactionItems)
+            ..where((t) => t.id.equals(transactionItemId)))
+          .getSingleOrNull();
+      if (item == null || item.transactionId != txId) return;
+
+      final clampedQty = newQty.clamp(0.0, item.qty);
+      final now = DateTime.now();
+
+      // Qty berkurang (termasuk ke 0 = hapus) → stok yang tidak jadi
+      // terjual dikembalikan, sama seperti retur nota belum lunas.
+      final qtyReduced = item.qty - clampedQty;
+      if (qtyReduced > 0) {
+        await _appendStock(
+          productUnitId: item.productUnitId,
+          qtyChange: qtyReduced,
+          type: 'return_in',
+          referenceId: txId,
+          kasirId: kasirId,
+          note: 'Edit item (nota belum lunas)',
+          now: now,
+        );
+      }
+
+      if (clampedQty <= 0) {
+        await (delete(transactionItems)..where((t) => t.id.equals(item.id)))
+            .go();
+      } else {
+        await (update(transactionItems)..where((t) => t.id.equals(item.id)))
+            .write(TransactionItemsCompanion(
+          qty: Value(clampedQty),
+          priceAtSale: Value(newPrice),
+          subtotal: Value((newPrice * clampedQty).round()),
+          itemNote: Value(newNote?.isEmpty ?? true ? null : newNote),
+        ));
+      }
+
+      // Jejak audit ringan (amount 0 → tidak memengaruhi dibayar).
+      await into(transactionPayments)
+          .insert(TransactionPaymentsCompanion.insert(
+        id: const Uuid().v4(),
+        transactionId: txId,
+        amount: 0,
+        method: 'edit',
+        paidAt: Value(now),
+        kasirId: Value(kasirId),
+        note: Value(clampedQty <= 0
+            ? 'Item dihapus (nota belum lunas)'
+            : 'Item diubah (nota belum lunas)'),
+      ));
+
+      await _reconcileTransactionTotals(txId);
+
+      // Sama seperti returnUnpaidTransactionItems: nota tanpa tagihan
+      // tersisa (mis. item terakhir dihapus) tidak boleh tetap "menggantung".
+      final after = await (select(transactions)
+            ..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (after != null && after.total <= 0 && after.status != 'lunas') {
+        await (update(transactions)..where((t) => t.id.equals(txId))).write(
+            const TransactionsCompanion(
+                status: Value('lunas'), changeAmount: Value(0)));
+      }
+
+      await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
+    });
+  }
+
   // ───────────────────────── Customer debt ─────────────────────────
 
   /// Buku hutang: pelanggan dengan nota belum lunas, diurut dari yang paling
@@ -1693,7 +1811,8 @@ class AppDatabase extends _$AppDatabase {
       final changeSum = transactionPayments.changeGiven.sum();
       final sumRow = await (selectOnly(transactionPayments)
             ..addColumns([changeSum])
-            ..where(transactionPayments.transactionId.equals(txId)))
+            ..where(transactionPayments.transactionId.equals(txId) &
+                transactionPayments.voided.equals(false)))
           .getSingle();
       final sumChangeGiven = sumRow.read(changeSum) ?? 0;
       final newPaid = tx.paid + amount;
@@ -1708,6 +1827,29 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
       return changeGiven;
+    });
+  }
+
+  /// "Batalkan Pembayaran" — membatalkan SATU baris pembayaran. Baris TETAP
+  /// tersimpan (jejak audit "pernah dibayar, lalu dibatalkan"), tapi
+  /// `paid`/status nota dihitung ulang seolah baris itu tidak pernah ada.
+  /// Item & stok TIDAK disentuh (beda dari void transaksi/`voidTransaction`
+  /// yang membatalkan SELURUH nota). Nota `void` / baris sudah dibatalkan /
+  /// tidak ditemukan → tidak melakukan apa pun.
+  Future<void> voidPayment(String paymentId) async {
+    await transaction(() async {
+      final pay = await (select(transactionPayments)
+            ..where((t) => t.id.equals(paymentId)))
+          .getSingleOrNull();
+      if (pay == null || pay.voided) return;
+      final tx = await (select(transactions)
+            ..where((t) => t.id.equals(pay.transactionId)))
+          .getSingleOrNull();
+      if (tx == null || tx.status == 'void') return;
+
+      await (update(transactionPayments)..where((t) => t.id.equals(paymentId)))
+          .write(const TransactionPaymentsCompanion(voided: Value(true)));
+      await _reconcileTransactionTotals(pay.transactionId);
     });
   }
 

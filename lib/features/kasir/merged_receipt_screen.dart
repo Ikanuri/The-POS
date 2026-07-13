@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -12,6 +13,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'receipt_screen.dart' show netPaidDisplay, netRemainingOwed;
 
 /// Struk gabungan beberapa nota (gabung nota). Tampilan murni baca: item
 /// ditampilkan terpisah per nota, dengan total akumulatif di bawah. Bisa
@@ -29,6 +31,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   bool _loading = true;
   List<Transaction> _txs = [];
   Map<String, List<TransactionItem>> _itemsByTx = {};
+  Map<String, List<TransactionPayment>> _paymentsByTx = {};
   Map<String, String> _productNames = {};
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {};
@@ -130,6 +133,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
       setState(() {
         _txs = txs;
         _itemsByTx = itemsByTx;
+        _paymentsByTx = paymentsByTx;
         _productNames = productNames;
         _unitNames = unitNames;
         _parentOf = parentOf;
@@ -149,7 +153,33 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   }
 
   int get _grandTotal => _txs.fold(0, (s, t) => s + t.total);
-  int get _grandPaid => _txs.fold(0, (s, t) => s + t.paid);
+
+  /// Terbayar NET (dikurangi kembalian per nota, sama pola dengan
+  /// `netPaidDisplay` di receipt_screen.dart) — BUKAN `Σ tx.paid` mentah,
+  /// yang bisa menghitung dobel kembalian yang dipakai ulang sbg pembayaran
+  /// baru (akar masalah Item 23, sebelumnya belum ikut diperbaiki di sini).
+  int get _grandPaid => _txs.fold(
+      0, (s, t) => s + netPaidDisplay(t, _paymentsByTx[t.id] ?? const []));
+
+  /// Sisa NET, dijumlah per nota (masing-masing sudah di-clamp ≥0) — supaya
+  /// TOTAL = Terbayar + Sisa tetap konsisten & tidak pernah muncul angka
+  /// negatif yang membingungkan ("SISA Rp -31.400").
+  int get _grandSisa => _txs.fold(
+      0, (s, t) => s + netRemainingOwed(t, _paymentsByTx[t.id] ?? const []));
+
+  /// Pembayaran (bukan dibatalkan) paling baru lintas semua nota yang
+  /// menghasilkan kembalian — Item 9, dipakai baris "Uang Diterima" (gross,
+  /// uang tender asli sebelum dikurangi kembalian).
+  TransactionPayment? get _latestPaymentWithChange {
+    TransactionPayment? latest;
+    for (final list in _paymentsByTx.values) {
+      for (final p in list) {
+        if (p.voided || p.changeGiven <= 0) continue;
+        if (latest == null || p.paidAt.isAfter(latest.paidAt)) latest = p;
+      }
+    }
+    return latest;
+  }
 
   Future<void> _print() async {
     final mac = await PrinterService.getSavedMac();
@@ -167,6 +197,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
     final ok = await PrinterService.printMergedReceipt(
       txs: _txs,
       itemsByTx: _itemsByTx,
+      paymentsByTx: _paymentsByTx,
       productNames: _productNames,
       unitNames: _unitNames,
       customerName: _customerName,
@@ -243,6 +274,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
                 child: _MergedReceiptPaper(
                   txs: _txs,
                   itemsByTx: _itemsByTx,
+                  paymentsByTx: _paymentsByTx,
                   productNames: _productNames,
                   unitNames: _unitNames,
                   parentOf: _parentOf,
@@ -257,6 +289,8 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
                   receiptHeader: _receiptHeader,
                   grandTotal: _grandTotal,
                   grandPaid: _grandPaid,
+                  grandSisa: _grandSisa,
+                  latestPaymentWithChange: _latestPaymentWithChange,
                   lastPaymentAt: _lastPaymentAt,
                 ),
               ),
@@ -274,6 +308,7 @@ class _MergedReceiptPaper extends StatelessWidget {
   const _MergedReceiptPaper({
     required this.txs,
     required this.itemsByTx,
+    required this.paymentsByTx,
     required this.productNames,
     required this.unitNames,
     required this.parentOf,
@@ -288,11 +323,14 @@ class _MergedReceiptPaper extends StatelessWidget {
     required this.receiptHeader,
     required this.grandTotal,
     required this.grandPaid,
+    required this.grandSisa,
+    required this.latestPaymentWithChange,
     required this.lastPaymentAt,
   });
 
   final List<Transaction> txs;
   final Map<String, List<TransactionItem>> itemsByTx;
+  final Map<String, List<TransactionPayment>> paymentsByTx;
   final Map<String, String> productNames;
   final Map<String, String> unitNames;
   final Map<String, String?> parentOf;
@@ -307,11 +345,15 @@ class _MergedReceiptPaper extends StatelessWidget {
   final String receiptHeader;
   final int grandTotal;
   final int grandPaid;
+  final int grandSisa;
+  final TransactionPayment? latestPaymentWithChange;
   final DateTime? lastPaymentAt;
 
   static const _ink = Color(0xFF111111);
-  static const _mono = TextStyle(
-      fontFamily: 'monospace', fontSize: 12, color: _ink, height: 1.4);
+  // Item 7 — pin font eksplisit, sama alasan dgn receipt_screen.dart
+  // (fontFamily: 'monospace' generik resolve beda-beda per device).
+  static TextStyle get _mono =>
+      GoogleFonts.robotoMono(fontSize: 12, color: _ink, height: 1.4);
 
   TransactionItem? _parentItemOf(
       TransactionItem item, List<TransactionItem> items) {
@@ -338,7 +380,6 @@ class _MergedReceiptPaper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final grandSisa = grandTotal - grandPaid;
     return Container(
       width: 300,
       color: Colors.white,
@@ -381,7 +422,10 @@ class _MergedReceiptPaper extends StatelessWidget {
           // ── Per nota (terpisah) ──────────────────────────────────────────
           ...txs.expand((tx) {
             final items = itemsByTx[tx.id] ?? const <TransactionItem>[];
-            final sisa = tx.total - tx.paid;
+            // NET (dikurangi kembalian, sudah di-clamp ≥0) — bukan
+            // `tx.total - tx.paid` mentah, yang bisa jadi negatif/understate
+            // kalau kembalian dipakai ulang sbg pembayaran (Item 23).
+            final sisa = netRemainingOwed(tx, paymentsByTx[tx.id] ?? const []);
             final date = _fmtDateTime(tx.createdAt);
             final empName =
                 (showEmployee ? tx.employeeName?.trim() : null) ?? '';
@@ -440,7 +484,7 @@ class _MergedReceiptPaper extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Subtotal nota', style: _mono),
+                  Text('Subtotal nota', style: _mono),
                   Text('Rp ${_fmtNum(tx.total)}',
                       style: _mono.copyWith(fontWeight: FontWeight.w700)),
                 ],
@@ -449,7 +493,7 @@ class _MergedReceiptPaper extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('  Sisa', style: _mono),
+                    Text('  Sisa', style: _mono),
                     Text('Rp ${_fmtNum(sisa)}', style: _mono),
                   ],
                 ),
@@ -472,10 +516,31 @@ class _MergedReceiptPaper extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Terbayar', style: _mono),
+              Text('Terbayar', style: _mono),
               Text('Rp ${_fmtNum(grandPaid)}', style: _mono),
             ],
           ),
+          // Item 9 — uang tender ASLI (gross) dari pembayaran terakhir yang
+          // menghasilkan kembalian, supaya tidak membingungkan pembeli yang
+          // kasih lebih dari tagihan gabungan.
+          if (latestPaymentWithChange != null)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Uang Diterima', style: _mono),
+                Text('Rp ${_fmtNum(latestPaymentWithChange!.amount)}',
+                    style: _mono),
+              ],
+            ),
+          if (latestPaymentWithChange != null)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Kembalian', style: _mono),
+                Text('Rp ${_fmtNum(latestPaymentWithChange!.changeGiven)}',
+                    style: _mono),
+              ],
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -532,10 +597,8 @@ class _DashedLine extends StatelessWidget {
             List.filled(count, '-').join(),
             maxLines: 1,
             overflow: TextOverflow.clip,
-            style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                color: Color(0xFF777777)),
+            style: GoogleFonts.robotoMono(
+                fontSize: 12, color: const Color(0xFF777777)),
           );
         },
       ),

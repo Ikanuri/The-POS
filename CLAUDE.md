@@ -49,6 +49,15 @@ lib/
   `getTopProductsByRevenue`, `getCategoryNamesForProducts`).
 - **Katalog tersimpan** disimpan sebagai blob JSON di tabel settings
   (key `saved_catalogs`) — tanpa migrasi DB.
+- **Gerbang lisensi (Item 25c)**: state (`license_provider.dart`) di
+  SharedPreferences (BUKAN tabel settings DB) — harus bisa dicek SEBELUM
+  `/setup` (device belum configured, DB belum bisa dibuka). Redirect di
+  `app_router.dart` dicek PALING AWAL, sebelum `/setup`. Verifikasi
+  kriptografi (`license_service.dart`) Ed25519 murni-Dart (`cryptography`
+  pkg) — public key developer di `LicenseService.publicKeyBase64` KOSONG
+  = gerbang nonaktif total (kill-switch aman, jangan hapus guard ini).
+  Alat generator kode aktivasi = `scripts/license-generator.html` (offline,
+  Web Crypto API, TIDAK disentuh dari app).
 
 ## Konvensi Kode
 

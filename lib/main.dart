@@ -8,9 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 
 import 'core/providers/device_provider.dart';
+import 'core/providers/license_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/services/crash_log_service.dart';
+import 'core/services/temp_share_cleanup.dart';
 import 'core/theme/app_theme.dart';
 import 'features/kasir/cart_meta_provider.dart';
 import 'features/kasir/cart_provider.dart';
@@ -44,6 +46,9 @@ void main() {
     final container = ProviderContainer();
     // Identitas device harus dimuat sebelum router memutuskan redirect /setup.
     await container.read(deviceProvider.notifier).load();
+    // Item 25c — gerbang lisensi juga harus dimuat sebelum router memutuskan
+    // redirect /aktivasi (dicek lebih awal dari /setup, lihat app_router.dart).
+    await container.read(licenseProvider.notifier).load();
 
     runApp(
       UncontrolledProviderScope(
@@ -82,6 +87,9 @@ Future<void> _runStartupMaintenance(ProviderContainer container) async {
   await CartNotifier.cleanupOrphanCarts();
   // Metadata keranjang yatim mengikuti pembersihan keranjang di atas.
   await CartMetaNotifier.cleanupOrphanMeta();
+  // Item 8 — file gambar/HTML sementara hasil "Bagikan" yang tidak pernah
+  // dihapus sebelumnya (menumpuk di temp dir).
+  await TempShareCleanup.run();
 }
 
 class ThePosApp extends ConsumerWidget {

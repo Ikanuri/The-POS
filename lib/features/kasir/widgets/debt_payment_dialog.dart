@@ -65,14 +65,20 @@ class _DebtPaymentDialogState extends State<_DebtPaymentDialog> {
         text: widget.prefillRemaining
             ? ThousandsSeparatorFormatter.format(widget.remaining)
             : '');
+    // Item 11 — tombol Bayar nyala/mati ikut isi field (persis kalkulator
+    // di modal checkout), butuh rebuild tiap ketikan.
+    _ctrl.addListener(_onAmountChanged);
     if (widget.methods.isNotEmpty) {
       final tunai = widget.methods.where((m) => m.type == 'tunai').firstOrNull;
       _selectedId = (tunai ?? widget.methods.first).id;
     }
   }
 
+  void _onAmountChanged() => setState(() {});
+
   @override
   void dispose() {
+    _ctrl.removeListener(_onAmountChanged);
     _ctrl.dispose();
     super.dispose();
   }
@@ -102,16 +108,6 @@ class _DebtPaymentDialogState extends State<_DebtPaymentDialog> {
             decoration: const InputDecoration(
                 prefixText: 'Rp ', border: OutlineInputBorder()),
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ActionChip(
-              avatar: const Icon(Icons.check_circle_outline, size: 16),
-              label: const Text('Uang Pas'),
-              onPressed: () => setState(() => _ctrl.text =
-                  ThousandsSeparatorFormatter.format(widget.remaining)),
-            ),
-          ),
           if (widget.methods.length > 1) ...[
             const SizedBox(height: 14),
             Text('Metode bayar',
@@ -140,12 +136,22 @@ class _DebtPaymentDialogState extends State<_DebtPaymentDialog> {
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Batal')),
+        // Item 11 — "Uang Pas" di kiri (sekunder), "Bayar" di kanan (primer),
+        // sama pola dgn modal checkout (payment_screen.dart).
+        OutlinedButton(
+          onPressed: () => setState(() => _ctrl.text =
+              ThousandsSeparatorFormatter.format(widget.remaining)),
+          child: const Text('Uang Pas'),
+        ),
         FilledButton(
-          onPressed: () {
-            final amount = ThousandsSeparatorFormatter.parseValue(_ctrl.text);
-            Navigator.of(context)
-                .pop((amount: amount, method: _selectedType));
-          },
+          onPressed: ThousandsSeparatorFormatter.parseValue(_ctrl.text) <= 0
+              ? null
+              : () {
+                  final amount =
+                      ThousandsSeparatorFormatter.parseValue(_ctrl.text);
+                  Navigator.of(context)
+                      .pop((amount: amount, method: _selectedType));
+                },
           child: const Text('Bayar'),
         ),
       ],

@@ -27,6 +27,8 @@ void main() {
     ''');
     // products diperlukan agar migrasi v14 (addColumn marked_out_of_stock) tak gagal.
     v12.execute('CREATE TABLE products(id TEXT PRIMARY KEY);');
+    // transactions diperlukan agar migrasi v15 (addColumn checked_item_ids) tak gagal.
+    v12.execute('CREATE TABLE transactions(id TEXT PRIMARY KEY);');
     v12.execute(
         "INSERT INTO transaction_payments(id, transaction_id, amount, method, paid_at) "
         "VALUES('p1','tx1',50000,'tunai',1700000000)");
@@ -52,7 +54,7 @@ void main() {
     expect(p.amount, 50000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 14);
+    expect(ver.data.values.first, 15);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

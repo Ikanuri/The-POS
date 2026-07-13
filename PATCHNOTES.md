@@ -32,8 +32,40 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (mis. "yang matang", "warna merah") — tidak cuma catatan umum untuk
   seluruh pesanan seperti sebelumnya. Catatan ini otomatis ikut ke
   keranjang & struk begitu kasir tempel pesanannya.
+- **Katalog online: tap produk untuk pilih varian/harga/catatan.**
+  Sebelumnya varian produk cuma bisa dibuka lewat tombol panah kecil yang
+  di sebagian HP tidak responsif disentuh. Sekarang seluruh baris produk
+  bisa langsung ditap untuk buka jendela pilihan — pilih ukuran/varian,
+  atur harga kalau perlu nego khusus, dan isi catatan, semua di satu
+  tempat. Barang yang sudah dipilih sekarang juga bisa ditap lagi di
+  keranjang untuk diubah tanpa perlu hapus & pilih ulang dari awal.
+- **Batalkan Pembayaran.** Kalau ada pembayaran yang salah dicatat, kasir
+  sekarang bisa membatalkannya langsung dari layar struk (dengan
+  konfirmasi) — catatan pembayaran itu tetap tersimpan sebagai riwayat
+  (ditandai "Dibatalkan"), tidak dihapus, jadi tetap ada jejaknya.
+- **Ubah/hapus barang di struk yang belum lunas.** Selama nota masih
+  berstatus kurang bayar (atau pembayarannya baru dibatalkan), kasir bisa
+  tap barang di daftar struk untuk mengubah harga/jumlah/catatannya, atau
+  menghapusnya — tanpa perlu buat nota baru dari awal.
+- **Baris "Uang Diterima" di struk.** Kalau pelanggan bayar lebih dari
+  tagihan (ada kembalian), struk sekarang menampilkan baris terpisah
+  "Uang Diterima" yang menunjukkan jumlah uang yang benar-benar diserahkan
+  pelanggan — sebelumnya baris "Dibayar" bisa membingungkan karena
+  menampilkan angka bersih (setelah dikurangi kembalian), bukan uang yang
+  diterima.
 
 ### 🎨 Tampilan
+- **Tombol "Bayar" & "Tambah Belanjaan" kini sejajar** di layar struk
+  (dulu ditumpuk vertikal terpisah) — tombol "Bayar" juga diganti warna
+  hijau supaya lebih jelas bedanya dengan aksi lain.
+- **Tombol "Uang Pas" di modal "Tambah Bayar"/pelunasan hutang pindah ke
+  sebelah kiri tombol "Bayar"**, dan tombol "Bayar"-nya kini tidak bisa
+  dipencet selama kolom nominal masih kosong — sama seperti kalkulator
+  checkout utama.
+- Nominal harga & angka di modal keranjang kasir sekarang pakai jenis
+  huruf angka yang sama dengan layar lain di aplikasi (dulu beda font).
+  Tombol tambah/kurang jumlah barang di keranjang & baris produk juga
+  diperbesar supaya lebih mudah disentuh.
 - **Tombol "Uang Pas" pindah ke sebelah kiri tombol "Bayar"** di kalkulator
   bayar tunai — sebelumnya di atas keypad bareng pecahan uang, sekarang
   sebaris dengan "Bayar" supaya tidak salah pencet saat buru-buru.
@@ -60,6 +92,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Ditambahkan juga menu **"Log Error Terakhir"** di Pengaturan →
   Diagnostik untuk membantu penelusuran kalau ada masalah serupa di
   kemudian hari.
+- **Centang di struk (verifikasi barang diserahkan) sekarang tersimpan
+  permanen** — sebelumnya kalau struk ditutup lalu dibuka lagi, semua
+  centang hilang dan harus dicentang ulang dari nol.
+- **Retur barang seharga Rp0 (mis. promo/bonus) sekarang bisa diproses**
+  — sebelumnya gagal karena dianggap tidak valid.
+- **"Sisa" di nota gabungan (struk pelanggan yang punya beberapa
+  transaksi digabung jadi satu) tidak lagi tampil minus/salah hitung**
+  saat kembalian sebelumnya dipakai lagi sebagai pembayaran — baik di
+  layar, gambar yang dibagikan, maupun struk cetak fisik.
+- **Tulisan di struk yang dibagikan lewat WhatsApp/dll kini tampil sama
+  persis di semua HP** — sebelumnya jenis hurufnya bisa beda antara HP
+  dan tablet karena mengikuti font bawaan tiap perangkat.
+- **Harga di bawah nama produk (tab Produk) kini langsung ter-update**
+  begitu harga produk itu diubah dari layar lain — sebelumnya harus
+  keluar-masuk layar dulu supaya angkanya ikut berubah.
 
 ## 12 Juli 2026
 

@@ -3773,6 +3773,12 @@ class $TransactionsTable extends Transactions
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("change_taken" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _checkedItemIdsMeta =
+      const VerificationMeta('checkedItemIds');
+  @override
+  late final GeneratedColumn<String> checkedItemIds = GeneratedColumn<String>(
+      'checked_item_ids', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -3804,6 +3810,7 @@ class $TransactionsTable extends Transactions
         employeeName,
         pointsEarned,
         changeTaken,
+        checkedItemIds,
         createdAt,
         syncedAt
       ];
@@ -3906,6 +3913,12 @@ class $TransactionsTable extends Transactions
           changeTaken.isAcceptableOrUnknown(
               data['change_taken']!, _changeTakenMeta));
     }
+    if (data.containsKey('checked_item_ids')) {
+      context.handle(
+          _checkedItemIdsMeta,
+          checkedItemIds.isAcceptableOrUnknown(
+              data['checked_item_ids']!, _checkedItemIdsMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -3953,6 +3966,8 @@ class $TransactionsTable extends Transactions
           .read(DriftSqlType.int, data['${effectivePrefix}points_earned'])!,
       changeTaken: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}change_taken'])!,
+      checkedItemIds: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}checked_item_ids']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       syncedAt: attachedDatabase.typeMapping
@@ -3997,6 +4012,12 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   /// per-perangkat (tidak ikut sync — sama seperti edit strukNote/
   /// internalNote setelah nota dibuat).
   final bool changeTaken;
+
+  /// ID baris `transaction_items` yang sudah dicentang "diverifikasi/
+  /// diserahkan" di struk in-app — JSON array of String. null/kosong =
+  /// belum ada yang dicentang. Murni per-perangkat (tidak ikut sync — sama
+  /// seperti `changeTaken`/`internalNote` setelah nota dibuat).
+  final String? checkedItemIds;
   final DateTime createdAt;
   final DateTime? syncedAt;
   const Transaction(
@@ -4015,6 +4036,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       this.employeeName,
       required this.pointsEarned,
       required this.changeTaken,
+      this.checkedItemIds,
       required this.createdAt,
       this.syncedAt});
   @override
@@ -4047,6 +4069,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     }
     map['points_earned'] = Variable<int>(pointsEarned);
     map['change_taken'] = Variable<bool>(changeTaken);
+    if (!nullToAbsent || checkedItemIds != null) {
+      map['checked_item_ids'] = Variable<String>(checkedItemIds);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || syncedAt != null) {
       map['synced_at'] = Variable<DateTime>(syncedAt);
@@ -4083,6 +4108,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           : Value(employeeName),
       pointsEarned: Value(pointsEarned),
       changeTaken: Value(changeTaken),
+      checkedItemIds: checkedItemIds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(checkedItemIds),
       createdAt: Value(createdAt),
       syncedAt: syncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -4109,6 +4137,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       employeeName: serializer.fromJson<String?>(json['employeeName']),
       pointsEarned: serializer.fromJson<int>(json['pointsEarned']),
       changeTaken: serializer.fromJson<bool>(json['changeTaken']),
+      checkedItemIds: serializer.fromJson<String?>(json['checkedItemIds']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
     );
@@ -4132,6 +4161,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'employeeName': serializer.toJson<String?>(employeeName),
       'pointsEarned': serializer.toJson<int>(pointsEarned),
       'changeTaken': serializer.toJson<bool>(changeTaken),
+      'checkedItemIds': serializer.toJson<String?>(checkedItemIds),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
     };
@@ -4153,6 +4183,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           Value<String?> employeeName = const Value.absent(),
           int? pointsEarned,
           bool? changeTaken,
+          Value<String?> checkedItemIds = const Value.absent(),
           DateTime? createdAt,
           Value<DateTime?> syncedAt = const Value.absent()}) =>
       Transaction(
@@ -4174,6 +4205,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
             employeeName.present ? employeeName.value : this.employeeName,
         pointsEarned: pointsEarned ?? this.pointsEarned,
         changeTaken: changeTaken ?? this.changeTaken,
+        checkedItemIds:
+            checkedItemIds.present ? checkedItemIds.value : this.checkedItemIds,
         createdAt: createdAt ?? this.createdAt,
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
       );
@@ -4208,6 +4241,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           : this.pointsEarned,
       changeTaken:
           data.changeTaken.present ? data.changeTaken.value : this.changeTaken,
+      checkedItemIds: data.checkedItemIds.present
+          ? data.checkedItemIds.value
+          : this.checkedItemIds,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
     );
@@ -4231,6 +4267,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('employeeName: $employeeName, ')
           ..write('pointsEarned: $pointsEarned, ')
           ..write('changeTaken: $changeTaken, ')
+          ..write('checkedItemIds: $checkedItemIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
           ..write(')'))
@@ -4254,6 +4291,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       employeeName,
       pointsEarned,
       changeTaken,
+      checkedItemIds,
       createdAt,
       syncedAt);
   @override
@@ -4275,6 +4313,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.employeeName == this.employeeName &&
           other.pointsEarned == this.pointsEarned &&
           other.changeTaken == this.changeTaken &&
+          other.checkedItemIds == this.checkedItemIds &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt);
 }
@@ -4295,6 +4334,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String?> employeeName;
   final Value<int> pointsEarned;
   final Value<bool> changeTaken;
+  final Value<String?> checkedItemIds;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
   final Value<int> rowid;
@@ -4314,6 +4354,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.employeeName = const Value.absent(),
     this.pointsEarned = const Value.absent(),
     this.changeTaken = const Value.absent(),
+    this.checkedItemIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4334,6 +4375,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.employeeName = const Value.absent(),
     this.pointsEarned = const Value.absent(),
     this.changeTaken = const Value.absent(),
+    this.checkedItemIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4360,6 +4402,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? employeeName,
     Expression<int>? pointsEarned,
     Expression<bool>? changeTaken,
+    Expression<String>? checkedItemIds,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
     Expression<int>? rowid,
@@ -4380,6 +4423,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (employeeName != null) 'employee_name': employeeName,
       if (pointsEarned != null) 'points_earned': pointsEarned,
       if (changeTaken != null) 'change_taken': changeTaken,
+      if (checkedItemIds != null) 'checked_item_ids': checkedItemIds,
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
       if (rowid != null) 'rowid': rowid,
@@ -4402,6 +4446,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       Value<String?>? employeeName,
       Value<int>? pointsEarned,
       Value<bool>? changeTaken,
+      Value<String?>? checkedItemIds,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt,
       Value<int>? rowid}) {
@@ -4421,6 +4466,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       employeeName: employeeName ?? this.employeeName,
       pointsEarned: pointsEarned ?? this.pointsEarned,
       changeTaken: changeTaken ?? this.changeTaken,
+      checkedItemIds: checkedItemIds ?? this.checkedItemIds,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
       rowid: rowid ?? this.rowid,
@@ -4475,6 +4521,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (changeTaken.present) {
       map['change_taken'] = Variable<bool>(changeTaken.value);
     }
+    if (checkedItemIds.present) {
+      map['checked_item_ids'] = Variable<String>(checkedItemIds.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4505,6 +4554,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('employeeName: $employeeName, ')
           ..write('pointsEarned: $pointsEarned, ')
           ..write('changeTaken: $changeTaken, ')
+          ..write('checkedItemIds: $checkedItemIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
           ..write('rowid: $rowid')
@@ -5201,6 +5251,15 @@ class $TransactionPaymentsTable extends TransactionPayments
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("change_taken" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _voidedMeta = const VerificationMeta('voided');
+  @override
+  late final GeneratedColumn<bool> voided = GeneratedColumn<bool>(
+      'voided', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("voided" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -5211,7 +5270,8 @@ class $TransactionPaymentsTable extends TransactionPayments
         kasirId,
         note,
         changeGiven,
-        changeTaken
+        changeTaken,
+        voided
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5272,6 +5332,10 @@ class $TransactionPaymentsTable extends TransactionPayments
           changeTaken.isAcceptableOrUnknown(
               data['change_taken']!, _changeTakenMeta));
     }
+    if (data.containsKey('voided')) {
+      context.handle(_voidedMeta,
+          voided.isAcceptableOrUnknown(data['voided']!, _voidedMeta));
+    }
     return context;
   }
 
@@ -5299,6 +5363,8 @@ class $TransactionPaymentsTable extends TransactionPayments
           .read(DriftSqlType.int, data['${effectivePrefix}change_given'])!,
       changeTaken: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}change_taken'])!,
+      voided: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}voided'])!,
     );
   }
 
@@ -5333,6 +5399,14 @@ class TransactionPayment extends DataClass
   /// masing-masing dengan status ambil sendiri-sendiri. Murni per-perangkat
   /// (tidak ikut sync — sama seperti `Transactions.changeTaken`).
   final bool changeTaken;
+
+  /// true bila pembayaran ini DIBATALKAN (fitur "Batalkan Pembayaran") —
+  /// baris TETAP tersimpan sbg jejak audit (kapan pernah dibayar, lalu
+  /// dibatalkan), tapi TIDAK ikut dihitung ke `Transactions.paid`/status
+  /// nota. Beda dari void transaksi (`Transactions.status = 'void'`, yang
+  /// membatalkan SELURUH nota + stok + poin) — ini murni membatalkan SATU
+  /// baris pembayaran, item & stok tidak tersentuh.
+  final bool voided;
   const TransactionPayment(
       {required this.id,
       required this.transactionId,
@@ -5342,7 +5416,8 @@ class TransactionPayment extends DataClass
       this.kasirId,
       this.note,
       required this.changeGiven,
-      required this.changeTaken});
+      required this.changeTaken,
+      required this.voided});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -5359,6 +5434,7 @@ class TransactionPayment extends DataClass
     }
     map['change_given'] = Variable<int>(changeGiven);
     map['change_taken'] = Variable<bool>(changeTaken);
+    map['voided'] = Variable<bool>(voided);
     return map;
   }
 
@@ -5375,6 +5451,7 @@ class TransactionPayment extends DataClass
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
       changeGiven: Value(changeGiven),
       changeTaken: Value(changeTaken),
+      voided: Value(voided),
     );
   }
 
@@ -5391,6 +5468,7 @@ class TransactionPayment extends DataClass
       note: serializer.fromJson<String?>(json['note']),
       changeGiven: serializer.fromJson<int>(json['changeGiven']),
       changeTaken: serializer.fromJson<bool>(json['changeTaken']),
+      voided: serializer.fromJson<bool>(json['voided']),
     );
   }
   @override
@@ -5406,6 +5484,7 @@ class TransactionPayment extends DataClass
       'note': serializer.toJson<String?>(note),
       'changeGiven': serializer.toJson<int>(changeGiven),
       'changeTaken': serializer.toJson<bool>(changeTaken),
+      'voided': serializer.toJson<bool>(voided),
     };
   }
 
@@ -5418,7 +5497,8 @@ class TransactionPayment extends DataClass
           Value<String?> kasirId = const Value.absent(),
           Value<String?> note = const Value.absent(),
           int? changeGiven,
-          bool? changeTaken}) =>
+          bool? changeTaken,
+          bool? voided}) =>
       TransactionPayment(
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
@@ -5429,6 +5509,7 @@ class TransactionPayment extends DataClass
         note: note.present ? note.value : this.note,
         changeGiven: changeGiven ?? this.changeGiven,
         changeTaken: changeTaken ?? this.changeTaken,
+        voided: voided ?? this.voided,
       );
   TransactionPayment copyWithCompanion(TransactionPaymentsCompanion data) {
     return TransactionPayment(
@@ -5445,6 +5526,7 @@ class TransactionPayment extends DataClass
           data.changeGiven.present ? data.changeGiven.value : this.changeGiven,
       changeTaken:
           data.changeTaken.present ? data.changeTaken.value : this.changeTaken,
+      voided: data.voided.present ? data.voided.value : this.voided,
     );
   }
 
@@ -5459,14 +5541,15 @@ class TransactionPayment extends DataClass
           ..write('kasirId: $kasirId, ')
           ..write('note: $note, ')
           ..write('changeGiven: $changeGiven, ')
-          ..write('changeTaken: $changeTaken')
+          ..write('changeTaken: $changeTaken, ')
+          ..write('voided: $voided')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, transactionId, amount, method, paidAt,
-      kasirId, note, changeGiven, changeTaken);
+      kasirId, note, changeGiven, changeTaken, voided);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5479,7 +5562,8 @@ class TransactionPayment extends DataClass
           other.kasirId == this.kasirId &&
           other.note == this.note &&
           other.changeGiven == this.changeGiven &&
-          other.changeTaken == this.changeTaken);
+          other.changeTaken == this.changeTaken &&
+          other.voided == this.voided);
 }
 
 class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
@@ -5492,6 +5576,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
   final Value<String?> note;
   final Value<int> changeGiven;
   final Value<bool> changeTaken;
+  final Value<bool> voided;
   final Value<int> rowid;
   const TransactionPaymentsCompanion({
     this.id = const Value.absent(),
@@ -5503,6 +5588,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.note = const Value.absent(),
     this.changeGiven = const Value.absent(),
     this.changeTaken = const Value.absent(),
+    this.voided = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionPaymentsCompanion.insert({
@@ -5515,6 +5601,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.note = const Value.absent(),
     this.changeGiven = const Value.absent(),
     this.changeTaken = const Value.absent(),
+    this.voided = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         transactionId = Value(transactionId),
@@ -5530,6 +5617,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     Expression<String>? note,
     Expression<int>? changeGiven,
     Expression<bool>? changeTaken,
+    Expression<bool>? voided,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5542,6 +5630,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       if (note != null) 'note': note,
       if (changeGiven != null) 'change_given': changeGiven,
       if (changeTaken != null) 'change_taken': changeTaken,
+      if (voided != null) 'voided': voided,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5556,6 +5645,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       Value<String?>? note,
       Value<int>? changeGiven,
       Value<bool>? changeTaken,
+      Value<bool>? voided,
       Value<int>? rowid}) {
     return TransactionPaymentsCompanion(
       id: id ?? this.id,
@@ -5567,6 +5657,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       note: note ?? this.note,
       changeGiven: changeGiven ?? this.changeGiven,
       changeTaken: changeTaken ?? this.changeTaken,
+      voided: voided ?? this.voided,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5601,6 +5692,9 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     if (changeTaken.present) {
       map['change_taken'] = Variable<bool>(changeTaken.value);
     }
+    if (voided.present) {
+      map['voided'] = Variable<bool>(voided.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5619,6 +5713,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
           ..write('note: $note, ')
           ..write('changeGiven: $changeGiven, ')
           ..write('changeTaken: $changeTaken, ')
+          ..write('voided: $voided, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -13663,6 +13758,7 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   Value<String?> employeeName,
   Value<int> pointsEarned,
   Value<bool> changeTaken,
+  Value<String?> checkedItemIds,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<int> rowid,
@@ -13684,6 +13780,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<String?> employeeName,
   Value<int> pointsEarned,
   Value<bool> changeTaken,
+  Value<String?> checkedItemIds,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<int> rowid,
@@ -13782,6 +13879,10 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<bool> get changeTaken => $composableBuilder(
       column: $table.changeTaken, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get checkedItemIds => $composableBuilder(
+      column: $table.checkedItemIds,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -13892,6 +13993,10 @@ class $$TransactionsTableOrderingComposer
   ColumnOrderings<bool> get changeTaken => $composableBuilder(
       column: $table.changeTaken, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get checkedItemIds => $composableBuilder(
+      column: $table.checkedItemIds,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -13952,6 +14057,9 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<bool> get changeTaken => $composableBuilder(
       column: $table.changeTaken, builder: (column) => column);
+
+  GeneratedColumn<String> get checkedItemIds => $composableBuilder(
+      column: $table.checkedItemIds, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -14043,6 +14151,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String?> employeeName = const Value.absent(),
             Value<int> pointsEarned = const Value.absent(),
             Value<bool> changeTaken = const Value.absent(),
+            Value<String?> checkedItemIds = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -14063,6 +14172,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             employeeName: employeeName,
             pointsEarned: pointsEarned,
             changeTaken: changeTaken,
+            checkedItemIds: checkedItemIds,
             createdAt: createdAt,
             syncedAt: syncedAt,
             rowid: rowid,
@@ -14083,6 +14193,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String?> employeeName = const Value.absent(),
             Value<int> pointsEarned = const Value.absent(),
             Value<bool> changeTaken = const Value.absent(),
+            Value<String?> checkedItemIds = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -14103,6 +14214,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             employeeName: employeeName,
             pointsEarned: pointsEarned,
             changeTaken: changeTaken,
+            checkedItemIds: checkedItemIds,
             createdAt: createdAt,
             syncedAt: syncedAt,
             rowid: rowid,
@@ -14564,6 +14676,7 @@ typedef $$TransactionPaymentsTableCreateCompanionBuilder
   Value<String?> note,
   Value<int> changeGiven,
   Value<bool> changeTaken,
+  Value<bool> voided,
   Value<int> rowid,
 });
 typedef $$TransactionPaymentsTableUpdateCompanionBuilder
@@ -14577,6 +14690,7 @@ typedef $$TransactionPaymentsTableUpdateCompanionBuilder
   Value<String?> note,
   Value<int> changeGiven,
   Value<bool> changeTaken,
+  Value<bool> voided,
   Value<int> rowid,
 });
 
@@ -14632,6 +14746,9 @@ class $$TransactionPaymentsTableFilterComposer
   ColumnFilters<bool> get changeTaken => $composableBuilder(
       column: $table.changeTaken, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<bool> get voided => $composableBuilder(
+      column: $table.voided, builder: (column) => ColumnFilters(column));
+
   $$TransactionsTableFilterComposer get transactionId {
     final $$TransactionsTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -14686,6 +14803,9 @@ class $$TransactionPaymentsTableOrderingComposer
   ColumnOrderings<bool> get changeTaken => $composableBuilder(
       column: $table.changeTaken, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get voided => $composableBuilder(
+      column: $table.voided, builder: (column) => ColumnOrderings(column));
+
   $$TransactionsTableOrderingComposer get transactionId {
     final $$TransactionsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -14739,6 +14859,9 @@ class $$TransactionPaymentsTableAnnotationComposer
 
   GeneratedColumn<bool> get changeTaken => $composableBuilder(
       column: $table.changeTaken, builder: (column) => column);
+
+  GeneratedColumn<bool> get voided =>
+      $composableBuilder(column: $table.voided, builder: (column) => column);
 
   $$TransactionsTableAnnotationComposer get transactionId {
     final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
@@ -14796,6 +14919,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<String?> note = const Value.absent(),
             Value<int> changeGiven = const Value.absent(),
             Value<bool> changeTaken = const Value.absent(),
+            Value<bool> voided = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion(
@@ -14808,6 +14932,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             note: note,
             changeGiven: changeGiven,
             changeTaken: changeTaken,
+            voided: voided,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -14820,6 +14945,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<String?> note = const Value.absent(),
             Value<int> changeGiven = const Value.absent(),
             Value<bool> changeTaken = const Value.absent(),
+            Value<bool> voided = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion.insert(
@@ -14832,6 +14958,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             note: note,
             changeGiven: changeGiven,
             changeTaken: changeTaken,
+            voided: voided,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
