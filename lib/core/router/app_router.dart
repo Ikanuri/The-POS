@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/aktivasi/aktivasi_screen.dart';
 import '../../features/produk/barcode_screen.dart';
 import '../../features/kasir/kasir_screen.dart';
 import '../../features/kasir/payment_screen.dart';
@@ -38,11 +39,22 @@ import '../../features/setup/setup_toko_screen.dart';
 import '../../features/setup/welcome_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../providers/device_provider.dart';
+import '../providers/license_provider.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/kasir',
     redirect: (context, state) {
+      // Item 25c — gerbang lisensi diperiksa PALING AWAL, bahkan sebelum
+      // /setup (copy salinan tanpa izin tidak boleh sempat sampai ke
+      // setup toko sama sekali). Kalau public key belum ditanam
+      // (LicenseService.isConfigured == false), isLocked selalu false —
+      // gerbang ini nonaktif total, tidak memengaruhi siapa pun.
+      final license = ref.read(licenseProvider);
+      final inAktivasi = state.matchedLocation.startsWith('/aktivasi');
+      if (license.isLocked && !inAktivasi) return '/aktivasi';
+      if (!license.isLocked && inAktivasi) return '/kasir';
+
       final device = ref.read(deviceProvider);
       final inSetup = state.matchedLocation.startsWith('/setup');
       if (!device.isConfigured && !inSetup) return '/setup';
@@ -53,6 +65,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/aktivasi',
+        builder: (_, __) => const AktivasiScreen(),
+      ),
       GoRoute(
         path: '/setup',
         builder: (_, __) => const WelcomeScreen(),

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 
 import 'core/providers/device_provider.dart';
+import 'core/providers/license_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/services/crash_log_service.dart';
@@ -44,6 +45,9 @@ void main() {
     final container = ProviderContainer();
     // Identitas device harus dimuat sebelum router memutuskan redirect /setup.
     await container.read(deviceProvider.notifier).load();
+    // Item 25c — gerbang lisensi juga harus dimuat sebelum router memutuskan
+    // redirect /aktivasi (dicek lebih awal dari /setup, lihat app_router.dart).
+    await container.read(licenseProvider.notifier).load();
 
     runApp(
       UncontrolledProviderScope(

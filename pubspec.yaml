@@ -25,6 +25,7 @@ dependencies:
   # Crypto
   encrypt: ^5.0.0
   crypto: ^3.0.3
+  cryptography: ^2.9.0
 
   # Barcode & QR
   mobile_scanner: ^5.2.0
