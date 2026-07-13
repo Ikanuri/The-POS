@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `9633e7d` — fix: tombol Uang Pas/Bayar hilang di modal Tambah Bayar layar sempit + judul jadi "Bayar"
 - `2090d40` — feat: checklist verifikasi + stepper senada di keranjang kasir
 - `9fec89e` — fix: tombol modal Tambah Bayar tidak sejajar (overflow ke kolom)
 - `6564852` — feat: katalog HTML — modal tap-item ganti dropdown varian (pilih satuan/harga custom/catatan)

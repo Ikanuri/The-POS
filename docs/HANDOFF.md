@@ -5,24 +5,48 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 13 Juli 2026 (lanjutan lagi). Sesi ini: fix bug tombol
-modal "Tambah Bayar" belum sejajar (`9fec89e`) + fitur checklist verifikasi
-barang di keranjang kasir + stepper senada kartu produk (`2090d40`). Full
-`flutter test`: **326 test hijau** (318 lama + 8 baru), `flutter analyze`
-bersih. **schemaVersion masih 15** (tidak ada migrasi baru sesi ini —
-checklist keranjang murni SharedPreferences, `checkedItemIds` transaksi
-kolom lama dipakai ulang)._
+modal "Tambah Bayar" (2 iterasi — `9fec89e` lalu `9633e7d`, lihat catatan
+di bawah, PENTING dibaca kalau ada laporan bug tombol serupa lagi) + fitur
+checklist verifikasi barang di keranjang kasir + stepper senada kartu
+produk (`2090d40`). Full `flutter test`: **327 test hijau**, `flutter
+analyze` bersih. **schemaVersion masih 15** (tidak ada migrasi baru sesi
+ini — checklist keranjang murni SharedPreferences, `checkedItemIds`
+transaksi kolom lama dipakai ulang)._
+
+## Gotcha BARU — tombol lebar-penuh (Outlined/FilledButton) dalam Row di dalam AlertDialog
+
+`AppTheme` set `minimumSize: Size(double.infinity, 48)` sebagai default
+utk `OutlinedButtonThemeData`/`FilledButtonThemeData` (utk tombol CTA
+berdiri sendiri di banyak layar). Kalau taruh 2+ tombol begini dalam SATU
+`Row` (pola umum di app ini — lihat `payment_screen.dart`), WAJIB override
+`minimumSize` ke lebar sempit (mis. `Size(0, 44)`) di style masing-masing,
+KALAU TIDAK Row akan overflow.
+
+Kasus KHUSUS di dalam `AlertDialog.content` (bukan BottomSheet/Column
+biasa): `AlertDialog` SELALU membungkus content dgn `IntrinsicWidth`
+(lihat framework `dialog.dart`), dan lebar konten yang tersedia jauh lebih
+sempit dari layar penuh (dipotong `insetPadding` + `contentPadding`
+default). **3 tombol sekaligus (mis. Batal + Uang Pas + Bayar) bisa SAMA
+SEKALI TIDAK MUAT sejajar dalam satu Row** di dialog — bukan cuma soal
+`minimumSize`, override itu SAJA TIDAK CUKUP (`debt_payment_dialog.dart`
+sempat 2× salah fix sebelum benar: iterasi 1 taruh 3 tombol dlm 1 Row +
+override minimumSize → overflow tetap terjadi, "Uang Pas"/"Bayar" hilang
+total tanpa indikasi visual apapun di HP asli). **Fix yang benar:** pisah
+tombol "Batal" ke baris sendiri (tidak berebut lebar dgn tombol lain),
+baru 2 tombol utama (mis. Uang Pas + Bayar) sebaris di bawahnya dgn
+`Expanded` pada tombol primer — persis pola `payment_screen.dart`. Kalau
+nanti nemu dialog lain dgn pola serupa (>=3 tombol custom dlm 1 Row di
+AlertDialog), curigai kelas bug yang SAMA — test widget dgn surface
+SEMPIT (`tester.binding.setSurfaceSize(const Size(360, 800))`, BUKAN
+default ~800×600 flutter_test yang terlalu lebar utk menangkap bug ini)
+utk verifikasi nyata sebelum anggap fix selesai.
 
 ## Sesi ini — fix tombol Tambah Bayar + checklist keranjang kasir
 
-**Bug tombol "Tambah Bayar" belum sejajar** (dilaporkan user via screenshot):
-akar masalahnya `debt_payment_dialog.dart` masih menaruh 3 tombol (Batal/Uang
-Pas/Bayar) di `AlertDialog.actions` bawaan — begitu tak muat sejajar,
-`OverflowBar` jatuh ke mode kolom (Batal nempel kanan sendiri, 2 tombol lain
-full-width di bawahnya). Fix sebelumnya (Item 11, 12 Juli) cuma mengubah
-URUTAN elemen di `actions`, bukan strukturnya — jadi bug ini sebenarnya sisa
-Item 11 yang belum tuntas. Diperbaiki dengan Row manual di `content`, meniru
-pola `payment_screen.dart` (modal checkout utama, yang dari awal TIDAK
-memakai `actions` bawaan makanya tidak pernah kena bug ini).
+**Bug tombol "Tambah Bayar" belum sejajar** (dilaporkan user via screenshot,
+lalu screenshot susulan menunjukkan fix pertama malah bikin tombol hilang
+total) — kronologi & akar masalah FINAL ada di section gotcha di atas,
+jangan diulang di sini.
 
 **Fitur checklist keranjang** (usulan user, disetujui setelah opini +
 riset arsitektur): keranjang kasir (`cart_sheet.dart`) sekarang punya

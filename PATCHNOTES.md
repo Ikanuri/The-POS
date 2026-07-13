@@ -116,10 +116,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Harga di bawah nama produk (tab Produk) kini langsung ter-update**
   begitu harga produk itu diubah dari layar lain — sebelumnya harus
   keluar-masuk layar dulu supaya angkanya ikut berubah.
-- **Tombol "Batal"/"Uang Pas"/"Bayar" di modal "Tambah Bayar" kini sejajar
-  rapi** — sebelumnya di beberapa ukuran layar, tombol "Batal" tampil
-  nempel sendiri di kanan atas sementara "Uang Pas" dan "Bayar" terpisah
-  di bawahnya (tidak sejajar).
+- **Modal "Tambah Bayar" dirapikan** — sebelumnya di beberapa ukuran layar
+  tombol "Batal" tampil nempel sendiri di kanan atas sementara "Uang Pas"
+  dan "Bayar" tidak sejajar (bahkan sempat hilang total di sebagian HP).
+  Sekarang "Batal" di barisnya sendiri, "Uang Pas" & "Bayar" sejajar rapi
+  di bawahnya. Judul modal ini juga disederhanakan jadi "Bayar" saja.
 
 ## 12 Juli 2026
 
