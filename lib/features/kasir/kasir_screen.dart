@@ -463,8 +463,17 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
 /// `checked` (Item 24b) — centangan verifikasi owner sebelum lanjut bayar,
 /// sejajar index dengan `items`; murni 1 device (owner), TIDAK ikut
 /// terbawa ke transaksi/struk setelah "Lanjut ke Keranjang".
-({List<CartItem> items, CartMeta meta, bool awaitingPayment, List<bool> checked})
-    _parseHeldPayload(String json) {
+/// `employeeName` (susulan Item 24d) — nama pegawai PENGIRIM handoff,
+/// disimpan TERPISAH dari `label` (yang sekarang jadi nama pelanggan)
+/// supaya keduanya bisa tampil bersamaan di `_HeldCard` (tab pegawai +
+/// judul kartu pelanggan).
+({
+  List<CartItem> items,
+  CartMeta meta,
+  bool awaitingPayment,
+  List<bool> checked,
+  String? employeeName,
+}) _parseHeldPayload(String json) {
   List<bool> parseChecked(dynamic raw, int itemCount) {
     if (raw is List && raw.length == itemCount) {
       return raw.map((e) => e == true).toList();
@@ -484,6 +493,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         meta: const CartMeta(),
         awaitingPayment: false,
         checked: List.filled(items.length, false),
+        employeeName: null,
       );
     }
     if (decoded is Map<String, dynamic>) {
@@ -497,6 +507,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
         awaitingPayment: decoded['awaitingPayment'] as bool? ?? false,
         checked: parseChecked(decoded['checked'], items.length),
+        employeeName: decoded['employeeName'] as String?,
       );
     }
   } catch (_) {/* data rusak → kosong */}
@@ -505,6 +516,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
     meta: const CartMeta(),
     awaitingPayment: false,
     checked: const <bool>[],
+    employeeName: null,
   );
 }
 
@@ -896,9 +908,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   }
 
   /// Item 24e — proses barcode yang sedang ditampung (tap-to-scan).
+  /// Langsung dikosongkan begitu diproses — bidik ditombol lagi TANPA
+  /// deteksi baru (mis. kamera diarahkan ke tempat kosong) TIDAK boleh
+  /// mengulang barang yang sama; harus ada barcode terdeteksi FRESH dulu.
   void _confirmPendingScan() {
     final code = _pendingBarcode;
     if (code == null) return;
+    setState(() => _pendingBarcode = null);
     _handleBarcode(code);
   }
 
@@ -1129,14 +1145,28 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
     final employeeName = parsed.employeeName;
     if (employeeName != null) {
+      // Item 24d/24b susulan — pelanggan (bila pegawai sempat memilih di
+      // keranjangnya) ikut lewat baris "Nama:" yang sama dgn Tempel Pesanan
+      // (lihat `encodeHandoff`). Ini ad-hoc (customerId TIDAK di-resolve —
+      // sama seperti alur Tempel Pesanan biasa), murni nama tampilan.
+      // `label` kartu antrian jadi nama PELANGGAN (bukan pegawai lagi —
+      // pegawai pengirim ditampilkan lewat tab terpisah di `_HeldCard`,
+      // lihat `employeeName` di payload).
+      final customerName = parsed.customerName;
+      final meta = (customerName != null && customerName.isNotEmpty)
+          ? CartMeta(customerName: customerName)
+          : const CartMeta();
       final payload = jsonEncode({
         'items': parsed.items.map((i) => i.toCartItem().toJson()).toList(),
-        'meta': const CartMeta().toJson(),
+        'meta': meta.toJson(),
         'awaitingPayment': true,
+        'employeeName': employeeName,
       });
       await db.holdOrder(
         id: _kasirUuid.v4(),
-        label: employeeName,
+        label: (customerName != null && customerName.isNotEmpty)
+            ? customerName
+            : 'Tanpa Nama',
         cartJson: payload,
       );
       if (!mounted) return;
@@ -3421,16 +3451,17 @@ class _HeldInlinePanel extends ConsumerWidget {
                 );
               }
               return SizedBox(
-                // Item 24d — dinaikkan dari 86 supaya badge "Menunggu Anda
-                // Bayar" (entri awaitingPayment) muat tanpa overflow;
-                // kartu tanpa badge cuma dapat sedikit ruang kosong ekstra.
-                height: 128,
+                // Item 24d — dinaikkan dari 86 lalu 128 supaya badge
+                // "Menunggu Anda Bayar" muat; sekarang 152 supaya tab
+                // pegawai (susulan Item 24d) di atas kartu handoff juga
+                // muat — kartu tanpa tab cuma dapat ruang kosong ekstra.
+                height: 152,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: held.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 9),
-                  itemBuilder: (_, i) =>
-                      _HeldCard(order: held[i], onTap: () => onResume(held[i])),
+                  itemBuilder: (_, i) => _HeldCardWithTab(
+                      order: held[i], onTap: () => onResume(held[i])),
                 ),
               );
             },
@@ -3449,6 +3480,67 @@ class _HeldInlinePanel extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Susulan Item 24d — kartu antrian handoff pegawai dapat tab folder di
+/// atasnya (gaya sama seperti `_CartMetaTab` di atas cart bar, pakai
+/// `_TabPainter` yang sama) berisi nama PEGAWAI pengirim + jam masuk —
+/// dipisah dari `_HeldCard` yang judulnya sekarang nama PELANGGAN (bukan
+/// pegawai lagi, lihat `_handleOrderCode`). Pesanan ditahan biasa (tanpa
+/// `employeeName`) tetap tampil polos tanpa tab, seperti sebelumnya.
+class _HeldCardWithTab extends StatelessWidget {
+  const _HeldCardWithTab({required this.order, required this.onTap});
+
+  final HeldOrder order;
+  final VoidCallback onTap;
+
+  static const _cardWidth = 158.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = _parseHeldPayload(order.cartJson);
+    final employeeName = parsed.employeeName;
+    if (!parsed.awaitingPayment || employeeName == null) {
+      return _HeldCard(order: order, onTap: onTap);
+    }
+    final cs = Theme.of(context).colorScheme;
+    final time =
+        '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
+    // TIDAK pakai mainAxisSize.min — kartu di baliknya (`_HeldCard`) punya
+    // `Spacer()` internal yang butuh tinggi TERBATAS dari parent utk bisa
+    // dihitung; Column mainAxisSize.min memberi constraint tinggi TAK
+    // TERBATAS ke children non-flex, bikin Spacer() itu crash saat layout
+    // (RenderFlex unbounded height). `Expanded` di sini memberi `_HeldCard`
+    // sisa tinggi yang sudah tetap (152, dari `SizedBox` pembungkus
+    // ListView) dikurangi tinggi tab — balik seperti sebelum ada tab.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Transform.translate(
+          offset: const Offset(0, 1),
+          child: CustomPaint(
+            painter: _TabPainter(fill: cs.error, border: cs.error, slant: 8),
+            child: SizedBox(
+              width: _cardWidth,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 8, 6),
+                child: Text(
+                  '$employeeName · $time',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onError),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Expanded(child: _HeldCard(order: order, onTap: onTap)),
+      ],
     );
   }
 }
@@ -3552,6 +3644,8 @@ class _VerifyOrderSheet extends ConsumerStatefulWidget {
 class _VerifyOrderSheetState extends ConsumerState<_VerifyOrderSheet> {
   late final List<CartItem> _items;
   late List<bool> _checked;
+  late final CartMeta _meta;
+  late final String? _employeeName;
 
   @override
   void initState() {
@@ -3559,14 +3653,20 @@ class _VerifyOrderSheetState extends ConsumerState<_VerifyOrderSheet> {
     final parsed = _parseHeldPayload(widget.order.cartJson);
     _items = parsed.items;
     _checked = List.of(parsed.checked);
+    // Pertahankan meta (nama pelanggan) & employeeName dari payload asli —
+    // menulis balik payload kosong di sini akan MENGHAPUS atribusi
+    // pelanggan/pegawai yang sudah kebawa lewat QR (bug yang pernah terjadi).
+    _meta = parsed.meta;
+    _employeeName = parsed.employeeName;
   }
 
   Future<void> _toggle(int i, bool value) async {
     setState(() => _checked[i] = value);
     final payload = jsonEncode({
       'items': _items.map((c) => c.toJson()).toList(),
-      'meta': const CartMeta().toJson(),
+      'meta': _meta.toJson(),
       'awaitingPayment': true,
+      'employeeName': _employeeName,
       'checked': _checked,
     });
     await ref.read(databaseProvider).updateHeldOrder(widget.order.id, payload);

@@ -204,6 +204,56 @@ void main() {
   });
 
   testWidgets(
+      'tap-to-scan ON + mode Berulang: tap bidik lagi TANPA barcode baru '
+      'terdeteksi (kamera diarahkan ke tempat kosong) TIDAK mengulang scan '
+      'produk sebelumnya', (tester) async {
+    final db = await seedProduct('8991234567890');
+    addTearDown(() async => db.close());
+
+    await _pumpKasirWithScannerOpen(tester, db);
+
+    // Mode Berulang — scanner TETAP terbuka setelah scan sukses (beda dari
+    // mode Sekali yang auto-close), supaya tap bidik kedua bisa terjadi
+    // sama sekali tanpa deteksi baru — ini kondisi yang memicu bug lama.
+    await tester.tap(find.text('Berulang'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tap to Scan'));
+    await tester.pumpAndSettle();
+
+    fake.emitBarcode('8991234567890');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final shutter = find.byKey(const Key('scan_shutter_button'));
+    await tester.tap(shutter);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget,
+        reason: 'mode Berulang — scanner tetap terbuka setelah scan sukses');
+    expect(find.text('1'), findsWidgets,
+        reason: 'barang pertama berhasil masuk (qty 1)');
+
+    // Cek langsung ikon tombol bidik (abu-abu = nonaktif, `enabled: false`
+    // di `_ScanShutterButton`) — BUKAN tap-lagi-lalu-cek-qty, karena
+    // `_handleBarcode` punya debounce 1.5 detik per-barcode yang sama; di
+    // widget test dua tap terjadi nyaris seketika (real wall-clock, tidak
+    // ikut fast-forward `tester.pump`), jadi debounce itu SENDIRI sudah
+    // menyembunyikan bug lama (`_pendingBarcode` yang tak pernah
+    // dikosongkan) — assertion qty basi/false-negative kalau tetap dipakai.
+    final icon = tester.widget<Icon>(find.descendant(
+      of: shutter,
+      matching: find.byIcon(Icons.center_focus_strong),
+    ));
+    expect(icon.color, Colors.grey,
+        reason: 'tombol bidik harus nonaktif (abu-abu) segera setelah '
+            'barcode ditahan berhasil diproses — TANPA deteksi baru, tidak '
+            'ada apa pun lagi yang bisa diulang');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
       'tap-to-scan ON: tombol bidik nonaktif (abu-abu, tidak bisa ditap) '
       'sebelum ada barcode terdeteksi', (tester) async {
     final db = await seedProduct('8991234567890');

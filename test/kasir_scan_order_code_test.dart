@@ -153,16 +153,24 @@ void main() {
 
     final rows = await db.select(db.heldOrders).get();
     expect(rows, hasLength(1));
-    expect(rows.first.label, 'Budi');
+    // Susulan Item 24d — label kartu = nama PELANGGAN (tidak ada di sini,
+    // tidak ada baris "Nama:"), BUKAN nama pegawai lagi (lihat test
+    // terpisah utk kasus dgn "Nama:").
+    expect(rows.first.label, 'Tanpa Nama');
     expect(rows.first.cartJson, contains('"awaitingPayment":true'));
     expect(rows.first.cartJson, contains('Sedap Goreng'));
+    expect(rows.first.cartJson, contains('"employeeName":"Budi"'));
 
     // Buka panel antrian → badge "Menunggu Anda Bayar" harus tampil,
-    // beda dari pesanan ditahan biasa.
+    // beda dari pesanan ditahan biasa. Nama pegawai tampil di tab folder
+    // di atas kartu (susulan Item 24d), bukan di judul kartu.
     await tester.tap(find.byIcon(Icons.pause_circle_outline_rounded));
     await tester.pumpAndSettle();
     expect(find.text('Menunggu Anda Bayar'), findsOneWidget);
-    expect(find.text('Budi'), findsOneWidget);
+    expect(find.text('Tanpa Nama'), findsOneWidget);
+    expect(find.textContaining('Budi'), findsWidgets,
+        reason: 'nama pegawai tampil di tab (banner sukses jg masih '
+            'menyebutnya, jadi bisa >1 match)');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -209,6 +217,94 @@ void main() {
     expect(find.textContaining('tidak valid'), findsOneWidget);
     final rows = await db.select(db.heldOrders).get();
     expect(rows, isEmpty);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'susulan Item 24d — scan #PSN: dgn baris "Pegawai:" DAN "Nama:" → '
+      'kartu antrian judulnya nama PELANGGAN, tab di atasnya nama PEGAWAI '
+      '(bukan tertukar seperti bug lama)', (tester) async {
+    final db = await seedProduct();
+    addTearDown(() async => db.close());
+
+    await _pumpKasirWithScannerOpen(tester, db);
+
+    fake.emitBarcode('#PSN:u1=2;\nPegawai: Budi\nNama: Siti');
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.heldOrders).get();
+    expect(rows, hasLength(1));
+    expect(rows.first.label, 'Siti',
+        reason: 'judul kartu antrian harus nama PELANGGAN, bukan pegawai');
+    expect(rows.first.cartJson, contains('"employeeName":"Budi"'));
+    expect(rows.first.cartJson, contains('"customerName":"Siti"'));
+
+    await tester.tap(find.byIcon(Icons.pause_circle_outline_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Siti'), findsOneWidget,
+        reason: 'judul kartu = nama pelanggan');
+    expect(find.textContaining('Budi ·'), findsOneWidget,
+        reason: 'tab folder di atas kartu = nama pegawai pengirim + jam '
+            '("·" pembeda dari banner sukses yg jg menyebut Budi)');
+    expect(find.text('Menunggu Anda Bayar'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'susulan Item 24d — scan #PSN: dgn "Pegawai:" TANPA "Nama:" (pegawai '
+      'belum pilih pelanggan) → kartu antrian judulnya "Tanpa Nama", tab '
+      'pegawai tetap tampil', (tester) async {
+    final db = await seedProduct();
+    addTearDown(() async => db.close());
+
+    await _pumpKasirWithScannerOpen(tester, db);
+
+    fake.emitBarcode('#PSN:u1=2;\nPegawai: Budi');
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.heldOrders).get();
+    expect(rows.first.label, 'Tanpa Nama');
+    expect(rows.first.cartJson, contains('"employeeName":"Budi"'));
+
+    await tester.tap(find.byIcon(Icons.pause_circle_outline_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tanpa Nama'), findsOneWidget);
+    expect(find.textContaining('Budi ·'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'susulan Item 24d — centang di sheet Verifikasi Pesanan TIDAK '
+      'menghapus atribusi pelanggan/pegawai yang sudah kebawa lewat QR '
+      '(bug lama: _toggle menulis balik meta kosong)', (tester) async {
+    final db = await seedProduct();
+    addTearDown(() async => db.close());
+
+    await _pumpKasirWithScannerOpen(tester, db);
+    fake.emitBarcode('#PSN:u1=2;\nPegawai: Budi\nNama: Siti');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.pause_circle_outline_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Siti'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.heldOrders).get();
+    expect(rows.first.cartJson, contains('"customerName":"Siti"'),
+        reason: 'meta pelanggan harus tetap ada setelah centang, TIDAK ditimpa kosong');
+    expect(rows.first.cartJson, contains('"employeeName":"Budi"'),
+        reason: 'employeeName juga harus tetap ada setelah centang');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

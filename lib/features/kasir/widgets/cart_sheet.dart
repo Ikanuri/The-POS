@@ -70,8 +70,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final meta = ref.read(cartMetaProvider(widget.cartId));
     final employeeName =
         meta.hasEmployee ? meta.employeeName! : device.deviceName;
-    final qrText =
-        OrderParserService.encodeHandoff(items: cart, employeeName: employeeName);
+    final qrText = OrderParserService.encodeHandoff(
+      items: cart,
+      employeeName: employeeName,
+      customerName: meta.hasCustomer ? meta.customerName : null,
+    );
 
     await showModalBottomSheet<void>(
       context: context,
