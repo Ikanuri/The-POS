@@ -4,11 +4,14 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (Item 24 SELESAI SEPENUHNYA + 5 bugfix
-susulan: tap-to-scan mengulang barang lama [2x, termasuk kasus race frame
-basi], atribusi pelanggan/pegawai tertukar di kartu antrian, force-close
-diam-diam di HP tertentu, kode #PSN: pecah jadi beberapa scan di HID
-eksternal)._
+_Terakhir diperbarui: 13 Juli 2026. Item 24 SELESAI SEPENUHNYA. 4 bugfix
+scanner SELESAI & terkonfirmasi bekerja (tap-to-scan mengulang barang
+lama [2x], atribusi pelanggan/pegawai tertukar di antrian, kode #PSN:
+pecah jadi beberapa scan di HID eksternal). **1 masalah BELUM
+terselesaikan: crash Infinix Smart 8 — 2 percobaan fix sudah dikirim,
+percobaan pertama TERKONFIRMASI GAGAL, percobaan kedua BELUM
+dikonfirmasi — baca ⚠️ di bawah SEBELUM lanjut kerjakan apa pun soal
+ini.**
 
 **schemaVersion tetap 14** (tidak ada migrasi baru sesi ini). Full
 `flutter test`: **282 test hijau**, `flutter analyze` bersih.
@@ -54,22 +57,83 @@ BUKAN lewat TextField) — `tester.sendKeyEvent(key, character: ch)` (param
 benar (lihat `kasir_hid_order_code_merge_test.dart`). Jangan generalisasi
 gotcha lama ke SEMUA HID testing — cuma berlaku utk TextField.
 
-## ⚠️ BELUM diverifikasi di device fisik — commit `e3a7b7d`
+## ⚠️ MASIH BELUM TERSELESAIKAN — crash Infinix Smart 8 (status: 2 percobaan sudah tidak cukup)
 
-Fix crash "force-close diam-diam" (lihat bagian di bawah) **belum
-dikonfirmasi user di HP Infinix Smart 8 yang melaporkan bug-nya** — sesi
-berakhir tepat setelah commit+push, sebelum user sempat install APK hasil
-build CI dan mengonfirmasi. **Kalau sesi berikutnya lanjut soal ini,
-tanyakan dulu ke user apakah sudah dicoba & berhasil** sebelum menganggap
-selesai. Juga: bagian Kotlin (`MainActivity.kt`) **tidak bisa dikompilasi
-lokal di environment ini** (tidak ada Android SDK terpasang, `ANDROID_HOME`
-kosong) — sudah ditinjau manual baris-demi-baris dan seharusnya benar
-secara sintaks, tapi verifikasi RIIL baru terjadi saat GitHub Actions
-build APK jalan. Kalau build CI gagal karena Kotlin, cek `MainActivity.kt`
-dulu (perubahan sesi ini: `onCreate()` override baru + `installCrashLogHandler()`/
-`writeCrashLog()`).
+**Update kritis**: fix pertama (`e3a7b7d`, secure-storage try/catch) **SUDAH
+DIKONFIRMASI TIDAK CUKUP** — user install APK hasil fix itu, app MASIH
+crash, dengan gejala PERSIS SAMA seperti sebelumnya (instan, tanpa
+keterangan). Ini berarti dugaan awal (FlutterSecureStorage/Android
+Keystore) KEMUNGKINAN BESAR SALAH, atau setidaknya bukan SATU-SATUNYA
+penyebab. **Jangan asumsikan diagnosis lama itu benar** kalau lanjut
+sesi ini — anggap penyebab sebenarnya MASIH BELUM DIKETAHUI.
 
-## Bugfix: force-close diam-diam di HP tertentu (commit `e3a7b7d`)
+User juga cek folder `Android/data/com.thepos.the_pos/files` via app
+"Files by Google" — **kosong, tidak ada file log sama sekali**. Ini bisa
+berarti DUA hal berbeda (belum bisa dipastikan mana): (a) jaring pengaman
+Dart/Kotlin tidak sempat menangkap apa pun (crash terlalu dini/native), atau
+(b) filenya ADA tapi Android 11+ blokir "Files by Google" (dan file
+manager pihak ketiga lain) dari melihat isi folder `Android/data/<app
+lain>/` sama sekali (temuan OS well-known, bukan bug app ini) — tampil
+"kosong" adalah gejala UMUM restriksi ini, bukan bukti kosong beneran.
+
+**Commit `2c5ddf9` (sesi ini) mencoba mengatasi kemungkinan (b)**: log
+sekarang JUGA ditulis ke folder Downloads PUBLIK (`MediaStore`, API 29+)
+yang TIDAK kena restriksi itu, plus jaring pengaman native dipasang LEBIH
+AWAL lagi (`CrashCatchingApplication.attachBaseContext`, sebelum
+`MainActivity` ada). **INI JUGA BELUM DIKONFIRMASI** — user belum sempat
+test APK hasil commit ini saat sesi berakhir.
+
+**Kalau sesi berikutnya lanjut soal ini, LANGKAH PERTAMA WAJIB**: tanya
+user apakah sudah coba APK terbaru (`2c5ddf9`), dan:
+- Kalau app SEKARANG BUKA NORMAL → selesai, tidak perlu apa-apa lagi.
+- Kalau MASIH crash TAPI ada file di folder Downloads (`the_pos_crash_log.jsonl`,
+  cari lewat File Manager biasa, TANPA perlu masuk `Android/data`) →
+  MINTA ISI FILE ITU, itu petunjuk nyata pertama yang kita punya soal
+  penyebab sebenarnya — diagnosis ulang dari situ, JANGAN based on
+  dugaan lama.
+- Kalau MASIH crash DAN folder Downloads JUGA tidak ada file sama sekali
+  → ini bukti kuat crash terjadi di level yang genuinely tidak bisa
+  ditangkap software apa pun (native segfault) — jaring pengaman sudah
+  dipasang di titik paling awal yang mungkin (`attachBaseContext`), tidak
+  ada lagi yang bisa diperlebar dari sisi app. **Di titik ini, JUJUR
+  sampaikan ke user**: satu-satunya jalan tersisa adalah `adb logcat`
+  (perlu PC/laptop, walau cuma sebentar/pinjam) — tidak ada trik software
+  lain yang bisa menembus batas ini.
+
+**Jangan ulangi pola "asumsikan fix ini pasti benar" tanpa bukti log
+nyata** — sudah 1x salah asumsi (secure storage), jangan sampai
+membangun teori kedua tanpa data juga.
+
+## Bugfix (upaya ke-2, BELUM terkonfirmasi berhasil): pindahkan crash log ke Downloads publik (commit `2c5ddf9`)
+
+Lihat bagian ⚠️ di atas untuk konteks kenapa ini diperlukan. Perubahan:
+- `CrashLogWriter.kt` (baru) — tulis ke folder Downloads publik via
+  `MediaStore.Downloads` (API 29+, TANPA izin runtime apa pun) SELAIN
+  folder khusus app yang lama (dipertahankan sbg fallback HP <Android 10).
+- `CrashCatchingApplication.kt` (baru, custom `Application` class,
+  direferensikan di `AndroidManifest.xml` `android:name`) — jaring
+  pengaman native di `attachBaseContext()`, titik PALING AWAL yang
+  mungkin dalam siklus hidup proses Android (sebelum `Application.
+  onCreate()`, jauh sebelum `MainActivity` ada). Rantai (bukan menimpa)
+  dgn handler `MainActivity.onCreate()` yang sudah ada.
+- `MainActivity.kt` — refactor pakai `CrashLogWriter` bersama + method
+  channel baru `com.thepos/crash_log` (`append`/`readDownloads`/
+  `clearDownloads`) sbg jembatan dari sisi Dart.
+- `crash_log_service.dart` — `record()` sekarang tulis ke KEDUA lokasi;
+  `readAll()` prioritaskan folder Downloads (lebih pasti terlihat),
+  fallback ke folder lama.
+
+**Batas testing**: sama seperti sebelumnya, bagian Kotlin TIDAK bisa
+dikompilasi lokal (tidak ada Android SDK). Bagian Dart yang baru
+(pemanggilan `MethodChannel` di `record()`/`readAll()`) juga TIDAK bisa
+ditest di widget test — `Platform.isAndroid` selalu `false` di environment
+test (jalan di host Linux, bukan device Android sungguhan), jadi cabang
+kode itu otomatis terlewati di SEMUA test yang ada, tidak pernah benar-benar
+tereksekusi kecuali di device asli. Test yang ADA (`crash_log_service_test.dart`)
+cuma membuktikan behavior LAMA (`path_provider`) masih utuh, TIDAK
+membuktikan jalur `MediaStore` baru bekerja.
+
+## Bugfix (upaya ke-1, TERKONFIRMASI TIDAK CUKUP): force-close diam-diam di HP tertentu (commit `e3a7b7d`)
 
 **Laporan user**: HP Infinix Smart 8 — app terinstall sukses, tapi begitu
 dibuka langsung force-close dalam hitungan milidetik, TANPA keterangan
@@ -234,15 +298,15 @@ non-root menghasilkan warning "Woah!... trying to run as root" yang TIDAK
 menggagalkan perintah (aman diabaikan).
 
 ## Menggantung / Kandidat Berikutnya
-- **Konfirmasi user**: apakah fix crash Infinix Smart 8 (`e3a7b7d`) benar
-  menyelesaikan masalahnya — BELUM dikonfirmasi, lihat peringatan di atas.
-  Kalau masih crash, minta user buka "Log Error Terakhir" di Pengaturan
-  (kalau app berhasil kebuka) atau cari file `the_pos_crash_log.jsonl` di
-  `Android/data/com.thepos.the_pos/files/` via File Manager (kalau tidak).
-  User sedang MENUNGGU HP-nya selesai dipakai orang lain sebelum bisa
-  test — sambil menunggu, user melaporkan (dan sudah diperbaiki di commit
-  `2ee8068`) 2 bug scanner terpisah yang TIDAK terkait crash fix di atas.
-  Jangan bingung kedua alur ini — beda commit, beda root cause.
+- **PALING PRIORITAS — crash Infinix Smart 8 MASIH BELUM SELESAI.** Baca
+  section ⚠️ di atas dulu sebelum menyentuh ini. Ringkas: fix ke-1
+  (`e3a7b7d`, secure storage) TERKONFIRMASI GAGAL — app masih crash sama
+  persis. Fix ke-2 (`2c5ddf9`, pindah log ke Downloads publik + jaring
+  native lebih awal) BELUM dikonfirmasi user. Langkah pertama sesi
+  berikutnya: tanya status test APK terbaru, JANGAN asumsikan apa pun
+  sudah selesai tanpa konfirmasi eksplisit. Kalau file log akhirnya
+  muncul di folder Downloads, itu data PERTAMA yang benar-benar bisa
+  dipakai diagnosis — sebelum itu, semua "penyebabnya X" masih dugaan.
 - **Item 21+17** (sync UI persisten lintas tab + persist antrian approval)
   — masih sengaja ditunda dari sesi-sesi sebelumnya.
 - **Item 23** (scope bug "Sisa Tagihan" understated di lokasi lain) — lihat
