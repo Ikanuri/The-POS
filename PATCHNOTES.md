@@ -52,14 +52,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Scan pesanan pegawai (QR "Kirim ke Owner/Asisten") lewat scanner
   eksternal sekarang masuk antrian dengan benar**, tidak lagi salah
   kebuka sebagai "Tempel Pesanan" dan tidak lagi terasa lambat.
-- **(Masih diselidiki) Sebagian HP tertentu** (dilaporkan terjadi di
-  Infinix Smart 8) **bisa force-close begitu dibuka, tanpa keterangan
-  apa pun.** Satu kemungkinan penyebab sudah diperbaiki, tapi laporan
-  terakhir menunjukkan sebagian kasus masih terjadi — perbaikan lanjutan
-  masih berjalan. Ditambahkan menu baru **"Log Error Terakhir"** di
-  Pengaturan → Diagnostik untuk membantu penelusuran, dan catatan error
-  sekarang juga tersimpan di folder Downloads (lebih mudah ditemukan
-  lewat aplikasi File Manager mana pun).
+- **Aplikasi sekarang bisa dibuka di HP kelas bawah/lama yang sebelumnya
+  langsung force-close tanpa keterangan** (dilaporkan terjadi di Infinix
+  Smart 8, kemungkinan besar berlaku juga di HP sejenis). Penyebabnya
+  sudah ditemukan: file APK sebelumnya tidak menyertakan komponen yang
+  dibutuhkan HP dengan prosesor 32-bit — sekarang sudah disertakan.
+  Ditambahkan juga menu **"Log Error Terakhir"** di Pengaturan →
+  Diagnostik untuk membantu penelusuran kalau ada masalah serupa di
+  kemudian hari.
 
 ## 12 Juli 2026
 

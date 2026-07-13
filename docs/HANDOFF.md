@@ -7,11 +7,12 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 _Terakhir diperbarui: 13 Juli 2026. Item 24 SELESAI SEPENUHNYA. 4 bugfix
 scanner SELESAI & terkonfirmasi bekerja (tap-to-scan mengulang barang
 lama [2x], atribusi pelanggan/pegawai tertukar di antrian, kode #PSN:
-pecah jadi beberapa scan di HID eksternal). **1 masalah BELUM
-terselesaikan: crash Infinix Smart 8 — 2 percobaan fix sudah dikirim,
-percobaan pertama TERKONFIRMASI GAGAL, percobaan kedua BELUM
-dikonfirmasi — baca ⚠️ di bawah SEBELUM lanjut kerjakan apa pun soal
-ini.**
+pecah jadi beberapa scan di HID eksternal). **Crash Infinix Smart 8:
+akar masalah AKHIRNYA TERKONFIRMASI (commit `fb8ba80`) — APK sebelumnya
+cuma dibuild utk arm64-v8a, HP itu butuh armeabi-v7a (32-bit). Fix sudah
+di-push, BELUM dites user di APK hasil CI berikutnya — lihat bagian
+"Crash Infinix Smart 8 — SELESAI" di bawah sebelum menyentuh topik ini
+lagi.**
 
 **schemaVersion tetap 14** (tidak ada migrasi baru sesi ini). Full
 `flutter test`: **282 test hijau**, `flutter analyze` bersih.
@@ -57,56 +58,55 @@ BUKAN lewat TextField) — `tester.sendKeyEvent(key, character: ch)` (param
 benar (lihat `kasir_hid_order_code_merge_test.dart`). Jangan generalisasi
 gotcha lama ke SEMUA HID testing — cuma berlaku utk TextField.
 
-## ⚠️ MASIH BELUM TERSELESAIKAN — crash Infinix Smart 8 (status: 2 percobaan sudah tidak cukup)
+## Crash Infinix Smart 8 — SELESAI (akar masalah terkonfirmasi, commit `fb8ba80`)
 
-**Update kritis**: fix pertama (`e3a7b7d`, secure-storage try/catch) **SUDAH
-DIKONFIRMASI TIDAK CUKUP** — user install APK hasil fix itu, app MASIH
-crash, dengan gejala PERSIS SAMA seperti sebelumnya (instan, tanpa
-keterangan). Ini berarti dugaan awal (FlutterSecureStorage/Android
-Keystore) KEMUNGKINAN BESAR SALAH, atau setidaknya bukan SATU-SATUNYA
-penyebab. **Jangan asumsikan diagnosis lama itu benar** kalau lanjut
-sesi ini — anggap penyebab sebenarnya MASIH BELUM DIKETAHUI.
+**Akar masalah sebenarnya** (baru terungkap setelah user berhasil ambil
+isi file log lewat infrastruktur commit `2c5ddf9` — lihat riwayat upaya
+di bawah): `UnsatisfiedLinkError: dlopen failed: library "libflutter.so"
+not found`. APK yang dibuild CI (`build-apk.yml`) sebelumnya pakai
+`--target-platform android-arm64` SAJA — cuma menyertakan native library
+utk arsitektur 64-bit (arm64-v8a). Infinix Smart 8 (dan kemungkinan besar
+HP kelas bawah/lama sejenis) butuh 32-bit (armeabi-v7a) — `libflutter.so`
+(engine Flutter) dan `libapp.so` (kode Dart terkompilasi) TIDAK ADA sama
+sekali utk arsitektur itu, jadi crash terjadi SEBELUM `FlutterActivity.
+onCreate()` sempat jalan — persis kenapa BAIK jaring pengaman Dart
+(`runZonedGuarded` dll) MAUPUN Kotlin (`MainActivity.onCreate`, bahkan
+`Application.attachBaseContext`) tidak pernah bisa MENCEGAH crash ini —
+titik kegagalannya di level `dlopen()` native, sebelum kode app manapun
+(Dart/Kotlin) sempat dieksekusi. Yang BISA dilakukan jaring pengaman itu
+cuma MENANGKAP hasilnya lewat log Android (`UncaughtExceptionHandler`
+level OS/ART, bukan handler kita) — dan justru itulah yang membuat file
+log yang user kirim BERISI stack trace `dlopen` ini, sehingga akar
+masalah akhirnya bisa dipastikan dari data nyata, bukan dugaan.
 
-User juga cek folder `Android/data/com.thepos.the_pos/files` via app
-"Files by Google" — **kosong, tidak ada file log sama sekali**. Ini bisa
-berarti DUA hal berbeda (belum bisa dipastikan mana): (a) jaring pengaman
-Dart/Kotlin tidak sempat menangkap apa pun (crash terlalu dini/native), atau
-(b) filenya ADA tapi Android 11+ blokir "Files by Google" (dan file
-manager pihak ketiga lain) dari melihat isi folder `Android/data/<app
-lain>/` sama sekali (temuan OS well-known, bukan bug app ini) — tampil
-"kosong" adalah gejala UMUM restriksi ini, bukan bukti kosong beneran.
+**Fix**: `.github/workflows/build-apk.yml` — ganti
+`--target-platform android-arm64` jadi
+`--target-platform android-arm,android-arm64` (fat APK, kedua arsitektur
+dalam satu file, tidak pakai `--split-per-abi` supaya UX download tetap
+1 file lewat GitHub Releases). Juga catatan di CLAUDE.md §Perintah supaya
+tidak dipersempit balik ke arm64-v8a saja tanpa alasan kuat.
 
-**Commit `2c5ddf9` (sesi ini) mencoba mengatasi kemungkinan (b)**: log
-sekarang JUGA ditulis ke folder Downloads PUBLIK (`MediaStore`, API 29+)
-yang TIDAK kena restriksi itu, plus jaring pengaman native dipasang LEBIH
-AWAL lagi (`CrashCatchingApplication.attachBaseContext`, sebelum
-`MainActivity` ada). **INI JUGA BELUM DIKONFIRMASI** — user belum sempat
-test APK hasil commit ini saat sesi berakhir.
+**2 dugaan sebelumnya (secure storage try/catch, commit `e3a7b7d`) SALAH
+— TERBUKTI dari user test langsung**, app masih crash identik setelah fix
+itu terpasang. Pelajaran: untuk crash device-spesifik yang tidak bisa
+direproduksi di environment dev, JANGAN percaya diagnosis dari inspeksi
+kode SAJA — dorong dulu ke titik bisa dapat log/data nyata, baru
+diagnosis. Riwayat lengkap kedua upaya (kode yang tetap berguna sbg
+infrastruktur diagnostik, walau bukan fix akhir) ada di 2 subsection
+di bawah, dipertahankan sbg referensi kalau ada crash device-spesifik
+lain di masa depan.
 
-**Kalau sesi berikutnya lanjut soal ini, LANGKAH PERTAMA WAJIB**: tanya
-user apakah sudah coba APK terbaru (`2c5ddf9`), dan:
-- Kalau app SEKARANG BUKA NORMAL → selesai, tidak perlu apa-apa lagi.
-- Kalau MASIH crash TAPI ada file di folder Downloads (`the_pos_crash_log.jsonl`,
-  cari lewat File Manager biasa, TANPA perlu masuk `Android/data`) →
-  MINTA ISI FILE ITU, itu petunjuk nyata pertama yang kita punya soal
-  penyebab sebenarnya — diagnosis ulang dari situ, JANGAN based on
-  dugaan lama.
-- Kalau MASIH crash DAN folder Downloads JUGA tidak ada file sama sekali
-  → ini bukti kuat crash terjadi di level yang genuinely tidak bisa
-  ditangkap software apa pun (native segfault) — jaring pengaman sudah
-  dipasang di titik paling awal yang mungkin (`attachBaseContext`), tidak
-  ada lagi yang bisa diperlebar dari sisi app. **Di titik ini, JUJUR
-  sampaikan ke user**: satu-satunya jalan tersisa adalah `adb logcat`
-  (perlu PC/laptop, walau cuma sebentar/pinjam) — tidak ada trik software
-  lain yang bisa menembus batas ini.
+**BELUM dikonfirmasi user**: fix `fb8ba80` sudah di-push & merge, APK
+baru akan otomatis dibuild CI, TAPI user belum sempat install & test
+ulang di Infinix Smart 8 fisik saat sesi ini berakhir. Kalau lanjut sesi
+berikutnya dan user belum kabar — tanya duluan status test-nya sebelum
+menganggap ini benar-benar tuntas.
 
-**Jangan ulangi pola "asumsikan fix ini pasti benar" tanpa bukti log
-nyata** — sudah 1x salah asumsi (secure storage), jangan sampai
-membangun teori kedua tanpa data juga.
+## Infrastruktur diagnostik: pindahkan crash log ke Downloads publik (commit `2c5ddf9`)
 
-## Bugfix (upaya ke-2, BELUM terkonfirmasi berhasil): pindahkan crash log ke Downloads publik (commit `2c5ddf9`)
-
-Lihat bagian ⚠️ di atas untuk konteks kenapa ini diperlukan. Perubahan:
+Ini BUKAN fix akhir (lihat section di atas) — infrastruktur ini yang
+membuat log crash asli akhirnya bisa diambil user & dikirim, yang pada
+gilirannya membongkar akar masalah sebenarnya. Perubahan:
 - `CrashLogWriter.kt` (baru) — tulis ke folder Downloads publik via
   `MediaStore.Downloads` (API 29+, TANPA izin runtime apa pun) SELAIN
   folder khusus app yang lama (dipertahankan sbg fallback HP <Android 10).
@@ -133,7 +133,7 @@ tereksekusi kecuali di device asli. Test yang ADA (`crash_log_service_test.dart`
 cuma membuktikan behavior LAMA (`path_provider`) masih utuh, TIDAK
 membuktikan jalur `MediaStore` baru bekerja.
 
-## Bugfix (upaya ke-1, TERKONFIRMASI TIDAK CUKUP): force-close diam-diam di HP tertentu (commit `e3a7b7d`)
+## Infrastruktur diagnostik: jaring pengaman crash log awal (upaya ke-1, dugaan penyebab TERBUKTI SALAH, commit `e3a7b7d`)
 
 **Laporan user**: HP Infinix Smart 8 — app terinstall sukses, tapi begitu
 dibuka langsung force-close dalam hitungan milidetik, TANPA keterangan
@@ -286,6 +286,20 @@ Semua sub-item (24a–24f) selesai & di-commit. Ringkasan alur akhir:
   selamanya — pakai query one-shot (`db.select(db.tabelnya).get()`).
 - Sheet modal baru di atas `KasirScreen` otomatis aman dari HID scanner
   eksternal — JANGAN reuse flag `_cartSheetOpen` (khusus `CartSheet`).
+- **`flutter build apk --target-platform android-arm64` SAJA bikin HP
+  32-bit (armeabi-v7a) tidak bisa buka app sama sekali** — `libflutter.so`
+  & `libapp.so` hilang total utk arsitektur itu, crash `dlopen` terjadi
+  sebelum kode app manapun jalan (tidak bisa dicegah dari sisi
+  Dart/Kotlin, cuma bisa DITANGKAP via `UncaughtExceptionHandler` level
+  OS). Build APK produksi HARUS `--target-platform android-arm,
+  android-arm64` (lihat `build-apk.yml`, kasus nyata Infinix Smart 8).
+- **Folder `Android/data/<package>/` tidak selalu terlihat "kosong"
+  krn benar-benar kosong** — Android 11+ blokir File Manager pihak
+  ketiga (termasuk "Files by Google") dari melihat isi folder itu sama
+  sekali, walau app sendiri bisa baca/tulis bebas via `path_provider`.
+  Kalau perlu file yang HARUS terlihat user lewat File Manager biasa
+  (mis. crash log darurat), tulis ke `MediaStore.Downloads` (API 29+,
+  publik, tanpa izin runtime) — lihat `CrashLogWriter.kt`.
 
 ## Lingkungan sesi ini
 Flutter TIDAK terpasang default — dipasang manual ke `/tmp/flutter`
@@ -298,15 +312,13 @@ non-root menghasilkan warning "Woah!... trying to run as root" yang TIDAK
 menggagalkan perintah (aman diabaikan).
 
 ## Menggantung / Kandidat Berikutnya
-- **PALING PRIORITAS — crash Infinix Smart 8 MASIH BELUM SELESAI.** Baca
-  section ⚠️ di atas dulu sebelum menyentuh ini. Ringkas: fix ke-1
-  (`e3a7b7d`, secure storage) TERKONFIRMASI GAGAL — app masih crash sama
-  persis. Fix ke-2 (`2c5ddf9`, pindah log ke Downloads publik + jaring
-  native lebih awal) BELUM dikonfirmasi user. Langkah pertama sesi
-  berikutnya: tanya status test APK terbaru, JANGAN asumsikan apa pun
-  sudah selesai tanpa konfirmasi eksplisit. Kalau file log akhirnya
-  muncul di folder Downloads, itu data PERTAMA yang benar-benar bisa
-  dipakai diagnosis — sebelum itu, semua "penyebabnya X" masih dugaan.
+- **Crash Infinix Smart 8 — tinggal konfirmasi user.** Akar masalah sudah
+  ditemukan & fix sudah di-merge (`fb8ba80`, lihat section di atas).
+  Langkah pertama sesi berikutnya kalau topik ini muncul lagi: tanya
+  apakah user sudah install APK CI terbaru & apakah app sekarang bisa
+  dibuka normal di Infinix Smart 8. Kalau MASIH crash walau sudah fat
+  APK (arm+arm64), itu artinya ada penyebab LAIN — jangan asumsikan
+  otomatis sama dgn kasus ini, minta log baru lagi.
 - **Item 21+17** (sync UI persisten lintas tab + persist antrian approval)
   — masih sengaja ditunda dari sesi-sesi sebelumnya.
 - **Item 23** (scope bug "Sisa Tagihan" understated di lokasi lain) — lihat
