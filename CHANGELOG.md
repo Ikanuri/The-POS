@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `2ee8068` — fix: deteksi basi tap-to-scan + kode #PSN: pecah jadi beberapa scan di HID eksternal
+- `26ce99c` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk fix crash Infinix Smart 8
 - `e3a7b7d` — fix: cegah force-close diam-diam di HP tertentu (mis. Infinix Smart 8) + jaring pengaman crash log
 - `1b6d275` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk bugfix tap-to-scan + atribusi antrian
 - `c146695` — fix: scan tap-to-scan mengulang barang lama + atribusi pelanggan/pegawai tertukar di antrian

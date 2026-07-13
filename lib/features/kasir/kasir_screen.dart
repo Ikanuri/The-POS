@@ -771,6 +771,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   static const _kHumanGapMs = 200; // jeda antar-tombol manusia > 200ms
   static const _kMinBarcodeLen = 3;
 
+  // Item 24d susulan — kode `#PSN:` (handoff pegawai/pesanan pelanggan) itu
+  // multi-baris (kode mesin + baris opsional Pegawai:/Nama:/HP:/Catatan:).
+  // Scanner eksternal (keyboard wedge) mengirim newline DI DALAM payload
+  // QR sebagai keystroke Enter TERPISAH — jadi 1 scan QR pecah jadi
+  // beberapa "scan" beruntun dari sudut pandang app ini (baris pertama
+  // #PSN:... tiba TANPA baris Pegawai:/Nama: yang menyusul, salah rute ke
+  // "Tempel Pesanan" alih-alih antrian). Gabungkan kembali fragmen yang
+  // datang SEGERA setelah baris #PSN: sebelumnya.
+  String? _pendingOrderCodeBuffer;
+  Timer? _orderCodeMergeTimer;
+  static const _kOrderCodeMergeWindow = Duration(milliseconds: 350);
+
   // Mode scanner
   bool _continuousScan = false;
   int _toastDurationSeconds = 5;
@@ -782,6 +794,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   // cuma ditampung di _pendingBarcode sampai pengguna tap tombol bidik.
   bool _tapToScan = false;
   String? _pendingBarcode;
+
+  // Item 24e susulan — kamera masih bisa melaporkan barcode yang SUDAH
+  // disingkirkan fisik (frame basi akibat latensi pipeline kamera,
+  // terutama di HP kelas bawah) SESAAT setelah bidik ditap — tanpa
+  // penjagaan ini, deteksi basi itu meng-isi ulang `_pendingBarcode`
+  // dengan barcode yang SAMA, membuat tap bidik berikutnya (dimaksudkan
+  // no-op krn tidak ada barcode di frame) justru mengulang barang lama.
+  String? _lastConfirmedBarcode;
+  DateTime? _lastConfirmedAt;
+  static const _kStaleDetectionCooldown = Duration(milliseconds: 1200);
 
   // Toast melayang (mode continuous)
   _ScanToast? _activeToast;
@@ -862,6 +884,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         key == LogicalKeyboardKey.numpadEnter) {
       final code = _hwScanBuffer.toString().trim();
       _hwScanBuffer.clear();
+      if (code.isEmpty) return false;
+
+      if (code.startsWith(OrderPageService.machineCodePrefix)) {
+        _beginOrderCodeMerge(code);
+        return true;
+      }
+      if (_pendingOrderCodeBuffer != null && _looksLikeOrderCodeLine(code)) {
+        _continueOrderCodeMerge(code);
+        return true;
+      }
+
+
       if (code.length >= _kMinBarcodeLen) {
         _handleBarcode(code, fromExternal: true);
         return true;
@@ -880,6 +914,32 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       return true;
     }
     return false;
+  }
+
+  bool _looksLikeOrderCodeLine(String code) =>
+      code.startsWith('Pegawai:') ||
+      code.startsWith('Nama:') ||
+      code.startsWith('HP:') ||
+      code.startsWith('Catatan:');
+
+  void _beginOrderCodeMerge(String firstLine) {
+    _orderCodeMergeTimer?.cancel();
+    _pendingOrderCodeBuffer = firstLine;
+    _scheduleOrderCodeFinalize();
+  }
+
+  void _continueOrderCodeMerge(String nextLine) {
+    _orderCodeMergeTimer?.cancel();
+    _pendingOrderCodeBuffer = '${_pendingOrderCodeBuffer!}\n$nextLine';
+    _scheduleOrderCodeFinalize();
+  }
+
+  void _scheduleOrderCodeFinalize() {
+    _orderCodeMergeTimer = Timer(_kOrderCodeMergeWindow, () {
+      final text = _pendingOrderCodeBuffer;
+      _pendingOrderCodeBuffer = null;
+      if (text != null) _handleBarcode(text, fromExternal: true);
+    });
   }
 
   Future<void> _loadScannerPrefs() async {
@@ -915,6 +975,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final code = _pendingBarcode;
     if (code == null) return;
     setState(() => _pendingBarcode = null);
+    _lastConfirmedBarcode = code;
+    _lastConfirmedAt = DateTime.now();
     _handleBarcode(code);
   }
 
@@ -932,6 +994,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     _activeToast?.timer?.cancel();
     _scannerCtrl?.dispose();
     _scanPulseController.dispose();
+    _orderCodeMergeTimer?.cancel();
     super.dispose();
   }
 
@@ -940,6 +1003,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       _scannerOpen = true;
       _torchOn = false;
       _pendingBarcode = null;
+      _lastConfirmedBarcode = null;
+      _lastConfirmedAt = null;
       _scannerCtrl = MobileScannerController();
     });
   }
@@ -953,6 +1018,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       _activeToast = null;
       _torchOn = false;
       _pendingBarcode = null;
+      _lastConfirmedBarcode = null;
+      _lastConfirmedAt = null;
     });
   }
 
@@ -1463,6 +1530,17 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                 final barcode = capture.barcodes.firstOrNull?.rawValue;
                 if (barcode == null) return;
                 if (_tapToScan) {
+                  // Frame basi dari SEBELUM barcode disingkirkan (latensi
+                  // pipeline kamera) bisa masih melaporkan barcode yang
+                  // BARU SAJA dikonfirmasi — abaikan dalam jendela singkat
+                  // ini supaya tidak meng-isi ulang _pendingBarcode dgn
+                  // barang yang sama (lihat komentar _lastConfirmedBarcode).
+                  if (barcode == _lastConfirmedBarcode &&
+                      _lastConfirmedAt != null &&
+                      DateTime.now().difference(_lastConfirmedAt!) <
+                          _kStaleDetectionCooldown) {
+                    return;
+                  }
                   if (_pendingBarcode != barcode) {
                     setState(() => _pendingBarcode = barcode);
                   }

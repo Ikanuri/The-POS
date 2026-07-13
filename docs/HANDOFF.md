@@ -4,12 +4,55 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (Item 24 SELESAI SEPENUHNYA + 3 bugfix
-susulan: tap-to-scan mengulang barang lama, atribusi pelanggan/pegawai
-tertukar di kartu antrian, force-close diam-diam di HP tertentu)._
+_Terakhir diperbarui: 13 Juli 2026 (Item 24 SELESAI SEPENUHNYA + 5 bugfix
+susulan: tap-to-scan mengulang barang lama [2x, termasuk kasus race frame
+basi], atribusi pelanggan/pegawai tertukar di kartu antrian, force-close
+diam-diam di HP tertentu, kode #PSN: pecah jadi beberapa scan di HID
+eksternal)._
 
 **schemaVersion tetap 14** (tidak ada migrasi baru sesi ini). Full
-`flutter test`: **279 test hijau**, `flutter analyze` bersih.
+`flutter test`: **282 test hijau**, `flutter analyze` bersih.
+
+## Bugfix susulan: tap-to-scan race + kode #PSN: pecah di HID (commit `2ee8068`)
+
+**Laporan user 1**: tap-to-scan mode Berulang — scan barcode, SEGERA
+singkirkan (<1 detik) lalu tap bidik lagi → KADANG no-op (benar), KADANG
+masih menambahkan barang yang sama lagi. Akar masalah: fix sebelumnya
+(`_pendingBarcode = null` setelah confirm) tidak menutup RACE — kamera
+bisa melaporkan `onDetect` untuk barcode yang SAMA beberapa puluh/ratus ms
+SETELAH confirm (frame basi dari sebelum barcode disingkirkan, latensi
+pipeline kamera — lebih parah di HP kelas bawah), yang meng-isi ulang
+`_pendingBarcode`. Fix: `_lastConfirmedBarcode`/`_lastConfirmedAt` +
+cooldown 1.2 detik di `onDetect` — tolak re-arm dgn barcode yang SAMA
+dalam jendela itu.
+
+**Laporan user 2**: scan QR handoff pegawai via scanner EKSTERNAL salah
+rute ke "Tempel Pesanan" (bukan antrian), + terasa lambat (~6 detik).
+Akar masalah: payload `#PSN:` multi-baris (kode mesin + `Pegawai:`/`Nama:`
+opsional, dipisah `\n`), tapi scanner keyboard-wedge mengirim newline DI
+DALAM payload SEBAGAI keystroke Enter TERPISAH — 1 scan QR pecah jadi
+BEBERAPA "scan" beruntun dari sudut pandang `_onHardwareKey`. Baris
+`#PSN:...` tiba SENDIRIAN (tanpa `Pegawai:` yang menyusul beberapa puluh
+ms kemudian) → `_handleOrderCode` tidak nemu `employeeName` → salah rute.
+Baris lanjutan yang menyusul (`Pegawai: Budi` dll) juga masing-masing
+dicoba sbg barcode produk biasa → beberapa lookup DB gagal ("Barcode
+tidak ditemukan") — kombinasi ini yang bikin terasa lambat. **Catatan:
+kamera (mobile_scanner) TIDAK kena bug ini** — dapat teks utuh sekali
+baca, cuma HID keyboard-wedge yang split per-newline. Fix:
+`_beginOrderCodeMerge`/`_continueOrderCodeMerge`/`_scheduleOrderCodeFinalize`
+— tampung fragmen `#PSN:...` + baris lanjutan (`Pegawai:`/`Nama:`/`HP:`/
+`Catatan:`) yang datang dalam jendela 350ms, gabung jadi satu teks
+sebelum diproses. TIDAK mengubah format QR/wire (opsi yg dipertimbangkan
+tapi lebih invasif) — cuma perbaikan sisi PENERIMAAN.
+
+**Temuan metodologi penting**: sebelumnya (`kasir_hw_key_after_produk_nav_test.dart`)
+ada gotcha "widget test TIDAK bisa simulasikan HID masuk ke TextField" —
+itu BENAR tapi SEMPIT (soal kanal IME/`EditableText`). `_onHardwareKey`
+didaftarkan via `HardwareKeyboard.instance.addHandler` (raw key event,
+BUKAN lewat TextField) — `tester.sendKeyEvent(key, character: ch)` (param
+`character` eksplisit override) TERBUKTI JALAN reach handler ini dgn
+benar (lihat `kasir_hid_order_code_merge_test.dart`). Jangan generalisasi
+gotcha lama ke SEMUA HID testing — cuma berlaku utk TextField.
 
 ## ⚠️ BELUM diverifikasi di device fisik — commit `e3a7b7d`
 
@@ -158,6 +201,21 @@ Semua sub-item (24a–24f) selesai & di-commit. Ringkasan alur akhir:
   — perubahan Kotlin (`MainActivity.kt`) tidak bisa dikompilasi lokal,
   cuma ditinjau manual. GitHub Actions (`build-apk.yml`) yang jadi
   verifikasi RIIL pertama untuk perubahan native Android.
+- **`Timer(Duration, ...)` beda dari `DateTime.now()` soal fast-forward di
+  widget test**: `Timer` (dipakai `_scheduleOrderCodeFinalize` utk gabung
+  fragmen HID) IKUT di-fast-forward oleh `tester.pump(Duration(...))` —
+  bisa ditest deterministik tanpa nunggu wall-clock asli. `DateTime.now()`
+  (dipakai debounce `_handleBarcode` & cooldown stale-detection tap-to-
+  scan) TIDAK ikut fast-forward, tetap wall-clock asli — bisa jadi
+  confound test kalau dua tap terjadi "seketika" dalam waktu test (lihat
+  gotcha debounce di atas). Pilih `Timer` vs `DateTime.now()` sadar
+  konsekuensi testing-nya masing-masing.
+- **`tester.sendKeyEvent(key, character: ch)` REACH `HardwareKeyboard.
+  instance.addHandler`-registered callback dgn benar** (raw key event
+  pipeline) — beda dari gotcha lama soal TextField/IME yang TIDAK bisa
+  disimulasikan via raw key event. Jangan generalisasi gotcha lama itu ke
+  SEMUA skenario HID — cuma berlaku utk widget `TextField`/`EditableText`.
+  Lihat `kasir_hid_order_code_merge_test.dart`.
 - Double `Navigator.pop()` sinkron back-to-back bisa bikin `pumpAndSettle()`
   macet selamanya di widget test — cuma pop route TERDEKAT/terdalam.
 - `await someDriftTable.watch().first` langsung di `testWidgets` bisa HANG
@@ -181,6 +239,10 @@ menggagalkan perintah (aman diabaikan).
   Kalau masih crash, minta user buka "Log Error Terakhir" di Pengaturan
   (kalau app berhasil kebuka) atau cari file `the_pos_crash_log.jsonl` di
   `Android/data/com.thepos.the_pos/files/` via File Manager (kalau tidak).
+  User sedang MENUNGGU HP-nya selesai dipakai orang lain sebelum bisa
+  test — sambil menunggu, user melaporkan (dan sudah diperbaiki di commit
+  `2ee8068`) 2 bug scanner terpisah yang TIDAK terkait crash fix di atas.
+  Jangan bingung kedua alur ini — beda commit, beda root cause.
 - **Item 21+17** (sync UI persisten lintas tab + persist antrian approval)
   — masih sengaja ditunda dari sesi-sesi sebelumnya.
 - **Item 23** (scope bug "Sisa Tagihan" understated di lokasi lain) — lihat
