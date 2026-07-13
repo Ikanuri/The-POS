@@ -54,6 +54,9 @@ const kKasirPermissionKeys = <String>[
   'input_pembelian',
   'override_harga',
   'batal_transaksi',
+  // Item 24d — default OFF. Tanpa izin ini, tombol "Bayar" di kasir
+  // berubah jadi "Kirim ke Owner/Asisten" (lihat kasir_screen.dart).
+  'terima_pembayaran',
 ];
 
 /// Izin khusus role Asisten. Disimpan di tabel kasir_permissions yang sama
@@ -102,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -206,6 +209,10 @@ class AppDatabase extends _$AppDatabase {
             // status sudah-diambil sendiri.
             await m.addColumn(transactionPayments, transactionPayments.changeGiven);
             await m.addColumn(transactionPayments, transactionPayments.changeTaken);
+          }
+          if (from < 14) {
+            // Tanda cepat "stok habis" manual per produk (Item 25a).
+            await m.addColumn(products, products.markedOutOfStock);
           }
         },
         beforeOpen: (details) async {
@@ -982,6 +989,12 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deactivateProduct(String productId) =>
       (update(products)..where((t) => t.id.equals(productId)))
           .write(const ProductsCompanion(isActive: Value(false)));
+
+  /// Item 25a — tandai/lepas tanda "stok habis" manual (lihat komentar
+  /// kolom `markedOutOfStock` di product_tables.dart).
+  Future<void> setMarkedOutOfStock(String productId, bool value) =>
+      (update(products)..where((t) => t.id.equals(productId))).write(
+          ProductsCompanion(markedOutOfStock: Value(value)));
 
   // ───────────────────────── Transaction save ─────────────────────────
 

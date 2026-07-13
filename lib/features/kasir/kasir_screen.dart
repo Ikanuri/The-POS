@@ -119,6 +119,216 @@ class _ScanToastCard extends StatelessWidget {
   }
 }
 
+// ─── Item 24f — kapsul kontrol scanner melayang di frame kamera ────────────
+// Gaya kamera bawaan HP (mis. pill zoom "0.6 · 1X · 2"): kapsul-kapsul kecil
+// TERPISAH, bukan digabung 1 panel besar/menu titik-tiga — supaya gampang
+// dijangkau jempol & tidak menutupi area bidik tengah.
+
+const _kScanCapsuleBg = Color(0x73000000); // hitam semi-transparan (~45%)
+
+/// Satu tombol icon melayang (mis. tutup/senter).
+class _ScanCapsuleIconButton extends StatelessWidget {
+  const _ScanCapsuleIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _kScanCapsuleBg,
+      shape: const CircleBorder(),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white),
+        tooltip: tooltip,
+        onPressed: onTap,
+      ),
+    );
+  }
+}
+
+/// Segmented pill "Sekali | Berulang".
+class _ScanModeSegment extends StatelessWidget {
+  const _ScanModeSegment({required this.continuous, required this.onChanged});
+
+  final bool continuous;
+  final ValueChanged<bool> onChanged;
+
+  Widget _seg(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(label,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _kScanCapsuleBg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _seg('Sekali', !continuous, () => onChanged(false)),
+            _seg('Berulang', continuous, () => onChanged(true)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Kapsul toggle label + icon (dipakai untuk "Tap to Scan").
+class _ScanCapsuleToggle extends StatelessWidget {
+  const _ScanCapsuleToggle({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: value ? AppTheme.accent : _kScanCapsuleBg,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              value
+                  ? Icons.center_focus_strong
+                  : Icons.center_focus_weak_outlined,
+              size: 15,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 5),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Kapsul kecil siklus durasi toast (tap untuk pindah 3s → 5s → 10s → ...).
+class _ScanDurationCapsule extends StatelessWidget {
+  const _ScanDurationCapsule({required this.seconds, required this.onTap});
+
+  final int seconds;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: _kScanCapsuleBg,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text('Pesan ${seconds}s',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tombol bidik manual (tap-to-scan) — muncul/hilang dgn animasi "plop"
+/// (scale+fade, sedikit overshoot), TIDAK dipaksakan di mode auto-continuous.
+class _ScanShutterButton extends StatelessWidget {
+  const _ScanShutterButton({
+    super.key,
+    required this.visible,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final bool visible;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedScale(
+        scale: visible ? 1 : 0.7,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 180),
+          child: GestureDetector(
+            onTap: enabled ? onTap : null,
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                border: Border.all(
+                    color: Colors.white.withOpacity(0.35), width: 4),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3)),
+                ],
+              ),
+              child: Icon(
+                Icons.center_focus_strong,
+                color: enabled ? AppTheme.accent : Colors.grey,
+                size: 30,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Pemicu animasi pulse garis scan — dipanggil saat produk berhasil discan
 /// dalam mode berulang (kamera tetap terbuka).
 class ScanPulseController extends ChangeNotifier {
@@ -482,6 +692,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   bool get _isCatalogMode => widget.catalogMode;
   static const _prefContinuous = 'scanner_continuous';
   static const _prefToastDuration = 'scanner_toast_duration';
+  static const _prefTapToScan = 'scanner_tap_to_scan';
 
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
@@ -525,6 +736,14 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   // Mode scanner
   bool _continuousScan = false;
   int _toastDurationSeconds = 5;
+
+  // Item 24e — tap-to-scan: opsi tambahan (bukan pengganti default), untuk
+  // situasi presisi lebih penting daripada kecepatan (mis. rak dengan
+  // banyak barcode berdekatan, rawan salah pindai kalau auto-continuous).
+  // Saat aktif: barcode yang terdeteksi kamera TIDAK langsung diproses,
+  // cuma ditampung di _pendingBarcode sampai pengguna tap tombol bidik.
+  bool _tapToScan = false;
+  String? _pendingBarcode;
 
   // Toast melayang (mode continuous)
   _ScanToast? _activeToast;
@@ -631,6 +850,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     setState(() {
       _continuousScan = prefs.getBool(_prefContinuous) ?? false;
       _toastDurationSeconds = prefs.getInt(_prefToastDuration) ?? 5;
+      _tapToScan = prefs.getBool(_prefTapToScan) ?? false;
     });
   }
 
@@ -638,6 +858,22 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     setState(() => _continuousScan = v);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefContinuous, v);
+  }
+
+  Future<void> _setTapToScan(bool v) async {
+    setState(() {
+      _tapToScan = v;
+      _pendingBarcode = null;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefTapToScan, v);
+  }
+
+  /// Item 24e — proses barcode yang sedang ditampung (tap-to-scan).
+  void _confirmPendingScan() {
+    final code = _pendingBarcode;
+    if (code == null) return;
+    _handleBarcode(code);
   }
 
   Future<void> _setToastDuration(int s) async {
@@ -661,6 +897,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     setState(() {
       _scannerOpen = true;
       _torchOn = false;
+      _pendingBarcode = null;
       _scannerCtrl = MobileScannerController();
     });
   }
@@ -673,6 +910,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       _scannerCtrl = null;
       _activeToast = null;
       _torchOn = false;
+      _pendingBarcode = null;
     });
   }
 
@@ -1079,53 +1317,26 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   @override
   Widget build(BuildContext context) {
     if (_scannerOpen && _scannerCtrl != null) {
+      // Item 24f — kontrol scanner sebagai kapsul-kapsul kecil melayang
+      // langsung di frame kamera (gaya kamera bawaan HP, mis. pill zoom
+      // "0.6 · 1X · 2"), BUKAN satu panel besar/menu titik-tiga — supaya
+      // gampang dijangkau jempol & tidak menutupi area bidik tengah.
       return Scaffold(
-        appBar: AppBar(
-          title: Text(_continuousScan ? 'Scan Berulang' : 'Scan Sekali'),
-          leading: IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: _closeScanner,
-          ),
-          actions: [
-            IconButton(
-              icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
-              tooltip: 'Senter',
-              onPressed: _toggleTorch,
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.settings_outlined),
-              tooltip: 'Pengaturan Scanner',
-              onSelected: (v) {
-                if (v == 'mode') {
-                  _setContinuous(!_continuousScan);
-                } else if (v.startsWith('dur:')) {
-                  _setToastDuration(int.parse(v.substring(4)));
-                }
-              },
-              itemBuilder: (ctx) => [
-                CheckedPopupMenuItem(
-                  value: 'mode',
-                  checked: _continuousScan,
-                  child: const Text('Scan Berulang'),
-                ),
-                const PopupMenuDivider(),
-                for (final s in [3, 5, 10])
-                  CheckedPopupMenuItem(
-                    value: 'dur:$s',
-                    checked: _toastDurationSeconds == s,
-                    child: Text('Durasi Pesan: ${s}s'),
-                  ),
-              ],
-            ),
-          ],
-        ),
+        backgroundColor: Colors.black,
         body: Stack(
           children: [
             MobileScanner(
               controller: _scannerCtrl!,
               onDetect: (capture) {
                 final barcode = capture.barcodes.firstOrNull?.rawValue;
-                if (barcode != null) _handleBarcode(barcode);
+                if (barcode == null) return;
+                if (_tapToScan) {
+                  if (_pendingBarcode != barcode) {
+                    setState(() => _pendingBarcode = barcode);
+                  }
+                } else {
+                  _handleBarcode(barcode);
+                }
               },
             ),
             // Overlay panduan visual (dekoratif — TIDAK membatasi area deteksi;
@@ -1133,6 +1344,75 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             Positioned.fill(
               child: IgnorePointer(
                 child: _ScanGuideOverlay(controller: _scanPulseController),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _ScanCapsuleIconButton(
+                      icon: Icons.arrow_back,
+                      tooltip: 'Tutup scanner',
+                      onTap: _closeScanner,
+                    ),
+                    _ScanCapsuleIconButton(
+                      icon: _torchOn ? Icons.flash_on : Icons.flash_off,
+                      tooltip: 'Senter',
+                      onTap: _toggleTorch,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Tombol bidik manual (tap-to-scan) — muncul/hilang dgn animasi
+            // "plop" halus (scale+fade, sedikit overshoot), TIDAK dipaksakan
+            // saat mode auto-continuous supaya tidak membingungkan.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 118,
+              child: Center(
+                child: _ScanShutterButton(
+                  key: const Key('scan_shutter_button'),
+                  visible: _tapToScan,
+                  enabled: _pendingBarcode != null,
+                  onTap: _confirmPendingScan,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _ScanModeSegment(
+                        continuous: _continuousScan,
+                        onChanged: _setContinuous,
+                      ),
+                      _ScanCapsuleToggle(
+                        label: 'Tap to Scan',
+                        value: _tapToScan,
+                        onChanged: _setTapToScan,
+                      ),
+                      _ScanDurationCapsule(
+                        seconds: _toastDurationSeconds,
+                        onTap: () {
+                          const options = [3, 5, 10];
+                          final i = options.indexOf(_toastDurationSeconds);
+                          _setToastDuration(
+                              options[(i + 1) % options.length]);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
             if (_activeToast != null)
@@ -2037,13 +2317,20 @@ class _ProductCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  product.name,
+                  // Item 25a — kosmetik saja (warnai nama, tidak nonaktifkan
+                  // "+"; itu wewenang izin "Izinkan Stok Minus"). Pakai warna
+                  // nama (bukan badge terpisah) supaya tidak menambah lebar/
+                  // tinggi baris & memicu overflow di kartu grid yang sempit.
+                  product.markedOutOfStock
+                      ? '${product.name} · Habis'
+                      : product.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     height: 1.25,
+                    color: product.markedOutOfStock ? cs.error : null,
                   ),
                 ),
                 const Spacer(),
@@ -2215,6 +2502,16 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                                 ),
                               ),
                             ),
+                            if (product.markedOutOfStock) ...[
+                              const SizedBox(width: 6),
+                              // Item 25a — kosmetik saja, tidak menonaktifkan
+                              // tombol +/- (itu wewenang izin stok minus).
+                              Text('Habis',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: cs.error)),
+                            ],
                             if (hasVariants) ...[
                               const SizedBox(width: 4),
                               Icon(

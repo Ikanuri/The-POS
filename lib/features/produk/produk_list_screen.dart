@@ -286,10 +286,32 @@ class _ProductTile extends ConsumerWidget {
   /// punya satuan/harga sama sekali.
   final int? basePrice;
 
+  Future<void> _confirmDeactivate(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nonaktifkan Produk?'),
+        content: const Text(
+            'Produk tidak akan muncul di katalog kasir. Data tetap tersimpan.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Nonaktifkan')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await ref.read(databaseProvider).deactivateProduct(product.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    return ListTile(
+    final tile = ListTile(
       leading: CircleAvatar(
         backgroundColor: scheme.primaryContainer,
         child: Text(
@@ -326,6 +348,28 @@ class _ProductTile extends ConsumerWidget {
       // Tetap bisa di-tap walau !canEdit: form membuka mode read-only
       // ("Detail Produk") untuk kasir tanpa izin input_stok.
       onTap: () => onOpen('/produk/${product.id}'),
+    );
+
+    if (!canEdit) return tile;
+
+    // Geser ke kiri untuk nonaktifkan — pola sama seperti hapus pelanggan.
+    // Bukan hard-delete (tidak ada fungsi itu di DB): "Nonaktifkan" = sama
+    // persis logika tombol Nonaktifkan di produk_form_screen.dart, cuma
+    // dipanggil lebih cepat lewat swipe.
+    return Dismissible(
+      key: ValueKey(product.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        await _confirmDeactivate(context, ref);
+        return false; // stream akan memperbarui daftar sendiri
+      },
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: scheme.errorContainer,
+        child: Icon(Icons.visibility_off_outlined, color: scheme.onErrorContainer),
+      ),
+      child: tile,
     );
   }
 }

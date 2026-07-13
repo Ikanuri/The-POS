@@ -34,7 +34,7 @@ class KasirPermissionsScreen extends ConsumerWidget {
     final permsAsync = ref.watch(_kasirPermissionsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Izin Kasir')),
+      appBar: AppBar(title: const Text('Izin Pegawai')),
       body: permsAsync.when(
         data: (perms) => ListView(
           padding: const EdgeInsets.all(8),
@@ -43,7 +43,7 @@ class KasirPermissionsScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Izin ini berlaku untuk device dengan role Kasir. '
+                  'Izin ini berlaku untuk device dengan role Pegawai. '
                   'Owner dan Asisten selalu punya akses penuh.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -94,16 +94,20 @@ class _PermissionTile extends ConsumerWidget {
         'input_pembelian' => 'Input Pembelian',
         'override_harga' => 'Override Harga',
         'batal_transaksi' => 'Batalkan Transaksi',
+        'terima_pembayaran' => 'Terima Pembayaran',
         _ => key,
       };
 
   String _desc(String key) => switch (key) {
-        'input_stok' => 'Kasir bisa menambah stok produk',
-        'tambah_pelanggan' => 'Kasir bisa mendaftarkan pelanggan baru',
-        'input_pengeluaran' => 'Kasir bisa mencatat pengeluaran',
-        'input_pembelian' => 'Kasir bisa mencatat pembelian dari supplier',
-        'override_harga' => 'Kasir bisa mengubah harga di kasir',
-        'batal_transaksi' => 'Kasir bisa membatalkan / void transaksi',
+        'input_stok' => 'Pegawai bisa menambah stok produk',
+        'tambah_pelanggan' => 'Pegawai bisa mendaftarkan pelanggan baru',
+        'input_pengeluaran' => 'Pegawai bisa mencatat pengeluaran',
+        'input_pembelian' => 'Pegawai bisa mencatat pembelian dari supplier',
+        'override_harga' => 'Pegawai bisa mengubah harga di kasir',
+        'batal_transaksi' => 'Pegawai bisa membatalkan / void transaksi',
+        'terima_pembayaran' =>
+          'Pegawai bisa terima uang & selesaikan pembayaran sendiri. '
+              'Kalau OFF, tombol "Bayar" berubah jadi "Kirim ke Owner/Asisten".',
         _ => '',
       };
 }

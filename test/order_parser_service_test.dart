@@ -158,4 +158,40 @@ void main() {
     expect(result.items.first.parentProductId, parentId);
     await db.close();
   });
+
+  test(
+      'Item 26a — segmen catatan per-produk ter-encodeURIComponent di-decode '
+      'balik jadi itemNote, ikut ke CartItem', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db, name: 'Ayam', price: 25000);
+    final unitId = await _unitIdOf(db, productId);
+
+    // Catatan asli "yang matang; jangan pedas" — mengandung ';' mentah,
+    // yang harus AMAN karena sisi HTML mengirim hasil encodeURIComponent.
+    const encoded = 'yang%20matang%3B%20jangan%20pedas';
+    final text = '#PSN:$unitId=2:$encoded;';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    expect(result.items, hasLength(1));
+    expect(result.items.first.itemNote, 'yang matang; jangan pedas');
+    expect(result.items.first.toCartItem().itemNote,
+        'yang matang; jangan pedas');
+    await db.close();
+  });
+
+  test(
+      'Item 26a — item TANPA catatan (format lama "id=qty" polos) tetap '
+      'parse normal, itemNote null (backward-compatible)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    final unitId = await _unitIdOf(db, productId);
+
+    final text = '#PSN:$unitId=3;';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    expect(result.items, hasLength(1));
+    expect(result.items.first.qty, 3);
+    expect(result.items.first.itemNote, isNull);
+    await db.close();
+  });
 }

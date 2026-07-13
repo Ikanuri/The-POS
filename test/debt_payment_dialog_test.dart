@@ -93,4 +93,41 @@ void main() {
     expect(result!.method, 'tunai');
     expect(result!.amount, 15000);
   });
+
+  testWidgets(
+      'tap chip "Uang Pas" saat field kosong (Tambah Bayar) → field terisi '
+      'sisa tagihan persis', (tester) async {
+    ({int amount, String method})? result;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () async {
+              result = await showDebtPaymentDialog(context, db,
+                  remaining: 84500, title: 'Tambah Bayar',
+                  prefillRemaining: false);
+            },
+            child: const Text('buka'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('buka'));
+    await tester.pumpAndSettle();
+
+    // Field kosong (prefillRemaining: false) sebelum chip ditap.
+    expect(find.text('84.500'), findsNothing);
+
+    await tester.tap(find.widgetWithText(ActionChip, 'Uang Pas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('84.500'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Bayar'));
+    await tester.pumpAndSettle();
+
+    expect(result, isNotNull);
+    expect(result!.amount, 84500);
+  });
 }

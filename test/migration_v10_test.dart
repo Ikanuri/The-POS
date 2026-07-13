@@ -38,6 +38,8 @@ void main() {
         id TEXT PRIMARY KEY, transaction_id TEXT, amount INTEGER, method TEXT,
         paid_at INTEGER, kasir_id TEXT, note TEXT);
     ''');
+    // products diperlukan agar migrasi v14 (addColumn marked_out_of_stock) tak gagal.
+    v9.execute('CREATE TABLE products(id TEXT PRIMARY KEY);');
     v9.execute(
         "INSERT INTO alt_prices(id, product_unit_id, label, price, created_at) "
         "VALUES('a1','u1','Harga Toko A',3000,1700000000)");
@@ -73,7 +75,7 @@ void main() {
     expect(updated.sortOrder, 5);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 13);
+    expect(ver.data.values.first, 14);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

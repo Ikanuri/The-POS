@@ -221,4 +221,93 @@ void main() {
     expect(names, contains('Sedap Goreng'));
     await db.close();
   });
+
+  test(
+      'Item 25a — produk ditandai stok habis tampil badge "Stok Habis" di '
+      'katalog HTML, bukan tombol tambah', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final id = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    await db.setMarkedOutOfStock(id, true);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['name'] == 'Gula Pasir');
+    expect(p['outOfStock'], isTrue);
+    // Markup render badge & skip tombol tambah untuk produk outOfStock —
+    // dicek lewat keberadaan kelas CSS-nya di template.
+    expect(result.html.contains('oos-badge'), isTrue);
+    await db.close();
+  });
+
+  test(
+      'Item 25a — produk TIDAK ditandai stok habis → outOfStock false di '
+      'data katalog', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Teh Celup', price: 8000);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['name'] == 'Teh Celup');
+    expect(p['outOfStock'], isFalse);
+    await db.close();
+  });
+
+  test(
+      'Item 24c — default TERANG selalu (tidak ikut prefers-color-scheme '
+      'HP pelanggan), font Hanken Grotesk/Newsreader ter-embed', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // TIDAK ADA lagi auto-dark ikut OS pelanggan — dulu ada blok CSS
+    // `@media (prefers-color-scheme: dark)` + JS `matchMedia(...)` yang
+    // bikin katalog gelap tanpa dipilih; sekarang default HARUS selalu
+    // terang (cek marker fungsional, bukan sekadar substring bebas — teks
+    // "prefers-color-scheme" masih boleh muncul di komentar penjelas).
+    expect(result.html.contains('@media (prefers-color-scheme'), isFalse);
+    expect(result.html.contains('matchMedia'), isFalse);
+    expect(result.html.contains("saved = 'light'"), isTrue);
+
+    // Font disamakan dengan app (Hanken Grotesk = UI, Newsreader = angka),
+    // di-embed sebagai @font-face base64 (bukan cuma system-font fallback).
+    expect(result.html.contains("--font:'Hanken Grotesk'"), isTrue);
+    expect(result.html.contains("--serif:'Newsreader'"), isTrue);
+    expect(result.html.contains("font-family:'Hanken Grotesk'"), isTrue);
+    expect(result.html.contains("font-family:'Newsreader'"), isTrue);
+    expect(result.html.contains('data:font/woff2;base64,'), isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 26a — cart sheet HTML punya input catatan per-produk, '
+      'buildOrderText encode catatan ke segmen ":<catatan>" di kode mesin',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // Input catatan per-baris keranjang ada (bukan di kartu grid produk).
+    expect(result.html.contains("noteInput.className = 'tfield ci-note'"),
+        isTrue);
+    expect(result.html.contains('cartNotes[id] = noteInput.value'), isTrue);
+    // Tidak memicu render() saat mengetik (hindari buang fokus input).
+    expect(
+        RegExp(r"noteInput\.addEventListener\('input',\s*function\(\)\{\s*"
+                r'cartNotes\[id\] = noteInput\.value;\s*\}\)')
+            .hasMatch(result.html),
+        isTrue);
+
+    // Encoding ke kode mesin: id=qty:catatan(encodeURIComponent).
+    expect(
+        result.html.contains(
+            "codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''))"),
+        isTrue);
+
+    await db.close();
+  });
 }

@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 13 Juli 2026
+
+### ✨ Fitur Baru
+- **Catatan per-produk di katalog HTML.** Saat memilih barang lewat
+  katalog online, pelanggan sekarang bisa isi catatan untuk tiap produk
+  (mis. "yang matang", "warna merah") — tidak cuma catatan umum untuk
+  seluruh pesanan seperti sebelumnya. Catatan ini otomatis ikut ke
+  keranjang & struk begitu kasir tempel pesanannya.
+
+### 🎨 Tampilan
+- **Tombol "Uang Pas" pindah ke sebelah kiri tombol "Bayar"** di kalkulator
+  bayar tunai — sebelumnya di atas keypad bareng pecahan uang, sekarang
+  sebaris dengan "Bayar" supaya tidak salah pencet saat buru-buru.
+- **Tombol "00" di keypad kalkulator bayar kini sebaris dengan "0"** (di
+  baris paling bawah), bukan lagi di baris "7 8 9" — susunan angka jadi
+  lebih rapi & mudah dijangkau.
+
 ## 12 Juli 2026
 
 ### ✨ Fitur Baru
@@ -21,6 +38,28 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Harga per-satuan tampil di keranjang kasir**, di bawah nama tiap item
   (mis. "Karung · Rp 65.000"). Berguna kalau qty lebih dari 1 dan mau tahu
   harga per 1 satuannya tanpa harus menghitung sendiri dari subtotal.
+- **Tombol "Uang Pas"** di modal Tambah Bayar/Lunasi hutang — sekali tap
+  langsung mengisi field dengan sisa tagihan persis, tidak perlu ketik
+  manual.
+- **Katalog HTML kini pakai font & tampilan yang sama dengan aplikasi**
+  (Hanken Grotesk/Newsreader), selalu terang secara default (tidak lagi
+  ikut mode gelap HP pelanggan yang bisa bikin teks susah dibaca).
+- **Hapus produk langsung dari tab Produk** dengan geser (swipe) ke kiri,
+  sama seperti di tab Pelanggan — tidak perlu lagi buka detail produk dulu.
+- **Tanda cepat "Stok Habis"** — dari modal item kasir, tap ikon keranjang-
+  silang untuk menandai produk habis. Produk tetap bisa ditambah ke
+  keranjang seperti biasa (cuma tanda visual), tapi di katalog HTML
+  statis tombol tambahnya benar-benar dinonaktifkan buat pelanggan.
+- **Scanner kasir tampilan baru** — tombol tutup, senter, mode Sekali/
+  Berulang, dan durasi pesan kini jadi kapsul-kapsul kecil melayang
+  langsung di atas kamera (gaya kamera bawaan HP), bukan lagi tersembunyi
+  di menu titik-tiga.
+- **Mode "Tap to Scan"** (opsional, di kapsul scanner) — barcode yang
+  terdeteksi kamera ditahan dulu, baru diproses setelah tap tombol bidik.
+  Berguna kalau banyak barcode berdekatan di rak dan mode otomatis rawan
+  salah pindai.
+- Role device "Kasir" sekarang tampil sebagai **"Pegawai"** di semua layar
+  Pengaturan & pairing (murni penamaan, tidak mengubah cara kerja).
 
 ### 🔧 Perbaikan
 - **"Sisa Tagihan" di struk sekarang benar** saat kembalian yang sudah

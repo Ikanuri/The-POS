@@ -9,10 +9,308 @@ di sini.
 _Terakhir diperbarui: 12 Juli 2026. Item 9-22 SELESAI 12/13 (Item 17+21
 sengaja ditunda). Item 3a/3b SELESAI/terjawab lewat fitur baru "Import dari
 Griyo POS". Item 4 (import pelanggan Griyo) analisis+keputusan besar
-selesai, siap diimplementasi. **Item 23 baru** (bug "Sisa Tagihan" understated
+selesai, siap diimplementasi. **Item 23** (bug "Sisa Tagihan" understated
 saat kembalian dipakai ulang — scope Buku Hutang/Tutup Kasir/tempat lain
-masih menggantung, lihat detail). Sisa menggantung: Item 3c, 5, 8, 23 —
-lihat masing-masing untuk detail._
+masih menggantung). **Item 24**: 24a/24c/24e/24f SELESAI & di-commit; 24d
+SEBAGIAN (rename Pegawai + permission `terima_pembayaran` selesai) — sisa
+logika gate "Bayar" jadi QR (**mekanisme kirim SUDAH DIPUTUSKAN: QR,
+gabung ke scanner kasir yang sudah ada, hasil scan masuk antrian
+`held_orders` — lihat detail lengkap di 24d**), checklist tersinkron
+(24b), & (sengaja TANPA notifikasi otomatis arah balik di versi awal)
+belum dikerjakan. **Item 25**: 25a/25b SELESAI & di-commit. **Item 26**
+(3 penyempurnaan kecil: catatan per-produk di katalog HTML, posisi tombol
+Uang Pas & keypad "00"/"0" di kalkulator bayar) — SELESAI & di-commit.
+**25c (lisensi) desainnya SUDAH FINAL & komprehensif** (lihat dokumentasi
+terpisah yang dikirim ke user, `docs/keamanan-lisensi-offline.md` — TIDAK
+di-commit ke repo atas permintaan user, cuma dikirim sebagai file) —
+**TAPI SENGAJA BELUM dieksekusi**, user eksplisit minta tunda eksekusinya
+walau desainnya sudah disetujui penuh. Jangan eksekusi 25c tanpa instruksi
+baru dari user.
+Sisa menggantung: Item 3c, 5, 8, 23, 24b+24d, 25c — lihat masing-masing
+untuk detail._
+
+---
+
+## Item 25 — 3 usulan tambahan (lanjutan sesi Item 24)
+
+### 25c — Gerbang aktivasi/lisensi offline anti-penyebaran tanpa izin (DESAIN FINAL, EKSEKUSI SENGAJA DITUNDA)
+
+**Konteks nyata dari user:** seseorang minta akses app ini (sudah
+diperingatkan belum stabil/masih buggy), lalu diam-diam menyebarkannya ke
+pihak lain tanpa izin. User ingin cara menghentikan rantai penyebaran +
+mengunci fitur sepenuhnya, sekaligus placeholder untuk monetisasi nanti.
+
+**⚠️ STATUS: desain sudah disetujui penuh lewat diskusi panjang (termasuk
+1 lubang keamanan nyata yang ditemukan user sendiri & sudah ditambal di
+desain final), TAPI user secara eksplisit minta EKSEKUSI kode DITUNDA**
+("eksekusi semua plan... kecuali aspek security yang baru kita bahas").
+**Jangan mulai implementasi 25c tanpa instruksi baru dari user di sesi
+mendatang.**
+
+**Dokumentasi lengkap (alur, logika, detail teknis tiap komponen) ada di
+file terpisah `docs/keamanan-lisensi-offline.md`** — sengaja **TIDAK
+di-commit ke repo** atas permintaan eksplisit user (dikirim sebagai file
+saja). Kalau file itu sudah tidak ada di scratchpad/hilang saat sesi
+mendatang mau eksekusi ini, regenerasi ringkasannya dari sini:
+
+**Ringkasan arsitektur final (2 lapis independen, bisa dikombinasi bebas):**
+- **Tingkat 1 (offline, ratchet ringan):** tiap device generate fingerprint
+  unik saat install pertama → terkunci sampai user tempel kode aktivasi
+  yang HANYA developer bisa keluarkan (dihitung dari fingerprint + masa
+  berlaku pilihan developer, termasuk opsi "selamanya" → skema lisensi
+  offline klasik ala serial-key, tidak butuh server). Masa berlaku
+  dihitung pakai ratchet DASAR (waktu-terakhir-terlihat, tolak kalau
+  mundur) — sengaja TIDAK dibuat berlapis-lapis rumit (skip cross-check
+  file-mtime/elapsed-since-boot) karena Tingkat 3 menutup kasus yang lebih
+  canggih.
+- **Tingkat 2 (opsional, lewat rilis APK baru):** kode aktivasi lama
+  otomatis tidak dikenali skema verifikasi baru begitu app di-update ke
+  versi lisensi berbayar sungguhan — jalur alami untuk momen monetisasi
+  aktif nanti.
+- **Tingkat 3 (remote revoke, butuh internet sesekali, TERISOLASI dari
+  logika offline-first lainnya):** 1 file JSON kecil yang dihost developer
+  (mis. raw file di GitHub) berisi daftar fingerprint yang dicabut. App
+  cek file ini opportunistic (saat dibuka, timeout pendek, gagal-diam
+  kalau offline — TIDAK PERNAH memblokir fungsi inti) — kalau fingerprint
+  device sendiri ada di daftar, terkunci di kesempatan cek berikutnya
+  (bukan realtime/push, app tidak punya server untuk itu).
+- **Lubang yang DITEMUKAN & DITAMBAL:** ratchet Tingkat 1 murni bisa
+  diakali via "Hapus Data Aplikasi" (reset semua state lokal termasuk
+  ratchet) lalu **restore backup DB lama** (fitur backup app ini sendiri)
+  yang isinya ratchet versi "masih fresh" — trik replay yang tidak bisa
+  ditambal murni lokal (clear-data menghapus SEMUA yang bisa diingat app,
+  backup file adalah data eksternal di luar kendali app). **Solusinya
+  Tingkat 3** — begitu device itu online lagi, dicek ulang lewat sumber di
+  LUAR device, tidak bisa di-replay dari backup.
+- **Kunci fitur (locked screen, data aman), BUKAN hapus data** — prinsip
+  non-negotiable, konsisten offline-first (tidak ada cloud backup
+  terjamin di app ini).
+- **Batas jujur:** tidak ada proteksi client-side 100% tahan RE dari
+  pihak yang benar-benar niat (root+disassembly) — tapi CI (`build-apk.yml`)
+  sudah pakai `flutter build apk --release` (kode mesin ARM native, bukan
+  bytecode gampang-dibaca) sebagai aset tahan-RE yang SUDAH ADA tanpa
+  kerja tambahan. TIDAK disarankan investasi anti-tamper tambahan
+  (risiko false-positive ke pengguna sah tidak sepadan untuk skala
+  ancaman individu, bukan grup pembajakan terorganisir).
+
+**UI/UX (final, lihat dokumentasi terpisah untuk detail penuh):**
+- Satu layar "Aktivasi Diperlukan" (gerbang lewat `redirect` di
+  `routerProvider`, pola sama seperti `/setup`) untuk SEMUA kondisi
+  terkunci (belum aktivasi/habis masa/dicabut) — pesan SAMA & netral,
+  sengaja tidak membedakan alasan (tidak membocorkan mekanisme
+  pencabutan, tidak terasa menuduh). Visual tenang, konsisten dengan
+  `WelcomeScreen`/token `AppTheme` yang sudah ada — BUKAN gaya
+  DRM/ancaman merah.
+- Kartu kode device + tombol "Salin Kode" + tombol "Kirim via WhatsApp"
+  (buka WA dengan nomor developer + kode terisi otomatis).
+- Field tempel kode aktivasi balasan + tombol "Aktifkan".
+- Banner peringatan sebelum masa berlaku habis (H-5/7 hari) — reuse
+  `InlineBannerStateMixin` yang sudah ada di banyak screen, BUKAN
+  komponen baru.
+- Alat generate kode & kelola daftar cabut: skrip lokal sederhana milik
+  developer (BUKAN UI di dalam app) — dipakai jarang, cukup satu orang.
+
+**Alasan ditunda (bukan ditolak):** user ingin fokus eksekusi fitur
+fungsional (Item 24 + 25a/25b) dulu; 25c sudah matang & bisa dieksekusi
+kapan saja user siap, tanpa perlu didiskusikan ulang dari nol.
+
+---
+
+## Item 24 — Sisa: payment gate role Pegawai (24b+24d)
+
+**Status:** 24a, 24c, 24e, 24f SELESAI & sudah di-commit. **24d SEBAGIAN
+mulai dikerjakan** (rename kosmetik "Kasir"→"Pegawai" di UI + permission
+`terima_pembayaran` default OFF sudah SELESAI & di-commit) — **SISA:**
+logika gerbang tombol "Bayar"→"Kirim ke Owner/Asisten", tag `held_orders`
+`awaitingPayment`, tampilan antrian khusus, checklist struk tersinkron
+(24b), dan notifikasi realtime. Detail lengkap tiap bagian masih di bawah
+(belum dihapus karena belum semua selesai).
+
+**Bagian yang SUDAH selesai (24d, sebagian):**
+- `kKasirPermissionKeys` (`app_database.dart`) — tambah `terima_pembayaran`,
+  default OFF (self-heal ke DB lama via `beforeOpen` insertOrIgnore, pola
+  yang sama seperti izin lain, TANPA migrasi schema).
+- `kasir_permissions_screen.dart` — label/deskripsi "Terima Pembayaran" +
+  AppBar/teks jadi "Izin Pegawai".
+- Rename kosmetik UI lain: `pengaturan_screen.dart` (roleLabel switch,
+  menu "Izin Pegawai", teks toggle stok minus), `pair_device_screen.dart`
+  (chip pilih role saat pairing), `pairing_screen.dart` (saran nama
+  device + roleLabel identitas). **`deviceRole` internal TETAP `'kasir'`**
+  di semua titik — TIDAK disentuh, sesuai catatan audit di bawah.
+- **SENGAJA TIDAK disentuh** (bukan role-label, konsep beda): tab
+  bottom-nav "Kasir" di `main_shell.dart` (nama FITUR/layar POS, bukan
+  role pegawai) & label "Kasir" di `transaksi_tab.dart` (atribusi generik
+  "siapa yang menjalankan kasir/proses jual", bukan tier permission).
+
+**Bagian yang MASIH tersisa (belum dikerjakan):** logika gate tombol
+"Bayar" di `cart_sheet.dart`/`kasir_screen.dart` (perlu hati-hati: cart
+sheet ini dipakai bersama untuk mode kasir utama, Tambah Belanjaan, DAN
+mode Katalog — gate HANYA berlaku utk transaksi nyata, exclude
+`kCatalogCartId`), tag `held_orders` + payload checklist (24b), tampilan
+antrian khusus di owner/asisten, dan notifikasi realtime (lihat catatan
+di 24d di bawah soal keterkaitannya dengan Item 21 yang sengaja ditunda).
+
+### Mekanisme kirim pesanan pegawai — KEPUTUSAN FINAL: QR, gabung ke scanner kasir yang sudah ada
+
+**Riwayat singkat:** 2 opsi dibandingkan (A = servis jaringan LAN
+terpisah/realtime, B = QR offline reuse "Tempel Pesanan"). **User pilih
+Opsi B**, dengan 2 penyempurnaan tambahan hasil diskusi (lihat di bawah)
+— Opsi A ditolak/tidak dieksekusi (disimpan sebagai catatan riwayat
+keputusan, bukan rencana aktif).
+
+**Ide inti:** tombol yang sebelumnya "Bayar" (saat pegawai tanpa izin
+`terima_pembayaran`) beralih fungsi jadi **tampilkan QR** berisi data
+pesanan — sama sekali tanpa network call. QR itu di-scan owner/asisten,
+lalu **masuk ke ANTRIAN** (`held_orders` bertanda `awaitingPayment`),
+BUKAN langsung ke keranjang aktif — lihat alasan di bagian "penyempurnaan
+2" di bawah.
+
+**Kenapa QR (bukan servis jaringan) — reuse besar-besaran, sudah dicek
+kode nyatanya:**
+- **QR generate**: `qr_flutter` + widget `QrSyncDisplay`
+  (`lib/core/widgets/qr_sync_widgets.dart`) sudah ada & dipakai fitur
+  pairing device — tinggal reuse.
+- **Format payload SUDAH kompak by design**: fitur "Tempel Pesanan" (lihat
+  `order_page_service.dart`/`order_parser_service.dart`) TIDAK
+  menyimpan nama/harga produk di teks pesanan — cuma
+  `#PSN:unitId=qty;unitId=qty;...` (+ baris `Nama:`/`HP:`/`Catatan:`
+  opsional). Harga & nama produk **selalu di-resolve ulang dari DB lokal
+  saat parse**, sudah ada penanganan barang yang terhapus/nonaktif
+  (`ParsedOrder.notFound`). Format sekompak ini sangat muat di QR (kapasitas
+  QR standar ~2900 karakter alfanumerik) bahkan untuk keranjang berisi
+  puluhan item.
+- **Sepenuhnya OFFLINE** — tidak butuh WiFi/LAN/jaringan sama sekali,
+  paling murni sesuai prinsip offline-first app ini.
+
+**Penyempurnaan 1 (dari diskusi) — scan-nya GABUNG ke scanner kasir yang
+sudah ada, BUKAN scanner terpisah di dalam "Tempel Pesanan":**
+- Owner tinggal tap ikon scan yang **sudah biasa dipakai** (hasil redesign
+  Item 24e/24f) — tidak perlu navigasi ke sheet "Tempel Pesanan" dulu.
+- **Scanner eksternal (Bluetooth/USB OTG) otomatis ikut bisa baca — GRATIS,
+  tanpa kode terpisah** — karena `_handleBarcode()` di `kasir_screen.dart`
+  sudah jadi titik temu untuk input kamera MAUPUN input HID eksternal
+  (yang "mengetik" hasil scan). Scanner eksternal yang dipakai toko ini
+  SUDAH support QR (dikonfirmasi user), jadi tidak ada gap kompatibilitas.
+  `MobileScanner` kamera juga sudah mendeteksi SEMUA format termasuk QR
+  tanpa konfigurasi tambahan (`formats: []` default = semua format).
+- **Implementasi**: 1 pengecekan di awal `_handleBarcode()` — kalau teks
+  hasil scan diawali `#PSN:` DAN mengandung baris `Pegawai: <nama>` →
+  branch ke alur import-pesanan-pegawai (bukan cari produk by barcode).
+  Kalau `#PSN:` TANPA baris `Pegawai:` → tetap perilaku "Tempel Pesanan"
+  customer yang sudah ada (tidak berubah). Baris `Pegawai:` jadi
+  pembeda dua jenis kode `#PSN:` (dari pelanggan vs dari pegawai) —
+  reuse total, tanpa format/prefix baru.
+- "Tempel Pesanan" (sheet) tetap dipakai sebagai tempat **preview/
+  konfirmasi isi sebelum final** (bagian yang memang reusable), hanya
+  pemicunya (scan) pindah ke scanner utama kasir.
+
+**Penyempurnaan 2 (dari diskusi) — hasil scan masuk ANTRIAN, bukan
+langsung ke keranjang aktif owner:**
+- Alasan: owner bisa saja sedang di tengah melayani transaksi lain
+  (keranjang aktifnya sudah berisi barang customer lain) — kalau hasil
+  scan pegawai langsung digabung ke situ, 2 transaksi berbeda bisa
+  campur aduk. Masuk ke `held_orders` (`awaitingPayment=true` + nama
+  pegawai + jam kirim, badge "Menunggu Anda Bayar") jauh lebih aman —
+  owner proses kapan siap, bahkan bisa terima beberapa handoff dari
+  beberapa pegawai sekaligus saat rush hour tanpa saling tabrak.
+- **Insight penting**: dengan ini, Opsi A (jaringan) dan Opsi B (QR)
+  SEBENARNYA cuma beda di jalur pengiriman (transport) — keduanya
+  bermuara ke tempat yang PERSIS sama (`held_orders` bertanda
+  `awaitingPayment`). Jadi desain "antrian + card 'Menunggu Anda Bayar'"
+  dari Opsi A tetap dipakai penuh di sini, tidak sia-sia.
+
+**Batas jujur — TIDAK ada notifikasi otomatis arah balik (owner→pegawai
+"transaksi lunas") di versi ini.** QR cuma 1 arah per-scan (fisik, butuh
+2 orang sama-sama berdekatan momen itu). **Keputusan: JANGAN bangun
+notifikasi otomatis arah balik untuk versi awal** — pegawai sudah tahu
+lewat interaksi fisik (serah-terima), owner bisa bilang langsung. Kalau
+nanti dirasa perlu, bisa jadi scope terpisah nanti (QR kecil balik, atau
+Opsi A khusus untuk arah ini) — TAPI jangan digabung otomatis tanpa
+keputusan eksplisit baru.
+
+**Keterbatasan lain (diterima):** butuh owner & pegawai berdekatan fisik
+saat handoff — untuk toko grosir/retail kecil yang jadi target app ini,
+ini realistis (bukan skenario multi-cabang jauh).
+
+### 24b — Persist + sinkronkan state centang item struk (LIHAT JUGA 24d)
+**File:** `lib/features/kasir/receipt_screen.dart` (`_checked`, baris ~80).
+Sekarang murni `Map<String, bool>` di memori widget — hilang begitu layar
+ditutup atau app di-kill OS.
+
+**Keputusan scope (berubah di tengah diskusi — lihat 24d):** awalnya
+diasumsikan cukup persist LOKAL (`SharedPreferences` per `transactionId`,
+pola sama seperti `cart_v1_$cartId`), dengan asumsi 1 pegawai tuntaskan 1
+order sendiri di 1 device. **Asumsi itu gugur** begitu 24d disetujui (alur
+lintas-device: pegawai susun+centang → owner/asisten yang bayar di device
+lain). Keputusan final: state centang HARUS ikut sebagai bagian payload
+`held_orders` yang tersinkron (bukan `SharedPreferences` lokal lagi) —
+supaya owner/asisten bisa lihat progres centang pegawai, ATAU centang
+sendiri kalau pegawai belum sempat (keduanya use-case yang disebut user).
+Auto-clear checklist saat semua item tercentang (bukan expiry berbasis
+waktu — sinyal alami "selesai" lebih masuk akal daripada timer arbitrer).
+
+### 24d — Payment gate untuk role Pegawai (rename kosmetik "Kasir"→"Pegawai" + handoff bayar + notifikasi realtime)
+**Konteks:** pegawai yang cuma boleh input barang & cek kelengkapan (TIDAK
+boleh terima uang) — pembayaran tetap wajib lewat owner/asisten yang pegang
+laci uang.
+
+**⚠️ CATATAN AUDIT PENTING (diminta eksplisit dicatat user):** rename
+"Kasir" → "Pegawai" HANYA di label tampilan UI. **Nilai internal
+`deviceRole` di database & kode TETAP `'kasir'`** — TIDAK diganti jadi
+`'pegawai'`. Alasan: puluhan titik kode (`device.deviceRole == 'kasir'`)
++ data tersimpan di device yang sudah dipasangkan bergantung ke string
+persis itu; mengganti nilainya butuh migrasi & berisiko pecah kompatibilitas
+sync antar-device beda versi app. **Kalau mengaudit/review kode ini di masa
+depan dan menemukan role "Pegawai" di UI tapi `deviceRole: 'kasir'` di
+DB/kode — itu BUKAN bug, itu keputusan sadar yang didokumentasikan di sini.**
+
+**Permission baru:** `terima_pembayaran` (nama tentatif), pola PERSIS sama
+seperti `override_harga`/`batal_transaksi` yang sudah ada di
+`kKasirPermissionKeys` (`app_database.dart`) + `kasir_permissions_screen.dart`.
+**Default OFF** (bukan ON) — keputusan sadar user demi minimalkan celah
+sejak awal ("kasus saya, pegawai memang tidak seharusnya terima
+pembayaran"), owner yang sengaja NYALAKAN kalau mau device tertentu tetap
+bisa jadi kasir penuh.
+
+**DITOLAK (scope lebih besar yang sempat diusulkan, lalu dibatalkan
+user):** permission PER-DEVICE individual (ditentukan saat pairing, bukan
+kebijakan global-per-role). Alasan ditolak: tabel `KasirPermissions`
+sekarang eksplisit "global untuk role, bukan per-user" (`settings_tables.dart`
+baris 3) — upgrade ke per-device butuh ubah skema (kolom relasi device) +
+ubah makna layar Izin Kasir/Izin Asisten dari "kebijakan toko" jadi
+"daftar pegawai individual". User pilih TETAP model global demi
+kesederhanaan & risiko lebih kecil — **jangan re-litigasi ide per-device
+ini tanpa alasan baru yang kuat**, sudah dipertimbangkan & sengaja
+ditolak.
+
+**Alur "Bayar" untuk pegawai tanpa izin `terima_pembayaran`:** tombol
+"Bayar" di keranjang berubah jadi **"Kirim ke Owner/Asisten"**. TIDAK
+reuse mekanisme "Tempel Pesanan"/pause pribadi yang sudah ada (itu tetap
+harus jalan normal & terpisah untuk kebutuhan pegawai sendiri) — sebagai
+gantinya, buat entri `held_orders` dengan **penanda jenis baru** (mis.
+kolom/flag `awaitingPayment` atau semacamnya) yang beda dari hold biasa.
+Entri ini muncul di antrian tertahan milik owner/asisten (tersinkron LAN),
+dengan **nama pegawai + timestamp di atas card** (beda visual dari hold
+biasa — badge/warna aksen berbeda, mis. "Menunggu Anda Bayar"). Owner/
+asisten buka & proses bayar normal di device sendiri.
+
+**Notifikasi realtime ke pegawai:** begitu owner/asisten selesaikan
+pembayaran, device pegawai yang mengirim tadi dapat notifikasi in-app
+real-time "Transaksi [no. nota] lunas" — **LEWAT LAN yang sudah ada**
+(bukan push notification OS/cloud — itu butuh FCM/internet, bertentangan
+dengan prinsip app "tanpa backend cloud", SUDAH dikonfirmasi user bukan
+yang dimaksud). Nyambung erat ke **Item 21** (sync UI persisten + banner
+shell) yang sudah lama menggantung — pertimbangkan kerjakan bareng/setelah
+Item 21 karena infrastrukturnya tumpang tindih (state sync global,
+provider realtime).
+
+**Mockup desain (rush-hour flow, non-blocking):** ada prototipe visual
+interaktif dibuat sesi ini — HP kasir tampilkan pill status "menunggu
+konfirmasi" TANPA menghalangi kasir lanjut kerja; HP owner tampilkan
+badge+sheet dengan tombol "Setujui" besar (jalur utama) + isyarat geser-
+untuk-approve (percepatan opsional, bukan wajib). Tidak disimpan sebagai
+file permanen di repo — regenerasi kalau perlu rujukan visual lagi saat
+implementasi.
 
 ---
 

@@ -102,6 +102,16 @@ class _DebtPaymentDialogState extends State<_DebtPaymentDialog> {
             decoration: const InputDecoration(
                 prefixText: 'Rp ', border: OutlineInputBorder()),
           ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ActionChip(
+              avatar: const Icon(Icons.check_circle_outline, size: 16),
+              label: const Text('Uang Pas'),
+              onPressed: () => setState(() => _ctrl.text =
+                  ThousandsSeparatorFormatter.format(widget.remaining)),
+            ),
+          ),
           if (widget.methods.length > 1) ...[
             const SizedBox(height: 14),
             Text('Metode bayar',
