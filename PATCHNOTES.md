@@ -11,6 +11,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 13 Juli 2026
 
 ### ✨ Fitur Baru
+- **Pegawai kasir kini bisa "Kirim ke Owner/Asisten" tanpa pegang uang
+  tunai.** Untuk pegawai yang belum diberi izin "Terima Pembayaran", tombol
+  "Bayar" di keranjang berubah jadi "Kirim ke Owner/Asisten" — menampilkan
+  kode QR berisi isi keranjang. Owner/Asisten tinggal scan QR itu dengan
+  scanner kasir yang sama (kamera atau scanner eksternal), pesanan otomatis
+  masuk daftar antrian dengan tanda "Menunggu Anda Bayar" beserta nama
+  pegawai pengirimnya, siap diproses pembayarannya. Owner/Asisten sendiri
+  tidak pernah digerbang — tetap langsung "Bayar" seperti biasa.
 - **Catatan per-produk di katalog HTML.** Saat memilih barang lewat
   katalog online, pelanggan sekarang bisa isi catatan untuk tiap produk
   (mis. "yang matang", "warna merah") — tidak cuma catatan umum untuk

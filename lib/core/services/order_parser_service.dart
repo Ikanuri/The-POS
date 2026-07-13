@@ -19,6 +19,10 @@ class OrderParserService {
   static final RegExp _nameLine = RegExp(r'^Nama:\s*(.+)$', multiLine: true);
   static final RegExp _phoneLine = RegExp(r'^HP:\s*(.+)$', multiLine: true);
   static final RegExp _noteLine = RegExp(r'^Catatan:\s*(.+)$', multiLine: true);
+  // Item 24d — baris pembeda kode #PSN: handoff PEGAWAI dari pesanan
+  // PELANGGAN biasa (yang tidak punya baris ini).
+  static final RegExp _employeeLine =
+      RegExp(r'^Pegawai:\s*(.+)$', multiLine: true);
 
   static Future<ParsedOrder> parse({
     required AppDatabase db,
@@ -32,6 +36,7 @@ class OrderParserService {
         customerName: null,
         customerPhone: null,
         note: null,
+        employeeName: null,
         hasMachineCode: false,
       );
     }
@@ -136,6 +141,7 @@ class OrderParserService {
     final name = _nameLine.firstMatch(text)?.group(1)?.trim();
     final phone = _phoneLine.firstMatch(text)?.group(1)?.trim();
     final note = _noteLine.firstMatch(text)?.group(1)?.trim();
+    final employeeName = _employeeLine.firstMatch(text)?.group(1)?.trim();
 
     return ParsedOrder(
       items: items,
@@ -144,9 +150,34 @@ class OrderParserService {
       customerPhone:
           (phone == null || phone.isEmpty || phone == '-') ? null : phone,
       note: (note == null || note.isEmpty) ? null : note,
+      employeeName:
+          (employeeName == null || employeeName.isEmpty) ? null : employeeName,
       hasMachineCode: true,
     );
   }
+
+  /// Item 24d — encode keranjang pegawai jadi teks kode mesin `#PSN:` siap
+  /// di-QR-kan, format SAMA dengan yang dihasilkan katalog HTML
+  /// (`OrderPageService` JS `buildOrderText()`) supaya bisa dibaca [parse]
+  /// yang sama. Baris `Pegawai: <nama>` jadi pembeda dari pesanan
+  /// pelanggan biasa (lihat [ParsedOrder.employeeName]).
+  static String encodeHandoff({
+    required List<CartItem> items,
+    required String employeeName,
+  }) {
+    final codeParts = items.map((c) {
+      final note = c.itemNote?.trim();
+      final noteSeg = (note != null && note.isNotEmpty)
+          ? ':${Uri.encodeComponent(note)}'
+          : '';
+      return '${c.productUnitId}=${_fmtQty(c.qty)}$noteSeg';
+    }).join(';');
+    return '${OrderPageService.machineCodePrefix}$codeParts\n'
+        'Pegawai: $employeeName';
+  }
+
+  static String _fmtQty(double qty) =>
+      qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
 }
 
 /// Satu baris hasil parsing yang berhasil dicocokkan ke produk lokal.
@@ -204,6 +235,7 @@ class ParsedOrder {
     required this.customerName,
     required this.customerPhone,
     required this.note,
+    required this.employeeName,
     required this.hasMachineCode,
   });
 
@@ -218,6 +250,12 @@ class ParsedOrder {
   final String? customerName;
   final String? customerPhone;
   final String? note;
+
+  /// Item 24d — TERISI hanya untuk kode handoff dari PEGAWAI (baris
+  /// `Pegawai: <nama>`), null untuk pesanan pelanggan biasa. Pembeda alur:
+  /// terisi → masuk antrian `held_orders` (awaitingPayment); null → alur
+  /// "Tempel Pesanan" pelanggan yang sudah ada (langsung ke keranjang).
+  final String? employeeName;
 
   /// false bila teks yang ditempel sama sekali tidak mengandung kode mesin
   /// (`#PSN:...`) — dipakai UI untuk pesan error yang jelas, beda dari

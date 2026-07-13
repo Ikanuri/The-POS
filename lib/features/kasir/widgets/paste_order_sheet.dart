@@ -17,19 +17,32 @@ import '../cart_provider.dart';
 /// [OrderParserService]) — bukan dipercaya dari teks — jadi katalog yang
 /// sedikit basi tidak pernah membuat transaksi salah hitung.
 class PasteOrderSheet extends ConsumerStatefulWidget {
-  const PasteOrderSheet({super.key, this.cartId = kMainCartId});
+  const PasteOrderSheet({super.key, this.cartId = kMainCartId, this.initialText});
 
   final String cartId;
+
+  /// Item 24d — bila terisi (mis. hasil scan QR pesanan pelanggan), field
+  /// teks pra-diisi & langsung diproses otomatis begitu sheet dibuka, tanpa
+  /// perlu kasir tempel manual.
+  final String? initialText;
 
   @override
   ConsumerState<PasteOrderSheet> createState() => _PasteOrderSheetState();
 }
 
 class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
-  final _textCtrl = TextEditingController();
+  late final _textCtrl = TextEditingController(text: widget.initialText);
   ParsedOrder? _result;
   bool _processing = false;
   bool _adding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialText != null && widget.initialText!.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _process());
+    }
+  }
 
   @override
   void dispose() {

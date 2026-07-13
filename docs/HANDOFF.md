@@ -4,81 +4,89 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (lanjutan sesi Item 24/25/26 — payment
-gate role Pegawai [sebagian], catatan per-produk katalog HTML, tata letak
-kalkulator bayar)._
+_Terakhir diperbarui: 13 Juli 2026 (lanjutan sesi Item 24 — inti mekanisme QR
+payment gate role Pegawai selesai diimplementasi & di-commit)._
 
-**schemaVersion tetap 14** (tidak ada migrasi baru sesi ini — Item 26
-murni UI + extend format teks JSON/blob yang sudah ada, tanpa skema DB
-baru). Full `flutter test`: **248 test hijau**, `flutter analyze` bersih.
+**schemaVersion tetap 14** (tidak ada migrasi baru sesi ini — mekanisme QR
+murni reuse `CartItem.itemNote`, `CartMeta`, dan payload JSON blob
+`held_orders` yang sudah ada, tanpa skema DB baru). Full `flutter test`:
+**260 test hijau**, `flutter analyze` bersih.
 
-## Status Item 24 (payment gate role Pegawai) — SEBAGIAN, lihat PLAN.md
+## Status Item 24 (payment gate role Pegawai) — HAMPIR SELESAI, sisa 24b
 
-- **SUDAH SELESAI & di-commit** (`4317c33`): rename KOSMETIK "Kasir"→
-  "Pegawai" di semua layar UI (`deviceRole` internal TETAP `'kasir'`,
-  TIDAK disentuh — lihat catatan audit di PLAN.md kalau lupa kenapa) +
-  permission baru `terima_pembayaran` (default OFF, self-heal via
-  `beforeOpen`, TANPA migrasi schema — pola sama seperti izin lain).
-- **Mekanisme "kirim ke Owner/Asisten" — SUDAH DIPUTUSKAN desainnya**
-  (bukan lagi opsi terbuka), TAPI **belum diimplementasi sama sekali**:
-  QR code (bukan servis jaringan — opsi itu dibandingkan lalu ditolak),
-  scan-nya **gabung ke scanner kasir yang sudah ada** (bukan scanner
-  terpisah — otomatis dapat dukungan scanner eksternal HID gratis, sudah
-  dikonfirmasi user scanner tokonya support QR), hasil scan **masuk
-  antrian** `held_orders` bertanda `awaitingPayment` (BUKAN langsung ke
-  keranjang aktif owner — supaya tidak bentrok kalau owner sedang
-  melayani transaksi lain). Detail lengkap arsitektur & alur ada di
-  PLAN.md Item 24 (24d) — baca itu dulu sebelum mulai implementasi,
-  jangan re-diskusikan dari nol.
-- **Sengaja TANPA notifikasi otomatis arah balik** (owner→pegawai
-  "transaksi lunas") di versi ini — keputusan sadar, bukan lupa.
-- **Checklist struk tersinkron (24b)** — belum dikerjakan, nyambung ke
-  payload `held_orders` yang sama.
+- **SELESAI & di-commit** (`4317c33`): rename kosmetik "Kasir"→"Pegawai" di
+  UI + permission `terima_pembayaran` (default OFF, self-heal `beforeOpen`).
+- **SELESAI & di-commit** (`1f18000`) — inti mekanisme "kirim ke
+  Owner/Asisten":
+  - `CartSheet`: pegawai (`deviceRole == 'kasir'`) TANPA izin
+    `terima_pembayaran` melihat tombol "Kirim ke Owner/Asisten" alih-alih
+    "Bayar" (gate via `_needsHandoffGateProvider`, dicek per cartId — mode
+    Katalog `kCatalogCartId` TIDAK PERNAH digerbang). Tap membuka
+    `_HandoffQrSheet` yang menampilkan QR (`qr_flutter`) berisi kode mesin
+    `OrderParserService.encodeHandoff()` — format sama seperti `#PSN:...`
+    katalog HTML, ditambah baris `Pegawai: <nama>`. "Sudah Dikirim,
+    Kosongkan Keranjang" HANYA mengosongkan cart lokal pegawai — **TIDAK**
+    menulis `held_orders` di device pegawai (itu tugas device OWNER saat
+    scan).
+  - `kasir_screen.dart`: `_handleBarcode()` deteksi prefix `#PSN:` di
+    PALING AWAL (sebelum cabang `fromExternal`/`_continuousScan`) →
+    `_handleOrderCode()`. Kalau ada baris `Pegawai:` → langsung
+    `db.holdOrder(...)` dengan payload `awaitingPayment: true`, banner
+    sukses, scanner ditutup — TIDAK masuk keranjang aktif (supaya tidak
+    bentrok transaksi owner yang sedang berjalan). Kalau TIDAK ada baris
+    `Pegawai:` (pesanan pelanggan biasa dari katalog HTML) → alur LAMA
+    tetap jalan, buka `PasteOrderSheet` pra-diisi (`initialText`) &
+    otomatis diproses. Berlaku untuk kamera MAUPUN scanner eksternal HID
+    (satu titik integrasi yang sama).
+  - `_HeldCard`/`_HeldInlinePanel`: badge merah "Menunggu Anda Bayar" utk
+    held_order dengan `awaitingPayment: true`, beda dari pesanan ditahan
+    biasa. `SizedBox` panel dinaikkan ke height 128 (dari 86) supaya badge
+    muat tanpa overflow.
+  - Transport: QR-lewat-scanner-kasir (bukan servis jaringan) — opsi
+    servis jaringan terpisah (port 8626) sempat didesain lalu SENGAJA
+    ditolak user demi kesederhanaan (baca histori di CHANGELOG sekitar
+    commit `9f9cb18`/`5d65188` kalau perlu detail perbandingannya).
+  - Sengaja TANPA notifikasi otomatis arah balik (owner→pegawai "transaksi
+    lunas") — keputusan sadar, bukan lupa.
+- **BELUM dikerjakan — 24b (checklist struk tersinkron): BUTUH KLARIFIKASI
+  USER sebelum mulai coding.** Ditemukan ambiguitas desain saat mau mulai
+  implementasi: checklist item struk yang SUDAH ADA (`ReceiptScreen`,
+  `_checked`) itu mekanismenya POST-payment — butuh `transactionId` sungguhan
+  yang baru ada SETELAH transaksi selesai dibayar & disimpan. Padahal asumsi
+  awal 24b ("pegawai susun+centang sebelum kirim") itu PRE-payment (belum ada
+  transactionId sama sekali, cuma held_order/QR). Dua interpretasi yang perlu
+  dipilih user:
+  (a) checklist BARU di sisi pre-payment (cart/handoff pegawai, sebelum QR
+      dikirim) — butuh UI baru + field baru di payload `held_orders`/QR; atau
+  (b) reuse checklist `ReceiptScreen` yang SUDAH ADA, tapi itu artinya
+      post-payment saja (transaksi sudah lunas) — butuh transport BARU
+      (beda dari held_orders/QR pre-payment) untuk kasus completed-transaction.
+  **JANGAN diasumsikan sepihak — tanyakan ke user dulu** sebelum coding 24b.
 
-## Item 26 — 3 penyempurnaan kecil, SELESAI (`7fa7907`)
+## Gotcha teknis baru sesi ini (selain yang sudah ada di CLAUDE.md)
 
-- **26a**: catatan per-produk di katalog HTML "Tempel Pesanan" — reuse
-  penuh `CartItem.itemNote`/kolom `item_note` yang sudah ada end-to-end
-  (tanpa field/kolom baru). Format kode mesin `#PSN:` diperluas dengan
-  segmen opsional `:catatan` (encodeURIComponent di JS, `Uri.decodeComponent`
-  di parser) — backward-compatible dengan baris lama tanpa catatan.
-- **26b**: tombol "Uang Pas" pindah dari `Wrap` chip pecahan uang ke
-  sebaris dengan "Bayar" di baris paling bawah kalkulator (`payment_screen.dart`
-  `_CashKeypadSheet`).
-- **26c**: tombol "00" ditukar posisi dengan "000" di `_Keypad._rows`
-  supaya "00" berjajar dengan "0" (bukan lagi dengan 7/8/9) — TANPA
-  tombol yang hilang, `_press()` generic per-string jadi aman ditukar.
-
-## Gotcha teknis baru sesi ini
-
-**`ButtonStyle.minimumSize: Size.fromHeight(h)` = `Size(double.infinity, h)`
-— TIDAK aman ditaruh di dalam `Row` tanpa `Expanded`.** Dipakai berkali-kali
-di app ini untuk tombol FULL-WIDTH (mis. tombol "Bayar" berdiri sendiri di
-`Column`) — tapi begitu widget yang sama ditaruh sebagai SIBLING lain di
-`Row` (Item 26b: "Uang Pas" di sebelah "Bayar"), constraint lebar infinity
-itu nabrak `BoxConstraints` Row yang cuma kasih lebar terbatas ke child
-non-`Expanded` → `BoxConstraints forces an infinite width` (assertion
-error, ketahuan dari widget test, bukan cuma visual). **Parah lagi:**
-`AppTheme`-nya sendiri set `outlinedButtonTheme` global dengan
-`minimumSize: Size(double.infinity, 48)` — jadi walau instance style TIDAK
-eksplisit set `Size.fromHeight`, `OutlinedButton` POLOS pun kena infinity
-dari tema. Fix: override eksplisit `minimumSize: Size(0, h)` di style
-instance kalau tombol itu perlu SEMPIT (bukan full-width) di dalam `Row`.
-
-**Screenshot visual katalog HTML via Playwright — pola kerja yang
-terbukti jalan:** `OrderPageService.generateHtml()` butuh binding Flutter
-(depends on `dart:ui` transitively lewat `path_provider`), jadi TIDAK bisa
-dijalankan lewat `dart run` polos — harus lewat `flutter test` (test
-sekali-pakai yang nulis `result.html` ke file, lalu dihapus lagi). Baru
-file HTML itu dibuka via `file://...` di Chromium (`/opt/pw-browsers/chromium`,
-`NODE_PATH=/opt/node22/lib/node_modules`) — bisa klik tombol `+`
-(`button[data-act="inc"]`), isi `.ci-note`, dan panggil fungsi JS `buildOrderText()`
-langsung lewat `page.evaluate()` untuk lihat teks pesanan jadi (termasuk
-kode mesin `#PSN:`) tanpa perlu simulasikan klik "Salin"/clipboard.
-
-**Migrasi schemaVersion baru butuh audit SEMUA fixture test migrasi
-lama** (dari sesi sebelumnya, masih berlaku) — lihat CLAUDE.md §Gotcha
-kalau lupa detailnya.
+- **Double `Navigator.pop()` sinkron back-to-back bisa bikin
+  `pumpAndSettle()` macet selamanya** di widget test (animasi popping
+  nested-lalu-parent sheet tidak pernah konvergen) — walau pola yang sama
+  mungkin baik-baik saja di produksi. Fix: cuma pop route TERDEKAT/terdalam,
+  biarkan pemanggil/pengguna tutup route luar secara terpisah.
+- **`await someDriftTable.watch().first` langsung di dalam body
+  `testWidgets` bisa HANG selamanya**, walau cuma baca sekali (bukan
+  `StreamProvider`) — perluasan dari gotcha "drift StreamProvider hang 10
+  menit" yang sudah ada di CLAUDE.md, tapi ternyata trigger juga dari
+  `.first` polos tanpa provider sama sekali. Fix: pakai query one-shot
+  (`await db.select(db.tabelnya).get()`), JANGAN `.watch()...first`, di
+  dalam widget test.
+- **Cara diagnosis hang widget test yang terbukti jalan**: `timeout <N>
+  flutter test ...` (bash) + `tester.pump(Duration(...))` bertahap +
+  `tester.takeException()` (bukan `pumpAndSettle()` buta) untuk mempersempit
+  await mana yang tidak pernah selesai.
+- **Nambah konten visual baru (badge dll) ke `Column` di dalam
+  `SizedBox`-constrained horizontal `ListView` item bisa overflow** kalau
+  tinggi container tetap tidak dinaikkan — pola berulang di codebase ini,
+  ketahuan dari widget test (bukan cuma visual).
+- (Gotcha `ButtonStyle.minimumSize`/`Row` dari sesi sebelumnya — sudah
+  masuk histori, tidak diulang di sini.)
 
 ## Lingkungan sesi ini
 Flutter TIDAK terpasang default — dipasang manual ke `/tmp/flutter`
@@ -89,20 +97,19 @@ menghasilkan warning "Woah!... trying to run as root" yang TIDAK
 menggagalkan perintah (aman diabaikan).
 
 ## Menggantung / Kandidat Berikutnya
-- **Item 24 sisa** (gate tombol "Bayar" jadi QR + antrian `held_orders` +
-  checklist tersinkron) — desain SUDAH FINAL, tinggal implementasi. Item
-  terbesar yang belum dikerjakan, baca PLAN.md Item 24 (24b/24d) dulu.
+- **Item 24b** (checklist struk tersinkron) — BUTUH JAWABAN USER dulu (lihat
+  di atas), baru bisa dieksekusi. Ini satu-satunya sisa Item 24.
 - **Item 21+17** (sync UI persisten lintas tab + persist antrian approval)
-  — masih sengaja ditunda dari sesi-sesi sebelumnya. CATATAN: TIDAK lagi
-  prasyarat keras untuk 24d (mekanisme QR yang dipilih tidak bergantung
-  pada infrastruktur sync/LAN sama sekali).
+  — masih sengaja ditunda dari sesi-sesi sebelumnya, TIDAK lagi prasyarat
+  untuk Item 24 (mekanisme QR yang dipilih tidak bergantung sync/LAN).
 - **Item 23** (scope bug "Sisa Tagihan" understated di lokasi lain: Buku
-  Hutang, Tutup Kasir, dll) — lihat PLAN.md untuk daftar lengkap lokasi
-  yang sengaja belum disentuh.
+  Hutang, Tutup Kasir, printer_service.dart, transaksi_tab.dart,
+  tx_history_sheet.dart, merged_receipt_screen.dart) — lihat PLAN.md untuk
+  daftar lengkap lokasi yang sengaja belum disentuh.
 - **Item 3c/4/5/8** (import data toko lama dari dataset Griyo POS) — lihat
   PLAN.md, menunggu keputusan/data lanjutan dari user.
 - **25c (lisensi)** — desain final, tunggu instruksi eksplisit user untuk
-  mulai eksekusi.
+  mulai eksekusi. JANGAN disentuh tanpa instruksi baru.
 
 ## Preferensi User (masih berlaku)
 - Bahasa komunikasi & teks UI: Indonesia.
@@ -118,4 +125,5 @@ menggagalkan perintah (aman diabaikan).
 - Untuk perubahan kecil yang jelas (tidak ambigu) — user eksplisit minta
   langsung eksekusi + merge ke main tanpa menunggu konfirmasi tambahan
   (lihat pola Item 26), TAPI kalau ada keputusan desain yang genuinely
-  ambigu (banyak interpretasi valid), tetap ajukan dulu sebelum eksekusi.
+  ambigu (banyak interpretasi valid, seperti 24b sekarang) — tetap ajukan
+  dulu sebelum eksekusi, jangan diasumsikan sepihak.

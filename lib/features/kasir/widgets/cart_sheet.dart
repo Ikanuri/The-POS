@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/models/cart_item.dart';
+import '../../../core/providers/device_provider.dart';
+import '../../../core/services/order_parser_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
+
+/// Item 24d — true bila device INI perlu digerbang: role Pegawai
+/// (`deviceRole == 'kasir'`) TANPA izin `terima_pembayaran`. Owner/Asisten
+/// TIDAK PERNAH digerbang (selalu bisa Bayar langsung).
+final _needsHandoffGateProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final device = ref.watch(deviceProvider);
+  if (device.deviceRole != 'kasir') return false;
+  final db = ref.watch(databaseProvider);
+  return !(await db.isPermissionEnabled('terima_pembayaran'));
+});
 
 class CartSheet extends ConsumerStatefulWidget {
   const CartSheet({
@@ -43,12 +56,57 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     });
   }
 
+  /// Item 24d — pegawai tanpa izin `terima_pembayaran`: tombol "Bayar"
+  /// beralih jadi QR berisi keranjang (format `#PSN:` + baris `Pegawai:`),
+  /// sepenuhnya offline. Owner/asisten scan QR ini lewat scanner kasir yang
+  /// sudah ada — hasilnya masuk ANTRIAN (`held_orders` awaitingPayment),
+  /// BUKAN langsung ke keranjang aktif mereka (lihat PLAN.md Item 24d).
+  Future<void> _showHandoffQr(
+    BuildContext context,
+    WidgetRef ref,
+    List<CartItem> cart,
+  ) async {
+    final device = ref.read(deviceProvider);
+    final meta = ref.read(cartMetaProvider(widget.cartId));
+    final employeeName =
+        meta.hasEmployee ? meta.employeeName! : device.deviceName;
+    final qrText =
+        OrderParserService.encodeHandoff(items: cart, employeeName: employeeName);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => _HandoffQrSheet(
+        qrText: qrText,
+        itemCount: cart.where((c) => !c.isVariant).length,
+        total: cart.fold<int>(0, (s, c) => s + (c.price * c.qty).round()),
+        // QR (bukan network) adalah SATU-SATUNYA jalur transport — antrian
+        // `held_orders` ditulis di device OWNER saat MEREKA scan QR ini
+        // (lihat `_handleOrderCode` di kasir_screen.dart), BUKAN di device
+        // pegawai sendiri. Di sisi pegawai, "selesai" cuma berarti
+        // membersihkan keranjang lokal (dianggap sudah terkirim/diserahkan).
+        // Cuma tutup sheet QR-nya sendiri (bukan CartSheet di baliknya
+        // sekalian) — dua pop beruntun di frame yang sama pernah bikin
+        // animasi Navigator macet tak pernah selesai di widget test.
+        onDone: () async {
+          ref.read(cartProvider(widget.cartId).notifier).clear();
+          ref.read(cartMetaProvider(widget.cartId).notifier).clear();
+          if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider(widget.cartId));
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
     final scheme = Theme.of(context).colorScheme;
     final total = notifier.totalAmount;
+    // Item 24d — gerbang HANYA untuk transaksi nyata (kasir utama & Tambah
+    // Belanjaan), TIDAK untuk mode Katalog (bukan transaksi sungguhan).
+    final needsGate = widget.cartId != kCatalogCartId &&
+        (ref.watch(_needsHandoffGateProvider).valueOrNull ?? false);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -176,11 +234,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   child: FilledButton(
                     onPressed: cart.isEmpty
                         ? null
-                        : () {
-                            Navigator.of(ctx).pop();
-                            context.push(widget.payRoute);
-                          },
-                    child: const Text('Bayar'),
+                        : needsGate
+                            ? () => _showHandoffQr(context, ref, cart)
+                            : () {
+                                Navigator.of(ctx).pop();
+                                context.push(widget.payRoute);
+                              },
+                    child: Text(needsGate ? 'Kirim ke Owner/Asisten' : 'Bayar'),
                   ),
                 ),
               ],
@@ -418,6 +478,75 @@ class _QtyFieldState extends ConsumerState<_QtyField> {
           _fmt(widget.effectiveQty),
           textAlign: TextAlign.center,
           style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
+/// Item 24d — QR handoff pesanan pegawai. `onDone` dipanggil saat pegawai
+/// menandai sudah menunjukkan/discan owner — barulah keranjang lokal
+/// dibersihkan (bukan otomatis saat sheet dibuka, supaya QR tetap bisa
+/// ditunjukkan ulang kalau scan pertama gagal).
+class _HandoffQrSheet extends StatelessWidget {
+  const _HandoffQrSheet({
+    required this.qrText,
+    required this.itemCount,
+    required this.total,
+    required this.onDone,
+  });
+
+  final String qrText;
+  final int itemCount;
+  final int total;
+  final Future<void> Function() onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Kirim ke Owner/Asisten',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              '$itemCount item · ${formatRupiah(total)}',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: QrImageView(data: qrText, size: 220),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Minta owner/asisten scan QR ini lewat scanner kasir.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: onDone,
+                child: const Text('Sudah Dikirim, Kosongkan Keranjang'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Tutup'),
+            ),
+          ],
         ),
       ),
     );

@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `1f18000` — feat: gerbang pembayaran Pegawai via QR + antrian handoff (Item 24d)
 - `7fa7907` — feat: catatan per-produk katalog HTML + tata letak kalkulator bayar (Item 26a/26b/26c)
 - `8fa05d8` — docs: masukkan Item 26 — catatan per-produk HTML, posisi Uang Pas/keypad
 - `5d65188` — docs: putuskan mekanisme kirim pesanan pegawai — QR gabung scanner kasir
