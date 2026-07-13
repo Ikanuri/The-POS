@@ -130,31 +130,39 @@ class _DebtPaymentDialogState extends State<_DebtPaymentDialog> {
               ],
             ),
           ],
+          const SizedBox(height: 16),
+          // Row manual (bukan AlertDialog.actions bawaan) — 3 tombol lebar
+          // penuh ("Uang Pas" + "Bayar") tak pernah muat sejajar di actions
+          // bawaan, jatuh ke mode kolom & bikin "Batal" nempel kanan sendiri
+          // tak sejajar dgn 2 tombol lain. Sama pola dgn payment_screen.dart.
+          Row(
+            children: [
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Batal')),
+              const Spacer(),
+              OutlinedButton(
+                onPressed: () => setState(() => _ctrl.text =
+                    ThousandsSeparatorFormatter.format(widget.remaining)),
+                child: const Text('Uang Pas'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed:
+                    ThousandsSeparatorFormatter.parseValue(_ctrl.text) <= 0
+                        ? null
+                        : () {
+                            final amount = ThousandsSeparatorFormatter
+                                .parseValue(_ctrl.text);
+                            Navigator.of(context)
+                                .pop((amount: amount, method: _selectedType));
+                          },
+                child: const Text('Bayar'),
+              ),
+            ],
+          ),
         ],
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Batal')),
-        // Item 11 — "Uang Pas" di kiri (sekunder), "Bayar" di kanan (primer),
-        // sama pola dgn modal checkout (payment_screen.dart).
-        OutlinedButton(
-          onPressed: () => setState(() => _ctrl.text =
-              ThousandsSeparatorFormatter.format(widget.remaining)),
-          child: const Text('Uang Pas'),
-        ),
-        FilledButton(
-          onPressed: ThousandsSeparatorFormatter.parseValue(_ctrl.text) <= 0
-              ? null
-              : () {
-                  final amount =
-                      ThousandsSeparatorFormatter.parseValue(_ctrl.text);
-                  Navigator.of(context)
-                      .pop((amount: amount, method: _selectedType));
-                },
-          child: const Text('Bayar'),
-        ),
-      ],
     );
   }
 }
