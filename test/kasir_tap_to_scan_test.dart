@@ -254,6 +254,49 @@ void main() {
   });
 
   testWidgets(
+      'tap-to-scan ON + mode Berulang: deteksi BASI dari barcode yang BARU '
+      'SAJA dikonfirmasi (kamera lambat "catch up" walau barcode sudah '
+      'disingkirkan fisik) TIDAK mengisi ulang tombol bidik', (tester) async {
+    final db = await seedProduct('8991234567890');
+    addTearDown(() async => db.close());
+
+    await _pumpKasirWithScannerOpen(tester, db);
+
+    await tester.tap(find.text('Berulang'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tap to Scan'));
+    await tester.pumpAndSettle();
+
+    fake.emitBarcode('8991234567890');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final shutter = find.byKey(const Key('scan_shutter_button'));
+    await tester.tap(shutter);
+    await tester.pumpAndSettle();
+
+    // Kamera "kejar-mengejar" (frame basi) MASIH melaporkan barcode yang
+    // sama SESAAT setelah confirm, walau secara fisik barcode itu sudah
+    // disingkirkan pengguna — ini persis kondisi race yang dilaporkan user.
+    fake.emitBarcode('8991234567890');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final icon = tester.widget<Icon>(find.descendant(
+      of: shutter,
+      matching: find.byIcon(Icons.center_focus_strong),
+    ));
+    expect(icon.color, Colors.grey,
+        reason: 'deteksi basi dari barcode yang baru dikonfirmasi TIDAK '
+            'boleh meng-isi ulang _pendingBarcode — tombol harus tetap '
+            'nonaktif sampai ada barcode BARU (atau barcode LAMA lagi '
+            'setelah jendela cooldown lewat) yang benar-benar terdeteksi');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
       'tap-to-scan ON: tombol bidik nonaktif (abu-abu, tidak bisa ditap) '
       'sebelum ada barcode terdeteksi', (tester) async {
     final db = await seedProduct('8991234567890');
