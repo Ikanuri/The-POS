@@ -2,12 +2,19 @@ package com.thepos.the_pos
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket
+import android.os.Bundle
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.FileWriter
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
 
@@ -15,9 +22,55 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "com.thepos/bt_print"
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private const val TAG = "BtPrint"
+        // HARUS sama persis dgn CrashLogService.fileName di sisi Dart
+        // (lib/core/services/crash_log_service.dart) & lokasi yang sama
+        // (getExternalFilesDir == path_provider getExternalStorageDirectory)
+        // supaya keduanya nulis ke satu file yang sama.
+        private const val CRASH_LOG_FILE = "the_pos_crash_log.jsonl"
     }
 
     private var btSocket: BluetoothSocket? = null
+
+    // Jaring pengaman native — cakupan LEBIH LUAS dari `runZonedGuarded` di
+    // sisi Dart (main.dart): menangkap exception Java/Kotlin tak tertangani
+    // (mis. UnsatisfiedLinkError saat gagal memuat native library) SEBELUM
+    // proses benar-benar dihentikan OS, termasuk yang terjadi sebelum Dart
+    // sempat jalan sama sekali. Dipasang PALING AWAL (sebelum super.onCreate)
+    // supaya jendela cakupannya semaksimal mungkin. TIDAK bisa menangkap
+    // crash native murni (segfault C/C++) — itu di luar jangkauan handler
+    // Java/Kotlin mana pun, satu-satunya cara lihat itu adalah adb logcat.
+    override fun onCreate(savedInstanceState: Bundle?) {
+        installCrashLogHandler()
+        super.onCreate(savedInstanceState)
+    }
+
+    private fun installCrashLogHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                writeCrashLog(throwable)
+            } catch (_: Exception) {
+                // Jaring pengaman ini sendiri tidak boleh ikut melempar.
+            }
+            previous?.uncaughtException(thread, throwable)
+        }
+    }
+
+    private fun writeCrashLog(throwable: Throwable) {
+        val dir = getExternalFilesDir(null) ?: return
+        val file = File(dir, CRASH_LOG_FILE)
+        val json = JSONObject()
+        json.put(
+            "waktu",
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
+        )
+        json.put("context", "AndroidUncaughtExceptionHandler")
+        json.put("jenis", throwable.javaClass.name)
+        json.put("pesan", throwable.message ?: "")
+        json.put("stackTrace", Log.getStackTraceString(throwable))
+        json.put("platform", "android-native")
+        FileWriter(file, true).use { it.write(json.toString() + "\n") }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

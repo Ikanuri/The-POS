@@ -339,6 +339,18 @@ class PengaturanScreen extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: 8),
+          const _SectionHeader('Diagnostik'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.bug_report_outlined),
+              title: const Text('Log Error Terakhir'),
+              subtitle: const Text(
+                  'Catatan error yang tertangkap otomatis, bisa dibagikan ke developer'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/pengaturan/log-error'),
+            ),
+          ),
         ],
       ),
     );

@@ -48,6 +48,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   barcode sama sekali — bisa menambahkan barang yang SAMA sekali lagi ke
   keranjang. Sekarang tombol bidik otomatis nonaktif sampai ada barcode
   baru benar-benar terdeteksi.
+- **Aplikasi tidak lagi force-close diam-diam di sebagian HP tertentu**
+  (dilaporkan terjadi di Infinix Smart 8) — sebelumnya app bisa langsung
+  tertutup sendiri begitu dibuka tanpa keterangan apa pun. Ditambahkan
+  juga menu baru **"Log Error Terakhir"** di Pengaturan → Diagnostik,
+  untuk melihat/membagikan catatan error terakhir kalau suatu saat ada
+  masalah serupa.
 
 ## 12 Juli 2026
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,33 +10,55 @@ import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'core/providers/device_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/router/app_router.dart';
+import 'core/services/crash_log_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/kasir/cart_meta_provider.dart';
 import 'features/kasir/cart_provider.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  // Jaring pengaman diagnosis crash (lihat docs/HANDOFF.md): tangkap SEMUA
+  // error yang lolos dari penanganan normal (termasuk yang terjadi SEBELUM
+  // runApp() sempat dipanggil) dan simpan ke file lokal di HP — supaya
+  // tetap bisa dibaca via File Manager walau app force-close tanpa layar
+  // error sama sekali. TIDAK menggantikan penanganan error yang sudah ada,
+  // murni tambahan best-effort di lapisan paling luar.
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Beberapa versi Android gagal dlopen libsqlcipher tanpa workaround ini.
-  if (Platform.isAndroid) {
-    await applyWorkaroundToOpenSqlCipherOnOldAndroidVersions();
-  }
+    FlutterError.onError = (details) {
+      unawaited(CrashLogService.record(details.exception, details.stack,
+          context: 'FlutterError.onError'));
+      FlutterError.presentError(details);
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      unawaited(
+          CrashLogService.record(error, stack, context: 'PlatformDispatcher.onError'));
+      return true;
+    };
 
-  final container = ProviderContainer();
-  // Identitas device harus dimuat sebelum router memutuskan redirect /setup.
-  await container.read(deviceProvider.notifier).load();
+    // Beberapa versi Android gagal dlopen libsqlcipher tanpa workaround ini.
+    if (Platform.isAndroid) {
+      await applyWorkaroundToOpenSqlCipherOnOldAndroidVersions();
+    }
 
-  runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: const ThePosApp(),
-    ),
-  );
+    final container = ProviderContainer();
+    // Identitas device harus dimuat sebelum router memutuskan redirect /setup.
+    await container.read(deviceProvider.notifier).load();
 
-  // Pekerjaan catch-up dijalankan SETELAH runApp agar tidak menahan frame
-  // pertama — durasi backfill tumbuh seiring data (O(total tx)), dan pada
-  // toko lama sempat membuat splash tertahan ratusan ms tiap startup.
-  unawaited(_runStartupMaintenance(container));
+    runApp(
+      UncontrolledProviderScope(
+        container: container,
+        child: const ThePosApp(),
+      ),
+    );
+
+    // Pekerjaan catch-up dijalankan SETELAH runApp agar tidak menahan frame
+    // pertama — durasi backfill tumbuh seiring data (O(total tx)), dan pada
+    // toko lama sempat membuat splash tertahan ratusan ms tiap startup.
+    unawaited(_runStartupMaintenance(container));
+  }, (error, stack) {
+    unawaited(CrashLogService.record(error, stack, context: 'runZonedGuarded'));
+  });
 }
 
 /// Catch-up non-fatal saat startup: materialisasi ringkasan harian, backfill
