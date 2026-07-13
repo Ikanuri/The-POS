@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
+import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
 
 /// Identitas device: store_key di FlutterSecureStorage (hardware-backed
@@ -53,11 +56,27 @@ class DeviceNotifier extends StateNotifier<DeviceIdentity> {
 
     // Migrate store_key from SharedPreferences to FlutterSecureStorage if needed.
     final legacyKey = prefs.getString(_keys.storeKey);
-    String? storeKey = await _secureStorage.read(key: _keys.storeKey);
-    if (storeKey == null && legacyKey != null) {
-      await _secureStorage.write(key: _keys.storeKey, value: legacyKey);
-      await prefs.remove(_keys.storeKey);
-      storeKey = legacyKey;
+    String? storeKey = legacyKey;
+    try {
+      final secureKey = await _secureStorage.read(key: _keys.storeKey);
+      if (secureKey != null) {
+        storeKey = secureKey;
+      } else if (legacyKey != null) {
+        await _secureStorage.write(key: _keys.storeKey, value: legacyKey);
+        await prefs.remove(_keys.storeKey);
+        storeKey = legacyKey;
+      }
+    } catch (e, st) {
+      // Beberapa HP (mis. sebagian Transsion/Infinix) punya implementasi
+      // Android Keystore yang gagal dipakai EncryptedSharedPreferences —
+      // TANPA try/catch ini, satu kegagalan baca storage di sini
+      // menjatuhkan SELURUH app SEBELUM sempat runApp() (persis gejala
+      // "app terinstall, tapi force-close instan saat dibuka tanpa
+      // keterangan error"). Fallback ke nilai lama di SharedPreferences
+      // (kalau ada) supaya app tetap bisa jalan — sudah di-assign ke
+      // `storeKey` di atas sebagai nilai awal.
+      unawaited(CrashLogService.record(e, st,
+          context: 'DeviceNotifier.load secureStorage'));
     }
 
     state = DeviceIdentity(

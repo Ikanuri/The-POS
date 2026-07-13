@@ -10,6 +10,7 @@ import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
 import '../../features/pengaturan/arsip_screen.dart';
 import '../../features/pengaturan/backup_screen.dart';
+import '../../features/pengaturan/crash_log_screen.dart';
 import '../../features/pengaturan/csv_import_screen.dart';
 import '../../features/pengaturan/asisten_permissions_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
@@ -189,6 +190,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'tutup-buku',
                   builder: (_, __) => const TutupBukuScreen()),
               GoRoute(path: 'arsip', builder: (_, __) => const ArsipScreen()),
+              GoRoute(
+                  path: 'log-error',
+                  builder: (_, __) => const CrashLogScreen()),
             ],
           ),
         ],
