@@ -284,25 +284,59 @@ void main() {
   });
 
   test(
-      'Item 26a — cart sheet HTML punya input catatan per-produk, '
-      'buildOrderText encode catatan ke segmen ":<catatan>" di kode mesin',
+      'Item 26a/14 — catatan per-produk diedit lewat modal tap-item '
+      '(bukan lagi input di lembar keranjang), buildOrderText encode '
+      'catatan ke segmen ":<catatan>" di kode mesin',
       () async {
     final db = AppDatabase(NativeDatabase.memory());
     final result = await OrderPageService.generateHtml(
         db: db, storeName: 'Toko Berkah');
 
-    // Input catatan per-baris keranjang ada (bukan di kartu grid produk).
+    // Item 14 — input catatan yang dulu ada DI DALAM lembar keranjang
+    // (ci-note editable) sudah dihapus; catatan sekarang murni tampilan
+    // read-only di sana (ci-note-view), diedit lewat modal item.
     expect(result.html.contains("noteInput.className = 'tfield ci-note'"),
-        isTrue);
-    expect(result.html.contains('cartNotes[id] = noteInput.value'), isTrue);
-    // Tidak memicu render() saat mengetik (hindari buang fokus input).
+        isFalse);
+    expect(result.html.contains('ci-note-view'), isTrue);
+
+    // Modal tap-item (pengganti <details>) punya textarea catatan sendiri.
+    expect(result.html.contains('id="itemNote"'), isTrue);
     expect(
-        RegExp(r"noteInput\.addEventListener\('input',\s*function\(\)\{\s*"
-                r'cartNotes\[id\] = noteInput\.value;\s*\}\)')
-            .hasMatch(result.html),
+        result.html
+            .contains("if (note) cartNotes[unitId] = note; else delete"),
         isTrue);
 
-    // Encoding ke kode mesin: id=qty:catatan(encodeURIComponent).
+    // Encoding ke kode mesin: id=qty:catatan(encodeURIComponent) — TIDAK
+    // berubah walau sumber catatan pindah tempat.
+    expect(
+        result.html.contains(
+            "codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''))"),
+        isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 14 — modal tap-item menggantikan <details> lama: satu modal '
+      'utk semua produk (varian/tidak), harga custom TIDAK ikut kode mesin',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // <details>/<summary>/chevron lama sudah tidak ada.
+    expect(result.html.contains('<details'), isFalse);
+    expect(result.html.contains('<summary'), isFalse);
+    expect(result.html.contains('class="chev"'), isFalse);
+
+    // Modal tap-item + pemilih satuan/varian.
+    expect(result.html.contains('id="itemSheet"'), isTrue);
+    expect(result.html.contains('id="itemUnitChips"'), isTrue);
+    expect(result.html.contains('function openItemModal('), isTrue);
+
+    // Harga custom murni anotasi manusia di teks pesanan, tidak pernah
+    // ditulis ke baris kode mesin #PSN:.
+    expect(result.html.contains('(harga custom)'), isTrue);
     expect(
         result.html.contains(
             "codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''))"),

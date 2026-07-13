@@ -226,7 +226,7 @@ body{
 .list{flex:1;overflow-y:auto;padding:0 16px 96px;}
 .prow{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
   margin-bottom:8px;overflow:hidden;}
-.prow-main{display:flex;align-items:center;gap:10px;padding:12px;}
+.prow-main{display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer;}
 .prow-info{flex:1;min-width:0;}
 .prow-name{font-size:14px;font-weight:600;}
 .prow-meta{font-size:12px;color:var(--ink-2);margin-top:2px;font-family:var(--serif);}
@@ -236,23 +236,11 @@ body{
   color:var(--accent);font-size:17px;font-weight:700;cursor:pointer;
   display:flex;align-items:center;justify-content:center;}
 .stepper .n{min-width:22px;text-align:center;font-weight:700;font-size:13px;}
-.add-btn{border:none;background:var(--accent);color:#fff;border-radius:999px;
-  padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;flex-shrink:0;}
 .oos-badge{background:var(--warn);color:#fff;border-radius:999px;
   padding:7px 12px;font-size:11.5px;font-weight:700;flex-shrink:0;}
-.chev{width:28px;height:28px;border:none;background:transparent;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  color:var(--ink-3);transition:transform .15s;}
-details[open] .chev{transform:rotate(180deg);}
-summary{list-style:none;cursor:pointer;}
-summary::-webkit-details-marker{display:none;}
-.vlist{padding:0 12px 10px;border-top:1px solid var(--line);}
-.vrow{display:flex;align-items:center;gap:10px;padding:9px 0 9px 14px;
-  border-bottom:1px dashed var(--line);}
-.vrow:last-child{border-bottom:none;}
-.vrow-info{flex:1;min-width:0;font-size:13px;font-weight:500;}
-.vrow-price{font-size:12px;color:var(--ink-2);font-family:var(--serif);margin-top:1px;}
-.vmatch{background:rgba(201,100,66,.10);}
+.prow-badge{background:var(--accent);color:#fff;border-radius:999px;
+  padding:7px 12px;font-size:11.5px;font-weight:700;flex-shrink:0;}
+.prow-chevron{color:var(--ink-3);font-size:20px;flex-shrink:0;}
 .empty{text-align:center;color:var(--ink-3);padding:50px 20px;font-size:13.5px;}
 .cartbar{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;
   background:var(--card);border-top:1px solid var(--line);padding:10px 14px;
@@ -285,16 +273,29 @@ summary::-webkit-details-marker{display:none;}
 .sheet-body{overflow-y:auto;padding:0 16px;flex:1;}
 .citem{display:flex;flex-direction:column;gap:6px;padding:10px 0;
   border-bottom:1px solid var(--line);}
-.ci-top{display:flex;align-items:center;gap:10px;}
+.ci-top{display:flex;align-items:center;gap:10px;cursor:pointer;}
 .ci-info{flex:1;min-width:0;}
 .ci-name{font-size:13.5px;font-weight:600;}
 .ci-price{font-size:11.5px;color:var(--ink-3);margin-top:1px;}
-.ci-note{font-size:12px;padding:7px 10px;}
+.ci-custom{color:var(--accent);font-weight:700;}
+.ci-note-view{font-size:12px;color:var(--ink-2);padding:0 0 6px;}
 .field-label{font-size:11px;color:var(--ink-3);font-weight:600;margin:14px 0 5px;}
 .tfield{width:100%;border:1px solid var(--line);background:var(--field);
   border-radius:var(--r-btn);padding:10px 12px;font-size:13.5px;color:var(--ink);
   font-family:var(--font);outline:none;}
 textarea.tfield{resize:none;min-height:56px;}
+.unit-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;}
+.unit-chip{border:1px solid var(--line);background:var(--field);color:var(--ink);
+  border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;}
+.unit-chip.sel{background:var(--accent);border-color:var(--accent);color:#fff;}
+.im-price-note{font-size:11px;color:var(--ink-3);margin-top:5px;}
+.im-qty{display:flex;align-items:center;gap:14px;margin-top:14px;}
+.im-qty button{width:38px;height:38px;border:1px solid var(--line);background:var(--field);
+  color:var(--accent);font-size:19px;font-weight:700;border-radius:999px;cursor:pointer;}
+.im-qty .n{min-width:34px;text-align:center;font-size:16px;font-weight:700;font-family:var(--serif);}
+.add-cta{width:100%;border:none;background:var(--accent);color:#fff;border-radius:var(--r-btn);
+  padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;}
+.add-cta:disabled{opacity:.4;}
 .sheet-foot{padding:12px 16px calc(16px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line);flex-shrink:0;}
 .grand{display:flex;justify-content:space-between;align-items:baseline;
@@ -364,15 +365,44 @@ textarea.tfield{resize:none;min-height:56px;}
     <button class="copy-btn" id="copyBtn">Salin Teks Pesanan</button>
   </div>
 </div>
+
+<div class="scrim" id="itemScrim"></div>
+<div class="sheet" id="itemSheet">
+  <div class="sheet-grip"></div>
+  <div class="sheet-head"><b id="itemTitle">Produk</b><button class="sheet-x" id="itemSheetClose" type="button">&times;</button></div>
+  <div class="sheet-body">
+    <div class="unit-chips" id="itemUnitChips"></div>
+    <div class="field-label">Harga satuan</div>
+    <input class="tfield" id="itemPrice" type="number" step="0.01" min="0" inputmode="decimal" />
+    <div class="im-price-note">Ubah untuk harga custom — kasir akan melihat catatan ini saat memproses pesanan.</div>
+    <div class="field-label">Jumlah</div>
+    <div class="im-qty">
+      <button type="button" id="itemQtyDec">−</button>
+      <span class="n" id="itemQtyVal">1</span>
+      <button type="button" id="itemQtyInc">+</button>
+    </div>
+    <div class="field-label">Catatan (opsional)</div>
+    <textarea class="tfield" id="itemNote" placeholder="mis. yang matang, size L"></textarea>
+  </div>
+  <div class="sheet-foot">
+    <div class="grand"><span class="gl">Subtotal</span><span class="gv" id="itemSubtotal">Rp 0</span></div>
+    <button class="add-cta" id="itemAddBtn" type="button">Tambah ke Pesanan</button>
+    <button class="copy-btn" id="itemRemoveBtn" type="button" style="display:none;">Hapus dari Pesanan</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
 var cartNotes = {}; // unitId -> catatan per-produk (Item 26a)
+var cartPriceOverride = {}; // unitId -> harga custom dari modal item (Item 14/26b)
 var byUnit = {}; // unitId -> {name, unit, price, parentName}
-var openState = {}; // productId -> bool, dropdown varian tetap terbuka/tertutup lewat re-render
 var sheetOpen = false; // hindari renderCartSheet() sia-sia saat sheet tertutup
+var itemModalProduct = null; // produk aktif di modal tap-item (Item 14)
+var itemModalUnitId = null; // satuan/varian aktif di modal
+var itemModalQty = 1;
 
 // ── Toggle terang/gelap manual — menimpa prefers-color-scheme, disimpan
 // per-browser lewat localStorage supaya pilihan bertahan saat file dibuka lagi.
@@ -428,19 +458,55 @@ function cartCount(){
   for (var k in cart) n += cart[k];
   return n;
 }
+function priceFor(unitId){
+  if (cartPriceOverride.hasOwnProperty(unitId)) return cartPriceOverride[unitId];
+  var u = byUnit[unitId];
+  return u ? u.price : 0;
+}
 function cartTotal(){
   var t = 0;
-  for (var k in cart) { var u = byUnit[k]; if (u) t += u.price * cart[k]; }
+  for (var k in cart) t += priceFor(k) * cart[k];
   return t;
+}
+function totalQtyForProduct(p){
+  var n = cart[p.unitId] || 0;
+  (p.variants||[]).forEach(function(v){ n += cart[v.unitId] || 0; });
+  return n;
+}
+function minPriceForProduct(p){
+  var prices = [p.price].concat((p.variants||[]).map(function(v){return v.price;}));
+  return Math.min.apply(null, prices);
+}
+function unitOptionsFor(p){
+  var opts = [{unitId:p.unitId, label:'Utama', unit:p.unit, price:p.price}];
+  (p.variants||[]).forEach(function(v){
+    opts.push({unitId:v.unitId, label:v.name, unit:v.unit, price:v.price});
+  });
+  return opts;
+}
+function findProductForUnit(unitId){
+  for (var i=0;i<DATA.products.length;i++){
+    var p = DATA.products[i];
+    if (p.unitId === unitId) return p;
+    for (var j=0;j<(p.variants||[]).length;j++){
+      if (p.variants[j].unitId === unitId) return p;
+    }
+  }
+  return null;
 }
 
 function setQty(unitId, qty){
-  if (qty <= 0) delete cart[unitId]; else cart[unitId] = qty;
-  // Update HANYA stepper baris yang berubah (bukan renderList() penuh) —
-  // katalog bisa ratusan/ribuan baris, membangun ulang semuanya tiap tap
-  // +/- sangat berat di HP low-end padahal cuma satu angka yang berubah.
-  var old = document.querySelector('#list [data-unit="'+unitId+'"]');
-  if (old) old.replaceWith(buildStepper(unitId, qty));
+  if (qty <= 0) {
+    delete cart[unitId];
+    delete cartNotes[unitId];
+    delete cartPriceOverride[unitId];
+  } else {
+    cart[unitId] = qty;
+  }
+  // Stepper inline sekarang cuma dipakai di lembar keranjang (barang
+  // sedikit) — bukan lagi di daftar produk penuh, jadi render ulang
+  // daftar (utk badge jumlah per-produk) tidak lagi berat seperti dulu.
+  renderList();
   renderCartBar();
   if (sheetOpen) renderCartSheet();
 }
@@ -461,67 +527,30 @@ function renderList(){
 
     var row = document.createElement('div');
     row.className = 'prow';
+    var main = document.createElement('div');
+    main.className = 'prow-main';
 
-    if (variants.length > 0) {
-      var det = document.createElement('details');
-      det.dataset.pid = p.id;
-      // Tetap terbuka sampai user sendiri yang tap induk untuk menutup —
-      // openState dicek dulu supaya tidak collapse tiap kali render() ulang
-      // (mis. selesai tambah qty varian).
-      if (openState.hasOwnProperty(p.id)) {
-        det.open = openState[p.id];
-      } else if (q && matchedVariants.length > 0) {
-        // Auto-expand: query aktif & cocok lewat nama varian (bukan nama induk).
-        det.open = true;
-      }
-      det.addEventListener('toggle', function(){
-        openState[this.dataset.pid] = this.open;
-      });
-      var sum = document.createElement('summary');
-      sum.innerHTML =
-        '<div class="prow-main">' +
-          '<div class="prow-info">' +
-            '<div class="prow-name">'+esc(p.name)+'</div>' +
-            '<div class="prow-meta">'+variants.length+' varian · mulai '+rp(Math.min.apply(null, variants.map(function(v){return v.price;}).concat([p.price])))+'</div>' +
-          '</div>' +
-          '<button class="chev" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button>' +
-        '</div>';
-      det.appendChild(sum);
-      var vlist = document.createElement('div');
-      vlist.className = 'vlist';
-      var displayVariants = q ? matchedVariants : variants;
-      displayVariants.forEach(function(v){
-        var qty = cart[v.unitId] || 0;
-        var vr = document.createElement('div');
-        vr.className = 'vrow' + ((q && matchedVariants.indexOf(v) >= 0) ? ' vmatch' : '');
-        vr.innerHTML =
-          '<div class="vrow-info">'+esc(v.name)+
-            '<div class="vrow-price">'+rp(v.price)+' /'+esc(v.unit)+'</div></div>';
-        vr.appendChild(buildStepper(v.unitId, qty));
-        vlist.appendChild(vr);
-      });
-      det.appendChild(vlist);
-      row.appendChild(det);
-    } else if (p.outOfStock) {
+    var metaHtml = variants.length > 0
+      ? (variants.length + 1) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
+      : rp(p.price) + ' /' + esc(p.unit);
+    main.innerHTML =
+      '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
+        '<div class="prow-meta">'+metaHtml+'</div></div>';
+
+    if (p.outOfStock) {
       // Item 25a — tanda stok habis manual: badge menggantikan tombol
       // tambah, tidak bisa dipesan lewat katalog HTML statis ini.
-      var mainOos = document.createElement('div');
-      mainOos.className = 'prow-main';
-      mainOos.innerHTML =
-        '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
-          '<div class="prow-meta">'+rp(p.price)+' /'+esc(p.unit)+'</div></div>' +
-          '<span class="oos-badge">Stok Habis</span>';
-      row.appendChild(mainOos);
+      main.insertAdjacentHTML('beforeend', '<span class="oos-badge">Stok Habis</span>');
     } else {
-      var qty = cart[p.unitId] || 0;
-      var main = document.createElement('div');
-      main.className = 'prow-main';
-      main.innerHTML =
-        '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
-          '<div class="prow-meta">'+rp(p.price)+' /'+esc(p.unit)+'</div></div>';
-      main.appendChild(buildStepper(p.unitId, qty));
-      row.appendChild(main);
+      // Item 14 — seluruh baris (varian atau tidak) tap utk buka modal
+      // pilih satuan/harga/catatan, menggantikan dropdown varian lama.
+      var qty = totalQtyForProduct(p);
+      main.insertAdjacentHTML('beforeend', qty > 0
+        ? '<span class="prow-badge">'+qty+'</span>'
+        : '<span class="prow-chevron">&rsaquo;</span>');
+      main.addEventListener('click', function(){ openItemModal(p); });
     }
+    row.appendChild(main);
     frag.appendChild(row);
   });
   // Bangun semua baris di DocumentFragment dulu (di luar DOM aktif), baru
@@ -534,36 +563,18 @@ function renderList(){
   }
 }
 
+// Stepper inline +/- — sekarang hanya dipakai di lembar keranjang, di mana
+// barisnya SELALU qty > 0 (barang qty 0 dihapus dari cart, bukan ditampilkan).
 function buildStepper(unitId, qty){
   var wrap = document.createElement('div');
   wrap.dataset.unit = unitId;
-  if (qty > 0) {
-    wrap.className = 'stepper';
-    wrap.innerHTML =
-      '<button type="button" data-act="dec" data-id="'+unitId+'">−</button>' +
-      '<span class="n">'+qty+'</span>' +
-      '<button type="button" data-act="inc" data-id="'+unitId+'">+</button>';
-  } else {
-    var btn = document.createElement('button');
-    btn.className = 'add-btn';
-    btn.type = 'button';
-    btn.dataset.act = 'inc';
-    btn.dataset.id = unitId;
-    btn.textContent = 'Pilih';
-    wrap.appendChild(btn);
-    return wrap;
-  }
+  wrap.className = 'stepper';
+  wrap.innerHTML =
+    '<button type="button" data-act="dec" data-id="'+unitId+'">−</button>' +
+    '<span class="n">'+qty+'</span>' +
+    '<button type="button" data-act="inc" data-id="'+unitId+'">+</button>';
   return wrap;
 }
-
-document.getElementById('list').addEventListener('click', function(e){
-  var btn = e.target.closest('button[data-act]');
-  if (!btn) return;
-  e.preventDefault();
-  var id = btn.dataset.id;
-  var cur = cart[id] || 0;
-  setQty(id, btn.dataset.act === 'inc' ? cur + 1 : cur - 1);
-});
 
 function renderCartBar(){
   var n = cartCount();
@@ -585,26 +596,34 @@ function renderCartSheet(){
   ids.forEach(function(id){
     var u = byUnit[id]; if (!u) return;
     var qty = cart[id];
+    var price = priceFor(id);
+    var overridden = cartPriceOverride.hasOwnProperty(id);
     var row = document.createElement('div');
     row.className = 'citem';
     var top = document.createElement('div');
     top.className = 'ci-top';
     top.innerHTML =
       '<div class="ci-info"><div class="ci-name">'+esc(u.name)+'</div>' +
-        '<div class="ci-price">'+qty+' '+esc(u.unit)+' × '+rp(u.price)+' = '+rp(u.price*qty)+'</div></div>';
+        '<div class="ci-price">'+qty+' '+esc(u.unit)+' × '+rp(price)+
+          (overridden ? ' <span class="ci-custom">(custom)</span>' : '') +
+          ' = '+rp(price*qty)+'</div></div>';
     top.appendChild(buildStepper(id, qty));
-    row.appendChild(top);
-    // Item 26a — catatan per-produk opsional (mis. "yang matang", "size L").
-    // TIDAK memicu render() saat diketik — render ulang seluruh daftar akan
-    // membuang fokus/kursor input ini di tengah mengetik.
-    var noteInput = document.createElement('input');
-    noteInput.className = 'tfield ci-note';
-    noteInput.placeholder = 'Tambah catatan (opsional)';
-    noteInput.value = cartNotes[id] || '';
-    noteInput.addEventListener('input', function(){
-      cartNotes[id] = noteInput.value;
+    // Item 14 — tap baris (di luar tombol +/-) buka lagi modal item, utk
+    // ubah satuan/harga/catatan tanpa menghapus & menambah ulang dari nol.
+    top.addEventListener('click', function(e){
+      if (e.target.closest('button[data-act]')) return;
+      var p = findProductForUnit(id);
+      if (p) openItemModal(p, id);
     });
-    row.appendChild(noteInput);
+    row.appendChild(top);
+    // Item 26a — catatan per-produk kini murni tampilan (read-only) di
+    // sini; diubah lewat modal item (Item 14), bukan input di tempat ini.
+    if (cartNotes[id]) {
+      var noteEl = document.createElement('div');
+      noteEl.className = 'ci-note-view';
+      noteEl.textContent = '* ' + cartNotes[id];
+      row.appendChild(noteEl);
+    }
     wrap.appendChild(row);
   });
   document.getElementById('sheetTotal').textContent = rp(cartTotal());
@@ -616,6 +635,96 @@ document.getElementById('cartItems').addEventListener('click', function(e){
   var id = btn.dataset.id;
   var cur = cart[id] || 0;
   setQty(id, btn.dataset.act === 'inc' ? cur + 1 : cur - 1);
+});
+
+// ── Modal tap-item (Item 14) — pengganti dropdown varian lama: satu modal
+// untuk semua produk (varian atau tidak), dipakai baik dari daftar maupun
+// dari baris keranjang (utk ubah satuan/harga custom/catatan barang yg
+// sudah dipilih). Harga custom TIDAK pernah ikut baris kode mesin #PSN:
+// (lihat komentar di kelas OrderPageService) — murni anotasi manusia di
+// teks WA.
+function openItemModal(p, preselectUnitId){
+  itemModalProduct = p;
+  document.getElementById('itemTitle').textContent = p.name;
+  loadUnitIntoForm(p, preselectUnitId || p.unitId);
+  document.getElementById('itemScrim').classList.add('show');
+  document.getElementById('itemSheet').classList.add('show');
+}
+
+function closeItemModal(){
+  document.getElementById('itemScrim').classList.remove('show');
+  document.getElementById('itemSheet').classList.remove('show');
+  itemModalProduct = null;
+  itemModalUnitId = null;
+}
+
+function renderUnitChips(p, selectedUnitId){
+  var opts = unitOptionsFor(p);
+  var wrap = document.getElementById('itemUnitChips');
+  wrap.innerHTML = '';
+  wrap.style.display = opts.length <= 1 ? 'none' : 'flex';
+  opts.forEach(function(o){
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'unit-chip' + (o.unitId === selectedUnitId ? ' sel' : '');
+    chip.textContent = o.label + ' · ' + rp(o.price);
+    chip.addEventListener('click', function(){ loadUnitIntoForm(p, o.unitId); });
+    wrap.appendChild(chip);
+  });
+}
+
+function loadUnitIntoForm(p, unitId){
+  itemModalUnitId = unitId;
+  renderUnitChips(p, unitId);
+  var overridden = cartPriceOverride.hasOwnProperty(unitId);
+  document.getElementById('itemPrice').value = overridden ? cartPriceOverride[unitId] : byUnit[unitId].price;
+  itemModalQty = cart[unitId] || 1;
+  document.getElementById('itemQtyVal').textContent = fmtQty(itemModalQty);
+  document.getElementById('itemNote').value = cartNotes[unitId] || '';
+  document.getElementById('itemRemoveBtn').style.display = cart[unitId] ? 'block' : 'none';
+  updateItemSubtotal();
+}
+
+function updateItemSubtotal(){
+  var raw = parseFloat(document.getElementById('itemPrice').value);
+  var price = isNaN(raw) || raw < 0 ? 0 : raw;
+  document.getElementById('itemSubtotal').textContent = rp(price * itemModalQty);
+}
+
+document.getElementById('itemPrice').addEventListener('input', updateItemSubtotal);
+document.getElementById('itemQtyDec').addEventListener('click', function(){
+  itemModalQty = Math.max(1, itemModalQty - 1);
+  document.getElementById('itemQtyVal').textContent = fmtQty(itemModalQty);
+  updateItemSubtotal();
+});
+document.getElementById('itemQtyInc').addEventListener('click', function(){
+  itemModalQty += 1;
+  document.getElementById('itemQtyVal').textContent = fmtQty(itemModalQty);
+  updateItemSubtotal();
+});
+document.getElementById('itemSheetClose').addEventListener('click', closeItemModal);
+document.getElementById('itemScrim').addEventListener('click', closeItemModal);
+
+document.getElementById('itemAddBtn').addEventListener('click', function(){
+  if (!itemModalProduct || !itemModalUnitId) return;
+  var unitId = itemModalUnitId;
+  var raw = parseFloat(document.getElementById('itemPrice').value);
+  var basePrice = byUnit[unitId].price;
+  var price = (isNaN(raw) || raw < 0) ? basePrice : raw;
+  if (price !== basePrice) cartPriceOverride[unitId] = price; else delete cartPriceOverride[unitId];
+  var note = document.getElementById('itemNote').value.trim();
+  if (note) cartNotes[unitId] = note; else delete cartNotes[unitId];
+  cart[unitId] = itemModalQty;
+  closeItemModal();
+  render();
+});
+document.getElementById('itemRemoveBtn').addEventListener('click', function(){
+  if (!itemModalUnitId) return;
+  delete cart[itemModalUnitId];
+  delete cartNotes[itemModalUnitId];
+  delete cartPriceOverride[itemModalUnitId];
+  closeItemModal();
+  render();
 });
 
 function render(){ renderList(); renderCartBar(); if (sheetOpen) renderCartSheet(); }
@@ -667,18 +776,26 @@ function buildOrderText(){
     // Baris TANPA catatan tetap "id=qty" polos (backward-compatible).
     codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''));
     var key = u.parentName || u.name;
-    (byParent[key] = byParent[key] || []).push({name:u.name, unit:u.unit, qty:qty, isChild: !!u.parentName, itemNote:itemNote});
+    // Item 14 — harga custom (dari modal item) TIDAK pernah masuk kode
+    // mesin, murni anotasi teks manusia — kasir tetap yg memutuskan/
+    // menerapkan lewat DB lokal saat transaksi diinput.
+    (byParent[key] = byParent[key] || []).push({
+      name:u.name, unit:u.unit, qty:qty, isChild: !!u.parentName, itemNote:itemNote,
+      price:priceFor(id), overridden:cartPriceOverride.hasOwnProperty(id),
+    });
   });
   Object.keys(byParent).forEach(function(k){
     var rows = byParent[k];
     if (rows.length === 1 && !rows[0].isChild) {
-      lines.push(rows[0].name + ' ' + rows[0].unit + ' × ' + fmtQty(rows[0].qty));
+      lines.push(rows[0].name + ' ' + rows[0].unit + ' × ' + fmtQty(rows[0].qty) +
+        (rows[0].overridden ? ' @ ' + rp(rows[0].price) + ' (harga custom)' : ''));
       if (rows[0].itemNote) lines.push('    * ' + rows[0].itemNote);
     } else {
       lines.push(k);
       rows.forEach(function(r){
         var label = r.isChild ? r.name.split(' — ').slice(1).join(' — ') : r.name;
-        lines.push('  > ' + label + ' ' + r.unit + ' × ' + fmtQty(r.qty));
+        lines.push('  > ' + label + ' ' + r.unit + ' × ' + fmtQty(r.qty) +
+          (r.overridden ? ' @ ' + rp(r.price) + ' (harga custom)' : ''));
         if (r.itemNote) lines.push('    * ' + r.itemNote);
       });
     }
