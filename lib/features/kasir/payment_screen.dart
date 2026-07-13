@@ -1495,13 +1495,6 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  ActionChip(
-                    label: const Text('Uang Pas'),
-                    backgroundColor: scheme.primaryContainer,
-                    side: BorderSide.none,
-                    onPressed: () =>
-                        setState(() => _tendered = _effectiveTotal),
-                  ),
                   ...{10000, 20000, 50000, 100000}
                       .where((d) => d >= _effectiveTotal)
                       .take(3)
@@ -1514,31 +1507,58 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
               const SizedBox(height: 10),
               _Keypad(onPress: _press),
               const SizedBox(height: 10),
-              SizedBox(
-                height: 56,
-                child: FilledButton(
-                  onPressed: _tendered > 0
-                      ? () => Navigator.of(context).pop(_tendered)
-                      : null,
-                  style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(56)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _shortfall > 0
-                            ? 'Catat Hutang ${formatRupiah(_shortfall)}'
-                            : _change > 0
-                                ? 'Bayar · Kembali ${formatRupiah(_change)}'
-                                : 'Bayar',
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.check_circle, size: 22),
-                    ],
+              // Item 26b — "Uang Pas" di kiri (sekunder) & "Bayar" di kanan
+              // (primer) sebaris paling bawah, supaya tidak jauh secara
+              // visual dari tombol konfirmasi saat kasir buru-buru.
+              Row(
+                children: [
+                  SizedBox(
+                    height: 56,
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          setState(() => _tendered = _effectiveTotal),
+                      style: OutlinedButton.styleFrom(
+                          // Override tema global (`outlinedButtonTheme` di
+                          // AppTheme set minimumSize lebar penuh by default)
+                          // — di sini sengaja SEMPIT (bukan Expanded).
+                          minimumSize: const Size(0, 56),
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 16)),
+                      child: const Text('Uang Pas',
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: FilledButton(
+                        onPressed: _tendered > 0
+                            ? () => Navigator.of(context).pop(_tendered)
+                            : null,
+                        style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(56)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _shortfall > 0
+                                  ? 'Catat Hutang ${formatRupiah(_shortfall)}'
+                                  : _change > 0
+                                      ? 'Bayar · Kembali ${formatRupiah(_change)}'
+                                      : 'Bayar',
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.check_circle, size: 22),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1552,10 +1572,12 @@ class _Keypad extends StatelessWidget {
   const _Keypad({required this.onPress});
   final ValueChanged<String> onPress;
 
+  // Item 26c — "00" ditukar posisi dengan "000" (bukan dihapus) supaya
+  // "00" berjajar dengan "0" di baris paling bawah/tengah keypad.
   static const _rows = [
     ['1', '2', '3', '⌫'],
     ['4', '5', '6', 'C'],
-    ['7', '8', '9', '00'],
+    ['7', '8', '9', '000'],
   ];
 
   @override
@@ -1599,7 +1621,7 @@ class _Keypad extends StatelessWidget {
     return Column(
       children: [
         for (final row in _rows) Row(children: [for (final k in row) key(k)]),
-        Row(children: [key('0', flex: 2), key('000', flex: 2)]),
+        Row(children: [key('0', flex: 2), key('00', flex: 2)]),
       ],
     );
   }

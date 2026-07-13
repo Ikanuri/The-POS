@@ -25,7 +25,9 @@ class OrderPageService {
   OrderPageService._();
 
   /// Marker awal baris kode mesin di teks pesanan — format:
-  /// `#PSN:<productUnitId>=<qty>;<productUnitId>=<qty>;...`.
+  /// `#PSN:<productUnitId>=<qty>;<productUnitId>=<qty>;...`. Tiap pasangan
+  /// bisa punya segmen catatan opsional (Item 26a):
+  /// `<productUnitId>=<qty>:<catatan ter-encodeURIComponent>`.
   static const machineCodePrefix = '#PSN:';
 
   /// Generate HTML katalog dari seluruh produk aktif (induk + varian) yang
@@ -281,11 +283,13 @@ summary::-webkit-details-marker{display:none;}
 .sheet-x{margin-left:auto;border:none;background:transparent;color:var(--ink-3);
   font-size:20px;cursor:pointer;padding:4px;}
 .sheet-body{overflow-y:auto;padding:0 16px;flex:1;}
-.citem{display:flex;align-items:center;gap:10px;padding:10px 0;
+.citem{display:flex;flex-direction:column;gap:6px;padding:10px 0;
   border-bottom:1px solid var(--line);}
+.ci-top{display:flex;align-items:center;gap:10px;}
 .ci-info{flex:1;min-width:0;}
 .ci-name{font-size:13.5px;font-weight:600;}
 .ci-price{font-size:11.5px;color:var(--ink-3);margin-top:1px;}
+.ci-note{font-size:12px;padding:7px 10px;}
 .field-label{font-size:11px;color:var(--ink-3);font-weight:600;margin:14px 0 5px;}
 .tfield{width:100%;border:1px solid var(--line);background:var(--field);
   border-radius:var(--r-btn);padding:10px 12px;font-size:13.5px;color:var(--ink);
@@ -365,6 +369,7 @@ textarea.tfield{resize:none;min-height:56px;}
 <script>
 var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
+var cartNotes = {}; // unitId -> catatan per-produk (Item 26a)
 var byUnit = {}; // unitId -> {name, unit, price, parentName}
 var openState = {}; // productId -> bool, dropdown varian tetap terbuka/tertutup lewat re-render
 var sheetOpen = false; // hindari renderCartSheet() sia-sia saat sheet tertutup
@@ -582,10 +587,24 @@ function renderCartSheet(){
     var qty = cart[id];
     var row = document.createElement('div');
     row.className = 'citem';
-    row.innerHTML =
+    var top = document.createElement('div');
+    top.className = 'ci-top';
+    top.innerHTML =
       '<div class="ci-info"><div class="ci-name">'+esc(u.name)+'</div>' +
         '<div class="ci-price">'+qty+' '+esc(u.unit)+' × '+rp(u.price)+' = '+rp(u.price*qty)+'</div></div>';
-    row.appendChild(buildStepper(id, qty));
+    top.appendChild(buildStepper(id, qty));
+    row.appendChild(top);
+    // Item 26a — catatan per-produk opsional (mis. "yang matang", "size L").
+    // TIDAK memicu render() saat diketik — render ulang seluruh daftar akan
+    // membuang fokus/kursor input ini di tengah mengetik.
+    var noteInput = document.createElement('input');
+    noteInput.className = 'tfield ci-note';
+    noteInput.placeholder = 'Tambah catatan (opsional)';
+    noteInput.value = cartNotes[id] || '';
+    noteInput.addEventListener('input', function(){
+      cartNotes[id] = noteInput.value;
+    });
+    row.appendChild(noteInput);
     wrap.appendChild(row);
   });
   document.getElementById('sheetTotal').textContent = rp(cartTotal());
@@ -641,19 +660,26 @@ function buildOrderText(){
   Object.keys(cart).forEach(function(id){
     var u = byUnit[id]; if (!u) return;
     var qty = cart[id];
-    codeParts.push(id + '=' + qty);
+    var itemNote = (cartNotes[id] || '').trim();
+    // Item 26a — catatan per-produk ikut baris kode mesin sbg segmen
+    // opsional ":<catatan ter-encode>" — encodeURIComponent supaya bebas-
+    // karakter (termasuk ';'/'=') tidak bentrok delimiter format ini.
+    // Baris TANPA catatan tetap "id=qty" polos (backward-compatible).
+    codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''));
     var key = u.parentName || u.name;
-    (byParent[key] = byParent[key] || []).push({name:u.name, unit:u.unit, qty:qty, isChild: !!u.parentName});
+    (byParent[key] = byParent[key] || []).push({name:u.name, unit:u.unit, qty:qty, isChild: !!u.parentName, itemNote:itemNote});
   });
   Object.keys(byParent).forEach(function(k){
     var rows = byParent[k];
     if (rows.length === 1 && !rows[0].isChild) {
       lines.push(rows[0].name + ' ' + rows[0].unit + ' × ' + fmtQty(rows[0].qty));
+      if (rows[0].itemNote) lines.push('    * ' + rows[0].itemNote);
     } else {
       lines.push(k);
       rows.forEach(function(r){
         var label = r.isChild ? r.name.split(' — ').slice(1).join(' — ') : r.name;
         lines.push('  > ' + label + ' ' + r.unit + ' × ' + fmtQty(r.qty));
+        if (r.itemNote) lines.push('    * ' + r.itemNote);
       });
     }
   });

@@ -54,10 +54,24 @@ class OrderParserService {
         continue;
       }
       final unitId = pair.substring(0, eq).trim();
-      final qty = double.tryParse(pair.substring(eq + 1).trim());
+      final rest = pair.substring(eq + 1).trim();
+      // Item 26a — segmen catatan opsional setelah qty: "qty:catatan"
+      // (catatan ter-encodeURIComponent di sisi HTML, jadi TIDAK pernah
+      // mengandung ':' mentah — aman split di ':' PERTAMA).
+      final colonIdx = rest.indexOf(':');
+      final qtyStr = colonIdx == -1 ? rest : rest.substring(0, colonIdx);
+      final qty = double.tryParse(qtyStr);
       if (qty == null || qty <= 0) {
         notFound.add(pair);
         continue;
+      }
+      String? itemNote;
+      if (colonIdx != -1 && colonIdx + 1 < rest.length) {
+        try {
+          itemNote = Uri.decodeComponent(rest.substring(colonIdx + 1));
+        } catch (_) {
+          itemNote = null;
+        }
       }
 
       final unit = await (db.select(db.productUnits)
@@ -91,6 +105,9 @@ class OrderParserService {
           costPrice: reResolved.costPrice,
           isVariant: prev.isVariant,
           parentProductId: prev.parentProductId,
+          // Baris sama muncul dobel (tempel 2x) — catatan dari kemunculan
+          // TERAKHIR yang dipakai (bukan digabung, ambigu kalau beda).
+          itemNote: itemNote,
         );
         continue;
       }
@@ -112,6 +129,7 @@ class OrderParserService {
         costPrice: resolved.costPrice,
         isVariant: product.parentProductId != null,
         parentProductId: product.parentProductId,
+        itemNote: itemNote,
       ));
     }
 
@@ -143,6 +161,7 @@ class ParsedOrderItem {
     required this.costPrice,
     required this.isVariant,
     this.parentProductId,
+    this.itemNote,
   });
 
   final String productId;
@@ -154,6 +173,9 @@ class ParsedOrderItem {
   final int costPrice;
   final bool isVariant;
   final String? parentProductId;
+
+  /// Catatan per-produk dari pelanggan (Item 26a), mis. "yang matang".
+  final String? itemNote;
 
   int get subtotal => (price * qty).round();
 
@@ -170,6 +192,7 @@ class ParsedOrderItem {
         costPrice: costPrice,
         parentProductId: parentProductId,
         isVariant: isVariant,
+        itemNote: itemNote,
       );
 }
 

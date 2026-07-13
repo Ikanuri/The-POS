@@ -282,4 +282,32 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'Item 26a — cart sheet HTML punya input catatan per-produk, '
+      'buildOrderText encode catatan ke segmen ":<catatan>" di kode mesin',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // Input catatan per-baris keranjang ada (bukan di kartu grid produk).
+    expect(result.html.contains("noteInput.className = 'tfield ci-note'"),
+        isTrue);
+    expect(result.html.contains('cartNotes[id] = noteInput.value'), isTrue);
+    // Tidak memicu render() saat mengetik (hindari buang fokus input).
+    expect(
+        RegExp(r"noteInput\.addEventListener\('input',\s*function\(\)\{\s*"
+                r'cartNotes\[id\] = noteInput\.value;\s*\}\)')
+            .hasMatch(result.html),
+        isTrue);
+
+    // Encoding ke kode mesin: id=qty:catatan(encodeURIComponent).
+    expect(
+        result.html.contains(
+            "codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''))"),
+        isTrue);
+
+    await db.close();
+  });
 }
