@@ -44,10 +44,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ### 🐛 Perbaikan Bug
 - **"Tap to Scan" tidak lagi mengulang barang yang sama.** Sebelumnya,
   setelah satu barang berhasil di-scan lewat mode "Tap to Scan", menekan
-  tombol bidik lagi — walau kamera diarahkan ke tempat kosong tanpa
-  barcode sama sekali — bisa menambahkan barang yang SAMA sekali lagi ke
-  keranjang. Sekarang tombol bidik otomatis nonaktif sampai ada barcode
-  baru benar-benar terdeteksi.
+  tombol bidik lagi — walau barcode sudah disingkirkan dari kamera —
+  kadang masih menambahkan barang yang SAMA sekali lagi ke keranjang
+  (termasuk kasus kamera "kejar-mengejar" melaporkan barcode basi
+  sesaat setelah dikonfirmasi). Sekarang tombol bidik otomatis nonaktif
+  sampai ada barcode BARU yang benar-benar terdeteksi.
+- **Scan pesanan pegawai (QR "Kirim ke Owner/Asisten") lewat scanner
+  eksternal sekarang masuk antrian dengan benar**, tidak lagi salah
+  kebuka sebagai "Tempel Pesanan" dan tidak lagi terasa lambat.
 - **Aplikasi tidak lagi force-close diam-diam di sebagian HP tertentu**
   (dilaporkan terjadi di Infinix Smart 8) — sebelumnya app bisa langsung
   tertutup sendiri begitu dibuka tanpa keterangan apa pun. Ditambahkan
