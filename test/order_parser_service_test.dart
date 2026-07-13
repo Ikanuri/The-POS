@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/services/order_parser_service.dart';
 
 /// Test Tier 1 (DB murni) untuk fitur eksperimental "Tempel Pesanan" —
@@ -192,6 +193,88 @@ void main() {
     expect(result.items, hasLength(1));
     expect(result.items.first.qty, 3);
     expect(result.items.first.itemNote, isNull);
+    await db.close();
+  });
+
+  test(
+      'Item 24d — baris "Pegawai: <nama>" di-parse jadi ParsedOrder.employeeName, '
+      'pembeda handoff pegawai dari pesanan pelanggan biasa', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    final unitId = await _unitIdOf(db, productId);
+
+    final text = '#PSN:$unitId=2;\nPegawai: Budi';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    expect(result.employeeName, 'Budi');
+    expect(result.items, hasLength(1));
+    await db.close();
+  });
+
+  test(
+      'Item 24d — TANPA baris "Pegawai:" → employeeName null (pesanan '
+      'pelanggan biasa, alur Tempel Pesanan tidak berubah)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    final unitId = await _unitIdOf(db, productId);
+
+    final text = '#PSN:$unitId=2;\nNama: Ani';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    expect(result.employeeName, isNull);
+    expect(result.customerName, 'Ani');
+    await db.close();
+  });
+
+  test(
+      'Item 24d — encodeHandoff() menghasilkan teks yang bisa di-parse balik '
+      'oleh parse() sendiri (round-trip), termasuk item dgn catatan', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+    final u1 = await _unitIdOf(db, p1);
+    final p2 = await _addProduct(db, name: 'Beras', price: 12000);
+    final u2 = await _unitIdOf(db, p2);
+
+    final cart = [
+      CartItem(
+        productId: p1,
+        productUnitId: u1,
+        productName: 'Ayam Potong',
+        unitName: 'Kg',
+        qty: 2,
+        price: 25000,
+        originalPrice: 25000,
+        costPrice: 18000,
+        itemNote: 'yang segar; bukan beku',
+      ),
+      CartItem(
+        productId: p2,
+        productUnitId: u2,
+        productName: 'Beras',
+        unitName: 'Kg',
+        qty: 5,
+        price: 12000,
+        originalPrice: 12000,
+        costPrice: 10000,
+      ),
+    ];
+
+    final encoded =
+        OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+    expect(encoded, startsWith('#PSN:'));
+    expect(encoded, contains('Pegawai: Budi'));
+
+    final result = await OrderParserService.parse(db: db, text: encoded);
+    expect(result.employeeName, 'Budi');
+    expect(result.items, hasLength(2));
+    final ayam = result.items.firstWhere((i) => i.productId == p1);
+    expect(ayam.qty, 2);
+    expect(ayam.itemNote, 'yang segar; bukan beku',
+        reason:
+            'catatan dgn karakter ";" harus selamat lewat encode/decode');
+    final beras = result.items.firstWhere((i) => i.productId == p2);
+    expect(beras.qty, 5);
+    expect(beras.itemNote, isNull);
     await db.close();
   });
 }

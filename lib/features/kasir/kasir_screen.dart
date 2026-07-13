@@ -14,6 +14,8 @@ import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/product_providers.dart';
+import '../../core/services/order_page_service.dart';
+import '../../core/services/order_parser_service.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
@@ -456,7 +458,10 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
 
 /// Bongkar payload pesanan ditahan. Format baru: objek `{items:[...], meta:{}}`.
 /// Format lama (kompatibel mundur): list item langsung tanpa metadata.
-({List<CartItem> items, CartMeta meta}) _parseHeldPayload(String json) {
+/// `awaitingPayment` (Item 24d) — true untuk handoff pegawai via QR (lihat
+/// `cart_sheet.dart` `_showHandoffQr`), beda tampilan di `_HeldCard`.
+({List<CartItem> items, CartMeta meta, bool awaitingPayment}) _parseHeldPayload(
+    String json) {
   try {
     final decoded = jsonDecode(json);
     if (decoded is List) {
@@ -466,6 +471,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
             .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
             .toList(),
         meta: const CartMeta(),
+        awaitingPayment: false,
       );
     }
     if (decoded is Map<String, dynamic>) {
@@ -476,10 +482,11 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
             .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
             .toList(),
         meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
+        awaitingPayment: decoded['awaitingPayment'] as bool? ?? false,
       );
     }
   } catch (_) {/* data rusak → kosong */}
-  return (items: const <CartItem>[], meta: const CartMeta());
+  return (items: const <CartItem>[], meta: const CartMeta(), awaitingPayment: false);
 }
 
 final _kasirProductsProvider =
@@ -1012,6 +1019,15 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     _lastScan = barcode;
     _lastScanMs = nowMs;
 
+    // Item 24d — kode pesanan (#PSN:), BUKAN barcode produk biasa. Dua jenis:
+    // handoff pegawai (baris "Pegawai:") → antrian held_orders; pesanan
+    // pelanggan biasa → buka "Tempel Pesanan" pra-diisi (perilaku lama,
+    // sebelumnya cuma bisa tempel manual).
+    if (barcode.startsWith(OrderPageService.machineCodePrefix)) {
+      await _handleOrderCode(barcode);
+      return;
+    }
+
     // Scanner eksternal (HID): tambah ke keranjang, beri haptik, lalu buka
     // sheet keranjang sebagai konfirmasi visual (mode kamera tak terpakai).
     if (fromExternal) {
@@ -1071,6 +1087,53 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     final newQty =
         inCart == null ? 0 : notifier.effectiveQtyFor(inCart).round();
     _showOrUpdateToast(item, newQty);
+  }
+
+  /// Item 24d — proses kode `#PSN:` hasil scan (kamera ATAU scanner
+  /// eksternal — keduanya bermuara ke sini lewat `_handleBarcode`).
+  /// Dua alur: `employeeName` terisi → handoff pegawai, masuk antrian
+  /// `held_orders` LOKAL device ini (owner/asisten yang scan), TIDAK
+  /// langsung ke keranjang aktif (supaya tidak bentrok kalau device ini
+  /// sedang melayani transaksi lain). `employeeName` null → pesanan
+  /// pelanggan biasa, buka "Tempel Pesanan" pra-diisi (preview & konfirmasi
+  /// seperti alur tempel manual yang sudah ada, tidak berubah).
+  Future<void> _handleOrderCode(String text) async {
+    final db = ref.read(databaseProvider);
+    final parsed = await OrderParserService.parse(db: db, text: text);
+    if (!mounted) return;
+
+    if (!parsed.hasMachineCode || parsed.items.isEmpty) {
+      if (_scannerOpen) _closeScanner();
+      _showBanner('Kode pesanan tidak valid / tidak ada barang dikenali');
+      return;
+    }
+
+    final employeeName = parsed.employeeName;
+    if (employeeName != null) {
+      final payload = jsonEncode({
+        'items': parsed.items.map((i) => i.toCartItem().toJson()).toList(),
+        'meta': const CartMeta().toJson(),
+        'awaitingPayment': true,
+      });
+      await db.holdOrder(
+        id: _kasirUuid.v4(),
+        label: employeeName,
+        cartJson: payload,
+      );
+      if (!mounted) return;
+      if (_scannerOpen) _closeScanner();
+      _showBanner('Pesanan dari $employeeName masuk antrian',
+          InlineBannerType.success);
+      return;
+    }
+
+    if (_scannerOpen) _closeScanner();
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => PasteOrderSheet(cartId: _cartId, initialText: text),
+    );
   }
 
   /// Buka sheet keranjang. Bila sudah terbuka, isi diperbarui otomatis lewat
@@ -3319,7 +3382,10 @@ class _HeldInlinePanel extends ConsumerWidget {
                 );
               }
               return SizedBox(
-                height: 86,
+                // Item 24d — dinaikkan dari 86 supaya badge "Menunggu Anda
+                // Bayar" (entri awaitingPayment) muat tanpa overflow;
+                // kartu tanpa badge cuma dapat sedikit ruang kosong ekstra.
+                height: 128,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: held.length,
@@ -3374,12 +3440,33 @@ class _HeldCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: cs.outlineVariant, width: 1),
+          border: Border.all(
+              color: parsed.awaitingPayment ? cs.error : cs.outlineVariant,
+              width: parsed.awaitingPayment ? 1.4 : 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Item 24d — tanda visual khusus utk handoff pegawai via QR,
+            // beda dari pesanan ditahan biasa.
+            if (parsed.awaitingPayment) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: cs.error,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('Menunggu Anda Bayar',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onError)),
+              ),
+              const SizedBox(height: 4),
+            ],
             Text(
               order.label,
               maxLines: 1,
