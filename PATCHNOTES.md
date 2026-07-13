@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 13 Juli 2026
+
+### ✨ Fitur Baru
+- **Catatan per-produk di katalog HTML.** Saat memilih barang lewat
+  katalog online, pelanggan sekarang bisa isi catatan untuk tiap produk
+  (mis. "yang matang", "warna merah") — tidak cuma catatan umum untuk
+  seluruh pesanan seperti sebelumnya. Catatan ini otomatis ikut ke
+  keranjang & struk begitu kasir tempel pesanannya.
+
+### 🎨 Tampilan
+- **Tombol "Uang Pas" pindah ke sebelah kiri tombol "Bayar"** di kalkulator
+  bayar tunai — sebelumnya di atas keypad bareng pecahan uang, sekarang
+  sebaris dengan "Bayar" supaya tidak salah pencet saat buru-buru.
+- **Tombol "00" di keypad kalkulator bayar kini sebaris dengan "0"** (di
+  baris paling bawah), bukan lagi di baris "7 8 9" — susunan angka jadi
+  lebih rapi & mudah dijangkau.
+
 ## 12 Juli 2026
 
 ### ✨ Fitur Baru

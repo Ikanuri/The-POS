@@ -8,6 +8,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-13
+
+- `7fa7907` — feat: catatan per-produk katalog HTML + tata letak kalkulator bayar (Item 26a/26b/26c)
+- `8fa05d8` — docs: masukkan Item 26 — catatan per-produk HTML, posisi Uang Pas/keypad
+- `5d65188` — docs: putuskan mekanisme kirim pesanan pegawai — QR gabung scanner kasir
+- `9f9cb18` — docs: catat 2 opsi desain mekanisme kirim pesanan pegawai (Item 24d)
+
 ## 2026-07-12
 
 - `4317c33` — feat: rename kosmetik "Kasir"→"Pegawai" di UI + izin Terima Pembayaran (Item 24d, bagian 1)
