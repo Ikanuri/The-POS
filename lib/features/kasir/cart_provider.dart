@@ -274,6 +274,53 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
         .toList();
   }
 
+  /// Toggle checklist verifikasi item sebelum bayar — independen dari
+  /// qty/harga. Cascade sama seperti Struk (`receipt_screen.dart`): centang
+  /// induk → semua varian anak ikut tercentang; centang/uncheck satu varian
+  /// anak → induk mengikuti (tercentang hanya bila SEMUA anak tercentang).
+  void setChecked(String productUnitId, bool checked) {
+    final idx = state.indexWhere((c) => c.productUnitId == productUnitId);
+    if (idx < 0) return;
+    final item = state[idx];
+    if (item.isVariant) {
+      state = [
+        for (final c in state)
+          if (c.productUnitId == productUnitId)
+            c.copyWith(checked: checked)
+          else
+            c,
+      ];
+      CartItem? parent;
+      for (final c in state) {
+        if (item.belongsToParent(c)) {
+          parent = c;
+          break;
+        }
+      }
+      if (parent != null) {
+        final parentUnitId = parent.productUnitId;
+        final allChecked = state
+            .where((c) => c.belongsToParent(parent!))
+            .every((c) => c.checked);
+        state = [
+          for (final c in state)
+            if (c.productUnitId == parentUnitId)
+              c.copyWith(checked: allChecked)
+            else
+              c,
+        ];
+      }
+    } else {
+      state = [
+        for (final c in state)
+          if (c.productUnitId == productUnitId || c.belongsToParent(item))
+            c.copyWith(checked: checked)
+          else
+            c,
+      ];
+    }
+  }
+
   /// Set / ganti item berdasarkan productUnitId (dipakai modal edit item).
   /// Berbeda dari [addItem] yang menambah qty; ini menimpa.
   void setItem(CartItem item) {

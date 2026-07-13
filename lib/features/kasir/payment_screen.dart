@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -460,21 +462,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       }
 
       final txId = _uuid.v4();
-      final txCompanion = TransactionsCompanion.insert(
-        id: txId,
-        localId: localId,
-        kasirId: Value(device.deviceCode),
-        customerId: Value(customerId),
-        customerName: Value(customerName),
-        status: status,
-        total: _total,
-        paid: paidAmount,
-        changeAmount: _change,
-        paymentMethod: _selectedMethodType,
-        employeeName: Value(_selectedEmployee?.name),
-        pointsEarned: Value(pointsEarned),
-        createdAt: Value(now),
-      );
 
       // Effective qty memakai satu sumber kebenaran di cart provider (A-13).
       double effQty(CartItem item) => notifier.effectiveQtyFor(item);
@@ -491,22 +478,49 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         cartTotal: _cartTotal,
       );
 
+      // Item baru diteruskan ke `checkedItemIds` transaksi bila sudah
+      // dicentang di keranjang (checklist verifikasi sebelum bayar) — Struk
+      // melanjutkan dari titik yang sama, bukan mulai dari nol.
+      final checkedTxItemIds = <String>[];
       final itemCompanions = <TransactionItemsCompanion>[
         for (final l in allocatedLines)
-          TransactionItemsCompanion.insert(
-            id: _uuid.v4(),
-            transactionId: txId,
-            productId: l.item.productId,
-            productUnitId: l.item.productUnitId,
-            qty: l.effectiveQty,
-            priceAtSale: l.unitPrice,
-            originalPrice: l.item.originalPrice,
-            priceOverridden: Value(l.priceOverridden),
-            costAtSale: Value(l.item.costPrice),
-            itemNote: Value(l.item.itemNote),
-            subtotal: l.subtotal,
-          ),
+          () {
+            final id = _uuid.v4();
+            if (l.item.checked) checkedTxItemIds.add(id);
+            return TransactionItemsCompanion.insert(
+              id: id,
+              transactionId: txId,
+              productId: l.item.productId,
+              productUnitId: l.item.productUnitId,
+              qty: l.effectiveQty,
+              priceAtSale: l.unitPrice,
+              originalPrice: l.item.originalPrice,
+              priceOverridden: Value(l.priceOverridden),
+              costAtSale: Value(l.item.costPrice),
+              itemNote: Value(l.item.itemNote),
+              subtotal: l.subtotal,
+            );
+          }(),
       ];
+
+      final txCompanion = TransactionsCompanion.insert(
+        id: txId,
+        localId: localId,
+        kasirId: Value(device.deviceCode),
+        customerId: Value(customerId),
+        customerName: Value(customerName),
+        status: status,
+        total: _total,
+        paid: paidAmount,
+        changeAmount: _change,
+        paymentMethod: _selectedMethodType,
+        employeeName: Value(_selectedEmployee?.name),
+        pointsEarned: Value(pointsEarned),
+        createdAt: Value(now),
+        checkedItemIds: checkedTxItemIds.isEmpty
+            ? const Value.absent()
+            : Value(jsonEncode(checkedTxItemIds)),
+      );
 
       final paymentCompanions = paidAmount > 0
           ? [
