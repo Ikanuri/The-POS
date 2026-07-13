@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `2090d40` — feat: checklist verifikasi + stepper senada di keranjang kasir
+- `9fec89e` — fix: tombol modal Tambah Bayar tidak sejajar (overflow ke kolom)
 - `6564852` — feat: katalog HTML — modal tap-item ganti dropdown varian (pilih satuan/harga custom/catatan)
 - `955ea34` — feat: bersihkan file share sementara (struk/katalog) yang menumpuk di temp dir
 - `acaf2b5` — feat: modal Tambah Bayar Uang Pas pindah kiri + gate kosong, stepper lebih besar, harga produk reaktif

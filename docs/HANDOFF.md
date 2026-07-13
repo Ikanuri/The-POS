@@ -4,10 +4,61 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (lanjutan). Batch 18-item bugfix/UX kasir +
-katalog HTML SELESAI & di-commit (5 commit, hash lihat CHANGELOG tanggal
-ini). **schemaVersion naik ke 15** (kolom `checkedItemIds` + `voided`).
-Full `flutter test`: **318 test hijau**, `flutter analyze` bersih._
+_Terakhir diperbarui: 13 Juli 2026 (lanjutan lagi). Sesi ini: fix bug tombol
+modal "Tambah Bayar" belum sejajar (`9fec89e`) + fitur checklist verifikasi
+barang di keranjang kasir + stepper senada kartu produk (`2090d40`). Full
+`flutter test`: **326 test hijau** (318 lama + 8 baru), `flutter analyze`
+bersih. **schemaVersion masih 15** (tidak ada migrasi baru sesi ini —
+checklist keranjang murni SharedPreferences, `checkedItemIds` transaksi
+kolom lama dipakai ulang)._
+
+## Sesi ini — fix tombol Tambah Bayar + checklist keranjang kasir
+
+**Bug tombol "Tambah Bayar" belum sejajar** (dilaporkan user via screenshot):
+akar masalahnya `debt_payment_dialog.dart` masih menaruh 3 tombol (Batal/Uang
+Pas/Bayar) di `AlertDialog.actions` bawaan — begitu tak muat sejajar,
+`OverflowBar` jatuh ke mode kolom (Batal nempel kanan sendiri, 2 tombol lain
+full-width di bawahnya). Fix sebelumnya (Item 11, 12 Juli) cuma mengubah
+URUTAN elemen di `actions`, bukan strukturnya — jadi bug ini sebenarnya sisa
+Item 11 yang belum tuntas. Diperbaiki dengan Row manual di `content`, meniru
+pola `payment_screen.dart` (modal checkout utama, yang dari awal TIDAK
+memakai `actions` bawaan makanya tidak pernah kena bug ini).
+
+**Fitur checklist keranjang** (usulan user, disetujui setelah opini +
+riset arsitektur): keranjang kasir (`cart_sheet.dart`) sekarang punya
+- Checkbox di kiri nama tiap item (leading widget eksplisit, BUKAN
+  `CheckboxListTile` — supaya tap checkbox vs tap baris/buka modal edit
+  tidak tumpang tindih, ikuti gotcha yang sudah tercatat).
+- Cascade centang induk↔varian sama persis logika Struk (`cart_provider.dart`
+  method `setChecked`): centang induk → semua anak ikut; uncheck 1 anak →
+  induk ikut ke-uncheck (tercentang hanya kalau SEMUA anak tercentang).
+- Stepper qty diganti total: widget `_AddControl` (dulu private di
+  `kasir_screen.dart`) diekstrak jadi shared widget publik
+  `lib/features/kasir/widgets/add_control.dart` (`AddControl`), dipakai
+  kartu/baris produk DAN baris keranjang — gaya lingkaran +/− identik di
+  kedua tempat. Field qty tap-to-edit lama (`_QtyField`) dihapus total
+  (edit qty manual sekarang lewat tap item → `ItemEntrySheet`, sudah ada
+  sebelumnya).
+- Teks baris item (nama, unit·harga, catatan, subtotal) diperbesar sedikit.
+- Field `checked` baru di `CartItem` (`core/models/cart_item.dart`) — ikut
+  ter-persist ke SharedPreferences otomatis (mekanisme persist cart yang
+  sudah ada, per-perubahan state, tidak perlu kode baru).
+- Saat checkout (`payment_screen.dart` `_confirm()`): item yang `checked`
+  di cart diteruskan jadi nilai awal `checkedItemIds` transaksi baru (kolom
+  lama, sudah ada sejak schemaVersion 15) — Struk melanjutkan checklist
+  dari titik yang sama, bukan mulai dari nol.
+
+**Keputusan default yang diambil tanpa tanya balik** (dikomunikasikan ke
+user dulu, bukan sepihak diam-diam): cascade parent/varian ikut pola Struk;
+increment stepper tetap ±1/tap tanpa input manual (konsekuensi dari field
+input dihilangkan — bukan regresi baru, sudah begitu juga di stepper kartu
+produk).
+
+**Test baru** (`test/cart_checklist_test.dart`, 8 test, semua lolos
+revert-verify): serialisasi `CartItem.checked`, cascade `setChecked` (3
+skenario), UI `CartSheet` (checkbox + `AddControl` menggantikan widget
+lama), dan end-to-end checkout → `checkedItemIds` transaksi via
+`PaymentScreen` sungguhan (bukan reimplementasi logic di test).
 
 ## Batch 18-item bugfix/UX kasir + katalog HTML (sesi ini)
 

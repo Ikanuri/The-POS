@@ -53,6 +53,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   pelanggan — sebelumnya baris "Dibayar" bisa membingungkan karena
   menampilkan angka bersih (setelah dikurangi kembalian), bukan uang yang
   diterima.
+- **Checklist centang di keranjang kasir** — sebelum bayar, kasir sekarang
+  bisa centang tiap barang di keranjang untuk memastikan barangnya sudah
+  benar/lengkap (kotak centang di kiri nama barang). Centangan ini ikut
+  terbawa ke struk, jadi tidak perlu mulai centang dari nol lagi di layar
+  struk.
 
 ### 🎨 Tampilan
 - **Tombol "Bayar" & "Tambah Belanjaan" kini sejajar** di layar struk
@@ -66,6 +71,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   huruf angka yang sama dengan layar lain di aplikasi (dulu beda font).
   Tombol tambah/kurang jumlah barang di keranjang & baris produk juga
   diperbesar supaya lebih mudah disentuh.
+- **Tombol tambah/kurang jumlah barang di keranjang kini bentuknya sama
+  persis dengan tombol di kartu produk** (lingkaran +/− berwarna), tidak
+  lagi ikon ± polos. Tulisan nama barang, harga, dan catatan di keranjang
+  juga sedikit diperbesar supaya lebih mudah dibaca.
 - **Tombol "Uang Pas" pindah ke sebelah kiri tombol "Bayar"** di kalkulator
   bayar tunai — sebelumnya di atas keypad bareng pecahan uang, sekarang
   sebaris dengan "Bayar" supaya tidak salah pencet saat buru-buru.
@@ -107,6 +116,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Harga di bawah nama produk (tab Produk) kini langsung ter-update**
   begitu harga produk itu diubah dari layar lain — sebelumnya harus
   keluar-masuk layar dulu supaya angkanya ikut berubah.
+- **Tombol "Batal"/"Uang Pas"/"Bayar" di modal "Tambah Bayar" kini sejajar
+  rapi** — sebelumnya di beberapa ukuran layar, tombol "Batal" tampil
+  nempel sendiri di kanan atas sementara "Uang Pas" dan "Bayar" terpisah
+  di bawahnya (tidak sejajar).
 
 ## 12 Juli 2026
 
