@@ -227,6 +227,44 @@ void main() {
   });
 
   test(
+      'Bugfix — baris "Pegawai:" MENEMPEL ke kode mesin TANPA newline '
+      '(scanner HID tertentu tidak mengirim embedded newline sbg Enter) '
+      'tetap dikenali employeeName-nya, tidak salah rute ke Tempel Pesanan',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    final unitId = await _unitIdOf(db, productId);
+
+    // TANPA '\n' antara kode mesin & "Pegawai:" — meniru payload yang
+    // datang sebagai SATU string utuh dari scanner yang tidak
+    // menerjemahkan newline di dalam QR jadi keystroke Enter terpisah.
+    final text = '#PSN:$unitId=2;Pegawai: Budi';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    expect(result.employeeName, 'Budi');
+    expect(result.items, hasLength(1));
+    expect(result.items.first.qty, 2);
+    await db.close();
+  });
+
+  test(
+      'Bugfix — baris "Nama:" & "HP:" yang sama-sama menempel tanpa '
+      'newline (mis. "Pegawai: BudiNama: AniHP: 0812") tetap terpisah benar',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    final unitId = await _unitIdOf(db, productId);
+
+    final text = '#PSN:$unitId=1;Pegawai: BudiNama: AniHP: 0812';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    expect(result.employeeName, 'Budi');
+    expect(result.customerName, 'Ani');
+    expect(result.customerPhone, '0812');
+    await db.close();
+  });
+
+  test(
       'Item 24d — encodeHandoff() menghasilkan teks yang bisa di-parse balik '
       'oleh parse() sendiri (round-trip), termasuk item dgn catatan', () async {
     final db = AppDatabase(NativeDatabase.memory());
