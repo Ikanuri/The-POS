@@ -208,52 +208,56 @@ body{
 }
 #app{width:100%;max-width:480px;min-height:100vh;background:var(--panel);
   display:flex;flex-direction:column;position:relative;}
-.topbar{padding:14px 16px 10px;border-bottom:1px solid var(--line);
+.topbar{padding:16px 16px 12px;border-bottom:1px solid var(--line);
   background:var(--panel);position:sticky;top:0;z-index:5;
   display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
-.tb-store{font-family:var(--serif);font-size:19px;font-weight:600;}
-.tb-sub{font-size:11px;color:var(--ink-3);margin-top:2px;}
-.theme-btn{flex-shrink:0;width:34px;height:34px;border:1px solid var(--line);
+.tb-store{font-family:var(--serif);font-size:22px;font-weight:600;}
+.tb-sub{font-size:13px;color:var(--ink-3);margin-top:3px;}
+.theme-btn{flex-shrink:0;width:38px;height:38px;border:1px solid var(--line);
   background:var(--field);color:var(--ink-2);border-radius:999px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;}
-.theme-btn svg{width:17px;height:17px;}
+.theme-btn svg{width:19px;height:19px;}
 .search-wrap{padding:10px 16px;}
 .search{display:flex;align-items:center;gap:8px;background:var(--field);
-  border-radius:var(--r-btn);padding:9px 12px;}
-.search input{flex:1;border:none;background:transparent;font-size:14px;
+  border-radius:var(--r-btn);padding:11px 14px;}
+.search input{flex:1;border:none;background:transparent;font-size:16px;
   color:var(--ink);outline:none;font-family:var(--font);}
 .search svg{flex-shrink:0;opacity:.6;}
-.list{flex:1;overflow-y:auto;padding:0 16px 96px;}
+.list{flex:1;overflow-y:auto;padding:0 16px 100px;}
 .prow{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
-  margin-bottom:8px;overflow:hidden;}
-.prow-main{display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer;}
+  margin-bottom:9px;overflow:hidden;}
+.prow-main{display:flex;align-items:center;gap:12px;padding:13px;cursor:pointer;}
 .prow-info{flex:1;min-width:0;}
-.prow-name{font-size:14px;font-weight:600;}
-.prow-meta{font-size:12px;color:var(--ink-2);margin-top:2px;font-family:var(--serif);}
-.stepper{display:flex;align-items:center;gap:0;background:var(--field);
-  border-radius:999px;overflow:hidden;flex-shrink:0;}
-.stepper button{width:30px;height:30px;border:none;background:transparent;
-  color:var(--accent);font-size:17px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;}
-.stepper .n{min-width:22px;text-align:center;font-weight:700;font-size:13px;}
+.prow-name{font-size:17px;font-weight:600;}
+.prow-meta{font-size:14px;color:var(--ink-2);margin-top:3px;font-family:var(--serif);}
 .oos-badge{background:var(--warn);color:#fff;border-radius:999px;
-  padding:7px 12px;font-size:11.5px;font-weight:700;flex-shrink:0;}
-.prow-badge{background:var(--accent);color:#fff;border-radius:999px;
-  padding:7px 12px;font-size:11.5px;font-weight:700;flex-shrink:0;}
-.prow-chevron{color:var(--ink-3);font-size:20px;flex-shrink:0;}
-.empty{text-align:center;color:var(--ink-3);padding:50px 20px;font-size:13.5px;}
+  padding:8px 13px;font-size:13px;font-weight:700;flex-shrink:0;}
+.empty{text-align:center;color:var(--ink-3);padding:50px 20px;font-size:15px;}
+/* Kontrol tambah/kurang di daftar produk — meniru _AddControl di app kasir:
+   lingkaran "+" oranye saat belum ada di keranjang, berubah jadi lingkaran
+   ANGKA hijau + tombol minus merah terpisah begitu ada qty > 0. */
+.prow-controls{display:flex;align-items:center;gap:7px;flex-shrink:0;}
+.prow-circle{width:40px;height:40px;border:none;border-radius:999px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-weight:700;
+  flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.15);}
+.prow-circle-add{background:var(--accent);color:#fff;font-size:24px;}
+.prow-circle-qty{background:var(--ok);color:#fff;font-size:16px;font-family:var(--serif);}
+.prow-minus{width:36px;height:36px;border:none;border-radius:999px;cursor:pointer;
+  background:#D64545;color:#fff;font-size:19px;font-weight:700;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.15);}
 .cartbar{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;
-  background:var(--card);border-top:1px solid var(--line);padding:10px 14px;
+  background:var(--card);border-top:1px solid var(--line);padding:12px 14px;
   display:flex;align-items:center;gap:10px;box-shadow:0 -4px 18px rgba(0,0,0,.08);}
-.cb-count{width:32px;height:32px;border-radius:999px;background:var(--accent);
-  color:#fff;display:flex;align-items:center;justify-content:center;
-  font-weight:700;font-size:13px;flex-shrink:0;}
+.cb-count{width:40px;height:40px;min-width:40px;min-height:40px;aspect-ratio:1;
+  align-self:center;border-radius:999px;background:var(--accent);
+  color:#fff;display:flex;align-items:center;justify-content:center;line-height:1;
+  font-weight:700;font-size:16px;flex-shrink:0;}
 .cb-count.empty{background:var(--ink-3);}
 .cb-info{flex:1;min-width:0;}
-.cb-lbl{font-size:11px;color:var(--ink-3);}
-.cb-total{font-size:21px;font-weight:700;font-family:var(--serif);}
+.cb-lbl{font-size:13px;color:var(--ink-3);}
+.cb-total{font-size:24px;font-weight:700;font-family:var(--serif);}
 .cb-view{border:1px solid var(--line);background:transparent;color:var(--ink);
-  border-radius:var(--r-btn);padding:9px 16px;font-size:13px;font-weight:600;
+  border-radius:var(--r-btn);padding:11px 18px;font-size:15px;font-weight:600;
   cursor:pointer;flex-shrink:0;}
 .cb-view:disabled{opacity:.4;}
 .scrim{position:fixed;inset:0;background:rgba(20,16,10,.42);z-index:20;
@@ -267,51 +271,61 @@ body{
 .sheet-grip{width:38px;height:4px;background:var(--line);border-radius:2px;
   margin:10px auto 4px;flex-shrink:0;}
 .sheet-head{display:flex;align-items:center;padding:6px 16px 10px;flex-shrink:0;}
-.sheet-head b{font-size:15px;}
+.sheet-head b{font-size:18px;}
 .sheet-x{margin-left:auto;border:none;background:transparent;color:var(--ink-3);
-  font-size:20px;cursor:pointer;padding:4px;}
+  font-size:24px;cursor:pointer;padding:4px;}
 .sheet-body{overflow-y:auto;padding:0 16px;flex:1;}
-.citem{display:flex;flex-direction:column;gap:6px;padding:10px 0;
+.citem{display:flex;flex-direction:column;gap:7px;padding:11px 0;
   border-bottom:1px solid var(--line);}
 .ci-top{display:flex;align-items:center;gap:10px;cursor:pointer;}
 .ci-info{flex:1;min-width:0;}
-.ci-name{font-size:13.5px;font-weight:600;}
-.ci-price{font-size:11.5px;color:var(--ink-3);margin-top:1px;}
-.ci-custom{color:var(--accent);font-weight:700;}
-.ci-note-view{font-size:12px;color:var(--ink-2);padding:0 0 6px;}
-.field-label{font-size:11px;color:var(--ink-3);font-weight:600;margin:14px 0 5px;}
+.ci-name{font-size:16px;font-weight:600;}
+.ci-price{font-size:13.5px;color:var(--ink-3);margin-top:2px;}
+.ci-note-view{font-size:13.5px;color:var(--ink-2);padding:0 0 6px;}
+.stepper{display:flex;align-items:center;gap:0;background:var(--field);
+  border-radius:999px;overflow:hidden;flex-shrink:0;}
+.stepper button{width:34px;height:34px;border:none;background:transparent;
+  color:var(--accent);font-size:19px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;}
+.stepper .n{min-width:26px;text-align:center;font-weight:700;font-size:15px;}
+.field-label{font-size:13px;color:var(--ink-3);font-weight:600;margin:16px 0 6px;}
 .tfield{width:100%;border:1px solid var(--line);background:var(--field);
-  border-radius:var(--r-btn);padding:10px 12px;font-size:13.5px;color:var(--ink);
+  border-radius:var(--r-btn);padding:11px 13px;font-size:16px;color:var(--ink);
   font-family:var(--font);outline:none;}
-textarea.tfield{resize:none;min-height:56px;}
-.unit-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;}
+textarea.tfield{resize:none;min-height:64px;}
+.unit-chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:4px;}
 .unit-chip{border:1px solid var(--line);background:var(--field);color:var(--ink);
-  border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;}
+  border-radius:999px;padding:10px 16px;font-size:14.5px;font-weight:600;cursor:pointer;}
 .unit-chip.sel{background:var(--accent);border-color:var(--accent);color:#fff;}
-.im-price-note{font-size:11px;color:var(--ink-3);margin-top:5px;}
+.im-price-display{border:1px solid var(--line);background:var(--field);
+  border-radius:var(--r-btn);padding:11px 13px;font-size:18px;font-weight:700;
+  font-family:var(--serif);color:var(--ink);}
 .im-qty{display:flex;align-items:center;gap:14px;margin-top:14px;}
-.im-qty button{width:38px;height:38px;border:1px solid var(--line);background:var(--field);
-  color:var(--accent);font-size:19px;font-weight:700;border-radius:999px;cursor:pointer;}
-.im-qty .n{min-width:34px;text-align:center;font-size:16px;font-weight:700;font-family:var(--serif);}
+.im-qty button{width:42px;height:42px;border:1px solid var(--line);background:var(--field);
+  color:var(--accent);font-size:22px;font-weight:700;border-radius:999px;cursor:pointer;
+  flex-shrink:0;}
+.im-qty-input{width:70px;text-align:center;border:1px solid var(--line);
+  background:var(--field);border-radius:var(--r-btn);padding:10px 4px;
+  font-size:19px;font-weight:700;font-family:var(--serif);color:var(--ink);outline:none;}
 .add-cta{width:100%;border:none;background:var(--accent);color:#fff;border-radius:var(--r-btn);
-  padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;}
+  padding:15px;font-size:16.5px;font-weight:700;cursor:pointer;}
 .add-cta:disabled{opacity:.4;}
-.sheet-foot{padding:12px 16px calc(16px + env(safe-area-inset-bottom));
+.sheet-foot{padding:14px 16px calc(16px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line);flex-shrink:0;}
 .grand{display:flex;justify-content:space-between;align-items:baseline;
-  margin-bottom:10px;}
-.grand .gl{font-size:13px;color:var(--ink-2);}
-.grand .gv{font-size:27px;font-weight:700;font-family:var(--serif);}
+  margin-bottom:12px;}
+.grand .gl{font-size:15px;color:var(--ink-2);}
+.grand .gv{font-size:30px;font-weight:700;font-family:var(--serif);}
 .wa-btn{width:100%;border:none;background:#25D366;color:#fff;border-radius:var(--r-btn);
-  padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;
+  padding:15px;font-size:16.5px;font-weight:700;cursor:pointer;
   display:flex;align-items:center;justify-content:center;gap:8px;}
 .wa-btn:disabled{opacity:.4;}
 .copy-btn{width:100%;border:1px solid var(--line);background:transparent;
-  color:var(--ink);border-radius:var(--r-btn);padding:10px;font-size:13px;
-  font-weight:600;cursor:pointer;margin-top:8px;}
+  color:var(--ink);border-radius:var(--r-btn);padding:12px;font-size:15px;
+  font-weight:600;cursor:pointer;margin-top:9px;}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);
-  background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;
-  font-size:12.5px;font-weight:600;z-index:30;opacity:0;pointer-events:none;
+  background:var(--ink);color:var(--panel);padding:10px 18px;border-radius:999px;
+  font-size:14.5px;font-weight:600;z-index:30;opacity:0;pointer-events:none;
   transition:opacity .2s;}
 .toast.show{opacity:1;}
 </style>
@@ -372,13 +386,12 @@ textarea.tfield{resize:none;min-height:56px;}
   <div class="sheet-head"><b id="itemTitle">Produk</b><button class="sheet-x" id="itemSheetClose" type="button">&times;</button></div>
   <div class="sheet-body">
     <div class="unit-chips" id="itemUnitChips"></div>
-    <div class="field-label">Harga satuan</div>
-    <input class="tfield" id="itemPrice" type="number" step="0.01" min="0" inputmode="decimal" />
-    <div class="im-price-note">Ubah untuk harga custom — kasir akan melihat catatan ini saat memproses pesanan.</div>
+    <div class="field-label">Harga</div>
+    <div class="im-price-display" id="itemPriceDisplay">Rp 0</div>
     <div class="field-label">Jumlah</div>
     <div class="im-qty">
       <button type="button" id="itemQtyDec">−</button>
-      <span class="n" id="itemQtyVal">1</span>
+      <input class="im-qty-input" id="itemQtyVal" type="number" inputmode="decimal" min="0" step="any" value="1" />
       <button type="button" id="itemQtyInc">+</button>
     </div>
     <div class="field-label">Catatan (opsional)</div>
@@ -397,7 +410,6 @@ textarea.tfield{resize:none;min-height:56px;}
 var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
 var cartNotes = {}; // unitId -> catatan per-produk (Item 26a)
-var cartPriceOverride = {}; // unitId -> harga custom dari modal item (Item 14/26b)
 var byUnit = {}; // unitId -> {name, unit, price, parentName}
 var sheetOpen = false; // hindari renderCartSheet() sia-sia saat sheet tertutup
 var itemModalProduct = null; // produk aktif di modal tap-item (Item 14)
@@ -458,14 +470,9 @@ function cartCount(){
   for (var k in cart) n += cart[k];
   return n;
 }
-function priceFor(unitId){
-  if (cartPriceOverride.hasOwnProperty(unitId)) return cartPriceOverride[unitId];
-  var u = byUnit[unitId];
-  return u ? u.price : 0;
-}
 function cartTotal(){
   var t = 0;
-  for (var k in cart) t += priceFor(k) * cart[k];
+  for (var k in cart) { var u = byUnit[k]; if (u) t += u.price * cart[k]; }
   return t;
 }
 function totalQtyForProduct(p){
@@ -499,7 +506,6 @@ function setQty(unitId, qty){
   if (qty <= 0) {
     delete cart[unitId];
     delete cartNotes[unitId];
-    delete cartPriceOverride[unitId];
   } else {
     cart[unitId] = qty;
   }
@@ -542,13 +548,15 @@ function renderList(){
       // tambah, tidak bisa dipesan lewat katalog HTML statis ini.
       main.insertAdjacentHTML('beforeend', '<span class="oos-badge">Stok Habis</span>');
     } else {
-      // Item 14 — seluruh baris (varian atau tidak) tap utk buka modal
-      // pilih satuan/harga/catatan, menggantikan dropdown varian lama.
-      var qty = totalQtyForProduct(p);
-      main.insertAdjacentHTML('beforeend', qty > 0
-        ? '<span class="prow-badge">'+qty+'</span>'
-        : '<span class="prow-chevron">&rsaquo;</span>');
-      main.addEventListener('click', function(){ openItemModal(p); });
+      // Kontrol +/− meniru _AddControl di app kasir (lingkaran "+" oranye,
+      // berubah jadi angka hijau + minus merah begitu ada qty). Tap SISA
+      // badan baris (bukan tombol) buka modal pilih satuan/catatan — sama
+      // seperti tap badan kartu produk di app kasir.
+      main.appendChild(buildProwControls(p));
+      main.addEventListener('click', function(e){
+        if (e.target.closest('.prow-controls')) return;
+        openItemModal(p);
+      });
     }
     row.appendChild(main);
     frag.appendChild(row);
@@ -561,6 +569,47 @@ function renderList(){
   } else {
     list.appendChild(frag);
   }
+}
+
+// "+" selalu menambah SATUAN DASAR induk, walau produk punya varian — sama
+// seperti _quickAdd() di app kasir (pilih varian lewat modal/tap badan).
+function prowQuickAdd(p){
+  setQty(p.unitId, (cart[p.unitId] || 0) + 1);
+}
+function prowDecrement(p){
+  var cur = cart[p.unitId] || 0;
+  if (cur <= 0) {
+    showToast('Atur jumlah varian lewat keranjang');
+    return;
+  }
+  setQty(p.unitId, cur - 1);
+}
+function buildProwControls(p){
+  var wrap = document.createElement('div');
+  wrap.className = 'prow-controls';
+  var qty = totalQtyForProduct(p);
+  if (qty > 0) {
+    var minus = document.createElement('button');
+    minus.type = 'button';
+    minus.className = 'prow-minus';
+    minus.textContent = String.fromCharCode(8722);
+    minus.addEventListener('click', function(){ prowDecrement(p); });
+    var main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'prow-circle prow-circle-qty';
+    main.textContent = fmtQty(qty);
+    main.addEventListener('click', function(){ prowQuickAdd(p); });
+    wrap.appendChild(minus);
+    wrap.appendChild(main);
+  } else {
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'prow-circle prow-circle-add';
+    add.textContent = '+';
+    add.addEventListener('click', function(){ prowQuickAdd(p); });
+    wrap.appendChild(add);
+  }
+  return wrap;
 }
 
 // Stepper inline +/- — sekarang hanya dipakai di lembar keranjang, di mana
@@ -596,8 +645,7 @@ function renderCartSheet(){
   ids.forEach(function(id){
     var u = byUnit[id]; if (!u) return;
     var qty = cart[id];
-    var price = priceFor(id);
-    var overridden = cartPriceOverride.hasOwnProperty(id);
+    var price = u.price;
     var row = document.createElement('div');
     row.className = 'citem';
     var top = document.createElement('div');
@@ -605,7 +653,6 @@ function renderCartSheet(){
     top.innerHTML =
       '<div class="ci-info"><div class="ci-name">'+esc(u.name)+'</div>' +
         '<div class="ci-price">'+qty+' '+esc(u.unit)+' × '+rp(price)+
-          (overridden ? ' <span class="ci-custom">(custom)</span>' : '') +
           ' = '+rp(price*qty)+'</div></div>';
     top.appendChild(buildStepper(id, qty));
     // Item 14 — tap baris (di luar tombol +/-) buka lagi modal item, utk
@@ -639,10 +686,10 @@ document.getElementById('cartItems').addEventListener('click', function(e){
 
 // ── Modal tap-item (Item 14) — pengganti dropdown varian lama: satu modal
 // untuk semua produk (varian atau tidak), dipakai baik dari daftar maupun
-// dari baris keranjang (utk ubah satuan/harga custom/catatan barang yg
-// sudah dipilih). Harga custom TIDAK pernah ikut baris kode mesin #PSN:
-// (lihat komentar di kelas OrderPageService) — murni anotasi manusia di
-// teks WA.
+// dari baris keranjang (utk ubah satuan/jumlah/catatan barang yg sudah
+// dipilih). Harga MURNI tampilan (dari katalog, tidak bisa diketik ulang
+// oleh pelanggan) — kasir tetap satu-satunya sumber harga final saat
+// transaksi diproses (lihat komentar di kelas OrderPageService).
 function openItemModal(p, preselectUnitId){
   itemModalProduct = p;
   document.getElementById('itemTitle').textContent = p.name;
@@ -676,30 +723,34 @@ function renderUnitChips(p, selectedUnitId){
 function loadUnitIntoForm(p, unitId){
   itemModalUnitId = unitId;
   renderUnitChips(p, unitId);
-  var overridden = cartPriceOverride.hasOwnProperty(unitId);
-  document.getElementById('itemPrice').value = overridden ? cartPriceOverride[unitId] : byUnit[unitId].price;
+  document.getElementById('itemPriceDisplay').textContent =
+      rp(byUnit[unitId].price) + ' /' + esc(byUnit[unitId].unit);
   itemModalQty = cart[unitId] || 1;
-  document.getElementById('itemQtyVal').textContent = fmtQty(itemModalQty);
+  document.getElementById('itemQtyVal').value = fmtQty(itemModalQty);
   document.getElementById('itemNote').value = cartNotes[unitId] || '';
   document.getElementById('itemRemoveBtn').style.display = cart[unitId] ? 'block' : 'none';
   updateItemSubtotal();
 }
 
 function updateItemSubtotal(){
-  var raw = parseFloat(document.getElementById('itemPrice').value);
-  var price = isNaN(raw) || raw < 0 ? 0 : raw;
+  var price = itemModalUnitId ? byUnit[itemModalUnitId].price : 0;
   document.getElementById('itemSubtotal').textContent = rp(price * itemModalQty);
 }
 
-document.getElementById('itemPrice').addEventListener('input', updateItemSubtotal);
+// Field jumlah bisa diketik LANGSUNG (mis. 2.5 kg), selain lewat tombol +/-.
+document.getElementById('itemQtyVal').addEventListener('input', function(){
+  var v = parseFloat(this.value);
+  itemModalQty = (isNaN(v) || v < 0) ? 0 : v;
+  updateItemSubtotal();
+});
 document.getElementById('itemQtyDec').addEventListener('click', function(){
-  itemModalQty = Math.max(1, itemModalQty - 1);
-  document.getElementById('itemQtyVal').textContent = fmtQty(itemModalQty);
+  itemModalQty = Math.max(0, itemModalQty - 1);
+  document.getElementById('itemQtyVal').value = fmtQty(itemModalQty);
   updateItemSubtotal();
 });
 document.getElementById('itemQtyInc').addEventListener('click', function(){
   itemModalQty += 1;
-  document.getElementById('itemQtyVal').textContent = fmtQty(itemModalQty);
+  document.getElementById('itemQtyVal').value = fmtQty(itemModalQty);
   updateItemSubtotal();
 });
 document.getElementById('itemSheetClose').addEventListener('click', closeItemModal);
@@ -708,13 +759,14 @@ document.getElementById('itemScrim').addEventListener('click', closeItemModal);
 document.getElementById('itemAddBtn').addEventListener('click', function(){
   if (!itemModalProduct || !itemModalUnitId) return;
   var unitId = itemModalUnitId;
-  var raw = parseFloat(document.getElementById('itemPrice').value);
-  var basePrice = byUnit[unitId].price;
-  var price = (isNaN(raw) || raw < 0) ? basePrice : raw;
-  if (price !== basePrice) cartPriceOverride[unitId] = price; else delete cartPriceOverride[unitId];
   var note = document.getElementById('itemNote').value.trim();
   if (note) cartNotes[unitId] = note; else delete cartNotes[unitId];
-  cart[unitId] = itemModalQty;
+  if (itemModalQty > 0) {
+    cart[unitId] = itemModalQty;
+  } else {
+    delete cart[unitId];
+    delete cartNotes[unitId];
+  }
   closeItemModal();
   render();
 });
@@ -722,7 +774,6 @@ document.getElementById('itemRemoveBtn').addEventListener('click', function(){
   if (!itemModalUnitId) return;
   delete cart[itemModalUnitId];
   delete cartNotes[itemModalUnitId];
-  delete cartPriceOverride[itemModalUnitId];
   closeItemModal();
   render();
 });
@@ -776,26 +827,19 @@ function buildOrderText(){
     // Baris TANPA catatan tetap "id=qty" polos (backward-compatible).
     codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''));
     var key = u.parentName || u.name;
-    // Item 14 — harga custom (dari modal item) TIDAK pernah masuk kode
-    // mesin, murni anotasi teks manusia — kasir tetap yg memutuskan/
-    // menerapkan lewat DB lokal saat transaksi diinput.
-    (byParent[key] = byParent[key] || []).push({
-      name:u.name, unit:u.unit, qty:qty, isChild: !!u.parentName, itemNote:itemNote,
-      price:priceFor(id), overridden:cartPriceOverride.hasOwnProperty(id),
-    });
+    (byParent[key] = byParent[key] || []).push(
+        {name:u.name, unit:u.unit, qty:qty, isChild: !!u.parentName, itemNote:itemNote});
   });
   Object.keys(byParent).forEach(function(k){
     var rows = byParent[k];
     if (rows.length === 1 && !rows[0].isChild) {
-      lines.push(rows[0].name + ' ' + rows[0].unit + ' × ' + fmtQty(rows[0].qty) +
-        (rows[0].overridden ? ' @ ' + rp(rows[0].price) + ' (harga custom)' : ''));
+      lines.push(rows[0].name + ' ' + rows[0].unit + ' × ' + fmtQty(rows[0].qty));
       if (rows[0].itemNote) lines.push('    * ' + rows[0].itemNote);
     } else {
       lines.push(k);
       rows.forEach(function(r){
         var label = r.isChild ? r.name.split(' — ').slice(1).join(' — ') : r.name;
-        lines.push('  > ' + label + ' ' + r.unit + ' × ' + fmtQty(r.qty) +
-          (r.overridden ? ' @ ' + rp(r.price) + ' (harga custom)' : ''));
+        lines.push('  > ' + label + ' ' + r.unit + ' × ' + fmtQty(r.qty));
         if (r.itemNote) lines.push('    * ' + r.itemNote);
       });
     }

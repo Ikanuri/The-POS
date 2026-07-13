@@ -318,7 +318,7 @@ void main() {
 
   test(
       'Item 14 — modal tap-item menggantikan <details> lama: satu modal '
-      'utk semua produk (varian/tidak), harga custom TIDAK ikut kode mesin',
+      'utk semua produk (varian/tidak), harga TIDAK bisa diketik pelanggan',
       () async {
     final db = AppDatabase(NativeDatabase.memory());
     final result = await OrderPageService.generateHtml(
@@ -334,13 +334,39 @@ void main() {
     expect(result.html.contains('id="itemUnitChips"'), isTrue);
     expect(result.html.contains('function openItemModal('), isTrue);
 
-    // Harga custom murni anotasi manusia di teks pesanan, tidak pernah
-    // ditulis ke baris kode mesin #PSN:.
-    expect(result.html.contains('(harga custom)'), isTrue);
+    // Harga MURNI tampilan (bukan input yang bisa diketik pelanggan) — tidak
+    // ada lagi field harga custom sama sekali di modal ini.
+    expect(result.html.contains('id="itemPriceDisplay"'), isTrue);
+    expect(result.html.contains('id="itemPrice"'), isFalse);
+    expect(result.html.contains('(harga custom)'), isFalse);
+
+    // Jumlah bisa diketik langsung (input), bukan cuma label statis.
+    expect(
+        result.html
+            .contains('id="itemQtyVal" type="number" inputmode="decimal"'),
+        isTrue);
+
     expect(
         result.html.contains(
             "codeParts.push(id + '=' + qty + (itemNote ? ':' + encodeURIComponent(itemNote) : ''))"),
         isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 14 — daftar produk punya kontrol +/− lingkaran (meniru app '
+      'kasir), bukan cuma badge angka/chevron', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    expect(result.html.contains('prow-circle-add'), isTrue);
+    expect(result.html.contains('prow-circle-qty'), isTrue);
+    expect(result.html.contains('prow-minus'), isTrue);
+    expect(result.html.contains('function prowQuickAdd('), isTrue);
+    expect(result.html.contains('prow-badge'), isFalse);
+    expect(result.html.contains('prow-chevron'), isFalse);
 
     await db.close();
   });
