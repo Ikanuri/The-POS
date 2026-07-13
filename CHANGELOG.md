@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `e3a7b7d` — fix: cegah force-close diam-diam di HP tertentu (mis. Infinix Smart 8) + jaring pengaman crash log
+- `1b6d275` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk bugfix tap-to-scan + atribusi antrian
 - `c146695` — fix: scan tap-to-scan mengulang barang lama + atribusi pelanggan/pegawai tertukar di antrian
 - `386b275` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF/PLAN untuk Item 24b
 - `b04e064` — feat: sheet Verifikasi Pesanan sebelum lanjut bayar antrian handoff (Item 24b)
