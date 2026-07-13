@@ -48,8 +48,8 @@ jobs:
           storeFile=release-key.jks
           EOF
 
-      - name: Build APK (release, arm64-v8a)
-        run: flutter build apk --release --target-platform android-arm64
+      - name: Build APK (release, armeabi-v7a + arm64-v8a)
+        run: flutter build apk --release --target-platform android-arm,android-arm64
 
       - name: Rename APK
         run: |
