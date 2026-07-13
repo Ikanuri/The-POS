@@ -6,28 +6,27 @@ dari file ini (lihat aturan di [CLAUDE.md](CLAUDE.md) §Perencanaan). Riwayat
 teknis pekerjaan yang SUDAH selesai ada di [CHANGELOG.md](CHANGELOG.md), bukan
 di sini.
 
-_Terakhir diperbarui: 12 Juli 2026. Item 9-22 SELESAI 12/13 (Item 17+21
+_Terakhir diperbarui: 13 Juli 2026. Item 9-22 SELESAI 12/13 (Item 17+21
 sengaja ditunda). Item 3a/3b SELESAI/terjawab lewat fitur baru "Import dari
 Griyo POS". Item 4 (import pelanggan Griyo) analisis+keputusan besar
 selesai, siap diimplementasi. **Item 23** (bug "Sisa Tagihan" understated
 saat kembalian dipakai ulang — scope Buku Hutang/Tutup Kasir/tempat lain
-masih menggantung). **Item 24**: 24a/24c/24e/24f SELESAI & di-commit; 24d
-SEBAGIAN (rename Pegawai + permission `terima_pembayaran` selesai) — sisa
-logika gate "Bayar" jadi QR (**mekanisme kirim SUDAH DIPUTUSKAN: QR,
-gabung ke scanner kasir yang sudah ada, hasil scan masuk antrian
-`held_orders` — lihat detail lengkap di 24d**), checklist tersinkron
-(24b), & (sengaja TANPA notifikasi otomatis arah balik di versi awal)
-belum dikerjakan. **Item 25**: 25a/25b SELESAI & di-commit. **Item 26**
-(3 penyempurnaan kecil: catatan per-produk di katalog HTML, posisi tombol
-Uang Pas & keypad "00"/"0" di kalkulator bayar) — SELESAI & di-commit.
+masih menggantung). **Item 24 SELESAI SEPENUHNYA & di-commit** (24a/24b/
+24c/24d/24e/24f): payment gate role Pegawai lewat QR + antrian
+`held_orders` + sheet "Verifikasi Pesanan" (owner centang sambil pegawai
+bacakan barang, 1 device saja tanpa sync) — sengaja TANPA notifikasi
+otomatis arah balik (keputusan final). **Item 25**: 25a/25b SELESAI &
+di-commit. **Item 26** (3 penyempurnaan kecil: catatan per-produk di
+katalog HTML, posisi tombol Uang Pas & keypad "00"/"0" di kalkulator
+bayar) — SELESAI & di-commit.
 **25c (lisensi) desainnya SUDAH FINAL & komprehensif** (lihat dokumentasi
 terpisah yang dikirim ke user, `docs/keamanan-lisensi-offline.md` — TIDAK
 di-commit ke repo atas permintaan user, cuma dikirim sebagai file) —
 **TAPI SENGAJA BELUM dieksekusi**, user eksplisit minta tunda eksekusinya
 walau desainnya sudah disetujui penuh. Jangan eksekusi 25c tanpa instruksi
 baru dari user.
-Sisa menggantung: Item 3c, 5, 8, 23, 24b+24d, 25c — lihat masing-masing
-untuk detail._
+Sisa menggantung: Item 3c, 5, 8, 23, 25c — lihat masing-masing untuk
+detail._
 
 ---
 
@@ -113,56 +112,6 @@ mendatang mau eksekusi ini, regenerasi ringkasannya dari sini:
 **Alasan ditunda (bukan ditolak):** user ingin fokus eksekusi fitur
 fungsional (Item 24 + 25a/25b) dulu; 25c sudah matang & bisa dieksekusi
 kapan saja user siap, tanpa perlu didiskusikan ulang dari nol.
-
----
-
-## Item 24 — Sisa: checklist struk tersinkron lintas-device (24b)
-
-**Status:** 24a, 24c, 24e, 24f, 24d **SEMUA SELESAI & sudah di-commit**
-(rename "Pegawai", permission `terima_pembayaran`, gerbang tombol "Bayar"
-jadi QR, integrasi scan ke scanner kasir yang sudah ada, antrian
-`held_orders` bertanda `awaitingPayment` + badge "Menunggu Anda Bayar").
-**Sisa HANYA 24b** (checklist struk tersinkron) — dan itu pun masih ada
-1 pertanyaan desain yang perlu dijawab user dulu sebelum eksekusi, lihat
-di bawah.
-
-**Notifikasi realtime arah balik (owner→pegawai) SENGAJA TIDAK dibangun**
-— keputusan final, bukan item yang masih menggantung.
-
-### 24b — Persist + sinkronkan state centang item struk (BUTUH KLARIFIKASI sebelum eksekusi)
-**File:** `lib/features/kasir/receipt_screen.dart` (`_checked`, baris ~80).
-Sekarang murni `Map<String, bool>` di memori widget — hilang begitu layar
-ditutup atau app di-kill OS.
-
-**⚠️ Tegangan desain BARU ditemukan saat mulai eksekusi 24d (belum
-terjawab, JANGAN diasumsikan sendiri):** `ReceiptScreen` (satu-satunya
-tempat checklist `_checked` ini ada) **mensyaratkan `transactionId`
-sungguhan** — artinya checklist SELALU POST-PEMBAYARAN (transaksi sudah
-tercatat resmi). Tapi rencana awal 24b bilang "pegawai susun+centang
-SEBELUM kirim ke owner" — itu PRE-PEMBAYARAN, saat datanya masih di
-`held_orders`/keranjang lokal pegawai, BUKAN `Transaction` asli. Dua hal
-ini tidak otomatis nyambung. **Pertanyaan untuk user:** apakah checklist
-yang dimaksud (a) checklist BARU di level keranjang/cart_sheet SEBELUM
-kirim QR (pegawai centang barang yang sudah digenggam sebelum handoff),
-atau (b) checklist `ReceiptScreen` yang SUDAH ADA, dipakai SETELAH owner
-bayar (pegawai pantau/centang packing dari struk transaksi yang sudah
-jadi, bukan sebelum kirim)? Implementasinya beda signifikan tergantung
-jawaban ini — (a) butuh UI checklist baru + field baru di payload
-`held_orders` (belum ada infrastrukturnya sama sekali); (b) reuse
-`ReceiptScreen` yang sudah ada, tinggal ganti sumber datanya dari
-`SharedPreferences` lokal ke sesuatu yang bisa dibaca 2 device (tapi
-BELUM ada jalur transport utk transaksi yang sudah selesai, beda dari
-`held_orders` yang tersedia lewat QR untuk pra-bayar).
-
-**Keputusan lama yang MUNGKIN SUDAH TIDAK BERLAKU (tercatat di sini untuk
-konteks, tapi baca catatan di atas dulu):** awalnya diasumsikan cukup
-persist LOKAL (`SharedPreferences` per `transactionId`), lalu direvisi ke
-"ikut payload `held_orders`" saat asumsi transport masih Opsi A (jaringan
-realtime). Sekarang transport final adalah **QR, satu arah, sekali pakai**
-(bukan sinkron berkelanjutan) — payload `held_orders` cuma ada SEBELUM
-owner scan; begitu di-scan, jadi keranjang biasa lalu `Transaction`.
-Auto-clear checklist saat semua item tercentang (bukan expiry berbasis
-waktu) — bagian ini kemungkinan masih relevan apa pun jawaban di atas.
 
 ---
 

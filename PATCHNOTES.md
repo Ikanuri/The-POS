@@ -19,6 +19,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   masuk daftar antrian dengan tanda "Menunggu Anda Bayar" beserta nama
   pegawai pengirimnya, siap diproses pembayarannya. Owner/Asisten sendiri
   tidak pernah digerbang — tetap langsung "Bayar" seperti biasa.
+- **Verifikasi pesanan pegawai sebelum dibayar.** Tap pesanan "Menunggu
+  Anda Bayar" di antrian sekarang membuka daftar barang dengan kotak
+  centang — pegawai bacakan barang satu-satu, owner tinggal centang yang
+  sudah dicek biar tidak ada yang kelewat/salah sebelum lanjut ke
+  keranjang untuk diproses bayar. Centangan tersimpan otomatis, jadi kalau
+  sempat tertunda pun tidak hilang.
 - **Catatan per-produk di katalog HTML.** Saat memilih barang lewat
   katalog online, pelanggan sekarang bisa isi catatan untuk tiap produk
   (mis. "yang matang", "warna merah") — tidak cuma catatan umum untuk
