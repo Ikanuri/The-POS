@@ -2274,6 +2274,12 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteHeldOrder(String id) =>
       (delete(heldOrders)..where((t) => t.id.equals(id))).go();
 
+  /// Item 24b — update payload pesanan ditahan (dipakai buat persist
+  /// centangan verifikasi tanpa ganti id/createdAt-nya).
+  Future<void> updateHeldOrder(String id, String cartJson) =>
+      (update(heldOrders)..where((t) => t.id.equals(id)))
+          .write(HeldOrdersCompanion(cartJson: Value(cartJson)));
+
   // ───────────────────────── Backup / Restore ─────────────────────────
 
   static const _allTables = [
