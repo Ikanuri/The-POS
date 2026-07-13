@@ -222,7 +222,7 @@ class _TxTile extends ConsumerWidget {
     final remaining = tx.total - tx.paid;
     final db = ref.read(databaseProvider);
     final result = await showDebtPaymentDialog(ctx, db,
-        remaining: remaining, title: 'Tambah Bayar', prefillRemaining: false);
+        remaining: remaining, title: 'Bayar', prefillRemaining: false);
 
     if (result != null && result.amount > 0) {
       final device = ref.read(deviceProvider);

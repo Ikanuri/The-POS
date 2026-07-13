@@ -93,75 +93,101 @@ class _DebtPaymentDialogState extends State<_DebtPaymentDialog> {
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: Text(widget.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Sisa tagihan: ${formatRupiah(widget.remaining)}',
-              style: const TextStyle(fontSize: 13)),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _ctrl,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: const [ThousandsSeparatorFormatter()],
-            decoration: const InputDecoration(
-                prefixText: 'Rp ', border: OutlineInputBorder()),
-          ),
-          if (widget.methods.length > 1) ...[
-            const SizedBox(height: 14),
-            Text('Metode bayar',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+      // AlertDialog SELALU membungkus content dengan IntrinsicWidth (lihat
+      // framework `dialog.dart`), yang kurang cocok dgn Expanded di bawah —
+      // SizedBox(width: maxFinite) memberi lebar pasti ke subtree ini
+      // supaya Expanded bisa dipakai dgn aman (dialog tetap dibatasi lebar
+      // maksimum oleh constraint Dialog sendiri, TIDAK jadi selebar layar).
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Sisa tagihan: ${formatRupiah(widget.remaining)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [ThousandsSeparatorFormatter()],
+              decoration: const InputDecoration(
+                  prefixText: 'Rp ', border: OutlineInputBorder()),
+            ),
+            if (widget.methods.length > 1) ...[
+              const SizedBox(height: 14),
+              Text('Metode bayar',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final m in widget.methods)
+                    ChoiceChip(
+                      label: Text(m.name),
+                      selected: _selectedId == m.id,
+                      selectedColor: scheme.primaryContainer,
+                      onSelected: (_) => setState(() => _selectedId = m.id),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            // 3 tombol lebar-penuh ("Uang Pas" + "Bayar") TIDAK MUAT sejajar
+            // dalam SATU baris di dialog sesempit ini (sudah dibuktikan
+            // overflow nyata di widget test dgn surface sesempit HP asli) —
+            // "Batal" dipisah baris sendiri di kanan atas (tidak berebut
+            // lebar dgn 2 tombol lain), baru "Uang Pas"+"Bayar" sebaris di
+            // bawahnya persis pola payment_screen.dart (yang muat karena
+            // cuma 2 tombol).
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Batal')),
+            ),
+            Row(
               children: [
-                for (final m in widget.methods)
-                  ChoiceChip(
-                    label: Text(m.name),
-                    selected: _selectedId == m.id,
-                    selectedColor: scheme.primaryContainer,
-                    onSelected: (_) => setState(() => _selectedId = m.id),
+                OutlinedButton(
+                  // AppTheme set minimumSize OutlinedButton lebar penuh by
+                  // default (utk tombol CTA berdiri sendiri) — di sini WAJIB
+                  // override sempit, sama seperti payment_screen.dart.
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 16)),
+                  onPressed: () => setState(() => _ctrl.text =
+                      ThousandsSeparatorFormatter.format(widget.remaining)),
+                  child: const Text('Uang Pas'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: FilledButton(
+                      onPressed:
+                          ThousandsSeparatorFormatter.parseValue(_ctrl.text) <=
+                                  0
+                              ? null
+                              : () {
+                                  final amount =
+                                      ThousandsSeparatorFormatter.parseValue(
+                                          _ctrl.text);
+                                  Navigator.of(context).pop(
+                                      (amount: amount, method: _selectedType));
+                                },
+                      child: const Text('Bayar'),
+                    ),
                   ),
+                ),
               ],
             ),
           ],
-          const SizedBox(height: 16),
-          // Row manual (bukan AlertDialog.actions bawaan) — 3 tombol lebar
-          // penuh ("Uang Pas" + "Bayar") tak pernah muat sejajar di actions
-          // bawaan, jatuh ke mode kolom & bikin "Batal" nempel kanan sendiri
-          // tak sejajar dgn 2 tombol lain. Sama pola dgn payment_screen.dart.
-          Row(
-            children: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Batal')),
-              const Spacer(),
-              OutlinedButton(
-                onPressed: () => setState(() => _ctrl.text =
-                    ThousandsSeparatorFormatter.format(widget.remaining)),
-                child: const Text('Uang Pas'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed:
-                    ThousandsSeparatorFormatter.parseValue(_ctrl.text) <= 0
-                        ? null
-                        : () {
-                            final amount = ThousandsSeparatorFormatter
-                                .parseValue(_ctrl.text);
-                            Navigator.of(context)
-                                .pop((amount: amount, method: _selectedType));
-                          },
-                child: const Text('Bayar'),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

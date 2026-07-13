@@ -1004,7 +1004,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final remaining = netRemainingOwed(_tx!, _payments);
     final db = ref.read(databaseProvider);
     final result = await showDebtPaymentDialog(context, db,
-        remaining: remaining, title: 'Tambah Bayar', prefillRemaining: false);
+        remaining: remaining, title: 'Bayar', prefillRemaining: false);
 
     if (result != null && result.amount > 0 && mounted) {
       final device = ref.read(deviceProvider);

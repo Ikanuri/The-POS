@@ -133,6 +133,55 @@ void main() {
   });
 
   testWidgets(
+      'lebar dialog SEMPIT (spt HP asli) — tombol "Uang Pas"/"Bayar" tetap '
+      'kelihatan & bisa ditap, tidak overflow/hilang karena minimumSize '
+      'lebar-penuh bawaan tema', (tester) async {
+    // AppTheme set minimumSize OutlinedButton/FilledButton lebar penuh by
+    // default (utk CTA berdiri sendiri) — dialog ini menaruh 2 tombol itu
+    // dalam SATU Row, jadi WAJIB override sempit. Surface test default
+    // (flutter_test ~800x600) terlalu lebar utk menangkap bug ini — pakai
+    // ukuran sempit spt layar HP sungguhan.
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showDebtPaymentDialog(context, db,
+                remaining: 50000, title: 'Bayar', prefillRemaining: false),
+            child: const Text('buka'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('buka'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull,
+        reason: 'tidak boleh ada RenderFlex overflow dari Row tombol');
+
+    final uangPas = find.widgetWithText(OutlinedButton, 'Uang Pas');
+    final bayar = find.widgetWithText(FilledButton, 'Bayar');
+    expect(uangPas, findsOneWidget);
+    expect(bayar, findsOneWidget);
+
+    // Kedua tombol harus benar-benar berada DI DALAM lebar layar (bukan
+    // ter-render tapi terdorong keluar batas karena minta lebar tak hingga).
+    final screenWidth = tester.view.physicalSize.width /
+        tester.view.devicePixelRatio;
+    for (final finder in [uangPas, bayar]) {
+      final rect = tester.getRect(finder);
+      expect(rect.right, lessThanOrEqualTo(screenWidth),
+          reason: 'tombol terdorong keluar layar (minimumSize infinity)');
+    }
+
+    await tester.tap(bayar);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
       'Item 11 — tombol Bayar TIDAK menyala saat field kosong, menyala '
       'begitu diisi', (tester) async {
     await tester.pumpWidget(MaterialApp(
