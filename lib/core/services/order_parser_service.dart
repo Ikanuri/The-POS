@@ -160,10 +160,14 @@ class OrderParserService {
   /// di-QR-kan, format SAMA dengan yang dihasilkan katalog HTML
   /// (`OrderPageService` JS `buildOrderText()`) supaya bisa dibaca [parse]
   /// yang sama. Baris `Pegawai: <nama>` jadi pembeda dari pesanan
-  /// pelanggan biasa (lihat [ParsedOrder.employeeName]).
+  /// pelanggan biasa (lihat [ParsedOrder.employeeName]). `customerName`
+  /// (bila pegawai sudah pilih pelanggan di keranjangnya) ikut sbg baris
+  /// `Nama:` yang SUDAH ADA parser-nya (dipakai jg oleh alur Tempel
+  /// Pesanan) — supaya atribusi pelanggan tidak hilang saat handoff.
   static String encodeHandoff({
     required List<CartItem> items,
     required String employeeName,
+    String? customerName,
   }) {
     final codeParts = items.map((c) {
       final note = c.itemNote?.trim();
@@ -172,8 +176,13 @@ class OrderParserService {
           : '';
       return '${c.productUnitId}=${_fmtQty(c.qty)}$noteSeg';
     }).join(';');
-    return '${OrderPageService.machineCodePrefix}$codeParts\n'
-        'Pegawai: $employeeName';
+    final buf = StringBuffer('${OrderPageService.machineCodePrefix}$codeParts\n')
+      ..write('Pegawai: $employeeName');
+    final name = customerName?.trim();
+    if (name != null && name.isNotEmpty) {
+      buf.write('\nNama: $name');
+    }
+    return buf.toString();
   }
 
   static String _fmtQty(double qty) =>

@@ -277,4 +277,68 @@ void main() {
     expect(beras.itemNote, isNull);
     await db.close();
   });
+
+  test(
+      'encodeHandoff() dgn customerName ikut baris "Nama:" — round-trip '
+      'balik ke customerName (bukan cuma employeeName)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+    final u1 = await _unitIdOf(db, p1);
+
+    final cart = [
+      CartItem(
+        productId: p1,
+        productUnitId: u1,
+        productName: 'Ayam Potong',
+        unitName: 'Kg',
+        qty: 1,
+        price: 25000,
+        originalPrice: 25000,
+        costPrice: 18000,
+      ),
+    ];
+
+    final encoded = OrderParserService.encodeHandoff(
+      items: cart,
+      employeeName: 'Budi',
+      customerName: 'Siti',
+    );
+    expect(encoded, contains('Pegawai: Budi'));
+    expect(encoded, contains('Nama: Siti'));
+
+    final result = await OrderParserService.parse(db: db, text: encoded);
+    expect(result.employeeName, 'Budi');
+    expect(result.customerName, 'Siti',
+        reason:
+            'atribusi pelanggan yang dipilih pegawai harus ikut terbawa QR');
+    await db.close();
+  });
+
+  test(
+      'encodeHandoff() TANPA customerName (pegawai belum pilih pelanggan) → '
+      'tidak ada baris "Nama:" sama sekali', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+    final u1 = await _unitIdOf(db, p1);
+    final cart = [
+      CartItem(
+        productId: p1,
+        productUnitId: u1,
+        productName: 'Ayam Potong',
+        unitName: 'Kg',
+        qty: 1,
+        price: 25000,
+        originalPrice: 25000,
+        costPrice: 18000,
+      ),
+    ];
+
+    final encoded =
+        OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+    expect(encoded, isNot(contains('Nama:')));
+
+    final result = await OrderParserService.parse(db: db, text: encoded);
+    expect(result.customerName, isNull);
+    await db.close();
+  });
 }

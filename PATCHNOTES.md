@@ -14,11 +14,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Pegawai kasir kini bisa "Kirim ke Owner/Asisten" tanpa pegang uang
   tunai.** Untuk pegawai yang belum diberi izin "Terima Pembayaran", tombol
   "Bayar" di keranjang berubah jadi "Kirim ke Owner/Asisten" — menampilkan
-  kode QR berisi isi keranjang. Owner/Asisten tinggal scan QR itu dengan
-  scanner kasir yang sama (kamera atau scanner eksternal), pesanan otomatis
-  masuk daftar antrian dengan tanda "Menunggu Anda Bayar" beserta nama
-  pegawai pengirimnya, siap diproses pembayarannya. Owner/Asisten sendiri
-  tidak pernah digerbang — tetap langsung "Bayar" seperti biasa.
+  kode QR berisi isi keranjang (termasuk nama pelanggan bila sudah
+  dipilih pegawai). Owner/Asisten tinggal scan QR itu dengan scanner
+  kasir yang sama (kamera atau scanner eksternal), pesanan otomatis
+  masuk daftar antrian dengan tanda "Menunggu Anda Bayar" — judul
+  kartunya nama pelanggan, dengan label kecil nama pegawai pengirim +
+  jam masuk di atas kartu — siap diproses pembayarannya. Owner/Asisten
+  sendiri tidak pernah digerbang — tetap langsung "Bayar" seperti biasa.
 - **Verifikasi pesanan pegawai sebelum dibayar.** Tap pesanan "Menunggu
   Anda Bayar" di antrian sekarang membuka daftar barang dengan kotak
   centang — pegawai bacakan barang satu-satu, owner tinggal centang yang
@@ -38,6 +40,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Tombol "00" di keypad kalkulator bayar kini sebaris dengan "0"** (di
   baris paling bawah), bukan lagi di baris "7 8 9" — susunan angka jadi
   lebih rapi & mudah dijangkau.
+
+### 🐛 Perbaikan Bug
+- **"Tap to Scan" tidak lagi mengulang barang yang sama.** Sebelumnya,
+  setelah satu barang berhasil di-scan lewat mode "Tap to Scan", menekan
+  tombol bidik lagi — walau kamera diarahkan ke tempat kosong tanpa
+  barcode sama sekali — bisa menambahkan barang yang SAMA sekali lagi ke
+  keranjang. Sekarang tombol bidik otomatis nonaktif sampai ada barcode
+  baru benar-benar terdeteksi.
 
 ## 12 Juli 2026
 
