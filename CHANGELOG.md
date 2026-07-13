@@ -10,6 +10,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `6564852` — feat: katalog HTML — modal tap-item ganti dropdown varian (pilih satuan/harga custom/catatan)
+- `955ea34` — feat: bersihkan file share sementara (struk/katalog) yang menumpuk di temp dir
+- `acaf2b5` — feat: modal Tambah Bayar Uang Pas pindah kiri + gate kosong, stepper lebih besar, harga produk reaktif
+- `5ff92a4` — feat: struk — Bayar+Tambah Belanjaan sejajar, batalkan pembayaran, edit item, fix nota gabungan
+- `a8c94ad` — feat: skema v15 — checklist struk persisten, batalkan pembayaran, edit item nota belum lunas
 - `174cad7` — feat: gerbang aktivasi/lisensi offline (Item 25c) — public key developer masih placeholder, gerbang nonaktif total
 - `fb8ba80` — fix: build APK utk armeabi-v7a + arm64-v8a — akar masalah crash Infinix Smart 8 TERKONFIRMASI
 - `f47e67b` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF — crash Infinix Smart 8 masih belum selesai

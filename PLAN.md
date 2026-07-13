@@ -23,7 +23,8 @@ di-commit** — lihat CHANGELOG & `docs/HANDOFF.md` untuk detail (public
 key developer & nomor WA "Kirim via WhatsApp" masih placeholder, gerbang
 otomatis nonaktif total sampai keduanya diisi — lihat HANDOFF utk langkah
 lanjutannya).
-Sisa menggantung: Item 3c, 5, 8, 23 — lihat masing-masing untuk detail._
+Sisa menggantung: Item 3c, 5, 23 (sebagian, lihat detail — nota gabungan
+sudah diperbaiki sesi 13 Juli)._
 
 ---
 
@@ -78,10 +79,15 @@ ke laporan spesifik, bukan sapu bersih semua turunan `total-paid`):
   kembalian) — belum dikonfirmasi user apakah ini disengaja atau bug,
   belum ada fix.
 - Tempat lain yang masih pakai pola `tx.total - tx.paid` mentah: `printer_
-  service.dart` (2×, struk cetak ESC/POS asli — beda dari `_ReceiptPaper`
-  di receipt_screen.dart yang SUDAH diperbaiki), `transaksi_tab.dart` (2×,
-  tab Laporan → Transaksi), `tx_history_sheet.dart` (3×, riwayat transaksi
-  di kasir), `merged_receipt_screen.dart` (nota gabungan).
+  service.dart` (`printReceipt`/struk cetak ESC/POS tunggal — beda dari
+  `_ReceiptPaper` di receipt_screen.dart yang SUDAH diperbaiki),
+  `transaksi_tab.dart` (2×, tab Laporan → Transaksi), `tx_history_sheet.dart`
+  (3×, riwayat transaksi di kasir).
+  - **`merged_receipt_screen.dart` (nota gabungan) + `printer_service.dart`
+    `_buildMergedBytes` (cetak ESC/POS nota gabungan) SUDAH diperbaiki**
+    (sesi 13 Juli, laporan user "SISA Rp -31.400" di struk gabungan) —
+    keduanya sekarang pakai `netRemainingOwed()`/`netPaidDisplay()` via
+    `paymentsByTx`, sama seperti `receipt_screen.dart`.
 
 **Kalau ada laporan bug lanjutan dari salah satu tempat di atas**, akar
 masalahnya kemungkinan besar SAMA (pola `total-paid` mentah) — cek dulu
@@ -254,42 +260,6 @@ diputuskan):**
 
 ---
 
-## Item 8 — Bawa UI/UX "pilih harga" modal ItemEntrySheet ke halaman HTML (didiskusikan, BELUM diputuskan)
-
-**Status:** Masih tahap diskusi kelayakan — user bertanya "bisakah", belum
-ada keputusan scope final. Dicatat supaya tidak hilang dari radar.
-
-**Ide:** modal `ItemEntrySheet` di tab Kasir (tap badan produk) sudah punya
-UI pilih harga yang cukup kaya: chip horizontal untuk satuan + tier grosir +
-harga alternatif (`_PriceChip`), qty stepper, dst. User bertanya apakah UI/UX
-serupa ini bisa juga ditambahkan ke halaman HTML Katalog Pesanan (yang saat
-ini pemilihan varian di HTML masih pakai `<details>` dropdown sederhana +
-stepper polos, tanpa konsep "harga lain"/tier grosir sama sekali).
-
-**Trade-off yang perlu dipertimbangkan sebelum lanjut (belum final,
-menunggu keputusan user):**
-- **Kompleksitas vs manfaat:** HTML katalog ini sengaja dibuat SEDERHANA
-  (statis, tanpa framework, tanpa build step) supaya tetap ringan & mudah
-  dirawat sebagai satu file. Menambahkan sistem "harga lain"/tier grosir ke
-  sana berarti duplikasi LOGIKA price-resolving (`PriceService`) ke JS
-  murni — dua tempat yang harus dijaga tetap sinkron kalau logika harga
-  berubah di masa depan.
-  - **Kaitan dengan optimasi performa HTML yang sudah dikerjakan** (debounce
-    cari, update per-baris, dll — lihat CHANGELOG): semakin banyak
-    UI/interaktivitas ditambahkan ke HTML ini, semakin besar risiko masalah
-    performa serupa muncul lagi di tempat baru — perlu diperhatikan bareng,
-    bukan ditambah dulu baru dioptimasi belakangan.
-- **Relevansi ke pelanggan vs ke kasir:** tier grosir/harga alternatif itu
-  fitur yang biasanya dipakai KASIR/OWNER untuk situasi tawar-menawar
-  khusus, bukan sesuatu yang biasanya perlu dipilih PELANGGAN sendiri saat
-  memesan dari HP-nya. Perlu dipikirkan: apakah relevan pelanggan melihat/
-  memilih opsi harga alternatif sendiri, atau ini cuma perlu tetap jadi
-  keputusan kasir saat pesanan diproses di tab Kasir (lewat "Tempel
-  Pesanan")?
-- **Menunggu keputusan user** sebelum ada rencana teknis lebih rinci.
-
----
-
 ## Item 17 — Persist antrian approval sync + majukan watermark upload (revisi dari catatan "ACK" lama)
 
 **Prioritas:** Sedang. **Disetujui arah oleh user** (usul: simpan state
@@ -377,5 +347,7 @@ detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
    konfirmasi user soal cakupan tanggal file `Transaksi ...xlsx` sebelum
    mulai; dependensi ke Item 3b (rasio multi-satuan) sekarang longgar
    karena user sudah memilih flat-import tanpa auto-gabung.
-4. **Item 8** (bawa UI pilih-harga ke katalog HTML) — masih tahap diskusi
-   kelayakan, menunggu keputusan user soal trade-off kompleksitas.
+4. **Item 23 sisa** (`printer_service.dart` `printReceipt` tunggal,
+   `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
+   Hutang, Tutup Kasir "kas sistem" overstated) — belum disentuh, lihat
+   detail Item 23 di atas.
