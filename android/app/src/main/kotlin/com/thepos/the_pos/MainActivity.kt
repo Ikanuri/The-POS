@@ -7,26 +7,16 @@ import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
-import java.io.FileWriter
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.UUID
-import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "com.thepos/bt_print"
+        private const val CRASH_CHANNEL = "com.thepos/crash_log"
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private const val TAG = "BtPrint"
-        // HARUS sama persis dgn CrashLogService.fileName di sisi Dart
-        // (lib/core/services/crash_log_service.dart) & lokasi yang sama
-        // (getExternalFilesDir == path_provider getExternalStorageDirectory)
-        // supaya keduanya nulis ke satu file yang sama.
-        private const val CRASH_LOG_FILE = "the_pos_crash_log.jsonl"
     }
 
     private var btSocket: BluetoothSocket? = null
@@ -34,11 +24,14 @@ class MainActivity : FlutterActivity() {
     // Jaring pengaman native — cakupan LEBIH LUAS dari `runZonedGuarded` di
     // sisi Dart (main.dart): menangkap exception Java/Kotlin tak tertangani
     // (mis. UnsatisfiedLinkError saat gagal memuat native library) SEBELUM
-    // proses benar-benar dihentikan OS, termasuk yang terjadi sebelum Dart
-    // sempat jalan sama sekali. Dipasang PALING AWAL (sebelum super.onCreate)
-    // supaya jendela cakupannya semaksimal mungkin. TIDAK bisa menangkap
-    // crash native murni (segfault C/C++) — itu di luar jangkauan handler
-    // Java/Kotlin mana pun, satu-satunya cara lihat itu adalah adb logcat.
+    // proses benar-benar dihentikan OS. Dipasang PALING AWAL (sebelum
+    // super.onCreate) supaya jendela cakupannya semaksimal mungkin — tapi
+    // `CrashCatchingApplication.attachBaseContext()` sudah pasang jaring
+    // yang LEBIH awal lagi (sebelum Activity manapun ada), handler di sini
+    // ikut RANTAI ke situ (lihat `previous?.uncaughtException`), bukan
+    // menimpanya. TIDAK bisa menangkap crash native murni (segfault C/C++)
+    // — itu di luar jangkauan handler Java/Kotlin mana pun, satu-satunya
+    // cara lihat itu adalah adb logcat.
     override fun onCreate(savedInstanceState: Bundle?) {
         installCrashLogHandler()
         super.onCreate(savedInstanceState)
@@ -48,28 +41,13 @@ class MainActivity : FlutterActivity() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                writeCrashLog(throwable)
+                CrashLogWriter.appendThrowable(
+                    applicationContext, "AndroidUncaughtExceptionHandler", throwable)
             } catch (_: Exception) {
                 // Jaring pengaman ini sendiri tidak boleh ikut melempar.
             }
             previous?.uncaughtException(thread, throwable)
         }
-    }
-
-    private fun writeCrashLog(throwable: Throwable) {
-        val dir = getExternalFilesDir(null) ?: return
-        val file = File(dir, CRASH_LOG_FILE)
-        val json = JSONObject()
-        json.put(
-            "waktu",
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
-        )
-        json.put("context", "AndroidUncaughtExceptionHandler")
-        json.put("jenis", throwable.javaClass.name)
-        json.put("pesan", throwable.message ?: "")
-        json.put("stackTrace", Log.getStackTraceString(throwable))
-        json.put("platform", "android-native")
-        FileWriter(file, true).use { it.write(json.toString() + "\n") }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -83,6 +61,30 @@ class MainActivity : FlutterActivity() {
                     "disconnect" -> doDisconnect(result)
                     "status"     -> result.success(btSocket?.isConnected == true)
                     else         -> result.notImplemented()
+                }
+            }
+
+        // Item 24d susulan — jembatan Dart → native utk crash log: error yang
+        // tertangkap Flutter (`runZonedGuarded`/`FlutterError.onError`, engine
+        // MASIH hidup) ikut ditulis ke folder Downloads publik via
+        // `CrashLogWriter` (sisi Dart sendiri, lewat `path_provider`, TIDAK
+        // bisa akses MediaStore — cuma folder khusus app yang kena restriksi
+        // Android 11+ File Manager, lihat komentar `CrashLogWriter`).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CRASH_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "append" -> {
+                        val json = call.argument<String>("json")
+                        if (json != null) CrashLogWriter.appendLine(applicationContext, json)
+                        result.success(true)
+                    }
+                    "readDownloads" ->
+                        result.success(CrashLogWriter.readDownloads(applicationContext))
+                    "clearDownloads" -> {
+                        CrashLogWriter.clearDownloads(applicationContext)
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
                 }
             }
     }
