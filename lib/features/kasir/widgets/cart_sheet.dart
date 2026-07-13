@@ -225,10 +225,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             )),
                     Text(
                       formatRupiah(total),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
+                      style: AppTheme.numStyle(context,
+                          size: 22, weight: FontWeight.w700, color: scheme.primary),
                     ),
                   ],
                 ),
@@ -306,11 +304,21 @@ class _CartItemTile extends ConsumerWidget {
             Row(
               children: [
                 Flexible(
-                  child: Text('${item.unitName} · ${formatRupiah(item.price)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  child: Text.rich(
+                    TextSpan(
                       style: TextStyle(
-                          fontSize: 11, color: scheme.onSurfaceVariant)),
+                          fontSize: 11, color: scheme.onSurfaceVariant),
+                      children: [
+                        TextSpan(text: '${item.unitName} · '),
+                        TextSpan(
+                            text: formatRupiah(item.price),
+                            style: AppTheme.numStyle(context,
+                                size: 11, color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 if (item.priceOverridden) ...[
                   const SizedBox(width: 4),
@@ -354,29 +362,27 @@ class _CartItemTile extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: const Icon(Icons.remove_circle_outline, size: 20),
-              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.remove_circle_outline, size: 24),
               onPressed: isZeroed
                   ? null
                   : () => notifier.setEffectiveQty(
                       item.productUnitId, effectiveQty - 1),
             ),
+            const SizedBox(width: 2),
             _QtyField(item: item, effectiveQty: effectiveQty, cartId: cartId),
+            const SizedBox(width: 2),
             IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.add_circle_outline, size: 24),
               onPressed: () => notifier.setEffectiveQty(
                   item.productUnitId, effectiveQty + 1),
             ),
             const SizedBox(width: 4),
             Text(
               formatRupiah(subtotal),
-              style: TextStyle(
-                  color: isZeroed
-                      ? scheme.onSurfaceVariant
-                      : scheme.primary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13),
+              style: AppTheme.numStyle(context,
+                  size: 13,
+                  weight: FontWeight.w600,
+                  color: isZeroed ? scheme.onSurfaceVariant : scheme.primary),
             ),
           ],
         ),
