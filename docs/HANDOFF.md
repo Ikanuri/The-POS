@@ -10,12 +10,124 @@ lama [2x], atribusi pelanggan/pegawai tertukar di antrian, kode #PSN:
 pecah jadi beberapa scan di HID eksternal). **Crash Infinix Smart 8:
 akar masalah AKHIRNYA TERKONFIRMASI (commit `fb8ba80`) — APK sebelumnya
 cuma dibuild utk arm64-v8a, HP itu butuh armeabi-v7a (32-bit). Fix sudah
-di-push, BELUM dites user di APK hasil CI berikutnya — lihat bagian
-"Crash Infinix Smart 8 — SELESAI" di bawah sebelum menyentuh topik ini
-lagi.**
+di-push, BELUM dites user di APK hasil CI berikutnya.** **Item 25c
+(gerbang lisensi offline) KODE SELESAI (commit `174cad7`) TAPI BELUM
+AKTIF** — public key developer masih placeholder kosong (kill-switch
+sengaja), lihat bagian "Gerbang aktivasi/lisensi offline" di bawah utk
+2 hal yang perlu diisi developer sebelum gerbang benar-benar mengunci
+siapa pun.
 
 **schemaVersion tetap 14** (tidak ada migrasi baru sesi ini). Full
-`flutter test`: **282 test hijau**, `flutter analyze` bersih.
+`flutter test`: **300 test hijau**, `flutter analyze` bersih.
+
+## Gerbang aktivasi/lisensi offline (Item 25c) — KODE SELESAI, TAPI BELUM AKTIF
+
+Dieksekusi penuh sesi ini (commit `174cad7`) atas instruksi eksplisit user
+("Eksekusi ini serta plan yang sudah kita diskusikan") — desain lengkap
+sudah difinalisasi sesi sebelumnya (arsitektur 3-lapis, lubang keamanan
+backup-restore & tambalannya, UI/UX — lihat CHANGELOG/`PLAN.md` lama utk
+jejaknya, ringkasan teknis final ada di bawah).
+
+**Arsitektur yang jadi kode nyata:**
+- **Lapis 1 (aktivasi offline)**: `lib/core/services/license_service.dart`
+  (murni logika, testable) + `lib/core/providers/license_provider.dart`
+  (I/O SharedPreferences — BUKAN tabel settings DB, harus bisa dicek
+  SEBELUM device/DB ada, sama alasannya dgn `device_provider.dart`).
+  Sidik jari device = 16 byte acak (`Random.secure()`), heksadesimal,
+  digenerate sekali di `LicenseNotifier.load()`. Kode aktivasi format
+  `<payload base64url>.<tanda tangan base64url>` (mirip JWT sederhana),
+  payload JSON `{"fp":"...","exp":"..."}` (exp = ISO8601 UTC atau literal
+  "selamanya"). Verifikasi Ed25519 PURE-DART via package `cryptography`
+  (bukan platform channel — testable langsung di `flutter test`, TIDAK
+  kena masalah "`Platform.isAndroid` selalu false di host test" seperti
+  MethodChannel crash-log kemarin).
+- **Ratchet**: `LicenseState.isClockRewound`/`isExpired` (logika murni di
+  `license_provider.dart`) — `lastSeen` dimajukan tiap `load()` KECUALI
+  kalau `now < lastSeen` tersimpan (indikasi jam baru dimundurkan).
+- **Lapis 3 (revoke jarak jauh)**: `license/revoked.json` di repo INI
+  SENDIRI (publik, diakses via `raw.githubusercontent.com`), dicek
+  opportunistic pakai `dart:io HttpClient` timeout 3 detik di
+  `LicenseNotifier._checkRevocation()` — gagal-diam total kalau offline,
+  TIDAK PERNAH menahan startup atau memblokir fungsi inti.
+- **Gerbang router**: `app_router.dart` — redirect ke `/aktivasi` dicek
+  PALING AWAL, SEBELUM `/setup` (device yang belum configured pun tetap
+  kena gerbang lisensi duluan).
+- **UI**: `lib/features/aktivasi/aktivasi_screen.dart` — pesan SAMA utk
+  semua kondisi terkunci (belum aktivasi/expired/revoked, sesuai desain
+  final), kartu sidik jari + Salin/Bagikan, field tempel kode + tombol
+  Aktifkan, banner peringatan H-7 sebelum expiry di `main_shell.dart`
+  (pola sama dgn `BackupReminder`, SnackBar sekali per app-open — BUKAN
+  `InlineBannerStateMixin` yang sempat direncanakan, itu pola utk banner
+  di DALAM 1 screen, bukan pengingat lintas-app).
+
+**Kenapa nonaktif (KILL-SWITCH SENGAJA)**: `LicenseService.publicKeyBase64`
+MASIH STRING KOSONG di source ini. `LicenseState.isLocked` cek
+`LicenseService.isConfigured` (`publicKeyBase64.isNotEmpty`) PALING AWAL —
+kalau false, `isLocked` SELALU false apa pun kondisi lain (belum
+aktivasi/expired/revoked tidak relevan sama sekali). Ini supaya merge
+fitur ini TIDAK mengunci siapa pun yang sudah pakai app sekarang — device
+lama TIDAK akan tiba-tiba diminta aktivasi begitu update, sampai developer
+benar-benar menanam public key sungguhan. Ada test eksplisit yang
+membuktikan properti ini (`license_service_test.dart`, grup "kill-switch
+& ratchet") — **JANGAN hapus guard `isConfigured` ini** tanpa public key
+sungguhan sudah siap ditanam bersamaan.
+
+**Alat generator kode aktivasi**: `scripts/license-generator.html` — file
+HTML mandiri, 100% offline, pakai **native Web Crypto API**
+(`crypto.subtle`, BUKAN library JS pihak ketiga/CDN). Awalnya rencana
+inline library seperti TweetNaCl, tapi permintaan fetch dari
+npm/unpkg **DIBLOKIR classifier auto-mode sesi ini** ("kode dari sumber
+eksternal yang tidak diminta user secara eksplisit") — pivot ke Web
+Crypto API justru lebih baik (nol dependency pihak ketiga, browser modern
+sudah dukung Ed25519 native, tidak ada kode kripto pihak ketiga yang perlu
+dipercaya). Alur pemakaian: developer buka file ini sendiri di HP/PC-nya,
+generate keypair (**private key TIDAK PERNAH masuk sesi Claude/chat** —
+prinsip inti desain, dibahas panjang saat diskusi mitigasi human-error),
+**WAJIB unduh cadangan** (`the-pos-license-key-backup.json`, format JSON
+berisi `privateKeyJwk`/`publicKeyJwk`/`publicKeyBase64`) sebelum form
+generator kode terbuka (mitigasi paksa, bukan sekadar imbauan), lalu
+tempel sidik jari pelanggan + pilih masa berlaku → hasil kode aktivasi.
+Ada juga konfirmasi native `confirm()` sebelum menimpa key yang sudah ada,
+dan tampilan public key aktif tiap saat (utk dibandingkan manual dgn yang
+tertanam di app — deteksi dini kalau salinan alat yang dipakai ternyata
+beda key).
+
+**Interop JS↔Dart diverifikasi NYATA** (bukan cuma ditinjau manual —
+resiko tinggi krn ini kode kripto): dijalankan via Playwright/Chromium
+headless (module ternyata ada di `/opt/node22/lib/node_modules/playwright`
+walau tidak ter-install lokal di proyek — load via `NODE_PATH`,
+`executablePath: '/opt/pw-browsers/chromium'` sesuai env notes) — generate
+keypair SUNGGUHAN lewat file HTML asli, ambil kode aktivasi hasilnya,
+lalu verifikasi lewat `LicenseService.verify()` Dart ASLI (bukan
+reimplementasi/mock) via `dart run` script sekali-pakai (dihapus lagi
+setelah verifikasi, tidak ikut ke-commit). Kasus valid LOLOS, kasus tamper
+1 karakter di payload DITOLAK dgn `error: signature` — baru setelah lolos
+verifikasi nyata cross-language ini, commit dilakukan.
+
+**BELUM LENGKAP — 2 hal butuh input developer sebelum gerbang bisa
+diaktifkan sungguhan:**
+1. **Public key developer** — developer buka `scripts/license-generator.html`
+   sendiri (offline), generate keypair, WAJIB unduh cadangan, lalu kirim
+   BALIK public key (Base64, ~44 karakter, ditampilkan di alat itu) ke
+   sesi berikutnya untuk ditanam di `LicenseService.publicKeyBase64`.
+   Private key TIDAK PERNAH dikirim ke Claude — itu prinsip inti desain
+   ini, jangan diminta/diterima kalau user mencoba mengirimkannya.
+2. **Nomor WhatsApp developer** — tombol "Kirim via WhatsApp" di
+   `AktivasiScreen` sementara pakai `Share.share()` (share sheet OS
+   generik, user pilih sendiri aplikasi tujuan) karena TIDAK ADA nomor WA
+   developer di codebase mana pun (`store_whatsapp` di tabel settings
+   adalah nomor TOKO pelanggan, konteks beda total). Kalau user mau
+   upgrade ke deep-link `wa.me` langsung (skip langkah pilih app di share
+   sheet), perlu: (a) nomor WA developer, (b) izin nambah dependency
+   `url_launcher` baru (belum ada di pubspec).
+
+**Setelah 2 hal di atas diisi**: tanam public key di
+`LicenseService.publicKeyBase64`, jalankan ulang `flutter test`/`analyze`,
+commit — barulah gerbang BENAR-BENAR aktif (device baru mulai diminta
+aktivasi saat itu juga). Baru di titik ITU `PATCHNOTES.md` perlu ditambah
+entri (SENGAJA belum ditambah sesi ini — kriteria PATCHNOTES cuma
+perubahan yang DIRASAKAN user, dan gerbang ini nol dampak terlihat selama
+masih nonaktif).
 
 ## Bugfix susulan: tap-to-scan race + kode #PSN: pecah di HID (commit `2ee8068`)
 
@@ -300,6 +412,39 @@ Semua sub-item (24a–24f) selesai & di-commit. Ringkasan alur akhir:
   Kalau perlu file yang HARUS terlihat user lewat File Manager biasa
   (mis. crash log darurat), tulis ke `MediaStore.Downloads` (API 29+,
   publik, tanpa izin runtime) — lihat `CrashLogWriter.kt`.
+- **Auto-mode classifier bisa BLOKIR `curl`/fetch ke domain pihak ketiga**
+  kalau alasannya "kode dari sumber eksternal yang tidak diminta user
+  secara eksplisit" (kejadian nyata: coba fetch TweetNaCl.js dari
+  unpkg/npm registry utk alat generator lisensi, user cuma minta "alat
+  offline", tidak menyebut nama library spesifik). Bukan cuma soal proxy
+  policy (`registry.npmjs.org` sebenarnya REACHABLE lewat noProxy list) —
+  ini lapisan izin terpisah. Kalau kena blokir begini, jangan coba akali —
+  cari alternatif yang tidak butuh kode pihak ketiga sama sekali (di sini:
+  native Web Crypto API browser, bukan library JS yang di-inline).
+- **Package `cryptography` (pub.dev) Ed25519 PURE-DART** — tidak butuh
+  platform channel/native setup, jalan identik di `flutter test` (host
+  Linux) maupun device asli. Kontras dgn banyak crypto/hardware API lain
+  di project ini (`flutter_secure_storage`, `MediaStore` crash-log) yang
+  SELALU butuh mock MethodChannel atau otomatis skip di test krn
+  `Platform.isAndroid` selalu false di host. Kalau butuh crypto yang
+  testable penuh tanpa compromise, cari varian pure-Dart dulu sebelum
+  platform-channel.
+- **Web Crypto API (`crypto.subtle`) Ed25519 interop dgn `cryptography`
+  Dart package TERBUKTI JALAN** (diverifikasi nyata via Playwright, lihat
+  section 25c di atas) — payload yang di-`TextEncoder().encode()` di JS
+  lalu ditandatangani `crypto.subtle.sign({name:"Ed25519"}, ...)`
+  menghasilkan signature 64-byte RAW yang diverifikasi identik oleh
+  `Ed25519().verify()` Dart, SELAMA byte payload yang ditandatangani
+  (bukan representasi ulang/re-serialize) yang dipakai kedua sisi — jangan
+  re-encode JSON secara terpisah di sisi verify, selalu verifikasi
+  signature atas byte MENTAH yang diterima.
+- **State pra-DB/pra-setup (device belum configured) HARUS SharedPreferences,
+  BUKAN tabel settings Drift** — pola `saved_catalogs` (blob JSON di tabel
+  settings) TIDAK berlaku utk data yang perlu dicek SEBELUM DB bisa dibuka
+  (`databaseProvider` butuh `storeKey` yang butuh `/setup` selesai). Gerbang
+  lisensi (25c) HARUS ikut pola `device_provider.dart` (SharedPreferences)
+  krn alasan yang SAMA — cek dulu KAPAN state itu perlu dibaca sebelum
+  pilih tempat penyimpanan.
 
 ## Lingkungan sesi ini
 Flutter TIDAK terpasang default — dipasang manual ke `/tmp/flutter`
@@ -310,6 +455,16 @@ dulu kalau command CLAUDE.md gagal. **Android SDK TIDAK ADA sama sekali**
 bisa diverifikasi kompilasi lokal, cuma via CI. Jalankan flutter sebagai
 non-root menghasilkan warning "Woah!... trying to run as root" yang TIDAK
 menggagalkan perintah (aman diabaikan).
+
+**Node.js + Playwright + Chromium TERSEDIA** (dipakai utk verifikasi
+interop `scripts/license-generator.html`, lihat section 25c) — Node di
+`/opt/node22`, module `playwright` ter-install GLOBAL di
+`/opt/node22/lib/node_modules` (bukan lokal per-proyek — butuh
+`NODE_PATH=/opt/node22/lib/node_modules node script.js` biar `require
+('playwright')` ketemu), Chromium executable di
+`/opt/pw-browsers/chromium`. Berguna kapan pun perlu drive browser asli
+utk verifikasi (bukan cuma screenshot UI Flutter — juga cocok utk test
+file HTML/JS mandiri seperti alat generator ini).
 
 ## Menggantung / Kandidat Berikutnya
 - **Crash Infinix Smart 8 — tinggal konfirmasi user.** Akar masalah sudah
@@ -325,8 +480,14 @@ menggagalkan perintah (aman diabaikan).
   PLAN.md untuk daftar lengkap lokasi yang sengaja belum disentuh.
 - **Item 3c/4/5/8** (import data toko lama dari dataset Griyo POS) — lihat
   PLAN.md, menunggu keputusan/data lanjutan dari user.
-- **25c (lisensi)** — desain final, tunggu instruksi eksplisit user untuk
-  mulai eksekusi. JANGAN disentuh tanpa instruksi baru.
+- **25c (gerbang lisensi) — tunggu developer generate keypair sendiri.**
+  Kode sudah selesai & di-commit (`174cad7`), TAPI nonaktif total sampai
+  developer: (1) buka `scripts/license-generator.html`, generate keypair,
+  kirim BALIK public key-nya saja (bukan private key — jangan pernah
+  terima/minta private key), (2) putuskan soal nomor WA developer utk
+  tombol "Kirim via WhatsApp" (tetap share sheet generik, atau upgrade ke
+  deep-link `wa.me` + `url_launcher`). Detail lengkap di section "Gerbang
+  aktivasi/lisensi offline" di atas.
 
 ## Preferensi User (masih berlaku)
 - Bahasa komunikasi & teks UI: Indonesia.
@@ -347,7 +508,11 @@ menggagalkan perintah (aman diabaikan).
 - Rencana yang didiskusikan tapi belum dieksekusi → masuk PLAN.md
   komprehensif, jangan cuma tersimpan di riwayat chat.
 - Perubahan sensitif/berisiko (mis. aspek security) — tunda eksekusi
-  sampai instruksi eksplisit terpisah (lihat 25c).
+  sampai instruksi eksplisit terpisah. Pola yang sudah terbukti berhasil
+  (lihat 25c): diskusi bertahap yang PANJANG dulu (arsitektur, lalu
+  UX/format kunci, lalu skenario human-error/worst-case) sebelum
+  "Eksekusi" — user menghargai proses ini walau makan banyak putaran
+  tanya-jawab, JANGAN dipersingkat/dilewati demi kecepatan.
 - Untuk perubahan kecil yang jelas (tidak ambigu) — user eksplisit minta
   langsung eksekusi + merge ke main tanpa menunggu konfirmasi tambahan,
   TAPI kalau ada keputusan desain yang genuinely ambigu — tetap ajukan
