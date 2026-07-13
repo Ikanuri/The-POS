@@ -91,6 +91,21 @@ lib/
   sekali). Selalu tutup test dengan `drain()`: `await tester.pumpWidget(const
   SizedBox()); await tester.pump(const Duration(milliseconds: 10));` (lihat
   `test/payment_method_edit_delete_test.dart`).
+- **`OutlinedButton`/`FilledButton` di `AppTheme` default `minimumSize` LEBAR
+  PENUH.** Taruh 2+ tombol begini dalam satu `Row` (pola umum di app ini)
+  WAJIB override `minimumSize` sempit di masing-masing `style`, kalau tidak
+  overflow. **Di dalam `AlertDialog.content` lebih parah**: dialog SELALU
+  bungkus content dengan `IntrinsicWidth`, dan lebar tersedia jauh lebih
+  sempit dari layar (dipotong `insetPadding`+`contentPadding`) — 3 tombol
+  custom sekaligus (mis. Batal+Uang Pas+Bayar) bisa SAMA SEKALI TIDAK MUAT
+  walau `minimumSize` sudah dioverride, overflow-nya TIDAK KELIHATAN di HP
+  (tombol seakan hilang total, bukan cuma tidak sejajar) — lihat
+  `debt_payment_dialog.dart`. Fix: pisah tombol yang berebut ke baris
+  sendiri-sendiri (mis. Batal sendiri, 2 tombol utama sebaris dengan
+  `Expanded` di tombol primer). Widget test dengan surface default
+  flutter_test (~800×600) TIDAK menangkap bug ini — WAJIB
+  `tester.binding.setSurfaceSize(const Size(360, 800))` (sesempit HP asli)
+  sebelum dianggap teruji.
 
 ## Perintah
 
