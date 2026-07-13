@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -6,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +17,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/input_formatters.dart';
 import 'widgets/debt_payment_dialog.dart';
 import 'widgets/tx_history_sheet.dart';
 
@@ -24,8 +28,15 @@ import 'widgets/tx_history_sheet.dart';
 /// `changeAmount` sendiri TIDAK diubah (tetap dipakai apa adanya di struk
 /// cetak "Bayar../Kembali") — koreksi ini murni utk "berapa yang beneran
 /// masih harus dibayar".
+/// Pembayaran yang DIBATALKAN ("Batalkan Pembayaran") tetap ada di [payments]
+/// (jejak audit, tampil dicoret di Riwayat Pembayaran) tapi tidak boleh ikut
+/// hitungan finansial mana pun — `tx.paid` sendiri sudah dijaga tidak
+/// menghitungnya (lihat `AppDatabase._reconcileTransactionTotals`), di sini
+/// cukup jaga `sumChangeGiven` konsisten dengan itu.
 int netRemainingOwed(Transaction tx, List<TransactionPayment> payments) {
-  final sumChangeGiven = payments.fold<int>(0, (s, p) => s + p.changeGiven);
+  final sumChangeGiven = payments
+      .where((p) => !p.voided)
+      .fold<int>(0, (s, p) => s + p.changeGiven);
   final remaining = tx.total - tx.paid + sumChangeGiven;
   return remaining > 0 ? remaining : 0;
 }
@@ -34,10 +45,20 @@ int netRemainingOwed(Transaction tx, List<TransactionPayment> payments) {
 /// Sisa Tagihan" konsisten di Ringkasan on-screen (`paid` mentah dipakai
 /// apa adanya tetap di struk cetak/gambar, TIDAK di sini).
 int netPaidDisplay(Transaction tx, List<TransactionPayment> payments) {
-  final sumChangeGiven = payments.fold<int>(0, (s, p) => s + p.changeGiven);
+  final sumChangeGiven = payments
+      .where((p) => !p.voided)
+      .fold<int>(0, (s, p) => s + p.changeGiven);
   final net = tx.paid - sumChangeGiven;
   return net > 0 ? net : 0;
 }
+
+/// Total uang yang benar-benar diterima kasir (gross, sebelum dikurangi
+/// kembalian) — Item 9. Beda dari [netPaidDisplay] yang net demi arithmetic
+/// "Total = Dibayar + Sisa" tetap konsisten di layar; ini murni info
+/// tambahan supaya tidak membingungkan pembeli ("kok cuma tercatat 300rb
+/// padahal saya kasih 400rb").
+int grossReceived(List<TransactionPayment> payments) =>
+    payments.where((p) => !p.voided).fold<int>(0, (s, p) => s + p.amount);
 
 class ReceiptScreen extends ConsumerStatefulWidget {
   const ReceiptScreen({super.key, required this.transactionId});
@@ -76,32 +97,44 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// Toggle tampilkan laba per item — persisted via SharedPreferences.
   bool _showProfit = true;
 
-  /// Checklist verifikasi serah-terima barang. Murni lokal (tidak disimpan).
+  /// Checklist verifikasi serah-terima barang — persisted ke
+  /// `transactions.checkedItemIds` (dulu murni lokal/tidak disimpan).
   final Map<String, bool> _checked = {};
   bool get _allChecked =>
       _items.isNotEmpty && _items.every((i) => _checked[i.id] == true);
   Set<String> get _checkedIds =>
       _checked.entries.where((e) => e.value).map((e) => e.key).toSet();
 
-  /// Timeline pembayaran ditampilkan hanya bila informatif: ada >1 pembayaran
-  /// (cicilan), atau satu pembayaran yang waktunya jauh dari waktu nota dibuat
-  /// (hutang dilunasi belakangan). Penjualan tunai seketika → disembunyikan
-  /// agar tidak mengulang info yang sudah ada di baris tanggal.
+  Future<void> _persistChecked() async {
+    final db = ref.read(databaseProvider);
+    await (db.update(db.transactions)
+          ..where((t) => t.id.equals(widget.transactionId)))
+        .write(TransactionsCompanion(
+      checkedItemIds: Value(jsonEncode(_checkedIds.toList())),
+    ));
+  }
+
+  /// Timeline pembayaran ditampilkan bila informatif: ada >1 pembayaran
+  /// (cicilan), ada yang DIBATALKAN (perlu terlihat, jangan disembunyikan),
+  /// atau satu pembayaran yang waktunya jauh dari waktu nota dibuat (hutang
+  /// dilunasi belakangan). Penjualan tunai seketika (satu pembayaran, tidak
+  /// dibatalkan) → disembunyikan agar tidak mengulang info baris tanggal.
   bool get _showPaymentTimeline {
     final tx = _tx;
     if (tx == null || _payments.isEmpty) return false;
     if (_payments.length > 1) return true;
+    if (_payments.any((p) => p.voided)) return true;
     // Sembunyikan hanya jika bayar tunai seketika (paidAt == createdAt persis).
     // Hutang yang dilunasi belakangan — meski hanya selisih beberapa detik —
     // tetap ditampilkan karena waktunya pasti berbeda.
     return _payments.first.paidAt != tx.createdAt;
   }
 
-  /// Kembalian di Ringkasan SELALU dari pembayaran TERAKHIR (bukan
-  /// akumulatif) — `_payments` sudah terurut ASC by paidAt dari
-  /// `getPaymentsForTx`, jadi `.last` = pembayaran paling baru.
+  /// Kembalian di Ringkasan SELALU dari pembayaran TERAKHIR yang TIDAK
+  /// dibatalkan (bukan akumulatif) — `_payments` sudah terurut ASC by
+  /// paidAt dari `getPaymentsForTx`.
   TransactionPayment? get _latestPayment =>
-      _payments.isEmpty ? null : _payments.last;
+      _payments.where((p) => !p.voided).lastOrNull;
 
   /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
   /// induknya tidak ada di transaksi ini).
@@ -127,6 +160,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _checked[c.id] = v;
       }
     });
+    unawaited(_persistChecked());
   }
 
   void _setChildChecked(TransactionItem parent, TransactionItem child, bool v) {
@@ -135,6 +169,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       final kids = _childrenOf(parent);
       _checked[parent.id] = kids.every((c) => _checked[c.id] == true);
     });
+    unawaited(_persistChecked());
   }
 
   /// Qty sebuah item di receipt. transaction_items SELALU menyimpan qty
@@ -147,7 +182,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// Susun baris item untuk struk in-app. Bila ada item susulan (addedAt != null,
   /// fitur tambah belanjaan), sisipkan pembatas "Tambahan <jam>" sebelum batch
   /// item susulan. Khusus tampilan in-app — share/cetak tetap menyatu.
-  List<Widget> _buildItemRows(ColorScheme scheme, {bool showProfit = false}) {
+  List<Widget> _buildItemRows(ColorScheme scheme,
+      {bool showProfit = false, bool editable = false}) {
     final rows = <Widget>[];
     String? lastBatchLabel;
     for (final parent in _topLevelItems) {
@@ -161,10 +197,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         }
       }
       rows.add(_itemCheckRow(parent, scheme,
-          isVariant: false, showProfit: showProfit));
+          isVariant: false, showProfit: showProfit, editable: editable));
       for (final child in _childrenOf(parent)) {
         rows.add(_itemCheckRow(child, scheme,
-            isVariant: true, parent: parent, showProfit: showProfit));
+            isVariant: true,
+            parent: parent,
+            showProfit: showProfit,
+            editable: editable));
       }
     }
     return rows;
@@ -173,7 +212,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Widget _itemCheckRow(TransactionItem item, ColorScheme scheme,
       {required bool isVariant,
       TransactionItem? parent,
-      bool showProfit = false}) {
+      bool showProfit = false,
+      bool editable = false}) {
     final checked = _checked[item.id] ?? false;
     final hasChildren = !isVariant && _childrenOf(item).isNotEmpty;
     final effQty = _itemEffQty(item);
@@ -185,23 +225,29 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final profitColor =
         isDark ? const Color(0xFF81C784) : const Color(0xFF388E3C);
 
+    void onCheckChanged(bool? v) {
+      final nv = v ?? false;
+      if (isVariant && parent != null) {
+        _setChildChecked(parent, item, nv);
+      } else if (hasChildren) {
+        _setParentChecked(item, nv);
+      } else {
+        setState(() => _checked[item.id] = nv);
+      }
+      unawaited(_persistChecked());
+    }
+
     return GestureDetector(
       onLongPress: isPlaceholder ? null : () => _editItemNote(item),
-      child: CheckboxListTile(
+      child: ListTile(
         dense: true,
-        controlAffinity: ListTileControlAffinity.leading,
-        value: checked,
         contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 12),
-        onChanged: (v) {
-          final nv = v ?? false;
-          if (isVariant && parent != null) {
-            _setChildChecked(parent, item, nv);
-          } else if (hasChildren) {
-            _setParentChecked(item, nv);
-          } else {
-            setState(() => _checked[item.id] = nv);
-          }
-        },
+        // Item 5 — tap item (bukan checkbox) buka modal edit, HANYA saat
+        // nota belum lunas (checkbox tetap harus bisa dipakai independen —
+        // beda gesture, beda tujuan). Placeholder induk-via-varian tidak
+        // punya baris nyata utk diedit.
+        onTap: (!isPlaceholder && editable) ? () => _openEditItemSheet(item) : null,
+        leading: Checkbox(value: checked, onChanged: onCheckChanged),
         title: Row(
           children: [
             if (isVariant)
@@ -282,7 +328,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   ],
                 ),
               ),
-        secondary: isPlaceholder
+        trailing: isPlaceholder
             ? null
             : Text(
                 formatRupiah((item.priceAtSale * effQty).round()),
@@ -329,6 +375,128 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         .write(TransactionItemsCompanion(
       itemNote: Value(result.isEmpty ? null : result),
     ));
+    await _load();
+  }
+
+  /// Item 5 — modal edit item nota BELUM LUNAS: ubah harga, qty (cuma bisa
+  /// dikurangi/dihapus — bukan ditambah), catatan. Dipanggil dari tap item
+  /// di `_itemCheckRow` (gated `editable`, cuma saat `isKurangBayar`).
+  Future<void> _openEditItemSheet(TransactionItem item) async {
+    final priceCtrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(item.priceAtSale));
+    final noteCtrl = TextEditingController(text: item.itemNote ?? '');
+    var qty = item.qty;
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setSheet) => Padding(
+            padding: EdgeInsets.fromLTRB(
+                16, 12, 16, MediaQuery.of(ctx).viewInsets.bottom + 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(_productNames[item.productId] ?? 'Edit Barang',
+                    style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  'Nota belum lunas — perubahan langsung menyesuaikan total & hutang.',
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: priceCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: const [ThousandsSeparatorFormatter()],
+                  decoration: const InputDecoration(
+                      labelText: 'Harga', prefixText: 'Rp ',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text('Jumlah', style: TextStyle(color: scheme.onSurfaceVariant)),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed:
+                          qty <= 0 ? null : () => setSheet(() => qty -= 1),
+                    ),
+                    SizedBox(
+                      width: 36,
+                      child: Text(
+                        qty % 1 == 0 ? qty.toInt().toString() : qty.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      // Sengaja TIDAK bisa melebihi qty asli — cuma
+                      // kurangi/hapus, bukan tambah barang baru (itu sudah
+                      // ada jalur "Tambah Belanjaan" terpisah).
+                      onPressed: qty >= item.qty
+                          ? null
+                          : () => setSheet(() => qty += 1),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: noteCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Catatan barang',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => setSheet(() => qty = 0),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Hapus Barang Ini'),
+                  style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: Text(qty <= 0 ? 'Hapus' : 'Simpan Perubahan'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    priceCtrl.dispose();
+    if (saved != true || !mounted) return;
+
+    final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    final newPrice = ThousandsSeparatorFormatter.parseValue(priceCtrl.text);
+    final newNote = noteCtrl.text.trim();
+    noteCtrl.dispose();
+
+    try {
+      await db.editUnpaidTransactionItem(
+        txId: widget.transactionId,
+        transactionItemId: item.id,
+        newQty: qty,
+        newPrice: newPrice,
+        newNote: newNote,
+        kasirId: device.deviceCode,
+      );
+    } catch (_) {
+      if (mounted) {
+        AppTheme.showSnack(context, 'Gagal menyimpan perubahan', isError: true);
+      }
+      return;
+    }
     await _load();
   }
 
@@ -435,6 +603,54 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     await (db.update(db.transactionPayments)
           ..where((t) => t.id.equals(paymentId)))
         .write(TransactionPaymentsCompanion(changeTaken: Value(value)));
+    await _load();
+  }
+
+  /// Item 4 — "Batalkan Pembayaran". Sama gerbang izin dgn `showVoidTransaction
+  /// Dialog` (`batal_transaksi`) — ini juga aksi finansial yang membatalkan
+  /// sesuatu yang sudah tercatat. Beda dari void transaksi: item & stok
+  /// TIDAK disentuh, baris pembayaran TETAP ada (jejak audit, ditandai
+  /// dibatalkan) — lihat `AppDatabase.voidPayment`.
+  Future<void> _voidPayment(TransactionPayment payment) async {
+    final db = ref.read(databaseProvider);
+    final device = ref.read(deviceProvider);
+    if (device.deviceRole == 'kasir') {
+      final allowed = await db.isPermissionEnabled('batal_transaksi');
+      if (!allowed) {
+        if (mounted) {
+          AppTheme.showSnack(
+              context, 'Tidak punya izin membatalkan pembayaran',
+              isError: true);
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Batalkan Pembayaran?'),
+        content: Text(
+          'Pembayaran ${formatRupiah(payment.amount)} (${_methodLabel(payment.method)}) '
+          'pada ${_formatDateTime(payment.paidAt)} akan dibatalkan. Nota '
+          'kembali berstatus belum lunas — barang & stok TIDAK berubah.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Batalkan Pembayaran'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await db.voidPayment(payment.id);
     await _load();
   }
 
@@ -559,6 +775,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       }
     }
 
+    final checkedIds = <String>{};
+    if (tx.checkedItemIds != null) {
+      try {
+        checkedIds.addAll((jsonDecode(tx.checkedItemIds!) as List).cast<String>());
+      } catch (_) {
+        // Data rusak/format lama — abaikan, mulai dari kosong.
+      }
+    }
+
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -575,6 +800,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _tx = tx;
         _items = items;
         _payments = payments;
+        _checked
+          ..clear()
+          ..addEntries(checkedIds.map((id) => MapEntry(id, true)));
         _productNames = productNames;
         _unitNames = unitNames;
         _parentOf = parentOf;
@@ -854,8 +1082,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         return StatefulBuilder(
           builder: (ctx, setSheet) {
             int refund = 0;
+            var anyQtySelected = false;
             for (final i in _items) {
-              refund += (i.priceAtSale * (returnQty[i.id] ?? 0)).round();
+              final q = returnQty[i.id] ?? 0;
+              if (q > 0) anyQtySelected = true;
+              refund += (i.priceAtSale * q).round();
             }
             return SafeArea(
               child: Padding(
@@ -1018,7 +1249,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     ),
                     const SizedBox(height: 12),
                     FilledButton(
-                      onPressed: refund <= 0
+                      // Gate pada "ada qty dipilih", BUKAN "refund > 0" — item
+                      // seharga Rp0 (mis. promo/bonus) valid diretur meski
+                      // nominalnya nol.
+                      onPressed: !anyQtySelected
                           ? null
                           : () => Navigator.of(ctx).pop(true),
                       style:
@@ -1572,12 +1806,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: () => setState(() {
-                  final target = !_allChecked;
-                  for (final i in _items) {
-                    _checked[i.id] = target;
-                  }
-                }),
+                onPressed: () {
+                  setState(() {
+                    final target = !_allChecked;
+                    for (final i in _items) {
+                      _checked[i.id] = target;
+                    }
+                  });
+                  unawaited(_persistChecked());
+                },
                 icon: Icon(_allChecked ? Icons.remove_done : Icons.done_all,
                     size: 18),
                 label: Text(_allChecked ? 'Hapus Tanda' : 'Tandai Semua',
@@ -1590,7 +1827,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             child: Column(
               children: [
                 ..._buildItemRows(scheme,
-                    showProfit: device.canSeeReports && _showProfit),
+                    showProfit: device.canSeeReports && _showProfit,
+                    editable: isKurangBayar && !isVoid),
                 const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -1604,6 +1842,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         _SummaryRow('Dibayar',
                             '${_methodLabel(tx.paymentMethod)} · '
                             '${formatRupiah(netPaidDisplay(tx, _payments))}'),
+                      // Item 9 — uang tender ASLI dari pembayaran TERAKHIR
+                      // (gross, sebelum dikurangi kembalian) supaya tidak
+                      // membingungkan pembeli yang kasih lebih ("bayar
+                      // 300rb" padahal kasih 400rb). Cuma tampil kalau
+                      // memang ada kembalian (kalau pas, "Dibayar" di atas
+                      // sudah sama dengan uang diterima).
+                      if ((_latestPayment?.changeGiven ?? 0) > 0)
+                        _SummaryRow('Uang Diterima',
+                            formatRupiah(_latestPayment!.amount)),
                       if ((_latestPayment?.changeGiven ?? 0) > 0)
                         _ChangeTakenRow(
                           amount: formatRupiah(_latestPayment!.changeGiven),
@@ -1651,21 +1898,37 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ],
           const SizedBox(height: 20),
 
-          if (isKurangBayar && !isVoid) ...[
-            FilledButton.tonal(
-              onPressed: () => _showTambahBayar(context),
-              child: const Text('Tambah Bayar'),
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (!isVoid && !isRetur) ...[
-            FilledButton.tonalIcon(
-              onPressed: () async {
-                await context.push('/kasir/tambah/${tx.id}');
-                if (mounted) _load();
-              },
-              icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
-              label: const Text('Tambah Belanjaan'),
+          if ((isKurangBayar && !isVoid) || (!isVoid && !isRetur)) ...[
+            Row(
+              children: [
+                if (isKurangBayar && !isVoid)
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => _showTambahBayar(context),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.changeBg(
+                            Theme.of(context).brightness == Brightness.dark),
+                        foregroundColor: AppTheme.changeFg(
+                            Theme.of(context).brightness == Brightness.dark),
+                      ),
+                      child: const Text('Bayar'),
+                    ),
+                  ),
+                if (isKurangBayar && !isVoid && !isRetur)
+                  const SizedBox(width: 8),
+                if (!isVoid && !isRetur)
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      onPressed: () async {
+                        await context.push('/kasir/tambah/${tx.id}');
+                        if (mounted) _load();
+                      },
+                      icon: const Icon(Icons.add_shopping_cart_outlined,
+                          size: 18),
+                      label: const Text('Tambah Belanjaan'),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
           ],
@@ -1888,23 +2151,53 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                   fontSize: 12,
-                                  color: scheme.onSurfaceVariant)),
+                                  color: scheme.onSurfaceVariant,
+                                  decoration: p.voided
+                                      ? TextDecoration.lineThrough
+                                      : null)),
                         ),
                         const SizedBox(width: 8),
                         Text(_methodLabel(p.method),
                             style: TextStyle(
                                 fontSize: 12,
-                                color: scheme.onSurfaceVariant)),
+                                color: scheme.onSurfaceVariant,
+                                decoration: p.voided
+                                    ? TextDecoration.lineThrough
+                                    : null)),
                         const SizedBox(width: 8),
                         Text(formatRupiah(p.amount),
-                            style: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w600)),
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: p.voided ? scheme.onSurfaceVariant : null,
+                                decoration: p.voided
+                                    ? TextDecoration.lineThrough
+                                    : null)),
+                        if (!p.voided && !isVoid)
+                          IconButton(
+                            icon: const Icon(Icons.cancel_outlined, size: 16),
+                            tooltip: 'Batalkan Pembayaran',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
+                            color: scheme.error,
+                            onPressed: () => _voidPayment(p),
+                          ),
                       ],
                     ),
+                    if (p.voided)
+                      Text('Dibatalkan',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: scheme.error)),
                     // Kembalian milik pembayaran INI (bukan akumulatif) —
                     // nempel langsung di bawah nominalnya, satu momen yang
                     // sama (lihat AppDatabase._computePaymentChangeGiven).
-                    if (p.changeGiven > 0)
+                    // Pembayaran yang dibatalkan tidak punya kembalian
+                    // relevan lagi (sudah tidak dihitung finansial).
+                    if (p.changeGiven > 0 && !p.voided)
                       _ChangeTakenRow(
                         amount: formatRupiah(p.changeGiven),
                         taken: p.changeTaken,
@@ -1963,8 +2256,12 @@ class _ReceiptPaper extends StatelessWidget {
   final Set<String> checkedIds;
 
   static const _ink = Color(0xFF111111);
-  static const _mono = TextStyle(
-      fontFamily: 'monospace', fontSize: 12, color: _ink, height: 1.4);
+  // Item 7 — 'monospace' generik resolve ke font DEFAULT OS yang beda-beda
+  // per merek/versi Android (tablet vs HP bisa beda glyph) → tampilan struk
+  // share tidak konsisten. Pin font eksplisit (sama mekanisme dgn Hanken
+  // Grotesk/Newsreader di AppTheme) supaya identik di semua device.
+  static TextStyle get _mono =>
+      GoogleFonts.robotoMono(fontSize: 12, color: _ink, height: 1.4);
 
   TransactionItem? _parentItemOf(TransactionItem item) {
     final pid = parentOf[item.productId];
@@ -2103,7 +2400,7 @@ class _ReceiptPaper extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Bayar..', style: _mono),
+                Text('Bayar..', style: _mono),
                 Text('Rp ${_fmtNum(tx.paid)}', style: _mono),
               ],
             ),
@@ -2230,10 +2527,8 @@ class _DashedLine extends StatelessWidget {
             List.filled(count, '-').join(),
             maxLines: 1,
             overflow: TextOverflow.clip,
-            style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                color: Color(0xFF777777)),
+            style: GoogleFonts.robotoMono(
+                fontSize: 12, color: const Color(0xFF777777)),
           );
         },
       ),
