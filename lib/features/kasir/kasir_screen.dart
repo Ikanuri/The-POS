@@ -460,33 +460,52 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
 /// Format lama (kompatibel mundur): list item langsung tanpa metadata.
 /// `awaitingPayment` (Item 24d) — true untuk handoff pegawai via QR (lihat
 /// `cart_sheet.dart` `_showHandoffQr`), beda tampilan di `_HeldCard`.
-({List<CartItem> items, CartMeta meta, bool awaitingPayment}) _parseHeldPayload(
-    String json) {
+/// `checked` (Item 24b) — centangan verifikasi owner sebelum lanjut bayar,
+/// sejajar index dengan `items`; murni 1 device (owner), TIDAK ikut
+/// terbawa ke transaksi/struk setelah "Lanjut ke Keranjang".
+({List<CartItem> items, CartMeta meta, bool awaitingPayment, List<bool> checked})
+    _parseHeldPayload(String json) {
+  List<bool> parseChecked(dynamic raw, int itemCount) {
+    if (raw is List && raw.length == itemCount) {
+      return raw.map((e) => e == true).toList();
+    }
+    return List.filled(itemCount, false);
+  }
+
   try {
     final decoded = jsonDecode(json);
     if (decoded is List) {
       // Format lama: hanya daftar item.
+      final items = decoded
+          .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
+          .toList();
       return (
-        items: decoded
-            .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
-            .toList(),
+        items: items,
         meta: const CartMeta(),
         awaitingPayment: false,
+        checked: List.filled(items.length, false),
       );
     }
     if (decoded is Map<String, dynamic>) {
       final itemsRaw = decoded['items'] as List? ?? const [];
       final metaRaw = decoded['meta'] as Map<String, dynamic>?;
+      final items = itemsRaw
+          .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
+          .toList();
       return (
-        items: itemsRaw
-            .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
-            .toList(),
+        items: items,
         meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
         awaitingPayment: decoded['awaitingPayment'] as bool? ?? false,
+        checked: parseChecked(decoded['checked'], items.length),
       );
     }
   } catch (_) {/* data rusak → kosong */}
-  return (items: const <CartItem>[], meta: const CartMeta(), awaitingPayment: false);
+  return (
+    items: const <CartItem>[],
+    meta: const CartMeta(),
+    awaitingPayment: false,
+    checked: const <bool>[],
+  );
 }
 
 final _kasirProductsProvider =
@@ -1310,6 +1329,26 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     }
   }
 
+  /// Item 24b — dispatch tap kartu antrian: pesanan handoff pegawai
+  /// (`awaitingPayment`) buka sheet verifikasi dulu (pegawai bacakan
+  /// barang, owner centang), pesanan ditahan biasa langsung lanjut seperti
+  /// sebelumnya (tidak ada yang perlu diverifikasi).
+  void _onHeldCardTap(HeldOrder order) {
+    final parsed = _parseHeldPayload(order.cartJson);
+    if (!parsed.awaitingPayment) {
+      _resumeHeld(order);
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _VerifyOrderSheet(
+        order: order,
+        onLanjut: () => _resumeHeld(order),
+      ),
+    );
+  }
+
   Future<void> _resumeHeld(HeldOrder order) async {
     final parsed = _parseHeldPayload(order.cartJson);
     if (parsed.items.isEmpty) {
@@ -1593,7 +1632,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                       alignment: Alignment.topCenter,
                       child: _heldPanelOpen
                           ? _HeldInlinePanel(
-                              onResume: _resumeHeld,
+                              onResume: _onHeldCardTap,
                               onClose: () =>
                                   setState(() => _heldPanelOpen = false),
                             )
@@ -3488,6 +3527,112 @@ class _HeldCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Item 24b — sheet verifikasi pesanan handoff pegawai sebelum lanjut bayar:
+/// pegawai bacakan barang, owner centang tiap yang cocok. Centangan
+/// persisted langsung ke `held_orders.cartJson` (bukan cuma state widget)
+/// supaya tidak hilang kalau owner sempat tertunda (mis. dipanggil pembeli
+/// lain). Murni 1 device (owner) — TIDAK ada mekanisme sync, dan checklist
+/// ini SELESAI tugasnya begitu "Lanjut ke Keranjang" ditekan (tidak
+/// menempel ke transaksi/struk setelahnya).
+class _VerifyOrderSheet extends ConsumerStatefulWidget {
+  const _VerifyOrderSheet({required this.order, required this.onLanjut});
+
+  final HeldOrder order;
+  final VoidCallback onLanjut;
+
+  @override
+  ConsumerState<_VerifyOrderSheet> createState() => _VerifyOrderSheetState();
+}
+
+class _VerifyOrderSheetState extends ConsumerState<_VerifyOrderSheet> {
+  late final List<CartItem> _items;
+  late List<bool> _checked;
+
+  @override
+  void initState() {
+    super.initState();
+    final parsed = _parseHeldPayload(widget.order.cartJson);
+    _items = parsed.items;
+    _checked = List.of(parsed.checked);
+  }
+
+  Future<void> _toggle(int i, bool value) async {
+    setState(() => _checked[i] = value);
+    final payload = jsonEncode({
+      'items': _items.map((c) => c.toJson()).toList(),
+      'meta': const CartMeta().toJson(),
+      'awaitingPayment': true,
+      'checked': _checked,
+    });
+    await ref.read(databaseProvider).updateHeldOrder(widget.order.id, payload);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final allChecked = _items.isNotEmpty && _checked.every((c) => c);
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 2),
+            child: Text('Verifikasi Pesanan · ${widget.order.label}',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              'Pegawai bacakan barang, centang tiap yang sudah dicek.',
+              style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemCount: _items.length,
+              itemBuilder: (_, i) {
+                final item = _items[i];
+                final qtyLabel = item.qty % 1 == 0
+                    ? item.qty.toInt().toString()
+                    : item.qty.toString();
+                return CheckboxListTile(
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: _checked[i],
+                  onChanged: (v) => _toggle(i, v ?? false),
+                  title: Text(item.productName,
+                      style: const TextStyle(fontSize: 13.5)),
+                  subtitle: Text('$qtyLabel ${item.unitName}'
+                      '${item.itemNote != null && item.itemNote!.isNotEmpty ? ' · ${item.itemNote}' : ''}'),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.onLanjut();
+                },
+                child: Text(allChecked
+                    ? 'Lanjut ke Keranjang'
+                    : 'Lanjut ke Keranjang (belum semua dicentang)'),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
