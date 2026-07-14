@@ -45,7 +45,7 @@ class LicenseService {
   /// mengunci siapa pun) sampai key sungguhan ditanam di sini. Isi dari
   /// public key yang ditampilkan `tools/license-generator.html` setelah
   /// developer generate pasangan kunci sendiri secara offline.
-  static const publicKeyBase64 = '';
+  static const publicKeyBase64 = 'a3KO8cpEAOOq+YoJPWQ++Pxkw+eWWVnSa02rYah22rY=';
 
   static bool get isConfigured => publicKeyBase64.isNotEmpty;
 

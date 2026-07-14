@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
+import 'package:the_pos/core/providers/license_provider.dart';
 import 'package:the_pos/core/router/app_router.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
@@ -86,6 +87,13 @@ void main() {
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
       deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+      // Test ini lewat routerProvider sungguhan (bukan cuma widget kasir
+      // langsung) — sejak gerbang lisensi diaktifkan (public key ditanam),
+      // state default licenseProvider (belum aktivasi) akan redirect ke
+      // /aktivasi sebelum sempat sampai /kasir. Override supaya test tetap
+      // fokus ke bug HID-nya, bukan soal lisensi.
+      licenseProvider.overrideWith(
+          (ref) => LicenseNotifier()..state = const LicenseState(exp: 'selamanya')),
     ]);
     addTearDown(container.dispose);
 

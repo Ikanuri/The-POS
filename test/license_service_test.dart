@@ -107,32 +107,46 @@ void main() {
   });
 
   group('LicenseState — kill-switch & ratchet (logika murni)', () {
-    // CATATAN: `LicenseService.publicKeyBase64` MASIH KOSONG (placeholder) di
-    // source ini — sengaja, supaya merge fitur ini tidak mengunci siapa pun
-    // sebelum developer menanam public key sungguhan. Test ini membuktikan
-    // properti keamanan itu secara eksplisit. Begitu key sungguhan ditanam,
-    // `LicenseService.isConfigured` jadi true & test PERTAMA di grup ini
-    // perlu ditinjau ulang (bukan dihapus — assert `isConfigured` di
-    // dalamnya tinggal disesuaikan).
-    test(
-        'isLocked SELALU false selama gerbang belum dikonfigurasi (public '
-        'key kosong) — apa pun kondisi lain', () {
-      expect(LicenseService.isConfigured, isFalse,
-          reason: 'placeholder harus tetap kosong di source terkini');
+    // Gerbang SUDAH aktif (public key developer sudah ditanam) — grup ini
+    // sekarang membuktikan properti sebaliknya dari sebelumnya: begitu
+    // dikonfigurasi, `isLocked` benar-benar menegakkan tiap syarat (belum
+    // aktivasi/expired/revoked/jam mundur), BUKAN selalu false lagi.
+    test('isConfigured true — public key developer sudah ditanam', () {
+      expect(LicenseService.isConfigured, isTrue,
+          reason: 'gerbang lisensi sudah diaktifkan sengaja oleh developer, '
+              'lihat LicenseService.publicKeyBase64');
+    });
 
+    test('isLocked true kalau BELUM pernah aktivasi', () {
       const belumAktivasi = LicenseState(fingerprint: _fp);
-      expect(belumAktivasi.isLocked, isFalse);
+      expect(belumAktivasi.isLocked, isTrue);
+    });
 
+    test('isLocked true kalau sudah aktivasi TAPI tanggal exp sudah lewat',
+        () {
       final expired = LicenseState(
         fingerprint: _fp,
         exp: '2000-01-01T00:00:00Z',
         lastSeen: DateTime(2000, 1, 2),
       );
-      expect(expired.isLocked, isFalse);
+      expect(expired.isLocked, isTrue);
+    });
 
+    test('isLocked true kalau fingerprint masuk daftar revoked', () {
       const revoked =
           LicenseState(fingerprint: _fp, exp: 'selamanya', revoked: true);
-      expect(revoked.isLocked, isFalse);
+      expect(revoked.isLocked, isTrue);
+    });
+
+    test(
+        'isLocked false kalau sudah aktivasi valid, belum expired, tidak '
+        'revoked, jam tidak dimundurkan', () {
+      final aktif = LicenseState(
+        fingerprint: _fp,
+        exp: 'selamanya',
+        lastSeen: DateTime.now().subtract(const Duration(hours: 1)),
+      );
+      expect(aktif.isLocked, isFalse);
     });
 
     test('isExpired true kalau tanggal exp sudah lewat', () {
