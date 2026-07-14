@@ -16,9 +16,51 @@ handoff pegawai (`458fc77`, lihat detail di bawah — PENTING, gotcha
 `Clipboard.getData()` hang di widget test, sudah ikut ditambahkan ke
 CLAUDE.md `102399d`) + redesign kartu antrian "Pesanan Ditahan" (`3200c0e`,
 lihat detail di bawah — diusulkan via mockup Playwright dulu sebelum
-dikerjakan, sesuai permintaan user). **schemaVersion masih 15** (tidak ada
-migrasi baru). Full `flutter test` **337 test hijau**, `flutter analyze`
-bersih._
+dikerjakan, sesuai permintaan user) + fix poin loyalitas tempo selalu 0 +
+tap luar tutup panel antrian (`45ac0c5`, lihat detail di bawah).
+**schemaVersion masih 15** (tidak ada migrasi baru). Full `flutter test`
+**340 test hijau**, `flutter analyze` bersih._
+
+## Poin loyalitas transaksi tempo + tutup panel antrian via tap luar
+
+User laporkan 2 hal sekaligus:
+1. Transaksi tempo (tombol "Bayar Nanti") tidak pernah dapat poin
+   loyalitas, walau totalnya melebihi threshold di Pengaturan.
+2. Panel "Pesanan Ditahan" cuma bisa ditutup lewat tombol ✕ — user minta
+   tap/swipe di luar wadah panel juga menutupnya, dengan animasi smooth.
+
+**Poin tempo** — akar masalah di `payment_screen.dart:459` (sebelum fix):
+syarat `!isTempo` di kondisi pemberian poin bikin `pointsEarned` SELALU 0
+utk transaksi `status == 'tempo'`, tidak peduli besarnya `_total`. **Sempat
+ditanya ke user dulu** (`AskUserQuestion`) soal timing: poin langsung saat
+dicatat, atau baru saat lunas? Sebelum bertanya, sudah dicek dulu bahwa
+`voidTransaction` (`app_database.dart:1279`) SUDAH generik membalikkan
+poin berdasarkan `tx.pointsEarned` tersimpan, TIDAK peduli payment method
+— jadi kalau poin diberikan langsung saat tempo dicatat, pembatalan tetap
+otomatis aman tanpa kode tambahan. User pilih opsi ini (langsung saat
+dicatat, lebih sederhana). Fix: hapus syarat `!isTempo` — poin dihitung
+dari `_total` sama seperti tunai. Test baru: `test/tempo_loyalty_points_test.dart`
+(drive lewat `PaymentScreen` sungguhan, tap "Bayar Nanti", verifikasi
+`tx.pointsEarned`, `customer.loyaltyPoints`, & `loyaltyPointLedger`).
+
+**Tutup panel via tap luar** — `_HeldInlinePanel` di `kasir_screen.dart`
+sudah inline (bukan modal) di dalam `Listener` yang membungkus SELURUH
+area topbar-ke-bawah (termasuk panel itu sendiri) — jadi tidak bisa
+sekadar "tutup panel kalau ada tap di area Listener ini", karena tap DI
+DALAM panel (kartu antrian, tombol ✕, scroll strip horizontal) juga akan
+ke-hit-test oleh Listener yang sama. Fix: `GlobalKey _heldPanelKey`
+dipasang ke `_HeldInlinePanel`, di `onPointerDown` cek posisi tap via
+`RenderBox.globalToLocal` — kalau di LUAR bounds panel baru
+`setState(() => _heldPanelOpen = false)`. Animasi smooth otomatis dari
+`AnimatedSize` yang sudah membungkus panel (tidak perlu kode animasi
+baru). `_HeldInlinePanel` constructor perlu ditambah `super.key` (tidak
+ada sebelumnya). Test baru di `kasir_verify_order_test.dart`: 1) tap jauh
+di bawah panel (grid produk) → panel tertutup, antrian TIDAK
+ter-resume/terhapus; 2) tap DI DALAM panel (judul "PESANAN DITAHAN") →
+panel TETAP terbuka.
+
+Kedua fix sudah revert-verify (test gagal dgn pesan yang relevan sebelum
+fix dipasang, hijau lagi sesudahnya).
 
 ## Redesign kartu antrian "Pesanan Ditahan"
 

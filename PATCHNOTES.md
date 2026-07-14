@@ -36,6 +36,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   pegawai) tampil rapi dalam bentuk yang sama — beda status cukup lewat
   label kecil berwarna di atas kartu (abu-abu netral "Ditahan" atau
   terracotta bertuliskan nama pegawai pengirim).
+- **Panel "Pesanan Ditahan" sekarang bisa ditutup dengan tap/geser di
+  layar** — tidak perlu selalu tekan tombol (✕) lagi, tap di mana saja
+  di luar wadah panel langsung menutupnya dengan animasi halus.
 
 ### 🐛 Perbaikan Bug
 - **Sync ke owner/asisten tidak lagi gagal total dengan pesan error
@@ -43,6 +46,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   kasir belum sempat update ke versi app terbaru — data yang bisa
   disinkronkan tetap masuk, cuma bagian yang belum dikenal HP itu saja
   yang dilewati.
+- **Transaksi "Bayar Nanti" (tempo/hutang) sekarang ikut mendapat poin
+  loyalitas** kalau totalnya melebihi ambang batas yang ditentukan di
+  Pengaturan — sebelumnya poin selalu 0 utk transaksi tempo apapun
+  besar nominalnya, walau pelanggan sudah pasti akan menepati janji
+  bayarnya. Kalau transaksinya kemudian dibatalkan, poin ikut otomatis
+  ditarik kembali seperti transaksi tunai biasa.
 
 ## 13 Juli 2026
 
