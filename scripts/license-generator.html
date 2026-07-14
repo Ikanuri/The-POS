@@ -133,7 +133,13 @@
         <option value="90" selected>90 hari</option>
         <option value="365">365 hari</option>
         <option value="forever">Selamanya</option>
+        <option value="custom">Kustom (menit) — utk testing cepat</option>
       </select>
+      <div id="customMinutesWrap" class="hidden">
+        <label for="customMinutes">Jumlah menit (min. 1)</label>
+        <input type="text" id="customMinutes" inputmode="numeric" placeholder="1" />
+        <div id="customMinutesError" class="note danger-text hidden"></div>
+      </div>
 
       <button id="btnBuildCode" class="primary">Buat Kode Aktivasi</button>
 
@@ -294,6 +300,13 @@ document.getElementById('fpInput').addEventListener('input', () => {
   document.getElementById('fpError').classList.add('hidden');
 });
 
+function refreshExpSelectUI() {
+  const isCustom = document.getElementById('expSelect').value === 'custom';
+  document.getElementById('customMinutesWrap').classList.toggle('hidden', !isCustom);
+}
+document.getElementById('expSelect').addEventListener('change', refreshExpSelectUI);
+refreshExpSelectUI();
+
 document.getElementById('btnBuildCode').addEventListener('click', async () => {
   const fpError = document.getElementById('fpError');
   const rawInput = document.getElementById('fpInput').value;
@@ -305,9 +318,22 @@ document.getElementById('btnBuildCode').addEventListener('click', async () => {
   }
 
   const expSelect = document.getElementById('expSelect').value;
-  const exp = expSelect === 'forever'
-    ? 'selamanya'
-    : new Date(Date.now() + parseInt(expSelect, 10) * 86400000).toISOString();
+  let exp;
+  if (expSelect === 'forever') {
+    exp = 'selamanya';
+  } else if (expSelect === 'custom') {
+    const minutesError = document.getElementById('customMinutesError');
+    const minutes = parseInt(document.getElementById('customMinutes').value, 10);
+    if (isNaN(minutes) || minutes < 1) {
+      minutesError.textContent = 'Isi jumlah menit, minimal 1.';
+      minutesError.classList.remove('hidden');
+      return;
+    }
+    minutesError.classList.add('hidden');
+    exp = new Date(Date.now() + minutes * 60000).toISOString();
+  } else {
+    exp = new Date(Date.now() + parseInt(expSelect, 10) * 86400000).toISOString();
+  }
 
   const record = loadStored();
   const privateKey = await importPrivateKey(record.jwkPriv);

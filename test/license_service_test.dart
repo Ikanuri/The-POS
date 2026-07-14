@@ -194,4 +194,43 @@ void main() {
       expect(forever.daysUntilExpiry, isNull);
     });
   });
+
+  group('LicenseNotifier.computeRevoked — sakelar darurat "lockAll" (Lapis 3)',
+      () {
+    test('lockAll false & fingerprint TIDAK di daftar → tidak revoked', () {
+      expect(
+        LicenseNotifier.computeRevoked(
+            lockAll: false, dicabut: const [], fingerprint: _fp),
+        isFalse,
+      );
+    });
+
+    test('lockAll false & fingerprint ADA di daftar → revoked', () {
+      expect(
+        LicenseNotifier.computeRevoked(
+            lockAll: false, dicabut: [_fp], fingerprint: _fp),
+        isTrue,
+      );
+    });
+
+    test(
+        'lockAll TRUE → SEMUA device revoked, walau fingerprint TIDAK ada '
+        'di daftar `dicabut` sama sekali (skenario darurat)', () {
+      expect(
+        LicenseNotifier.computeRevoked(
+            lockAll: true, dicabut: const [], fingerprint: _fp),
+        isTrue,
+      );
+    });
+
+    test('perbandingan fingerprint tidak case-sensitive', () {
+      expect(
+        LicenseNotifier.computeRevoked(
+            lockAll: false,
+            dicabut: [_fp.toUpperCase()],
+            fingerprint: _fp),
+        isTrue,
+      );
+    });
+  });
 }
