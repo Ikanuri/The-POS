@@ -230,12 +230,13 @@ body{
 .prow-info{flex:1;min-width:0;}
 .prow-name{font-size:14px;font-weight:600;}
 .prow-meta{font-size:12px;color:var(--ink-2);margin-top:2px;font-family:var(--serif);}
-.stepper{display:flex;align-items:center;gap:0;background:var(--field);
-  border-radius:999px;overflow:hidden;flex-shrink:0;}
-.stepper button{width:30px;height:30px;border:none;background:transparent;
-  color:var(--accent);font-size:17px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;}
-.stepper .n{min-width:22px;text-align:center;font-weight:700;font-size:13px;}
+.stepper{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.stepper button{width:30px;height:30px;border:none;border-radius:999px;
+  color:#fff;font-size:15px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);}
+.stepper .step-minus{background:#d64545;}
+.stepper .step-qty{background:var(--accent);font-size:13px;}
 .oos-badge{background:var(--warn);color:#fff;border-radius:999px;
   padding:7px 12px;font-size:11.5px;font-weight:700;flex-shrink:0;}
 .prow-badge{background:var(--accent);color:#fff;border-radius:999px;
@@ -565,14 +566,17 @@ function renderList(){
 
 // Stepper inline +/- — sekarang hanya dipakai di lembar keranjang, di mana
 // barisnya SELALU qty > 0 (barang qty 0 dihapus dari cart, bukan ditampilkan).
+// Gaya disamakan dgn stepper `AddControl` di app kasir (lingkaran merah utk
+// kurang, lingkaran accent berisi qty utk tambah — tap qty = tambah 1,
+// persis mainCircle AddControl yg tetap jadi tap-target "+" walau lagi
+// menampilkan angka).
 function buildStepper(unitId, qty){
   var wrap = document.createElement('div');
   wrap.dataset.unit = unitId;
   wrap.className = 'stepper';
   wrap.innerHTML =
-    '<button type="button" data-act="dec" data-id="'+unitId+'">−</button>' +
-    '<span class="n">'+qty+'</span>' +
-    '<button type="button" data-act="inc" data-id="'+unitId+'">+</button>';
+    '<button type="button" class="step-minus" data-act="dec" data-id="'+unitId+'">−</button>' +
+    '<button type="button" class="step-qty" data-act="inc" data-id="'+unitId+'">'+qty+'</button>';
   return wrap;
 }
 
