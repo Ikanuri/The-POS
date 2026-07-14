@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 14 Juli 2026
+
+### 🐛 Perbaikan Bug
+- **Sync ke owner/asisten tidak lagi gagal total dengan pesan error
+  teknis** (mis. "table transactions has no column named ...") kalau HP
+  kasir belum sempat update ke versi app terbaru — data yang bisa
+  disinkronkan tetap masuk, cuma bagian yang belum dikenal HP itu saja
+  yang dilewati.
+
 ## 13 Juli 2026
 
 ### ✨ Fitur Baru

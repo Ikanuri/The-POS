@@ -4,25 +4,56 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (gabungan 2 sesi paralel via merge
-`main`). Sesi cabang ini: fix bug tombol modal "Tambah Bayar" (2 iterasi —
-`9fec89e` lalu `9633e7d`, lihat catatan gotcha di bawah, PENTING dibaca
-kalau ada laporan bug tombol serupa lagi) + fitur checklist verifikasi
-barang di keranjang kasir + stepper senada kartu produk (`2090d40`). Sempat
-juga coba samakan gaya stepper keranjang katalog HTML (`beaf395`) tapi
-DI-REVERT (`3a48d4e`/`e12c290`) begitu ketahuan desain katalog HTML sudah
-ditangani terpisah di `main` (`24097ec`, lihat detail di bawah — jangan
-kerjakan ulang). Sesi paralel di `main` (sudah di-merge ke sini):
-redesign lanjutan katalog HTML sesuai referensi app kasir + 2 bugfix
-lain (`24097ec`/`16b94b9`/`83e01dd`). **schemaVersion masih 15** (tidak
-ada migrasi baru dari kedua sesi — checklist keranjang murni
-SharedPreferences, `checkedItemIds` transaksi kolom lama dipakai ulang).
-Setelah merge: full `flutter test` **331 test hijau** (327 dari cabang ini
-+ 4 baru dari `main`), `flutter analyze` bersih, 0 konflik kode (cuma
-`CHANGELOG.md`/`docs/HANDOFF.md` — file dokumentasi rolling-snapshot yang
-memang wajar bentrok kalau 2 sesi jalan paralel). Susulan setelah merge:
-tambah tampilan jumlah item di struk (kiri "Tandai Semua") & keranjang
-kasir (kiri nominal Total) — `310960f`, sekarang **333 test hijau**._
+_Terakhir diperbarui: 14 Juli 2026. Lanjutan dari sesi 13 Juli (gabungan 2
+sesi paralel via merge `main` — fix bug tombol modal "Tambah Bayar", fitur
+checklist keranjang, redesign katalog HTML dari `main`, tampilan jumlah
+item di struk & keranjang — lihat section di bawah). Sesi ini: fix bug
+sync LAN gagal total di HP yang app-nya belum ter-update (`2d4467a`,
+lihat detail di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada
+kolom skema baru selama device belum update serentak). **schemaVersion
+masih 15** (tidak ada migrasi baru). Full `flutter test` **334 test
+hijau**, `flutter analyze` bersih._
+
+## Fix sync LAN gagal total — device tertinggal 1 kolom skema (mis. Infinix Smart 8)
+
+User laporkan error nyata saat sync dari HP Infinix Smart 8 ke host:
+`SqliteException(1): table transactions has no column named
+checked_item_ids`. Root cause (dikonfirmasi via investigasi, BUKAN
+migrasi gagal diam-diam — sudah dicek tidak ada `try/catch` yang menelan
+exception migrasi di `onUpgrade`): `AppDatabase.mergeRows()`
+(`lib/core/database/app_database.dart`) membangun `INSERT OR IGNORE/
+REPLACE` secara DINAMIS dari `row.keys` — yaitu kolom apa pun yang
+kebetulan ada di dump SELECT * milik PENGIRIM — tanpa pernah divalidasi
+ke skema fisik tabel LOKAL penerima. Device yang app-nya belum ter-update
+ke schemaVersion terbaru (kemungkinan besar kasus Infinix ini: APK yang
+ter-install lebih tua dari commit `a8c94ad`/schemaVersion 15) akan selalu
+gagal total begitu menerima dump dari device lain yang skemanya lebih
+baru — SATU kolom asing menggagalkan SELURUH baris & seluruh proses sync,
+bukan cuma baris/kolom itu.
+
+**Ini BUKAN kasus sekali-jadi** — app ini offline-first multi-perangkat
+(owner+kasir update tidak serentak by design), jadi kelas bug yang SAMA
+akan muncul lagi tiap kali ada kolom skema baru selama masih ada device
+yang belum sempat update. Fix bersifat STRUKTURAL, bukan tambal 1 kolom:
+`mergeRows()` sekarang baca kolom fisik lokal via `PRAGMA table_info
+("$tableName")` (bukan definisi tabel Drift statis di kode — supaya
+benar-benar mencerminkan skema SQLite yang SUNGGUHAN berjalan di device
+itu), lalu filter row masuk ke kolom yang benar-benar ada sebelum build
+INSERT. Kolom asing dari pengirim yang lebih baru diabaikan per-baris,
+tidak menggagalkan sync.
+
+**Belum disentuh** (di luar scope fix ini, dicatat sebagai potensi
+follow-up kalau relevan nanti): protokol `lan_sync_service.dart` tidak
+punya mekanisme cek/negosiasi `schemaVersion` sama sekali antar host↔klien
+— fix ini menangani gejalanya (sync tidak gagal), bukan menambahkan
+deteksi proaktif "device X butuh update" ke UI.
+
+Test regresi (`test/merge_rows_schema_mismatch_test.dart`) mensimulasikan
+device tertinggal dengan `ALTER TABLE transactions DROP COLUMN
+checked_item_ids` pada DB in-memory yang sudah schemaVersion 15 (paling
+presisi mereproduksi kondisi fisik device asli, dibanding coba pasang
+fixture schemaVersion lama) — diverifikasi revert-verify, pesan error
+tereproduksi PERSIS sama dengan laporan user sebelum fix dikembalikan.
 
 ## Gotcha BARU — tombol lebar-penuh (Outlined/FilledButton) dalam Row di dalam AlertDialog
 

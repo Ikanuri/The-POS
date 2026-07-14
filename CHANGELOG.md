@@ -8,6 +8,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-14
+
+- `2d4467a` — fix: sync LAN gagal total kalau device penerima tertinggal 1 kolom skema
+
 ## 2026-07-13
 
 - `310960f` — feat: tampilkan jumlah item di struk (baris Tandai Semua) & keranjang kasir
