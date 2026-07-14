@@ -72,7 +72,12 @@ void main() {
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: 'tx1'));
 
-    expect(find.text('Kembalian'), findsOneWidget);
+    // Item 1a (batch feedback) — Riwayat Pembayaran SELALU tampil begitu
+    // ada pembayaran (satu-satunya tempat tombol Batalkan Pembayaran), jadi
+    // baris "Kembalian" sengaja duplikat: di Ringkasan DAN di baris Riwayat
+    // Pembayaran, sama-sama merujuk pembayaran yang sama (lihat pola yang
+    // sama di receipt_payment_timeline_change_test.dart).
+    expect(find.text('Kembalian'), findsNWidgets(2));
     final checkboxFinder = find.byType(Checkbox);
     expect(checkboxFinder, findsWidgets);
 
@@ -84,7 +89,7 @@ void main() {
     expect(findChangeCheckbox().value, isFalse,
         reason: 'default belum dicentang — kembalian belum diambil');
 
-    await tester.tap(find.text('Kembalian'));
+    await tester.tap(find.text('Kembalian').first);
     await tester.pumpAndSettle();
 
     final payment = await (db.select(db.transactionPayments)

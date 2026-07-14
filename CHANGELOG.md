@@ -10,6 +10,9 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `24097ec` — feat: katalog HTML — kontrol +/- lingkaran spt app kasir, harga read-only, font lebih besar
+- `16b94b9` — fix: scan pesanan pegawai via scanner HID tertentu salah rute ke Tempel Pesanan
+- `83e01dd` — fix: tombol Batalkan Pembayaran tidak muncul untuk nota lunas seketika
 - `6564852` — feat: katalog HTML — modal tap-item ganti dropdown varian (pilih satuan/harga custom/catatan)
 - `955ea34` — feat: bersihkan file share sementara (struk/katalog) yang menumpuk di temp dir
 - `acaf2b5` — feat: modal Tambah Bayar Uang Pas pindah kiri + gate kosong, stepper lebih besar, harga produk reaktif

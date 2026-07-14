@@ -32,13 +32,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (mis. "yang matang", "warna merah") — tidak cuma catatan umum untuk
   seluruh pesanan seperti sebelumnya. Catatan ini otomatis ikut ke
   keranjang & struk begitu kasir tempel pesanannya.
-- **Katalog online: tap produk untuk pilih varian/harga/catatan.**
+- **Katalog online: tap produk untuk pilih varian/jumlah/catatan.**
   Sebelumnya varian produk cuma bisa dibuka lewat tombol panah kecil yang
   di sebagian HP tidak responsif disentuh. Sekarang seluruh baris produk
-  bisa langsung ditap untuk buka jendela pilihan — pilih ukuran/varian,
-  atur harga kalau perlu nego khusus, dan isi catatan, semua di satu
-  tempat. Barang yang sudah dipilih sekarang juga bisa ditap lagi di
-  keranjang untuk diubah tanpa perlu hapus & pilih ulang dari awal.
+  punya tombol bulat "+" (sama seperti di aplikasi kasir) untuk tambah
+  cepat, atau bisa ditap untuk buka jendela pilihan — pilih ukuran/
+  varian, atur jumlah (bisa diketik langsung, tidak cuma tombol +/-),
+  dan isi catatan. Barang yang sudah dipilih bisa ditap lagi di keranjang
+  untuk diubah tanpa perlu hapus & pilih ulang dari awal. Semua teks di
+  halaman katalog juga diperbesar agar lebih mudah dibaca.
 - **Batalkan Pembayaran.** Kalau ada pembayaran yang salah dicatat, kasir
   sekarang bisa membatalkannya langsung dari layar struk (dengan
   konfirmasi) — catatan pembayaran itu tetap tersimpan sebagai riwayat
@@ -83,7 +85,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sampai ada barcode BARU yang benar-benar terdeteksi.
 - **Scan pesanan pegawai (QR "Kirim ke Owner/Asisten") lewat scanner
   eksternal sekarang masuk antrian dengan benar**, tidak lagi salah
-  kebuka sebagai "Tempel Pesanan" dan tidak lagi terasa lambat.
+  kebuka sebagai "Tempel Pesanan" dan tidak lagi terasa lambat — termasuk
+  untuk jenis scanner yang sebelumnya masih salah rute.
+- **Tombol "Batalkan Pembayaran" sekarang selalu muncul di struk**, dulu
+  cuma muncul untuk nota yang dicicil/dilunasi belakangan — nota tunai
+  yang langsung lunas saat dibuat (paling umum) tidak pernah bisa
+  dibatalkan pembayarannya sama sekali.
 - **Aplikasi sekarang bisa dibuka di HP kelas bawah/lama yang sebelumnya
   langsung force-close tanpa keterangan** (dilaporkan terjadi di Infinix
   Smart 8, kemungkinan besar berlaku juga di HP sejenis). Penyebabnya

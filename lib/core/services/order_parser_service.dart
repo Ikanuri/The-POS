@@ -24,10 +24,48 @@ class OrderParserService {
   static final RegExp _employeeLine =
       RegExp(r'^Pegawai:\s*(.+)$', multiLine: true);
 
+  /// Marker baris meta yang HARUS berada di awal baris agar regex `^...`
+  /// di atas mengenalinya (lihat [_normalizeMetaLineBreaks]).
+  static const _metaMarkers = ['Pegawai:', 'Nama:', 'HP:', 'Catatan:'];
+
+  /// Sisipkan newline di depan marker meta (`Pegawai:`/`Nama:`/dst) bila
+  /// "menempel" ke teks sebelumnya TANPA baris baru — kejadian nyata di
+  /// scanner HID eksternal tertentu yang TIDAK menerjemahkan newline yang
+  /// di-encode di dalam payload QR jadi keystroke Enter (beda dari scanner
+  /// lain yang sudah ditangani `_beginOrderCodeMerge`/`_continueOrderCodeMerge`
+  /// di kasir_screen.dart) — hasilnya baris `#PSN:...` dan `Pegawai: ...`
+  /// menyatu di satu baris fisik ("...=2Pegawai: Budi"), membuat regex
+  /// `^Pegawai:` (butuh awal baris) gagal cocok sama sekali → employeeName
+  /// null → salah rute ke "Tempel Pesanan" alih-alih antrian pegawai.
+  /// No-op bila baris sudah terpisah normal (newline asli/dari HID lain).
+  static String _normalizeMetaLineBreaks(String text) {
+    var result = text;
+    for (final marker in _metaMarkers) {
+      final buf = StringBuffer();
+      var idx = 0;
+      while (true) {
+        final found = result.indexOf(marker, idx);
+        if (found == -1) {
+          buf.write(result.substring(idx));
+          break;
+        }
+        buf.write(result.substring(idx, found));
+        if (found > 0 && result[found - 1] != '\n') {
+          buf.write('\n');
+        }
+        buf.write(marker);
+        idx = found + marker.length;
+      }
+      result = buf.toString();
+    }
+    return result;
+  }
+
   static Future<ParsedOrder> parse({
     required AppDatabase db,
     required String text,
   }) async {
+    text = _normalizeMetaLineBreaks(text);
     final match = _machineLine.firstMatch(text);
     if (match == null) {
       return const ParsedOrder(
