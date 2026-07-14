@@ -4,13 +4,15 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
+import 'package:the_pos/core/widgets/item_count_badge.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
 
 import 'helpers/pump_app.dart';
 
-/// Jumlah item ditampilkan di 2 tempat (usulan user, screenshot struk):
-/// - Struk in-app, sebaris dgn "Tandai Semua" (kiri).
+/// Jumlah item ditampilkan sebagai badge lingkaran (`ItemCountBadge`, gaya
+/// sama dgn cart bar kasir) di 2 tempat:
+/// - Struk in-app, menempel di sudut kiri-atas kartu daftar barang.
 /// - Keranjang kasir, di samping kiri nominal Total.
 void main() {
   late AppDatabase db;
@@ -55,7 +57,12 @@ void main() {
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: 'tx1'));
 
-    expect(find.text('2 item'), findsOneWidget);
+    final badge = find.byType(ItemCountBadge);
+    expect(badge, findsOneWidget);
+    expect(tester.widget<ItemCountBadge>(badge).count, 2);
+    expect(tester.widget<ItemCountBadge>(badge).elevated, isTrue,
+        reason: 'badge di struk menempel/mengambang di atas kartu, bukan '
+            'sejajar biasa');
     expect(find.text('Tandai Semua'), findsOneWidget);
   });
 
@@ -90,7 +97,9 @@ void main() {
     await pumpWithFakeApp(tester,
         db: db, initialPrefs: prefs, child: const CartSheet());
 
-    expect(find.text('2 item'), findsOneWidget);
+    final badge = find.byType(ItemCountBadge);
+    expect(badge, findsOneWidget);
+    expect(tester.widget<ItemCountBadge>(badge).count, 2);
     expect(find.text('Total'), findsOneWidget);
   });
 }

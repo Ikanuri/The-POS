@@ -7,6 +7,7 @@ import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/services/order_parser_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/item_count_badge.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 import 'add_control.dart';
@@ -217,6 +218,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                 16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),
             child: Row(
               children: [
+                // Badge jumlah item — gaya sama dgn cart bar kasir, supaya
+                // representasi "jumlah barang" konsisten di seluruh alur.
+                ItemCountBadge(
+                    count: cart.where((c) => !c.isVariant).length),
+                const SizedBox(width: 10),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -225,24 +231,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             )),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                            '${cart.where((c) => !c.isVariant).length} item',
-                            style: TextStyle(
-                                fontSize: 12, color: scheme.onSurfaceVariant)),
-                        const SizedBox(width: 6),
-                        Text(
-                          formatRupiah(total),
-                          style: AppTheme.numStyle(context,
-                              size: 22,
-                              weight: FontWeight.w700,
-                              color: scheme.primary),
-                        ),
-                      ],
+                    Text(
+                      formatRupiah(total),
+                      style: AppTheme.numStyle(context,
+                          size: 22, weight: FontWeight.w700, color: scheme.primary),
                     ),
                   ],
                 ),

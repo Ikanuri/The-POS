@@ -19,6 +19,7 @@ import '../../core/services/order_parser_service.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/widgets/item_count_badge.dart';
 import '../produk/catalog/catalog_models.dart';
 import '../produk/catalog/catalog_share.dart';
 import '../produk/catalog/catalog_store.dart';
@@ -2872,24 +2873,7 @@ class _CartBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  color: AppTheme.accent,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    '$count',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
+              ItemCountBadge(count: count),
               const SizedBox(width: 10),
               Column(
                 mainAxisSize: MainAxisSize.min,
