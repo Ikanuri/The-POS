@@ -370,4 +370,55 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'produk dengan >1 satuan (mis. Biji dasar + Dus) — SEMUA satuan '
+      'ter-embed di field `units`, bukan cuma satuan dasar', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db,
+        name: 'Sedap Goreng', price: 2500, unitTypeId: 1 /* Biji */);
+    // Satuan KEDUA (Dus) utk produk yang SAMA — bukan varian, bukan produk
+    // baru. Sebelum fix, satuan ini tidak pernah ter-embed sama sekali.
+    const dusUnitId = 'u-dus';
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: dusUnitId,
+          productId: productId,
+          unitTypeId: const Value(3), // Dus
+          isBaseUnit: const Value(false),
+          ratioToBase: const Value(40),
+        ));
+    await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+          id: 'dus-t1',
+          productUnitId: dusUnitId,
+          minQty: const Value(1),
+          price: 90000,
+        ));
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['id'] == productId) as Map;
+
+    final units = p['units'] as List;
+    expect(units, hasLength(2),
+        reason: 'Biji (dasar) DAN Dus harus sama-sama ter-embed');
+    final unitIds = units.map((u) => (u as Map)['unitId']).toSet();
+    expect(unitIds, contains(dusUnitId));
+
+    // Satuan dasar (Biji) tetap yang dipakai di field top-level (harga
+    // "utama" yg tampil di daftar produk sebelum modal dibuka).
+    final baseUnit = await (db.select(db.productUnits)
+          ..where((t) =>
+              t.productId.equals(productId) & t.isBaseUnit.equals(true)))
+        .getSingle();
+    expect(p['unitId'], baseUnit.id);
+
+    // JS `unitOptionsFor`/`renderList` harus punya cukup data utk
+    // menampilkan chip Dus di modal — dipastikan lewat kehadiran fungsi
+    // yang membaca `p.units` (bukti tidak sekadar embed data tanpa dipakai).
+    expect(result.html.contains('_ownUnits('), isTrue);
+
+    await db.close();
+  });
 }

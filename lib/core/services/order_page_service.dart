@@ -69,6 +69,30 @@ class OrderPageService {
     final unitTypes = await db.getAllUnitTypes();
     final typeNameById = {for (final u in unitTypes) u.id: u.name};
 
+    // Semua satuan berharga valid milik SATU produk (bukan cuma satuan
+    // dasar) — mis. "Sedap Goreng" bisa punya Biji (dasar) DAN Dus, dua
+    // baris `product_units` berbeda utk produk yang SAMA. Sebelumnya
+    // katalog HTML cuma pernah menyertakan satuan dasar, jadi Dus tidak
+    // pernah muncul di modal pilih satuan — pelanggan tidak tahu ada
+    // opsi beli per-dus. Satuan dasar diurutkan lebih dulu (tampilan chip
+    // konsisten: dasar → satuan lain).
+    Future<List<Map<String, Object?>>> unitsJsonFor(String productId) async {
+      final units = await db.getProductUnits(productId);
+      units.sort((a, b) => (b.isBaseUnit ? 1 : 0) - (a.isBaseUnit ? 1 : 0));
+      final out = <Map<String, Object?>>[];
+      for (final u in units) {
+        final resolved =
+            await priceService.resolvePrice(productUnitId: u.id, qty: 1);
+        if (resolved.price <= 0) continue;
+        out.add({
+          'unitId': u.id,
+          'unit': typeNameById[u.unitTypeId ?? 1] ?? 'Satuan',
+          'price': resolved.price,
+        });
+      }
+      return out;
+    }
+
     // Hanya produk induk (bukan varian) yang aktif — varian ditautkan di
     // bawah induknya masing-masing, sama seperti tampilan katalog kasir.
     // `searchProducts` TIDAK menyaring varian (beda dari `watchProducts`
@@ -80,32 +104,22 @@ class OrderPageService {
 
     final out = <Map<String, Object?>>[];
     for (final p in parents) {
-      final units = await db.getProductUnits(p.id);
-      // Fallback ke satuan pertama kalau tidak ada yang ditandai isBaseUnit
-      // (mis. produk lama hasil import CSV sebelum fix) — konsisten dengan
-      // pola dipakai di seluruh app (kasir_screen, produk_form_screen, dst),
-      // supaya produk begini tidak lenyap diam-diam dari katalog.
-      final base = units.where((u) => u.isBaseUnit).firstOrNull ?? units.firstOrNull;
-      if (base == null) continue;
-      final resolved =
-          await priceService.resolvePrice(productUnitId: base.id, qty: 1);
-      if (resolved.price <= 0) continue;
+      final unitsOut = await unitsJsonFor(p.id);
+      if (unitsOut.isEmpty) continue;
+      final base = unitsOut.first;
 
       final variantsOut = <Map<String, Object?>>[];
       final variants = await db.getVariants(p.id);
       for (final v in variants) {
-        final vUnits = await db.getProductUnits(v.id);
-        final vBase =
-            vUnits.where((u) => u.isBaseUnit).firstOrNull ?? vUnits.firstOrNull;
-        if (vBase == null) continue;
-        final vResolved =
-            await priceService.resolvePrice(productUnitId: vBase.id, qty: 1);
-        if (vResolved.price <= 0) continue;
+        final vUnitsOut = await unitsJsonFor(v.id);
+        if (vUnitsOut.isEmpty) continue;
+        final vBase = vUnitsOut.first;
         variantsOut.add({
-          'unitId': vBase.id,
+          'unitId': vBase['unitId'],
           'name': v.name,
-          'unit': typeNameById[vBase.unitTypeId ?? 1] ?? 'Satuan',
-          'price': vResolved.price,
+          'unit': vBase['unit'],
+          'price': vBase['price'],
+          'units': vUnitsOut,
         });
       }
 
@@ -115,9 +129,10 @@ class OrderPageService {
       out.add({
         'id': p.id,
         'name': p.name,
-        'unitId': base.id,
-        'unit': typeNameById[base.unitTypeId ?? 1] ?? 'Satuan',
-        'price': resolved.price,
+        'unitId': base['unitId'],
+        'unit': base['unit'],
+        'price': base['price'],
+        'units': unitsOut,
         'variants': variantsOut,
         // Item 25a — tanda cepat "stok habis" manual (bukan sistem stok
         // resmi). Katalog HTML statis: tombol tambah dinonaktifkan + badge.
@@ -442,9 +457,28 @@ document.getElementById('themeBtn').addEventListener('click', function(){
 initTheme();
 
 DATA.products.forEach(function(p){
-  byUnit[p.unitId] = {name:p.name, unit:p.unit, price:p.price, parentName:null};
+  // Satuan lain (mis. Dus di samping Biji) sama-sama milik produk INI —
+  // dikelompokkan di keranjang/pesanan sama seperti varian (parentName
+  // diisi) begitu ada lebih dari 1 satuan, supaya tidak ambigu antara 2
+  // baris "Sedap Goreng" yang cuma beda satuan.
+  var pUnits = (p.units && p.units.length) ? p.units : [{unitId:p.unitId, unit:p.unit, price:p.price}];
+  var pMulti = pUnits.length > 1;
+  pUnits.forEach(function(u){
+    byUnit[u.unitId] = {
+      name: pMulti ? (p.name + ' — ' + u.unit) : p.name,
+      unit: u.unit, price: u.price,
+      parentName: pMulti ? p.name : null
+    };
+  });
   (p.variants||[]).forEach(function(v){
-    byUnit[v.unitId] = {name:p.name + ' — ' + v.name, unit:v.unit, price:v.price, parentName:p.name};
+    var vUnits = (v.units && v.units.length) ? v.units : [{unitId:v.unitId, unit:v.unit, price:v.price}];
+    var vMulti = vUnits.length > 1;
+    vUnits.forEach(function(u){
+      byUnit[u.unitId] = {
+        name: p.name + ' — ' + v.name + (vMulti ? ' (' + u.unit + ')' : ''),
+        unit: u.unit, price: u.price, parentName: p.name
+      };
+    });
   });
 });
 
@@ -475,28 +509,55 @@ function cartTotal(){
   for (var k in cart) { var u = byUnit[k]; if (u) t += u.price * cart[k]; }
   return t;
 }
+function _ownUnits(p){
+  return (p.units && p.units.length) ? p.units : [{unitId:p.unitId, unit:p.unit, price:p.price}];
+}
 function totalQtyForProduct(p){
-  var n = cart[p.unitId] || 0;
-  (p.variants||[]).forEach(function(v){ n += cart[v.unitId] || 0; });
+  var n = 0;
+  _ownUnits(p).forEach(function(u){ n += cart[u.unitId] || 0; });
+  (p.variants||[]).forEach(function(v){
+    _ownUnits(v).forEach(function(u){ n += cart[u.unitId] || 0; });
+  });
   return n;
 }
 function minPriceForProduct(p){
-  var prices = [p.price].concat((p.variants||[]).map(function(v){return v.price;}));
+  var prices = _ownUnits(p).map(function(u){ return u.price; });
+  (p.variants||[]).forEach(function(v){
+    _ownUnits(v).forEach(function(u){ prices.push(u.price); });
+  });
   return Math.min.apply(null, prices);
 }
+// Total satuan/varian yang bisa dipilih pelanggan — dipakai renderList utk
+// tahu apakah tampilkan "N pilihan · mulai Rp X" atau harga satuan tunggal.
+function totalOptionsFor(p){
+  return _ownUnits(p).length + (p.variants||[]).length;
+}
 function unitOptionsFor(p){
-  var opts = [{unitId:p.unitId, label:'Utama', unit:p.unit, price:p.price}];
+  var opts = [];
+  _ownUnits(p).forEach(function(u){
+    opts.push({unitId:u.unitId, label:u.unit, unit:u.unit, price:u.price});
+  });
   (p.variants||[]).forEach(function(v){
-    opts.push({unitId:v.unitId, label:v.name, unit:v.unit, price:v.price});
+    var vUnits = _ownUnits(v);
+    var vMulti = vUnits.length > 1;
+    vUnits.forEach(function(u){
+      opts.push({
+        unitId:u.unitId,
+        label: vMulti ? (v.name + ' (' + u.unit + ')') : v.name,
+        unit:u.unit, price:u.price
+      });
+    });
   });
   return opts;
 }
 function findProductForUnit(unitId){
   for (var i=0;i<DATA.products.length;i++){
     var p = DATA.products[i];
-    if (p.unitId === unitId) return p;
+    var pUnits = _ownUnits(p);
+    for (var k=0;k<pUnits.length;k++){ if (pUnits[k].unitId === unitId) return p; }
     for (var j=0;j<(p.variants||[]).length;j++){
-      if (p.variants[j].unitId === unitId) return p;
+      var vUnits = _ownUnits(p.variants[j]);
+      for (var m=0;m<vUnits.length;m++){ if (vUnits[m].unitId === unitId) return p; }
     }
   }
   return null;
@@ -536,8 +597,8 @@ function renderList(){
     var main = document.createElement('div');
     main.className = 'prow-main';
 
-    var metaHtml = variants.length > 0
-      ? (variants.length + 1) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
+    var metaHtml = totalOptionsFor(p) > 1
+      ? totalOptionsFor(p) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
       : rp(p.price) + ' /' + esc(p.unit);
     main.innerHTML =
       '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
