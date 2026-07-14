@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-14
 
+- `3200c0e` — redesign: satukan kartu antrian "Pesanan Ditahan" pakai chip status
 - `102399d` — docs: tambah gotcha CLAUDE.md — Clipboard.getData() hang di widget test
 - `458fc77` — feat: tombol "Salin Teks Pesanan" di bawah QR handoff pegawai
 - `69abb77` — fix: teks "N pilihan" katalog HTML under-count saat varian punya >1 satuan

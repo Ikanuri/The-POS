@@ -14,8 +14,55 @@ HTML kini tampilkan SEMUA satuan produk, bukan cuma satuan dasar
 varian+multi-satuan (`69abb77`) + tombol "Salin Teks Pesanan" di bawah QR
 handoff pegawai (`458fc77`, lihat detail di bawah — PENTING, gotcha
 `Clipboard.getData()` hang di widget test, sudah ikut ditambahkan ke
-CLAUDE.md `102399d`). **schemaVersion masih 15** (tidak ada migrasi
-baru). Full `flutter test` **337 test hijau**, `flutter analyze` bersih._
+CLAUDE.md `102399d`) + redesign kartu antrian "Pesanan Ditahan" (`3200c0e`,
+lihat detail di bawah — diusulkan via mockup Playwright dulu sebelum
+dikerjakan, sesuai permintaan user). **schemaVersion masih 15** (tidak ada
+migrasi baru). Full `flutter test` **337 test hijau**, `flutter analyze`
+bersih._
+
+## Redesign kartu antrian "Pesanan Ditahan"
+
+User bilang desain kartu antrian yang lama "tidak pas" — diminta
+proposalkan dulu via Playwright (mockup HTML statis, screenshot,
+dikirim ke user) SEBELUM ada perubahan kode, baru setelah user setuju
+("wah bagus itu, kerjakan sekarang juga") baru dieksekusi. Mockup ada di
+scratchpad sesi ini (`queue_redesign/mockup.html` + `proposal.png`, tidak
+di-commit — cuma alat komunikasi, bukan bagian app).
+
+Masalah desain lama (`_HeldCard` + `_HeldCardWithTab`, sebelum redesign):
+tinggi kartu dipaksa 152px demi menampung tab lipat (`_TabPainter`
+trapesium, gaya yang cuma dipakai di sini) di kartu handoff — kartu
+pesanan ditahan BIASA (tanpa handoff) jadi punya `Spacer()` kosong besar
+karena tinggi disamakan. Badge "Menunggu Anda Bayar" pakai warna `error`
+(merah) padahal bukan kondisi error — bertabrakan dgn konvensi semantik
+warna project (merah = hutang/masalah, lihat §Gotcha CLAUDE.md). Nominal
+total pakai font biasa, bukan `AppTheme.numStyle` (Newsreader) yg jadi
+konvensi semua angka uang di app.
+
+Redesign: gabung `_HeldCardWithTab` + `_HeldCard` jadi SATU class
+`_HeldCard` — tidak ada lagi tab lipat terpisah. Beda status (pesanan
+ditahan biasa vs handoff pegawai) sekarang cuma lewat warna **chip** di
+baris atas KARTU YANG SAMA: abu netral "Ditahan" vs terracotta
+(`AppTheme.accent`) berisi ikon + nama pegawai pengirim + jam. Semua kartu
+jadi tinggi konsisten (134, turun dari 152) tanpa ruang kosong. Total
+sekarang pakai `AppTheme.numStyle`. `_TabPainter` class TIDAK dihapus —
+masih dipakai `_CartMetaTab` (komponen lain) di file yg sama.
+
+**Bug ketemu saat implementasi** (langsung ke-catch oleh test yang sudah
+ada, `kasir_scan_order_code_test.dart`): chip pertama kali ditulis dengan
+`Text` polos di dalam `Row(mainAxisSize: MainAxisSize.min)` tanpa
+`Flexible` — RenderFlex overflow 3px kalau nama pegawai+jam agak panjang,
+karena Row(mainAxisSize.min) melayout child non-flex di lebar natural
+(tak terbatas), BUKAN dibatasi lebar parent, walau parent (Column di
+dalam Container lebar tetap) sudah sempit. Fix: bungkus `Text` dgn
+`Flexible` supaya Row benar-benar memberi batas lebar & ellipsis bisa
+jalan. Revert-verify: hapus `Flexible`, 4 test gagal dgn overflow error
+yang sama persis → pasang lagi, hijau semua.
+
+Test yang perlu diupdate (bukan bug, cuma teks assertion ikut desain
+baru): 2 assertion `find.text('Menunggu Anda Bayar')` di
+`kasir_scan_order_code_test.dart` diganti `find.textContaining('siap
+dibayarkan')` (teks meta baris kedua khusus kartu handoff sekarang).
 
 ## Tombol "Salin Teks Pesanan" di bawah QR handoff pegawai
 

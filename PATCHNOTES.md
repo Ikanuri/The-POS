@@ -29,6 +29,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dengan badge di bar keranjang** (lingkaran terracotta berisi angka) —
   di struk, badge ini menempel di sudut kartu daftar barang; di
   keranjang, tampil di samping nominal Total.
+- **Kartu antrian "Pesanan Ditahan" dirombak** — sebelumnya pesanan
+  handoff dari pegawai punya tab lipat merah di atas kartu yang bikin
+  tampilan tidak rapi & sebagian kartu jadi punya ruang kosong besar di
+  bawahnya. Sekarang semua kartu (pesanan ditahan biasa maupun kiriman
+  pegawai) tampil rapi dalam bentuk yang sama — beda status cukup lewat
+  label kecil berwarna di atas kartu (abu-abu netral "Ditahan" atau
+  terracotta bertuliskan nama pegawai pengirim).
 
 ### 🐛 Perbaikan Bug
 - **Sync ke owner/asisten tidak lagi gagal total dengan pesan error
