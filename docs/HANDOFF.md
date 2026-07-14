@@ -4,14 +4,17 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 14 Juli 2026 (lanjutan). Sesi ini: fix bug sync LAN
-gagal total di HP yang app-nya belum ter-update (`2d4467a`, lihat detail
-di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada kolom skema
-baru selama device belum update serentak) + badge jumlah item di
-struk/keranjang disamakan gaya cart bar (`67414e1`) + katalog HTML kini
-tampilkan SEMUA satuan produk, bukan cuma satuan dasar (`7c65b78`, lihat
-detail di bawah). **schemaVersion masih 15** (tidak ada migrasi baru).
-Full `flutter test` **335 test hijau**, `flutter analyze` bersih._
+_Terakhir diperbarui: 14 Juli 2026 (lanjutan lagi). Sesi ini: fix bug sync
+LAN gagal total di HP yang app-nya belum ter-update (`2d4467a`, lihat
+detail di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada
+kolom skema baru selama device belum update serentak) + badge jumlah
+item di struk/keranjang disamakan gaya cart bar (`67414e1`) + katalog
+HTML kini tampilkan SEMUA satuan produk, bukan cuma satuan dasar
+(`7c65b78`) + fix susulan "N pilihan" under-count utk kombinasi
+varian+multi-satuan (`69abb77`, lihat detail di bawah — kombinasi ini
+SUDAH diverifikasi Playwright, bukan lagi "belum disentuh"). **schemaVersion
+masih 15** (tidak ada migrasi baru). Full `flutter test` **336 test
+hijau**, `flutter analyze` bersih._
 
 ## Katalog HTML — satuan lain (mis. Dus) sekarang ikut tampil
 
@@ -37,15 +40,22 @@ teks pesanan (`buildOrderText`) + tampilan keranjang meniru pola varian
 (header nama produk + baris ber-indent per satuan) begitu produk itu
 benar-benar punya >1 satuan.
 
-**Belum disentuh** (di luar laporan user, potensi follow-up kalau
-relevan): varian yang punya >1 satuan SENDIRI (mis. varian "Pedas" juga
-py Dus) — kode sudah digeneralisasi mendukung ini (`_ownUnits(v)` dipakai
-sama persis), tapi belum ada test spesifik utk kombinasi varian+multi-
-satuan sekaligus (test baru cuma cover produk induk).
+**Susulan (dikonfirmasi via pertanyaan user "apakah varian juga bisa
+diinput?"):** kombinasi varian yang PUNYA >1 satuan SENDIRI (mis. varian
+"Pedas" juga py Pcs+Renceng) sudah diverifikasi nyata via Playwright —
+chip di modal tampil benar (semua kombinasi produk-induk × varian ×
+satuan muncul sbg chip terpisah, mis. "Pcs", "Pedas (Pcs)", "Pedas
+(Renceng)"), TAPI ketahuan bug turunan: teks ringkasan "N pilihan" di
+daftar produk under-count (bilang "2 pilihan" padahal 3 chip nyata
+muncul) — `totalOptionsFor` menghitung tiap varian sebagai 1 opsi tetap,
+tidak ikut menjumlahkan satuan internal varian itu. Fix: `totalOptionsFor`
+sekarang menjumlahkan satuan TIAP varian, sama seperti cara
+`unitOptionsFor` membangun chip (`69abb77`). Test baru
+(`order_page_service_test.dart`) cover kombinasi ini secara eksplisit.
 
-Diverifikasi Playwright/Chromium nyata (bukan cuma baca kode): generate
-HTML produk 2-satuan, modal tampilkan 2 chip terpisah, tap chip kedua
-(Dus) ganti harga tampil & bisa ditambah ke keranjang dgn benar.
+Diverifikasi Playwright/Chromium nyata (bukan cuma baca kode) utk KEDUA
+skenario: produk induk 2-satuan (chip Dus muncul & berfungsi), DAN
+varian+multi-satuan (3 chip benar, teks "3 pilihan" akurat setelah fix).
 
 ## Badge jumlah item disatukan gayanya (struk/keranjang/cart bar)
 

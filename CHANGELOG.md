@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-14
 
+- `69abb77` — fix: teks "N pilihan" katalog HTML under-count saat varian punya >1 satuan
 - `7c65b78` — fix: katalog HTML tidak menampilkan satuan lain (mis. Dus) produk
 - `67414e1` — feat: samakan gaya badge jumlah item di struk & keranjang dgn cart bar
 - `2d4467a` — fix: sync LAN gagal total kalau device penerima tertinggal 1 kolom skema
