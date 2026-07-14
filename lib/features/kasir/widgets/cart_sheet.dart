@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -7,8 +8,10 @@ import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/services/order_parser_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/item_count_badge.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
+import 'add_control.dart';
 
 /// Item 24d — true bila device INI perlu digerbang: role Pegawai
 /// (`deviceRole == 'kasir'`) TANPA izin `terima_pembayaran`. Owner/Asisten
@@ -184,7 +187,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                 ? Center(
                     child: Text(
                       'Keranjang kosong',
-                      style: TextStyle(color: scheme.onSurfaceVariant),
+                      style: TextStyle(
+                          fontSize: 15, color: scheme.onSurfaceVariant),
                     ),
                   )
                 : Builder(builder: (_) {
@@ -215,6 +219,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                 16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),
             child: Row(
               children: [
+                // Badge jumlah item — gaya sama dgn cart bar kasir, supaya
+                // representasi "jumlah barang" konsisten di seluruh alur.
+                ItemCountBadge(
+                    count: cart.where((c) => !c.isVariant).length),
+                const SizedBox(width: 10),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -279,21 +288,29 @@ class _CartItemTile extends ConsumerWidget {
       opacity: isZeroed ? 0.45 : 1.0,
       child: ListTile(
         dense: true,
-        contentPadding: EdgeInsets.only(left: isVariant ? 32 : 16, right: 4),
+        contentPadding: EdgeInsets.only(left: isVariant ? 32 : 8, right: 4),
+        // Checklist verifikasi barang sebelum bayar — independen dari tap
+        // baris (yang membuka modal edit). Leading widget eksplisit (bukan
+        // CheckboxListTile) supaya kedua gesture ini tidak tumpang tindih.
+        leading: Checkbox(
+          value: item.checked,
+          onChanged: (v) =>
+              notifier.setChecked(item.productUnitId, v ?? false),
+        ),
         title: Row(
           children: [
             if (isVariant)
               Padding(
                 padding: const EdgeInsets.only(right: 4),
                 child: Icon(Icons.subdirectory_arrow_right,
-                    size: 14, color: scheme.onSurfaceVariant),
+                    size: 15, color: scheme.onSurfaceVariant),
               ),
             Expanded(
               child: Text(item.productName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: isVariant ? 13 : null,
+                      fontSize: isVariant ? 15 : 17,
                       color: isVariant ? scheme.onSurfaceVariant : null)),
             ),
           ],
@@ -307,13 +324,13 @@ class _CartItemTile extends ConsumerWidget {
                   child: Text.rich(
                     TextSpan(
                       style: TextStyle(
-                          fontSize: 11, color: scheme.onSurfaceVariant),
+                          fontSize: 13, color: scheme.onSurfaceVariant),
                       children: [
                         TextSpan(text: '${item.unitName} · '),
                         TextSpan(
                             text: formatRupiah(item.price),
                             style: AppTheme.numStyle(context,
-                                size: 11, color: scheme.onSurfaceVariant)),
+                                size: 13, color: scheme.onSurfaceVariant)),
                       ],
                     ),
                     maxLines: 1,
@@ -322,12 +339,12 @@ class _CartItemTile extends ConsumerWidget {
                 ),
                 if (item.priceOverridden) ...[
                   const SizedBox(width: 4),
-                  Icon(Icons.edit, size: 10, color: scheme.tertiary),
+                  Icon(Icons.edit, size: 12, color: scheme.tertiary),
                 ],
                 if (isZeroed) ...[
                   const SizedBox(width: 4),
                   Text('via varian',
-                      style: TextStyle(fontSize: 10, color: scheme.primary)),
+                      style: TextStyle(fontSize: 12, color: scheme.primary)),
                 ],
               ],
             ),
@@ -350,7 +367,7 @@ class _CartItemTile extends ConsumerWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 13,
                         fontStyle: FontStyle.italic,
                         color: scheme.tertiary),
                   ),
@@ -361,26 +378,24 @@ class _CartItemTile extends ConsumerWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.remove_circle_outline, size: 24),
-              onPressed: isZeroed
+            // Item 4 (usulan user) — stepper disamakan persis dgn gaya
+            // stepper produk di halaman kasir (`AddControl`, shared widget),
+            // menggantikan tombol ±/field qty lama.
+            AddControl(
+              qty: effectiveQty,
+              size: 30,
+              onTap: () => notifier.setEffectiveQty(
+                  item.productUnitId, effectiveQty + 1),
+              onMinus: isZeroed
                   ? null
                   : () => notifier.setEffectiveQty(
                       item.productUnitId, effectiveQty - 1),
             ),
-            const SizedBox(width: 2),
-            _QtyField(item: item, effectiveQty: effectiveQty, cartId: cartId),
-            const SizedBox(width: 2),
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 24),
-              onPressed: () => notifier.setEffectiveQty(
-                  item.productUnitId, effectiveQty + 1),
-            ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
             Text(
               formatRupiah(subtotal),
               style: AppTheme.numStyle(context,
-                  size: 13,
+                  size: 15,
                   weight: FontWeight.w600,
                   color: isZeroed ? scheme.onSurfaceVariant : scheme.primary),
             ),
@@ -396,98 +411,6 @@ class _CartItemTile extends ConsumerWidget {
               : item.productId;
           Navigator.of(context).pop(targetId);
         },
-      ),
-    );
-  }
-}
-
-/// Qty yang bisa di-tap untuk inline edit. Tap → TextField kecil di tempat;
-/// blur/submit → setEffectiveQty. Desain tombol ± di sekitarnya tidak berubah.
-class _QtyField extends ConsumerStatefulWidget {
-  const _QtyField({
-    required this.item,
-    required this.effectiveQty,
-    required this.cartId,
-  });
-  final CartItem item;
-  final double effectiveQty;
-  final String cartId;
-
-  @override
-  ConsumerState<_QtyField> createState() => _QtyFieldState();
-}
-
-class _QtyFieldState extends ConsumerState<_QtyField> {
-  bool _editing = false;
-  late final TextEditingController _ctrl = TextEditingController();
-  final FocusNode _focus = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _focus.addListener(() {
-      if (!_focus.hasFocus && _editing) _commit();
-    });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  String _fmt(double q) =>
-      q % 1 == 0 ? q.toInt().toString() : q.toString();
-
-  void _startEdit() {
-    setState(() {
-      _editing = true;
-      _ctrl.text = _fmt(widget.effectiveQty);
-      _ctrl.selection =
-          TextSelection(baseOffset: 0, extentOffset: _ctrl.text.length);
-    });
-    _focus.requestFocus();
-  }
-
-  void _commit() {
-    final parsed = double.tryParse(_ctrl.text.replaceAll(',', '.'));
-    if (parsed != null) {
-      ref.read(cartProvider(widget.cartId).notifier)
-          .setEffectiveQty(widget.item.productUnitId, parsed);
-    }
-    if (mounted) setState(() => _editing = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_editing) {
-      return SizedBox(
-        width: 48,
-        child: TextField(
-          controller: _ctrl,
-          focusNode: _focus,
-          autofocus: true,
-          textAlign: TextAlign.center,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(vertical: 4),
-          ),
-          style: const TextStyle(fontWeight: FontWeight.w600),
-          onSubmitted: (_) => _commit(),
-        ),
-      );
-    }
-    return GestureDetector(
-      onTap: _startEdit,
-      child: SizedBox(
-        width: 32,
-        child: Text(
-          _fmt(widget.effectiveQty),
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
       ),
     );
   }
@@ -540,6 +463,21 @@ class _HandoffQrSheet extends StatelessWidget {
               'Minta owner/asisten scan QR ini lewat scanner kasir.',
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            // Jalur cadangan kalau scan QR susah (kamera rusak/pencahayaan
+            // kurang) — teks pesanan yang SAMA persis dgn isi QR bisa
+            // ditempel manual lewat WhatsApp/Telegram, lalu owner buka
+            // "Tempel Pesanan" di kasir (parser sudah baca format ini).
+            OutlinedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: qrText));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Teks pesanan disalin')),
+                );
+              },
+              icon: const Icon(Icons.copy_outlined, size: 16),
+              label: const Text('Salin Teks Pesanan'),
             ),
             const SizedBox(height: 20),
             SizedBox(

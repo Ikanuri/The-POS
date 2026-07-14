@@ -8,6 +8,60 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 14 Juli 2026
+
+### ✨ Fitur Baru
+- **Katalog online kini menampilkan SEMUA satuan produk** — sebelumnya
+  kalau sebuah produk punya lebih dari satu satuan jual (mis. "Sedap
+  Goreng" per Biji dan per Dus), cuma satuan dasarnya yang tampil di
+  katalog online; satuan lain (Dus) tidak pernah muncul sama sekali di
+  jendela pilihan, sehingga pelanggan yang biasa beli per-dus tidak tahu
+  opsi itu ada. Sekarang semua satuan tampil sebagai pilihan — termasuk
+  kombinasi varian yang punya beberapa satuan sekaligus.
+- **Tombol "Salin Teks Pesanan" di QR "Kirim ke Owner/Asisten"** —
+  pegawai yang belum punya izin Terima Pembayaran sekarang punya jalur
+  cadangan kalau scan QR susah (kamera bermasalah/pencahayaan kurang):
+  salin teks pesanannya, lalu kirim manual lewat WhatsApp/Telegram ke
+  owner/asisten, yang bisa langsung tempel di fitur "Tempel Pesanan".
+- **App sekarang meminta kode aktivasi** saat pertama kali dibuka setelah
+  update ini — berlaku untuk semua device, termasuk yang sudah lama
+  dipakai. Kode aktivasi didapat dari penyedia app, sekali dimasukkan
+  tidak perlu diulang lagi (kecuali masa berlakunya habis).
+
+### 🎨 Tampilan
+- **Badge jumlah item di struk & keranjang kini bentuknya sama persis
+  dengan badge di bar keranjang** (lingkaran terracotta berisi angka) —
+  di struk, badge ini menempel di sudut kartu daftar barang; di
+  keranjang, tampil di samping nominal Total.
+- **Kartu antrian "Pesanan Ditahan" dirombak** — sebelumnya pesanan
+  handoff dari pegawai punya tab lipat merah di atas kartu yang bikin
+  tampilan tidak rapi & sebagian kartu jadi punya ruang kosong besar di
+  bawahnya. Sekarang semua kartu (pesanan ditahan biasa maupun kiriman
+  pegawai) tampil rapi dalam bentuk yang sama — beda status cukup lewat
+  label kecil berwarna di atas kartu (abu-abu netral "Ditahan" atau
+  terracotta bertuliskan nama pegawai pengirim).
+- **Panel "Pesanan Ditahan" sekarang bisa ditutup dengan tap/geser di
+  layar** — tidak perlu selalu tekan tombol (✕) lagi, tap di mana saja
+  di luar wadah panel langsung menutupnya dengan animasi halus.
+
+### 🐛 Perbaikan Bug
+- **Sync ke owner/asisten tidak lagi gagal total dengan pesan error
+  teknis** (mis. "table transactions has no column named ...") kalau HP
+  kasir belum sempat update ke versi app terbaru — data yang bisa
+  disinkronkan tetap masuk, cuma bagian yang belum dikenal HP itu saja
+  yang dilewati.
+- **Transaksi "Bayar Nanti" (tempo/hutang) sekarang ikut mendapat poin
+  loyalitas** kalau totalnya melebihi ambang batas yang ditentukan di
+  Pengaturan — sebelumnya poin selalu 0 utk transaksi tempo apapun
+  besar nominalnya, walau pelanggan sudah pasti akan menepati janji
+  bayarnya. Kalau transaksinya kemudian dibatalkan, poin ikut otomatis
+  ditarik kembali seperti transaksi tunai biasa.
+- **Katalog online tidak lagi terasa berat/nge-lag** saat pelanggan
+  menambah/mengurangi jumlah barang — sebelumnya tiap tap tombol +/-
+  membangun ulang seluruh daftar produk, terasa makin berat untuk toko
+  dengan banyak produk. Sekarang cuma barang yang disentuh saja yang
+  diperbarui, tampilannya sama persis seperti sebelumnya.
+
 ## 13 Juli 2026
 
 ### ✨ Fitur Baru
@@ -55,6 +109,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   pelanggan — sebelumnya baris "Dibayar" bisa membingungkan karena
   menampilkan angka bersih (setelah dikurangi kembalian), bukan uang yang
   diterima.
+- **Checklist centang di keranjang kasir** — sebelum bayar, kasir sekarang
+  bisa centang tiap barang di keranjang untuk memastikan barangnya sudah
+  benar/lengkap (kotak centang di kiri nama barang). Centangan ini ikut
+  terbawa ke struk, jadi tidak perlu mulai centang dari nol lagi di layar
+  struk.
 
 ### 🎨 Tampilan
 - **Tombol "Bayar" & "Tambah Belanjaan" kini sejajar** di layar struk
@@ -68,12 +127,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   huruf angka yang sama dengan layar lain di aplikasi (dulu beda font).
   Tombol tambah/kurang jumlah barang di keranjang & baris produk juga
   diperbesar supaya lebih mudah disentuh.
+- **Tombol tambah/kurang jumlah barang di keranjang kini bentuknya sama
+  persis dengan tombol di kartu produk** (lingkaran +/− berwarna), tidak
+  lagi ikon ± polos. Tulisan nama barang, harga, dan catatan di keranjang
+  juga sedikit diperbesar supaya lebih mudah dibaca.
 - **Tombol "Uang Pas" pindah ke sebelah kiri tombol "Bayar"** di kalkulator
   bayar tunai — sebelumnya di atas keypad bareng pecahan uang, sekarang
   sebaris dengan "Bayar" supaya tidak salah pencet saat buru-buru.
 - **Tombol "00" di keypad kalkulator bayar kini sebaris dengan "0"** (di
   baris paling bawah), bukan lagi di baris "7 8 9" — susunan angka jadi
   lebih rapi & mudah dijangkau.
+- **Jumlah item kini tampil di struk & keranjang kasir** — di struk,
+  jumlah barang tampil di sebelah kiri tombol "Tandai Semua"; di
+  keranjang, jumlah barang tampil di samping nominal Total.
 
 ### 🐛 Perbaikan Bug
 - **"Tap to Scan" tidak lagi mengulang barang yang sama.** Sebelumnya,
@@ -114,6 +180,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Harga di bawah nama produk (tab Produk) kini langsung ter-update**
   begitu harga produk itu diubah dari layar lain — sebelumnya harus
   keluar-masuk layar dulu supaya angkanya ikut berubah.
+- **Modal "Tambah Bayar" dirapikan** — sebelumnya di beberapa ukuran layar
+  tombol "Batal" tampil nempel sendiri di kanan atas sementara "Uang Pas"
+  dan "Bayar" tidak sejajar (bahkan sempat hilang total di sebagian HP).
+  Sekarang "Batal" di barisnya sendiri, "Uang Pas" & "Bayar" sejajar rapi
+  di bawahnya. Judul modal ini juga disederhanakan jadi "Bayar" saja.
 
 ## 12 Juli 2026
 

@@ -72,6 +72,20 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
   static const _revokedListUrl =
       'https://raw.githubusercontent.com/Ikanuri/The-POS/main/license/revoked.json';
 
+  /// Logika murni keputusan revoked dari isi `revoked.json` — diekstrak
+  /// dari `_checkRevocation()` supaya testable tanpa mock jaringan.
+  /// `lockAll` = sakelar darurat (Lapis 3 susulan): true → SEMUA device
+  /// revoked terlepas dari fingerprint-nya ada di `dicabut` atau tidak,
+  /// dipakai utk insiden skala besar yang tidak realistis ditangani
+  /// satu-satu lewat daftar fingerprint (mis. private key generator bocor).
+  static bool computeRevoked({
+    required bool lockAll,
+    required List<String> dicabut,
+    required String fingerprint,
+  }) =>
+      lockAll ||
+      dicabut.any((fp) => fp.toLowerCase() == fingerprint.toLowerCase());
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -143,9 +157,11 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
       if (res.statusCode != 200) return;
       final body = await res.transform(utf8.decoder).join();
       final data = jsonDecode(body) as Map<String, dynamic>;
-      final list = (data['dicabut'] as List?)?.cast<String>() ?? const [];
-      final revoked =
-          list.any((fp) => fp.toLowerCase() == state.fingerprint.toLowerCase());
+      final revoked = computeRevoked(
+        lockAll: data['lockAll'] as bool? ?? false,
+        dicabut: (data['dicabut'] as List?)?.cast<String>() ?? const [],
+        fingerprint: state.fingerprint,
+      );
       if (revoked != state.revoked) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_kRevoked, revoked);

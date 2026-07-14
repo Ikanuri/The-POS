@@ -161,15 +161,16 @@ void main() {
     expect(rows.first.cartJson, contains('Sedap Goreng'));
     expect(rows.first.cartJson, contains('"employeeName":"Budi"'));
 
-    // Buka panel antrian → badge "Menunggu Anda Bayar" harus tampil,
-    // beda dari pesanan ditahan biasa. Nama pegawai tampil di tab folder
-    // di atas kartu (susulan Item 24d), bukan di judul kartu.
+    // Buka panel antrian → kartu handoff harus beda dari pesanan ditahan
+    // biasa (chip terracotta "siap dibayarkan" alih-alih waktu polos, lihat
+    // redesign kartu _HeldCard). Nama pegawai tampil di chip status di
+    // dalam kartu (susulan Item 24d), bukan di judul kartu.
     await tester.tap(find.byIcon(Icons.pause_circle_outline_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Menunggu Anda Bayar'), findsOneWidget);
+    expect(find.textContaining('siap dibayarkan'), findsOneWidget);
     expect(find.text('Tanpa Nama'), findsOneWidget);
     expect(find.textContaining('Budi'), findsWidgets,
-        reason: 'nama pegawai tampil di tab (banner sukses jg masih '
+        reason: 'nama pegawai tampil di chip status (banner sukses jg masih '
             'menyebutnya, jadi bisa >1 match)');
 
     await tester.pumpWidget(const SizedBox());
@@ -247,9 +248,9 @@ void main() {
     expect(find.text('Siti'), findsOneWidget,
         reason: 'judul kartu = nama pelanggan');
     expect(find.textContaining('Budi ·'), findsOneWidget,
-        reason: 'tab folder di atas kartu = nama pegawai pengirim + jam '
+        reason: 'chip status di dalam kartu = nama pegawai pengirim + jam '
             '("·" pembeda dari banner sukses yg jg menyebut Budi)');
-    expect(find.text('Menunggu Anda Bayar'), findsOneWidget);
+    expect(find.textContaining('siap dibayarkan'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

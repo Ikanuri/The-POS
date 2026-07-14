@@ -8,8 +8,33 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-14
+
+- `3591396` — feat: sakelar darurat "lockAll" di Lapis 3 + durasi kustom (menit) di generator
+- `0d1efe2` — feat: aktifkan gerbang lisensi — tanam public key developer
+- `d4a8e71` — perf: katalog HTML update satu baris produk, bukan render ulang grid
+- `45ac0c5` — fix: poin loyalitas tempo tidak muncul + tap luar tutup panel antrian
+- `3200c0e` — redesign: satukan kartu antrian "Pesanan Ditahan" pakai chip status
+- `102399d` — docs: tambah gotcha CLAUDE.md — Clipboard.getData() hang di widget test
+- `458fc77` — feat: tombol "Salin Teks Pesanan" di bawah QR handoff pegawai
+- `69abb77` — fix: teks "N pilihan" katalog HTML under-count saat varian punya >1 satuan
+- `7c65b78` — fix: katalog HTML tidak menampilkan satuan lain (mis. Dus) produk
+- `67414e1` — feat: samakan gaya badge jumlah item di struk & keranjang dgn cart bar
+- `2d4467a` — fix: sync LAN gagal total kalau device penerima tertinggal 1 kolom skema
+
 ## 2026-07-13
 
+- `310960f` — feat: tampilkan jumlah item di struk (baris Tandai Semua) & keranjang kasir
+- `3a48d4e` — revert: "fix: samakan gaya stepper keranjang katalog HTML dengan AddControl app kasir"
+- `e12c290` — revert: "docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk fix stepper katalog HTML"
+- `36ceff7` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk fix stepper katalog HTML (di-revert, lihat `3a48d4e`/`e12c290` — desain sudah ditangani di branch lain, `24097ec`)
+- `beaf395` — fix: samakan gaya stepper keranjang katalog HTML dengan AddControl app kasir (di-revert, lihat di atas)
+- `b047372` — docs: tambah gotcha CLAUDE.md — tombol lebar-penuh dalam Row di AlertDialog
+- `74a1aaf` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF — fix susulan tombol Tambah Bayar + gotcha baru
+- `9633e7d` — fix: tombol Uang Pas/Bayar hilang di modal Tambah Bayar layar sempit + judul jadi "Bayar"
+- `2090d40` — feat: checklist verifikasi + stepper senada di keranjang kasir
+- `9fec89e` — fix: tombol modal Tambah Bayar tidak sejajar (overflow ke kolom)
+- `442ee22` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk follow-up round batch 18-item
 - `24097ec` — feat: katalog HTML — kontrol +/- lingkaran spt app kasir, harga read-only, font lebih besar
 - `16b94b9` — fix: scan pesanan pegawai via scanner HID tertentu salah rute ke Tempel Pesanan
 - `83e01dd` — fix: tombol Batalkan Pembayaran tidak muncul untuk nota lunas seketika

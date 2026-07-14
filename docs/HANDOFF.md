@@ -4,11 +4,455 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 13 Juli 2026 (lanjutan ke-2). Batch 18-item + 3 laporan
-follow-up (user test langsung setelah PR batch 18-item di-merge) SELESAI &
-di-commit (8 commit total, hash lihat CHANGELOG tanggal ini). **schemaVersion
-naik ke 15** (kolom `checkedItemIds` + `voided`). Full `flutter test`:
-**322 test hijau**, `flutter analyze` bersih._
+_Terakhir diperbarui: 14 Juli 2026 (lanjutan lagi). Sesi ini: fix bug sync
+LAN gagal total di HP yang app-nya belum ter-update (`2d4467a`, lihat
+detail di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada
+kolom skema baru selama device belum update serentak) + badge jumlah
+item di struk/keranjang disamakan gaya cart bar (`67414e1`) + katalog
+HTML kini tampilkan SEMUA satuan produk, bukan cuma satuan dasar
+(`7c65b78`) + fix susulan "N pilihan" under-count utk kombinasi
+varian+multi-satuan (`69abb77`) + tombol "Salin Teks Pesanan" di bawah QR
+handoff pegawai (`458fc77`, lihat detail di bawah — PENTING, gotcha
+`Clipboard.getData()` hang di widget test, sudah ikut ditambahkan ke
+CLAUDE.md `102399d`) + redesign kartu antrian "Pesanan Ditahan" (`3200c0e`,
+lihat detail di bawah — diusulkan via mockup Playwright dulu sebelum
+dikerjakan, sesuai permintaan user) + fix poin loyalitas tempo selalu 0 +
+tap luar tutup panel antrian (`45ac0c5`, lihat detail di bawah) + perf
+katalog HTML — update satu baris produk, bukan render ulang grid penuh
+(`d4a8e71`, lihat detail di bawah — didahului sesi riset performa
+read-only, user minta insight dulu sebelum eksekusi) + **GERBANG LISENSI
+DIAKTIFKAN SUNGGUHAN** (`0d1efe2`, lihat detail di bawah — PALING PENTING
+di sesi ini, baca dulu sebelum sentuh apa pun terkait lisensi/aktivasi)
++ susulan lisensi: sakelar darurat `lockAll` di Lapis 3 + durasi kustom
+menit di generator (`3591396`, lihat detail di bawah).
+**schemaVersion masih 15** (tidak ada migrasi baru). Full `flutter test`
+**349 test hijau**, `flutter analyze` bersih._
+
+## Gerbang lisensi (Item 25c) SEKARANG AKTIF SUNGGUHAN — bukan lagi kill-switch mati
+
+**PALING PENTING**: `LicenseService.publicKeyBase64` (`license_service.dart`)
+TIDAK LAGI KOSONG. User sudah generate pasangan kunci Ed25519 sendiri lewat
+`scripts/license-generator.html` (100% offline, private key TIDAK PERNAH
+dikirim/terlihat di sesi ini — user cuma kirim public key base64, sudah
+divalidasi persis 32 byte sebelum ditanam). Mulai commit `0d1efe2`, app
+BENAR-BENAR mengunci: device manapun yang belum pernah aktivasi (termasuk
+SEMUA device yang sudah lama terpasang sebelum update ini) akan diarahkan
+ke `/aktivasi` begitu buka app versi ini — keputusan EKSPLISIT user
+sendiri (ditanya lewat `AskUserQuestion`, user pilih "semua device wajib
+aktivasi, termasuk yang lama" — BUKAN grandfather otomatis untuk device
+existing).
+
+**Diskusi yang mendasari keputusan ini** (kalau topik serupa muncul lagi,
+jangan ulang dari nol, user sudah paham & setuju semua poin berikut):
+- Private key hilang → device yang SUDAH aktif TETAP jalan normal (state
+  tersimpan lokal di SharedPreferences, verifikasi Ed25519 cuma sekali
+  saat `activate()`, TIDAK pernah re-verify tiap buka app). Yang hilang
+  cuma kemampuan menerbitkan kode BARU.
+- Kill/cabut device yang sudah aktif TIDAK butuh private key sama sekali
+  — cukup edit `license/revoked.json` (daftar fingerprint) & push, dicek
+  opportunistic oleh `_checkRevocation()` di `license_provider.dart`.
+- Reversible penuh kapan saja: kosongkan lagi `publicKeyBase64` (atau
+  `git revert` commit `0d1efe2`) → `isLocked` otomatis false lagi utk
+  SEMUA device tanpa syarat (guard `if (!LicenseService.isConfigured)
+  return false;` di baris paling atas `LicenseState.isLocked`).
+- Private key TIDAK PERNAH ditampilkan sebagai string di
+  `license-generator.html` (dicek eksplisit: `jwkPriv` tidak pernah
+  masuk `innerHTML`/`textContent`/`value` manapun) — cuma ada di
+  `localStorage` browser & di file backup JSON yang diunduh (isinya
+  private key + public key + `publicKeyBase64` siap pakai sekaligus).
+
+**Perubahan kode** (`0d1efe2`): cuma 1 baris konstanta di
+`license_service.dart`. Dua file test disesuaikan (BUKAN dihapus, sesuai
+catatan yang sudah ada di kode test-nya sendiri):
+- `license_service_test.dart` — grup "kill-switch & ratchet" dulu
+  membuktikan `isLocked` SELALU false (gerbang mati). Sekarang dipecah
+  jadi beberapa test yang membuktikan sebaliknya: `isConfigured` true,
+  dan `isLocked` benar-benar menegakkan tiap syarat (belum aktivasi →
+  locked, expired → locked, revoked → locked, aktif+valid → TIDAK
+  locked).
+- `kasir_hw_key_after_produk_nav_test.dart` — SATU-SATUNYA test lain yang
+  pump lewat `routerProvider` sungguhan (bukan widget langsung), jadi
+  ikut kena redirect ke `/aktivasi` begitu gerbang aktif (device default
+  licenseProvider = belum aktivasi = locked). Ditambah override
+  `licenseProvider` ke state aktif (`exp: 'selamanya'`) supaya tetap
+  fokus ke bug HID yang diuji. **Kalau bikin widget test baru yang pump
+  lewat `routerProvider` (bukan widget spesifik langsung), WAJIB override
+  `licenseProvider` juga** — kalau tidak, akan auto-redirect ke
+  `/aktivasi` dan test gagal dengan pesan yang membingungkan (widget yang
+  dicari tidak ketemu, bukan error soal lisensi).
+
+**Nomor WA — SELESAI, keputusan final**: user memutuskan tombol "Kirim
+via WhatsApp" di `AktivasiScreen` TETAP `Share.share()` generik (tidak
+perlu deep-link `wa.me`) — jangan tanya/usulkan lagi soal ini kalau topik
+muncul lagi, sudah final.
+
+## Susulan lisensi — sakelar darurat "lockAll" (Lapis 3) + durasi kustom menit (`3591396`)
+
+Follow-up diskusi dari gerbang lisensi di atas — 2 pertanyaan user:
+
+**1. "html bisa kasih opsi durasi custom/semenit paling cepat utk testing?"**
+Ditambah opsi `<option value="custom">` di `expSelect`
+(`scripts/license-generator.html`) — muncul field jumlah menit
+(`customMinutes`), exp dihitung `Date.now() + menit*60000`. Validasi:
+kosong/< 1 → error inline, tidak generate kode. Diverifikasi via
+Playwright manual (scratch script, sudah dihapus): toggle field
+tampil/sembunyi sesuai pilihan, kode ter-generate benar, payload exp
+selisih persis sesuai menit yang diisi, validasi kosong menampilkan
+error.
+
+**2. "Lapis 3 gimana? bisa kasih opsi lock all (bukan paste satu-satu)?"**
+Ditambah field `lockAll` (boolean) di `license/revoked.json`, dicek di
+`_checkRevocation()` (`license_provider.dart`) — kalau `true`, SEMUA
+device dianggap revoked terlepas dari fingerprint-nya ada di `dicabut`
+atau tidak. Skenario pakai: insiden skala besar (mis. private key
+generator bocor) yang tidak realistis ditangani satu-satu lewat daftar
+fingerprint — developer cukup ubah 1 baris di `revoked.json`, commit,
+push, TIDAK perlu tahu fingerprint siapa pun. Tetap reversible kapan
+saja (`lockAll: false` lagi → device dgn `exp` masih valid otomatis
+jalan lagi tanpa aktivasi ulang, sama seperti sifat kill-switch lain di
+sistem ini).
+
+Logika keputusan diekstrak jadi `LicenseNotifier.computeRevoked()` (pure
+function, static) — supaya testable tanpa mock `HttpClient`/jaringan
+(beda dari `_checkRevocation()` pembungkusnya yang tetap tidak
+dites langsung, konsisten dgn sebelumnya — cuma logika keputusannya yg
+sekarang testable). Test baru di `license_service_test.dart`: 4 skenario
+(tidak revoked, revoked via daftar, revoked via `lockAll`, case-
+insensitive). Revert-verify: hapus `lockAll ||` sebentar → test
+"lockAll TRUE" gagal tepat (`Expected: true, Actual: <false>`) → pasang
+lagi, hijau.
+
+**Catatan**: `revoked.json` DEFAULT tetap `{"lockAll": false, "dicabut":
+[]}` — aman, tidak mengunci siapa pun sampai developer sengaja
+mengubahnya.
+
+## Perf katalog HTML — update satu baris produk, bukan render ulang grid
+
+User tanya (insight-only dulu, TANPA kode): "html ui sudah bagus, tapi
+sekarang jadi berat, apakah bisa dibuat ringan tanpa mengorbankan
+UI/UX?" + 2 pertanyaan lain (state centang persisten? fitur useless
+resource besar?). Riset dikerjakan oleh Explore agent (read-only) +
+verifikasi manual sendiri, jawaban lengkap sudah diberikan ke user tanpa
+ubah kode dulu. User lalu approve implementasi item prioritas #1
+("boleh, kerjakan").
+
+**Akar masalah** (`order_page_service.dart`, sebelum fix): `setQty()`
+(dipanggil tiap tap +/- baik di grid produk maupun stepper keranjang)
+SELALU panggil `renderList()` penuh — rebuild SELURUH grid produk dari
+nol via `DocumentFragment`, walau cuma 1 baris yang qty-nya berubah.
+O(jumlah produk) kerja DOM per tap, makin kerasa lag makin banyak
+produk di katalog.
+
+**Fix**: `renderList()` sekarang tag tiap `.prow` dengan `row.dataset.pid
+= p.id`. `setQty()` cari produk via `findProductForUnit(unitId)` (helper
+yg sudah ada), lalu panggil `refreshProwControls(p)` baru — cari row via
+`querySelector('.prow[data-pid="..."]')`, replace HANYA `.prow-controls`
+di dalamnya (`buildProwControls(p)` baru), bukan seluruh row apalagi
+seluruh grid. Fallback ke `renderList()` penuh kalau produk tidak
+ketemu (harusnya tidak pernah terjadi). Nama/meta/harga tiap baris
+memang tidak pernah berubah gara-gara qty jadi aman di-skip dari update.
+
+**Verifikasi Playwright manual** (bukan test committed, scratch file
+sudah dihapus): generate HTML dari DB uji 5 produk, tandai semua node
+`.prow` dengan marker JS custom, klik +/- pada satu produk berkali-kali,
+buktikan SEMUA node lain (termasuk node yg diklik sendiri — cuma child
+`.prow-controls`-nya yang diganti) tetap node yang SAMA (bukan
+rebuild) — plus qty/cart bar/search debounce/stepper keranjang semua
+tetap berfungsi identik ke perilaku lama.
+
+Test committed baru: `test/order_page_service_test.dart` — assertion
+string-based (pola yang sudah dipakai file ini) mengecek `setQty()`
+memanggil `refreshProwControls(p)` bukan `renderList()` tanpa syarat lagi
+(regex atas isi fungsi `setQty`), plus keberadaan `row.dataset.pid` &
+`refreshProwControls`. Revert-verify: kembalikan `setQty` ke
+`renderList()` polos → test gagal tepat di assertion yg diharapkan →
+pasang lagi fix, hijau.
+
+**Temuan riset lain (belum ditindaklanjuti, sekadar insight ke user)**:
+2 font base64 (Hanken Grotesk + Newsreader) ±123 KB selalu ikut tiap
+file katalog di-generate (`order_page_service.dart:187,191`) — biaya
+tetap ukuran file share, bukan penyebab lag. N+1 query saat generate
+katalog di app (`unitsJsonFor` per unit produk, sequential await) — bisa
+bikin proses "Generate Katalog" lambat utk toko banyak produk, terpisah
+dari lag di HP pelanggan. Crash log tidak pernah di-rotate
+(`crash_log_service.dart`) — bisa membengkak kalau ada bug yg crash
+berulang. State "centang" struk PERMANEN di SQLite
+(`transactions.checked_item_ids`, per-baris, tidak ada masalah performa);
+cart draft (termasuk `CartItem.checked`) di SharedPreferences dgn
+cleanup 24 jam utk cart "tambah belanjaan" yatim — tidak ada potensi
+menumpuk.
+
+## Poin loyalitas transaksi tempo + tutup panel antrian via tap luar
+
+User laporkan 2 hal sekaligus:
+1. Transaksi tempo (tombol "Bayar Nanti") tidak pernah dapat poin
+   loyalitas, walau totalnya melebihi threshold di Pengaturan.
+2. Panel "Pesanan Ditahan" cuma bisa ditutup lewat tombol ✕ — user minta
+   tap/swipe di luar wadah panel juga menutupnya, dengan animasi smooth.
+
+**Poin tempo** — akar masalah di `payment_screen.dart:459` (sebelum fix):
+syarat `!isTempo` di kondisi pemberian poin bikin `pointsEarned` SELALU 0
+utk transaksi `status == 'tempo'`, tidak peduli besarnya `_total`. **Sempat
+ditanya ke user dulu** (`AskUserQuestion`) soal timing: poin langsung saat
+dicatat, atau baru saat lunas? Sebelum bertanya, sudah dicek dulu bahwa
+`voidTransaction` (`app_database.dart:1279`) SUDAH generik membalikkan
+poin berdasarkan `tx.pointsEarned` tersimpan, TIDAK peduli payment method
+— jadi kalau poin diberikan langsung saat tempo dicatat, pembatalan tetap
+otomatis aman tanpa kode tambahan. User pilih opsi ini (langsung saat
+dicatat, lebih sederhana). Fix: hapus syarat `!isTempo` — poin dihitung
+dari `_total` sama seperti tunai. Test baru: `test/tempo_loyalty_points_test.dart`
+(drive lewat `PaymentScreen` sungguhan, tap "Bayar Nanti", verifikasi
+`tx.pointsEarned`, `customer.loyaltyPoints`, & `loyaltyPointLedger`).
+
+**Tutup panel via tap luar** — `_HeldInlinePanel` di `kasir_screen.dart`
+sudah inline (bukan modal) di dalam `Listener` yang membungkus SELURUH
+area topbar-ke-bawah (termasuk panel itu sendiri) — jadi tidak bisa
+sekadar "tutup panel kalau ada tap di area Listener ini", karena tap DI
+DALAM panel (kartu antrian, tombol ✕, scroll strip horizontal) juga akan
+ke-hit-test oleh Listener yang sama. Fix: `GlobalKey _heldPanelKey`
+dipasang ke `_HeldInlinePanel`, di `onPointerDown` cek posisi tap via
+`RenderBox.globalToLocal` — kalau di LUAR bounds panel baru
+`setState(() => _heldPanelOpen = false)`. Animasi smooth otomatis dari
+`AnimatedSize` yang sudah membungkus panel (tidak perlu kode animasi
+baru). `_HeldInlinePanel` constructor perlu ditambah `super.key` (tidak
+ada sebelumnya). Test baru di `kasir_verify_order_test.dart`: 1) tap jauh
+di bawah panel (grid produk) → panel tertutup, antrian TIDAK
+ter-resume/terhapus; 2) tap DI DALAM panel (judul "PESANAN DITAHAN") →
+panel TETAP terbuka.
+
+Kedua fix sudah revert-verify (test gagal dgn pesan yang relevan sebelum
+fix dipasang, hijau lagi sesudahnya).
+
+## Redesign kartu antrian "Pesanan Ditahan"
+
+User bilang desain kartu antrian yang lama "tidak pas" — diminta
+proposalkan dulu via Playwright (mockup HTML statis, screenshot,
+dikirim ke user) SEBELUM ada perubahan kode, baru setelah user setuju
+("wah bagus itu, kerjakan sekarang juga") baru dieksekusi. Mockup ada di
+scratchpad sesi ini (`queue_redesign/mockup.html` + `proposal.png`, tidak
+di-commit — cuma alat komunikasi, bukan bagian app).
+
+Masalah desain lama (`_HeldCard` + `_HeldCardWithTab`, sebelum redesign):
+tinggi kartu dipaksa 152px demi menampung tab lipat (`_TabPainter`
+trapesium, gaya yang cuma dipakai di sini) di kartu handoff — kartu
+pesanan ditahan BIASA (tanpa handoff) jadi punya `Spacer()` kosong besar
+karena tinggi disamakan. Badge "Menunggu Anda Bayar" pakai warna `error`
+(merah) padahal bukan kondisi error — bertabrakan dgn konvensi semantik
+warna project (merah = hutang/masalah, lihat §Gotcha CLAUDE.md). Nominal
+total pakai font biasa, bukan `AppTheme.numStyle` (Newsreader) yg jadi
+konvensi semua angka uang di app.
+
+Redesign: gabung `_HeldCardWithTab` + `_HeldCard` jadi SATU class
+`_HeldCard` — tidak ada lagi tab lipat terpisah. Beda status (pesanan
+ditahan biasa vs handoff pegawai) sekarang cuma lewat warna **chip** di
+baris atas KARTU YANG SAMA: abu netral "Ditahan" vs terracotta
+(`AppTheme.accent`) berisi ikon + nama pegawai pengirim + jam. Semua kartu
+jadi tinggi konsisten (134, turun dari 152) tanpa ruang kosong. Total
+sekarang pakai `AppTheme.numStyle`. `_TabPainter` class TIDAK dihapus —
+masih dipakai `_CartMetaTab` (komponen lain) di file yg sama.
+
+**Bug ketemu saat implementasi** (langsung ke-catch oleh test yang sudah
+ada, `kasir_scan_order_code_test.dart`): chip pertama kali ditulis dengan
+`Text` polos di dalam `Row(mainAxisSize: MainAxisSize.min)` tanpa
+`Flexible` — RenderFlex overflow 3px kalau nama pegawai+jam agak panjang,
+karena Row(mainAxisSize.min) melayout child non-flex di lebar natural
+(tak terbatas), BUKAN dibatasi lebar parent, walau parent (Column di
+dalam Container lebar tetap) sudah sempit. Fix: bungkus `Text` dgn
+`Flexible` supaya Row benar-benar memberi batas lebar & ellipsis bisa
+jalan. Revert-verify: hapus `Flexible`, 4 test gagal dgn overflow error
+yang sama persis → pasang lagi, hijau semua.
+
+Test yang perlu diupdate (bukan bug, cuma teks assertion ikut desain
+baru): 2 assertion `find.text('Menunggu Anda Bayar')` di
+`kasir_scan_order_code_test.dart` diganti `find.textContaining('siap
+dibayarkan')` (teks meta baris kedua khusus kartu handoff sekarang).
+
+## Tombol "Salin Teks Pesanan" di bawah QR handoff pegawai
+
+Usulan user: tambah jalur cadangan di `_HandoffQrSheet` (`cart_sheet.dart`,
+sheet "Kirim ke Owner/Asisten" utk pegawai tanpa izin Terima Pembayaran)
+kalau scan QR susah (kamera bermasalah/pencahayaan kurang) — pegawai bisa
+salin teks pesanan (persis sama dgn isi QR, hasil `OrderParserService.
+encodeHandoff`) lewat `OutlinedButton.icon` baru di bawah caption QR,
+kirim manual via WhatsApp/Telegram, owner/asisten tempel di fitur "Tempel
+Pesanan" yang sudah ada (parser sudah baca format ini).
+
+**Gotcha besar ketemu saat nulis test** (sudah ditambahkan ke CLAUDE.md
+§Gotcha, `102399d`): `Clipboard.getData()` TIDAK di-mock otomatis oleh
+`flutter_test` di environment ini — beda dari asumsi umum "flutter_test
+punya default clipboard mock". Tanpa handler manual, `await Clipboard.
+getData(...)` di dalam test MENGGANTUNG SELAMANYA (bukan exception cepat)
+— sempat bikin test hang >5 menit (dicoba `pumpAndSettle()` → `pump()`
+biasa dulu mengira gara-gara timer SnackBar, TERNYATA bukan itu masalahnya
+sama sekali) sebelum diisolasi via scratch test minimal dan ketahuan akar
+masalahnya murni di sisi test. Fix: pasang mock method channel manual
+(`TestDefaultBinaryMessengerBinding...setMockMethodCallHandler(
+SystemChannels.platform, ...)`) yang menyimpan/mengembalikan teks sendiri
+— lihat `test/kasir_handoff_qr_test.dart` utk pola lengkapnya, tiru kalau
+nanti ada test lain yang butuh baca balik isi clipboard.
+
+## Katalog HTML — satuan lain (mis. Dus) sekarang ikut tampil
+
+User laporkan: produk yang punya >1 satuan di POS (mis. "Sedap Goreng"
+per Biji + per Dus) cuma satuan dasarnya (Biji) yang muncul di katalog
+online — Dus sama sekali tidak ada opsinya. Akar masalah: `_buildCatalogJson`
+(`order_page_service.dart`) dari awal cuma pernah mengambil SATU baris
+`product_units` per produk (yang `isBaseUnit`), field satuan lain tidak
+pernah di-query sama sekali — ini KATEGORI BEDA dari fitur varian (varian
+= produk anak terpisah, `getVariants`, sudah ter-handle lama; ini soal
+multi-SATUAN produk yang SAMA, belum pernah ditangani).
+
+Fix: field baru `units` (array semua satuan berharga valid milik produk,
+base unit selalu di indeks 0) ditambahkan ke tiap entri produk/varian di
+JSON yang di-embed. Fungsi JS (`byUnit`, `totalQtyForProduct`,
+`minPriceForProduct`, `unitOptionsFor`, `findProductForUnit`, +
+`totalOptionsFor` baru) semua digeneralisasi baca `p.units`/helper
+`_ownUnits(p)` (fallback ke `[{unitId:p.unitId,...}]` kalau field lama
+tanpa `units`, jaga-jaga data lama) — bukan cuma `p.unitId` tunggal. Kalau
+produk punya >1 satuan, chip di modal tap-item sekarang menampilkan
+SEMUA satuan (label = nama satuan, mis. "Biji"/"Dus"), dan grouping di
+teks pesanan (`buildOrderText`) + tampilan keranjang meniru pola varian
+(header nama produk + baris ber-indent per satuan) begitu produk itu
+benar-benar punya >1 satuan.
+
+**Susulan (dikonfirmasi via pertanyaan user "apakah varian juga bisa
+diinput?"):** kombinasi varian yang PUNYA >1 satuan SENDIRI (mis. varian
+"Pedas" juga py Pcs+Renceng) sudah diverifikasi nyata via Playwright —
+chip di modal tampil benar (semua kombinasi produk-induk × varian ×
+satuan muncul sbg chip terpisah, mis. "Pcs", "Pedas (Pcs)", "Pedas
+(Renceng)"), TAPI ketahuan bug turunan: teks ringkasan "N pilihan" di
+daftar produk under-count (bilang "2 pilihan" padahal 3 chip nyata
+muncul) — `totalOptionsFor` menghitung tiap varian sebagai 1 opsi tetap,
+tidak ikut menjumlahkan satuan internal varian itu. Fix: `totalOptionsFor`
+sekarang menjumlahkan satuan TIAP varian, sama seperti cara
+`unitOptionsFor` membangun chip (`69abb77`). Test baru
+(`order_page_service_test.dart`) cover kombinasi ini secara eksplisit.
+
+Diverifikasi Playwright/Chromium nyata (bukan cuma baca kode) utk KEDUA
+skenario: produk induk 2-satuan (chip Dus muncul & berfungsi), DAN
+varian+multi-satuan (3 chip benar, teks "3 pilihan" akurat setelah fix).
+
+## Badge jumlah item disatukan gayanya (struk/keranjang/cart bar)
+
+Widget `ItemCountBadge` baru (`lib/core/widgets/item_count_badge.dart`),
+diekstrak dari lingkaran badge yang dulu private di `_CartBar`
+(`kasir_screen.dart`) — dipakai ulang di `cart_sheet.dart` (samping kiri
+Total) dan `receipt_screen.dart` (menempel/mengambang di sudut kiri-atas
+kartu daftar barang struk, via `Stack`+`Positioned`+`elevated:true`,
+sesuai posisi yg diminta user dari screenshot). Sebelumnya di kedua
+tempat itu cuma teks polos "N item", tidak senada dgn cart bar.
+
+## Fix sync LAN gagal total — device tertinggal 1 kolom skema (mis. Infinix Smart 8)
+
+User laporkan error nyata saat sync dari HP Infinix Smart 8 ke host:
+`SqliteException(1): table transactions has no column named
+checked_item_ids`. Root cause (dikonfirmasi via investigasi, BUKAN
+migrasi gagal diam-diam — sudah dicek tidak ada `try/catch` yang menelan
+exception migrasi di `onUpgrade`): `AppDatabase.mergeRows()`
+(`lib/core/database/app_database.dart`) membangun `INSERT OR IGNORE/
+REPLACE` secara DINAMIS dari `row.keys` — yaitu kolom apa pun yang
+kebetulan ada di dump SELECT * milik PENGIRIM — tanpa pernah divalidasi
+ke skema fisik tabel LOKAL penerima. Device yang app-nya belum ter-update
+ke schemaVersion terbaru (kemungkinan besar kasus Infinix ini: APK yang
+ter-install lebih tua dari commit `a8c94ad`/schemaVersion 15) akan selalu
+gagal total begitu menerima dump dari device lain yang skemanya lebih
+baru — SATU kolom asing menggagalkan SELURUH baris & seluruh proses sync,
+bukan cuma baris/kolom itu.
+
+**Ini BUKAN kasus sekali-jadi** — app ini offline-first multi-perangkat
+(owner+kasir update tidak serentak by design), jadi kelas bug yang SAMA
+akan muncul lagi tiap kali ada kolom skema baru selama masih ada device
+yang belum sempat update. Fix bersifat STRUKTURAL, bukan tambal 1 kolom:
+`mergeRows()` sekarang baca kolom fisik lokal via `PRAGMA table_info
+("$tableName")` (bukan definisi tabel Drift statis di kode — supaya
+benar-benar mencerminkan skema SQLite yang SUNGGUHAN berjalan di device
+itu), lalu filter row masuk ke kolom yang benar-benar ada sebelum build
+INSERT. Kolom asing dari pengirim yang lebih baru diabaikan per-baris,
+tidak menggagalkan sync.
+
+**Belum disentuh** (di luar scope fix ini, dicatat sebagai potensi
+follow-up kalau relevan nanti): protokol `lan_sync_service.dart` tidak
+punya mekanisme cek/negosiasi `schemaVersion` sama sekali antar host↔klien
+— fix ini menangani gejalanya (sync tidak gagal), bukan menambahkan
+deteksi proaktif "device X butuh update" ke UI.
+
+Test regresi (`test/merge_rows_schema_mismatch_test.dart`) mensimulasikan
+device tertinggal dengan `ALTER TABLE transactions DROP COLUMN
+checked_item_ids` pada DB in-memory yang sudah schemaVersion 15 (paling
+presisi mereproduksi kondisi fisik device asli, dibanding coba pasang
+fixture schemaVersion lama) — diverifikasi revert-verify, pesan error
+tereproduksi PERSIS sama dengan laporan user sebelum fix dikembalikan.
+
+## Gotcha BARU — tombol lebar-penuh (Outlined/FilledButton) dalam Row di dalam AlertDialog
+
+`AppTheme` set `minimumSize: Size(double.infinity, 48)` sebagai default
+utk `OutlinedButtonThemeData`/`FilledButtonThemeData` (utk tombol CTA
+berdiri sendiri di banyak layar). Kalau taruh 2+ tombol begini dalam SATU
+`Row` (pola umum di app ini — lihat `payment_screen.dart`), WAJIB override
+`minimumSize` ke lebar sempit (mis. `Size(0, 44)`) di style masing-masing,
+KALAU TIDAK Row akan overflow.
+
+Kasus KHUSUS di dalam `AlertDialog.content` (bukan BottomSheet/Column
+biasa): `AlertDialog` SELALU membungkus content dgn `IntrinsicWidth`
+(lihat framework `dialog.dart`), dan lebar konten yang tersedia jauh lebih
+sempit dari layar penuh (dipotong `insetPadding` + `contentPadding`
+default). **3 tombol sekaligus (mis. Batal + Uang Pas + Bayar) bisa SAMA
+SEKALI TIDAK MUAT sejajar dalam satu Row** di dialog — bukan cuma soal
+`minimumSize`, override itu SAJA TIDAK CUKUP (`debt_payment_dialog.dart`
+sempat 2× salah fix sebelum benar: iterasi 1 taruh 3 tombol dlm 1 Row +
+override minimumSize → overflow tetap terjadi, "Uang Pas"/"Bayar" hilang
+total tanpa indikasi visual apapun di HP asli). **Fix yang benar:** pisah
+tombol "Batal" ke baris sendiri (tidak berebut lebar dgn tombol lain),
+baru 2 tombol utama (mis. Uang Pas + Bayar) sebaris di bawahnya dgn
+`Expanded` pada tombol primer — persis pola `payment_screen.dart`. Kalau
+nanti nemu dialog lain dgn pola serupa (>=3 tombol custom dlm 1 Row di
+AlertDialog), curigai kelas bug yang SAMA — test widget dgn surface
+SEMPIT (`tester.binding.setSurfaceSize(const Size(360, 800))`, BUKAN
+default ~800×600 flutter_test yang terlalu lebar utk menangkap bug ini)
+utk verifikasi nyata sebelum anggap fix selesai.
+
+## Sesi ini — fix tombol Tambah Bayar + checklist keranjang kasir
+
+**Bug tombol "Tambah Bayar" belum sejajar** (dilaporkan user via screenshot,
+lalu screenshot susulan menunjukkan fix pertama malah bikin tombol hilang
+total) — kronologi & akar masalah FINAL ada di section gotcha di atas,
+jangan diulang di sini.
+
+**Fitur checklist keranjang** (usulan user, disetujui setelah opini +
+riset arsitektur): keranjang kasir (`cart_sheet.dart`) sekarang punya
+- Checkbox di kiri nama tiap item (leading widget eksplisit, BUKAN
+  `CheckboxListTile` — supaya tap checkbox vs tap baris/buka modal edit
+  tidak tumpang tindih, ikuti gotcha yang sudah tercatat).
+- Cascade centang induk↔varian sama persis logika Struk (`cart_provider.dart`
+  method `setChecked`): centang induk → semua anak ikut; uncheck 1 anak →
+  induk ikut ke-uncheck (tercentang hanya kalau SEMUA anak tercentang).
+- Stepper qty diganti total: widget `_AddControl` (dulu private di
+  `kasir_screen.dart`) diekstrak jadi shared widget publik
+  `lib/features/kasir/widgets/add_control.dart` (`AddControl`), dipakai
+  kartu/baris produk DAN baris keranjang — gaya lingkaran +/− identik di
+  kedua tempat. Field qty tap-to-edit lama (`_QtyField`) dihapus total
+  (edit qty manual sekarang lewat tap item → `ItemEntrySheet`, sudah ada
+  sebelumnya).
+- Teks baris item (nama, unit·harga, catatan, subtotal) diperbesar sedikit.
+- Field `checked` baru di `CartItem` (`core/models/cart_item.dart`) — ikut
+  ter-persist ke SharedPreferences otomatis (mekanisme persist cart yang
+  sudah ada, per-perubahan state, tidak perlu kode baru).
+- Saat checkout (`payment_screen.dart` `_confirm()`): item yang `checked`
+  di cart diteruskan jadi nilai awal `checkedItemIds` transaksi baru (kolom
+  lama, sudah ada sejak schemaVersion 15) — Struk melanjutkan checklist
+  dari titik yang sama, bukan mulai dari nol.
+
+**Keputusan default yang diambil tanpa tanya balik** (dikomunikasikan ke
+user dulu, bukan sepihak diam-diam): cascade parent/varian ikut pola Struk;
+increment stepper tetap ±1/tap tanpa input manual (konsekuensi dari field
+input dihilangkan — bukan regresi baru, sudah begitu juga di stepper kartu
+produk).
+
+**Test baru** (`test/cart_checklist_test.dart`, 8 test, semua lolos
+revert-verify): serialisasi `CartItem.checked`, cascade `setChecked` (3
+skenario), UI `CartSheet` (checkbox + `AddControl` menggantikan widget
+lama), dan end-to-end checkout → `checkedItemIds` transaksi via
+`PaymentScreen` sungguhan (bukan reimplementasi logic di test).
 
 ## Follow-up round setelah user test PR batch 18-item (3 laporan baru)
 

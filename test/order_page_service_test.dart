@@ -370,4 +370,137 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'setQty() update SATU baris produk di tempat (refreshProwControls), '
+      'BUKAN renderList() penuh — dulu tiap klik +/- membangun ulang '
+      'SELURUH grid produk, berat di katalog besar', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // Tiap baris ditandai id produknya sendiri, supaya bisa dicari &
+    // di-update sendiri tanpa menyentuh baris lain.
+    expect(result.html.contains('row.dataset.pid = p.id'), isTrue);
+    expect(result.html.contains('function refreshProwControls(p)'), isTrue);
+    expect(
+        result.html
+            .contains(r'''document.querySelector('.prow[data-pid="'+p.id+'"]')'''),
+        isTrue);
+
+    // setQty() TIDAK BOLEH lagi panggil renderList() tanpa syarat — harus
+    // lewat refreshProwControls (dgn fallback renderList() hanya kalau
+    // produk tidak ketemu).
+    final setQtyBody = RegExp(r'function setQty\(unitId, qty\)\{([\s\S]*?)\n\}')
+        .firstMatch(result.html)!
+        .group(1)!;
+    expect(setQtyBody.contains('refreshProwControls(p)'), isTrue);
+    expect(setQtyBody.contains('else renderList()'), isTrue,
+        reason: 'fallback tetap ada utk kasus produk tidak ketemu');
+    expect(RegExp(r'^\s*renderList\(\);\s*$', multiLine: true).hasMatch(setQtyBody),
+        isFalse,
+        reason: 'tidak boleh ada renderList() tanpa syarat lagi di setQty()');
+
+    await db.close();
+  });
+
+  test(
+      'produk dengan >1 satuan (mis. Biji dasar + Dus) — SEMUA satuan '
+      'ter-embed di field `units`, bukan cuma satuan dasar', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final productId = await _addProduct(db,
+        name: 'Sedap Goreng', price: 2500, unitTypeId: 1 /* Biji */);
+    // Satuan KEDUA (Dus) utk produk yang SAMA — bukan varian, bukan produk
+    // baru. Sebelum fix, satuan ini tidak pernah ter-embed sama sekali.
+    const dusUnitId = 'u-dus';
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: dusUnitId,
+          productId: productId,
+          unitTypeId: const Value(3), // Dus
+          isBaseUnit: const Value(false),
+          ratioToBase: const Value(40),
+        ));
+    await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+          id: 'dus-t1',
+          productUnitId: dusUnitId,
+          minQty: const Value(1),
+          price: 90000,
+        ));
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['id'] == productId) as Map;
+
+    final units = p['units'] as List;
+    expect(units, hasLength(2),
+        reason: 'Biji (dasar) DAN Dus harus sama-sama ter-embed');
+    final unitIds = units.map((u) => (u as Map)['unitId']).toSet();
+    expect(unitIds, contains(dusUnitId));
+
+    // Satuan dasar (Biji) tetap yang dipakai di field top-level (harga
+    // "utama" yg tampil di daftar produk sebelum modal dibuka).
+    final baseUnit = await (db.select(db.productUnits)
+          ..where((t) =>
+              t.productId.equals(productId) & t.isBaseUnit.equals(true)))
+        .getSingle();
+    expect(p['unitId'], baseUnit.id);
+
+    // JS `unitOptionsFor`/`renderList` harus punya cukup data utk
+    // menampilkan chip Dus di modal — dipastikan lewat kehadiran fungsi
+    // yang membaca `p.units` (bukti tidak sekadar embed data tanpa dipakai).
+    expect(result.html.contains('_ownUnits('), isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'varian yang PUNYA >1 satuan sendiri (mis. varian "Pedas" py Pcs + '
+      'Renceng) — SEMUA satuan varian itu ikut ter-embed di `variants[].units`,'
+      ' bukan cuma satuan dasar varian', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final parentId = await _addProduct(db, name: 'Kopi Sachet', price: 2000);
+
+    final variantId = await _addProduct(db,
+        name: 'Pedas', price: 2200, parentProductId: parentId);
+    // Satuan KEDUA milik VARIAN itu sendiri (bukan induk, bukan varian
+    // baru) — kombinasi varian + multi-satuan yang belum pernah
+    // diverifikasi sebelum diminta user.
+    const vRencengUnitId = 'u-variant-renceng';
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: vRencengUnitId,
+          productId: variantId,
+          unitTypeId: const Value(3),
+          isBaseUnit: const Value(false),
+          ratioToBase: const Value(10),
+        ));
+    await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+          id: 'variant-renceng-t1',
+          productUnitId: vRencengUnitId,
+          minQty: const Value(1),
+          price: 20000,
+        ));
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['id'] == parentId) as Map;
+    final variants = p['variants'] as List;
+    expect(variants, hasLength(1));
+    final vUnits = (variants.first as Map)['units'] as List;
+    expect(vUnits, hasLength(2),
+        reason: 'satuan dasar varian DAN Renceng harus sama-sama ter-embed');
+    expect(vUnits.map((u) => (u as Map)['unitId']), contains(vRencengUnitId));
+
+    // Regresi totalOptionsFor: harus menjumlahkan satuan TIAP varian
+    // (bukan menghitung 1 per varian) — kalau tidak, teks "N pilihan" di
+    // daftar produk under-count begitu ada varian bersatuan banyak
+    // (dikonfirmasi manual via Playwright: "2 pilihan" padahal chip yang
+    // muncul nyatanya 3).
+    expect(result.html.contains('n += _ownUnits(v).length;'), isTrue);
+
+    await db.close();
+  });
 }

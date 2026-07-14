@@ -19,11 +19,13 @@ import '../../core/services/order_parser_service.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/widgets/item_count_badge.dart';
 import '../produk/catalog/catalog_models.dart';
 import '../produk/catalog/catalog_share.dart';
 import '../produk/catalog/catalog_store.dart';
 import 'cart_meta_provider.dart';
 import 'cart_provider.dart';
+import 'widgets/add_control.dart';
 import 'widgets/cart_meta_pickers.dart';
 import 'widgets/cart_sheet.dart';
 import 'widgets/item_entry_sheet.dart';
@@ -817,6 +819,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   // Panel pesanan ditahan inline (slide dari atas, mendorong katalog ke bawah).
   bool _heldPanelOpen = false;
+  final _heldPanelKey = GlobalKey();
 
   // Sheet keranjang sedang terbuka? Dipakai agar scan eksternal berturut-turut
   // tetap diproses saat sheet terbuka, dan agar tidak membuka sheet ganda.
@@ -1713,12 +1716,27 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             // mengecilkan/keluar dari field — lihat `_markSkipSearchCollapse`.
             child: Listener(
               behavior: HitTestBehavior.translucent,
-              onPointerDown: (_) {
+              onPointerDown: (event) {
                 if (_skipNextSearchCollapse) {
                   _skipNextSearchCollapse = false;
                   return;
                 }
                 _searchFocus.unfocus();
+                // Tap/swipe di LUAR wadah panel pesanan ditahan → tutup
+                // panelnya saja (AnimatedSize yang membungkusnya di bawah
+                // sudah kasih animasi smooth), tanpa mengganggu tap DI DALAM
+                // panel (mis. tap kartu antrian, tombol X, scroll strip-nya).
+                if (_heldPanelOpen) {
+                  final box = _heldPanelKey.currentContext?.findRenderObject()
+                      as RenderBox?;
+                  final local = box?.globalToLocal(event.position);
+                  final insidePanel = box != null &&
+                      local != null &&
+                      (Offset.zero & box.size).contains(local);
+                  if (!insidePanel) {
+                    setState(() => _heldPanelOpen = false);
+                  }
+                }
               },
               child: NotificationListener<ScrollStartNotification>(
                 onNotification: (_) {
@@ -1740,6 +1758,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                       alignment: Alignment.topCenter,
                       child: _heldPanelOpen
                           ? _HeldInlinePanel(
+                              key: _heldPanelKey,
                               onResume: _onHeldCardTap,
                               onClose: () =>
                                   setState(() => _heldPanelOpen = false),
@@ -2358,97 +2377,6 @@ void _decrementProduct(BuildContext context, List<CartItem> cart,
 
 // ─── Add / counter control ────────────────────────────────────────────────────
 
-/// Tombol "+" yang berubah jadi lingkaran berisi jumlah saat produk ada di
-/// keranjang. Tap menambah 1 (produk satuan tunggal) atau membuka modal
-/// (produk multi-satuan).
-class _AddControl extends StatelessWidget {
-  const _AddControl({
-    required this.qty,
-    required this.onTap,
-    this.onMinus,
-    this.size = 34,
-  });
-
-  final double qty;
-  final VoidCallback onTap;
-  final VoidCallback? onMinus;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final inCart = qty > 0;
-    final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = inCart ? AppTheme.changeFg(isDark) : AppTheme.accent;
-    final shadowColor = inCart
-        ? AppTheme.changeFg(isDark).withOpacity(0.30)
-        : const Color(0x33C96442);
-
-    // Lingkaran utama (jumlah / "+") berukuran sama baik saat kosong maupun
-    // saat sudah ada di keranjang, agar tidak "melompat" ukuran.
-    final circleSize = size + 4;
-    final mainCircle = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: circleSize,
-        height: circleSize,
-        decoration: BoxDecoration(
-          color: bgColor,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-                color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Center(
-          child: inCart
-              ? Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: circleSize * 0.40,
-                  ),
-                )
-              : Icon(Icons.add_rounded,
-                  color: Colors.white, size: circleSize * 0.6),
-        ),
-      ),
-    );
-
-    if (!inCart) return mainCircle;
-
-    // Tombol minus: merah, sedikit lebih kecil dari lingkaran jumlah. Pakai
-    // HitTestBehavior.opaque agar tap tidak "tembus" ke InkWell kartu produk.
-    final minusSize = size - 2;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onMinus,
-          child: Container(
-            width: minusSize,
-            height: minusSize,
-            decoration: const BoxDecoration(
-              color: Color(0xFFD64545),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Icon(Icons.remove_rounded,
-                  color: Colors.white, size: minusSize * 0.6),
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        mainCircle,
-      ],
-    );
-  }
-}
-
 // ─── Product grid card ────────────────────────────────────────────────────────
 
 class _ProductCard extends ConsumerWidget {
@@ -2565,7 +2493,7 @@ class _ProductCard extends ConsumerWidget {
                       ),
                     ),
                     detailAsync.maybeWhen(
-                      data: (d) => _AddControl(
+                      data: (d) => AddControl(
                         qty: qty,
                         size: 32,
                         onTap: () {
@@ -2768,7 +2696,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                   ),
                   const SizedBox(width: 8),
                   detailAsync.maybeWhen(
-                    data: (d) => _AddControl(
+                    data: (d) => AddControl(
                       qty: qty,
                       onTap: () {
                         // "+" selalu menambah satuan dasar induk, walau punya
@@ -2875,7 +2803,7 @@ class _VariantDropdown extends ConsumerWidget {
                         final vQty = cart
                             .where((c) => c.productUnitId == v.unitId)
                             .fold<double>(0, (s, c) => s + c.qty);
-                        return _AddControl(
+                        return AddControl(
                           qty: vQty,
                           size: 28,
                           onTap: () {
@@ -2962,24 +2890,7 @@ class _CartBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  color: AppTheme.accent,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    '$count',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
+              ItemCountBadge(count: count),
               const SizedBox(width: 10),
               Column(
                 mainAxisSize: MainAxisSize.min,
@@ -3471,7 +3382,8 @@ class _TabPainter extends CustomPainter {
 // ─── Panel pesanan ditahan (inline) ────────────────────────────────────────
 
 class _HeldInlinePanel extends ConsumerWidget {
-  const _HeldInlinePanel({required this.onResume, required this.onClose});
+  const _HeldInlinePanel(
+      {super.key, required this.onResume, required this.onClose});
 
   final void Function(HeldOrder) onResume;
   final VoidCallback onClose;
@@ -3529,17 +3441,17 @@ class _HeldInlinePanel extends ConsumerWidget {
                 );
               }
               return SizedBox(
-                // Item 24d — dinaikkan dari 86 lalu 128 supaya badge
-                // "Menunggu Anda Bayar" muat; sekarang 152 supaya tab
-                // pegawai (susulan Item 24d) di atas kartu handoff juga
-                // muat — kartu tanpa tab cuma dapat ruang kosong ekstra.
-                height: 152,
+                // Redesign kartu antrian — chip status di baris atas
+                // (dalam kartu, bukan tab lipat terpisah) bikin semua kartu
+                // sama tinggi tanpa Spacer() kosong, jadi lebih pendek dari
+                // 152 sebelumnya.
+                height: 134,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: held.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 9),
-                  itemBuilder: (_, i) => _HeldCardWithTab(
-                      order: held[i], onTap: () => onResume(held[i])),
+                  itemBuilder: (_, i) =>
+                      _HeldCard(order: held[i], onTap: () => onResume(held[i])),
                 ),
               );
             },
@@ -3562,67 +3474,13 @@ class _HeldInlinePanel extends ConsumerWidget {
   }
 }
 
-/// Susulan Item 24d — kartu antrian handoff pegawai dapat tab folder di
-/// atasnya (gaya sama seperti `_CartMetaTab` di atas cart bar, pakai
-/// `_TabPainter` yang sama) berisi nama PEGAWAI pengirim + jam masuk —
-/// dipisah dari `_HeldCard` yang judulnya sekarang nama PELANGGAN (bukan
-/// pegawai lagi, lihat `_handleOrderCode`). Pesanan ditahan biasa (tanpa
-/// `employeeName`) tetap tampil polos tanpa tab, seperti sebelumnya.
-class _HeldCardWithTab extends StatelessWidget {
-  const _HeldCardWithTab({required this.order, required this.onTap});
-
-  final HeldOrder order;
-  final VoidCallback onTap;
-
-  static const _cardWidth = 158.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final parsed = _parseHeldPayload(order.cartJson);
-    final employeeName = parsed.employeeName;
-    if (!parsed.awaitingPayment || employeeName == null) {
-      return _HeldCard(order: order, onTap: onTap);
-    }
-    final cs = Theme.of(context).colorScheme;
-    final time =
-        '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
-    // TIDAK pakai mainAxisSize.min — kartu di baliknya (`_HeldCard`) punya
-    // `Spacer()` internal yang butuh tinggi TERBATAS dari parent utk bisa
-    // dihitung; Column mainAxisSize.min memberi constraint tinggi TAK
-    // TERBATAS ke children non-flex, bikin Spacer() itu crash saat layout
-    // (RenderFlex unbounded height). `Expanded` di sini memberi `_HeldCard`
-    // sisa tinggi yang sudah tetap (152, dari `SizedBox` pembungkus
-    // ListView) dikurangi tinggi tab — balik seperti sebelum ada tab.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Transform.translate(
-          offset: const Offset(0, 1),
-          child: CustomPaint(
-            painter: _TabPainter(fill: cs.error, border: cs.error, slant: 8),
-            child: SizedBox(
-              width: _cardWidth,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 8, 6),
-                child: Text(
-                  '$employeeName · $time',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: cs.onError),
-                ),
-              ),
-            ),
-          ),
-        ),
-        Expanded(child: _HeldCard(order: order, onTap: onTap)),
-      ],
-    );
-  }
-}
-
+/// Redesign kartu antrian — satu bentuk kartu utk pesanan ditahan biasa
+/// maupun handoff pegawai (Item 24d), beda status lewat WARNA chip di baris
+/// atas (dalam kartu), bukan tab lipat + badge merah terpisah seperti
+/// sebelumnya. Chip terracotta (`AppTheme.accent`) berisi nama pegawai
+/// pengirim + jam masuk utk handoff; chip abu netral "Ditahan" utk pesanan
+/// biasa. Semua kartu jadi sama tinggi tanpa ruang kosong (tidak ada lagi
+/// `Spacer()` internal yang dulu wajib demi menyamai tinggi kartu bertab).
 class _HeldCard extends StatelessWidget {
   const _HeldCard({required this.order, required this.onTap});
 
@@ -3639,61 +3497,92 @@ class _HeldCard extends StatelessWidget {
     final total = cartTotalOf(parsed.items);
     final time =
         '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
+    final isHandoff = parsed.awaitingPayment && parsed.employeeName != null;
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        width: 158,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        width: 172,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: parsed.awaitingPayment ? cs.error : cs.outlineVariant,
-              width: parsed.awaitingPayment ? 1.4 : 1),
+              color: isHandoff
+                  ? AppTheme.accent.withOpacity(0.35)
+                  : cs.outlineVariant),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Item 24d — tanda visual khusus utk handoff pegawai via QR,
-            // beda dari pesanan ditahan biasa.
-            if (parsed.awaitingPayment) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: cs.error,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text('Menunggu Anda Bayar',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onError)),
+            // Chip terracotta (warna tetap, TIDAK ikut role onPrimary yang
+            // berubah di dark mode) supaya teks putih di dalamnya selalu
+            // terbaca — lihat gotcha "teks putih tak terbaca" di CLAUDE.md.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: isHandoff ? AppTheme.accent : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(999),
               ),
-              const SizedBox(height: 4),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isHandoff) ...[
+                    const Icon(Icons.person, size: 9, color: Colors.white),
+                    const SizedBox(width: 3),
+                  ],
+                  // `Flexible` WAJIB — tanpa ini Row(mainAxisSize.min) melayout
+                  // Text di lebar natural (tak terbatas), overflow kalau nama
+                  // pegawai panjang meski card sudah dibatasi lebarnya.
+                  Flexible(
+                    child: Text(
+                      isHandoff ? '${parsed.employeeName} · $time' : 'Ditahan',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: isHandoff ? Colors.white : cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(
               order.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 2),
             Text(
-              '$itemCount item · $time',
+              isHandoff ? '$itemCount item · siap dibayarkan' : '$itemCount item · $time',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
             const Spacer(),
-            Text(
-              formatRupiah(total),
-              style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  color: cs.primary),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  formatRupiah(total),
+                  style: AppTheme.numStyle(context,
+                      size: 15, weight: FontWeight.w700, color: cs.primary),
+                ),
+                Icon(Icons.chevron_right, size: 16, color: cs.outlineVariant),
+              ],
             ),
           ],
         ),

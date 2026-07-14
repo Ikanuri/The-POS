@@ -1,11 +1,13 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
+import 'package:the_pos/core/services/order_parser_service.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
@@ -167,5 +169,67 @@ void main() {
 
     expect(find.text('Bayar'), findsOneWidget);
     expect(find.text('Kirim ke Owner/Asisten'), findsNothing);
+  });
+
+  testWidgets(
+      'tombol "Salin Teks Pesanan" — jalur cadangan kalau scan QR susah — '
+      'menyalin teks yang PERSIS SAMA dengan isi QR ke clipboard',
+      (tester) async {
+    // Clipboard.getData TIDAK di-mock otomatis oleh flutter_test di
+    // environment ini (beda dari asumsi umum) — tanpa handler manual,
+    // `await Clipboard.getData(...)` menggantung SELAMANYA (bukan error
+    // cepat), bikin seluruh test hang. Simulasikan clipboard asli lewat
+    // channel platform manual.
+    String? clipboardStore;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboardStore = (call.arguments as Map)['text'] as String?;
+        return null;
+      }
+      if (call.method == 'Clipboard.getData') {
+        return {'text': clipboardStore};
+      }
+      return null;
+    });
+    addTearDown(() =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    final db = await pumpCartSheetOpen(tester,
+        deviceRole: 'kasir', terimaPembayaran: false);
+    addTearDown(() async => db.close());
+
+    await tester.tap(find.text('Kirim ke Owner/Asisten'));
+    await tester.pumpAndSettle();
+
+    // QrImageView tidak expose data-nya lewat getter publik — bangun ulang
+    // teks yang SEHARUSNYA sama persis dgn cara `_showHandoffQr` membuatnya
+    // (device tanpa pegawai/pelanggan terpilih di meta → employeeName =
+    // nama device sendiri, customerName null).
+    final expectedText = OrderParserService.encodeHandoff(
+      items: [item],
+      employeeName: 'HP Kasir 2',
+      customerName: null,
+    );
+
+    // Sengaja `pump()` biasa (bukan `pumpAndSettle`) — SnackBar punya timer
+    // auto-dismiss (default 4 detik) yang tidak pernah "settle" di clock
+    // sintetis widget test, `pumpAndSettle` bisa menunggu selamanya (gotcha
+    // yang sama persis dgn drift StreamProvider, lihat CLAUDE.md §Gotcha).
+    await tester.tap(find.text('Salin Teks Pesanan'));
+    await tester.pump();
+
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    expect(clipboard?.text, expectedText,
+        reason: 'teks yang disalin harus persis sama dgn isi QR, supaya '
+            'bisa ditempel manual (WhatsApp/Telegram) & tetap terbaca '
+            'parser "Tempel Pesanan" kalau scan tidak memungkinkan');
+    expect(find.text('Teks pesanan disalin'), findsOneWidget);
+
+    // Drain timer SnackBar yang masih pending sebelum teardown (kalau
+    // tidak, "A Timer is still pending" saat disposal binding).
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
   });
 }

@@ -17,6 +17,7 @@ class CartItem {
     this.parentProductId,
     this.parentProductUnitId,
     this.isVariant = false,
+    this.checked = false,
   });
 
   final String productId;
@@ -43,6 +44,12 @@ class CartItem {
   final String? parentProductUnitId;
   final bool isVariant;
 
+  /// Checklist verifikasi barang sebelum bayar (mis. cek fisik sambil
+  /// packing) — independen dari qty/harga. Diteruskan jadi nilai awal
+  /// `checkedItemIds` transaksi saat checkout, lalu Struk melanjutkan
+  /// checklist ini dari titik yang sama (lihat `receipt_screen.dart`).
+  final bool checked;
+
   /// True bila varian ini menempel ke baris satuan induk [parentLine].
   /// Prioritas [parentProductUnitId] (presisi per-satuan); fallback ke
   /// [parentProductId] untuk data lama yang belum punya id satuan induk.
@@ -66,6 +73,7 @@ class CartItem {
     int? price,
     bool? priceOverridden,
     Object? itemNote = _unset,
+    bool? checked,
   }) =>
       CartItem(
         productId: productId,
@@ -84,6 +92,7 @@ class CartItem {
         parentProductId: parentProductId,
         parentProductUnitId: parentProductUnitId,
         isVariant: isVariant,
+        checked: checked ?? this.checked,
       );
 
   Map<String, dynamic> toJson() => {
@@ -101,6 +110,7 @@ class CartItem {
         'parentProductId': parentProductId,
         'parentProductUnitId': parentProductUnitId,
         'isVariant': isVariant,
+        'checked': checked,
       };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
@@ -118,5 +128,6 @@ class CartItem {
         parentProductId: json['parentProductId'] as String?,
         parentProductUnitId: json['parentProductUnitId'] as String?,
         isVariant: json['isVariant'] as bool? ?? false,
+        checked: json['checked'] as bool? ?? false,
       );
 }

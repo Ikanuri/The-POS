@@ -18,6 +18,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/widgets/item_count_badge.dart';
 import 'widgets/debt_payment_dialog.dart';
 import 'widgets/tx_history_sheet.dart';
 
@@ -1001,7 +1002,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final remaining = netRemainingOwed(_tx!, _payments);
     final db = ref.read(databaseProvider);
     final result = await showDebtPaymentDialog(context, db,
-        remaining: remaining, title: 'Tambah Bayar', prefillRemaining: false);
+        remaining: remaining, title: 'Bayar', prefillRemaining: false);
 
     if (result != null && result.amount > 0 && mounted) {
       final device = ref.read(deviceProvider);
@@ -1819,67 +1820,84 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               ),
             ),
 
-          // Items (varian bersarang di bawah induk, laba inline per item)
-          Card(
-            child: Column(
-              children: [
-                ..._buildItemRows(scheme,
-                    showProfit: device.canSeeReports && _showProfit,
-                    editable: isKurangBayar && !isVoid),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _SummaryRow('Total', formatRupiah(tx.total),
-                          bold: true, color: scheme.primary),
-                      if (device.canSeeReports && _showProfit)
-                        _buildTotalProfitRow(scheme),
-                      if (tx.paid > 0)
-                        _SummaryRow('Dibayar',
-                            '${_methodLabel(tx.paymentMethod)} · '
-                            '${formatRupiah(netPaidDisplay(tx, _payments))}'),
-                      // Item 9 — uang tender ASLI dari pembayaran TERAKHIR
-                      // (gross, sebelum dikurangi kembalian) supaya tidak
-                      // membingungkan pembeli yang kasih lebih ("bayar
-                      // 300rb" padahal kasih 400rb). Cuma tampil kalau
-                      // memang ada kembalian (kalau pas, "Dibayar" di atas
-                      // sudah sama dengan uang diterima).
-                      if ((_latestPayment?.changeGiven ?? 0) > 0)
-                        _SummaryRow('Uang Diterima',
-                            formatRupiah(_latestPayment!.amount)),
-                      if ((_latestPayment?.changeGiven ?? 0) > 0)
-                        _ChangeTakenRow(
-                          amount: formatRupiah(_latestPayment!.changeGiven),
-                          taken: _latestPayment!.changeTaken,
-                          color: scheme.tertiary,
-                          onChanged: isVoid
-                              ? null
-                              : (v) =>
-                                  _toggleChangeTaken(_latestPayment!.id, v),
-                        ),
-                      if (isKurangBayar)
-                        _SummaryRow(
-                          'Sisa Tagihan',
-                          formatRupiah(netRemainingOwed(tx, _payments)),
-                          color: scheme.error,
-                          bold: true,
-                        ),
-                      if (tx.pointsEarned > 0)
-                        _SummaryRow('Poin Didapat', '+${tx.pointsEarned} poin',
-                            color: scheme.tertiary),
+          // Items (varian bersarang di bawah induk, laba inline per item).
+          // Badge jumlah item "menempel" di sudut kiri-atas kartu, sengaja
+          // dirender di atasnya (Stack, bukan sejajar) via ItemCountBadge
+          // elevated — sama gaya dgn badge cart bar kasir.
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Card(
+                child: Column(
+                  children: [
+                    ..._buildItemRows(scheme,
+                        showProfit: device.canSeeReports && _showProfit,
+                        editable: isKurangBayar && !isVoid),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _SummaryRow('Total', formatRupiah(tx.total),
+                              bold: true, color: scheme.primary),
+                          if (device.canSeeReports && _showProfit)
+                            _buildTotalProfitRow(scheme),
+                          if (tx.paid > 0)
+                            _SummaryRow('Dibayar',
+                                '${_methodLabel(tx.paymentMethod)} · '
+                                '${formatRupiah(netPaidDisplay(tx, _payments))}'),
+                          // Item 9 — uang tender ASLI dari pembayaran TERAKHIR
+                          // (gross, sebelum dikurangi kembalian) supaya tidak
+                          // membingungkan pembeli yang kasih lebih ("bayar
+                          // 300rb" padahal kasih 400rb). Cuma tampil kalau
+                          // memang ada kembalian (kalau pas, "Dibayar" di atas
+                          // sudah sama dengan uang diterima).
+                          if ((_latestPayment?.changeGiven ?? 0) > 0)
+                            _SummaryRow('Uang Diterima',
+                                formatRupiah(_latestPayment!.amount)),
+                          if ((_latestPayment?.changeGiven ?? 0) > 0)
+                            _ChangeTakenRow(
+                              amount:
+                                  formatRupiah(_latestPayment!.changeGiven),
+                              taken: _latestPayment!.changeTaken,
+                              color: scheme.tertiary,
+                              onChanged: isVoid
+                                  ? null
+                                  : (v) => _toggleChangeTaken(
+                                      _latestPayment!.id, v),
+                            ),
+                          if (isKurangBayar)
+                            _SummaryRow(
+                              'Sisa Tagihan',
+                              formatRupiah(netRemainingOwed(tx, _payments)),
+                              color: scheme.error,
+                              bold: true,
+                            ),
+                          if (tx.pointsEarned > 0)
+                            _SummaryRow(
+                                'Poin Didapat', '+${tx.pointsEarned} poin',
+                                color: scheme.tertiary),
+                        ],
+                      ),
+                    ),
+                    // Catatan nota — di bawah total, dalam card yang sama
+                    if (tx.strukNote?.isNotEmpty == true ||
+                        (!isVoid && !isRetur)) ...[
+                      const Divider(height: 1),
+                      _buildStrukNoteBlock(scheme, tx,
+                          editable: !isVoid && !isRetur),
                     ],
-                  ),
+                  ],
                 ),
-                // Catatan nota — di bawah total, dalam card yang sama
-                if (tx.strukNote?.isNotEmpty == true ||
-                    (!isVoid && !isRetur)) ...[
-                  const Divider(height: 1),
-                  _buildStrukNoteBlock(scheme, tx,
-                      editable: !isVoid && !isRetur),
-                ],
-              ],
-            ),
+              ),
+              if (_items.isNotEmpty)
+                Positioned(
+                  left: 14,
+                  top: -14,
+                  child: ItemCountBadge(
+                      count: _topLevelItems.length, elevated: true),
+                ),
+            ],
           ),
 
           // Catatan internal — card terpisah

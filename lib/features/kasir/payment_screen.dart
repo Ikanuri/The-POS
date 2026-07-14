@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -446,35 +448,25 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ? (_custNameManual.trim().isEmpty ? null : _custNameManual.trim())
           : null;
 
-      // Loyalty points — tidak diberikan untuk transaksi tempo (belum dibayar).
+      // Loyalty points — dihitung dari total transaksi (bukan jumlah yang
+      // sudah dibayar), berlaku SAMA utk tempo maupun tunai/langsung lunas.
       // Aturan: setiap kelipatan [threshold] rupiah → [pointsPer] poin.
+      // Tempo TIDAK dikecualikan lagi (dulu poin selalu 0 utk tempo walau
+      // total melebihi threshold) — kalau transaksi ini nanti di-void,
+      // `voidTransaction` sudah generik membalikkan poin berdasarkan
+      // `pointsEarned` tersimpan, tidak peduli payment method-nya.
       int pointsEarned = 0;
       final loyaltyThreshold =
           int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ??
               0;
       final loyaltyPointsPer =
           int.tryParse(await db.getSetting('loyalty_points_per') ?? '') ?? 1;
-      if (customerId != null && loyaltyThreshold > 0 && !isTempo) {
+      if (customerId != null && loyaltyThreshold > 0) {
         pointsEarned = (_total / loyaltyThreshold).floor() *
             (loyaltyPointsPer < 1 ? 1 : loyaltyPointsPer);
       }
 
       final txId = _uuid.v4();
-      final txCompanion = TransactionsCompanion.insert(
-        id: txId,
-        localId: localId,
-        kasirId: Value(device.deviceCode),
-        customerId: Value(customerId),
-        customerName: Value(customerName),
-        status: status,
-        total: _total,
-        paid: paidAmount,
-        changeAmount: _change,
-        paymentMethod: _selectedMethodType,
-        employeeName: Value(_selectedEmployee?.name),
-        pointsEarned: Value(pointsEarned),
-        createdAt: Value(now),
-      );
 
       // Effective qty memakai satu sumber kebenaran di cart provider (A-13).
       double effQty(CartItem item) => notifier.effectiveQtyFor(item);
@@ -491,22 +483,49 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         cartTotal: _cartTotal,
       );
 
+      // Item baru diteruskan ke `checkedItemIds` transaksi bila sudah
+      // dicentang di keranjang (checklist verifikasi sebelum bayar) — Struk
+      // melanjutkan dari titik yang sama, bukan mulai dari nol.
+      final checkedTxItemIds = <String>[];
       final itemCompanions = <TransactionItemsCompanion>[
         for (final l in allocatedLines)
-          TransactionItemsCompanion.insert(
-            id: _uuid.v4(),
-            transactionId: txId,
-            productId: l.item.productId,
-            productUnitId: l.item.productUnitId,
-            qty: l.effectiveQty,
-            priceAtSale: l.unitPrice,
-            originalPrice: l.item.originalPrice,
-            priceOverridden: Value(l.priceOverridden),
-            costAtSale: Value(l.item.costPrice),
-            itemNote: Value(l.item.itemNote),
-            subtotal: l.subtotal,
-          ),
+          () {
+            final id = _uuid.v4();
+            if (l.item.checked) checkedTxItemIds.add(id);
+            return TransactionItemsCompanion.insert(
+              id: id,
+              transactionId: txId,
+              productId: l.item.productId,
+              productUnitId: l.item.productUnitId,
+              qty: l.effectiveQty,
+              priceAtSale: l.unitPrice,
+              originalPrice: l.item.originalPrice,
+              priceOverridden: Value(l.priceOverridden),
+              costAtSale: Value(l.item.costPrice),
+              itemNote: Value(l.item.itemNote),
+              subtotal: l.subtotal,
+            );
+          }(),
       ];
+
+      final txCompanion = TransactionsCompanion.insert(
+        id: txId,
+        localId: localId,
+        kasirId: Value(device.deviceCode),
+        customerId: Value(customerId),
+        customerName: Value(customerName),
+        status: status,
+        total: _total,
+        paid: paidAmount,
+        changeAmount: _change,
+        paymentMethod: _selectedMethodType,
+        employeeName: Value(_selectedEmployee?.name),
+        pointsEarned: Value(pointsEarned),
+        createdAt: Value(now),
+        checkedItemIds: checkedTxItemIds.isEmpty
+            ? const Value.absent()
+            : Value(jsonEncode(checkedTxItemIds)),
+      );
 
       final paymentCompanions = paidAmount > 0
           ? [

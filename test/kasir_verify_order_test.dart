@@ -193,4 +193,68 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  testWidgets(
+      'tap DI LUAR wadah panel "Pesanan Ditahan" (mis. grid produk di '
+      'bawahnya) menutup panel-nya saja, dengan animasi (AnimatedSize)',
+      (tester) async {
+    final db = await seedProduct();
+    addTearDown(() async => db.close());
+    await db.holdOrder(
+      id: 'h1',
+      label: 'Budi',
+      cartJson:
+          '{"items":[{"productId":"p1","productUnitId":"u1","productName":'
+          '"Sedap Goreng","unitName":"Pcs","qty":2,"price":2500,'
+          '"originalPrice":2500,"costPrice":0}],"meta":{}}',
+    );
+
+    await pumpKasir(tester, db);
+    await openAntrianPanel(tester);
+    expect(find.text('PESANAN DITAHAN'), findsOneWidget);
+
+    // Titik jauh di bawah panel (panel selalu ada di atas grid produk) —
+    // pasti di luar wadahnya berapa pun tinggi kontennya.
+    await tester.tapAt(const Offset(200, 2300));
+    await tester.pump(); // mulai animasi tutup
+    await tester.pumpAndSettle();
+
+    expect(find.text('PESANAN DITAHAN'), findsNothing,
+        reason: 'tap di luar wadah panel harus menutup panelnya');
+
+    final rows = await db.select(db.heldOrders).get();
+    expect(rows, hasLength(1),
+        reason: 'tap di luar cuma menutup panel, TIDAK meresume/menghapus '
+            'antrian yang ada di dalamnya');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'tap DI DALAM wadah panel (bukan kartu antrian, mis. judul '
+      '"PESANAN DITAHAN") TIDAK menutup panel', (tester) async {
+    final db = await seedProduct();
+    addTearDown(() async => db.close());
+    await db.holdOrder(
+      id: 'h1',
+      label: 'Budi',
+      cartJson:
+          '{"items":[{"productId":"p1","productUnitId":"u1","productName":'
+          '"Sedap Goreng","unitName":"Pcs","qty":2,"price":2500,'
+          '"originalPrice":2500,"costPrice":0}],"meta":{}}',
+    );
+
+    await pumpKasir(tester, db);
+    await openAntrianPanel(tester);
+
+    await tester.tap(find.text('PESANAN DITAHAN'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PESANAN DITAHAN'), findsOneWidget,
+        reason: 'tap di dalam wadah panel TIDAK boleh ikut menutup panel');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }
