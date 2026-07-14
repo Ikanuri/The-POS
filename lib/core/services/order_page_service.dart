@@ -530,7 +530,9 @@ function minPriceForProduct(p){
 // Total satuan/varian yang bisa dipilih pelanggan — dipakai renderList utk
 // tahu apakah tampilkan "N pilihan · mulai Rp X" atau harga satuan tunggal.
 function totalOptionsFor(p){
-  return _ownUnits(p).length + (p.variants||[]).length;
+  var n = _ownUnits(p).length;
+  (p.variants||[]).forEach(function(v){ n += _ownUnits(v).length; });
+  return n;
 }
 function unitOptionsFor(p){
   var opts = [];

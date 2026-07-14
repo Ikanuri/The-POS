@@ -421,4 +421,53 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'varian yang PUNYA >1 satuan sendiri (mis. varian "Pedas" py Pcs + '
+      'Renceng) — SEMUA satuan varian itu ikut ter-embed di `variants[].units`,'
+      ' bukan cuma satuan dasar varian', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final parentId = await _addProduct(db, name: 'Kopi Sachet', price: 2000);
+
+    final variantId = await _addProduct(db,
+        name: 'Pedas', price: 2200, parentProductId: parentId);
+    // Satuan KEDUA milik VARIAN itu sendiri (bukan induk, bukan varian
+    // baru) — kombinasi varian + multi-satuan yang belum pernah
+    // diverifikasi sebelum diminta user.
+    const vRencengUnitId = 'u-variant-renceng';
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: vRencengUnitId,
+          productId: variantId,
+          unitTypeId: const Value(3),
+          isBaseUnit: const Value(false),
+          ratioToBase: const Value(10),
+        ));
+    await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+          id: 'variant-renceng-t1',
+          productUnitId: vRencengUnitId,
+          minQty: const Value(1),
+          price: 20000,
+        ));
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final products = data['products'] as List;
+    final p = products.firstWhere((p) => p['id'] == parentId) as Map;
+    final variants = p['variants'] as List;
+    expect(variants, hasLength(1));
+    final vUnits = (variants.first as Map)['units'] as List;
+    expect(vUnits, hasLength(2),
+        reason: 'satuan dasar varian DAN Renceng harus sama-sama ter-embed');
+    expect(vUnits.map((u) => (u as Map)['unitId']), contains(vRencengUnitId));
+
+    // Regresi totalOptionsFor: harus menjumlahkan satuan TIAP varian
+    // (bukan menghitung 1 per varian) — kalau tidak, teks "N pilihan" di
+    // daftar produk under-count begitu ada varian bersatuan banyak
+    // (dikonfirmasi manual via Playwright: "2 pilihan" padahal chip yang
+    // muncul nyatanya 3).
+    expect(result.html.contains('n += _ownUnits(v).length;'), isTrue);
+
+    await db.close();
+  });
 }
