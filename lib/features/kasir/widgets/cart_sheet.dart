@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -462,6 +463,21 @@ class _HandoffQrSheet extends StatelessWidget {
               'Minta owner/asisten scan QR ini lewat scanner kasir.',
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            // Jalur cadangan kalau scan QR susah (kamera rusak/pencahayaan
+            // kurang) — teks pesanan yang SAMA persis dgn isi QR bisa
+            // ditempel manual lewat WhatsApp/Telegram, lalu owner buka
+            // "Tempel Pesanan" di kasir (parser sudah baca format ini).
+            OutlinedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: qrText));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Teks pesanan disalin')),
+                );
+              },
+              icon: const Icon(Icons.copy_outlined, size: 16),
+              label: const Text('Salin Teks Pesanan'),
             ),
             const SizedBox(height: 20),
             SizedBox(
