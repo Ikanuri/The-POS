@@ -2593,8 +2593,23 @@ class AppDatabase extends _$AppDatabase {
   Future<int> mergeRows(String tableName, List<Map<String, Object?>> rows,
       bool isAppendOnly) async {
     var count = 0;
+    // Perangkat berbeda (owner/kasir) bisa update app tidak serentak — dump
+    // dari pengirim yang schemanya lebih baru bisa membawa kolom yang belum
+    // ada secara fisik di tabel lokal penerima (mis. kolom baru dari migrasi
+    // yang belum sempat ter-install di device itu). Tanpa filter ini, satu
+    // kolom baru saja bikin SELURUH sync gagal ("no column named ..."),
+    // bukan cuma baris/kolom itu. Baca kolom fisik via PRAGMA (bukan definisi
+    // tabel Drift yang statis di kode) supaya benar-benar mencerminkan skema
+    // SQLite yang sungguhan berjalan di device ini saat ini.
+    final localColumns = (await customSelect('PRAGMA table_info("$tableName")')
+            .get())
+        .map((r) => r.data['name'] as String)
+        .toSet();
     await transaction(() async {
       for (var row in rows) {
+        if (row.isEmpty) continue;
+        row = Map<String, Object?>.from(row)
+          ..removeWhere((k, _) => !localColumns.contains(k));
         if (row.isEmpty) continue;
 
         if (isAppendOnly) {
