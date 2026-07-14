@@ -6,39 +6,12 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 13 Juli 2026 (lanjutan lagi). Sesi ini: fix bug tombol
 modal "Tambah Bayar" (2 iterasi — `9fec89e` lalu `9633e7d`, lihat catatan
-gotcha di bawah) + fitur checklist verifikasi barang di keranjang kasir +
-stepper senada kartu produk (`2090d40`) + fix susulan stepper keranjang
-katalog HTML yang jadi tidak senada lagi akibat redesign stepper app kasir
-(`beaf395`). Full `flutter test`: **327 test hijau**, `flutter analyze`
-bersih. **schemaVersion masih 15** (tidak ada migrasi baru sesi ini —
-checklist keranjang murni SharedPreferences, `checkedItemIds` transaksi
-kolom lama dipakai ulang)._
-
-## Efek domino redesign stepper `AddControl` — katalog HTML sempat tidak senada lagi
-
-User laporkan "katalog HTML masih panggil file lama" setelah redesign
-stepper keranjang app kasir (`2090d40`) — investigasi awal (baca kode
-`order_page_service.dart`, cek commit history, cek branch APK CI) TIDAK
-menemukan bug caching/file lama sama sekali; template HTML & JS-nya sudah
-benar sesuai redesign Item 14 kemarin. Akar masalah SEBENARNYA: stepper
-keranjang di katalog HTML (`buildStepper()`) dari awal pakai gaya "pil
-abu-abu, tombol −/+ transparan" yang KEBETULAN mirip gaya stepper LAMA app
-kasir — begitu app kasir diredesign ke `AddControl` (lingkaran terracotta/
-merah terpisah) sesi ini, katalog HTML TIDAK ikut disentuh, jadi kelihatan
-"berubah/tidak senada lagi" padahal katalognya sendiri tidak pernah
-berubah. **Pelajaran:** kalau redesign visual sebuah komponen yang punya
-"kembaran" tampilan di tempat lain (app Flutter vs template HTML/JS
-terpisah, dua basis kode berbeda) — WAJIB cek apakah ada tempat lain yang
-perlu ikut disamakan, jangan asumsikan laporan "kok jadi beda lagi" selalu
-berarti regresi di komponen yang baru saja diubah; bisa juga sebaliknya
-(komponen PEMBANDING yang berubah). Fix: `buildStepper()` +
-CSS `.stepper` di `order_page_service.dart` disamakan ke gaya `AddControl`
-(lingkaran merah "−", lingkaran accent berisi qty yg jadi tap-target "+").
-Diverifikasi VISUAL nyata (bukan cuma baca kode) — generate HTML sungguhan
-via test sekali-pakai (`OrderPageService.generateHtml` + `AppDatabase`
-in-memory, ditulis ke file), buka lewat Playwright/Chromium, klik alur
-tambah-ke-keranjang, screenshot + `page.$$eval` cek qty & jumlah baris
-setelah tap +/−.
+di bawah, PENTING dibaca kalau ada laporan bug tombol serupa lagi) + fitur
+checklist verifikasi barang di keranjang kasir + stepper senada kartu
+produk (`2090d40`). Full `flutter test`: **327 test hijau**, `flutter
+analyze` bersih. **schemaVersion masih 15** (tidak ada migrasi baru sesi
+ini — checklist keranjang murni SharedPreferences, `checkedItemIds`
+transaksi kolom lama dipakai ulang)._
 
 ## Gotcha BARU — tombol lebar-penuh (Outlined/FilledButton) dalam Row di dalam AlertDialog
 
