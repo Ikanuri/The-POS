@@ -20,9 +20,69 @@ dikerjakan, sesuai permintaan user) + fix poin loyalitas tempo selalu 0 +
 tap luar tutup panel antrian (`45ac0c5`, lihat detail di bawah) + perf
 katalog HTML — update satu baris produk, bukan render ulang grid penuh
 (`d4a8e71`, lihat detail di bawah — didahului sesi riset performa
-read-only, user minta insight dulu sebelum eksekusi).
+read-only, user minta insight dulu sebelum eksekusi) + **GERBANG LISENSI
+DIAKTIFKAN SUNGGUHAN** (`0d1efe2`, lihat detail di bawah — PALING PENTING
+di sesi ini, baca dulu sebelum sentuh apa pun terkait lisensi/aktivasi).
 **schemaVersion masih 15** (tidak ada migrasi baru). Full `flutter test`
-**341 test hijau**, `flutter analyze` bersih._
+**345 test hijau**, `flutter analyze` bersih._
+
+## Gerbang lisensi (Item 25c) SEKARANG AKTIF SUNGGUHAN — bukan lagi kill-switch mati
+
+**PALING PENTING**: `LicenseService.publicKeyBase64` (`license_service.dart`)
+TIDAK LAGI KOSONG. User sudah generate pasangan kunci Ed25519 sendiri lewat
+`scripts/license-generator.html` (100% offline, private key TIDAK PERNAH
+dikirim/terlihat di sesi ini — user cuma kirim public key base64, sudah
+divalidasi persis 32 byte sebelum ditanam). Mulai commit `0d1efe2`, app
+BENAR-BENAR mengunci: device manapun yang belum pernah aktivasi (termasuk
+SEMUA device yang sudah lama terpasang sebelum update ini) akan diarahkan
+ke `/aktivasi` begitu buka app versi ini — keputusan EKSPLISIT user
+sendiri (ditanya lewat `AskUserQuestion`, user pilih "semua device wajib
+aktivasi, termasuk yang lama" — BUKAN grandfather otomatis untuk device
+existing).
+
+**Diskusi yang mendasari keputusan ini** (kalau topik serupa muncul lagi,
+jangan ulang dari nol, user sudah paham & setuju semua poin berikut):
+- Private key hilang → device yang SUDAH aktif TETAP jalan normal (state
+  tersimpan lokal di SharedPreferences, verifikasi Ed25519 cuma sekali
+  saat `activate()`, TIDAK pernah re-verify tiap buka app). Yang hilang
+  cuma kemampuan menerbitkan kode BARU.
+- Kill/cabut device yang sudah aktif TIDAK butuh private key sama sekali
+  — cukup edit `license/revoked.json` (daftar fingerprint) & push, dicek
+  opportunistic oleh `_checkRevocation()` di `license_provider.dart`.
+- Reversible penuh kapan saja: kosongkan lagi `publicKeyBase64` (atau
+  `git revert` commit `0d1efe2`) → `isLocked` otomatis false lagi utk
+  SEMUA device tanpa syarat (guard `if (!LicenseService.isConfigured)
+  return false;` di baris paling atas `LicenseState.isLocked`).
+- Private key TIDAK PERNAH ditampilkan sebagai string di
+  `license-generator.html` (dicek eksplisit: `jwkPriv` tidak pernah
+  masuk `innerHTML`/`textContent`/`value` manapun) — cuma ada di
+  `localStorage` browser & di file backup JSON yang diunduh (isinya
+  private key + public key + `publicKeyBase64` siap pakai sekaligus).
+
+**Perubahan kode** (`0d1efe2`): cuma 1 baris konstanta di
+`license_service.dart`. Dua file test disesuaikan (BUKAN dihapus, sesuai
+catatan yang sudah ada di kode test-nya sendiri):
+- `license_service_test.dart` — grup "kill-switch & ratchet" dulu
+  membuktikan `isLocked` SELALU false (gerbang mati). Sekarang dipecah
+  jadi beberapa test yang membuktikan sebaliknya: `isConfigured` true,
+  dan `isLocked` benar-benar menegakkan tiap syarat (belum aktivasi →
+  locked, expired → locked, revoked → locked, aktif+valid → TIDAK
+  locked).
+- `kasir_hw_key_after_produk_nav_test.dart` — SATU-SATUNYA test lain yang
+  pump lewat `routerProvider` sungguhan (bukan widget langsung), jadi
+  ikut kena redirect ke `/aktivasi` begitu gerbang aktif (device default
+  licenseProvider = belum aktivasi = locked). Ditambah override
+  `licenseProvider` ke state aktif (`exp: 'selamanya'`) supaya tetap
+  fokus ke bug HID yang diuji. **Kalau bikin widget test baru yang pump
+  lewat `routerProvider` (bukan widget spesifik langsung), WAJIB override
+  `licenseProvider` juga** — kalau tidak, akan auto-redirect ke
+  `/aktivasi` dan test gagal dengan pesan yang membingungkan (widget yang
+  dicari tidak ketemu, bukan error soal lisensi).
+
+**Belum dikerjakan** (menggantung, lihat PLAN.md): nomor WhatsApp
+developer masih placeholder — tombol "Kirim via WhatsApp" di
+`AktivasiScreen` masih `Share.share()` generik, bukan deep-link `wa.me`.
+User belum memberikan nomornya di sesi ini.
 
 ## Perf katalog HTML — update satu baris produk, bukan render ulang grid
 

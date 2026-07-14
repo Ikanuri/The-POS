@@ -18,11 +18,11 @@ bacakan barang, 1 device saja tanpa sync) — sengaja TANPA notifikasi
 otomatis arah balik (keputusan final). **Item 25**: 25a/25b SELESAI &
 di-commit. **Item 26** (3 penyempurnaan kecil: catatan per-produk di
 katalog HTML, posisi tombol Uang Pas & keypad "00"/"0" di kalkulator
-bayar) — SELESAI & di-commit. **25c (gerbang lisensi offline) SELESAI &
-di-commit** — lihat CHANGELOG & `docs/HANDOFF.md` untuk detail (public
-key developer & nomor WA "Kirim via WhatsApp" masih placeholder, gerbang
-otomatis nonaktif total sampai keduanya diisi — lihat HANDOFF utk langkah
-lanjutannya).
+bayar) — SELESAI & di-commit. **25c (gerbang lisensi offline) SELESAI,
+di-commit, DAN SEKARANG AKTIF** — public key developer sudah ditanam
+(`0d1efe2`, 14 Juli). Nomor WA developer masih placeholder (tombol
+"Kirim via WhatsApp" di AktivasiScreen masih `Share.share()` generik) —
+lihat `docs/HANDOFF.md` kalau mau upgrade ke deep-link `wa.me`.
 Sisa menggantung: Item 3c, 5, 23 (sebagian, lihat detail — nota gabungan
 sudah diperbaiki sesi 13 Juli)._
 

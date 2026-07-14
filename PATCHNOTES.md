@@ -23,6 +23,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   cadangan kalau scan QR susah (kamera bermasalah/pencahayaan kurang):
   salin teks pesanannya, lalu kirim manual lewat WhatsApp/Telegram ke
   owner/asisten, yang bisa langsung tempel di fitur "Tempel Pesanan".
+- **App sekarang meminta kode aktivasi** saat pertama kali dibuka setelah
+  update ini — berlaku untuk semua device, termasuk yang sudah lama
+  dipakai. Kode aktivasi didapat dari penyedia app, sekali dimasukkan
+  tidak perlu diulang lagi (kecuali masa berlakunya habis).
 
 ### 🎨 Tampilan
 - **Badge jumlah item di struk & keranjang kini bentuknya sama persis
