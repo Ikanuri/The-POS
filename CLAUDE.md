@@ -106,6 +106,16 @@ lib/
   flutter_test (~800×600) TIDAK menangkap bug ini — WAJIB
   `tester.binding.setSurfaceSize(const Size(360, 800))` (sesempit HP asli)
   sebelum dianggap teruji.
+- **`Clipboard.getData()` TIDAK di-mock otomatis oleh `flutter_test`** di
+  environment ini — tanpa handler manual, `await Clipboard.getData(...)`
+  MENGGANTUNG SELAMANYA (bukan gagal cepat/exception), bikin seluruh test
+  hang bermenit-menit sebelum ketahuan akar masalahnya (`Clipboard.setData`
+  tanpa `await` di kode produksi aman-aman saja, masalahnya murni di sisi
+  test yang mau verifikasi baliknya). Wajib pasang mock manual di test:
+  `TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.
+  setMockMethodCallHandler(SystemChannels.platform, (call) async {...})`
+  yang menangani `'Clipboard.setData'`/`'Clipboard.getData'` sendiri
+  (simpan ke variabel lokal) — lihat `test/kasir_handoff_qr_test.dart`.
 
 ## Perintah
 
