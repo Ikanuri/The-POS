@@ -52,6 +52,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   besar nominalnya, walau pelanggan sudah pasti akan menepati janji
   bayarnya. Kalau transaksinya kemudian dibatalkan, poin ikut otomatis
   ditarik kembali seperti transaksi tunai biasa.
+- **Katalog online tidak lagi terasa berat/nge-lag** saat pelanggan
+  menambah/mengurangi jumlah barang — sebelumnya tiap tap tombol +/-
+  membangun ulang seluruh daftar produk, terasa makin berat untuk toko
+  dengan banyak produk. Sekarang cuma barang yang disentuh saja yang
+  diperbarui, tampilannya sama persis seperti sebelumnya.
 
 ## 13 Juli 2026
 

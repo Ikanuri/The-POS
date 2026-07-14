@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-14
 
+- `d4a8e71` — perf: katalog HTML update satu baris produk, bukan render ulang grid
 - `45ac0c5` — fix: poin loyalitas tempo tidak muncul + tap luar tutup panel antrian
 - `3200c0e` — redesign: satukan kartu antrian "Pesanan Ditahan" pakai chip status
 - `102399d` — docs: tambah gotcha CLAUDE.md — Clipboard.getData() hang di widget test

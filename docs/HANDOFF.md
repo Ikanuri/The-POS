@@ -17,9 +17,68 @@ handoff pegawai (`458fc77`, lihat detail di bawah — PENTING, gotcha
 CLAUDE.md `102399d`) + redesign kartu antrian "Pesanan Ditahan" (`3200c0e`,
 lihat detail di bawah — diusulkan via mockup Playwright dulu sebelum
 dikerjakan, sesuai permintaan user) + fix poin loyalitas tempo selalu 0 +
-tap luar tutup panel antrian (`45ac0c5`, lihat detail di bawah).
+tap luar tutup panel antrian (`45ac0c5`, lihat detail di bawah) + perf
+katalog HTML — update satu baris produk, bukan render ulang grid penuh
+(`d4a8e71`, lihat detail di bawah — didahului sesi riset performa
+read-only, user minta insight dulu sebelum eksekusi).
 **schemaVersion masih 15** (tidak ada migrasi baru). Full `flutter test`
-**340 test hijau**, `flutter analyze` bersih._
+**341 test hijau**, `flutter analyze` bersih._
+
+## Perf katalog HTML — update satu baris produk, bukan render ulang grid
+
+User tanya (insight-only dulu, TANPA kode): "html ui sudah bagus, tapi
+sekarang jadi berat, apakah bisa dibuat ringan tanpa mengorbankan
+UI/UX?" + 2 pertanyaan lain (state centang persisten? fitur useless
+resource besar?). Riset dikerjakan oleh Explore agent (read-only) +
+verifikasi manual sendiri, jawaban lengkap sudah diberikan ke user tanpa
+ubah kode dulu. User lalu approve implementasi item prioritas #1
+("boleh, kerjakan").
+
+**Akar masalah** (`order_page_service.dart`, sebelum fix): `setQty()`
+(dipanggil tiap tap +/- baik di grid produk maupun stepper keranjang)
+SELALU panggil `renderList()` penuh — rebuild SELURUH grid produk dari
+nol via `DocumentFragment`, walau cuma 1 baris yang qty-nya berubah.
+O(jumlah produk) kerja DOM per tap, makin kerasa lag makin banyak
+produk di katalog.
+
+**Fix**: `renderList()` sekarang tag tiap `.prow` dengan `row.dataset.pid
+= p.id`. `setQty()` cari produk via `findProductForUnit(unitId)` (helper
+yg sudah ada), lalu panggil `refreshProwControls(p)` baru — cari row via
+`querySelector('.prow[data-pid="..."]')`, replace HANYA `.prow-controls`
+di dalamnya (`buildProwControls(p)` baru), bukan seluruh row apalagi
+seluruh grid. Fallback ke `renderList()` penuh kalau produk tidak
+ketemu (harusnya tidak pernah terjadi). Nama/meta/harga tiap baris
+memang tidak pernah berubah gara-gara qty jadi aman di-skip dari update.
+
+**Verifikasi Playwright manual** (bukan test committed, scratch file
+sudah dihapus): generate HTML dari DB uji 5 produk, tandai semua node
+`.prow` dengan marker JS custom, klik +/- pada satu produk berkali-kali,
+buktikan SEMUA node lain (termasuk node yg diklik sendiri — cuma child
+`.prow-controls`-nya yang diganti) tetap node yang SAMA (bukan
+rebuild) — plus qty/cart bar/search debounce/stepper keranjang semua
+tetap berfungsi identik ke perilaku lama.
+
+Test committed baru: `test/order_page_service_test.dart` — assertion
+string-based (pola yang sudah dipakai file ini) mengecek `setQty()`
+memanggil `refreshProwControls(p)` bukan `renderList()` tanpa syarat lagi
+(regex atas isi fungsi `setQty`), plus keberadaan `row.dataset.pid` &
+`refreshProwControls`. Revert-verify: kembalikan `setQty` ke
+`renderList()` polos → test gagal tepat di assertion yg diharapkan →
+pasang lagi fix, hijau.
+
+**Temuan riset lain (belum ditindaklanjuti, sekadar insight ke user)**:
+2 font base64 (Hanken Grotesk + Newsreader) ±123 KB selalu ikut tiap
+file katalog di-generate (`order_page_service.dart:187,191`) — biaya
+tetap ukuran file share, bukan penyebab lag. N+1 query saat generate
+katalog di app (`unitsJsonFor` per unit produk, sequential await) — bisa
+bikin proses "Generate Katalog" lambat utk toko banyak produk, terpisah
+dari lag di HP pelanggan. Crash log tidak pernah di-rotate
+(`crash_log_service.dart`) — bisa membengkak kalau ada bug yg crash
+berulang. State "centang" struk PERMANEN di SQLite
+(`transactions.checked_item_ids`, per-baris, tidak ada masalah performa);
+cart draft (termasuk `CartItem.checked`) di SharedPreferences dgn
+cleanup 24 jam utk cart "tambah belanjaan" yatim — tidak ada potensi
+menumpuk.
 
 ## Poin loyalitas transaksi tempo + tutup panel antrian via tap luar
 
