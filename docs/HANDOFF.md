@@ -22,9 +22,11 @@ katalog HTML — update satu baris produk, bukan render ulang grid penuh
 (`d4a8e71`, lihat detail di bawah — didahului sesi riset performa
 read-only, user minta insight dulu sebelum eksekusi) + **GERBANG LISENSI
 DIAKTIFKAN SUNGGUHAN** (`0d1efe2`, lihat detail di bawah — PALING PENTING
-di sesi ini, baca dulu sebelum sentuh apa pun terkait lisensi/aktivasi).
+di sesi ini, baca dulu sebelum sentuh apa pun terkait lisensi/aktivasi)
++ susulan lisensi: sakelar darurat `lockAll` di Lapis 3 + durasi kustom
+menit di generator (`3591396`, lihat detail di bawah).
 **schemaVersion masih 15** (tidak ada migrasi baru). Full `flutter test`
-**345 test hijau**, `flutter analyze` bersih._
+**349 test hijau**, `flutter analyze` bersih._
 
 ## Gerbang lisensi (Item 25c) SEKARANG AKTIF SUNGGUHAN — bukan lagi kill-switch mati
 
@@ -79,10 +81,50 @@ catatan yang sudah ada di kode test-nya sendiri):
   `/aktivasi` dan test gagal dengan pesan yang membingungkan (widget yang
   dicari tidak ketemu, bukan error soal lisensi).
 
-**Belum dikerjakan** (menggantung, lihat PLAN.md): nomor WhatsApp
-developer masih placeholder — tombol "Kirim via WhatsApp" di
-`AktivasiScreen` masih `Share.share()` generik, bukan deep-link `wa.me`.
-User belum memberikan nomornya di sesi ini.
+**Nomor WA — SELESAI, keputusan final**: user memutuskan tombol "Kirim
+via WhatsApp" di `AktivasiScreen` TETAP `Share.share()` generik (tidak
+perlu deep-link `wa.me`) — jangan tanya/usulkan lagi soal ini kalau topik
+muncul lagi, sudah final.
+
+## Susulan lisensi — sakelar darurat "lockAll" (Lapis 3) + durasi kustom menit (`3591396`)
+
+Follow-up diskusi dari gerbang lisensi di atas — 2 pertanyaan user:
+
+**1. "html bisa kasih opsi durasi custom/semenit paling cepat utk testing?"**
+Ditambah opsi `<option value="custom">` di `expSelect`
+(`scripts/license-generator.html`) — muncul field jumlah menit
+(`customMinutes`), exp dihitung `Date.now() + menit*60000`. Validasi:
+kosong/< 1 → error inline, tidak generate kode. Diverifikasi via
+Playwright manual (scratch script, sudah dihapus): toggle field
+tampil/sembunyi sesuai pilihan, kode ter-generate benar, payload exp
+selisih persis sesuai menit yang diisi, validasi kosong menampilkan
+error.
+
+**2. "Lapis 3 gimana? bisa kasih opsi lock all (bukan paste satu-satu)?"**
+Ditambah field `lockAll` (boolean) di `license/revoked.json`, dicek di
+`_checkRevocation()` (`license_provider.dart`) — kalau `true`, SEMUA
+device dianggap revoked terlepas dari fingerprint-nya ada di `dicabut`
+atau tidak. Skenario pakai: insiden skala besar (mis. private key
+generator bocor) yang tidak realistis ditangani satu-satu lewat daftar
+fingerprint — developer cukup ubah 1 baris di `revoked.json`, commit,
+push, TIDAK perlu tahu fingerprint siapa pun. Tetap reversible kapan
+saja (`lockAll: false` lagi → device dgn `exp` masih valid otomatis
+jalan lagi tanpa aktivasi ulang, sama seperti sifat kill-switch lain di
+sistem ini).
+
+Logika keputusan diekstrak jadi `LicenseNotifier.computeRevoked()` (pure
+function, static) — supaya testable tanpa mock `HttpClient`/jaringan
+(beda dari `_checkRevocation()` pembungkusnya yang tetap tidak
+dites langsung, konsisten dgn sebelumnya — cuma logika keputusannya yg
+sekarang testable). Test baru di `license_service_test.dart`: 4 skenario
+(tidak revoked, revoked via daftar, revoked via `lockAll`, case-
+insensitive). Revert-verify: hapus `lockAll ||` sebentar → test
+"lockAll TRUE" gagal tepat (`Expected: true, Actual: <false>`) → pasang
+lagi, hijau.
+
+**Catatan**: `revoked.json` DEFAULT tetap `{"lockAll": false, "dicabut":
+[]}` — aman, tidak mengunci siapa pun sampai developer sengaja
+mengubahnya.
 
 ## Perf katalog HTML — update satu baris produk, bukan render ulang grid
 
