@@ -10,6 +10,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 14 Juli 2026
 
+### ✨ Fitur Baru
+- **Katalog online kini menampilkan SEMUA satuan produk** — sebelumnya
+  kalau sebuah produk punya lebih dari satu satuan jual (mis. "Sedap
+  Goreng" per Biji dan per Dus), cuma satuan dasarnya yang tampil di
+  katalog online; satuan lain (Dus) tidak pernah muncul sama sekali di
+  jendela pilihan, sehingga pelanggan yang biasa beli per-dus tidak tahu
+  opsi itu ada. Sekarang semua satuan tampil sebagai pilihan.
+
+### 🎨 Tampilan
+- **Badge jumlah item di struk & keranjang kini bentuknya sama persis
+  dengan badge di bar keranjang** (lingkaran terracotta berisi angka) —
+  di struk, badge ini menempel di sudut kartu daftar barang; di
+  keranjang, tampil di samping nominal Total.
+
 ### 🐛 Perbaikan Bug
 - **Sync ke owner/asisten tidak lagi gagal total dengan pesan error
   teknis** (mis. "table transactions has no column named ...") kalau HP

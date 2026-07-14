@@ -4,15 +4,58 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 14 Juli 2026. Lanjutan dari sesi 13 Juli (gabungan 2
-sesi paralel via merge `main` — fix bug tombol modal "Tambah Bayar", fitur
-checklist keranjang, redesign katalog HTML dari `main`, tampilan jumlah
-item di struk & keranjang — lihat section di bawah). Sesi ini: fix bug
-sync LAN gagal total di HP yang app-nya belum ter-update (`2d4467a`,
-lihat detail di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada
-kolom skema baru selama device belum update serentak). **schemaVersion
-masih 15** (tidak ada migrasi baru). Full `flutter test` **334 test
-hijau**, `flutter analyze` bersih._
+_Terakhir diperbarui: 14 Juli 2026 (lanjutan). Sesi ini: fix bug sync LAN
+gagal total di HP yang app-nya belum ter-update (`2d4467a`, lihat detail
+di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada kolom skema
+baru selama device belum update serentak) + badge jumlah item di
+struk/keranjang disamakan gaya cart bar (`67414e1`) + katalog HTML kini
+tampilkan SEMUA satuan produk, bukan cuma satuan dasar (`7c65b78`, lihat
+detail di bawah). **schemaVersion masih 15** (tidak ada migrasi baru).
+Full `flutter test` **335 test hijau**, `flutter analyze` bersih._
+
+## Katalog HTML — satuan lain (mis. Dus) sekarang ikut tampil
+
+User laporkan: produk yang punya >1 satuan di POS (mis. "Sedap Goreng"
+per Biji + per Dus) cuma satuan dasarnya (Biji) yang muncul di katalog
+online — Dus sama sekali tidak ada opsinya. Akar masalah: `_buildCatalogJson`
+(`order_page_service.dart`) dari awal cuma pernah mengambil SATU baris
+`product_units` per produk (yang `isBaseUnit`), field satuan lain tidak
+pernah di-query sama sekali — ini KATEGORI BEDA dari fitur varian (varian
+= produk anak terpisah, `getVariants`, sudah ter-handle lama; ini soal
+multi-SATUAN produk yang SAMA, belum pernah ditangani).
+
+Fix: field baru `units` (array semua satuan berharga valid milik produk,
+base unit selalu di indeks 0) ditambahkan ke tiap entri produk/varian di
+JSON yang di-embed. Fungsi JS (`byUnit`, `totalQtyForProduct`,
+`minPriceForProduct`, `unitOptionsFor`, `findProductForUnit`, +
+`totalOptionsFor` baru) semua digeneralisasi baca `p.units`/helper
+`_ownUnits(p)` (fallback ke `[{unitId:p.unitId,...}]` kalau field lama
+tanpa `units`, jaga-jaga data lama) — bukan cuma `p.unitId` tunggal. Kalau
+produk punya >1 satuan, chip di modal tap-item sekarang menampilkan
+SEMUA satuan (label = nama satuan, mis. "Biji"/"Dus"), dan grouping di
+teks pesanan (`buildOrderText`) + tampilan keranjang meniru pola varian
+(header nama produk + baris ber-indent per satuan) begitu produk itu
+benar-benar punya >1 satuan.
+
+**Belum disentuh** (di luar laporan user, potensi follow-up kalau
+relevan): varian yang punya >1 satuan SENDIRI (mis. varian "Pedas" juga
+py Dus) — kode sudah digeneralisasi mendukung ini (`_ownUnits(v)` dipakai
+sama persis), tapi belum ada test spesifik utk kombinasi varian+multi-
+satuan sekaligus (test baru cuma cover produk induk).
+
+Diverifikasi Playwright/Chromium nyata (bukan cuma baca kode): generate
+HTML produk 2-satuan, modal tampilkan 2 chip terpisah, tap chip kedua
+(Dus) ganti harga tampil & bisa ditambah ke keranjang dgn benar.
+
+## Badge jumlah item disatukan gayanya (struk/keranjang/cart bar)
+
+Widget `ItemCountBadge` baru (`lib/core/widgets/item_count_badge.dart`),
+diekstrak dari lingkaran badge yang dulu private di `_CartBar`
+(`kasir_screen.dart`) — dipakai ulang di `cart_sheet.dart` (samping kiri
+Total) dan `receipt_screen.dart` (menempel/mengambang di sudut kiri-atas
+kartu daftar barang struk, via `Stack`+`Positioned`+`elevated:true`,
+sesuai posisi yg diminta user dari screenshot). Sebelumnya di kedua
+tempat itu cuma teks polos "N item", tidak senada dgn cart bar.
 
 ## Fix sync LAN gagal total — device tertinggal 1 kolom skema (mis. Infinix Smart 8)
 
