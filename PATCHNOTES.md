@@ -75,6 +75,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   persis dengan tombol di kartu produk** (lingkaran +/− berwarna), tidak
   lagi ikon ± polos. Tulisan nama barang, harga, dan catatan di keranjang
   juga sedikit diperbesar supaya lebih mudah dibaca.
+- **Stepper jumlah di keranjang Katalog Pesanan (HTML yang dibagikan ke
+  pelanggan) kini bentuknya sama dengan stepper di aplikasi kasir** —
+  lingkaran merah untuk kurangi, lingkaran terracotta berisi angka untuk
+  tambah (dulu tombol −/+ polos di dalam kapsul abu-abu).
 - **Tombol "Uang Pas" pindah ke sebelah kiri tombol "Bayar"** di kalkulator
   bayar tunai — sebelumnya di atas keypad bareng pecahan uang, sekarang
   sebaris dengan "Bayar" supaya tidak salah pencet saat buru-buru.
