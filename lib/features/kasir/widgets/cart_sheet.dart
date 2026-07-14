@@ -225,10 +225,24 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             )),
-                    Text(
-                      formatRupiah(total),
-                      style: AppTheme.numStyle(context,
-                          size: 22, weight: FontWeight.w700, color: scheme.primary),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                            '${cart.where((c) => !c.isVariant).length} item',
+                            style: TextStyle(
+                                fontSize: 12, color: scheme.onSurfaceVariant)),
+                        const SizedBox(width: 6),
+                        Text(
+                          formatRupiah(total),
+                          style: AppTheme.numStyle(context,
+                              size: 22,
+                              weight: FontWeight.w700,
+                              color: scheme.primary),
+                        ),
+                      ],
                     ),
                   ],
                 ),

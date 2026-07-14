@@ -1800,23 +1800,31 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
           // Verifikasi serah-terima barang
           if (_items.isNotEmpty)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    final target = !_allChecked;
-                    for (final i in _items) {
-                      _checked[i.id] = target;
-                    }
-                  });
-                  unawaited(_persistChecked());
-                },
-                icon: Icon(_allChecked ? Icons.remove_done : Icons.done_all,
-                    size: 18),
-                label: Text(_allChecked ? 'Hapus Tanda' : 'Tandai Semua',
-                    style: const TextStyle(fontSize: 12)),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text('${_topLevelItems.length} item',
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      final target = !_allChecked;
+                      for (final i in _items) {
+                        _checked[i.id] = target;
+                      }
+                    });
+                    unawaited(_persistChecked());
+                  },
+                  icon: Icon(_allChecked ? Icons.remove_done : Icons.done_all,
+                      size: 18),
+                  label: Text(_allChecked ? 'Hapus Tanda' : 'Tandai Semua',
+                      style: const TextStyle(fontSize: 12)),
+                ),
+              ],
             ),
 
           // Items (varian bersarang di bawah induk, laba inline per item)
