@@ -83,6 +83,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Tombol "00" di keypad kalkulator bayar kini sebaris dengan "0"** (di
   baris paling bawah), bukan lagi di baris "7 8 9" — susunan angka jadi
   lebih rapi & mudah dijangkau.
+- **Jumlah item kini tampil di struk & keranjang kasir** — di struk,
+  jumlah barang tampil di sebelah kiri tombol "Tandai Semua"; di
+  keranjang, jumlah barang tampil di samping nominal Total.
 
 ### 🐛 Perbaikan Bug
 - **"Tap to Scan" tidak lagi mengulang barang yang sama.** Sebelumnya,

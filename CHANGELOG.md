@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-13
 
+- `310960f` — feat: tampilkan jumlah item di struk (baris Tandai Semua) & keranjang kasir
 - `3a48d4e` — revert: "fix: samakan gaya stepper keranjang katalog HTML dengan AddControl app kasir"
 - `e12c290` — revert: "docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk fix stepper katalog HTML"
 - `36ceff7` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk fix stepper katalog HTML (di-revert, lihat `3a48d4e`/`e12c290` — desain sudah ditangani di branch lain, `24097ec`)

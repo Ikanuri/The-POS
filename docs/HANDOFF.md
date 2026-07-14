@@ -20,7 +20,9 @@ SharedPreferences, `checkedItemIds` transaksi kolom lama dipakai ulang).
 Setelah merge: full `flutter test` **331 test hijau** (327 dari cabang ini
 + 4 baru dari `main`), `flutter analyze` bersih, 0 konflik kode (cuma
 `CHANGELOG.md`/`docs/HANDOFF.md` — file dokumentasi rolling-snapshot yang
-memang wajar bentrok kalau 2 sesi jalan paralel)._
+memang wajar bentrok kalau 2 sesi jalan paralel). Susulan setelah merge:
+tambah tampilan jumlah item di struk (kiri "Tandai Semua") & keranjang
+kasir (kiri nominal Total) — `310960f`, sekarang **333 test hijau**._
 
 ## Gotcha BARU — tombol lebar-penuh (Outlined/FilledButton) dalam Row di dalam AlertDialog
 
