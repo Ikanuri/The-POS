@@ -819,6 +819,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   // Panel pesanan ditahan inline (slide dari atas, mendorong katalog ke bawah).
   bool _heldPanelOpen = false;
+  final _heldPanelKey = GlobalKey();
 
   // Sheet keranjang sedang terbuka? Dipakai agar scan eksternal berturut-turut
   // tetap diproses saat sheet terbuka, dan agar tidak membuka sheet ganda.
@@ -1715,12 +1716,27 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             // mengecilkan/keluar dari field — lihat `_markSkipSearchCollapse`.
             child: Listener(
               behavior: HitTestBehavior.translucent,
-              onPointerDown: (_) {
+              onPointerDown: (event) {
                 if (_skipNextSearchCollapse) {
                   _skipNextSearchCollapse = false;
                   return;
                 }
                 _searchFocus.unfocus();
+                // Tap/swipe di LUAR wadah panel pesanan ditahan → tutup
+                // panelnya saja (AnimatedSize yang membungkusnya di bawah
+                // sudah kasih animasi smooth), tanpa mengganggu tap DI DALAM
+                // panel (mis. tap kartu antrian, tombol X, scroll strip-nya).
+                if (_heldPanelOpen) {
+                  final box = _heldPanelKey.currentContext?.findRenderObject()
+                      as RenderBox?;
+                  final local = box?.globalToLocal(event.position);
+                  final insidePanel = box != null &&
+                      local != null &&
+                      (Offset.zero & box.size).contains(local);
+                  if (!insidePanel) {
+                    setState(() => _heldPanelOpen = false);
+                  }
+                }
               },
               child: NotificationListener<ScrollStartNotification>(
                 onNotification: (_) {
@@ -1742,6 +1758,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                       alignment: Alignment.topCenter,
                       child: _heldPanelOpen
                           ? _HeldInlinePanel(
+                              key: _heldPanelKey,
                               onResume: _onHeldCardTap,
                               onClose: () =>
                                   setState(() => _heldPanelOpen = false),
@@ -3365,7 +3382,8 @@ class _TabPainter extends CustomPainter {
 // ─── Panel pesanan ditahan (inline) ────────────────────────────────────────
 
 class _HeldInlinePanel extends ConsumerWidget {
-  const _HeldInlinePanel({required this.onResume, required this.onClose});
+  const _HeldInlinePanel(
+      {super.key, required this.onResume, required this.onClose});
 
   final void Function(HeldOrder) onResume;
   final VoidCallback onClose;

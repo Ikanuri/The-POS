@@ -448,15 +448,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ? (_custNameManual.trim().isEmpty ? null : _custNameManual.trim())
           : null;
 
-      // Loyalty points — tidak diberikan untuk transaksi tempo (belum dibayar).
+      // Loyalty points — dihitung dari total transaksi (bukan jumlah yang
+      // sudah dibayar), berlaku SAMA utk tempo maupun tunai/langsung lunas.
       // Aturan: setiap kelipatan [threshold] rupiah → [pointsPer] poin.
+      // Tempo TIDAK dikecualikan lagi (dulu poin selalu 0 utk tempo walau
+      // total melebihi threshold) — kalau transaksi ini nanti di-void,
+      // `voidTransaction` sudah generik membalikkan poin berdasarkan
+      // `pointsEarned` tersimpan, tidak peduli payment method-nya.
       int pointsEarned = 0;
       final loyaltyThreshold =
           int.tryParse(await db.getSetting('loyalty_point_threshold') ?? '') ??
               0;
       final loyaltyPointsPer =
           int.tryParse(await db.getSetting('loyalty_points_per') ?? '') ?? 1;
-      if (customerId != null && loyaltyThreshold > 0 && !isTempo) {
+      if (customerId != null && loyaltyThreshold > 0) {
         pointsEarned = (_total / loyaltyThreshold).floor() *
             (loyaltyPointsPer < 1 ? 1 : loyaltyPointsPer);
       }
