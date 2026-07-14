@@ -16,7 +16,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Goreng" per Biji dan per Dus), cuma satuan dasarnya yang tampil di
   katalog online; satuan lain (Dus) tidak pernah muncul sama sekali di
   jendela pilihan, sehingga pelanggan yang biasa beli per-dus tidak tahu
-  opsi itu ada. Sekarang semua satuan tampil sebagai pilihan.
+  opsi itu ada. Sekarang semua satuan tampil sebagai pilihan — termasuk
+  kombinasi varian yang punya beberapa satuan sekaligus.
+- **Tombol "Salin Teks Pesanan" di QR "Kirim ke Owner/Asisten"** —
+  pegawai yang belum punya izin Terima Pembayaran sekarang punya jalur
+  cadangan kalau scan QR susah (kamera bermasalah/pencahayaan kurang):
+  salin teks pesanannya, lalu kirim manual lewat WhatsApp/Telegram ke
+  owner/asisten, yang bisa langsung tempel di fitur "Tempel Pesanan".
 
 ### 🎨 Tampilan
 - **Badge jumlah item di struk & keranjang kini bentuknya sama persis

@@ -11,10 +11,35 @@ kolom skema baru selama device belum update serentak) + badge jumlah
 item di struk/keranjang disamakan gaya cart bar (`67414e1`) + katalog
 HTML kini tampilkan SEMUA satuan produk, bukan cuma satuan dasar
 (`7c65b78`) + fix susulan "N pilihan" under-count utk kombinasi
-varian+multi-satuan (`69abb77`, lihat detail di bawah — kombinasi ini
-SUDAH diverifikasi Playwright, bukan lagi "belum disentuh"). **schemaVersion
-masih 15** (tidak ada migrasi baru). Full `flutter test` **336 test
-hijau**, `flutter analyze` bersih._
+varian+multi-satuan (`69abb77`) + tombol "Salin Teks Pesanan" di bawah QR
+handoff pegawai (`458fc77`, lihat detail di bawah — PENTING, gotcha
+`Clipboard.getData()` hang di widget test, sudah ikut ditambahkan ke
+CLAUDE.md `102399d`). **schemaVersion masih 15** (tidak ada migrasi
+baru). Full `flutter test` **337 test hijau**, `flutter analyze` bersih._
+
+## Tombol "Salin Teks Pesanan" di bawah QR handoff pegawai
+
+Usulan user: tambah jalur cadangan di `_HandoffQrSheet` (`cart_sheet.dart`,
+sheet "Kirim ke Owner/Asisten" utk pegawai tanpa izin Terima Pembayaran)
+kalau scan QR susah (kamera bermasalah/pencahayaan kurang) — pegawai bisa
+salin teks pesanan (persis sama dgn isi QR, hasil `OrderParserService.
+encodeHandoff`) lewat `OutlinedButton.icon` baru di bawah caption QR,
+kirim manual via WhatsApp/Telegram, owner/asisten tempel di fitur "Tempel
+Pesanan" yang sudah ada (parser sudah baca format ini).
+
+**Gotcha besar ketemu saat nulis test** (sudah ditambahkan ke CLAUDE.md
+§Gotcha, `102399d`): `Clipboard.getData()` TIDAK di-mock otomatis oleh
+`flutter_test` di environment ini — beda dari asumsi umum "flutter_test
+punya default clipboard mock". Tanpa handler manual, `await Clipboard.
+getData(...)` di dalam test MENGGANTUNG SELAMANYA (bukan exception cepat)
+— sempat bikin test hang >5 menit (dicoba `pumpAndSettle()` → `pump()`
+biasa dulu mengira gara-gara timer SnackBar, TERNYATA bukan itu masalahnya
+sama sekali) sebelum diisolasi via scratch test minimal dan ketahuan akar
+masalahnya murni di sisi test. Fix: pasang mock method channel manual
+(`TestDefaultBinaryMessengerBinding...setMockMethodCallHandler(
+SystemChannels.platform, ...)`) yang menyimpan/mengembalikan teks sendiri
+— lihat `test/kasir_handoff_qr_test.dart` utk pola lengkapnya, tiru kalau
+nanti ada test lain yang butuh baca balik isi clipboard.
 
 ## Katalog HTML — satuan lain (mis. Dus) sekarang ikut tampil
 
