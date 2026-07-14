@@ -114,20 +114,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     ));
   }
 
-  /// Timeline pembayaran ditampilkan bila informatif: ada >1 pembayaran
-  /// (cicilan), ada yang DIBATALKAN (perlu terlihat, jangan disembunyikan),
-  /// atau satu pembayaran yang waktunya jauh dari waktu nota dibuat (hutang
-  /// dilunasi belakangan). Penjualan tunai seketika (satu pembayaran, tidak
-  /// dibatalkan) → disembunyikan agar tidak mengulang info baris tanggal.
+  /// Timeline pembayaran SELALU ditampilkan bila ada minimal 1 pembayaran —
+  /// ini satu-satunya tempat tombol "Batalkan Pembayaran" muncul (lihat
+  /// `_buildPaymentTimeline`). Sebelumnya disembunyikan untuk penjualan
+  /// tunai seketika (1 pembayaran, tidak dibatalkan) demi menghindari
+  /// duplikasi info baris tanggal — tapi itu berarti nota yang LANGSUNG
+  /// lunas saat dibuat (kasus paling umum) tidak pernah bisa dibatalkan
+  /// pembayarannya sama sekali. Fungsi lebih penting dari menghindari 1
+  /// baris tanggal yang sedikit redundan.
   bool get _showPaymentTimeline {
     final tx = _tx;
-    if (tx == null || _payments.isEmpty) return false;
-    if (_payments.length > 1) return true;
-    if (_payments.any((p) => p.voided)) return true;
-    // Sembunyikan hanya jika bayar tunai seketika (paidAt == createdAt persis).
-    // Hutang yang dilunasi belakangan — meski hanya selisih beberapa detik —
-    // tetap ditampilkan karena waktunya pasti berbeda.
-    return _payments.first.paidAt != tx.createdAt;
+    return tx != null && _payments.isNotEmpty;
   }
 
   /// Kembalian di Ringkasan SELALU dari pembayaran TERAKHIR yang TIDAK
