@@ -3423,17 +3423,17 @@ class _HeldInlinePanel extends ConsumerWidget {
                 );
               }
               return SizedBox(
-                // Item 24d — dinaikkan dari 86 lalu 128 supaya badge
-                // "Menunggu Anda Bayar" muat; sekarang 152 supaya tab
-                // pegawai (susulan Item 24d) di atas kartu handoff juga
-                // muat — kartu tanpa tab cuma dapat ruang kosong ekstra.
-                height: 152,
+                // Redesign kartu antrian — chip status di baris atas
+                // (dalam kartu, bukan tab lipat terpisah) bikin semua kartu
+                // sama tinggi tanpa Spacer() kosong, jadi lebih pendek dari
+                // 152 sebelumnya.
+                height: 134,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: held.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 9),
-                  itemBuilder: (_, i) => _HeldCardWithTab(
-                      order: held[i], onTap: () => onResume(held[i])),
+                  itemBuilder: (_, i) =>
+                      _HeldCard(order: held[i], onTap: () => onResume(held[i])),
                 ),
               );
             },
@@ -3456,67 +3456,13 @@ class _HeldInlinePanel extends ConsumerWidget {
   }
 }
 
-/// Susulan Item 24d — kartu antrian handoff pegawai dapat tab folder di
-/// atasnya (gaya sama seperti `_CartMetaTab` di atas cart bar, pakai
-/// `_TabPainter` yang sama) berisi nama PEGAWAI pengirim + jam masuk —
-/// dipisah dari `_HeldCard` yang judulnya sekarang nama PELANGGAN (bukan
-/// pegawai lagi, lihat `_handleOrderCode`). Pesanan ditahan biasa (tanpa
-/// `employeeName`) tetap tampil polos tanpa tab, seperti sebelumnya.
-class _HeldCardWithTab extends StatelessWidget {
-  const _HeldCardWithTab({required this.order, required this.onTap});
-
-  final HeldOrder order;
-  final VoidCallback onTap;
-
-  static const _cardWidth = 158.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final parsed = _parseHeldPayload(order.cartJson);
-    final employeeName = parsed.employeeName;
-    if (!parsed.awaitingPayment || employeeName == null) {
-      return _HeldCard(order: order, onTap: onTap);
-    }
-    final cs = Theme.of(context).colorScheme;
-    final time =
-        '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
-    // TIDAK pakai mainAxisSize.min — kartu di baliknya (`_HeldCard`) punya
-    // `Spacer()` internal yang butuh tinggi TERBATAS dari parent utk bisa
-    // dihitung; Column mainAxisSize.min memberi constraint tinggi TAK
-    // TERBATAS ke children non-flex, bikin Spacer() itu crash saat layout
-    // (RenderFlex unbounded height). `Expanded` di sini memberi `_HeldCard`
-    // sisa tinggi yang sudah tetap (152, dari `SizedBox` pembungkus
-    // ListView) dikurangi tinggi tab — balik seperti sebelum ada tab.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Transform.translate(
-          offset: const Offset(0, 1),
-          child: CustomPaint(
-            painter: _TabPainter(fill: cs.error, border: cs.error, slant: 8),
-            child: SizedBox(
-              width: _cardWidth,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 8, 6),
-                child: Text(
-                  '$employeeName · $time',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: cs.onError),
-                ),
-              ),
-            ),
-          ),
-        ),
-        Expanded(child: _HeldCard(order: order, onTap: onTap)),
-      ],
-    );
-  }
-}
-
+/// Redesign kartu antrian — satu bentuk kartu utk pesanan ditahan biasa
+/// maupun handoff pegawai (Item 24d), beda status lewat WARNA chip di baris
+/// atas (dalam kartu), bukan tab lipat + badge merah terpisah seperti
+/// sebelumnya. Chip terracotta (`AppTheme.accent`) berisi nama pegawai
+/// pengirim + jam masuk utk handoff; chip abu netral "Ditahan" utk pesanan
+/// biasa. Semua kartu jadi sama tinggi tanpa ruang kosong (tidak ada lagi
+/// `Spacer()` internal yang dulu wajib demi menyamai tinggi kartu bertab).
 class _HeldCard extends StatelessWidget {
   const _HeldCard({required this.order, required this.onTap});
 
@@ -3533,61 +3479,92 @@ class _HeldCard extends StatelessWidget {
     final total = cartTotalOf(parsed.items);
     final time =
         '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
+    final isHandoff = parsed.awaitingPayment && parsed.employeeName != null;
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        width: 158,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        width: 172,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: parsed.awaitingPayment ? cs.error : cs.outlineVariant,
-              width: parsed.awaitingPayment ? 1.4 : 1),
+              color: isHandoff
+                  ? AppTheme.accent.withOpacity(0.35)
+                  : cs.outlineVariant),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Item 24d — tanda visual khusus utk handoff pegawai via QR,
-            // beda dari pesanan ditahan biasa.
-            if (parsed.awaitingPayment) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: cs.error,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text('Menunggu Anda Bayar',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onError)),
+            // Chip terracotta (warna tetap, TIDAK ikut role onPrimary yang
+            // berubah di dark mode) supaya teks putih di dalamnya selalu
+            // terbaca — lihat gotcha "teks putih tak terbaca" di CLAUDE.md.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: isHandoff ? AppTheme.accent : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(999),
               ),
-              const SizedBox(height: 4),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isHandoff) ...[
+                    const Icon(Icons.person, size: 9, color: Colors.white),
+                    const SizedBox(width: 3),
+                  ],
+                  // `Flexible` WAJIB — tanpa ini Row(mainAxisSize.min) melayout
+                  // Text di lebar natural (tak terbatas), overflow kalau nama
+                  // pegawai panjang meski card sudah dibatasi lebarnya.
+                  Flexible(
+                    child: Text(
+                      isHandoff ? '${parsed.employeeName} · $time' : 'Ditahan',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: isHandoff ? Colors.white : cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(
               order.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 2),
             Text(
-              '$itemCount item · $time',
+              isHandoff ? '$itemCount item · siap dibayarkan' : '$itemCount item · $time',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
             const Spacer(),
-            Text(
-              formatRupiah(total),
-              style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  color: cs.primary),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  formatRupiah(total),
+                  style: AppTheme.numStyle(context,
+                      size: 15, weight: FontWeight.w700, color: cs.primary),
+                ),
+                Icon(Icons.chevron_right, size: 16, color: cs.outlineVariant),
+              ],
             ),
           ],
         ),
