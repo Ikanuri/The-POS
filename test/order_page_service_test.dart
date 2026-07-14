@@ -372,6 +372,39 @@ void main() {
   });
 
   test(
+      'setQty() update SATU baris produk di tempat (refreshProwControls), '
+      'BUKAN renderList() penuh — dulu tiap klik +/- membangun ulang '
+      'SELURUH grid produk, berat di katalog besar', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // Tiap baris ditandai id produknya sendiri, supaya bisa dicari &
+    // di-update sendiri tanpa menyentuh baris lain.
+    expect(result.html.contains('row.dataset.pid = p.id'), isTrue);
+    expect(result.html.contains('function refreshProwControls(p)'), isTrue);
+    expect(
+        result.html
+            .contains(r'''document.querySelector('.prow[data-pid="'+p.id+'"]')'''),
+        isTrue);
+
+    // setQty() TIDAK BOLEH lagi panggil renderList() tanpa syarat — harus
+    // lewat refreshProwControls (dgn fallback renderList() hanya kalau
+    // produk tidak ketemu).
+    final setQtyBody = RegExp(r'function setQty\(unitId, qty\)\{([\s\S]*?)\n\}')
+        .firstMatch(result.html)!
+        .group(1)!;
+    expect(setQtyBody.contains('refreshProwControls(p)'), isTrue);
+    expect(setQtyBody.contains('else renderList()'), isTrue,
+        reason: 'fallback tetap ada utk kasus produk tidak ketemu');
+    expect(RegExp(r'^\s*renderList\(\);\s*$', multiLine: true).hasMatch(setQtyBody),
+        isFalse,
+        reason: 'tidak boleh ada renderList() tanpa syarat lagi di setQty()');
+
+    await db.close();
+  });
+
+  test(
       'produk dengan >1 satuan (mis. Biji dasar + Dus) — SEMUA satuan '
       'ter-embed di field `units`, bukan cuma satuan dasar', () async {
     final db = AppDatabase(NativeDatabase.memory());

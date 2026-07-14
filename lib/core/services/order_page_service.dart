@@ -572,12 +572,27 @@ function setQty(unitId, qty){
   } else {
     cart[unitId] = qty;
   }
-  // Stepper inline sekarang cuma dipakai di lembar keranjang (barang
-  // sedikit) — bukan lagi di daftar produk penuh, jadi render ulang
-  // daftar (utk badge jumlah per-produk) tidak lagi berat seperti dulu.
-  renderList();
+  // Render ulang HANYA baris produk yang badge qty-nya berubah, bukan
+  // renderList() penuh (dulu membangun ulang SELURUH grid tiap klik +/-,
+  // O(jumlah produk) kerja DOM per tap — kerasa lag di katalog besar).
+  // Sisa baris (nama/meta/harga) tidak pernah berubah gara-gara qty, jadi
+  // aman di-skip. Fallback ke renderList() penuh kalau produk somehow
+  // tidak ketemu (mis. unitId dari sumber tak terduga).
+  var p = findProductForUnit(unitId);
+  if (p) refreshProwControls(p); else renderList();
   renderCartBar();
   if (sheetOpen) renderCartSheet();
+}
+
+// Update badge +/qty SATU baris produk di tempat (tanpa rebuild grid).
+// No-op kalau baris sedang tidak tampil (mis. terfilter search) — nanti
+// otomatis benar begitu renderList() jalan lagi (search berubah).
+function refreshProwControls(p){
+  var row = document.querySelector('.prow[data-pid="'+p.id+'"]');
+  if (!row) return;
+  var old = row.querySelector('.prow-controls');
+  if (!old) return; // stok habis — tidak ada kontrol qty utk diupdate
+  old.replaceWith(buildProwControls(p));
 }
 
 function renderList(){
@@ -596,6 +611,7 @@ function renderList(){
 
     var row = document.createElement('div');
     row.className = 'prow';
+    row.dataset.pid = p.id;
     var main = document.createElement('div');
     main.className = 'prow-main';
 
