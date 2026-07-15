@@ -4,29 +4,81 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 14 Juli 2026 (lanjutan lagi). Sesi ini: fix bug sync
-LAN gagal total di HP yang app-nya belum ter-update (`2d4467a`, lihat
-detail di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada
-kolom skema baru selama device belum update serentak) + badge jumlah
-item di struk/keranjang disamakan gaya cart bar (`67414e1`) + katalog
-HTML kini tampilkan SEMUA satuan produk, bukan cuma satuan dasar
-(`7c65b78`) + fix susulan "N pilihan" under-count utk kombinasi
-varian+multi-satuan (`69abb77`) + tombol "Salin Teks Pesanan" di bawah QR
-handoff pegawai (`458fc77`, lihat detail di bawah — PENTING, gotcha
-`Clipboard.getData()` hang di widget test, sudah ikut ditambahkan ke
-CLAUDE.md `102399d`) + redesign kartu antrian "Pesanan Ditahan" (`3200c0e`,
-lihat detail di bawah — diusulkan via mockup Playwright dulu sebelum
-dikerjakan, sesuai permintaan user) + fix poin loyalitas tempo selalu 0 +
-tap luar tutup panel antrian (`45ac0c5`, lihat detail di bawah) + perf
-katalog HTML — update satu baris produk, bukan render ulang grid penuh
-(`d4a8e71`, lihat detail di bawah — didahului sesi riset performa
-read-only, user minta insight dulu sebelum eksekusi) + **GERBANG LISENSI
-DIAKTIFKAN SUNGGUHAN** (`0d1efe2`, lihat detail di bawah — PALING PENTING
-di sesi ini, baca dulu sebelum sentuh apa pun terkait lisensi/aktivasi)
-+ susulan lisensi: sakelar darurat `lockAll` di Lapis 3 + durasi kustom
-menit di generator (`3591396`, lihat detail di bawah).
+_Terakhir diperbarui: 15 Juli 2026. **`claude/setup-dependencies-am31te`
+SUDAH DI-MERGE KE `main`** (merge commit `e4b8b7c`, atas instruksi
+eksplisit user "merge ke main sekarang") — artinya **GERBANG LISENSI
+SUDAH AKTIF DI `main`** sejak merge ini; APK berikutnya yang di-build dari
+`main` akan meminta kode aktivasi ke SEMUA device (lihat bagian gerbang
+lisensi di bawah, masih PALING PENTING utk dibaca dulu kalau topik
+lisensi/aktivasi muncul lagi). Sesi ini (15 Juli, lanjutan): fix struk
+gabungan banyak item jadi blur saat dibagikan — sekarang dikirim sbg PDF
+(`a23c48e`, lihat detail di bawah). Sesi sebelumnya (14 Juli, masih di
+branch sebelum merge): sakelar darurat `lockAll` Lapis 3 + durasi kustom
+generator (`3591396`), aktivasi gerbang lisensi (`0d1efe2`), perf katalog
+HTML (`d4a8e71`), fix poin loyalitas tempo + tutup panel via tap luar
+(`45ac0c5`), redesign kartu antrian (`3200c0e`), tombol "Salin Teks
+Pesanan" (`458fc77`), dan beberapa fix lain — detail lengkap tiap topik
+ada di bagian-bagian di bawah, riwayat commit lengkap di CHANGELOG.md.
 **schemaVersion masih 15** (tidak ada migrasi baru). Full `flutter test`
-**349 test hijau**, `flutter analyze` bersih._
+**351 test hijau**, `flutter analyze` bersih._
+
+## Struk gabungan banyak item jadi blur saat dibagikan — fix: kirim sbg PDF
+
+User lapor (lampir screenshot): struk GABUNGAN (3 nota, 67 item) hasil
+"Bagikan" via WhatsApp jadi buram/tak terbaca. Investigasi (`merged_
+receipt_screen.dart`): capture lebar tetap 300px, tapi tinggi bertambah
+linear per item (~34px logis/item, tanpa batas) — utk 67 item + header/
+footer 3 nota, estimasi tinggi gambar akhir **≈900×9.000px** (dikali
+`pixelRatio: 3.0`). WhatsApp (dan kebanyakan app share lain saat dikirim
+"sbg foto") membatasi sisi terpanjang gambar ke ~1600px — gambar
+sepanjang itu di-downscale paksa ~0,18×, lebar 900px ikut mengecil jadi
+~160px, teks 12pt monospace jadi benar-benar tak terbaca. Struk BIASA
+(satu nota) tidak kena krn jauh lebih pendek (~10 item ≈ 2.360px tinggi).
+
+**3 opsi fix didiskusikan** (`AskUserQuestion`): (1) pecah jadi beberapa
+gambar per nota, (2) paksa kirim sbg dokumen bukan foto, (3) app sendiri
+yang downscale terkendali. User malah usul opsi ke-4 sendiri: **kirim
+sbg PDF** — dipilih krn PDF diperlakukan sbg dokumen oleh WhatsApp
+(TIDAK ikut dikompresi ulang apapun panjangnya), dan tidak perlu
+redesain ulang tampilan struknya sama sekali.
+
+**Implementasi**: capture widget TETAP SAMA (`RepaintBoundary.toImage
+(pixelRatio: 3.0)`, kualitas tidak berubah) — hasil PNG-nya dibungkus
+jadi 1 halaman PDF via package `pdf` (`pw.Document`/`pw.Page`/`pw.Image
+(pw.MemoryImage(...))`, sudah jadi dependency existing utk ekspor
+laporan). **Ukuran halaman PDF dibuat PAS ukuran logis konten**
+(`PdfPageFormat(logicalWidth, logicalHeight, marginAll: 0)`, BUKAN A4
+seperti ekspor laporan biasa) — logicalWidth/Height = ukuran image hasil
+capture dibagi `pixelRatio`. File diberi ekstensi `.pdf` & `mimeType:
+'application/pdf'` saat `Share.shareXFiles`.
+
+Logika pembuatan PDF diekstrak jadi `MergedReceiptScreen.
+buildReceiptPdfBytes` (static, public — bukan method private di State)
+supaya testable langsung tanpa widget tree/RepaintBoundary. **Gotcha
+ketemu saat nulis test**: awalnya coba tes lewat tap tombol "Bagikan" +
+intercept `MethodChannel('dev.fluttercommunity.plus/share')` (pola sama
+persis dgn Clipboard gotcha sebelumnya) — SELALU gagal (`capturedCall`
+null terus). Akar masalah: di environment `flutter test` (host Linux),
+`share_plus` otomatis registrasi `SharePlusLinuxPlugin` sbg
+`SharePlatform.instance`, BUKAN implementasi Android yang pakai
+`MethodChannel` itu — jadi mock method channel TIDAK PERNAH ke-hit sama
+sekali di sini, apapun yang dilakukan. **Kalau nanti mau test flow
+`Share.shareXFiles` lagi, jangan ulangi pendekatan mock MethodChannel
+platform** — extract logika murni yang mau diuji (spt `buildReceiptPdfBytes`
+di sini) dan test itu langsung, hindari coba mensimulasikan seluruh
+call-path `Share.*` di widget test sama sekali.
+
+Test baru: `test/merged_receipt_pdf_share_test.dart` — generate PNG kecil
+via `dart:ui` (`PictureRecorder`+`Canvas`, bukan capture widget
+sungguhan), panggil `buildReceiptPdfBytes` langsung, verifikasi magic
+bytes `%PDF-` & `/MediaBox` memuat ukuran logis yang diberikan (BUKAN
+ukuran A4 baku) — 2 skenario (ukuran normal & rasio sangat memanjang mirip
+kasus 67 item). Revert-verify: sempat balikin ke `PdfPageFormat.a4` →
+test gagal tepat (`does not contain '300'`) → pasang lagi, hijau.
+`receipt_screen.dart` (struk SATU nota, bukan gabungan) SENGAJA TIDAK
+disentuh — masalahnya cuma nyata utk struk gabungan yang bisa sangat
+panjang; mengubah struk biasa jadi PDF juga bukan yang diminta &
+menambah blast radius tanpa manfaat nyata.
 
 ## Gerbang lisensi (Item 25c) SEKARANG AKTIF SUNGGUHAN — bukan lagi kill-switch mati
 

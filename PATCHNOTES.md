@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 15 Juli 2026
+
+### 🐛 Perbaikan Bug
+- **Struk gabungan (nota digabung) dengan banyak barang tidak lagi buram
+  saat dibagikan** — sebelumnya kalau nota yang digabung berisi banyak
+  sekali barang (puluhan item dari beberapa nota), gambar struk yang
+  dikirim lewat WhatsApp jadi sangat panjang dan otomatis dikompresi
+  habis-habisan sampai tulisannya tidak terbaca sama sekali. Sekarang
+  dikirim sebagai file PDF (bukan foto), jadi tetap jelas dibaca berapa
+  pun banyaknya barang.
+
 ## 14 Juli 2026
 
 ### ✨ Fitur Baru

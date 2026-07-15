@@ -8,6 +8,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-15
+
+- `a23c48e` — fix: struk gabungan banyak item jadi blur saat dibagikan — kirim sbg PDF
+
 ## 2026-07-14
 
 - `3591396` — feat: sakelar darurat "lockAll" di Lapis 3 + durasi kustom (menit) di generator
