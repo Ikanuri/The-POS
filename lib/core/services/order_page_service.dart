@@ -37,6 +37,7 @@ class OrderPageService {
     required AppDatabase db,
     required String storeName,
     String storeWhatsapp = '',
+    bool waDirect = true,
   }) async {
     final catalog = await _buildCatalogJson(db);
     final generatedAt = _formatGeneratedAt(DateTime.now());
@@ -47,6 +48,12 @@ class OrderPageService {
       'store': nameOrDefault,
       'generatedAt': generatedAt,
       'waNumber': waDigits,
+      // Item 12 — toggle dari Pengaturan: true = deep-link langsung ke nomor
+      // WA toko (`wa.me/<nomor>`); false = share WA generik (pelanggan
+      // pilih sendiri kontak tujuan, mis. lupa nomor toko atau mau simpan
+      // draft dulu). Kontrol ada di POS (order_share_screen.dart), bukan
+      // hardcoded.
+      'waDirect': waDirect,
       'machinePrefix': machineCodePrefix,
       'products': catalog,
     });
@@ -968,7 +975,11 @@ document.getElementById('waBtn').addEventListener('click', function(){
   var text = buildOrderText();
   copyText(text);
   var num = (DATA.waNumber || '').replace(/[^0-9]/g, '');
-  var url = 'https://wa.me/' + num + '?text=' + encodeURIComponent(text);
+  // Item 12 — direct: deep-link ke nomor WA toko. Non-direct: share WA
+  // generik (tanpa nomor tujuan), pelanggan pilih sendiri kontaknya.
+  var url = (DATA.waDirect && num)
+    ? ('https://wa.me/' + num + '?text=' + encodeURIComponent(text))
+    : ('https://api.whatsapp.com/send?text=' + encodeURIComponent(text));
   showToast('Teks pesanan disalin — tempel bila perlu');
   window.open(url, '_blank');
 });

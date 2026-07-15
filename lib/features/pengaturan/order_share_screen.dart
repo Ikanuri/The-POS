@@ -22,6 +22,14 @@ class OrderShareScreen extends ConsumerStatefulWidget {
   ConsumerState<OrderShareScreen> createState() => _OrderShareScreenState();
 }
 
+/// Item 12 — toggle direct WA (wa.me ke nomor toko) vs share generik.
+/// Default ON (true) supaya perilaku lama tetap sama sebelum user mengatur.
+final _waDirectProvider = FutureProvider<bool>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final v = await db.getSetting('katalog_wa_direct');
+  return v == null || v == '1';
+});
+
 class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
   bool _generating = false;
   int? _lastProductCount;
@@ -40,11 +48,13 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
       final name = (storeName == null || storeName.isEmpty)
           ? device.storeName
           : storeName;
+      final waDirect = ref.read(_waDirectProvider).valueOrNull ?? true;
 
       final result = await OrderPageService.generateHtml(
         db: db,
         storeName: name,
         storeWhatsapp: storeWhatsapp,
+        waDirect: waDirect,
       );
 
       final dir = await getTemporaryDirectory();
@@ -110,6 +120,28 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Builder(builder: (context) {
+              final waDirect =
+                  ref.watch(_waDirectProvider).valueOrNull ?? true;
+              return SwitchListTile(
+                secondary: const Icon(Icons.chat_outlined),
+                title: const Text('Kirim Langsung ke Nomor WA Toko'),
+                subtitle: Text(waDirect
+                    ? 'Tombol "Kirim via WhatsApp" di katalog langsung buka '
+                        'chat ke nomor WA toko'
+                    : 'Tombol "Kirim via WhatsApp" biarkan pelanggan pilih '
+                        'sendiri kontak tujuan (share biasa)'),
+                value: waDirect,
+                onChanged: (v) async {
+                  final db = ref.read(databaseProvider);
+                  await db.setSetting('katalog_wa_direct', v ? '1' : '0');
+                  ref.invalidate(_waDirectProvider);
+                },
+              );
+            }),
           ),
           const SizedBox(height: 8),
           Card(
