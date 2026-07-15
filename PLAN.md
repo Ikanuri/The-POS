@@ -331,6 +331,67 @@ matikan kok kasir masih bisa?"). Perbaikan murah: tambah teks info
 
 ---
 
+## Item 27 — "Alihkan Owner": pindah sesi/role owner ke device lain tanpa create baru
+
+**Konteks:** user tanya skenario HP owner lowbat siang hari saat toko masih
+transaksi — device lain (mis. HP kasir) tidak bisa "naik jadi owner" karena
+app ini offline-first (satu role owner per toko, per device). User usul ide
+ala "login Telegram di device lain" — dikonfirmasi **memungkinkan tapi hanya
+proaktif** (device sumber harus masih hidup & terjangkau saat transfer
+dilakukan), TIDAK bisa retroaktif kalau device owner sudah benar2 mati/rusak
+duluan.
+
+**Konsep fitur (belum didesain detail):** "Alihkan Owner" — dipicu QR dari
+device owner lama, di-scan device tujuan (mis. HP kasir yang mau naik jadi
+owner). Alur: clone penuh DB (via mekanisme mirip export/import `.berkahpos`
+yang sudah ada) + reassign `deviceRole` di device tujuan jadi 'owner', device
+lama otomatis turun jadi non-owner (atau dinonaktifkan) supaya tidak ada 2
+owner aktif bersamaan untuk store yang sama.
+
+**Nilai ganda:** selain mengatasi skenario lowbat, ini juga bisa jadi
+alternatif mekanisme backup manual (tidak perlu upload file `.berkahpos` ke
+tempat lain — cukup transfer device-ke-device).
+
+**Belum diputuskan/didesain:**
+- Mekanisme deteksi & pencegahan 2 owner aktif bersamaan pasca-transfer
+  (device lama harus tahu dirinya sudah "turun takhta" — gimana kalau device
+  lama offline terus setelah transfer, apakah bisa nyala lagi dan bentrok?).
+- UI/flow persis (di mana entry point-nya — Pengaturan? halaman device?).
+- Apakah perlu konfirmasi PIN/password sebelum transfer (mencegah orang lain
+  asal scan QR dan mengambil alih role owner).
+
+---
+
+## Item 28 — Pegawai lanjutkan pesanan yang sudah diproses (lunas/tempo) owner di device lain
+
+**Konteks:** kasus nyata yang sering terjadi: pegawai input barang di HP-nya
+→ scan/kirim ke owner → owner proses jadi lunas/tempo → pelanggan masih mau
+tambah barang lagi. Sekarang tidak ada alur untuk pegawai "buka kembali"
+pesanan yang sudah closed di device owner itu untuk ditambahi.
+
+**Belum didesain sama sekali** — baru sebatas concern yang divalidasi,
+dimasukkan ke plan dulu sesuai permintaan user ("oke yang ini masukkan plan
+tersendiri dulu"), implementasi ditunda.
+
+**Pertimbangan awal (belum keputusan final):**
+- Beda dengan "Tambah Belanjaan" yang sudah ada sekarang (`_isAddMode`,
+  keyed `tx.id`) — itu untuk transaksi yang MASIH di device yang sama.
+  Kasus ini pesanan sudah pindah tangan device (pegawai → owner) DAN sudah
+  closed (lunas/tempo), jadi butuh mekanisme "buka kembali & sinkronkan
+  balik" lintas device, bukan cuma lintas state lokal.
+- Kemungkinan pendekatan: perpanjangan dari alur QR handoff antrian
+  (`held_orders`, Item 24) — pegawai kirim "tambahan" baru sebagai request
+  terpisah yang owner approve manual (konsisten dgn keputusan "TANPA
+  notifikasi otomatis" di Item 24), owner-side gabungkan ke transaksi asli
+  (butuh logic gabung item + reconcile total/pembayaran kalau statusnya
+  sudah lunas).
+- Perlu keputusan desain: apakah transaksi asli di-void lalu dibuat ulang
+  gabungan, atau item ditambahkan langsung ke transaksi asli yang sudah
+  closed (implikasi ke `pointsEarned`, cetak struk ulang, dll perlu
+  dipikirkan).
+
+---
+
 ## Status ringkas & urutan sisa pekerjaan
 
 **Item 9-22 (backlog audit besar 10-11 Juli) — SELESAI 12/13**, lihat
