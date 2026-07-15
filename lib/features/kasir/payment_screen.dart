@@ -819,215 +819,294 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 // Pelanggan & pegawai mengikuti transaksi asli saat tambah
                 // belanjaan — tidak ditampilkan/diubah di mode bayar selisih.
                 if (!_isAddMode) ...[
-                  // Customer picker
-                  Text('Pelanggan',
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (_selectedCustomer != null) ...[
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 14,
-                                  backgroundColor: scheme.primaryContainer,
-                                  child: Text(
-                                    (_selectedCustomer!.name.isEmpty
-                                            ? '?'
-                                            : _selectedCustomer!.name[0])
-                                        .toUpperCase(),
-                                    style: TextStyle(
-                                        color: scheme.onPrimaryContainer,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(_selectedCustomer!.name,
-                                      style: TextStyle(color: scheme.primary)),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.close, size: 18),
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedCustomer = null;
-                                      _custCtrl.clear();
-                                      _custNameManual = '';
-                                    });
-                                    _syncMetaCustomer();
-                                  },
-                                ),
-                              ],
-                            ),
-                            if ((_custDebts[_selectedCustomer!.id]?.$1 ?? 0) >
-                                0)
-                              Container(
-                                margin: const EdgeInsets.only(top: 8),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: scheme.errorContainer,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
+                  // Pelanggan & Pegawai sejajar — dua kartu bersebelahan,
+                  // masing2 lebih ringkas drpd ditumpuk vertikal. Dropdown
+                  // saran pelanggan & peringatan hutang tetap muat di setengah
+                  // lebar sendiri (lihat komentar di Expanded pelanggan).
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Customer picker
+                            Text('Pelanggan',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 8),
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.warning_amber_rounded,
-                                        size: 16,
-                                        color: scheme.onErrorContainer),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Pelanggan ini memiliki hutang ${formatRupiah(_custDebts[_selectedCustomer!.id]!.$1)} di ${_custDebts[_selectedCustomer!.id]!.$2} nota',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: scheme.onErrorContainer),
+                                    if (_selectedCustomer != null) ...[
+                                      Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 14,
+                                            backgroundColor:
+                                                scheme.primaryContainer,
+                                            child: Text(
+                                              (_selectedCustomer!.name.isEmpty
+                                                      ? '?'
+                                                      : _selectedCustomer!
+                                                          .name[0])
+                                                  .toUpperCase(),
+                                              style: TextStyle(
+                                                  color:
+                                                      scheme.onPrimaryContainer,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(_selectedCustomer!.name,
+                                                style: TextStyle(
+                                                    color: scheme.primary)),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.close,
+                                                size: 18),
+                                            onPressed: () {
+                                              setState(() {
+                                                _selectedCustomer = null;
+                                                _custCtrl.clear();
+                                                _custNameManual = '';
+                                              });
+                                              _syncMetaCustomer();
+                                            },
+                                          ),
+                                        ],
                                       ),
-                                    ),
+                                      if ((_custDebts[_selectedCustomer!.id]
+                                                  ?.$1 ??
+                                              0) >
+                                          0)
+                                        Container(
+                                          margin: const EdgeInsets.only(top: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: scheme.errorContainer,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.warning_amber_rounded,
+                                                  size: 16,
+                                                  color:
+                                                      scheme.onErrorContainer),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  'Pelanggan ini memiliki hutang ${formatRupiah(_custDebts[_selectedCustomer!.id]!.$1)} di ${_custDebts[_selectedCustomer!.id]!.$2} nota',
+                                                  style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: scheme
+                                                          .onErrorContainer),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ] else ...[
+                                      TextField(
+                                        key: _custFieldKey,
+                                        controller: _custCtrl,
+                                        decoration: InputDecoration(
+                                          hintText:
+                                              'Cari pelanggan atau ketik nama…',
+                                          prefixIcon: const Icon(
+                                              Icons.person_outline,
+                                              size: 18),
+                                          isDense: true,
+                                          border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8)),
+                                          suffixText: _custCtrl.text.isEmpty
+                                              ? 'Umum'
+                                              : null,
+                                          suffixStyle: TextStyle(
+                                              color: scheme.onSurfaceVariant,
+                                              fontStyle: FontStyle.italic),
+                                        ),
+                                        // Saat field difokus, gulir ke atas agar dropdown saran
+                                        // muncul di atas keyboard (beri jeda untuk animasi keyboard).
+                                        onTap: () =>
+                                            _scrollCustIntoView(delayMs: 300),
+                                        onChanged: (v) {
+                                          setState(() {
+                                            _custNameManual = v;
+                                          });
+                                          _searchCustomers(v);
+                                        },
+                                      ),
+                                      if (_custDropdownOpen)
+                                        Container(
+                                          margin: const EdgeInsets.only(top: 4),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                scheme.surfaceContainerHighest,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                                color: scheme.outlineVariant),
+                                          ),
+                                          constraints: const BoxConstraints(
+                                              maxHeight: 240),
+                                          child: ListView.builder(
+                                            shrinkWrap: true,
+                                            padding: EdgeInsets.zero,
+                                            itemCount: _custSuggestions.length,
+                                            itemBuilder: (context, index) {
+                                              final c = _custSuggestions[index];
+                                              final debt = _custDebts[c.id];
+                                              final hasDebt =
+                                                  debt != null && debt.$1 > 0;
+                                              // Alamat di bawah nama — disambiguasi
+                                              // pelanggan dengan nama sama.
+                                              final address = c.address?.trim();
+                                              final hasAddress =
+                                                  address != null &&
+                                                      address.isNotEmpty;
+                                              return ListTile(
+                                                dense: true,
+                                                leading: CircleAvatar(
+                                                  radius: 12,
+                                                  backgroundColor:
+                                                      scheme.primaryContainer,
+                                                  child: Text(
+                                                      (c.name.isEmpty
+                                                              ? '?'
+                                                              : c.name[0])
+                                                          .toUpperCase(),
+                                                      style: TextStyle(
+                                                          color: scheme
+                                                              .onPrimaryContainer,
+                                                          fontSize: 10)),
+                                                ),
+                                                title: Text(c.name,
+                                                    style: const TextStyle(
+                                                        fontSize: 13)),
+                                                subtitle: (!hasAddress &&
+                                                        !hasDebt)
+                                                    ? null
+                                                    : Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          if (hasAddress)
+                                                            Text(address,
+                                                                maxLines: 1,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                                style: TextStyle(
+                                                                    fontSize:
+                                                                        11,
+                                                                    color: scheme
+                                                                        .onSurfaceVariant)),
+                                                          if (hasDebt)
+                                                            Text(
+                                                                'Hutang: ${formatRupiah(debt.$1)} (${debt.$2} nota)',
+                                                                style: TextStyle(
+                                                                    fontSize:
+                                                                        11,
+                                                                    color: scheme
+                                                                        .error)),
+                                                        ],
+                                                      ),
+                                                onTap: () {
+                                                  setState(() {
+                                                    _selectedCustomer = c;
+                                                    _custCtrl.text = c.name;
+                                                    _custDropdownOpen = false;
+                                                  });
+                                                  _syncMetaCustomer();
+                                                },
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                    ],
                                   ],
                                 ),
                               ),
-                          ] else ...[
-                            TextField(
-                              key: _custFieldKey,
-                              controller: _custCtrl,
-                              decoration: InputDecoration(
-                                hintText: 'Cari pelanggan atau ketik nama…',
-                                prefixIcon:
-                                    const Icon(Icons.person_outline, size: 18),
-                                isDense: true,
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8)),
-                                suffixText:
-                                    _custCtrl.text.isEmpty ? 'Umum' : null,
-                                suffixStyle: TextStyle(
-                                    color: scheme.onSurfaceVariant,
-                                    fontStyle: FontStyle.italic),
-                              ),
-                              // Saat field difokus, gulir ke atas agar dropdown saran
-                              // muncul di atas keyboard (beri jeda untuk animasi keyboard).
-                              onTap: () => _scrollCustIntoView(delayMs: 300),
-                              onChanged: (v) {
-                                setState(() {
-                                  _custNameManual = v;
-                                });
-                                _searchCustomers(v);
-                              },
                             ),
-                            if (_custDropdownOpen)
-                              Container(
-                                margin: const EdgeInsets.only(top: 4),
-                                decoration: BoxDecoration(
-                                  color: scheme.surfaceContainerHighest,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border:
-                                      Border.all(color: scheme.outlineVariant),
-                                ),
-                                constraints: const BoxConstraints(maxHeight: 240),
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  padding: EdgeInsets.zero,
-                                  itemCount: _custSuggestions.length,
-                                  itemBuilder: (context, index) {
-                                    final c = _custSuggestions[index];
-                                    final debt = _custDebts[c.id];
-                                    final hasDebt = debt != null && debt.$1 > 0;
-                                    return ListTile(
-                                      dense: true,
-                                      leading: CircleAvatar(
-                                        radius: 12,
-                                        backgroundColor:
-                                            scheme.primaryContainer,
-                                        child: Text(
-                                            (c.name.isEmpty ? '?' : c.name[0])
-                                                .toUpperCase(),
-                                            style: TextStyle(
-                                                color:
-                                                    scheme.onPrimaryContainer,
-                                                fontSize: 10)),
-                                      ),
-                                      title: Text(c.name,
-                                          style: const TextStyle(fontSize: 13)),
-                                      subtitle: hasDebt
-                                          ? Text(
-                                              'Hutang: ${formatRupiah(debt.$1)} (${debt.$2} nota)',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: scheme.error))
-                                          : null,
-                                      onTap: () {
-                                        setState(() {
-                                          _selectedCustomer = c;
-                                          _custCtrl.text = c.name;
-                                          _custDropdownOpen = false;
-                                        });
-                                        _syncMetaCustomer();
-                                      },
-                                    );
-                                  },
-                                ),
-                              ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Pegawai picker — dipilih dari daftar (tanpa keyboard, sehingga
-                  // tidak menutupi field lain).
-                  Text('Pegawai (yang melayani)',
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: _pickEmployee,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 12),
-                        child: Row(
-                          children: [
-                            Icon(Icons.badge_outlined,
-                                size: 18, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _selectedEmployee?.name ??
-                                    'Pilih pegawai (opsional)',
-                                style: TextStyle(
-                                  color: _selectedEmployee != null
-                                      ? scheme.primary
-                                      : scheme.onSurfaceVariant,
-                                  fontWeight: _selectedEmployee != null
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  fontStyle: _selectedEmployee == null
-                                      ? FontStyle.italic
-                                      : FontStyle.normal,
-                                ),
-                              ),
-                            ),
-                            if (_selectedEmployee != null)
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 18),
-                                visualDensity: VisualDensity.compact,
-                                onPressed: () {
-                                  setState(() => _selectedEmployee = null);
-                                  _syncMetaEmployee();
-                                },
-                              )
-                            else
-                              Icon(Icons.expand_more,
-                                  color: scheme.onSurfaceVariant),
                           ],
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Pegawai picker — dipilih dari daftar (tanpa
+                            // keyboard, sehingga tidak menutupi field lain).
+                            Text('Pegawai',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 8),
+                            Card(
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: _pickEmployee,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.badge_outlined,
+                                          size: 18,
+                                          color: scheme.onSurfaceVariant),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _selectedEmployee?.name ??
+                                              'Pilih pegawai',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: _selectedEmployee != null
+                                                ? scheme.primary
+                                                : scheme.onSurfaceVariant,
+                                            fontWeight:
+                                                _selectedEmployee != null
+                                                    ? FontWeight.w600
+                                                    : FontWeight.normal,
+                                            fontStyle: _selectedEmployee == null
+                                                ? FontStyle.italic
+                                                : FontStyle.normal,
+                                          ),
+                                        ),
+                                      ),
+                                      if (_selectedEmployee != null)
+                                        IconButton(
+                                          icon:
+                                              const Icon(Icons.close, size: 18),
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () {
+                                            setState(
+                                                () => _selectedEmployee = null);
+                                            _syncMetaEmployee();
+                                          },
+                                        )
+                                      else
+                                        Icon(Icons.expand_more,
+                                            color: scheme.onSurfaceVariant),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -1134,7 +1213,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     (_isSaving || !_bayarEnabled) ? null : _onBayarPressed,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
-                  backgroundColor: const Color(0xFF22C55E),
+                  backgroundColor: AppTheme.payGreen,
                   foregroundColor: Colors.white,
                 ),
                 child: _isSaving
@@ -1188,9 +1267,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           initial: _tendered,
           unclaimedChangeAmount: _unclaimedChange?.amount,
           unclaimedChangeTaken: _unclaimedChangeTaken,
-          onToggleUnclaimedChangeTaken: _unclaimedChange == null
-              ? null
-              : _toggleUnclaimedChangeTaken,
+          onToggleUnclaimedChangeTaken:
+              _unclaimedChange == null ? null : _toggleUnclaimedChangeTaken,
           existingShortfall: _existingShortfall,
         ),
       );
@@ -1412,8 +1490,7 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                                 fontSize: 13, fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                          formatRupiah(_effectiveTotal),
+                      Text(formatRupiah(_effectiveTotal),
                           style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 16,
@@ -1541,8 +1618,7 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                           // AppTheme set minimumSize lebar penuh by default)
                           // — di sini sengaja SEMPIT (bukan Expanded).
                           minimumSize: const Size(0, 56),
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 16)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16)),
                       child: const Text('Uang Pas',
                           style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.w600)),

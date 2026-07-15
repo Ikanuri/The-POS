@@ -7,6 +7,12 @@ class AppTheme {
   // Terracotta clay accent — from mockup --accent token
   static const accent = Color(0xFFC96442);
 
+  // Tombol "Bayar" (aksi konfirmasi pembayaran lunas) — hijau tetap sama
+  // di light & dark, dipakai di modal checkout (payment_screen.dart) DAN
+  // dialog Bayar/Lunasi di struk (debt_payment_dialog.dart) supaya warna
+  // aksi utama konsisten di seluruh alur pembayaran.
+  static const payGreen = Color(0xFF22C55E);
+
   // ── Warna semantik kasir (konsisten light & dark) ──────────────────
   // Hutang / sisa bayar → MERAH di semua mode.
   // Kembalian → HIJAU soft di semua mode.

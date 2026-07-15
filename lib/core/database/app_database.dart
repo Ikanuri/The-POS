@@ -1276,6 +1276,51 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Bug dilaporkan user: ubah pelanggan dari "Umum" ke pelanggan terdaftar
+  /// DI STRUK (bukan saat checkout) tidak pernah memberi poin loyalitas —
+  /// wajar, krn poin cuma dihitung sekali di `_confirm()` (payment_screen.dart)
+  /// saat `customerId` masih null. Dipanggil dari `receipt_screen.dart`
+  /// `_saveCustomer()` setelah `customerId` transaksi diisi — no-op (aman
+  /// dipanggil berkali-kali) kalau `pointsEarned` transaksi itu SUDAH > 0
+  /// (sudah pernah dapat poin sebelumnya, mis. cuma ganti nama tampilan),
+  /// atau threshold belum dikonfigurasi, atau total di bawah threshold.
+  Future<void> awardLoyaltyPointsIfEligible({
+    required String txId,
+    required String customerId,
+  }) async {
+    final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    if (tx == null || tx.pointsEarned > 0) return;
+
+    final threshold =
+        int.tryParse(await getSetting('loyalty_point_threshold') ?? '') ?? 0;
+    if (threshold <= 0) return;
+    final pointsPer =
+        int.tryParse(await getSetting('loyalty_points_per') ?? '') ?? 1;
+    final points =
+        (tx.total / threshold).floor() * (pointsPer < 1 ? 1 : pointsPer);
+    if (points <= 0) return;
+
+    final now = DateTime.now();
+    await transaction(() async {
+      await (update(transactions)..where((t) => t.id.equals(txId)))
+          .write(TransactionsCompanion(pointsEarned: Value(points)));
+      await into(loyaltyPointLedger).insert(LoyaltyPointLedgerCompanion.insert(
+        id: const Uuid().v4(),
+        customerId: customerId,
+        type: 'earn',
+        points: points,
+        note: Value(tx.localId),
+        createdAt: Value(now),
+      ));
+      await customUpdate(
+        'UPDATE customers SET loyalty_points = loyalty_points + ? WHERE id = ?',
+        variables: [Variable.withInt(points), Variable.withString(customerId)],
+        updates: {customers},
+      );
+    });
+  }
+
   Future<void> voidTransaction(String txId, String kasirId) async {
     await transaction(() async {
       // Baca items untuk reverse stock.

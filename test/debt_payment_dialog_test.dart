@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/widgets/debt_payment_dialog.dart';
 
 /// Item 10 — pelunasan hutang mencatat METODE BAYAR terpilih, bukan lagi
@@ -215,6 +216,33 @@ void main() {
     await tester.pump();
     expect(bayarButton().onPressed, isNull,
         reason: 'dikosongkan lagi -> mati lagi');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'tombol "Bayar" pakai AppTheme.payGreen — warna sama persis dgn '
+      'tombol Bayar di modal checkout (payment_screen.dart)', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showDebtPaymentDialog(context, db,
+                remaining: 50000, title: 'Lunasi Transaksi'),
+            child: const Text('buka'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('buka'));
+    await tester.pumpAndSettle();
+
+    final bayarBtn =
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Bayar'));
+    final resolvedColor = bayarBtn.style!.backgroundColor!.resolve({});
+    expect(resolvedColor, AppTheme.payGreen);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

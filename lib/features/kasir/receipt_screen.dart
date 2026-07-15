@@ -708,6 +708,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       customerName: Value(name),
       customerId: Value(id),
     ));
+    // Bug dilaporkan user: ubah dari "Umum" ke pelanggan terdaftar di sini
+    // tidak pernah memberi poin loyalitas (poin cuma dihitung sekali saat
+    // checkout, waktu itu customerId masih null) — susulkan sekarang.
+    // No-op aman kalau transaksi ini sudah pernah dapat poin sebelumnya.
+    if (id != null) {
+      await db.awardLoyaltyPointsIfEligible(
+          txId: widget.transactionId, customerId: id);
+    }
     Customer? customer;
     if (id != null) {
       customer = await (db.select(db.customers)..where((t) => t.id.equals(id)))
@@ -971,10 +979,25 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 size: 14, color: scheme.onSurfaceVariant),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(c.name,
-                                  style: const TextStyle(fontSize: 12),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(c.name,
+                                      style: const TextStyle(fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                  // Alamat di bawah nama — disambiguasi
+                                  // pelanggan dengan nama sama.
+                                  if ((c.address ?? '').trim().isNotEmpty)
+                                    Text(c.address!.trim(),
+                                        style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: scheme.onSurfaceVariant),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -1986,11 +2009,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ],
               ),
             ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => context.go('/kasir'),
-            child: const Text('Transaksi Baru'),
-          ),
           const SizedBox(height: 20),
         ],
       ),
