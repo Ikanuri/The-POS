@@ -10,6 +10,12 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-15
 
+- `79b94e6` — docs: tambah rencana "Alihkan Owner" (transfer sesi) & lanjutkan pesanan lintas device ke PLAN.md
+- `99ca815` — feat: batch perbaikan modal checkout & struk (label, layout, warna, poin, alamat)
+- `791e021` — feat: bundle font lokal (Hanken Grotesk, Newsreader, Roboto Mono) — offline-first
+- `3b55d1c` — feat: tampilkan sisa waktu lisensi di Pengaturan
+- `8f0c958` — feat: toggle direct WhatsApp vs share generik untuk katalog HTML
+- `d7c257d` — fix: qty desimal (0.25) tidak tampil proper di stepper + tambah debounce anti-missclick
 - `a23c48e` — fix: struk gabungan banyak item jadi blur saat dibagikan — kirim sbg PDF
 
 ## 2026-07-14

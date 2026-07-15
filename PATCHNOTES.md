@@ -10,7 +10,37 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 15 Juli 2026
 
+### ✨ Fitur Baru
+- **Sisa waktu lisensi ditampilkan di Pengaturan** — di kartu "Device Ini",
+  sekarang terlihat berapa lama lagi masa aktif aplikasi, otomatis
+  menyesuaikan satuan (hari, lalu jam, lalu menit saat mendekati habis).
+- **Kirim katalog via WhatsApp bisa diatur langsung ke nomor toko atau
+  share biasa** — di Pengaturan > Katalog Pesanan, sekarang ada saklar
+  untuk memilih apakah tombol "Kirim via WhatsApp" di katalog pelanggan
+  langsung membuka chat ke nomor WA toko, atau membiarkan pelanggan
+  memilih sendiri kontak tujuannya.
+
+### 🎨 Perubahan Tampilan
+- Field Pelanggan & Pegawai di modal checkout sekarang sejajar
+  berdampingan, tidak lagi ditumpuk — lebih ringkas.
+- Beberapa keterangan yang terlalu panjang di modal checkout diringkas
+  (mis. "Pegawai (yang melayani)" menjadi "Pegawai").
+- Warna tombol "Bayar" di in-app struk sekarang sama dengan tombol Bayar
+  di modal checkout.
+- Alamat pelanggan kini ditampilkan di bawah nama pada semua daftar
+  saran pelanggan — membantu membedakan pelanggan dengan nama yang sama.
+
 ### 🐛 Perbaikan Bug
+- **Poin loyalitas tidak masuk saat pelanggan diubah dari "Umum" ke
+  pelanggan terdaftar di in-app struk** — sekarang poin otomatis dihitung
+  begitu nama pelanggan diisi/diubah di struk, tidak cuma saat checkout.
+- Tombol "Transaksi Baru" di in-app struk dihapus karena sudah bisa lewat
+  tab Kasir di bawah.
+- Angka desimal (mis. 0,25 untuk produk timbang) sekarang tampil dengan
+  benar di lingkaran stepper +/- dan di notifikasi hasil scan barcode —
+  sebelumnya terpotong/tidak proporsional.
+- Tap ganda yang sangat cepat pada stepper +/- (kemungkinan salah pencet)
+  sekarang diabaikan supaya jumlah tidak bertambah tanpa sengaja.
 - **Struk gabungan (nota digabung) dengan banyak barang tidak lagi buram
   saat dibagikan** — sebelumnya kalau nota yang digabung berisi banyak
   sekali barang (puluhan item dari beberapa nota), gambar struk yang
