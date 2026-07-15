@@ -55,10 +55,17 @@ class _ScanToast {
   final String productUnitId;
   final String productName;
   final String unitName;
-  int qty;
+  double qty;
   final int price;
   Timer? timer;
 }
+
+/// Sama seperti label `AddControl` — tampilkan bulat tanpa desimal kalau
+/// memang bulat (mis. "2"), tapi TIDAK dibulatkan kalau desimal (mis.
+/// "0.25") — dulu toast scan memakai `.round()` sebelum sampai di sini,
+/// membuat qty pecahan (produk timbang) hilang jadi "0".
+String _fmtToastQty(double qty) =>
+    qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
 
 /// Kartu toast melayang di atas kamera scanner. Tombol ± identik gaya keranjang.
 class _ScanToastCard extends StatelessWidget {
@@ -104,9 +111,12 @@ class _ScanToastCard extends StatelessWidget {
               visualDensity: VisualDensity.compact,
               onPressed: onDec,
             ),
-            SizedBox(
-              width: 28,
-              child: Text('${toast.qty}',
+            ConstrainedBox(
+              // minWidth (bukan width tetap) — angka pecahan (mis. "1.25",
+              // produk timbang) lebih panjang dari 1-2 digit biasa, lebar
+              // tetap dulu bikin RenderFlex Row ini overflow.
+              constraints: const BoxConstraints(minWidth: 28),
+              child: Text(_fmtToastQty(toast.qty),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 16)),
@@ -1189,8 +1199,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         break;
       }
     }
-    final newQty =
-        inCart == null ? 0 : notifier.effectiveQtyFor(inCart).round();
+    final newQty = inCart == null ? 0.0 : notifier.effectiveQtyFor(inCart);
     _showOrUpdateToast(item, newQty);
   }
 
@@ -1298,7 +1307,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (mounted && ref.read(cartProvider(_cartId)).isNotEmpty) _openCartSheet();
   }
 
-  void _showOrUpdateToast(CartItem item, int qty) {
+  void _showOrUpdateToast(CartItem item, double qty) {
     _activeToast?.timer?.cancel();
     final toast = _ScanToast(
       productUnitId: item.productUnitId,

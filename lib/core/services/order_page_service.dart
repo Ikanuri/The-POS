@@ -676,7 +676,14 @@ function buildProwControls(p){
     var main = document.createElement('button');
     main.type = 'button';
     main.className = 'prow-circle prow-circle-qty';
-    main.textContent = fmtQty(qty);
+    var qtyLabel = fmtQty(qty);
+    main.textContent = qtyLabel;
+    // Lingkaran tetap bulat (bukan pill) — utk qty desimal (mis. "0.25",
+    // produk timbang) yang lebih panjang dari 1-2 digit biasa, susutkan
+    // font-nya secara proporsional supaya tetap muat, bukan meluber.
+    if (qtyLabel.length > 2) {
+      main.style.fontSize = (16 * (2 / qtyLabel.length)) + 'px';
+    }
     main.addEventListener('click', function(){ prowQuickAdd(p); });
     wrap.appendChild(minus);
     wrap.appendChild(main);
