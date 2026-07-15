@@ -56,6 +56,29 @@ class LicenseState {
     if (d == null) return null;
     return d.difference(DateTime.now()).inDays;
   }
+
+  /// Item 14 — label sisa waktu lisensi utk ditampilkan di Pengaturan, unit
+  /// menyesuaikan sisa waktu (hari → jam → menit, satuan terkecil menit).
+  /// Null kalau belum aktivasi atau lisensi "selamanya" (tidak relevan
+  /// ditampilkan sbg countdown).
+  String? get remainingLabel {
+    if (exp == null || exp == 'selamanya') return null;
+    final d = DateTime.tryParse(exp!);
+    if (d == null) return null;
+    final remaining = d.difference(DateTime.now());
+    if (remaining.isNegative) return 'Kadaluarsa';
+    if (remaining.inDays >= 1) return '${remaining.inDays} hari lagi';
+    if (remaining.inHours >= 1) return '${remaining.inHours} jam lagi';
+    return '${remaining.inMinutes} menit lagi';
+  }
+
+  /// Status lisensi utk ditampilkan — "Selamanya", countdown, "Kadaluarsa",
+  /// atau null kalau belum aktivasi sama sekali.
+  String? get licenseStatusLabel {
+    if (!isActivated) return null;
+    if (exp == 'selamanya') return 'Selamanya';
+    return remainingLabel;
+  }
 }
 
 class LicenseNotifier extends StateNotifier<LicenseState> {
