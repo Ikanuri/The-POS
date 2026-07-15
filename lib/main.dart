@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 
 import 'core/providers/device_provider.dart';
@@ -26,6 +27,12 @@ void main() {
   // murni tambahan best-effort di lapisan paling luar.
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Item 9 (batch 15 Juli) — font offline-first: SEMUA font (Hanken
+    // Grotesk, Newsreader, Roboto Mono) sudah di-bundle lokal
+    // (assets/fonts/), jangan pernah fetch dari CDN Google Fonts saat
+    // runtime — device toko sering tidak online sama sekali.
+    GoogleFonts.config.allowRuntimeFetching = false;
 
     FlutterError.onError = (details) {
       unawaited(CrashLogService.record(details.exception, details.stack,
