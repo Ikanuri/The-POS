@@ -1280,42 +1280,48 @@ class AppDatabase extends _$AppDatabase {
   /// DI STRUK (bukan saat checkout) tidak pernah memberi poin loyalitas —
   /// wajar, krn poin cuma dihitung sekali di `_confirm()` (payment_screen.dart)
   /// saat `customerId` masih null. Dipanggil dari `receipt_screen.dart`
-  /// `_saveCustomer()` setelah `customerId` transaksi diisi — no-op (aman
-  /// dipanggil berkali-kali) kalau `pointsEarned` transaksi itu SUDAH > 0
-  /// (sudah pernah dapat poin sebelumnya, mis. cuma ganti nama tampilan),
-  /// atau threshold belum dikonfigurasi, atau total di bawah threshold.
+  /// `_saveCustomer()` setelah `customerId` transaksi diisi.
+  ///
+  /// KUMULATIF (bug susulan): hitung ulang poin TARGET dari `tx.total`
+  /// terkini, lalu tambahkan SELISIH terhadap `pointsEarned` yang sudah
+  /// tersimpan — bukan cuma no-op kalau `pointsEarned > 0`. Ini supaya
+  /// "Tambah Belanjaan" (`payment_screen.dart` `_confirmAddItems`, yang
+  /// menaikkan `tx.total` lewat item susulan) ikut menambah poin secara
+  /// proporsional, bukan cuma dihitung sekali di checkout awal. Aman
+  /// dipanggil berkali-kali dgn total yang sama (selisih 0 → no-op).
   Future<void> awardLoyaltyPointsIfEligible({
     required String txId,
     required String customerId,
   }) async {
     final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
         .getSingleOrNull();
-    if (tx == null || tx.pointsEarned > 0) return;
+    if (tx == null) return;
 
     final threshold =
         int.tryParse(await getSetting('loyalty_point_threshold') ?? '') ?? 0;
     if (threshold <= 0) return;
     final pointsPer =
         int.tryParse(await getSetting('loyalty_points_per') ?? '') ?? 1;
-    final points =
+    final targetPoints =
         (tx.total / threshold).floor() * (pointsPer < 1 ? 1 : pointsPer);
-    if (points <= 0) return;
+    final delta = targetPoints - tx.pointsEarned;
+    if (delta <= 0) return;
 
     final now = DateTime.now();
     await transaction(() async {
       await (update(transactions)..where((t) => t.id.equals(txId)))
-          .write(TransactionsCompanion(pointsEarned: Value(points)));
+          .write(TransactionsCompanion(pointsEarned: Value(targetPoints)));
       await into(loyaltyPointLedger).insert(LoyaltyPointLedgerCompanion.insert(
         id: const Uuid().v4(),
         customerId: customerId,
         type: 'earn',
-        points: points,
+        points: delta,
         note: Value(tx.localId),
         createdAt: Value(now),
       ));
       await customUpdate(
         'UPDATE customers SET loyalty_points = loyalty_points + ? WHERE id = ?',
-        variables: [Variable.withInt(points), Variable.withString(customerId)],
+        variables: [Variable.withInt(delta), Variable.withString(customerId)],
         updates: {customers},
       );
     });

@@ -657,6 +657,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       kasirId: device.deviceCode,
     );
 
+    // Bug dilaporkan user: poin loyalitas tidak ikut bertambah saat tambah
+    // belanjaan menaikkan total nota — `awardLoyaltyPointsIfEligible` sudah
+    // dibuat kumulatif (selisih target vs pointsEarned tersimpan), tinggal
+    // dipanggil lagi di sini dengan total yang sudah termasuk item susulan.
+    final updatedTx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    if (updatedTx?.customerId != null) {
+      await db.awardLoyaltyPointsIfEligible(
+          txId: txId, customerId: updatedTx!.customerId!);
+    }
+
     notifier.clear();
     ref.read(cartMetaProvider(_cartId).notifier).clear();
     if (mounted) {

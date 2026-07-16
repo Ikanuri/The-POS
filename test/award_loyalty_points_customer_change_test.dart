@@ -128,4 +128,54 @@ void main() {
             .getSingle();
     expect(tx.pointsEarned, 0);
   });
+
+  test(
+      'Tambah Belanjaan: total naik lewat item susulan → poin bertambah '
+      'KUMULATIF (selisih target, bukan cuma sekali di checkout awal)',
+      () async {
+    await db.setSetting('loyalty_point_threshold', '10000');
+    await db.setSetting('loyalty_points_per', '1');
+    final custId = await seedCustomer();
+    const txId = 'tx1';
+    await db.into(db.transactions).insert(TransactionsCompanion.insert(
+          id: txId,
+          localId: 'K1-1',
+          status: 'lunas',
+          total: 50000,
+          paid: 50000,
+          changeAmount: 0,
+          paymentMethod: 'tunai',
+          customerId: Value(custId),
+        ));
+
+    // Checkout awal: 50.000 / 10.000 = 5 poin.
+    await db.awardLoyaltyPointsIfEligible(txId: txId, customerId: custId);
+    var cust =
+        await (db.select(db.customers)..where((t) => t.id.equals(custId)))
+            .getSingle();
+    expect(cust.loyaltyPoints, 5);
+
+    // Simulasikan "Tambah Belanjaan": total naik jadi 120.000 (mis. lewat
+    // `addItemsToTransaction`), lalu poin dipanggil ulang.
+    await (db.update(db.transactions)..where((t) => t.id.equals(txId)))
+        .write(const TransactionsCompanion(total: Value(120000)));
+    await db.awardLoyaltyPointsIfEligible(txId: txId, customerId: custId);
+
+    final tx =
+        await (db.select(db.transactions)..where((t) => t.id.equals(txId)))
+            .getSingle();
+    expect(tx.pointsEarned, 12, reason: '120.000 / 10.000 = 12 kelipatan');
+
+    cust = await (db.select(db.customers)..where((t) => t.id.equals(custId)))
+        .getSingle();
+    expect(cust.loyaltyPoints, 12,
+        reason: 'bertambah 7 poin (selisih 12-5), BUKAN 5+12=17 (dobel) '
+            'atau tetap 5 (diblokir no-op lama)');
+
+    final ledger = await (db.select(db.loyaltyPointLedger)
+          ..where((l) => l.customerId.equals(custId)))
+        .get();
+    expect(ledger, hasLength(2), reason: '1 entri per panggilan yg menambah');
+    expect(ledger.last.points, 7, reason: 'entri kedua cuma catat SELISIHnya');
+  });
 }
