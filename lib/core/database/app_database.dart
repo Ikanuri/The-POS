@@ -1627,9 +1627,17 @@ class AppDatabase extends _$AppDatabase {
 
   /// Item 5 — edit baris item di nota BELUM LUNAS langsung (bukan retur
   /// terpisah): ubah harga dan/atau catatan, atau hapus (via [newQty] = 0).
-  /// Qty TIDAK BISA dinaikkan lewat sini (cuma dikurangi/dihapus) — sama
-  /// batasan dgn [returnUnpaidTransactionItems], yang fungsi ini pinjam pola
-  /// rekonsiliasinya. Tanpa refund tunai (memang belum ada uang masuk).
+  /// Qty TIDAK BISA dinaikkan lewat sini SELAMA `tx.paid > 0` (cuma
+  /// dikurangi/dihapus, sama batasan dgn [returnUnpaidTransactionItems] yang
+  /// fungsi ini pinjam pola rekonsiliasinya — menaikkan qty saat sudah ada
+  /// uang masuk akan merusak alokasi pembayaran yang sudah tercatat).
+  ///
+  /// KHUSUS `tx.paid == 0` (belum ada uang berpindah SAMA SEKALI): qty
+  /// BOLEH dinaikkan melebihi qty asli — tidak ada risiko rekonsiliasi
+  /// pembayaran karena memang belum ada pembayaran sama sekali. Ini beda
+  /// dari "Tambah Belanjaan" (yang menambah PRODUK baru) — di sini cuma
+  /// menaikkan qty produk yang SAMA yang sudah ada di baris ini.
+  /// Tanpa refund tunai (memang belum ada uang masuk).
   Future<void> editUnpaidTransactionItem({
     required String txId,
     required String transactionItemId,
@@ -1652,17 +1660,30 @@ class AppDatabase extends _$AppDatabase {
           .getSingleOrNull();
       if (item == null || item.transactionId != txId) return;
 
-      final clampedQty = newQty.clamp(0.0, item.qty);
+      final clampedQty =
+          tx.paid == 0 ? newQty.clamp(0.0, double.infinity) : newQty.clamp(0.0, item.qty);
       final now = DateTime.now();
 
       // Qty berkurang (termasuk ke 0 = hapus) → stok yang tidak jadi
-      // terjual dikembalikan, sama seperti retur nota belum lunas.
-      final qtyReduced = item.qty - clampedQty;
-      if (qtyReduced > 0) {
+      // terjual dikembalikan, sama seperti retur nota belum lunas. Qty
+      // BERTAMBAH (hanya mungkin saat tx.paid == 0) → potong stok
+      // tambahan, sama seperti item baru di "Tambah Belanjaan".
+      final qtyDelta = clampedQty - item.qty;
+      if (qtyDelta < 0) {
         await _appendStock(
           productUnitId: item.productUnitId,
-          qtyChange: qtyReduced,
+          qtyChange: -qtyDelta,
           type: 'return_in',
+          referenceId: txId,
+          kasirId: kasirId,
+          note: 'Edit item (nota belum lunas)',
+          now: now,
+        );
+      } else if (qtyDelta > 0) {
+        await _appendStock(
+          productUnitId: item.productUnitId,
+          qtyChange: -qtyDelta,
+          type: 'sale',
           referenceId: txId,
           kasirId: kasirId,
           note: 'Edit item (nota belum lunas)',

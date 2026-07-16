@@ -435,10 +435,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline),
-                      // Sengaja TIDAK bisa melebihi qty asli — cuma
-                      // kurangi/hapus, bukan tambah barang baru (itu sudah
-                      // ada jalur "Tambah Belanjaan" terpisah).
-                      onPressed: qty >= item.qty
+                      // Kalau nota SUDAH ada pembayaran (paid > 0), sengaja
+                      // TIDAK bisa melebihi qty asli — cuma kurangi/hapus,
+                      // bukan tambah barang baru (itu sudah ada jalur
+                      // "Tambah Belanjaan" terpisah). Khusus nota yang
+                      // BELUM ada pembayaran sama sekali (paid == 0), qty
+                      // boleh dinaikkan bebas — tidak ada risiko rekonsiliasi
+                      // pembayaran krn memang belum ada uang masuk.
+                      onPressed: (_tx!.paid > 0 && qty >= item.qty)
                           ? null
                           : () => setSheet(() => qty += 1),
                     ),
