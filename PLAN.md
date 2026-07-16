@@ -31,7 +31,10 @@ asli, & di-commit** (16 Juli, lihat CHANGELOG `99de7ea`/`1d09200`) — desain
 final beda dari catatan lama (bukan QR+LAN live, tapi file terenkripsi
 BPOT1 + rekey SQLCipher; entry point Pengaturan "Alihkan Owner" & welcome
 screen "Pulihkan dari File"). Item 28 (lanjutkan pesanan lintas device)
-masih sebatas konsep, belum didesain detail._
+masih sebatas konsep, belum didesain detail. **Item 29/30/31 BARU** (16
+Juli, dari sesi diskusi stok minus & tutup buku): katalog auto-habis dari
+stok riil (siap dikerjakan), laporan stok terkini (belum didesain detail),
+tutup buku tanggal custom mengikuti Hari Raya (belum didesain detail)._
 
 ---
 
@@ -365,6 +368,79 @@ tersendiri dulu"), implementasi ditunda.
   gabungan, atau item ditambahkan langsung ke transaksi asli yang sudah
   closed (implikasi ke `pointsEarned`, cetak struk ulang, dll perlu
   dipikirkan).
+
+---
+
+## Item 29 — Katalog HTML: auto-tandai "habis" dari stok riil (bukan cuma flag manual)
+
+**Konteks:** `order_page_service.dart` (`_buildCatalogJson`) sekarang HANYA
+pakai `markedOutOfStock` — flag manual "tandai stok habis" yang kasir set
+sendiri, TIDAK PERNAH baca stok riil dari `stock_ledger` sama sekali. Kalau
+kasir lupa tandai manual, katalog bisa menampilkan produk tersedia padahal
+stok sistem sudah 0/minus.
+
+**Usulan user (disetujui, siap dikerjakan):** kalau setting **"Izinkan
+Stok Minus" OFF** (`allow_negative_stock` di app_settings), katalog
+TAMBAHAN mengecek stok riil per produk — otomatis tandai "habis" kalau
+stok base unit ≤ 0, di luar flag manual. Kondisi habis jadi: `markedOutOfStock
+== true` ATAU `(!allowNegativeStock && stokRiil <= 0)`. Kalau toggle ON
+(toko sengaja jual walau minus/pre-order), auto-check ini DILEWATI — konsisten
+dgn kasir yang juga boleh jual minus saat toggle ON.
+
+**Perlu diperhatikan saat implementasi:** query stok riil per produk belum
+ada di `order_page_service.dart` — perlu tambah, dan untuk katalog besar
+(ratusan produk) harus agregat/JOIN sekali jalan, JANGAN N+1 query per
+produk (lihat §Pola Arsitektur CLAUDE.md).
+
+---
+
+## Item 30 — Halaman "Laporan Stok Terkini" (kontrol stok untuk owner)
+
+**Konteks:** muncul dari diskusi Item 29 — owner butuh cara melihat &
+mengontrol stok riil semua produk sekaligus, bukan cuma badge/filter "stok
+menipis" yang sudah ada (Item 11, `33ecd4f`, berdasar `min_stock` — cuma
+menandai produk DI BAWAH ambang batas, bukan laporan stok lengkap).
+Dikonfirmasi user: fitur laporan stok terkini (semua produk + jumlah
+stoknya, kemungkinan bisa diurut/dicari) **BELUM diterapkan sama sekali**.
+
+**Belum didesain detail** — pertanyaan yang perlu dijawab sebelum coding:
+- Lokasi: tab baru di `Laporan` (sejajar Ringkasan/Transaksi/Pelanggan/
+  Hutang), atau layar terpisah dari Pengaturan/Produk?
+- Cakupan: semua produk (termasuk yang stoknya 0/aman), atau cuma yang
+  perlu perhatian (menipis + habis)? Bisa difilter per kategori?
+- Sumber angka: base stock per product (agregat dari `stock_ledger`,
+  pola query sama seperti `_rawBaseStock`/`getLowStockProductIds`) — perlu
+  pastikan performpage besar tidak N+1.
+- Apakah ini juga tempat yang pas untuk memicu aksi (mis. langsung "tandai
+  habis" dari sini), atau murni tampilan read-only?
+
+---
+
+## Item 31 — Tutup Buku: tanggal custom (bukan selalu 1 Januari)
+
+**Konteks:** `TutupBukuService.execute(year)` sekarang HARDCODE periode
+kalender Jan 1–Des 31 (`tutup_buku_service.dart:62-63`), UI cuma tampilkan
+"Tahun $currentYear" tanpa input tanggal sama sekali.
+
+**Kasus riil user:** tutup buku dilakukan pas **Hari Raya**, yang
+tanggalnya BERUBAH tiap tahun (ikut kalender Hijriah, bukan tanggal tetap).
+Jadi ini BUKAN sekadar ganti offset "tahun fiskal" tetap (mis. April–Maret
+konsisten tiap tahun) — tiap kali mau tutup buku, user pilih tanggal MANUAL
+saat itu juga.
+
+**Implikasi desain (belum final, perlu dipikirkan sebelum coding):**
+- Periode tutup buku jadi: **dari tanggal tutup buku TERAKHIR sampai
+  tanggal yang dipilih SEKARANG** (bukan lagi "tahun kalender") — supaya
+  tidak ada celah/tumpang tindih antar-periode. Perlu simpan "tanggal tutup
+  buku terakhir" (setting baru), dipakai sbg batas awal periode berikutnya
+  otomatis.
+- Skema penamaan arsip: `archive_$year.db` (skema sekarang) tidak cocok
+  lagi kalau periodenya bukan tahun kalender penuh — perlu ganti ke
+  penamaan berbasis rentang tanggal atau ID sekuensial.
+- UI: perlu date picker menggantikan tampilan "Tahun $currentYear" statis.
+- Tutup buku PERTAMA kali (belum ada histori "tanggal terakhir") — mulai
+  dari kapan? Kemungkinan dari awal data transaksi tertua, atau tanggal
+  setup toko.
 
 ---
 
