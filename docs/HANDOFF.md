@@ -7,13 +7,38 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 _Terakhir diperbarui: 16 Juli 2026. Sesi 15 Juli: batch 14 item bugfix/
 redesign/fitur kasir & katalog (lihat ringkasan di bawah). Sesi susulan 16
 Juli: redesign header struk (Item 7) SELESAI diimplementasi (`eb7da72`),
-plus 3 fix susulan kecil — nama produk struk bold (`87b8c42`), alamat
-pelanggan belum tampil di dropdown cart bar (`f098fa4`), **poin loyalitas
-sekarang kumulatif saat Tambah Belanjaan** (`32d017e`, lihat detail di
-bawah — ini yang paling signifikan). Full `flutter test` **381 test
-hijau**, `flutter analyze` bersih. schemaVersion masih 15 (tidak ada
-migrasi baru). Branch `claude/setup-dependencies-am31te` — belum di-merge
-ke `main` (tunggu instruksi user)._
+plus fix susulan — nama produk struk bold (`87b8c42`), alamat pelanggan
+belum tampil di dropdown cart bar (`f098fa4`), poin loyalitas kumulatif
+saat Tambah Belanjaan (`32d017e`), **qty item boleh dinaikkan di edit
+sheet nota tempo yang paid==0** (`2ade5b5`, lihat detail di bawah). Full
+`flutter test` **384 test hijau**, `flutter analyze` bersih. schemaVersion
+masih 15 (tidak ada migrasi baru). Branch
+`claude/setup-dependencies-am31te` — belum di-merge ke `main` (tunggu
+instruksi user).
+
+**Sesi diskusi panjang (belum ada kode) tercatat di task manager (BUKAN
+PLAN.md, sesuai instruksi user "jangan ke plan.md dulu")**: (1) desain
+"Alihkan Owner" via QR handshake + transfer LAN + `storeUuid`/`storeKey`
+ikut dipulihkan (bukan cuma isi DB) supaya device kasir lama tidak
+orphan; (2) opsi "Pulihkan dari Backup .berkahpos" di welcome screen; (3)
+opsi hosting katalog HTML (Cloudflare Pages direkomendasikan — gratis,
+custom domain bisa, TIDAK butuh Workers/KV krn katalog full client-side
+self-contained, klik stepper tidak pernah hit server). Kalau task-list sesi
+ini sudah hilang (beda sesi), baca ulang riwayat chat 16 Juli utk detail
+lengkap sebelum eksekusi #17/#18.
+
+**Temuan operasional (BUKAN bug kode, di luar repo app)**: user cek file
+`license/revoked.json` di branch `main` ternyata JSON tidak valid —
+`"dicabut": [b85a8c7b2a4996e7ce5953df55c6efec]` (fingerprint tanpa tanda
+kutip). `_checkRevocation()` (`license_provider.dart`) gagal parse JSON
+ini, tapi error KETANGKEP oleh catch-all silent-fail (by design, supaya
+gangguan jaringan tidak pernah mengunci device tanpa alasan) — akibatnya
+device yang harusnya ke-revoke malah tetap online normal, TANPA log/tanda
+apa pun. **Kalau user lapor lagi "device yang di-revoke masih online",
+CEK DULU validitas JSON `license/revoked.json` di `main`** (fingerprint
+harus dalam tanda kutip string) sebelum curiga bug di kode — riwayat sudah
+1x kejadian karena typo manual di file itu. Belum diperbaiki sesi ini
+(nunggu user pilih: Claude push fix ke `main`, atau user edit manual).
 
 ## Poin loyalitas kumulatif saat Tambah Belanjaan (16 Juli, susulan)
 

@@ -22,6 +22,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - Nama produk di baris item struk in-app sekarang lebih tebal (bold),
   lebih mudah dibaca sekilas.
 
+### ✨ Fitur Baru
+- **Nota tempo yang belum dibayar sama sekali kini bisa menaikkan jumlah
+  barang langsung dari modal edit item struk** — sebelumnya cuma bisa
+  dikurangi/dihapus, sekarang jumlahnya bisa ditambah lagi kalau ternyata
+  kurang (khusus nota yang belum ada pembayaran masuk sama sekali).
+
 ### 🐛 Perbaikan Bug
 - **Poin loyalitas sekarang bertambah sesuai kenaikan nominal saat
   "Tambah Belanjaan"** — sebelumnya kalau nota yang sudah dapat poin
