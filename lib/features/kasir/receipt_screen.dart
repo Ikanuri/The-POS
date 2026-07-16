@@ -262,7 +262,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: isVariant ? 12 : 13,
-                  fontWeight: isVariant ? FontWeight.w400 : FontWeight.w500,
+                  fontWeight: isVariant ? FontWeight.w500 : FontWeight.w700,
                   decoration: checked ? TextDecoration.lineThrough : null,
                   color: checked
                       ? scheme.onSurfaceVariant
