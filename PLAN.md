@@ -394,25 +394,104 @@ produk (lihat §Pola Arsitektur CLAUDE.md).
 
 ---
 
-## Item 30 — Halaman "Laporan Stok Terkini" (kontrol stok untuk owner)
+## Item 30 — Kontrol stok untuk owner: cek cepat (Ringkasan) + koreksi (Produk) + laporan analitik/audit (Laporan)
 
 **Konteks:** muncul dari diskusi Item 29 — owner butuh cara melihat &
-mengontrol stok riil semua produk sekaligus, bukan cuma badge/filter "stok
-menipis" yang sudah ada (Item 11, `33ecd4f`, berdasar `min_stock` — cuma
-menandai produk DI BAWAH ambang batas, bukan laporan stok lengkap).
-Dikonfirmasi user: fitur laporan stok terkini (semua produk + jumlah
-stoknya, kemungkinan bisa diurut/dicari) **BELUM diterapkan sama sekali**.
+mengontrol stok riil semua produk. **Dikonfirmasi user: TIGA bagian
+sekaligus, di TIGA lokasi berbeda** (bukan satu halaman tunggal):
 
-**Belum didesain detail** — pertanyaan yang perlu dijawab sebelum coding:
-- Lokasi: tab baru di `Laporan` (sejajar Ringkasan/Transaksi/Pelanggan/
-  Hutang), atau layar terpisah dari Pengaturan/Produk?
-- Cakupan: semua produk (termasuk yang stoknya 0/aman), atau cuma yang
-  perlu perhatian (menipis + habis)? Bisa difilter per kategori?
-- Sumber angka: base stock per product (agregat dari `stock_ledger`,
-  pola query sama seperti `_rawBaseStock`/`getLowStockProductIds`) — perlu
-  pastikan performpage besar tidak N+1.
-- Apakah ini juga tempat yang pas untuk memicu aksi (mis. langsung "tandai
-  habis" dari sini), atau murni tampilan read-only?
+### (a) Cek cepat — kartu ringkas di **Ringkasan Harian**
+- Kartu baru (mis. "N produk stok menipis, M habis"), **bisa difilter per
+  kategori produk**, isinya **summary semua stok diurut dari yang
+  TERTIPIS dulu** (pola sort sama seperti `_lowStockSql`:
+  `ORDER BY (stock - min_stock) ASC`, atau stok absolut terkecil kalau
+  `min_stock` tidak diisi).
+- Bukan full-list di kartu ini — tombol "Lihat semua" sebaiknya
+  navigasi/aktifkan filter di (b), BUKAN duplikat UI daftar produk di 2
+  tempat.
+
+### (b) Koreksi — tetap di tab **Produk**
+- **Temuan penting**: filter "Stok Menipis" yang SUDAH ADA
+  (`produk_list_screen.dart`) sekarang **tersembunyi total** kalau (1)
+  tidak ada produk dgn `min_stock` terisi & di bawah ambang (`lowStockCount
+  == 0`), DAN/ATAU (2) toko belum punya kategori produk bernama sama
+  sekali (`if (named.isEmpty) return SizedBox.shrink();` — seluruh baris
+  chip filter, TERMASUK "Stok Menipis", ikut tidak dirender). Ini alasan
+  user "belum pernah coba fitur filter stok" — BUKAN salah user, murni
+  desain yang menyembunyikan diri sendiri tergantung kondisi data. JANGAN
+  warisi pola ini ke fitur baru — kontrol stok harus SELALU terlihat &
+  bisa diakses terlepas dari data yang ada.
+- **Referensi user** (`index.html`, starter kit personal utk audit
+  keuangan + "stock opname kecil-kecilan" — istilah user sendiri, dgn
+  disclaimer "maaf kalau salah istilah"): modul **"Stok Kosong"** di
+  situ ternyata BUKAN input jumlah stok numerik, tapi **checklist ringan**:
+  karyawan tandai per-item "ini lagi habis" (qty+satuan+nama via input
+  teks bebas, mirip pola input Nota Kulakan di modul yang sama), item
+  dikelompokkan per kategori, ada badge tanggal (hari ini/kemarin/lama),
+  filter tanggal (hari ini/7 hari/kustom), drag-reorder, dan "Mode Bos"
+  (PIN 4-digit via gesture 5x-tap, krn tool itu 1-device tanpa role) utk
+  fitur tertentu (kelola kategori, kirim data via WA, dll).
+  - **Insight kunci**: "Stok Kosong" di referensi itu **PERSIS konsep
+    `markedOutOfStock`** yang SUDAH ADA di app ini (flag manual dipakai
+    katalog HTML, Item 29) — BUKAN `adjustStock` (koreksi jumlah stok
+    numerik, sudah ada juga di `produk_form_screen.dart`). Jadi checklist
+    cepat "tandai habis" di tab Produk (kalau dibangun) otomatis nyambung
+    LANGSUNG ke Item 29 (katalog auto-baca `markedOutOfStock`) — TIDAK
+    perlu kerja dobel/dua sumber kebenaran berbeda.
+  - **Mode Bos (PIN) TIDAK PERLU ditiru** — itu solusi darurat khusus tool
+    1-device-tanpa-role. The POS sudah punya role asli (owner/kasir/
+    asisten via identitas device) — cukup gating pakai itu (mis. siapa
+    boleh centang "habis", siapa cuma boleh lihat).
+  - Fitur checklist yang relevan diadopsi (bukan angka stok, tapi
+    workflow-nya): kategori tab-bar, filter tanggal cepat (hari ini/7
+    hari/kustom), badge umur tanda (supaya kelihatan kalau tandaan sudah
+    lama & mungkin sudah tidak relevan — barangnya jangan-jangan sudah
+    restock tapi lupa di-un-tandai).
+  - `adjustStock` (koreksi ANGKA stok, beda dari flag habis) tetap
+    dipertahankan sbg fitur terpisah yang sudah ada — tidak perlu diubah.
+
+### (c) Laporan analitik/audit — tab baru di **Laporan**
+- User konfirmasi: dibutuhkan **utk audit**, meski belum ada use case
+  real sekarang — tetap dikerjakan.
+- **Isi yang diusulkan**:
+  1. **Nilai inventori** — Σ(stok riil × harga pokok) per produk, per
+     kategori, & grand total. Angka paling actionable utk audit ("modal
+     tertahan di rak sekarang").
+  2. **Deteksi data tidak lengkap** — hitung & tampilkan berapa produk yg
+     harga pokoknya kosong/0 (nilainya jadi TIDAK terhitung di (1) —
+     harus ditandai eksplisit spy owner tahu angkanya understated, bukan
+     dikira final akurat).
+  3. **Daftar stok NEGATIF saat ini** — terhubung ke temuan sesi
+     sebelumnya (owner selalu bisa bypass "Izinkan Stok Minus", tidak ada
+     pengaman/pencatatan khusus saat itu terjadi) — laporan ini tempat yg
+     pas menyorot produk yg stoknya minus SEKARANG sbg sinyal "perlu
+     direview" (entah salah input, entah oversell yg disengaja).
+  4. **(Opsional, iterasi berikutnya)** — nilai stok per periode Tutup
+     Buku (Item 31), begitu Item 31 selesai: catat "nilai stok akhir"
+     tiap kali tutup buku, jadi ada jejak historis dari waktu ke waktu.
+     BUKAN syarat wajib versi pertama.
+- **PENTING (jawaban ke pertanyaan user)**: fitur ini MELENGKAPI stock
+  opname fisik, TIDAK MENGGANTIKANNYA. Rajin input stok masuk (kulakan)
+  tidak pernah menangkap susut/rusak/hilang/kesalahan hitung/dikasih
+  gratis — cuma hitung fisik berkala yang bisa memverifikasi angka
+  sistem = kenyataan. Jangan sampai fitur (c) ini dipromosikan sbg
+  "pengganti opname" ke user — framing UI-nya harus jujur soal ini kalau
+  nanti dibangun (mis. teks kecil pengingat).
+
+**Belum didesain detail (pertanyaan sebelum coding)**:
+- (a): filter kategori — state terpisah dari filter kategori di tab
+  Produk (beda screen/konteks), atau reuse?
+- (b): bentuk checklist persis apa (field apa saja per baris, apakah
+  perlu parsing teks bebas spt referensi atau cukup tap toggle per
+  produk dari list yang sudah ada)?
+- (c): breakdown per kategori itu tabel atau chart (referensi user pakai
+  donut chart utk breakdown PNL — bisa dipertimbangkan pola serupa utk
+  nilai stok per kategori, tapi belum diputuskan)?
+- Semua bagian: sumber angka stok riil per produk — agregat dari
+  `stock_ledger`, pola query sama seperti `_rawBaseStock`/
+  `getLowStockProductIds` (`_lowStockSql`) — WAJIB agregat/JOIN sekali
+  jalan, JANGAN N+1 per produk (§Pola Arsitektur CLAUDE.md), terutama
+  utk (c) yang mencakup SEMUA produk bukan cuma yang menipis.
 
 ---
 
