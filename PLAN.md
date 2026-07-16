@@ -441,18 +441,22 @@ beberapa putaran revisi, arah akhirnya JAUH lebih spesifik dari usulan awal
    isinya ikon centang (atau progres N/total kalau mau lebih informatif,
    belum diputuskan detail — lihat "Belum diputuskan" di bawah).
 
-**Catatan revisi TERAKHIR dari user (belum diverifikasi visual final):**
+**Catatan revisi dari user — SUDAH diverifikasi visual di mockup:**
 "nominal item dan nama nota tidak tertutup oleh design" (dikoreksi user
 sendiri jadi "nama ITEM nota maksudnya" — bukan nama toko/nota) — stempel
 (poin 4 di atas) **TIDAK BOLEH menutupi teks nama produk atau nominal
-harga di baris item pertama kartu**. Implementasi WAJIB kasih clearance
-vertikal cukup (padding-top kartu / posisi `top` stempel disesuaikan)
-supaya baris item pertama (`_buildItemRows`) tidak ketiban stempel yang
-notabene cukup besar (2 baris teks + border ganda). Verifikasi ini SECARA
-VISUAL (screenshot/golden test atau minimal widget test cek posisi/bounds
-non-overlap `stempel` vs baris item pertama), jangan asumsikan aman dari
-angka `top`/`right` semata — ukuran font & tinggi kartu bisa beda-beda
-(banyak/sedikit item, ukuran teks user besar via `fontScaleProvider`).
+harga di baris item pertama kartu**. Mockup awal (`struk_header_mockup_
+v3.jpg` versi pertama) sempat KETIBAN betulan (stempel menimpa baris "Gula
+Pasir 1kg" + harganya) — diperbaiki dengan menaikkan padding-top kartu
+item dari 20px jadi 66px (badge & stempel tetap `position: absolute`,
+tidak terpengaruh; hanya konten baris item yang terdorong ke bawah), user
+sudah lihat versi yang diperbaiki. **Kalau nanti diimplementasi ke
+Flutter**: `Card`/`Column` daftar item butuh padding-top setara (bukan
+cuma niru angka px mockup mentah-mentah — hitung ulang berdasarkan tinggi
+stempel + posisi `top` sebenarnya di Flutter), dan tetap WAJIB verifikasi
+visual/widget test posisi (bukan cuma niru angka clearance dari mockup),
+karena ukuran font `fontScaleProvider` & lebar layar nyata bisa beda dari
+mockup statis ini.
 
 **Belum diputuskan / perlu keputusan implementasi:**
 - Render stempel: `CustomPainter` (gambar border ganda + noise/dash utk
