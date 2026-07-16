@@ -36,6 +36,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - Alamat pelanggan yang sempat belum tampil di beberapa dropdown pencarian
   pelanggan (mis. dari tab kasir) sekarang ikut muncul, konsisten dengan
   tempat lain.
+- **Poin loyalitas tidak lagi nyangkut di pelanggan lama** kalau nama
+  pelanggan pada nota diubah balik ke "Umum" atau diganti ke pelanggan
+  lain — poin yang sudah diberikan sekarang otomatis ditarik balik dari
+  pelanggan lama, lalu dihitung ulang untuk pelanggan baru (kalau ada).
 
 ## 15 Juli 2026
 
