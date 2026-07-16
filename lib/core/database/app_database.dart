@@ -2633,6 +2633,23 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Rekey fisik file SQLCipher ke [newKeyHex] (hex 64-char, hasil
+  /// `deriveDatabaseKey`). Dipakai "Alihkan Owner" (Item 27) saat device yang
+  /// SUDAH ada datanya menerima transfer identitas toko lain — koneksi ini
+  /// dibuka dgn key LAMA, tapi identitas device (storeKey) akan diganti ke
+  /// yang BARU setelah ini. Tanpa rekey, file fisik tetap terenkripsi dgn key
+  /// lama sementara device "mengira" key-nya sudah baru — app tidak akan bisa
+  /// membuka DB lagi sama sekali setelah restart (deadlock, tidak ada jalan
+  /// pulih tanpa key lama). WAJIB dipanggil SEBELUM identitas device diganti,
+  /// dgn koneksi yang MASIH pakai key lama (`PRAGMA rekey` butuh DB yg sudah
+  /// terbuka dgn key yang benar).
+  Future<void> rekey(String newKeyHex) async {
+    if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(newKeyHex)) {
+      throw ArgumentError('Encryption key harus hex murni; nilai tidak valid ditolak.');
+    }
+    await customStatement("PRAGMA rekey = '$newKeyHex';");
+  }
+
   // ───────────────────────── Sync helpers ─────────────────────────
 
   /// Dump only syncable rows since [since] for WiFi sync.

@@ -9,6 +9,7 @@ import '../../features/kasir/receipt_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
+import '../../features/pengaturan/alih_owner_screen.dart';
 import '../../features/pengaturan/arsip_screen.dart';
 import '../../features/pengaturan/backup_screen.dart';
 import '../../features/pengaturan/crash_log_screen.dart';
@@ -35,6 +36,7 @@ import '../../features/produk/produk_form_screen.dart';
 import '../../features/produk/produk_list_screen.dart';
 import '../../features/ringkasan/ringkasan_screen.dart';
 import '../../features/setup/pairing_screen.dart';
+import '../../features/setup/restore_file_screen.dart';
 import '../../features/setup/setup_toko_screen.dart';
 import '../../features/setup/welcome_screen.dart';
 import '../../features/shell/main_shell.dart';
@@ -75,6 +77,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: 'baru', builder: (_, __) => const SetupTokoScreen()),
           GoRoute(path: 'gabung', builder: (_, __) => const PairingScreen()),
+          GoRoute(
+              path: 'pulihkan',
+              builder: (_, __) => const RestoreFileScreen()),
         ],
       ),
       ShellRoute(
@@ -191,6 +196,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'pair', builder: (_, __) => const PairDeviceScreen()),
               GoRoute(path: 'sync', builder: (_, __) => const SyncScreen()),
               GoRoute(path: 'backup', builder: (_, __) => const BackupScreen()),
+              GoRoute(
+                  path: 'alih-owner',
+                  builder: (_, __) => const AlihOwnerScreen()),
               GoRoute(
                   path: 'printer', builder: (_, __) => const PrinterScreen()),
               GoRoute(

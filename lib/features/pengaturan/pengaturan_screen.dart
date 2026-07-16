@@ -242,6 +242,14 @@ class PengaturanScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pengaturan/backup'),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.swap_horiz_outlined),
+                  title: const Text('Alihkan Owner'),
+                  subtitle: const Text(
+                      'Pindahkan seluruh data & identitas toko ke device lain'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pengaturan/alih-owner'),
+                ),
                 if (device.isOwner) ...[
                   ListTile(
                     leading: const Icon(Icons.upload_file_outlined),

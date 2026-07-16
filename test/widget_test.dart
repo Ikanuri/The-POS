@@ -207,8 +207,9 @@ void main() {
         storeUuid: storeUuid,
         password: password,
       );
-      expect(result['storeUuid'], storeUuid);
-      expect(result['tables'], isA<Map>());
+      expect(result.payload['storeUuid'], storeUuid);
+      expect(result.payload['tables'], isA<Map>());
+      expect(result.isOwnerTransfer, isFalse);
     });
 
     test('decrypt with wrong password throws BackupException', () async {
