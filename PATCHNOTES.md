@@ -19,6 +19,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   banyaknya barang di nota. Tombol "Tandai Semua" juga diringkas jadi
   ikon bulat kecil (hijau), senada dengan lingkaran jumlah barang yang
   sudah ada.
+- Nama produk di baris item struk in-app sekarang lebih tebal (bold),
+  lebih mudah dibaca sekilas.
 
 ## 15 Juli 2026
 
