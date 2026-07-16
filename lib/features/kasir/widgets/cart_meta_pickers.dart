@@ -157,6 +157,11 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                     final c = _results[index];
                     final debt = _debts[c.id];
                     final hasDebt = debt != null && debt.$1 > 0;
+                    // Alamat di bawah nama — disambiguasi pelanggan dengan
+                    // nama sama, konsisten dgn dropdown pelanggan lain
+                    // (payment_screen.dart/receipt_screen.dart).
+                    final address = c.address?.trim();
+                    final hasAddress = address != null && address.isNotEmpty;
                     return ListTile(
                       dense: true,
                       leading: CircleAvatar(
@@ -169,12 +174,26 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                         ),
                       ),
                       title: Text(c.name),
-                      subtitle: hasDebt
-                          ? Text(
-                              'Hutang: ${formatRupiah(debt.$1)} (${debt.$2} nota)',
-                              style: TextStyle(
-                                  fontSize: 11, color: scheme.error))
-                          : null,
+                      subtitle: (!hasAddress && !hasDebt)
+                          ? null
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (hasAddress)
+                                  Text(address,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: scheme.onSurfaceVariant)),
+                                if (hasDebt)
+                                  Text(
+                                      'Hutang: ${formatRupiah(debt.$1)} (${debt.$2} nota)',
+                                      style: TextStyle(
+                                          fontSize: 11, color: scheme.error)),
+                              ],
+                            ),
                       onTap: () =>
                           Navigator.pop(context, CustomerPick(c.id, c.name)),
                     );
