@@ -233,4 +233,48 @@ void main() {
       );
     });
   });
+
+  group('LicenseNotifier.shouldBlockReactivation — fix susulan: device '
+      'revoked tidak boleh "membuka diri sendiri" via kode yang sama', () {
+    test(
+        'fetch live BERHASIL & fingerprint MASIH revoked → blokir, walau '
+        'cache lama bilang tidak revoked', () {
+      expect(
+        LicenseNotifier.shouldBlockReactivation(
+            liveRevoked: true, cachedRevoked: false),
+        isTrue,
+      );
+    });
+
+    test('fetch live BERHASIL & fingerprint SUDAH TIDAK revoked → boleh',
+        () {
+      expect(
+        LicenseNotifier.shouldBlockReactivation(
+            liveRevoked: false, cachedRevoked: true),
+        isFalse,
+        reason: 'live check menang atas cache lama begitu bisa dikonfirmasi',
+      );
+    });
+
+    test(
+        'fetch GAGAL (null, offline) & cache SUDAH revoked → tetap blokir '
+        '(fail-safe, TIDAK boleh diam-diam membuka gerbang)', () {
+      expect(
+        LicenseNotifier.shouldBlockReactivation(
+            liveRevoked: null, cachedRevoked: true),
+        isTrue,
+      );
+    });
+
+    test(
+        'fetch GAGAL (null, offline) & cache belum pernah revoked → boleh '
+        '(tidak menghalangi aktivasi pertama kali yang genuinely offline)',
+        () {
+      expect(
+        LicenseNotifier.shouldBlockReactivation(
+            liveRevoked: null, cachedRevoked: false),
+        isFalse,
+      );
+    });
+  });
 }

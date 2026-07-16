@@ -109,6 +109,17 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
       lockAll ||
       dicabut.any((fp) => fp.toLowerCase() == fingerprint.toLowerCase());
 
+  /// Logika murni keputusan blokir re-aktivasi — diekstrak supaya testable
+  /// tanpa mock jaringan/kripto. [liveRevoked] = hasil [_fetchRevokedStatus]
+  /// (null kalau fetch gagal). [cachedRevoked] = status revoked yang SUDAH
+  /// tersimpan sebelum percobaan aktivasi ini. Fail-safe: fetch gagal →
+  /// pertahankan status cache (JANGAN asumsikan tidak revoked).
+  static bool shouldBlockReactivation({
+    required bool? liveRevoked,
+    required bool cachedRevoked,
+  }) =>
+      liveRevoked ?? cachedRevoked;
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -146,6 +157,19 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
     );
   }
 
+  /// Aktivasi/reaktivasi. **Susulan (bug ditemukan user)**: sebelumnya
+  /// method ini unconditionally set `revoked=false` begitu tanda tangan
+  /// kode valid — device yang SUDAH di-revoke bisa "membuka diri sendiri"
+  /// cuma dgn memasukkan ulang kode yang SAMA (revoked terpisah dari kode,
+  /// terikat ke fingerprint via `revoked.json`; kode ber-`exp:'selamanya'`
+  /// yang belum kadaluarsa tetap valid tanda tangannya selamanya). Sekarang
+  /// cek status revoked LIVE dulu sebelum membuka gerbang — kalau
+  /// fingerprint MASIH ada di `revoked.json` saat itu, aktivasi ditolak
+  /// walau tanda tangan kodenya valid. Gagal fetch (offline) → fallback ke
+  /// status revoked yang SUDAH ter-cache (fail-safe utk re-aktivasi —
+  /// beda dari `_checkRevocation()` rutin yang sengaja fail-open, di sini
+  /// kita tidak boleh diam-diam membuka device yang sedang dicurigai
+  /// revoked hanya karena jaringan kebetulan mati).
   Future<LicenseVerifyResult> activate(String code) async {
     final result = await LicenseService.verify(
       code,
@@ -153,6 +177,12 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
       deviceFingerprint: state.fingerprint,
     );
     if (!result.isOk) return result;
+
+    final liveRevoked = await _fetchRevokedStatus(state.fingerprint);
+    if (shouldBlockReactivation(
+        liveRevoked: liveRevoked, cachedRevoked: state.revoked)) {
+      return const LicenseVerifyResult.fail('revoked');
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
@@ -168,8 +198,12 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
     return result;
   }
 
-  Future<void> _checkRevocation() async {
-    if (!LicenseService.isConfigured || state.fingerprint.isEmpty) return;
+  /// Ambil status revoked TERKINI dari `revoked.json` (fetch live) — null
+  /// kalau gagal (offline/timeout/format salah), BUKAN `false`. Dipakai
+  /// bareng oleh [_checkRevocation] (pengecekan rutin startup, fail-open)
+  /// dan [activate] (re-aktivasi, fail-safe — lihat catatan di sana).
+  Future<bool?> _fetchRevokedStatus(String fingerprint) async {
+    if (!LicenseService.isConfigured || fingerprint.isEmpty) return null;
     HttpClient? client;
     try {
       client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
@@ -177,29 +211,33 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
           .getUrl(Uri.parse(_revokedListUrl))
           .timeout(const Duration(seconds: 3));
       final res = await req.close().timeout(const Duration(seconds: 3));
-      if (res.statusCode != 200) return;
+      if (res.statusCode != 200) return null;
       final body = await res.transform(utf8.decoder).join();
       final data = jsonDecode(body) as Map<String, dynamic>;
-      final revoked = computeRevoked(
+      return computeRevoked(
         lockAll: data['lockAll'] as bool? ?? false,
         dicabut: (data['dicabut'] as List?)?.cast<String>() ?? const [],
-        fingerprint: state.fingerprint,
+        fingerprint: fingerprint,
       );
-      if (revoked != state.revoked) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool(_kRevoked, revoked);
-        state = LicenseState(
-          fingerprint: state.fingerprint,
-          exp: state.exp,
-          lastSeen: state.lastSeen,
-          revoked: revoked,
-        );
-      }
     } catch (_) {
-      // Gagal-diam — offline/timeout, jangan pernah blokir fungsi inti.
+      return null;
     } finally {
       client?.close();
     }
+  }
+
+  Future<void> _checkRevocation() async {
+    final revoked = await _fetchRevokedStatus(state.fingerprint);
+    // Gagal-diam — offline/timeout, jangan pernah blokir fungsi inti.
+    if (revoked == null || revoked == state.revoked) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kRevoked, revoked);
+    state = LicenseState(
+      fingerprint: state.fingerprint,
+      exp: state.exp,
+      lastSeen: state.lastSeen,
+      revoked: revoked,
+    );
   }
 }
 
