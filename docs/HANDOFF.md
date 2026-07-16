@@ -5,35 +5,78 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 16 Juli 2026. Sesi 15 Juli: batch 14 item bugfix/
-redesign/fitur kasir & katalog (lihat ringkasan di bawah). Full `flutter
-test` **375 test hijau**, `flutter analyze` bersih. schemaVersion masih 15
-(tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` — belum
-di-merge ke `main` (tunggu instruksi user). Sesi susulan 16 Juli: redesign
-header struk (Item 7) FINAL disepakati lewat 3 putaran mockup — **desain
-sudah disetujui user, dicatat lengkap di PLAN.md Item 29, siap
-diimplementasi sesi berikutnya** (belum ada kode yang berubah, baru
-spesifikasi tersimpan)._
+redesign/fitur kasir & katalog (lihat ringkasan di bawah). Sesi susulan 16
+Juli: redesign header struk (Item 7) — **SELESAI DIIMPLEMENTASI &
+di-commit** (`eb7da72`), lihat detail di bawah. Full `flutter test` **377
+test hijau**, `flutter analyze` bersih. schemaVersion masih 15 (tidak ada
+migrasi baru). Branch `claude/setup-dependencies-am31te` — belum di-merge
+ke `main` (tunggu instruksi user)._
 
-## Redesign header struk (Item 7 lama / PLAN.md Item 29) — DESAIN DISETUJUI, siap diimplementasi
+## Redesign header struk (Item 7 lama) — SELESAI diimplementasi (16 Juli)
 
-Lihat **PLAN.md Item 29** untuk spesifikasi lengkap (sudah final, hasil 3
-putaran mockup + revisi). Ringkas: header status besar "Transaksi
-Berhasil/Tempo" dihapus total, status Lunas/Tempo jadi **stempel** (kotak
-bersudut tumpul, double border, tepi bertekstur kasar, teks tebal miring
--11°, hijau/merah) menempel di sudut KANAN-ATAS kartu item (simetris dgn
-`ItemCountBadge` yg TIDAK diubah di kiri), nomor nota (`tx.localId`)
-pindah jadi baris kedua DI DALAM stempel, "Tandai Semua" jadi lingkaran
-solid hijau persis gaya `ItemCountBadge`.
+Desain final disepakati user lewat BEBERAPA putaran mockup (jauh lebih
+banyak iterasi dari perkiraan awal — arah desain berubah signifikan di
+setiap putaran, JANGAN kaget kalau pola serupa terulang di redesign lain).
+Urutan keputusan (kalau perlu telusuri histori diskusi, cek riwayat chat
+sesi 15-16 Juli, bukan cuma commit ini):
+1. Awalnya: chip status dgn gaya "kertas dijepit" (3 opsi A/B/C).
+2. Direvisi jadi stempel bulat teks melengkung — DITOLAK user, minta
+   bentuk kotak persis foto referensi asli yang dikirim user.
+3. Direvisi jadi stempel kotak (double border, tepi kasar) menempel di
+   sudut kanan-atas kartu item (simetris `ItemCountBadge`) — TERNYATA
+   menutupi nama+harga baris item pertama, ketahuan dari screenshot.
+4. Diperbaiki dulu (padding-top kartu dinaikkan) — TAPI user lalu usul
+   pendekatan BEDA sepenuhnya: jadikan **watermark** (bukan lagi elemen
+   menempel di sudut) supaya dijamin tidak PERNAH menutupi apapun,
+   berapa pun panjang daftar itemnya.
+5. Watermark pertama (teks polos, lurus, tanpa border) — user minta
+   kembali ke bentuk stempel asli (double border + tekstur) tapi
+   diperlakukan sbg watermark (besar, samar, di belakang teks) — inilah
+   arah FINAL yang diimplementasi.
+6. Terakhir: ukuran watermark diperkecil (78% → 46% lebar kartu, opacity
+   dinaikkan 16%→22% biar tetap kebaca meski lebih kecil).
 
-**Catatan revisi terakhir user (belum diverifikasi implementasi)**: stempel
-TIDAK BOLEH menutupi nama produk/nominal harga di baris item pertama —
-butuh clearance vertikal yang aman, verifikasi visual (bukan cuma asumsi
-angka posisi) sebelum dianggap selesai.
+**Implementasi final** (`receipt_screen.dart` + `lib/core/widgets/
+status_watermark_stamp.dart` baru):
+- Header status besar "Transaksi Berhasil"/"Transaksi Tempo" + `Container`
+  ber-`Icon` DIHAPUS TOTAL dari atas kartu.
+- Widget baru `StatusWatermarkStamp`: stempel kotak (double border via
+  `CustomPainter`, tepi "kasar/bertinta" dari dash acak ber-seed tetap —
+  DETERMINISTIC, bukan `feTurbulence` SVG asli krn Flutter tidak
+  punya API itu), teks "LUNAS"/"TEMPO" + nomor nota (`tx.localId`) baris
+  kedua, dirotasi -11° via `Transform.rotate`, opacity 0.22.
+  Warna: `AppTheme.payGreen` (lunas) / `scheme.error` (tempo/kurang_bayar).
+- Watermark ditaruh di dalam `Stack` yg SAMA dgn baris item
+  (`_buildItemRows`), sbg child **non-Positioned** (bukan
+  `Positioned.fill`!) — gotcha ketemu saat implementasi: `Positioned.fill`
+  memaksa watermark ikut tinggi Stack (bisa sependek 1 baris item kalau
+  notanya cuma 1 barang), bikin teks 3-baris overflow. Fix: pakai
+  `Stack(alignment: Alignment.center)` biasa + `FractionallySizedBox
+  (widthFactor: 0.46)` tanpa height constraint, supaya watermark bebas
+  menentukan tinggi alaminya sendiri terlepas dari tinggi Stack.
+- `ItemCountBadge` (badge jumlah item, sudut kiri-atas) **TIDAK DIUBAH**.
+- "Tandai Semua" (`TextButton.icon` lama) diganti `Container` lingkaran
+  solid hijau (`AppTheme.payGreen`) 34px, persis gaya `ItemCountBadge`,
+  dgn `Tooltip` (bukan `Text` label) — kalau butuh assert di widget test,
+  pakai `find.byTooltip('Tandai Semua')`, BUKAN `find.text(...)`.
+- `merged_receipt_screen.dart` (struk gabungan) **SENGAJA TIDAK ikut
+  disentuh** — belum ada keputusan/permintaan user apakah nota gabungan
+  ikut redesign ini.
 
-Source mockup (scratchpad sesi ini, TIDAK di-commit): `struk_header_
-mockup_v3.html`/`.jpg` adalah versi FINAL yang disetujui — kalau file
-scratchpad sudah hilang (beda sesi), lihat PLAN.md Item 29 sudah cukup
-detail utk rebuild dari nol tanpa perlu lihat mockup lagi.
+Test baru: `test/receipt_status_watermark_test.dart` (label/warna/serial
+watermark utk status lunas & tempo, header lama tidak ada lagi) + update
+`test/item_count_display_test.dart` (assertion "Tandai Semua" ganti dari
+`find.text` ke `find.byTooltip`). Revert-verify sudah dijalankan (label
+lunas/tempo ditukar sengaja → test gagal tepat; header lama disisipkan
+balik sementara → test gagal tepat) sebelum dianggap selesai.
+
+Mockup sumber (scratchpad sesi ini, TIDAK di-commit — kalau perlu
+regenerasi lain waktu, deskripsi di atas + kode final di
+`status_watermark_stamp.dart` sudah cukup, tidak perlu lihat mockup lagi):
+`struk_header_mockup.html/.jpg` (v1, 3 opsi awal) → `_v2` (stempel bulat,
+ditolak) → `_v3` (stempel kotak nempel sudut, lalu diperbaiki
+clearance-nya) → `_v4` (watermark teks polos) → `_v5` (watermark bentuk
+stempel — FINAL, 2 iterasi ukuran).
 
 ## Ringkasan sesi ini (14 item dari 1 pesan user)
 

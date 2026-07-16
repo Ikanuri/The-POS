@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 16 Juli 2026
+
+### 🎨 Perubahan Tampilan
+- **Header struk didesain ulang** — kotak besar "Transaksi Berhasil"/
+  "Transaksi Tempo" di atas struk sudah tidak ada lagi. Status Lunas/Tempo
+  sekarang tampil sebagai watermark stempel samar di belakang daftar
+  barang (hijau untuk Lunas, merah untuk Tempo), lengkap dengan nomor nota
+  di dalamnya — nama & harga barang tetap selalu terbaca jelas, berapa pun
+  banyaknya barang di nota. Tombol "Tandai Semua" juga diringkas jadi
+  ikon bulat kecil (hijau), senada dengan lingkaran jumlah barang yang
+  sudah ada.
+
 ## 15 Juli 2026
 
 ### ✨ Fitur Baru
