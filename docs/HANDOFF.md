@@ -132,15 +132,14 @@ dgn license locked + device unconfigured bersamaan, pastikan menetap di
 diperbarui total (assersi lama "deviceName dipertahankan" DIBALIK jadi
 "deviceName BARU diterapkan"). Revert-verify dilakukan utk kedua fix.
 
-**Yang BELUM diverifikasi user**: skenario paling kritis (device yg SUDAH
-ada datanya menerima transfer BPOT1, lalu di-force-close & dibuka ulang —
-membuktikan rekey SQLCipher benar2 jalan, bukan cuma "data berpindah"
-tanpa restart) BELUM eksplisit dikonfirmasi lolos. Temuan #2 user (redirect
-loop) terjadi dari skenario "hapus data app" yang BEDA device/BEDA momen —
-bukan bukti rekey aman. **Sebelum fitur ini dianggap benar2 siap**, minta
-user ulangi verifikasi manual poin ke-5 di percakapan (force-close &
-reopen device PENERIMA setelah "Terima Alihan", pastikan TIDAK
-force-close/hang/error saat dibuka lagi).
+**STATUS AKHIR — SUDAH TERVERIFIKASI user di device asli** (setelah kedua
+fix `1d09200` di atas): device penerima yang SUDAH punya data sendiri
+(install ulang → buat toko → isi 1-2 data) menerima "Terima Alihan", lalu
+di-force-close & dibuka ulang — **TIDAK crash, semua data ter-update
+benar**. Ini membuktikan rekey SQLCipher (bagian paling berisiko di fitur
+ini) berfungsi sesuai desain di device sungguhan, bukan cuma di unit test.
+**Fitur "Alihkan Owner" + "Pulihkan dari File" (Item 27/28) SELESAI &
+TERVERIFIKASI — tidak ada pekerjaan menggantung dari fitur ini.**
 
 ## Fix: poin loyalitas nyangkut di pelanggan lama (16 Juli)
 
@@ -273,12 +272,7 @@ Flutter di `/opt/flutter`. Jalan sbg root menghasilkan warning "Woah!..."
 yang tidak menggagalkan perintah, aman diabaikan.
 
 ## Menggantung / Kandidat Berikutnya
-1. **Verifikasi manual rekey SQLCipher di device/emulator sungguhan**
-   (lihat section "Alihkan Owner" di atas) — WAJIB sebelum fitur ini
-   dianggap aman dirilis ke user, belum dilakukan sesi ini (cuma
-   tervalidasi logika hex-nya di unit test, bukan perilaku enkripsi
-   fisiknya).
-2. Item lama yang masih terbuka: lihat PLAN.md (Item 23 sisa, Item 17+21 sync, Item 3c/4/5 import data Griyo).
+1. Item lama yang masih terbuka: lihat PLAN.md (Item 23 sisa, Item 17+21 sync, Item 3c/4/5 import data Griyo).
 
 ## Preferensi User (masih berlaku)
 - Bahasa komunikasi & teks UI: Indonesia.
