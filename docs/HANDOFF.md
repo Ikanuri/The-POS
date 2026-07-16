@@ -4,241 +4,116 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 16 Juli 2026. Sesi 15 Juli: batch 14 item bugfix/
-redesign/fitur kasir & katalog (lihat ringkasan di bawah). Sesi susulan 16
-Juli: redesign header struk (Item 7) SELESAI diimplementasi (`eb7da72`),
-plus fix susulan — nama produk struk bold (`87b8c42`), alamat pelanggan
-belum tampil di dropdown cart bar (`f098fa4`), poin loyalitas kumulatif
-saat Tambah Belanjaan (`32d017e`), **qty item boleh dinaikkan di edit
-sheet nota tempo yang paid==0** (`2ade5b5`, lihat detail di bawah). Full
-`flutter test` **384 test hijau**, `flutter analyze` bersih. schemaVersion
-masih 15 (tidak ada migrasi baru). Branch
+_Terakhir diperbarui: 16 Juli 2026 (sesi lanjutan — fix keamanan lisensi)._
+Full `flutter test` **388 test hijau** (384 + 4 baru), `flutter analyze`
+bersih. schemaVersion masih 15 (tidak ada migrasi baru). Branch
 `claude/setup-dependencies-am31te` — belum di-merge ke `main` (tunggu
 instruksi user).
 
-**Sesi diskusi panjang (belum ada kode) tercatat di task manager (BUKAN
-PLAN.md, sesuai instruksi user "jangan ke plan.md dulu")**: (1) desain
-"Alihkan Owner" via QR handshake + transfer LAN + `storeUuid`/`storeKey`
-ikut dipulihkan (bukan cuma isi DB) supaya device kasir lama tidak
-orphan; (2) opsi "Pulihkan dari Backup .berkahpos" di welcome screen; (3)
-opsi hosting katalog HTML (Cloudflare Pages direkomendasikan — gratis,
-custom domain bisa, TIDAK butuh Workers/KV krn katalog full client-side
-self-contained, klik stepper tidak pernah hit server). Kalau task-list sesi
-ini sudah hilang (beda sesi), baca ulang riwayat chat 16 Juli utk detail
-lengkap sebelum eksekusi #17/#18.
+## Fix keamanan: device revoked bisa "membuka diri sendiri" (16 Juli, `fc991d2`)
 
-**Temuan operasional (BUKAN bug kode, di luar repo app)**: user cek file
-`license/revoked.json` di branch `main` ternyata JSON tidak valid —
-`"dicabut": [b85a8c7b2a4996e7ce5953df55c6efec]` (fingerprint tanpa tanda
-kutip). `_checkRevocation()` (`license_provider.dart`) gagal parse JSON
-ini, tapi error KETANGKEP oleh catch-all silent-fail (by design, supaya
-gangguan jaringan tidak pernah mengunci device tanpa alasan) — akibatnya
-device yang harusnya ke-revoke malah tetap online normal, TANPA log/tanda
-apa pun. **Kalau user lapor lagi "device yang di-revoke masih online",
-CEK DULU validitas JSON `license/revoked.json` di `main`** (fingerprint
-harus dalam tanda kutip string) sebelum curiga bug di kode — riwayat sudah
-1x kejadian karena typo manual di file itu. Belum diperbaiki sesi ini
-(nunggu user pilih: Claude push fix ke `main`, atau user edit manual).
+User (via eksperimen manual dgn `license/revoked.json`) menemukan celah:
+`LicenseNotifier.activate()` (`license_provider.dart`) sebelumnya
+unconditionally set `revoked=false` begitu **tanda tangan** kode aktivasi
+valid — TANPA pernah re-cek status revoked LIVE. Karena kode ber-
+`exp:'selamanya'` yang belum kadaluarsa tetap valid tanda tangannya
+selamanya (verifikasi stateless, tidak ada server utk "pakai sekali"),
+dan revoked status terikat ke fingerprint (bukan ke kode), device yang
+SUDAH di-revoke bisa membuka diri sendiri lagi cuma dgn re-entry kode
+lama yang SAMA di layar `/aktivasi` (semua state locked diarahkan ke
+layar yang sama, `app_router.dart:55`).
 
-## Poin loyalitas kumulatif saat Tambah Belanjaan (16 Juli, susulan)
+**Fix**: `activate()` sekarang fetch `_fetchRevokedStatus()` (live) dulu
+sebelum membuka gerbang, pakai `shouldBlockReactivation(liveRevoked,
+cachedRevoked)` (logika murni, extracted spt `computeRevoked()`) —
+`liveRevoked ?? cachedRevoked`: kalau fetch sukses, live menang; kalau
+fetch gagal (offline), **fail-safe** — pertahankan status cache lama
+(BEDA dari `_checkRevocation()` rutin startup yang sengaja fail-open,
+supaya gangguan jaringan tidak pernah mengunci device tanpa alasan —
+di re-aktivasi kita tidak boleh sebaliknya, diam-diam membuka device yg
+sedang dicurigai revoked).
 
-User lapor: poin loyalitas tidak ikut bertambah saat "Tambah Belanjaan"
-menaikkan total nota yang SUDAH pernah dapat poin sebelumnya. Akar
-masalah: `awardLoyaltyPointsIfEligible` (`app_database.dart`, awalnya
-dibuat utk bug lain — lihat commit sebelumnya soal ganti pelanggan Umum→
-terdaftar di struk) punya guard `if (tx.pointsEarned > 0) return;` —
-idempotent tapi TERLALU agresif, bikin nota yang sudah dapat poin sekali
-TIDAK PERNAH dapat tambahan lagi walau totalnya naik banyak lewat item
-susulan.
+Test: `test/license_service_test.dart` group baru
+`shouldBlockReactivation` (4 skenario: live-revoked, live-clear,
+fetch-gagal+cache-revoked, fetch-gagal+cache-clear). Tidak bisa test
+`activate()` end-to-end (hardcode public key produksi asli, tidak
+diinjeksi spt `verify()`) — sempat dicoba lalu dibatalkan, cukup test
+fungsi murni `shouldBlockReactivation` saja. Revert-verify dijalankan.
 
-**Fix**: method diubah jadi hitung ulang poin TARGET dari `tx.total`
-terkini (`floor(total/threshold)*pointsPer`), lalu tambahkan SELISIH
-(`target - tx.pointsEarned`) — bukan lagi all-or-nothing. Aman dipanggil
-berkali-kali dgn total sama (selisih 0 → no-op, perilaku lama utk kasus
-non-Tambah-Belanjaan tetap sama persis). `_confirmAddItems`
-(`payment_screen.dart`) memanggil method ini lagi setelah
-`addItemsToTransaction`, pakai `customerId` tx yang di-fetch fresh
-(mode Tambah Belanjaan selalu warisi pelanggan transaksi asli, tidak
-pernah diubah).
+**Sekaligus ditemukan (BELUM diperbaiki, bukan bug kode)**: file
+`license/revoked.json` di branch `main` sempat berisi JSON tidak valid
+(`"dicabut": [xxx]` — fingerprint tanpa tanda kutip string). User sudah
+konfirmasi ini akar masalah kenapa device yg di-revoke masih online
+(`_checkRevocation()` gagal parse → ketangkep catch-all silent-fail by
+design). **Status: belum jelas siapa yang perbaiki file JSON-nya** —
+saya tawarkan (push fix ke `main` sendiri, atau user edit manual via
+GitHub) tapi belum ada jawaban eksplisit. **Kalau sesi depan lanjut,
+tanyakan ke user dulu sebelum menyentuh `main`** (branch policy: jangan
+push ke branch lain tanpa izin). Kalau user lapor lagi "device revoked
+masih online", cek dulu validitas JSON file ini sebelum curiga bug kode.
 
-**PENTING kalau nanti ada bug loyalty lain**: method ini sekarang jadi
-"recompute + top-up", BUKAN "award sekali doang" — kalau ada tempat lain
-yang butuh pola serupa (mis. retur sebagian yang menurunkan total), method
-ini SENGAJA tidak claw-back poin kalau total turun (`delta <= 0` →
-no-op, tidak pernah mengurangi) — pengurangan poin akibat void/retur sudah
-ditangani jalur terpisah (`voidTransaction`, proporsional) yang TIDAK
-disentuh sesi ini.
+## Item pending — dilacak di task manager (BUKAN PLAN.md, sesuai instruksi user)
 
-Test: `test/award_loyalty_points_customer_change_test.dart` (tambah 1 test
-DB-tier baru utk skenario kumulatif, 4 test lama tetap hijau tanpa
-diubah) + `test/tambah_belanjaan_loyalty_points_test.dart` (BARU,
-end-to-end lewat `PaymentScreen(addToTxId:)` sungguhan — tap "Bayar X" →
-"Uang Pas" → "Bayar", verifikasi `tx.pointsEarned`/`customer.loyaltyPoints`
-naik sesuai selisih, bukan dobel/tetap). Revert-verify dijalankan di
-kedua level (DB murni + widget end-to-end).
+Instruksi eksplisit user: *"masukkan plan dulu (jangan ke plan.md), kita
+eksekusi barengan dengan yang lain."* — kalau task-list sesi ini hilang
+(beda sesi/environment), berikut rekonstruksinya dari riwayat chat:
 
-## Alamat pelanggan — 1 dropdown lagi ketinggalan (16 Juli, susulan)
+1. **Cabut poin loyalitas saat customer diubah balik ke Umum** — bug:
+   transaksi umum→diubah ke pelanggan terdaftar (dapat poin)→diubah balik
+   ke Umum lagi, poin TETAP nempel di customer lama (tidak pernah
+   di-claw-back), padahal `voidTransaction` (reversal poin proporsional)
+   mensyaratkan `customerId != null` sehingga tidak bisa jalan lagi
+   setelah customerId di-null-kan. Belum ada fix, belum ada test.
+2. **"Alihkan Owner" (transfer sesi role owner antar-device)** — desain
+   besar, BELUM final, butuh keputusan lanjutan sebelum coding:
+   - QR dipakai sbg handshake saja (terlalu kecil utk transfer DB penuh),
+     transfer sungguhan lewat LAN (pola serupa `lan_sync_service.dart`).
+   - Demosi device lama TERJADI SETELAH restore sukses dikonfirmasi di
+     device baru (bukan sebelum) — cegah window "toko tanpa owner" kalau
+     transfer gagal di tengah jalan.
+   - `storeUuid`+`storeKey` ikut di-embed DI DALAM file `.berkahpos` itu
+     sendiri (bukan re-entry manual) — supaya restore benar2 "menjadi"
+     store yang sama, tidak meng-orphan device kasir/asisten lain yang
+     sync-nya bergantung pada `storeKey` yang cocok.
+3. **Opsi "Pulihkan dari Backup .berkahpos" langsung di welcome screen**
+   — saat ini restore backup cuma bisa lewat Pengaturan (setelah setup
+   toko selesai) — usul user: tambah opsi ke-3 di `welcome_screen.dart`
+   (selain "Setup Toko Baru"/"Gabung Toko") utk restore langsung dari
+   file tanpa perlu bikin toko dummy dulu. Bergantung pada keputusan
+   embedding storeUuid/storeKey di item #2 di atas (supaya device
+   kasir/asisten lama tidak orphan).
 
-Sesi sebelumnya (batch 14-item) sudah menambah alamat pelanggan di bawah
-nama pada dropdown `payment_screen.dart` & `receipt_screen.dart`, TAPI
-ada satu dropdown lagi yang terlewat: `showCustomerPickerSheet`
-(`lib/features/kasir/widgets/cart_meta_pickers.dart`) — dipakai dari
-`_CartMetaTab` di cart bar kasir (BEDA file/BEDA widget dari 2 dropdown
-yang sudah diperbaiki). Kalau nanti ada laporan serupa lagi ("alamat
-belum tampil di [tempat X]"), curigai ADA dropdown pelanggan lain yang
-belum ke-cover — cek semua pemakaian `searchCustomers`/pola
-`ListTile(title: Text(c.name), subtitle: ...)` di codebase, jangan
-asumsikan cuma 2 tempat yang sudah diperbaiki sudah cukup.
+## Diskusi lain (sudah dijawab, tidak perlu tindakan kode)
 
-Test: `test/cart_meta_customer_picker_address_test.dart`.
+- **Hosting katalog HTML**: Cloudflare Pages/GitHub Pages direkomendasikan
+  (gratis, custom domain didukung keduanya, ~Rp150-250rb/tahun kalau mau
+  domain sendiri — pembelian domain terpisah dari hosting). REKOMENDASI:
+  repo TERPISAH dari `The-POS` (biar source code app tetap privat) kalau
+  pakai GitHub Pages (perlu repo publik utk Pages gratis) — Cloudflare
+  Pages bisa drag-drop tanpa perlu repo GitHub sama sekali. Katalog HTML
+  fully self-contained/client-side (semua interaksi via JS ter-embed,
+  klik stepper tidak pernah hit network) — TIDAK butuh Workers/KV.
+  Model: developer "upload" (overwrite file yg sama tiap harga berubah),
+  pelanggan cukup buka URL spt web biasa (bukan download file permanen ke
+  storage device, beda dari cara share-file mentah yang berlaku sekarang).
+  Kecepatan render tetap tergantung device pelanggan (sudah pernah ada bug
+  nyata: grid re-render penuh tiap klik stepper, sudah diperbaiki jadi
+  partial update).
+- **Serial/kode aktivasi bisa dipakai berulang**: BUKAN bug — verifikasi
+  Ed25519 stateless offline, tidak ada server utk tracking "sudah
+  dipakai". Kode yang sama tetap valid tanda tangannya selamanya (kalau
+  `exp:'selamanya'` & device belum di-revoke) — inherent trade-off
+  arsitektur no-cloud-backend, bukan sesuatu yang perlu "diperbaiki".
 
-## Redesign header struk (Item 7 lama) — SELESAI diimplementasi (16 Juli)
+## Item selesai sebelumnya (16 Juli, sesi awal — ringkas)
+- Redesign header struk (Item 7) → watermark stempel
+  (`status_watermark_stamp.dart`), `eb7da72` + follow-up bold nama produk,
+  alamat dropdown cart bar, poin loyalitas kumulatif Tambah Belanjaan.
+- Nota tempo `paid==0` boleh naikkan qty item sama di edit sheet
+  (`2ade5b5`) — sebelumnya cuma bisa kurang/hapus.
+- Detail teknis lengkap ada di CHANGELOG.md (baris tanggal yang sama).
 
-Desain final disepakati user lewat BEBERAPA putaran mockup (jauh lebih
-banyak iterasi dari perkiraan awal — arah desain berubah signifikan di
-setiap putaran, JANGAN kaget kalau pola serupa terulang di redesign lain).
-Urutan keputusan (kalau perlu telusuri histori diskusi, cek riwayat chat
-sesi 15-16 Juli, bukan cuma commit ini):
-1. Awalnya: chip status dgn gaya "kertas dijepit" (3 opsi A/B/C).
-2. Direvisi jadi stempel bulat teks melengkung — DITOLAK user, minta
-   bentuk kotak persis foto referensi asli yang dikirim user.
-3. Direvisi jadi stempel kotak (double border, tepi kasar) menempel di
-   sudut kanan-atas kartu item (simetris `ItemCountBadge`) — TERNYATA
-   menutupi nama+harga baris item pertama, ketahuan dari screenshot.
-4. Diperbaiki dulu (padding-top kartu dinaikkan) — TAPI user lalu usul
-   pendekatan BEDA sepenuhnya: jadikan **watermark** (bukan lagi elemen
-   menempel di sudut) supaya dijamin tidak PERNAH menutupi apapun,
-   berapa pun panjang daftar itemnya.
-5. Watermark pertama (teks polos, lurus, tanpa border) — user minta
-   kembali ke bentuk stempel asli (double border + tekstur) tapi
-   diperlakukan sbg watermark (besar, samar, di belakang teks) — inilah
-   arah FINAL yang diimplementasi.
-6. Terakhir: ukuran watermark diperkecil (78% → 46% lebar kartu, opacity
-   dinaikkan 16%→22% biar tetap kebaca meski lebih kecil).
-
-**Implementasi final** (`receipt_screen.dart` + `lib/core/widgets/
-status_watermark_stamp.dart` baru):
-- Header status besar "Transaksi Berhasil"/"Transaksi Tempo" + `Container`
-  ber-`Icon` DIHAPUS TOTAL dari atas kartu.
-- Widget baru `StatusWatermarkStamp`: stempel kotak (double border via
-  `CustomPainter`, tepi "kasar/bertinta" dari dash acak ber-seed tetap —
-  DETERMINISTIC, bukan `feTurbulence` SVG asli krn Flutter tidak
-  punya API itu), teks "LUNAS"/"TEMPO" + nomor nota (`tx.localId`) baris
-  kedua, dirotasi -11° via `Transform.rotate`, opacity 0.22.
-  Warna: `AppTheme.payGreen` (lunas) / `scheme.error` (tempo/kurang_bayar).
-- Watermark ditaruh di dalam `Stack` yg SAMA dgn baris item
-  (`_buildItemRows`), sbg child **non-Positioned** (bukan
-  `Positioned.fill`!) — gotcha ketemu saat implementasi: `Positioned.fill`
-  memaksa watermark ikut tinggi Stack (bisa sependek 1 baris item kalau
-  notanya cuma 1 barang), bikin teks 3-baris overflow. Fix: pakai
-  `Stack(alignment: Alignment.center)` biasa + `FractionallySizedBox
-  (widthFactor: 0.46)` tanpa height constraint, supaya watermark bebas
-  menentukan tinggi alaminya sendiri terlepas dari tinggi Stack.
-- `ItemCountBadge` (badge jumlah item, sudut kiri-atas) **TIDAK DIUBAH**.
-- "Tandai Semua" (`TextButton.icon` lama) diganti `Container` lingkaran
-  solid hijau (`AppTheme.payGreen`) 34px, persis gaya `ItemCountBadge`,
-  dgn `Tooltip` (bukan `Text` label) — kalau butuh assert di widget test,
-  pakai `find.byTooltip('Tandai Semua')`, BUKAN `find.text(...)`.
-- `merged_receipt_screen.dart` (struk gabungan) **SENGAJA TIDAK ikut
-  disentuh** — belum ada keputusan/permintaan user apakah nota gabungan
-  ikut redesign ini.
-
-Test baru: `test/receipt_status_watermark_test.dart` (label/warna/serial
-watermark utk status lunas & tempo, header lama tidak ada lagi) + update
-`test/item_count_display_test.dart` (assertion "Tandai Semua" ganti dari
-`find.text` ke `find.byTooltip`). Revert-verify sudah dijalankan (label
-lunas/tempo ditukar sengaja → test gagal tepat; header lama disisipkan
-balik sementara → test gagal tepat) sebelum dianggap selesai.
-
-Mockup sumber (scratchpad sesi ini, TIDAK di-commit — kalau perlu
-regenerasi lain waktu, deskripsi di atas + kode final di
-`status_watermark_stamp.dart` sudah cukup, tidak perlu lihat mockup lagi):
-`struk_header_mockup.html/.jpg` (v1, 3 opsi awal) → `_v2` (stempel bulat,
-ditolak) → `_v3` (stempel kotak nempel sudut, lalu diperbaiki
-clearance-nya) → `_v4` (watermark teks polos) → `_v5` (watermark bentuk
-stempel — FINAL, 2 iterasi ukuran).
-
-## Ringkasan sesi ini (14 item dari 1 pesan user)
-
-User kirim 14 laporan/pertanyaan/redesign sekaligus, instruksi eksplisit:
-"berikan opini dulu" → user balas dengan keputusan spesifik per-poin → lalu
-"poin yang tidak saya sebut atau sudah saya konfirmasi, kerjakan. poin yang
-masih dipertimbangkan diskusikan. mockup design kerjakan". Hasil:
-
-**Dikerjakan (kode, commit terpisah per tema):**
-- Label verbose diringkas ("Pegawai (yang melayani)" → "Pegawai").
-- Field Pelanggan & Pegawai di modal checkout disejajarkan (`Row`+`Expanded`,
-  bukan ditumpuk) — `payment_screen.dart`.
-- Qty desimal (0,25) di stepper `AddControl` tidak proper → `FittedBox`
-  auto-shrink font, badge TETAP bulat (keputusan eksplisit user: "shrink
-  saja, karena bulat dibutuhkan") — juga diperbaiki di toast scan kontinu
-  (`kasir_screen.dart`) & katalog HTML (`order_page_service.dart`).
-- Warna tombol "Bayar" disamakan antara modal checkout & in-app struk
-  (`AppTheme.payGreen` baru, dipakai juga di `debt_payment_dialog.dart`).
-- **Bug poin loyalitas**: ubah pelanggan Umum→terdaftar di STRUK (bukan
-  saat checkout) tidak pernah memberi poin — diekstrak
-  `AppDatabase.awardLoyaltyPointsIfEligible()` (idempotent), dipanggil dari
-  `receipt_screen.dart` `_saveCustomer`.
-- Tombol "Transaksi Baru" di struk dihapus (redundan dgn tab kasir).
-- Alamat pelanggan ditampilkan di bawah nama di SEMUA dropdown/list saran
-  pelanggan (payment_screen & receipt_screen) — cegah salah pilih nama kembar.
-- Debounce anti-missclick di `AddControl` (150ms, berbasis `Timer` bukan
-  `DateTime.now()` — WAJIB `Timer` supaya testable dgn `tester.pump`,
-  `DateTime.now()` TIDAK ikut virtual clock widget test).
-- Countdown lisensi di Pengaturan (`LicenseState.remainingLabel`/
-  `licenseStatusLabel`, auto-scale hari→jam→menit).
-- Toggle direct WhatsApp (wa.me ke nomor toko) vs share generik
-  (`api.whatsapp.com/send` tanpa nomor) untuk katalog HTML — setting baru
-  `katalog_wa_direct` di `order_share_screen.dart`.
-- **Font di-bundle lokal** (Hanken Grotesk, Newsreader, Roboto Mono) — lihat
-  gotcha khusus di bawah, ini yang paling berisiko/rumit di batch ini.
-
-**Didiskusikan, TIDAK dikerjakan (sesuai keputusan user):**
-- Hold-to-queue di mode "Tambah Belanjaan" — ditelusuri, disimpulkan TIDAK
-  PERLU: cart provider mode ini sudah `family` keyed `tx.id` (bukan
-  `kMainCartId`), non-autoDispose, jadi progres pegawai otomatis aman
-  walau pindah tab tanpa fitur tahan tambahan.
-- "Alihkan Owner" (transfer sesi role owner antar-device) & "pegawai
-  lanjutkan pesanan yg sudah diproses owner" — masuk PLAN.md Item 27 & 28,
-  belum didesain detail, implementasi ditunda.
-
-## Gotcha BARU — bundling font lokal utk `google_fonts` (self-hosting)
-
-**Paket `google_fonts` TIDAK memakai deklarasi `fonts:` Flutter biasa.**
-Ia mencari file lewat `assets:` (AssetManifest) dgn pola nama PERSIS
-`<FamilyInternal>-<NamaBerat>.ttf` (mis. `HankenGrotesk-SemiBold.ttf`,
-tanpa spasi di nama keluarga — beda dari nama tampilan "Hanken Grotesk").
-Kalau declare via `fonts:` pubspec seperti font custom biasa, TIDAK akan
-kepakai — package tetap mencoba fetch runtime lalu exception kalau
-`allowRuntimeFetching = false`. Solusi yang benar: taruh file di folder yg
-didaftar `assets:` (project ini: `assets/fonts/`), biarkan `google_fonts`
-menemukannya sendiri via `AssetManifest`.
-
-File sumber yg didownload dari `google/fonts` (OFL) untuk 3 keluarga ini
-cuma **variable font** (satu file per keluarga, axis `wght` 100-900), BUKAN
-static per-berat seperti yg diharapkan `google_fonts`. Instans statis
-per-berat di-generate pakai `fonttools varLib.instancer` (`pip install
-fonttools`, instantiate tiap nilai `wght` jadi file terpisah) — 23 file
-total (Hanken 9 berat 100-900, Newsreader 7 berat 200-800 sesuai axis
-range aslinya, RobotoMono 7 berat 100-700).
-
-**Widget test TIDAK BISA dipakai untuk verifikasi regresi bundling ini** —
-`flutter test` SELALU jalankan `flutter_tester` dgn flag
-`--disable-asset-fonts --use-test-fonts` (bukan opsional), jadi
-render-based test lolos/gagal TIDAK MENCERMINKAN apakah asset font asli
-benar2 resolve (dibuktikan manual: test tetap hijau walau file font
-sengaja dihapus). Test yang benar & sudah dipasang
-(`test/local_fonts_offline_test.dart`): cek keberadaan file di disk sesuai
-konvensi nama persis, utk SEMUA kombinasi (keluarga, berat) yg benar2
-dipakai app — bukan widget test.
-
-**Build cache asset test bisa basi**: `build/unit_test_assets/
-AssetManifest.json` di-cache dan TIDAK otomatis rebuild walau isi
-`assets/fonts/` berubah (cuma rebuild kalau `pubspec.yaml` berubah) —
-kalau nanti nambah/hapus file di folder assets tanpa ubah pubspec, hapus
-`build/unit_test_assets/` manual sebelum test kalau curiga manifest basi.
-
-## Gotcha lain (masih berlaku, dari sesi-sesi sebelumnya — ringkas, detail di CLAUDE.md §Gotcha)
+## Gotcha (ringkas, detail lengkap di CLAUDE.md §Gotcha — tidak diulang di sini)
 - HID scanner menelan input keyboard kalau `useRootNavigator: true`.
 - `TextDirection` bentrok material vs pdf — pakai `ui.TextDirection.ltr` eksplisit.
 - Teks putih tak terbaca di PDF — bungkus `Material` di dalam `Theme(data: AppTheme.light())`.
@@ -247,34 +122,32 @@ kalau nanti nambah/hapus file di folder assets tanpa ubah pubspec, hapus
 - Drift `StreamProvider` widget test bisa hang 10 menit — WAJIB `drain()` di akhir test.
 - `OutlinedButton`/`FilledButton` default lebar-penuh — 2+ dalam 1 `Row` WAJIB override `minimumSize`, ekstra parah di dalam `AlertDialog.content` (`IntrinsicWidth`).
 - `Clipboard.getData()` TIDAK di-mock otomatis `flutter_test` — pasang mock manual atau test hang selamanya.
+- Stock ledger test: seed row butuh `createdAt` eksplisit di masa lalu (race dgn SQL-default timestamp vs `DateTime.now()` Dart-side).
 
-## Gerbang lisensi (Item 25c) — masih AKTIF, tidak disentuh sesi ini
+## Gerbang lisensi (Item 25c) — status terkini
 `LicenseService.publicKeyBase64` sudah ditanam (bukan kosong) — device
-manapun yang belum aktivasi diarahkan ke `/aktivasi`. Detail lengkap
-keputusan & mekanisme ada di CHANGELOG (`0d1efe2`, `3591396`) — tidak
-diulang di sini, tidak ada perubahan sesi ini.
+manapun yang belum aktivasi diarahkan ke `/aktivasi`. Layar aktivasi yang
+SAMA dipakai utk semua state locked (belum aktivasi/expired/revoked/jam
+mundur) — sengaja tidak membedakan alasan. `activate()` sekarang re-cek
+revoked LIVE (lihat section fix di atas) — sebelumnya TIDAK. Detail
+histori lengkap di CHANGELOG (`0d1efe2`, `3591396`, `fc991d2`).
 
 ## Lingkungan sesi ini
-Flutter di `/opt/flutter`. `pip install fonttools` dipakai sekali utk
-generate font statis (lihat gotcha di atas) — tidak perlu diinstall ulang
-kecuali environment baru. Jalan sbg root menghasilkan warning "Woah!..."
+Flutter di `/opt/flutter`. Jalan sbg root menghasilkan warning "Woah!..."
 yang tidak menggagalkan perintah, aman diabaikan.
 
 ## Menggantung / Kandidat Berikutnya
-- **Redesign header struk (Item 7)** — tunggu user pilih opsi A/B/C dari
-  Artifact mockup (lihat section paling atas).
-- **PLAN.md Item 27** ("Alihkan Owner") & **Item 28** (pegawai lanjutkan
-  pesanan lintas device) — baru sebatas konsep, belum didesain detail.
-- Item lama yang masih terbuka: lihat PLAN.md (Item 23 sisa, Item 17+21
-  sync, Item 3c/4/5 import data Griyo).
+1. Cabut poin loyalitas saat customer diubah balik ke Umum (lihat detail di atas).
+2. Keputusan siapa yang perbaiki JSON `license/revoked.json` di `main` (typo tanda kutip).
+3. "Alihkan Owner" & "Pulihkan dari Backup" welcome screen — desain besar, lihat detail di atas, JANGAN masuk PLAN.md dulu sampai user instruksikan lain.
+4. Item lama yang masih terbuka: lihat PLAN.md (Item 23 sisa, Item 17+21 sync, Item 3c/4/5 import data Griyo).
 
 ## Preferensi User (masih berlaku)
 - Bahasa komunikasi & teks UI: Indonesia.
 - Untuk fitur bervisual: usulkan opsi desain dulu (mockup/Artifact) sebelum implementasi.
 - Untuk batch besar berisi item ambigu + jelas dicampur: minta opini dulu,
   lalu beri keputusan spesifik per-poin — item yg jelas dieksekusi
-  langsung, item ambigu didiskusikan/plan dulu.
-- Rencana yang didiskusikan tapi belum dieksekusi → masuk PLAN.md
-  komprehensif, jangan cuma tersimpan di riwayat chat.
+  langsung, item ambigu didiskusikan/plan dulu (task manager, bukan
+  otomatis PLAN.md kalau user secara eksplisit minta ditahan).
 - Setiap regresi/bugfix WAJIB revert-verify (buktikan test gagal dulu
   sebelum fix, baru pasang lagi) — sudah konsisten dijalankan sesi ini.

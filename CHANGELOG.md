@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-16
 
+- `fc991d2` — fix: device yang di-revoke bisa "membuka diri sendiri" via kode aktivasi yang sama
 - `2ade5b5` — feat: boleh naikkan qty item sama di edit sheet nota tempo yang belum ada pembayaran
 - `32d017e` — fix: poin loyalitas tidak bertambah kumulatif saat Tambah Belanjaan
 - `f098fa4` — fix: alamat pelanggan tidak tampil di dropdown picker cart bar
