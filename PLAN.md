@@ -26,8 +26,12 @@ FINAL tetap `Share.share()` generik, tidak perlu deep-link `wa.me`.
 Sisa menggantung: Item 3c, 5, 23 (sebagian, lihat detail — nota gabungan
 sudah diperbaiki sesi 13 Juli). **Redesign header struk (watermark stempel
 Lunas/Tempo) SELESAI & di-commit** (16 Juli) — lihat CHANGELOG untuk hash.
-Item 27/28 (Alihkan Owner, lanjutkan pesanan lintas device) masih sebatas
-konsep, belum didesain detail._
+**Item 27 ("Alihkan Owner") SELESAI SEPENUHNYA, diverifikasi di device
+asli, & di-commit** (16 Juli, lihat CHANGELOG `99de7ea`/`1d09200`) — desain
+final beda dari catatan lama (bukan QR+LAN live, tapi file terenkripsi
+BPOT1 + rekey SQLCipher; entry point Pengaturan "Alihkan Owner" & welcome
+screen "Pulihkan dari File"). Item 28 (lanjutkan pesanan lintas device)
+masih sebatas konsep, belum didesain detail._
 
 ---
 
@@ -331,37 +335,6 @@ mengalir sebagai master-data owner→kasir). UX-nya membingungkan ("sudah saya
 matikan kok kasir masih bisa?"). Perbaikan murah: tambah teks info
 "Perubahan berlaku setelah HP kasir sync berikutnya" di `kasir_permissions_screen.dart`
 & `asisten_permissions_screen.dart`.
-
----
-
-## Item 27 — "Alihkan Owner": pindah sesi/role owner ke device lain tanpa create baru
-
-**Konteks:** user tanya skenario HP owner lowbat siang hari saat toko masih
-transaksi — device lain (mis. HP kasir) tidak bisa "naik jadi owner" karena
-app ini offline-first (satu role owner per toko, per device). User usul ide
-ala "login Telegram di device lain" — dikonfirmasi **memungkinkan tapi hanya
-proaktif** (device sumber harus masih hidup & terjangkau saat transfer
-dilakukan), TIDAK bisa retroaktif kalau device owner sudah benar2 mati/rusak
-duluan.
-
-**Konsep fitur (belum didesain detail):** "Alihkan Owner" — dipicu QR dari
-device owner lama, di-scan device tujuan (mis. HP kasir yang mau naik jadi
-owner). Alur: clone penuh DB (via mekanisme mirip export/import `.berkahpos`
-yang sudah ada) + reassign `deviceRole` di device tujuan jadi 'owner', device
-lama otomatis turun jadi non-owner (atau dinonaktifkan) supaya tidak ada 2
-owner aktif bersamaan untuk store yang sama.
-
-**Nilai ganda:** selain mengatasi skenario lowbat, ini juga bisa jadi
-alternatif mekanisme backup manual (tidak perlu upload file `.berkahpos` ke
-tempat lain — cukup transfer device-ke-device).
-
-**Belum diputuskan/didesain:**
-- Mekanisme deteksi & pencegahan 2 owner aktif bersamaan pasca-transfer
-  (device lama harus tahu dirinya sudah "turun takhta" — gimana kalau device
-  lama offline terus setelah transfer, apakah bisa nyala lagi dan bentrok?).
-- UI/flow persis (di mana entry point-nya — Pengaturan? halaman device?).
-- Apakah perlu konfirmasi PIN/password sebelum transfer (mencegah orang lain
-  asal scan QR dan mengambil alih role owner).
 
 ---
 
