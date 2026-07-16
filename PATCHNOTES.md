@@ -27,6 +27,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   barang langsung dari modal edit item struk** — sebelumnya cuma bisa
   dikurangi/dihapus, sekarang jumlahnya bisa ditambah lagi kalau ternyata
   kurang (khusus nota yang belum ada pembayaran masuk sama sekali).
+- **Fitur baru "Alihkan Owner"** (Pengaturan → Sinkronisasi) — pindahkan
+  seluruh data DAN identitas toko ke HP lain lewat file terenkripsi
+  (beda dari Backup & Restore biasa yang cuma memindahkan data). Berguna
+  kalau ganti HP owner, atau HP lama kehabisan baterai/rusak — HP baru
+  bisa langsung "menjadi" toko yang sama tanpa perlu setup ulang atau
+  pairing manual ke kasir/asisten yang sudah ada.
+- **Opsi baru "Pulihkan dari File" di layar awal** (sebelum setup toko) —
+  kalau sudah punya file backup atau file Alihan Owner, sekarang bisa
+  langsung dipulihkan dari layar pertama tanpa perlu bikin toko dummy
+  dulu.
 
 ### 🐛 Perbaikan Bug
 - **Poin loyalitas sekarang bertambah sesuai kenaikan nominal saat

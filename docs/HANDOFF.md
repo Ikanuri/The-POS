@@ -12,6 +12,84 @@ belum di-merge ke `main` (tunggu instruksi user). User sudah perbaiki
 `license/revoked.json` di `main` secara manual (typo tanda kutip) —
 item ini SELESAI, tidak perlu ditindaklanjuti lagi.
 
+## Fitur baru: "Alihkan Owner" + "Pulihkan dari File" (16 Juli, Item 27/28)
+
+Diimplementasikan SELESAI setelah diskusi desain panjang (lihat CHANGELOG
+utk histori keputusan lengkap kalau perlu telusuri). Ringkasan final:
+
+**Format file baru `BPOT1`** (`db_export_service.dart`) — sama enkripsinya
+dgn `.berkahpos` portable (BPOP2, PBKDF2+salt acak), TAPI payload-nya JUGA
+bawa `storeUuid`/`storeKey`/`storeName` toko asal, dan itu BENAR-BENAR
+diterapkan ke device penerima (bukan cuma ekspor data). SENGAJA magic byte
+& fungsi terpisah dari `exportPortable`/BPOP2 (bukan sekadar flag) — supaya
+user tidak salah pencet backup rutin & tanpa sadar mengubah identitas
+device (lihat CHANGELOG utk analisis trade-off lengkap kenapa ini dipisah,
+bukan defaultnya diubah). `DbExportService.decrypt()` sekarang return
+record `({payload, isOwnerTransfer})`, bukan `Map` polos lagi — SEMUA
+caller lama (`backup_screen.dart`, `widget_test.dart`,
+`backup_restore_bug_test.dart`) sudah disesuaikan.
+
+**Rekey SQLCipher** (`AppDatabase.rekey()`, app_database.dart) — bagian
+PALING KRITIS & PALING BERISIKO di fitur ini. File fisik DB (`the_pos.db`,
+path TETAP sama apa pun storeKey-nya) di-encrypt pakai key yang diturunkan
+dari storeKey saat itu (`deriveDatabaseKey`, PRAGMA key). Kalau device yang
+SUDAH ada datanya menerima transfer (Opsi B — lihat di bawah), storeKey
+device itu BERGANTI ke storeKey toko baru — TANPA rekey fisik, file lama
+tetap terenkripsi key LAMA sementara device "mengira" key-nya sudah BARU,
+sehingga app TIDAK BISA BUKA DB LAGI SAMA SEKALI setelah restart (tidak
+ada jalan pulih tanpa tahu key lamanya). Urutan WAJIB:
+1. `DbExportService.restore()` — isi tabel pakai koneksi lama (key lama).
+2. `db.rekey(deriveDatabaseKey(storeKeyBaru))` — SEBELUM identitas diganti.
+3. `DeviceNotifier.joinStore(...)` — baru sekarang identitas berubah.
+Diimplementasikan di `DeviceNotifier.applyOwnerTransferInPlace()`
+(device_provider.dart) persis urutan ini. **Device BARU (belum pernah
+setup, welcome screen)** tidak butuh rekey sama sekali — file DB belum
+pernah ada, jadi key pertama yg dipakai otomatis "menempel" tanpa konflik.
+**CATATAN PENTING kalau lanjut kerjakan fitur ini**: rekey TIDAK bisa
+diverifikasi end-to-end di unit test (`NativeDatabase.memory()` test pakai
+sqlite3 polos, `PRAGMA rekey` dianggap no-op bukan SQLCipher asli) — cuma
+validasi hex input yg testable, PERILAKU ENKRIPSI FISIKNYA WAJIB dites
+manual di device/emulator sungguhan sebelum rilis (belum dilakukan sesi
+ini — TODO sebelum build APK dirilis kalau fitur ini dipakai user).
+
+**Siapa boleh jadi penerima — Opsi B dipilih user**: device MANAPUN,
+termasuk yang SUDAH aktif dipakai (kasir/asisten/owner toko lain) — bukan
+cuma device baru. Makanya ada 2 entry point terpisah pakai fungsi inti
+yang sama:
+- **Pengaturan → Alihkan Owner** (`alih_owner_screen.dart`, route
+  `/pengaturan/alih-owner`) — utk device yg SUDAH ada datanya. Bagian
+  "Buat File Alihan" (ekspor) HANYA tampil utk owner; "Terima Alihan"
+  (impor) tampil utk SEMUA role. Import di sini pakai dialog konfirmasi
+  KUAT (beda dari restore biasa) + checkbox manual "sudah pastikan
+  ter-sync" (BUKAN pengecekan otomatis — cek otomatis butuh query status
+  sync host yg kompleks, sengaja disederhanakan jadi acknowledgment
+  manual, keputusan sadar utk membatasi scope).
+- **Welcome screen → "Pulihkan dari File"** (`restore_file_screen.dart`,
+  route `/setup/pulihkan`) — utk device BARU (belum setup). Terima 2
+  jenis file: BPOT1 (identitas dari file langsung dipakai via `joinStore`
+  role owner) ATAU `.berkahpos` biasa (device bikin identitas toko BARU
+  spt "Setup Toko Baru", lalu data dari file di-restore di atasnya).
+
+**TIDAK ADA logika demosi/kill-switch device lama** (keputusan final dari
+diskusi panjang) — device yg "kalah" (tidak lagi jadi sumber data
+terbaru) dibiarkan begitu saja, sesuai kebiasaan user "hapus & setup ulang
+kalau mau dipakai lagi". Jalur sync biasa (`lan_sync_service.dart`,
+kasir/asisten ↔ owner) SUDAH DIKONFIRMASI tidak tersentuh sama sekali oleh
+fitur ini — protokol terpisah total, watermark sync (`last_sync_download_at`
+di tabel `app_settings`) otomatis ikut ke-restore/rekey krn `app_settings`
+termasuk `_allTables`.
+
+Test: `test/owner_transfer_export_test.dart` (round-trip export/decrypt
+BPOT1 vs BPOP2, restore, validasi rekey), `test/apply_owner_transfer_in_place_test.dart`
+(deviceName/deviceCode dipertahankan, persist ke storage sungguhan via
+mock secure-storage channel), `test/alih_owner_screen_visibility_test.dart`
+(role gating), `test/welcome_screen_restore_button_test.dart`. Revert-verify
+dilakukan utk role-gating & deviceName-preservation. TIDAK ada widget test
+utk alur file-picker penuh (butuh mock platform channel `file_picker`,
+tidak ada preseden di codebase ini utk `backup_screen.dart` juga) — cukup
+DB-tier utk logika kritis (kripto/rekey/identitas), sesuai prinsip
+"pilih level sesuai yg disentuh".
+
 ## Fix: poin loyalitas nyangkut di pelanggan lama (16 Juli)
 
 User lapor: transaksi umum diubah ke pelanggan terdaftar (dapat poin),
@@ -89,50 +167,6 @@ tanyakan ke user dulu sebelum menyentuh `main`** (branch policy: jangan
 push ke branch lain tanpa izin). Kalau user lapor lagi "device revoked
 masih online", cek dulu validitas JSON file ini sebelum curiga bug kode.
 
-## Item pending — dilacak di task manager (BUKAN PLAN.md, sesuai instruksi user)
-
-Instruksi eksplisit user: *"masukkan plan dulu (jangan ke plan.md), kita
-eksekusi barengan dengan yang lain."* — kalau task-list sesi ini hilang
-(beda sesi/environment), berikut rekonstruksinya dari riwayat chat:
-
-1. **"Alihkan Owner" (transfer sesi role owner antar-device)** — desain
-   sudah cukup matang (lihat rekap di bawah), belum ada baris kode.
-   - QR dipakai sbg handshake saja (terlalu kecil utk transfer DB penuh),
-     transfer sungguhan lewat LAN (pola serupa `lan_sync_service.dart`).
-   - **Mekanisme transfer = full wipe & replace**, PAKAI ULANG
-     `dumpAllTables()`/`restoreFromDump()` yang sudah ada (persis jalur
-     `.berkahpos`), cuma lewat koneksi LAN langsung (bukan file manual).
-     Ini keputusan FINAL — jangan bangun protokol merge/incremental baru
-     khusus fitur ini.
-   - **TIDAK PERLU logika demosi/kill-switch sama sekali** (sempat
-     didiskusikan panjang, akhirnya disimpulkan tidak perlu) — device
-     lama dibiarkan begitu saja setelah transfer (tetap menganggap
-     dirinya `owner` di kepalanya sendiri, data lama beku per momen
-     transfer), TIDAK disentuh/direset. Ini valid krn pola pakai
-     nyata user: device yang "kalah" selalu berhenti dipakai transaksi
-     setelah transfer (bukan dipakai paralel) — kalau nanti dipakai
-     lagi, sudah jadi kebiasaan user utk hapus data/setup ulang dari
-     nol, bukan sesuatu yang perlu ditangani kode. Arah transfer BEBAS
-     bolak-balik (A→B lalu B→A dst), tiap kali selalu wipe&replace total
-     ke arah tujuan transfer saat itu.
-   - Watermark sync (`last_sync_download_at`, di tabel `app_settings`)
-     ikut ke-wipe&restore tiap transfer krn `app_settings` termasuk
-     `_allTables` — otomatis konsisten, tidak perlu penanganan khusus.
-     Jalur sync biasa (kasir/asisten ↔ owner, `lan_sync_service.dart`)
-     **sudah dikonfirmasi TIDAK tersentuh** oleh fitur ini — protokol
-     terpisah sepenuhnya.
-   - `storeUuid`+`storeKey` ikut di-embed DI DALAM dump/transfer itu
-     sendiri (bukan re-entry manual) — supaya device penerima benar2
-     "menjadi" store yang sama, tidak meng-orphan device kasir/asisten
-     lain yang sync-nya bergantung pada `storeKey` yang cocok.
-2. **Opsi "Pulihkan dari Backup .berkahpos" langsung di welcome screen**
-   — saat ini restore backup cuma bisa lewat Pengaturan (setelah setup
-   toko selesai) — usul user: tambah opsi ke-3 di `welcome_screen.dart`
-   (selain "Setup Toko Baru"/"Gabung Toko") utk restore langsung dari
-   file tanpa perlu bikin toko dummy dulu. Sekarang arsitekturnya makin
-   dekat dgn item #1 di atas (sama-sama wipe&replace total + storeUuid/
-   storeKey ikut, cuma beda jalur: LAN live vs file `.berkahpos`).
-
 ## Diskusi lain (sudah dijawab, tidak perlu tindakan kode)
 
 - **Hosting katalog HTML**: Cloudflare Pages/GitHub Pages direkomendasikan
@@ -187,10 +221,12 @@ Flutter di `/opt/flutter`. Jalan sbg root menghasilkan warning "Woah!..."
 yang tidak menggagalkan perintah, aman diabaikan.
 
 ## Menggantung / Kandidat Berikutnya
-1. Cabut poin loyalitas saat customer diubah balik ke Umum (lihat detail di atas).
-2. Keputusan siapa yang perbaiki JSON `license/revoked.json` di `main` (typo tanda kutip).
-3. "Alihkan Owner" & "Pulihkan dari Backup" welcome screen — desain besar, lihat detail di atas, JANGAN masuk PLAN.md dulu sampai user instruksikan lain.
-4. Item lama yang masih terbuka: lihat PLAN.md (Item 23 sisa, Item 17+21 sync, Item 3c/4/5 import data Griyo).
+1. **Verifikasi manual rekey SQLCipher di device/emulator sungguhan**
+   (lihat section "Alihkan Owner" di atas) — WAJIB sebelum fitur ini
+   dianggap aman dirilis ke user, belum dilakukan sesi ini (cuma
+   tervalidasi logika hex-nya di unit test, bukan perilaku enkripsi
+   fisiknya).
+2. Item lama yang masih terbuka: lihat PLAN.md (Item 23 sisa, Item 17+21 sync, Item 3c/4/5 import data Griyo).
 
 ## Preferensi User (masih berlaku)
 - Bahasa komunikasi & teks UI: Indonesia.
