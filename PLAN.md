@@ -24,7 +24,11 @@ di-commit, DAN SEKARANG AKTIF** — public key developer sudah ditanam
 kustom menit di generator (`3591396`). Nomor WA developer: KEPUTUSAN
 FINAL tetap `Share.share()` generik, tidak perlu deep-link `wa.me`.
 Sisa menggantung: Item 3c, 5, 23 (sebagian, lihat detail — nota gabungan
-sudah diperbaiki sesi 13 Juli)._
+sudah diperbaiki sesi 13 Juli). **Item 29 BARU (15-16 Juli)**: redesign
+header struk (stempel Lunas/Tempo) — desain SUDAH DISETUJUI user via 3
+putaran mockup, siap diimplementasi (lihat detail lengkap di Item 29).
+Item 27/28 (Alihkan Owner, lanjutkan pesanan lintas device) masih sebatas
+konsep, belum didesain detail._
 
 ---
 
@@ -389,6 +393,100 @@ tersendiri dulu"), implementasi ditunda.
   gabungan, atau item ditambahkan langsung ke transaksi asli yang sudah
   closed (implikasi ke `pointsEarned`, cetak struk ulang, dll perlu
   dipikirkan).
+
+---
+
+## Item 29 — Redesign header struk (Item 7 lama): status jadi "stempel", desain SUDAH DISETUJUI user, siap diimplementasi
+
+**Prioritas:** Siap dikerjakan — desain sudah difinalisasi lewat 3 putaran
+mockup (screenshot Playwright dikirim ke user tiap revisi), user sudah
+approve arah akhir + 1 catatan revisi kecil yang masih perlu diperhatikan
+saat implementasi (lihat "Catatan revisi" di bawah, BELUM diverifikasi
+visual final).
+
+**Konteks awal:** permintaan asli user — "Centang Semua" diganti kontrol
+kecil ala-counter, status Lunas/Tempo dipindah ke antara badge jumlah item
+& kontrol itu, ditampilkan seperti "kertas keterangan dijepit". Setelah
+beberapa putaran revisi, arah akhirnya JAUH lebih spesifik dari usulan awal
+(lihat di bawah) — bukan lagi "kertas dijepit", tapi stempel tinta asli.
+
+**Spesifikasi desain FINAL (disetujui user):**
+1. **Header status besar "Transaksi Berhasil"/"Transaksi Tempo" + nomor
+   nota DIHAPUS TOTAL** dari atas kartu (`receipt_screen.dart` baris
+   ~1587-1638, `Container` dgn `Icon`+`Column(Text status, Text
+   tx.localId)`) — kartu daftar item jadi elemen paling atas di bawah
+   info toko/transaksi (card struk cetak), TIDAK ADA lagi container
+   status terpisah.
+2. **Status Lunas/Tempo jadi STEMPEL** (bukan chip/pil datar): bentuk
+   kotak bersudut tumpul (rounded-rect), **double border** (garis luar
+   tebal + garis dalam tipis, jarak antar garis konsisten), **tepi
+   bertekstur kasar/bertinta** (efek "grunge" ala stempel karet asli yang
+   sudah dipakai berkali-kali — bukan garis vector rapi), **teks tebal
+   uppercase LURUS** (bukan melengkung), **miring ~-11°**. Warna: **hijau**
+   utk Lunas, **merah** utk Tempo (pakai warna semantik yg konsisten
+   dengan app — hijau ala `payGreen`/sukses, merah ala `error`/tempo).
+3. **Nomor seri nota (`tx.localId`, mis. "K1-0041") ditaruh DI DALAM
+   stempel**, baris kedua di bawah kata "LUNAS"/"TEMPO", dipisah garis
+   tipis horizontal dari baris pertama — INI yang menggantikan info nomor
+   nota yang dulu ada di header status yang sudah dihapus (poin 1).
+4. **Posisi stempel: menempel/overlap di sudut KANAN-ATAS kartu daftar
+   item** — sebagian di luar kartu sebagian di dalam, PERSIS gaya
+   `ItemCountBadge` yang sudah ada (`elevated: true`, `Positioned` sudut
+   kiri-atas) tapi di sisi berlawanan (kanan) & dirotasi. Badge jumlah item
+   (`ItemCountBadge`, sudut kiri-atas) **TIDAK DIUBAH SAMA SEKALI** — desain
+   lama dipertahankan persis.
+5. **"Tandai Semua" (`TextButton.icon`, baris ~1826-1844) diganti kontrol
+   kecil PERSIS gaya `ItemCountBadge`** (lingkaran solid, bukan tombol
+   berlabel teks) — cuma warnanya **hijau** (bukan `AppTheme.accent`),
+   isinya ikon centang (atau progres N/total kalau mau lebih informatif,
+   belum diputuskan detail — lihat "Belum diputuskan" di bawah).
+
+**Catatan revisi TERAKHIR dari user (belum diverifikasi visual final):**
+"nominal item dan nama nota tidak tertutup oleh design" (dikoreksi user
+sendiri jadi "nama ITEM nota maksudnya" — bukan nama toko/nota) — stempel
+(poin 4 di atas) **TIDAK BOLEH menutupi teks nama produk atau nominal
+harga di baris item pertama kartu**. Implementasi WAJIB kasih clearance
+vertikal cukup (padding-top kartu / posisi `top` stempel disesuaikan)
+supaya baris item pertama (`_buildItemRows`) tidak ketiban stempel yang
+notabene cukup besar (2 baris teks + border ganda). Verifikasi ini SECARA
+VISUAL (screenshot/golden test atau minimal widget test cek posisi/bounds
+non-overlap `stempel` vs baris item pertama), jangan asumsikan aman dari
+angka `top`/`right` semata — ukuran font & tinggi kartu bisa beda-beda
+(banyak/sedikit item, ukuran teks user besar via `fontScaleProvider`).
+
+**Belum diputuskan / perlu keputusan implementasi:**
+- Render stempel: `CustomPainter` (gambar border ganda + noise/dash utk
+  tekstur kasar) kemungkinan besar pendekatan paling layak di Flutter
+  (tidak ada `feTurbulence` SVG asli) — perlu dicoba dulu apakah cukup
+  meyakinkan sbg "tekstur bertinta" tanpa asset gambar. Alternatif:
+  asset PNG/SVG statis per warna (lunas/tempo) di-generate sekali offline
+  (bukan runtime) kalau `CustomPainter` kurang meyakinkan — tapi ini bikin
+  teks nomor nota tidak bisa dinamis (perlu render teks terpisah di atas
+  asset gambar, bukan sekadar 1 gambar utuh).
+- Isi kontrol "Tandai Semua" baru (poin 5): ikon centang polos, atau
+  angka progres "N/total tercentang"? User belum ditanya soal ini secara
+  eksplisit, keputusan mockup terakhir pakai ikon centang polos.
+- Perlu cek ulang: apakah `fontScaleProvider` (ukuran teks custom user)
+  memengaruhi tinggi baris pertama item cukup signifikan utk stempel jadi
+  ketiban di beberapa kombinasi ukuran — relevan langsung ke catatan
+  revisi di atas.
+
+**Mockup sumber (referensi visual, TIDAK di-commit ke repo):** scratchpad
+sesi 15-16 Juli — `struk_header_mockup.html`/`.jpg` (versi awal 3 opsi
+A/B/C), `struk_header_mockup_v2.html`/`.jpg` (versi stempel bulat teks
+melengkung — DITOLAK, diganti kotak), `struk_header_mockup_v3.html`/`.jpg`
+(versi FINAL — stempel kotak nempel di kartu, tanpa header status, nomor
+nota di dalam stempel). Semua dibuat dgn font asli `assets/fonts/
+HankenGrotesk-*.ttf` di-embed base64 supaya representatif, screenshot via
+Playwright/Chromium (bukan render HTML mentah) — kalau perlu regenerasi
+mockup lagi lain waktu, pola scriptnya ada di riwayat sesi ini (tidak
+disimpan sbg file terpisah di repo).
+
+**File yang terlibat:** `lib/features/kasir/receipt_screen.dart` (hapus
+Container status, restrukturisasi header-row + Stack badge, tambah widget
+stempel baru — kemungkinan `lib/core/widgets/status_stamp.dart` baru biar
+reusable kalau nanti dipakai di `merged_receipt_screen.dart` juga, belum
+diputuskan apakah nota gabungan ikut redesign ini atau tetap gaya lama).
 
 ---
 

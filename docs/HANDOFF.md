@@ -4,23 +4,36 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 15 Juli 2026. Sesi ini: batch 14 item bugfix/redesign/
-fitur kasir & katalog (lihat ringkasan di bawah). Full `flutter test` **375
-test hijau**, `flutter analyze` bersih. schemaVersion masih 15 (tidak ada
-migrasi baru). Branch `claude/setup-dependencies-am31te` — belum di-merge
-ke `main` sesi ini (tunggu instruksi user)._
+_Terakhir diperbarui: 16 Juli 2026. Sesi 15 Juli: batch 14 item bugfix/
+redesign/fitur kasir & katalog (lihat ringkasan di bawah). Full `flutter
+test` **375 test hijau**, `flutter analyze` bersih. schemaVersion masih 15
+(tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` — belum
+di-merge ke `main` (tunggu instruksi user). Sesi susulan 16 Juli: redesign
+header struk (Item 7) FINAL disepakati lewat 3 putaran mockup — **desain
+sudah disetujui user, dicatat lengkap di PLAN.md Item 29, siap
+diimplementasi sesi berikutnya** (belum ada kode yang berubah, baru
+spesifikasi tersimpan)._
 
-## Menunggu keputusan user — JANGAN diimplementasi sampai user pilih
+## Redesign header struk (Item 7 lama / PLAN.md Item 29) — DESAIN DISETUJUI, siap diimplementasi
 
-**Redesign header struk (Item 7)** — mockup HTML 3 opsi (A: clip kertas
-dipin+rotasi, B: pil sederhana, C: tiket dashed) sudah dipublikasikan sbg
-Artifact ke user, **belum ada pilihan balik**. Setelah user pilih salah
-satu (atau minta revisi), baru implementasi ke `receipt_screen.dart`:
-ganti tombol "Tandai Semua" jadi kontrol mini ala-counter, pindahkan status
-Lunas/Tempo (chip warna) ke antara badge jumlah item & kontrol itu. Source
-mockup: scratchpad sesi ini (`struk_header_mockup.html`, embed font asli
-`assets/fonts/HankenGrotesk-*.ttf` via base64 — TIDAK di-commit, cuma alat
-komunikasi).
+Lihat **PLAN.md Item 29** untuk spesifikasi lengkap (sudah final, hasil 3
+putaran mockup + revisi). Ringkas: header status besar "Transaksi
+Berhasil/Tempo" dihapus total, status Lunas/Tempo jadi **stempel** (kotak
+bersudut tumpul, double border, tepi bertekstur kasar, teks tebal miring
+-11°, hijau/merah) menempel di sudut KANAN-ATAS kartu item (simetris dgn
+`ItemCountBadge` yg TIDAK diubah di kiri), nomor nota (`tx.localId`)
+pindah jadi baris kedua DI DALAM stempel, "Tandai Semua" jadi lingkaran
+solid hijau persis gaya `ItemCountBadge`.
+
+**Catatan revisi terakhir user (belum diverifikasi implementasi)**: stempel
+TIDAK BOLEH menutupi nama produk/nominal harga di baris item pertama —
+butuh clearance vertikal yang aman, verifikasi visual (bukan cuma asumsi
+angka posisi) sebelum dianggap selesai.
+
+Source mockup (scratchpad sesi ini, TIDAK di-commit): `struk_header_
+mockup_v3.html`/`.jpg` adalah versi FINAL yang disetujui — kalau file
+scratchpad sudah hilang (beda sesi), lihat PLAN.md Item 29 sudah cukup
+detail utk rebuild dari nol tanpa perlu lihat mockup lagi.
 
 ## Ringkasan sesi ini (14 item dari 1 pesan user)
 
