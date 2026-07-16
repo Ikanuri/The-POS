@@ -1327,6 +1327,70 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Ganti pelanggan pada transaksi (dipanggil dari `receipt_screen.dart`
+  /// `_saveCustomer` — bisa Umum->pelanggan, pelanggan->Umum, atau
+  /// pelanggan A->B). Bug dilaporkan user: poin yang SUDAH diberikan ke
+  /// pelanggan LAMA (`tx.pointsEarned`) tidak pernah ditarik balik kalau
+  /// pelanggan transaksi diubah ke Umum (`customerId` jadi null) atau ke
+  /// pelanggan lain — poin nyangkut selamanya di pelanggan lama walau
+  /// transaksinya sudah tidak lagi tercatat atas namanya (`voidTransaction`
+  /// butuh `customerId != null` utk bisa menarik baliknya, jadi sekali
+  /// customerId di-null-kan, jalur reversal lama itu tidak bisa jalan lagi).
+  ///
+  /// Fix: kalau pelanggan BERUBAH (bukan cuma nama tanpa ganti id) & tx
+  /// sudah pernah dapat poin, tarik balik dari pelanggan LAMA dulu (reset
+  /// `pointsEarned` ke 0) — baru kalau pelanggan BARU bukan null, hitung
+  /// ulang & beri poin via `awardLoyaltyPointsIfEligible` (dari 0, jadi
+  /// otomatis dapat penuh sesuai `tx.total` kalau eligible).
+  Future<void> changeTransactionCustomer({
+    required String txId,
+    String? newCustomerId,
+    String? newCustomerName,
+  }) async {
+    await transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null) return;
+
+      final oldCustomerId = tx.customerId;
+      if (oldCustomerId != null &&
+          oldCustomerId != newCustomerId &&
+          tx.pointsEarned > 0) {
+        await customUpdate(
+          'UPDATE customers SET loyalty_points = loyalty_points - ? WHERE id = ?',
+          variables: [
+            Variable.withInt(tx.pointsEarned),
+            Variable.withString(oldCustomerId),
+          ],
+          updates: {customers},
+        );
+        await into(loyaltyPointLedger)
+            .insert(LoyaltyPointLedgerCompanion.insert(
+          id: const Uuid().v4(),
+          customerId: oldCustomerId,
+          type: 'adjust',
+          points: -tx.pointsEarned,
+          note: Value('Ganti pelanggan ${tx.localId}'),
+          createdAt: Value(DateTime.now()),
+        ));
+        await (update(transactions)..where((t) => t.id.equals(txId)))
+            .write(const TransactionsCompanion(pointsEarned: Value(0)));
+      }
+
+      await (update(transactions)..where((t) => t.id.equals(txId))).write(
+        TransactionsCompanion(
+          customerName: Value(newCustomerName),
+          customerId: Value(newCustomerId),
+        ),
+      );
+
+      if (newCustomerId != null) {
+        await awardLoyaltyPointsIfEligible(
+            txId: txId, customerId: newCustomerId);
+      }
+    });
+  }
+
   Future<void> voidTransaction(String txId, String kasirId) async {
     await transaction(() async {
       // Baca items untuk reverse stock.

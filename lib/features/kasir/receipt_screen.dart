@@ -707,20 +707,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _saveCustomer({String? name, String? id}) async {
     final db = ref.read(databaseProvider);
-    await (db.update(db.transactions)
-          ..where((t) => t.id.equals(widget.transactionId)))
-        .write(TransactionsCompanion(
-      customerName: Value(name),
-      customerId: Value(id),
-    ));
-    // Bug dilaporkan user: ubah dari "Umum" ke pelanggan terdaftar di sini
-    // tidak pernah memberi poin loyalitas (poin cuma dihitung sekali saat
-    // checkout, waktu itu customerId masih null) — susulkan sekarang.
-    // No-op aman kalau transaksi ini sudah pernah dapat poin sebelumnya.
-    if (id != null) {
-      await db.awardLoyaltyPointsIfEligible(
-          txId: widget.transactionId, customerId: id);
-    }
+    // `changeTransactionCustomer` menangani poin loyalitas otomatis: kalau
+    // pelanggan LAMA sudah dapat poin & pelanggan berubah (termasuk balik
+    // ke Umum, id == null), poin lama ditarik balik dulu sebelum pelanggan
+    // BARU (kalau ada) dihitung ulang & diberi poin dari 0.
+    await db.changeTransactionCustomer(
+      txId: widget.transactionId,
+      newCustomerId: id,
+      newCustomerName: name,
+    );
     Customer? customer;
     if (id != null) {
       customer = await (db.select(db.customers)..where((t) => t.id.equals(id)))

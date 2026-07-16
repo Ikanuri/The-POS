@@ -1013,11 +1013,15 @@ class _TxDetail extends ConsumerWidget {
       );
 
       if (result == null || !context.mounted) return;
-      await (db.update(db.transactions)..where((t) => t.id.equals(tx.id)))
-          .write(TransactionsCompanion(
-        customerName: Value(result.name),
-        customerId: Value(result.id),
-      ));
+      // `changeTransactionCustomer` (bukan write mentah) — supaya poin
+      // loyalitas pelanggan LAMA ikut ditarik balik kalau pelanggan diganti
+      // dari sini (dulu ada di receipt_screen.dart doang, sheet ini bug yg
+      // sama tapi lokasi beda: bisa diubah ke Umum dr riwayat transaksi).
+      await db.changeTransactionCustomer(
+        txId: tx.id,
+        newCustomerId: result.id,
+        newCustomerName: result.name,
+      );
       onChanged();
     } finally {
       ctrl.dispose();
