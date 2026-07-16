@@ -4,8 +4,9 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 16 Juli 2026 (sesi lanjutan — fix poin loyalitas +
-fix keamanan lisensi)._ Full `flutter test` **392 test hijau**,
+_Terakhir diperbarui: 16 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
+2 bug susulan dari testing device asli + fix poin loyalitas + fix
+keamanan lisensi)._ Full `flutter test` **405 test hijau**,
 `flutter analyze` bersih. schemaVersion masih 15
 (tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` —
 belum di-merge ke `main` (tunggu instruksi user). User sudah perbaiki
@@ -81,14 +82,65 @@ termasuk `_allTables`.
 
 Test: `test/owner_transfer_export_test.dart` (round-trip export/decrypt
 BPOT1 vs BPOP2, restore, validasi rekey), `test/apply_owner_transfer_in_place_test.dart`
-(deviceName/deviceCode dipertahankan, persist ke storage sungguhan via
-mock secure-storage channel), `test/alih_owner_screen_visibility_test.dart`
-(role gating), `test/welcome_screen_restore_button_test.dart`. Revert-verify
-dilakukan utk role-gating & deviceName-preservation. TIDAK ada widget test
-utk alur file-picker penuh (butuh mock platform channel `file_picker`,
-tidak ada preseden di codebase ini utk `backup_screen.dart` juga) — cukup
-DB-tier utk logika kritis (kripto/rekey/identitas), sesuai prinsip
-"pilih level sesuai yg disentuh".
+(deviceName/deviceCode BARU diterapkan — lihat susulan di bawah,
+persist ke storage sungguhan via mock secure-storage channel),
+`test/alih_owner_screen_visibility_test.dart` (role gating),
+`test/welcome_screen_restore_button_test.dart`. Revert-verify dilakukan
+utk role-gating & penerapan deviceName/deviceCode baru. TIDAK ada widget
+test utk alur file-picker penuh (butuh mock platform channel
+`file_picker`, tidak ada preseden di codebase ini utk `backup_screen.dart`
+juga) — cukup DB-tier utk logika kritis (kripto/rekey/identitas), sesuai
+prinsip "pilih level sesuai yg disentuh".
+
+### Susulan (16 Juli, `1d09200`) — 2 bug ditemukan user via testing device ASLI
+
+User coba fitur ini di 2 device sungguhan, laporkan 2 temuan:
+
+1. **Nama/kode device ikut warisan data lama** — device eks-kasir/asisten
+   toko lain (mis. nama "Asisten", kode "K1") menerima transfer & jadi
+   Owner, TAPI nama/kode tetap "Asisten"/"K1" (bukan cuma tampilan aneh —
+   `deviceCode` dipakai sbg prefix nomor transaksi yg harus UNIK per
+   device DALAM SATU toko; kode lama bisa TABRAKAN dgn device lain yg
+   sudah pairing ke toko tujuan pakai kode yg sama). **Fix**:
+   `applyOwnerTransferInPlace()` (device_provider.dart) sekarang WAJIB
+   terima `deviceName`/`deviceCode` sbg parameter dari pemanggil (bukan
+   diam-diam pakai `state.deviceName`/`state.deviceCode` lama) —
+   `alih_owner_screen.dart` sekarang munculkan dialog "Identitas
+   Perangkat" (mirip pairing_screen.dart) SETELAH dialog konfirmasi
+   destruktif, SEBELUM benar-benar menerapkan transfer, default
+   "Owner"/"O1".
+2. **Redirect loop router** (`GoException: redirect loop detected /kasir
+   => /aktivasi => /aktivasi => /setup => /setup => /aktivasi`, screenshot
+   "Page Not Found") — muncul saat user hapus data aplikasi/install ulang.
+   Akar masalah: BUKAN disebabkan kode Alihkan Owner — bug PRE-EXISTING
+   di `app_router.dart`'s `redirect()`. Blok cek lisensi & blok cek device
+   dieksekusi berurutan tapi TIDAK saling eksklusif: begitu di-redirect ke
+   `/aktivasi` krn `license.isLocked`, blok device SETELAHNYA tetap sempat
+   jalan & redirect lagi ke `/setup` (device belum configured, bukan di
+   `/aktivasi`) — dari `/setup`, license masih locked & bukan di
+   `/aktivasi` → balik lagi ke `/aktivasi` — bolak-balik selamanya. Bisa
+   dialami SIAPA PUN yang hapus data app/install ulang (license & device
+   identity SAMA-SAMA di SharedPreferences, terhapus bareng), bukan
+   spesifik Alihkan Owner — cuma kebetulan ketahuan saat testing sesi ini.
+   **Fix**: restrukturisasi jadi `if (license.isLocked) return inAktivasi
+   ? null : '/aktivasi';` — begitu locked, blok device TIDAK PERNAH
+   dievaluasi sama sekali.
+
+Test baru: `test/router_redirect_loop_test.dart` (render `ThePosApp` penuh
+dgn license locked + device unconfigured bersamaan, pastikan menetap di
+`AktivasiScreen` bukan loop). `test/apply_owner_transfer_in_place_test.dart`
+diperbarui total (assersi lama "deviceName dipertahankan" DIBALIK jadi
+"deviceName BARU diterapkan"). Revert-verify dilakukan utk kedua fix.
+
+**Yang BELUM diverifikasi user**: skenario paling kritis (device yg SUDAH
+ada datanya menerima transfer BPOT1, lalu di-force-close & dibuka ulang —
+membuktikan rekey SQLCipher benar2 jalan, bukan cuma "data berpindah"
+tanpa restart) BELUM eksplisit dikonfirmasi lolos. Temuan #2 user (redirect
+loop) terjadi dari skenario "hapus data app" yang BEDA device/BEDA momen —
+bukan bukti rekey aman. **Sebelum fitur ini dianggap benar2 siap**, minta
+user ulangi verifikasi manual poin ke-5 di percakapan (force-close &
+reopen device PENERIMA setelah "Terima Alihan", pastikan TIDAK
+force-close/hang/error saat dibuka lagi).
 
 ## Fix: poin loyalitas nyangkut di pelanggan lama (16 Juli)
 

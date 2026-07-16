@@ -50,6 +50,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   pelanggan pada nota diubah balik ke "Umum" atau diganti ke pelanggan
   lain — poin yang sudah diberikan sekarang otomatis ditarik balik dari
   pelanggan lama, lalu dihitung ulang untuk pelanggan baru (kalau ada).
+- **App tidak lagi bisa "macet" di halaman "Page Not Found" setelah hapus
+  data aplikasi atau install ulang** — sebelumnya bisa terjadi kondisi
+  aplikasi bolak-balik antara layar aktivasi & layar setup tanpa henti,
+  sekarang selalu tuntas berhenti di layar aktivasi.
 
 ## 15 Juli 2026
 

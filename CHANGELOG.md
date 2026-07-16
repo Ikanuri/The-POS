@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-16
 
+- `1d09200` — fix: 2 bug ditemukan saat testing device asli Alihkan Owner (redirect loop router + nama/kode device tidak lagi warisi punya lama)
 - `99de7ea` — feat: fitur "Alihkan Owner" (transfer data + identitas toko via file terenkripsi BPOT1) + opsi "Pulihkan dari File" di welcome screen
 - `e565430` — fix: poin loyalitas nyangkut di pelanggan lama saat transaksi diubah balik ke Umum/pelanggan lain
 - `fc991d2` — fix: device yang di-revoke bisa "membuka diri sendiri" via kode aktivasi yang sama
