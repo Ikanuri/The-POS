@@ -410,45 +410,75 @@ sekaligus, di TIGA lokasi berbeda** (bukan satu halaman tunggal):
   navigasi/aktifkan filter di (b), BUKAN duplikat UI daftar produk di 2
   tempat.
 
-### (b) Koreksi — tetap di tab **Produk**
-- **Temuan penting**: filter "Stok Menipis" yang SUDAH ADA
-  (`produk_list_screen.dart`) sekarang **tersembunyi total** kalau (1)
-  tidak ada produk dgn `min_stock` terisi & di bawah ambang (`lowStockCount
-  == 0`), DAN/ATAU (2) toko belum punya kategori produk bernama sama
-  sekali (`if (named.isEmpty) return SizedBox.shrink();` — seluruh baris
-  chip filter, TERMASUK "Stok Menipis", ikut tidak dirender). Ini alasan
-  user "belum pernah coba fitur filter stok" — BUKAN salah user, murni
-  desain yang menyembunyikan diri sendiri tergantung kondisi data. JANGAN
-  warisi pola ini ke fitur baru — kontrol stok harus SELALU terlihat &
-  bisa diakses terlepas dari data yang ada.
-- **Referensi user** (`index.html`, starter kit personal utk audit
-  keuangan + "stock opname kecil-kecilan" — istilah user sendiri, dgn
-  disclaimer "maaf kalau salah istilah"): modul **"Stok Kosong"** di
-  situ ternyata BUKAN input jumlah stok numerik, tapi **checklist ringan**:
-  karyawan tandai per-item "ini lagi habis" (qty+satuan+nama via input
-  teks bebas, mirip pola input Nota Kulakan di modul yang sama), item
-  dikelompokkan per kategori, ada badge tanggal (hari ini/kemarin/lama),
-  filter tanggal (hari ini/7 hari/kustom), drag-reorder, dan "Mode Bos"
-  (PIN 4-digit via gesture 5x-tap, krn tool itu 1-device tanpa role) utk
-  fitur tertentu (kelola kategori, kirim data via WA, dll).
-  - **Insight kunci**: "Stok Kosong" di referensi itu **PERSIS konsep
-    `markedOutOfStock`** yang SUDAH ADA di app ini (flag manual dipakai
-    katalog HTML, Item 29) — BUKAN `adjustStock` (koreksi jumlah stok
-    numerik, sudah ada juga di `produk_form_screen.dart`). Jadi checklist
-    cepat "tandai habis" di tab Produk (kalau dibangun) otomatis nyambung
-    LANGSUNG ke Item 29 (katalog auto-baca `markedOutOfStock`) — TIDAK
-    perlu kerja dobel/dua sumber kebenaran berbeda.
-  - **Mode Bos (PIN) TIDAK PERLU ditiru** — itu solusi darurat khusus tool
-    1-device-tanpa-role. The POS sudah punya role asli (owner/kasir/
-    asisten via identitas device) — cukup gating pakai itu (mis. siapa
-    boleh centang "habis", siapa cuma boleh lihat).
-  - Fitur checklist yang relevan diadopsi (bukan angka stok, tapi
-    workflow-nya): kategori tab-bar, filter tanggal cepat (hari ini/7
-    hari/kustom), badge umur tanda (supaya kelihatan kalau tandaan sudah
-    lama & mungkin sudah tidak relevan — barangnya jangan-jangan sudah
-    restock tapi lupa di-un-tandai).
-  - `adjustStock` (koreksi ANGKA stok, beda dari flag habis) tetap
-    dipertahankan sbg fitur terpisah yang sudah ada — tidak perlu diubah.
+### (b) Koreksi — dipanggil dari tab **Produk**, tapi layar TERSENDIRI ("Cek Stok")
+
+**Temuan penting (bug UX, bukan salah user):** filter "Stok Menipis" yang
+SUDAH ADA (`produk_list_screen.dart`) sekarang **tersembunyi total** kalau
+(1) tidak ada produk dgn `min_stock` terisi & di bawah ambang
+(`lowStockCount == 0`), DAN/ATAU (2) toko belum punya kategori produk
+bernama sama sekali (`if (named.isEmpty) return SizedBox.shrink();` —
+seluruh baris chip filter, TERMASUK "Stok Menipis", ikut tidak dirender).
+Ini alasan user "belum pernah coba fitur filter stok". Jangan warisi pola
+"sembunyi kalau kosong" ini ke fitur baru — kontrol stok harus SELALU
+terlihat & bisa diakses terlepas dari kondisi data.
+
+**Revisi arah setelah diskusi (KEPUTUSAN FINAL, bukan lagi checklist manual
+ala referensi HTML):** user awalnya minta ditiru dari modul "Stok Kosong"
+di `index.html` referensinya (starter kit personal audit keuangan + "stock
+opname kecil-kecilan" — istilah user sendiri), TAPI setelah ditelusuri,
+modul itu ternyata **checklist manual murni tanpa koneksi stok riil sama
+sekali** (karyawan ketik ulang "qty satuan nama" krn tool itu berdiri
+sendiri, tanpa database stok sungguhan). User dgn tepat mengoreksi: The POS
+**sudah punya stok riil** — jadi TIDAK BOLEH jadi checklist ketik-ulang
+manual (poin user: "untuk apa ada stok kalau akhirnya dicek manual juga").
+
+**Desain final yang disepakati:**
+1. **Layar baru terpisah** ("Cek Stok" atau serupa) — BUKAN nambah
+   checkbox/textarea ke `ProdukListScreen` yang sudah ada. Alasan: list
+   Produk sekarang fokus manajemen (cari nama, tap→edit form, kelola
+   kategori) — mode "pilih kategori→lihat semua diurut tertipis→
+   centang→teks" itu mental model beda (fokus triase), akan saling ganggu
+   kalau dicampur ke list yang sama.
+2. **Entry point SELALU terlihat di tab Produk** (bukan chip kondisional
+   spt sekarang) — mis. ikon AppBar "Cek Stok" atau kartu ringkas
+   permanen di atas list ("N produk perlu dicek stoknya").
+3. **Di layar baru**: chip kategori (gaya visual sama spt Produk, state
+   terpisah) → list produk kategori itu, SELALU urut stok riil tertipis
+   dulu (tidak perlu opsi sort lain) → tiap baris tampilkan **angka stok
+   riil besar/jelas** (bukan cuma badge kecil) + checkbox.
+4. **Centang = 2 hal sekaligus, BUKAN cuma catatan teks**:
+   - Langsung `UPDATE markedOutOfStock = true` produk itu di DB (state
+     SUNGGUHAN, tersinkron ke device lain, langsung dibaca katalog Item
+     29) — visual baris berubah (redup/strip, mirip `.item-card.checked`
+     di referensi).
+   - SEKALIGUS baris itu ditambahkan ke kotak teks di bawah ("Order
+     Restock" — panel sticky/collapsible di bawah list, biar tidak perlu
+     scroll jauh) — tombol Salin + share (reuse pola share yg sudah ada
+     di app, spt katalog/struk).
+   - Uncentang = kebalikannya (flag balik `false`, hilang dari teks).
+5. **Tujuan kotak teks DIALIHKAN** dari referensi: di HTML aslinya teks
+   itu "lapor ke bos" (perlu krn tool 1-device tanpa server bersama). The
+   POS sudah py sync/DB bersama (`markedOutOfStock` toggle sudah ada &
+   dipakai dari `item_entry_sheet.dart` di kasir screen — owner OTOMATIS
+   lihat perubahan tanpa perlu pesan manual). Jadi kotak teks di sini
+   fungsinya **teks order restock ke SUPPLIER** (pihak di LUAR sistem,
+   satu-satunya yang genuinely butuh pesan manual) — bukan lagi "lapor ke
+   bos" yang sudah redundan.
+6. **Reuse untuk Item 30(a)**: tombol "Lihat semua" di kartu ringkas
+   Ringkasan (poin a) mengarah ke layar YANG SAMA ini (filter kategori
+   dari Ringkasan bisa jadi parameter awal) — satu implementasi, dua
+   entry point (Ringkasan & Produk), JANGAN bikin UI daftar stok 2 kali.
+7. **Mode Bos (PIN) dari referensi TIDAK PERLU ditiru** — itu solusi
+   darurat khusus tool 1-device-tanpa-role. The POS sudah py role asli
+   (owner/kasir/asisten via identitas device) — cukup gating pakai itu.
+8. `adjustStock` (koreksi ANGKA stok, beda konsep dari flag "habis") TETAP
+   dipertahankan sbg fitur terpisah yang sudah ada di `produk_form_screen.dart`
+   — tidak berubah, tidak digabung ke layar "Cek Stok" ini.
+
+**Belum diputuskan (perlu simulasi HTML dulu sebelum coding — user minta
+lihat mockup dulu):** layout persis panel output (posisi sticky vs di
+bawah biasa), format teks yang dihasilkan per baris, apakah ada tombol
+"kirim WA langsung" atau cukup "Salin".
 
 ### (c) Laporan analitik/audit — tab baru di **Laporan**
 - User konfirmasi: dibutuhkan **utk audit**, meski belum ada use case
@@ -479,11 +509,11 @@ sekaligus, di TIGA lokasi berbeda** (bukan satu halaman tunggal):
   nanti dibangun (mis. teks kecil pengingat).
 
 **Belum didesain detail (pertanyaan sebelum coding)**:
-- (a): filter kategori — state terpisah dari filter kategori di tab
-  Produk (beda screen/konteks), atau reuse?
-- (b): bentuk checklist persis apa (field apa saja per baris, apakah
-  perlu parsing teks bebas spt referensi atau cukup tap toggle per
-  produk dari list yang sudah ada)?
+- (a): filter kategori di kartu Ringkasan — state terpisah dari filter di
+  layar "Cek Stok" (b), atau reuse begitu (b) dibuat?
+- (b): **user minta lihat simulasi HTML/mockup dulu** sebelum coding
+  (layout panel output, format teks per baris, tombol share) — JANGAN
+  langsung implementasi Flutter tanpa mockup disetujui dulu.
 - (c): breakdown per kategori itu tabel atau chart (referensi user pakai
   donut chart utk breakdown PNL — bisa dipertimbangkan pola serupa utk
   nilai stok per kategori, tapi belum diputuskan)?
