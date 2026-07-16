@@ -47,15 +47,22 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/kasir',
     redirect: (context, state) {
-      // Item 25c — gerbang lisensi diperiksa PALING AWAL, bahkan sebelum
-      // /setup (copy salinan tanpa izin tidak boleh sempat sampai ke
-      // setup toko sama sekali). Kalau public key belum ditanam
-      // (LicenseService.isConfigured == false), isLocked selalu false —
-      // gerbang ini nonaktif total, tidak memengaruhi siapa pun.
+      // Item 25c — gerbang lisensi diperiksa PALING AWAL & EKSKLUSIF: kalau
+      // locked, SELALU resolve ke /aktivasi, titik — blok device di bawah
+      // TIDAK PERNAH dievaluasi selama locked. Susulan (bug ditemukan user
+      // via testing device asli, "hapus data aplikasi/install ulang"):
+      // sebelumnya kedua blok (lisensi & device) dieksekusi berurutan tapi
+      // TIDAK saling eksklusif — begitu redirect ke /aktivasi krn locked,
+      // blok device di bawah tetap sempat jalan & melihat device belum
+      // configured (bukan di /setup) → redirect ke /setup; dari /setup
+      // ternyata masih locked & bukan di /aktivasi → balik lagi ke
+      // /aktivasi — bolak-balik selamanya (GoException: redirect loop).
+      // Kondisi pemicunya realistis: SharedPreferences (tempat license &
+      // device identity SAMA-SAMA disimpan) terhapus bersamaan.
       final license = ref.read(licenseProvider);
       final inAktivasi = state.matchedLocation.startsWith('/aktivasi');
-      if (license.isLocked && !inAktivasi) return '/aktivasi';
-      if (!license.isLocked && inAktivasi) return '/kasir';
+      if (license.isLocked) return inAktivasi ? null : '/aktivasi';
+      if (inAktivasi) return '/kasir';
 
       final device = ref.read(deviceProvider);
       final inSetup = state.matchedLocation.startsWith('/setup');

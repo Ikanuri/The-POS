@@ -12,9 +12,12 @@ const _secureStorageChannel =
 /// dipakai device yang SUDAH ada datanya (kasir/asisten/owner toko lain)
 /// menerima transfer identitas dari file BPOT1. Harus: (1) ganti
 /// storeUuid/storeKey/storeName/role jadi milik toko yang ditransfer, (2)
-/// PERTAHANKAN deviceName/deviceCode device ini sendiri (identitas fisik
-/// tidak ikut berubah), (3) panggil rekey SEBELUM identitas diganti (urutan
-/// terbalik = app tidak bisa buka DB lagi setelah restart).
+/// TERAPKAN deviceName/deviceCode BARU yang diberikan pemanggil (BUKAN
+/// otomatis warisi punya lama — bug ditemukan user via testing device asli:
+/// device eks-kasir/asisten toko lain tampil tetap "Asisten"/"K1" walau
+/// sudah jadi Owner, & `deviceCode` lama berisiko tabrakan dgn device lain
+/// yg sudah pairing ke toko tujuan), (3) panggil rekey SEBELUM identitas
+/// diganti (urutan terbalik = app tidak bisa buka DB lagi setelah restart).
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -42,8 +45,8 @@ void main() {
   });
 
   test(
-      'menerapkan storeUuid/storeKey/storeName/role BARU, tapi '
-      'deviceName/deviceCode LAMA device ini tetap dipertahankan', () async {
+      'menerapkan storeUuid/storeKey/storeName/role/deviceName/deviceCode '
+      'BARU — TIDAK warisi deviceName/deviceCode lama device ini', () async {
     final notifier = DeviceNotifier();
     // Device ini sudah aktif sebagai kasir toko LAIN sebelum menerima transfer.
     await notifier.joinStore(
@@ -61,6 +64,8 @@ void main() {
       storeUuid: 'uuid-toko-baru',
       storeKey: 'key-toko-baru',
       storeName: 'Toko Baru (Alihan)',
+      deviceName: 'Owner',
+      deviceCode: 'O1',
     );
     await db.close();
 
@@ -69,9 +74,10 @@ void main() {
     expect(notifier.state.storeName, 'Toko Baru (Alihan)');
     expect(notifier.state.deviceRole, 'owner',
         reason: 'device penerima SELALU jadi owner, terlepas dari role lama');
-    expect(notifier.state.deviceName, 'Kasir 1 - Fisik',
-        reason: 'identitas fisik device (bukan identitas toko) tidak boleh berubah');
-    expect(notifier.state.deviceCode, 'K1');
+    expect(notifier.state.deviceName, 'Owner',
+        reason: 'deviceName BARU dari pemanggil, BUKAN warisan "Kasir 1 - Fisik"');
+    expect(notifier.state.deviceCode, 'O1',
+        reason: 'deviceCode BARU, BUKAN warisan "K1" (cegah tabrakan prefix nota)');
   });
 
   test('persist ke SharedPreferences/SecureStorage benar2 tersimpan (bukan cuma state in-memory)',
@@ -91,6 +97,8 @@ void main() {
       storeUuid: 'u-baru',
       storeKey: 'k-baru',
       storeName: 'Baru',
+      deviceName: 'Owner Baru',
+      deviceCode: 'O1',
     );
     await db.close();
 
@@ -100,6 +108,7 @@ void main() {
     expect(reloaded.state.storeUuid, 'u-baru');
     expect(reloaded.state.storeKey, 'k-baru');
     expect(reloaded.state.deviceRole, 'owner');
-    expect(reloaded.state.deviceName, 'Asisten Toko');
+    expect(reloaded.state.deviceName, 'Owner Baru');
+    expect(reloaded.state.deviceCode, 'O1');
   });
 }

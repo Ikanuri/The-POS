@@ -173,6 +173,15 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
     final confirmed = await _confirmDestructive(storeName);
     if (confirmed != true || !mounted) return;
 
+    // Susulan (bug ditemukan user via testing device asli): device penerima
+    // WAJIB diberi nama/kode BARU, bukan otomatis warisi punya lama —
+    // `deviceCode` dipakai sbg prefix nomor transaksi yang harus UNIK per
+    // device DALAM SATU toko. Kalau device eks-kasir toko lain (mis. kode
+    // "K1") reuse kode lamanya sbg owner toko BARU, bisa tabrakan dgn device
+    // lain yang sudah pairing ke toko tujuan pakai kode yang sama.
+    final identity = await _promptDeviceIdentity();
+    if (identity == null || !mounted) return;
+
     setState(() => _busy = true);
     try {
       final db = ref.read(databaseProvider);
@@ -182,6 +191,8 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
             storeUuid: storeUuid,
             storeKey: storeKey,
             storeName: storeName,
+            deviceName: identity.name,
+            deviceCode: identity.code,
           );
       if (!mounted) return;
       showSuccess(
@@ -192,6 +203,65 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<({String name, String code})?> _promptDeviceIdentity() {
+    final nameCtrl = TextEditingController(text: 'Owner');
+    final codeCtrl = TextEditingController(text: 'O1');
+    final formKey = GlobalKey<FormState>();
+    return showDialog<({String name, String code})>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Identitas Perangkat'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Beri nama & kode BARU untuk device ini sebagai owner toko '
+                'yang baru — jangan pakai kode lama, harus unik dari device '
+                'lain di toko ini.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Device', isDense: true),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Nama device wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: codeCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Kode Device',
+                  hintText: 'mis. O1',
+                  isDense: true,
+                ),
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 4,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Kode device wajib diisi' : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          FilledButton(
+            onPressed: () {
+              if (!formKey.currentState!.validate()) return;
+              Navigator.pop(ctx, (
+                name: nameCtrl.text.trim(),
+                code: codeCtrl.text.trim().toUpperCase(),
+              ));
+            },
+            child: const Text('Lanjutkan'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool?> _confirmDestructive(String storeName) {
