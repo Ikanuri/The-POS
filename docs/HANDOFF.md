@@ -6,11 +6,66 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 16 Juli 2026. Sesi 15 Juli: batch 14 item bugfix/
 redesign/fitur kasir & katalog (lihat ringkasan di bawah). Sesi susulan 16
-Juli: redesign header struk (Item 7) — **SELESAI DIIMPLEMENTASI &
-di-commit** (`eb7da72`), lihat detail di bawah. Full `flutter test` **377
-test hijau**, `flutter analyze` bersih. schemaVersion masih 15 (tidak ada
+Juli: redesign header struk (Item 7) SELESAI diimplementasi (`eb7da72`),
+plus 3 fix susulan kecil — nama produk struk bold (`87b8c42`), alamat
+pelanggan belum tampil di dropdown cart bar (`f098fa4`), **poin loyalitas
+sekarang kumulatif saat Tambah Belanjaan** (`32d017e`, lihat detail di
+bawah — ini yang paling signifikan). Full `flutter test` **381 test
+hijau**, `flutter analyze` bersih. schemaVersion masih 15 (tidak ada
 migrasi baru). Branch `claude/setup-dependencies-am31te` — belum di-merge
 ke `main` (tunggu instruksi user)._
+
+## Poin loyalitas kumulatif saat Tambah Belanjaan (16 Juli, susulan)
+
+User lapor: poin loyalitas tidak ikut bertambah saat "Tambah Belanjaan"
+menaikkan total nota yang SUDAH pernah dapat poin sebelumnya. Akar
+masalah: `awardLoyaltyPointsIfEligible` (`app_database.dart`, awalnya
+dibuat utk bug lain — lihat commit sebelumnya soal ganti pelanggan Umum→
+terdaftar di struk) punya guard `if (tx.pointsEarned > 0) return;` —
+idempotent tapi TERLALU agresif, bikin nota yang sudah dapat poin sekali
+TIDAK PERNAH dapat tambahan lagi walau totalnya naik banyak lewat item
+susulan.
+
+**Fix**: method diubah jadi hitung ulang poin TARGET dari `tx.total`
+terkini (`floor(total/threshold)*pointsPer`), lalu tambahkan SELISIH
+(`target - tx.pointsEarned`) — bukan lagi all-or-nothing. Aman dipanggil
+berkali-kali dgn total sama (selisih 0 → no-op, perilaku lama utk kasus
+non-Tambah-Belanjaan tetap sama persis). `_confirmAddItems`
+(`payment_screen.dart`) memanggil method ini lagi setelah
+`addItemsToTransaction`, pakai `customerId` tx yang di-fetch fresh
+(mode Tambah Belanjaan selalu warisi pelanggan transaksi asli, tidak
+pernah diubah).
+
+**PENTING kalau nanti ada bug loyalty lain**: method ini sekarang jadi
+"recompute + top-up", BUKAN "award sekali doang" — kalau ada tempat lain
+yang butuh pola serupa (mis. retur sebagian yang menurunkan total), method
+ini SENGAJA tidak claw-back poin kalau total turun (`delta <= 0` →
+no-op, tidak pernah mengurangi) — pengurangan poin akibat void/retur sudah
+ditangani jalur terpisah (`voidTransaction`, proporsional) yang TIDAK
+disentuh sesi ini.
+
+Test: `test/award_loyalty_points_customer_change_test.dart` (tambah 1 test
+DB-tier baru utk skenario kumulatif, 4 test lama tetap hijau tanpa
+diubah) + `test/tambah_belanjaan_loyalty_points_test.dart` (BARU,
+end-to-end lewat `PaymentScreen(addToTxId:)` sungguhan — tap "Bayar X" →
+"Uang Pas" → "Bayar", verifikasi `tx.pointsEarned`/`customer.loyaltyPoints`
+naik sesuai selisih, bukan dobel/tetap). Revert-verify dijalankan di
+kedua level (DB murni + widget end-to-end).
+
+## Alamat pelanggan — 1 dropdown lagi ketinggalan (16 Juli, susulan)
+
+Sesi sebelumnya (batch 14-item) sudah menambah alamat pelanggan di bawah
+nama pada dropdown `payment_screen.dart` & `receipt_screen.dart`, TAPI
+ada satu dropdown lagi yang terlewat: `showCustomerPickerSheet`
+(`lib/features/kasir/widgets/cart_meta_pickers.dart`) — dipakai dari
+`_CartMetaTab` di cart bar kasir (BEDA file/BEDA widget dari 2 dropdown
+yang sudah diperbaiki). Kalau nanti ada laporan serupa lagi ("alamat
+belum tampil di [tempat X]"), curigai ADA dropdown pelanggan lain yang
+belum ke-cover — cek semua pemakaian `searchCustomers`/pola
+`ListTile(title: Text(c.name), subtitle: ...)` di codebase, jangan
+asumsikan cuma 2 tempat yang sudah diperbaiki sudah cukup.
+
+Test: `test/cart_meta_customer_picker_address_test.dart`.
 
 ## Redesign header struk (Item 7 lama) — SELESAI diimplementasi (16 Juli)
 

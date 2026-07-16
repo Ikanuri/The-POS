@@ -22,6 +22,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - Nama produk di baris item struk in-app sekarang lebih tebal (bold),
   lebih mudah dibaca sekilas.
 
+### 🐛 Perbaikan Bug
+- **Poin loyalitas sekarang bertambah sesuai kenaikan nominal saat
+  "Tambah Belanjaan"** — sebelumnya kalau nota yang sudah dapat poin
+  ditambah barang lagi, poin tambahannya tidak pernah dihitung. Sekarang
+  poin ikut bertambah proporsional dengan total nota yang baru.
+- Alamat pelanggan yang sempat belum tampil di beberapa dropdown pencarian
+  pelanggan (mis. dari tab kasir) sekarang ikut muncul, konsisten dengan
+  tempat lain.
+
 ## 15 Juli 2026
 
 ### ✨ Fitur Baru

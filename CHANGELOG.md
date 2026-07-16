@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-16
 
+- `32d017e` — fix: poin loyalitas tidak bertambah kumulatif saat Tambah Belanjaan
+- `f098fa4` — fix: alamat pelanggan tidak tampil di dropdown picker cart bar
 - `87b8c42` — fix: teks nama produk di baris item struk in-app dibuat bold
 - `eb7da72` — feat: redesign header struk — status Lunas/Tempo jadi watermark stempel
 - `feaf7d2` — docs: perbarui catatan Item 29 — clearance stempel vs baris item sudah diverifikasi di mockup
