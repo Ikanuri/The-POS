@@ -95,13 +95,33 @@ const kAsistenPermissionKeys = <String>[
   CashClosings,
 ])
 /// Baris hasil [AppDatabase.watchStockOverview] — Item 30 ("Cek Stok").
+/// [unitId] = id satuan DASAR produk ini (dipakai Item 36 stock opname utk
+/// panggil [AppDatabase.commitOpname], yang butuh productUnitId bukan productId).
 typedef StockOverviewRow = ({
   String productId,
+  String unitId,
   String name,
   int? groupId,
   double stock,
   double? minStock,
   bool markedOutOfStock,
+});
+
+/// Baris ringkasan satu sesi stock opname (Item 36) — dikelompokkan dari
+/// `stock_ledger` by (createdAt, note) yang identik (lihat [AppDatabase.
+/// commitOpname]: semua baris dalam satu sesi commit memakai timestamp &
+/// note yang SAMA PERSIS supaya bisa direkonstruksi jadi satu sesi di sini).
+typedef OpnameSessionSummary = ({
+  DateTime createdAt,
+  String note,
+  int itemCount,
+});
+
+/// Baris detail satu produk dalam satu sesi opname (Item 36).
+typedef OpnameSessionDetailRow = ({
+  String productName,
+  double qtyChange,
+  double stockAfter,
 });
 
 /// Baris hasil [AppDatabase.getInventoryRows] — Item 30(c) (laporan
@@ -648,7 +668,7 @@ class AppDatabase extends _$AppDatabase {
       variables.add(Variable<Object>(groupId));
     }
     return customSelect('''
-      SELECT pu.product_id AS pid, p.name AS name,
+      SELECT pu.id AS unit_id, pu.product_id AS pid, p.name AS name,
         p.product_group_id AS group_id, pu.min_stock AS min_stock,
         p.marked_out_of_stock AS marked_out_of_stock,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
@@ -663,6 +683,7 @@ class AppDatabase extends _$AppDatabase {
         .map((rows) => rows
             .map((r) => (
                   productId: r.data['pid'] as String,
+                  unitId: r.data['unit_id'] as String,
                   name: r.data['name'] as String,
                   groupId: r.data['group_id'] as int?,
                   stock: (r.data['stock'] as num).toDouble(),
@@ -672,6 +693,115 @@ class AppDatabase extends _$AppDatabase {
                 ))
             .toList());
   }
+
+  /// Commit hasil satu sesi stock opname sekaligus (Item 36). Semua baris
+  /// ledger dalam sesi ini memakai [note] & satu timestamp yang SAMA PERSIS
+  /// (di-capture SEKALI di sini, bukan per-baris) — supaya
+  /// [getOpnameSessions] bisa mengelompokkannya kembali jadi satu sesi
+  /// riwayat. [entries] hanya berisi produk yang selisihnya != 0 (pemanggil
+  /// bertanggung jawab menyaring produk yang tidak berubah sebelum commit).
+  Future<void> commitOpname({
+    required List<({String productUnitId, double newQty})> entries,
+    required String note,
+    String? kasirId,
+  }) async {
+    final sessionAt = DateTime.now();
+    await transaction(() async {
+      for (final e in entries) {
+        final info = await _baseUnitOf(e.productUnitId);
+        final newBase = e.newQty * info.ratio;
+        final prevBase = await _rawBaseStock(info.id);
+        final deltaBase = newBase - prevBase;
+        await into(stockLedger).insert(StockLedgerCompanion.insert(
+          id: const Uuid().v4(),
+          productUnitId: info.id,
+          type: 'adjustment',
+          qtyChange: deltaBase,
+          stockAfter: newBase,
+          kasirId: Value(kasirId),
+          note: Value(note),
+          createdAt: Value(sessionAt),
+        ));
+      }
+    });
+  }
+
+  /// Riwayat sesi stock opname (Item 36) — dikelompokkan dari `stock_ledger`
+  /// by (createdAt, note) yang identik (lihat [commitOpname]). Note sesi
+  /// opname SELALU diawali `"Opname "` (konvensi penamaan, lihat
+  /// [buildOpnameNote]) — jadi filter `LIKE` ini aman membedakannya dari
+  /// penyesuaian stok manual biasa ("Penyesuaian manual").
+  Future<List<OpnameSessionSummary>> getOpnameSessions() async {
+    final rows = await (select(stockLedger)
+          ..where((t) =>
+              t.type.equals('adjustment') & t.note.like('Opname %'))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
+    final grouped = <String, List<StockLedgerData>>{};
+    for (final r in rows) {
+      final key = '${r.createdAt.millisecondsSinceEpoch}|${r.note}';
+      grouped.putIfAbsent(key, () => []).add(r);
+    }
+    final sessions = grouped.values
+        .map((list) => (
+              createdAt: list.first.createdAt,
+              note: list.first.note!,
+              itemCount: list.length,
+            ))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return sessions;
+  }
+
+  /// Detail per-produk satu sesi opname — dipanggil dari layar riwayat saat
+  /// user tap salah satu sesi di [getOpnameSessions]. 3 query total (ledger →
+  /// unit → produk), bukan N+1 per baris.
+  Future<List<OpnameSessionDetailRow>> getOpnameSessionDetail({
+    required DateTime createdAt,
+    required String note,
+  }) async {
+    final ledgerRows = await (select(stockLedger)
+          ..where((t) =>
+              t.type.equals('adjustment') &
+              t.note.equals(note) &
+              t.createdAt.equals(createdAt)))
+        .get();
+    if (ledgerRows.isEmpty) return [];
+    final unitIds = ledgerRows.map((r) => r.productUnitId).toSet().toList();
+    final unitRows =
+        await (select(productUnits)..where((u) => u.id.isIn(unitIds))).get();
+    final productIdByUnit = {for (final u in unitRows) u.id: u.productId};
+    final productIds = productIdByUnit.values.toSet().toList();
+    final productRows =
+        await (select(products)..where((p) => p.id.isIn(productIds))).get();
+    final nameByProduct = {for (final p in productRows) p.id: p.name};
+    final out = ledgerRows.map((r) {
+      final pid = productIdByUnit[r.productUnitId];
+      final name =
+          pid != null ? (nameByProduct[pid] ?? r.productUnitId) : r.productUnitId;
+      return (
+        productName: name,
+        qtyChange: r.qtyChange,
+        stockAfter: r.stockAfter,
+      );
+    }).toList()
+      ..sort((a, b) => a.productName.compareTo(b.productName));
+    return out;
+  }
+
+  /// Konvensi penamaan note sesi opname (Item 36) — dipakai saat commit DAN
+  /// saat filter riwayat ([getOpnameSessions]), harus selalu sinkron.
+  static String buildOpnameNote(DateTime at, {String? categoryLabel}) {
+    final tgl = '${at.day.toString().padLeft(2, '0')} '
+        '${_bulanIndo[at.month - 1]} ${at.year}';
+    final scope = categoryLabel == null ? 'Seluruh' : 'Kategori: $categoryLabel';
+    return 'Opname $tgl ($scope)';
+  }
+
+  static const _bulanIndo = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  ];
 
   /// Baris mentah utk laporan nilai inventori (Item 30(c), tab Laporan) —
   /// agregasi (per-kategori/grand-total/deteksi harga pokok kosong) dihitung

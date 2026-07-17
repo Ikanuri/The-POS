@@ -29,6 +29,7 @@ import '../../features/pengaturan/sync_screen.dart';
 import '../../features/pengaturan/tutup_buku_screen.dart';
 import '../services/price_match_service.dart';
 import '../../features/produk/cek_stok_screen.dart';
+import '../../features/produk/stock_opname_screen.dart';
 import '../../features/produk/price_preview_screen.dart';
 import '../../features/produk/price_sync_screen.dart';
 import '../../features/produk/product_group_screen.dart';
@@ -157,6 +158,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'cek-stok',
                 builder: (_, state) =>
                     CekStokScreen(initialGroupId: state.extra as int?),
+              ),
+              GoRoute(
+                path: 'stock-opname',
+                builder: (_, __) => const StockOpnameScreen(),
               ),
               GoRoute(
                 path: ':id',

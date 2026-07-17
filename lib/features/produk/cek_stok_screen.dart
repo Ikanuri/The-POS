@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import 'stock_opname_screen.dart';
 
 /// Item 30(b) — layar kontrol stok terpisah dari daftar Produk (fokus
 /// triase, bukan manajemen). Filter kategori → list produk stok riil
@@ -68,7 +69,18 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     final rowsAsync = ref.watch(_cekStokOverviewProvider(groupId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Cek Stok')),
+      appBar: AppBar(
+        title: const Text('Cek Stok'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.checklist_rounded),
+            tooltip: 'Stock Opname',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const StockOpnameScreen(),
+            )),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           groupsAsync.when(
