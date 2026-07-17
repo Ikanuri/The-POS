@@ -8,6 +8,7 @@ import 'tabs/produk_tab.dart';
 import 'tabs/pelanggan_tab.dart';
 import 'tabs/transaksi_tab.dart';
 import 'tabs/hutang_tab.dart';
+import 'tabs/stok_tab.dart';
 
 final dateRangeProvider = StateProvider<DateTimeRange>((ref) {
   final now = DateTime.now();
@@ -27,7 +28,7 @@ class LaporanScreen extends ConsumerStatefulWidget {
 class _LaporanScreenState extends ConsumerState<LaporanScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
-      TabController(length: 5, vsync: this);
+      TabController(length: 6, vsync: this);
 
   @override
   void dispose() {
@@ -78,6 +79,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             Tab(text: 'Pelanggan'),
             Tab(text: 'Transaksi'),
             Tab(text: 'Hutang'),
+            Tab(text: 'Stok'),
           ],
         ),
       ),
@@ -89,15 +91,25 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
           PelangganTab(range: range),
           TransaksiTab(range: range),
           const HutangTab(),
+          const StokTab(),
         ],
       ),
     );
   }
 
-  String _tabName(int i) =>
-      const ['Ringkasan', 'Produk', 'Pelanggan', 'Transaksi', 'Hutang'][i];
+  String _tabName(int i) => const [
+        'Ringkasan',
+        'Produk',
+        'Pelanggan',
+        'Transaksi',
+        'Hutang',
+        'Stok'
+      ][i];
 
-  /// Tab Hutang (index 4) tidak punya padanan [ReportTab] & tidak diekspor.
+  /// Tab Hutang (index 4) & Stok (index 5, Item 30c) tidak punya padanan
+  /// [ReportTab] & tidak diekspor — Stok adalah snapshot "sekarang", bukan
+  /// data terikat rentang tanggal spt tab lain, jadi ekspor PDF/Excel
+  /// periode tidak relevan utknya.
   bool get _canExportCurrentTab =>
       _tabController.index < ReportTab.values.length;
 

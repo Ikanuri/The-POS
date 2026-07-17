@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/chart_utils.dart';
@@ -75,6 +77,21 @@ final _ringkasanProvider = FutureProvider<_RingkasanData>((ref) async {
   );
 });
 
+// Item 30(a) — kartu cek cepat stok. State filter kategori TERPISAH dari
+// filter layar "Cek Stok" (30b) — kartu ini murni ringkasan, tombol "Lihat
+// semua" membawa kategori terpilih sbg parameter awal ke layar 30b (bukan
+// berbagi provider yang sama).
+final _stockGroupFilterProvider = StateProvider<int?>((ref) => null);
+
+final _stockGroupsProvider = FutureProvider<List<ProductGroup>>((ref) {
+  return ref.watch(databaseProvider).getAllProductGroups();
+});
+
+final _stockOverviewForRingkasanProvider =
+    StreamProvider.family<List<StockOverviewRow>, int?>((ref, groupId) {
+  return ref.watch(databaseProvider).watchStockOverview(groupId: groupId);
+});
+
 class RingkasanScreen extends ConsumerWidget {
   const RingkasanScreen({super.key});
 
@@ -106,12 +123,12 @@ class RingkasanScreen extends ConsumerWidget {
   }
 }
 
-class _RingkasanBody extends StatelessWidget {
+class _RingkasanBody extends ConsumerWidget {
   const _RingkasanBody({required this.data});
   final _RingkasanData data;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
 
     return ListView(
@@ -171,6 +188,12 @@ class _RingkasanBody extends StatelessWidget {
             child: _HourlyChart(hourly: data.hourly),
           ),
         ),
+        const SizedBox(height: 20),
+
+        // Item 30(a) — kartu cek cepat stok.
+        Text('Kontrol Stok', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        const _StockQuickCheckCard(),
         const SizedBox(height: 20),
 
         // Top products
@@ -336,6 +359,153 @@ class _HourlyChart extends StatelessWidget {
           }).toList(),
         ),
       ],
+    );
+  }
+}
+
+class _StockQuickCheckCard extends ConsumerWidget {
+  const _StockQuickCheckCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final groupId = ref.watch(_stockGroupFilterProvider);
+    final groupsAsync = ref.watch(_stockGroupsProvider);
+    final rowsAsync = ref.watch(_stockOverviewForRingkasanProvider(groupId));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            groupsAsync.maybeWhen(
+              data: (groups) {
+                final named = groups.where((g) => g.name != null).toList();
+                if (named.isEmpty) return const SizedBox.shrink();
+                return SizedBox(
+                  height: 32,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      _MiniChip(
+                        label: 'Semua',
+                        selected: groupId == null,
+                        onTap: () => ref
+                            .read(_stockGroupFilterProvider.notifier)
+                            .state = null,
+                      ),
+                      ...named.map((g) => _MiniChip(
+                            label: g.name!,
+                            selected: groupId == g.id,
+                            onTap: () => ref
+                                .read(_stockGroupFilterProvider.notifier)
+                                .state = g.id,
+                          )),
+                    ],
+                  ),
+                );
+              },
+              orElse: () => const SizedBox.shrink(),
+            ),
+            rowsAsync.when(
+              data: (rows) {
+                final habis = rows.where((r) => r.stock <= 0).length;
+                final menipis = rows
+                    .where((r) =>
+                        r.stock > 0 &&
+                        r.minStock != null &&
+                        r.stock < r.minStock!)
+                    .length;
+                if (rows.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('Belum ada produk berstok di kategori ini',
+                        style: TextStyle(fontSize: 12)),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text('$menipis produk stok menipis, $habis habis',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: habis > 0
+                                ? AppTheme.debtFg(
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark)
+                                : scheme.onSurfaceVariant)),
+                    const SizedBox(height: 6),
+                    ...rows.take(3).map((r) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(r.name,
+                                    style: const TextStyle(fontSize: 12),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                              Text(
+                                r.stock % 1 == 0
+                                    ? r.stock.toInt().toString()
+                                    : r.stock.toString(),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: r.stock <= 0
+                                        ? AppTheme.debtFg(
+                                            Theme.of(context).brightness ==
+                                                Brightness.dark)
+                                        : scheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        )),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => context.push('/produk/cek-stok',
+                            extra: groupId),
+                        child: const Text('Lihat semua'),
+                      ),
+                    ),
+                  ],
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+              error: (e, _) => Text('Error: $e'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  const _MiniChip(
+      {required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ChoiceChip(
+        label: Text(label, style: const TextStyle(fontSize: 11)),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
     );
   }
 }

@@ -76,6 +76,26 @@ class OrderPageService {
     final unitTypes = await db.getAllUnitTypes();
     final typeNameById = {for (final u in unitTypes) u.id: u.name};
 
+    // Item 29 — selain flag manual `markedOutOfStock`, katalog JUGA baca
+    // stok riil kalau toko TIDAK mengizinkan stok minus (toggle "Izinkan
+    // Stok Minus" OFF) — supaya kasir yg lupa tandai manual tidak sampai
+    // menampilkan produk yg stok sistemnya sudah 0/minus. 1 query agregat
+    // (bukan N+1 per produk); toggle ON = auto-check ini DILEWATI (konsisten
+    // dgn kasir yg boleh jual minus saat toggle ON).
+    final allowNegativeStock =
+        (await db.getSetting('allow_negative_stock')) == '1';
+    final realStockByProductId =
+        allowNegativeStock ? const <String, double>{} : await db.getBaseUnitRealStock();
+
+    bool isRealOutOfStock(String productId) {
+      if (allowNegativeStock) return false;
+      final stock = realStockByProductId[productId];
+      // Produk non-stok/tanpa satuan dasar dilacak tidak ada di map —
+      // tidak berlaku ambang stok riil, hanya flag manual yang dipakai.
+      if (stock == null) return false;
+      return stock <= 0;
+    }
+
     // Semua satuan berharga valid milik SATU produk (bukan cuma satuan
     // dasar) — mis. "Sedap Goreng" bisa punya Biji (dasar) DAN Dus, dua
     // baris `product_units` berbeda utk produk yang SAMA. Sebelumnya
@@ -141,9 +161,10 @@ class OrderPageService {
         'price': base['price'],
         'units': unitsOut,
         'variants': variantsOut,
-        // Item 25a — tanda cepat "stok habis" manual (bukan sistem stok
-        // resmi). Katalog HTML statis: tombol tambah dinonaktifkan + badge.
-        'outOfStock': p.markedOutOfStock,
+        // Item 25a (flag manual) ATAU Item 29 (stok riil ≤0 saat toggle
+        // "Izinkan Stok Minus" OFF) — Katalog HTML statis: tombol tambah
+        // dinonaktifkan + badge kalau salah satu true.
+        'outOfStock': p.markedOutOfStock || isRealOutOfStock(p.id),
       });
     }
     return out;

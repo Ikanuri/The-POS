@@ -43,6 +43,14 @@ class AppTheme {
       isDark ? const Color(0x33B39DDB) : const Color(0xFFEAE3F2);
   static Color tempelFg(bool isDark) =>
       isDark ? const Color(0xFF8FAE7E) : const Color(0xFF4C6440);
+
+  // Item 30(b) — badge stok di layar "Cek Stok". Kritis/negatif pakai
+  // debtFg/debtBg (merah, sudah ada), aman pakai changeFg/changeBg (hijau,
+  // sudah ada) — tambahan hanya utk "menipis" (amber, belum ada pasangan).
+  static Color stockWarnFg(bool isDark) =>
+      isDark ? const Color(0xFFE0B65A) : const Color(0xFF9C6F0E);
+  static Color stockWarnBg(bool isDark) =>
+      isDark ? const Color(0x33E0B65A) : const Color(0xFFF6EAD0);
   static Color tempelBg(bool isDark) =>
       isDark ? const Color(0x338FAE7E) : const Color(0xFFE8EEDF);
 

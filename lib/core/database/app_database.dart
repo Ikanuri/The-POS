@@ -94,6 +94,26 @@ const kAsistenPermissionKeys = <String>[
   Employees,
   CashClosings,
 ])
+/// Baris hasil [AppDatabase.watchStockOverview] — Item 30 ("Cek Stok").
+typedef StockOverviewRow = ({
+  String productId,
+  String name,
+  int? groupId,
+  double stock,
+  double? minStock,
+  bool markedOutOfStock,
+});
+
+/// Baris hasil [AppDatabase.getInventoryRows] — Item 30(c) (laporan
+/// analitik/audit nilai inventori di tab Laporan).
+typedef InventoryRow = ({
+  String productId,
+  String name,
+  int? groupId,
+  double stock,
+  int costPrice,
+});
+
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
 
@@ -580,6 +600,104 @@ class AppDatabase extends _$AppDatabase {
             readsFrom: {productUnits, products, stockLedger})
         .get();
     return rows.map((r) => r.data['pid'] as String).toSet();
+  }
+
+  /// Stok riil (base unit) produk aktif yang STOK-nya AKTIF DILACAK
+  /// (`isNonStock == false` DAN minimal punya 1 baris `stock_ledger`) —
+  /// dipakai Item 29 (katalog HTML auto-tandai "habis" dari stok sungguhan)
+  /// & Item 30 (kontrol stok owner). SENGAJA pakai `EXISTS` (bukan
+  /// `COALESCE(...,0)`) — produk yang BELUM PERNAH disentuh stoknya sama
+  /// sekali (baru ditambah, belum sempat "Atur Stok") secara teknis
+  /// `stock_after` terakhirnya kosong, TAPI itu bukan berarti stoknya
+  /// sungguhan 0 — cuma belum pernah dilacak. Kalau tetap diperlakukan
+  /// sbg 0, produk yg owner memang tidak berniat lacak stoknya (banyak
+  /// toko kecil pakai katalog HTML murni utk harga, bukan stok) akan
+  /// mendadak tampil "Stok Habis" di katalog publik tanpa alasan nyata.
+  /// Produk non-stok ATAU belum pernah punya histori ledger SENGAJA tidak
+  /// masuk map — pemanggil harus treat "tidak ada di map" sbg "tidak
+  /// berlaku ambang stok riil", bukan 0. Agregat 1 query, bukan N+1 per
+  /// produk (§Pola Arsitektur CLAUDE.md).
+  Future<Map<String, double>> getBaseUnitRealStock() async {
+    final rows = await customSelect('''
+      SELECT pu.product_id AS pid,
+        (SELECT sl.stock_after FROM stock_ledger sl
+         WHERE sl.product_unit_id = pu.id
+         ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1) AS stock
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      WHERE pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1
+        AND EXISTS (SELECT 1 FROM stock_ledger sl
+                    WHERE sl.product_unit_id = pu.id)
+    ''', readsFrom: {productUnits, products, stockLedger}).get();
+    return {
+      for (final r in rows)
+        r.data['pid'] as String: (r.data['stock'] as num).toDouble(),
+    };
+  }
+
+  /// Baris overview stok utk Item 30 ("Cek Stok" — kontrol stok manual
+  /// owner). BEDA tujuan dari [getBaseUnitRealStock] (Item 29, katalog
+  /// publik): di sini layar SENGAJA dibuka owner utk MEREVIEW stok, jadi
+  /// produk yang belum pernah disentuh stoknya TETAP tampil sbg "0" (biar
+  /// kelihatan perlu dicek/diisi) — bukan disembunyikan spt di Item 29.
+  Stream<List<StockOverviewRow>> watchStockOverview({int? groupId}) {
+    final variables = <Variable<Object>>[];
+    var where = 'pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1';
+    if (groupId != null) {
+      where += ' AND p.product_group_id = ?';
+      variables.add(Variable<Object>(groupId));
+    }
+    return customSelect('''
+      SELECT pu.product_id AS pid, p.name AS name,
+        p.product_group_id AS group_id, pu.min_stock AS min_stock,
+        p.marked_out_of_stock AS marked_out_of_stock,
+        COALESCE((SELECT sl.stock_after FROM stock_ledger sl
+                  WHERE sl.product_unit_id = pu.id
+                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      WHERE $where
+      ORDER BY stock ASC
+    ''', variables: variables, readsFrom: {productUnits, products, stockLedger})
+        .watch()
+        .map((rows) => rows
+            .map((r) => (
+                  productId: r.data['pid'] as String,
+                  name: r.data['name'] as String,
+                  groupId: r.data['group_id'] as int?,
+                  stock: (r.data['stock'] as num).toDouble(),
+                  minStock: (r.data['min_stock'] as num?)?.toDouble(),
+                  markedOutOfStock:
+                      (r.data['marked_out_of_stock'] as int) == 1,
+                ))
+            .toList());
+  }
+
+  /// Baris mentah utk laporan nilai inventori (Item 30(c), tab Laporan) —
+  /// agregasi (per-kategori/grand-total/deteksi harga pokok kosong) dihitung
+  /// di layer UI dari list ini, bukan di SQL — laporan, bukan hot-path,
+  /// & lebih mudah diuji/dibaca sbg logika Dart murni. 1 query, bukan N+1.
+  Future<List<InventoryRow>> getInventoryRows() async {
+    final rows = await customSelect('''
+      SELECT p.id AS pid, p.name AS name, p.product_group_id AS group_id,
+        COALESCE((SELECT sl.stock_after FROM stock_ledger sl
+                  WHERE sl.product_unit_id = pu.id
+                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock,
+        COALESCE(pt.cost_price, 0) AS cost_price
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      LEFT JOIN price_tiers pt ON pt.product_unit_id = pu.id AND pt.min_qty = 1
+      WHERE pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1
+    ''', readsFrom: {productUnits, products, stockLedger, priceTiers}).get();
+    return rows
+        .map((r) => (
+              productId: r.data['pid'] as String,
+              name: r.data['name'] as String,
+              groupId: r.data['group_id'] as int?,
+              stock: (r.data['stock'] as num).toDouble(),
+              costPrice: (r.data['cost_price'] as num).toInt(),
+            ))
+        .toList();
   }
 
   // ───────────────────────── Tutup Kasir (Item 15) ─────────────────────────
