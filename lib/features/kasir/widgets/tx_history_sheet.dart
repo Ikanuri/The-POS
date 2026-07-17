@@ -76,11 +76,13 @@ final _txHistoryProvider =
   return rows;
 });
 
-/// Nama pelanggan terdaftar (id → nama) untuk accent & label di riwayat.
+/// Nama pelanggan (id → nama) untuk accent & label di riwayat — TERMASUK
+/// pelanggan yang sudah dihapus (soft-delete), supaya nota lama tetap
+/// menampilkan nama aslinya, bukan fallback generik "Pelanggan" (lihat
+/// `getAllCustomerNamesIncludingInactive`).
 final _custNamesProvider = FutureProvider<Map<String, String>>((ref) async {
   final db = ref.watch(databaseProvider);
-  final cs = await db.searchCustomers('');
-  return {for (final c in cs) c.id: c.name};
+  return db.getAllCustomerNamesIncludingInactive();
 });
 
 /// Detail produk yang cocok per transaksi saat filter produk aktif.

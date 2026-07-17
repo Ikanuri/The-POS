@@ -2488,6 +2488,19 @@ class AppDatabase extends _$AppDatabase {
     return query.get();
   }
 
+  /// Peta id→nama SEMUA pelanggan, TERMASUK yang sudah di-soft-delete
+  /// (`isActive=false`). Beda dari `searchCustomers()` (khusus daftar aktif
+  /// utk dropdown/autocomplete pilih pelanggan) — dipakai utk label riwayat
+  /// transaksi HISTORIS, yang menurut desain `deactivateCustomer()` memang
+  /// harus tetap tampil nama aslinya walau pelanggannya sudah dihapus. Bug
+  /// dilaporkan user: transaksi lama nyangkut nama generik "Pelanggan"
+  /// begitu pelanggannya dihapus, krn kode lama pakai `searchCustomers('')`
+  /// yang diam-diam menyaring `isActive=true` saja.
+  Future<Map<String, String>> getAllCustomerNamesIncludingInactive() async {
+    final rows = await select(customers).get();
+    return {for (final c in rows) c.id: c.name};
+  }
+
   Stream<List<Customer>> watchCustomers({String query = ''}) {
     final q = (select(customers)..where((t) => t.isActive.equals(true)));
     if (query.isNotEmpty) {
