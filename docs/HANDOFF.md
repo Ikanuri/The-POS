@@ -10,14 +10,78 @@ keamanan lisensi + fix debounce scanner + fix nama pelanggan riwayat +
 warna aksen toolbar kasir + fix sinkron harga SKU non-unik + Item
 29/30(a/b/c)/31/35(opsional) SEMUA dieksekusi & di-commit + migrasi data
 Griyo POS ke file `.berkahpos` (one-off, di luar repo) + fix silent-fail
-varian barcode bentrok)._ Full `flutter test` **442 test hijau**,
-`flutter analyze` bersih. schemaVersion masih 15
-(tidak ada migrasi baru, semua fitur baru pakai `app_settings` key baru
-`archive_manifest`/`last_archive_date` — TIDAK butuh migrasi skema).
-Branch `claude/setup-dependencies-am31te` — belum di-merge ke `main`
-(tunggu instruksi user). User sudah perbaiki `license/revoked.json` di
-`main` secara manual (typo tanda kutip) — item ini SELESAI, tidak perlu
-ditindaklanjuti lagi.
+varian barcode bentrok + **Item 36 (Stock Opname) & Item 37 (publish
+katalog ke Cloudflare Pages) SELESAI & di-commit**)._ Full `flutter test`
+**460 test hijau**, `flutter analyze` bersih. schemaVersion masih 15
+(Item 36/37 TIDAK butuh migrasi skema — opname pakai konvensi note di
+`stock_ledger` yg sudah ada, kredensial Cloudflare di secure storage).
+Branch `claude/setup-dependencies-am31te` sudah di-**merge ke `main`**
+(termasuk seluruh riwayat sesi sebelumnya) & di-push, lalu dilanjutkan
+lagi dgn commit Item 36/37 — **PENTING: sesi berikutnya perlu merge
+ULANG branch fitur ke main setelah commit Item 36/37 kalau user minta**
+(cek `git log --oneline --left-right origin/main...claude/setup-
+dependencies-am31te` dulu utk pastikan status terkini). User sudah
+perbaiki `license/revoked.json` di `main` secara manual (typo tanda
+kutip) — item ini SELESAI, tidak perlu ditindaklanjuti lagi.
+
+## Item 36 (Stock Opname) + Item 37 (Publish Cloudflare Pages) — SELESAI (17 Juli)
+
+**Item 36 — Stock Opname**: `lib/features/produk/stock_opname_screen.dart`
+(baru) — alur pilih kategori/Semua → hitung BUTA (stok sistem
+DISEMBUNYIKAN saat input, cuma field qty kosong) → review selisih (baru
+di sini stok sistem vs fisik dibandingkan) → commit. DB layer di
+`app_database.dart`: `commitOpname()` (tulis banyak baris `stock_ledger`
+type='adjustment' dgn timestamp+note SAMA PERSIS dalam 1 sesi),
+`getOpnameSessions()`/`getOpnameSessionDetail()` (riwayat, dikelompokkan
+dari note+createdAt, TANPA tabel baru), `buildOpnameNote()` (konvensi
+`"Opname <tgl> (Seluruh|Kategori: X)"`). `StockOverviewRow` typedef
+ditambah field `unitId` (dulu cuma `productId`) — dipakai `commitOpname`
+yg butuh productUnitId. Entry point: ikon ✅ di AppBar Cek Stok. Test:
+`test/stock_opname_test.dart` (DB-tier) + `test/stock_opname_screen_test.
+dart` (widget-tier, verifikasi mode buta beneran tidak tampilkan angka
+stok).
+
+**Item 37 — Publish Katalog ke Cloudflare Pages**: `lib/core/services/
+cloudflare_publish_service.dart` (baru) — `CloudflarePublishService`
+pakai Cloudflare Pages Direct Upload API murni HTTP (`dart:io HttpClient`,
+BUKAN package `http` — konsisten dgn `lan_sync_service.dart`). Nama
+project Cloudflare **deterministik**: `slug(storeName)-<hash storeUuid>`,
+dihitung SEKALI & disimpan permanen di secure storage (TIDAK berubah
+walau storeName diganti nanti, supaya URL yg sudah dibagikan ke pelanggan
+tetap valid; suffix hash storeUuid WAJIB krn subdomain `*.pages.dev` unik
+GLOBAL lintas akun Cloudflare, bukan cuma per akun). Kredensial (Account
+ID + API Token) di `FlutterSecureStorage`, pola sama seperti `storeKey`.
+UI: tombol "Publish ke Web" + ikon ☁️ (dialog kredensial) di
+`order_share_screen.dart`, berdampingan dgn "Buat & Bagikan" manual
+(fallback offline-first kalau token belum diisi/publish gagal). Abstraksi
+`CloudflareApi` (interface) dgn fake di test krn tidak mungkin hit API
+Cloudflare sungguhan tanpa akun/token nyata — test:
+`test/cloudflare_publish_service_test.dart` (7 test: gating kredensial,
+determinisme nama project, no-collision antar-toko, persist lintas
+instance/reinstall) + `test/order_share_publish_button_test.dart`
+(widget-tier).
+
+**2 bug nyata ditemukan & diperbaiki via test SEBELUM commit** (bukan
+laporan user — test yg saya tulis sendiri menangkapnya):
+1. `_shortHash()` awalnya `.substring(0, 6)` (6 hex digit PERTAMA) —
+   dua storeUuid yg cuma beda di akhir string (mis. beda 1 karakter
+   terakhir) bisa hasilkan hash SAMA krn justru digit pembedanya ada di
+   akhir hex, bukan awal. Fix: ambil 6 digit hex TERAKHIR.
+2. Tombol "Publish ke Web" set `_publishing = true` (nyalakan
+   `CircularProgressIndicator`, animasi tak terbatas) SEBELUM membuka
+   dialog Pengaturan Cloudflare saat kredensial belum diisi — bikin
+   `pumpAndSettle()` widget test macet (animasi tak pernah "settle"
+   selama menunggu input user di dialog). Fix: cek kredensial dulu TANPA
+   spinner, baru nyalakan spinner setelah benar-benar mulai kerja network.
+
+**Temuan sampingan (dicatat sbg Item 38 di PLAN.md, prioritas rendah,
+BUKAN bug yg dilaporkan user)**: `_rawBaseStock()` tie-break `ORDER BY
+created_at DESC, id DESC` bisa salah pilih baris kalau 2 perubahan stok
+jatuh di detik yang sama persis (createdAt presisi detik, id UUID acak
+tidak berkorelasi kronologis) — ketahuan lewat test Item 36 yg menulis 2x
+stok tanpa jeda. Test sudah disesuaikan (kasih jeda >1 detik antar
+langkah), tapi celah di kode produksi belum diperbaiki (lihat Item 38 utk
+detail & opsi fix).
 
 ## Fix: varian produk dgn barcode bentrok gagal-diam tanpa pesan error (17 Juli)
 

@@ -39,6 +39,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   toko dengan kode produk yang tidak konsisten, bisa memilih mode yang
   hanya mencocokkan lewat barcode (lebih lambat prosesnya tapi paling
   akurat).
+- **Fitur baru "Stock Opname"** (ikon ✅ di layar Cek Stok) — hitung
+  fisik stok toko secara BUTA (angka stok sistem sengaja disembunyikan
+  saat Anda mengetik hasil hitungan, supaya tidak bias ke angka lama),
+  baru dibandingkan dengan stok sistem di layar review sebelum disimpan.
+  Bisa untuk sebagian kategori saja atau seluruh produk sekaligus. Ada
+  riwayat semua sesi opname yang pernah dilakukan, lengkap dengan
+  rincian selisih per produk.
+- **Katalog kini bisa dipublish otomatis ke web** — tombol "Publish ke
+  Web" baru di layar Katalog Pesanan (berdampingan dengan "Buat &
+  Bagikan" manual yang sudah ada). Setelah isi Account ID + API Token
+  Cloudflare sekali (gratis, lihat tombol ☁️ di AppBar), setiap tekan
+  "Publish ke Web" katalog otomatis ter-upload dan dapat link tetap yang
+  bisa dibagikan sekali ke pelanggan — update harga berikutnya, link-nya
+  tidak berubah, tinggal publish ulang.
 
 ### 🔧 Perbaikan
 - **Sinkron harga antar-toko tidak lagi salah mengubah harga produk yang
