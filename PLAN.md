@@ -39,7 +39,9 @@ lengkap & siap dikerjakan (30(b) mockup di-approve, 30(c) chart+tabel,
 SELESAI & di-commit** (warna aksen toolbar kasir, Varian C dipilih user).
 **Item 4/5 (migrasi data) DIPENDING** — user bilang migrasi sebenarnya
 cakup lebih dari transaksi+pelanggan (termasuk produk dll., scope belum
-dirinci) — ditahan dulu, prioritaskan item lain yang sudah matang duluan._
+dirinci) — ditahan dulu, prioritaskan item lain yang sudah matang duluan.
+**Item 35 (fix sinkron harga SKU non-unik) SELESAI & di-commit** (17 Juli)
+— sisa cuma opsi "barcode saja" yang opsional._
 
 ---
 
@@ -648,6 +650,16 @@ disengaja sekarang berhasil dobel, DAN (b) tidak muncul balik gejala lama
 (barcode kepencet dobel sendiri tanpa disengaja/echo hardware). Kalau
 (b) muncul, berarti 150ms masih kurang tinggi utk scanner user — perlu
 naik sedikit, bukan bukti keputusan ini salah arah.
+
+---
+
+## Item 35 — Sinkron harga antar-toko: opsi "barcode saja" (OPSIONAL, belum dikerjakan)
+
+Bug utama sinkron harga (SKU non-unik salah cocok) **SUDAH DIPERBAIKI &
+di-commit** (17 Juli — lihat CHANGELOG/HANDOFF). Sisa yang belum: opsi
+"sinkron via barcode saja" untuk toko besar (item tanpa barcode-cocok
+langsung dianggap "Baru/lewati", tidak coba SKU/fuzzy). Dibahas tapi
+belum diminta dikerjakan — kerjakan kalau user re-konfirmasi butuh.
 
 ---
 

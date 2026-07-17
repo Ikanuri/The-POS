@@ -149,6 +149,28 @@ class PriceMatchService {
     return units.where((u) => u.isBaseUnit).firstOrNull ?? units.first;
   }
 
+  /// Seperti [_resolveUnit] tapi TANPA fallback ke base unit bila satuan yang
+  /// diminta tidak ada — kembalikan null. Dipakai jalur auto-match SKU yang
+  /// harus ketat (SKU sinyal lemah antar-toko; wajib satuannya benar-benar
+  /// ada agar tidak salah tempel harga). Bila katalog tidak menyertakan nama
+  /// satuan (`wantTypeName` kosong), tak bisa lebih ketat → pakai base unit.
+  static ProductUnit? _resolveUnitStrict(
+    List<ProductUnit> units,
+    Map<int, String> typeNameById,
+    String wantTypeName,
+  ) {
+    final want = wantTypeName.trim().toLowerCase();
+    if (want.isEmpty) {
+      return units.where((u) => u.isBaseUnit).firstOrNull ?? units.firstOrNull;
+    }
+    for (final u in units) {
+      final tn =
+          (u.unitTypeId != null ? typeNameById[u.unitTypeId!] : null) ?? '';
+      if (tn.trim().toLowerCase() == want) return u;
+    }
+    return null;
+  }
+
   static Future<MatchedItem?> _tryMatch(
     AppDatabase db,
     PriceCatalogItem item,
@@ -204,41 +226,53 @@ class PriceMatchService {
       }
     }
 
-    // 2. Match by SKU
+    // 2. Match by SKU — HANYA aman bila kode UNIK & satuan cocok.
     if (item.kodeProduk != null && item.kodeProduk!.isNotEmpty) {
       final skuLower = item.kodeProduk!.toLowerCase();
-      final product = allProducts.where(
-        (p) => p.kodeProduk?.toLowerCase() == skuLower,
-      ).firstOrNull;
-      if (product != null) {
+      final skuMatches = allProducts
+          .where((p) => p.kodeProduk?.toLowerCase() == skuLower)
+          .toList();
+
+      if (skuMatches.length > 1) {
+        // Tabrakan SKU: kode_produk tidak unik (mis. banyak produk berkode
+        // nama satuan "Dos"/"Pak"/"Bal"). Ambil-pertama-sembarang dulu bikin
+        // item nyasar ke produk tak berhubungan & harga saling-timpa tiap
+        // sync (non-konvergen). Jangan tebak — biarkan fuzzy-nama fallback
+        // yang tangani (masuk tab "Mirip" utk konfirmasi manual).
+        log.add('  → SKU "${item.kodeProduk}" cocok ke ${skuMatches.length} '
+            'produk (TABRAKAN, kode tidak unik) → tidak auto-match via SKU');
+      } else if (skuMatches.length == 1) {
+        final product = skuMatches.first;
         final units = await db.getProductUnits(product.id);
-        if (units.isNotEmpty) {
-          final unit = _resolveUnit(units, typeNameById, item.unitTypeName);
-          final tiers = await db.getPriceTiers(unit.id);
-          final tierCount = tiers.where((t) => t.minQty == 1).length;
-          log.add('  → SKU match: unit=${_short(unit.id)}, '
-              'product="${product.name}", '
-              '${units.length} units total');
-          log.add('    Tiers minQty=1: $tierCount buah → '
-              '${tiers.where((t) => t.minQty == 1).map((t) => 'id=${_short(t.id)} price=${t.price} cost=${t.costPrice}').join(' | ')}');
-          final baseTier =
-              tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
-          log.add('    baseTier dipilih: id=${_short(baseTier?.id ?? "?")} '
-              'price=${baseTier?.price ?? 0}');
-          if (tierCount > 1) {
-            log.add('    ⚠ DUPLIKAT TIER! $tierCount tier minQty=1 untuk unit ini');
-          }
-          return MatchedItem(
-            catalogItem: item,
-            localProductId: product.id,
-            localProductUnitId: unit.id,
-            localProductName: product.name,
-            localPrice: baseTier?.price ?? 0,
-            localCostPrice: baseTier?.costPrice ?? 0,
-            matchType: MatchType.sku,
-          );
-        } else {
+        if (units.isEmpty) {
           log.add('  → SKU match tapi tidak ada unit untuk product "${product.name}"');
+        } else {
+          // Perketat: satuan katalog HARUS ada di produk lokal. Cegah item
+          // spt "76 12/bal" nyasar ke "Atira 2000" hanya karena kebetulan
+          // berkode "bal" padahal tak punya satuan "Bal".
+          final unit = _resolveUnitStrict(units, typeNameById, item.unitTypeName);
+          if (unit == null) {
+            log.add('  → SKU match "${product.name}" tapi satuan '
+                '"${item.unitTypeName}" tidak ada di produk itu → tolak, '
+                'coba fuzzy');
+          } else {
+            final tiers = await db.getPriceTiers(unit.id);
+            final baseTier = tiers.where((t) => t.minQty == 1).firstOrNull ??
+                tiers.firstOrNull;
+            log.add('  → SKU match: unit=${_short(unit.id)}, '
+                'product="${product.name}", ${units.length} units total');
+            log.add('    baseTier dipilih: id=${_short(baseTier?.id ?? "?")} '
+                'price=${baseTier?.price ?? 0}');
+            return MatchedItem(
+              catalogItem: item,
+              localProductId: product.id,
+              localProductUnitId: unit.id,
+              localProductName: product.name,
+              localPrice: baseTier?.price ?? 0,
+              localCostPrice: baseTier?.costPrice ?? 0,
+              matchType: MatchType.sku,
+            );
+          }
         }
       } else {
         log.add('  → SKU "${item.kodeProduk}" tidak cocok');

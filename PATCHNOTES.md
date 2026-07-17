@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 17 Juli 2026
+
+### 🔧 Perbaikan
+- **Sinkron harga antar-toko tidak lagi salah mengubah harga produk yang
+  tak berhubungan.** Sebelumnya, saat menyamakan harga dengan toko lain,
+  sering muncul "harga berubah" untuk produk yang seharusnya tidak
+  tersentuh — bahkan setiap kali sinkron ulang selalu ada saja yang
+  berubah. Penyebabnya: produk yang **kode-nya sama** (mis. banyak produk
+  memakai kode "Dos"/"Pak"/"Bal") tertukar satu sama lain. Sekarang, kalau
+  sebuah kode dipakai lebih dari satu produk, aplikasi **tidak menebak** —
+  item seperti itu dilempar ke tab "Mirip" untuk Anda konfirmasi manual,
+  dan pencocokan lewat kode juga mengharuskan satuannya benar-benar cocok.
+  Sinkron harga jadi jauh lebih akurat dan tidak "berubah-ubah sendiri".
+
 ## 16 Juli 2026
 
 ### 🎨 Perubahan Tampilan
