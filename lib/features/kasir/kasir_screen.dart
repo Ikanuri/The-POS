@@ -2196,7 +2196,9 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                                     children: [
                                       _TbBtn(
                                           icon: Icons.qr_code_scanner_rounded,
-                                          onTap: widget.onScan),
+                                          onTap: widget.onScan,
+                                          fg: AppTheme.scanFg,
+                                          bg: AppTheme.scanBg),
                                       if (widget.showQueueAndHistory) ...[
                                         const SizedBox(width: 4),
                                         _TbBtn(
@@ -2205,12 +2207,16 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                                           onTap: widget.onHeld,
                                           badgeCount: widget.heldCount,
                                           label: 'Antrian',
+                                          fg: AppTheme.antrianFg,
+                                          bg: AppTheme.antrianBg,
                                         ),
                                         const SizedBox(width: 4),
                                         _TbBtn(
                                           icon: Icons.history_rounded,
                                           onTap: widget.onHistory,
                                           label: 'Riwayat\nTransaksi',
+                                          fg: AppTheme.riwayatFg,
+                                          bg: AppTheme.riwayatBg,
                                         ),
                                       ],
                                       const SizedBox(width: 4),
@@ -2226,6 +2232,8 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                                           icon: Icons.content_paste_go_rounded,
                                           onTap: widget.onPasteOrder!,
                                           label: 'Tempel\nPesanan',
+                                          fg: AppTheme.tempelFg,
+                                          bg: AppTheme.tempelBg,
                                         ),
                                       ],
                                     ],
@@ -2303,6 +2311,8 @@ class _TbBtn extends StatelessWidget {
     required this.onTap,
     this.badgeCount = 0,
     this.label,
+    this.fg,
+    this.bg,
   });
 
   final IconData icon;
@@ -2313,15 +2323,23 @@ class _TbBtn extends StatelessWidget {
   /// untuk memaksa dua baris. Lebar dibatasi agar tidak menabrak tombol lain.
   final String? label;
 
+  /// Item 33 — aksen soft per-fungsi (mis. `AppTheme.scanFg`/`scanBg`).
+  /// Null = netral (dipakai grid/list toggle, murni preferensi tampilan).
+  final Color Function(bool isDark)? fg;
+  final Color Function(bool isDark)? bg;
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final child = Icon(icon, size: 18, color: cs.onSurfaceVariant);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = fg?.call(isDark) ?? cs.onSurfaceVariant;
+    final bgColor = bg?.call(isDark) ?? cs.surface;
+    final child = Icon(icon, size: 18, color: iconColor);
     final box = Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: cs.surface,
+        color: bgColor,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: cs.outlineVariant, width: 0.75),
       ),

@@ -25,6 +25,27 @@ class AppTheme {
   static Color changeBg(bool isDark) =>
       isDark ? const Color(0x4D5FD39A) : const Color(0xFFE3F4EA);
 
+  // Item 33 — aksen soft per-fungsi tombol toolbar kasir (scan/antrian/
+  // riwayat/tempel pesanan), Varian C dipilih user dari mockup. Grid/list
+  // toggle sengaja TETAP netral (murni preferensi tampilan, bukan fungsi
+  // bermakna warna).
+  static Color scanFg(bool isDark) =>
+      isDark ? const Color(0xFF8AABC4) : const Color(0xFF3E6E92);
+  static Color scanBg(bool isDark) =>
+      isDark ? const Color(0x338AABC4) : const Color(0xFFE3EBF2);
+  static Color antrianFg(bool isDark) =>
+      isDark ? const Color(0xFFCFA75A) : const Color(0xFF9C7A2E);
+  static Color antrianBg(bool isDark) =>
+      isDark ? const Color(0x33CFA75A) : const Color(0xFFF5EBD3);
+  static Color riwayatFg(bool isDark) =>
+      isDark ? const Color(0xFFB39DDB) : const Color(0xFF6E4E92);
+  static Color riwayatBg(bool isDark) =>
+      isDark ? const Color(0x33B39DDB) : const Color(0xFFEAE3F2);
+  static Color tempelFg(bool isDark) =>
+      isDark ? const Color(0xFF8FAE7E) : const Color(0xFF4C6440);
+  static Color tempelBg(bool isDark) =>
+      isDark ? const Color(0x338FAE7E) : const Color(0xFFE8EEDF);
+
   /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
   /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).
   static void showSnack(BuildContext context, String message,

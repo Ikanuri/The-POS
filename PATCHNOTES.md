@@ -21,6 +21,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sudah ada.
 - Nama produk di baris item struk in-app sekarang lebih tebal (bold),
   lebih mudah dibaca sekilas.
+- **Tombol toolbar di layar Kasir** (scan barcode, antrian, riwayat
+  transaksi, tempel pesanan) sekarang punya aksen warna soft sesuai
+  fungsinya masing-masing — lebih mudah dibedakan sekilas, tidak lagi
+  seragam abu-abu semua.
 
 ### ✨ Fitur Baru
 - **Nota tempo yang belum dibayar sama sekali kini bisa menaikkan jumlah

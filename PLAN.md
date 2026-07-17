@@ -32,9 +32,14 @@ final beda dari catatan lama (bukan QR+LAN live, tapi file terenkripsi
 BPOT1 + rekey SQLCipher; entry point Pengaturan "Alihkan Owner" & welcome
 screen "Pulihkan dari File"). Item 28 (lanjutkan pesanan lintas device)
 masih sebatas konsep, belum didesain detail. **Item 29/30/31 BARU** (16
-Juli, dari sesi diskusi stok minus & tutup buku): katalog auto-habis dari
-stok riil (siap dikerjakan), laporan stok terkini (belum didesain detail),
-tutup buku tanggal custom mengikuti Hari Raya (belum didesain detail)._
+Juli, dari sesi diskusi stok minus & tutup buku): semua sudah didesain
+lengkap & siap dikerjakan (30(b) mockup di-approve, 30(c) chart+tabel,
+31 sekali/tahun tanggal custom). **Item 32 SELESAI** (debounce scanner
+150ms, `839a29c` — tinggal user uji manual di device asli). **Item 33
+SELESAI & di-commit** (warna aksen toolbar kasir, Varian C dipilih user).
+**Item 4/5 (migrasi data) DIPENDING** — user bilang migrasi sebenarnya
+cakup lebih dari transaksi+pelanggan (termasuk produk dll., scope belum
+dirinci) — ditahan dulu, prioritaskan item lain yang sudah matang duluan._
 
 ---
 
@@ -130,8 +135,14 @@ nyata dari user; kerjakan kalau ada keluhan konkret.
 
 ## Item 4 — Import pelanggan dari Griyo POS (fitur eksperimental, ANALISIS SELESAI — implementasi BELUM dimulai)
 
-**Prioritas:** Siap dikerjakan — sumber data & keputusan besar sudah ada,
-tinggal 1-2 keputusan kecil sebelum coding (lihat di bawah).
+**STATUS: DIPENDING sementara** bareng Item 5 — lihat catatan status di
+Item 5 (migrasi user ternyata cakup lebih dari transaksi+pelanggan,
+termasuk produk dll., scope penuh belum dirinci). Analisis di bawah ini
+tetap valid & siap dipakai begitu user re-konfirmasi & minta lanjut.
+
+**Prioritas (kalau nanti dilanjutkan):** Siap dikerjakan — sumber data &
+keputusan besar sudah ada, tinggal 1-2 keputusan kecil sebelum coding
+(lihat di bawah).
 
 **Sumber data dianalisis:** `Pelanggan.xlsx` (Griyo POS), 493 baris, 1 sheet.
 Kolom: `Pelanggan, Alamat, Telepon, Barcode, Keterangan, Poin, Piutang`.
@@ -192,9 +203,19 @@ cuma tes "tab pelanggan muncul" lalu anggap beres.
 
 ## Item 5 — Import riwayat transaksi dari dataset lama (fitur baru + jadi data stress-test nyata)
 
-**Prioritas:** Setelah Item 3 selesai (lihat alasan ketergantungan di
-3b — bug dedup importer di Item 2 sudah selesai dikerjakan, lihat
-CHANGELOG).
+**STATUS: DIPENDING sementara** (keputusan user) — migrasi data user
+ternyata BUKAN cuma transaksi + pelanggan (Item 4/5), tapi juga mencakup
+aspek lain (mis. produk, dll — belum dirinci detailnya). Daripada
+implementasi Item 4/5 dulu sebagian lalu ternyata perlu dirombak begitu
+scope penuh migrasi diketahui, **seluruh inisiatif migrasi data
+(Item 3c, 4, 5, dan kemungkinan item baru terkait produk) ditahan
+dulu** — user minta prioritaskan eksekusi item lain yang sudah matang
+(29/30/31/32/33) duluan. Jangan mulai Item 4/5 sebelum user re-konfirmasi
+scope migrasi lengkap & bilang siap lanjut.
+
+**Prioritas (kalau nanti dilanjutkan):** Setelah Item 3 selesai (lihat
+alasan ketergantungan di 3b — bug dedup importer di Item 2 sudah selesai
+dikerjakan, lihat CHANGELOG).
 
 **DIKONFIRMASI user (menjawab pertanyaan cakupan yang sebelumnya
 menggantung):** user punya **riwayat transaksi PENUH dari tahun lalu**,
@@ -627,42 +648,6 @@ disengaja sekarang berhasil dobel, DAN (b) tidak muncul balik gejala lama
 (barcode kepencet dobel sendiri tanpa disengaja/echo hardware). Kalau
 (b) muncul, berarti 150ms masih kurang tinggi utk scanner user — perlu
 naik sedikit, bukan bukti keputusan ini salah arah.
-
----
-
-## Item 33 — Warna aksen pada tombol toolbar (scan, dll) di sebelah kolom cari produk
-
-**Konteks:** user minta tombol-tombol di toolbar kasir (scan barcode,
-antrian, riwayat transaksi, toggle grid, tempel pesanan) diberi aksen
-warna soft sesuai fungsi masing-masing — sekarang SEMUA seragam abu-abu
-netral (`_TbBtn`, `kasir_screen.dart:2294-2356`: `cs.surface` bg,
-`cs.onSurfaceVariant` ikon, `cs.outlineVariant` border, tidak ada
-pembeda warna sama sekali antar tombol).
-
-**Tombol yang perlu mapping warna** (dari `kasir_screen.dart:2190-2230`):
-scan barcode (`qr_code_scanner_rounded`), antrian pesanan tertahan
-(`pause_circle_outline_rounded`, badge count), riwayat transaksi
-(`history_rounded`), toggle grid/list (`grid_view_rounded`/
-`view_list_rounded`), tempel pesanan (icon paste, kondisional).
-
-**Usulan mapping (belum final, perlu konfirmasi user)** — soft/dim spt
-pola `accent-dim`/`errorContainer` yang sudah dipakai di app, BUKAN warna
-solid penuh:
-- Scan barcode → aksen utama toko (`AppTheme` terracotta) — tombol aksi
-  cepat paling sering dipakai.
-- Antrian (pesanan tertahan, ada badge count) → amber/kuning — semantik
-  "menunggu/pending".
-- Riwayat Transaksi → biru soft — semantik "informasi/lihat data".
-- Toggle grid/list → tetap netral (murni preferensi tampilan, bukan
-  fungsi bermakna warna).
-- Tempel Pesanan → hijau soft — semantik "menambahkan/masuk".
-
-**Mockup 3 varian sudah dikirim** (`toolbar_color_mockups.html`/`.jpg` di
-scratchpad sesi ini, tidak di-commit): Varian A (aksen per-fungsi lengkap
-— scan=terracotta, antrian=amber, riwayat=biru, grid=netral, tempel=hijau),
-Varian B (minimal — cuma Scan yg diwarnai, sisanya netral), Varian C
-(palet beda — scan=biru, riwayat=ungu). **Menunggu user pilih salah satu
-atau minta revisi** sebelum diterapkan ke kode.
 
 ---
 
