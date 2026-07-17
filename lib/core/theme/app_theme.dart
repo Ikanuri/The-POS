@@ -7,6 +7,12 @@ class AppTheme {
   // Terracotta clay accent — from mockup --accent token
   static const accent = Color(0xFFC96442);
 
+  // Tombol "Bayar" (aksi konfirmasi pembayaran lunas) — hijau tetap sama
+  // di light & dark, dipakai di modal checkout (payment_screen.dart) DAN
+  // dialog Bayar/Lunasi di struk (debt_payment_dialog.dart) supaya warna
+  // aksi utama konsisten di seluruh alur pembayaran.
+  static const payGreen = Color(0xFF22C55E);
+
   // ── Warna semantik kasir (konsisten light & dark) ──────────────────
   // Hutang / sisa bayar → MERAH di semua mode.
   // Kembalian → HIJAU soft di semua mode.
@@ -18,6 +24,35 @@ class AppTheme {
       isDark ? const Color(0xFF74E0AC) : const Color(0xFF1E7E4F);
   static Color changeBg(bool isDark) =>
       isDark ? const Color(0x4D5FD39A) : const Color(0xFFE3F4EA);
+
+  // Item 33 — aksen soft per-fungsi tombol toolbar kasir (scan/antrian/
+  // riwayat/tempel pesanan), Varian C dipilih user dari mockup. Grid/list
+  // toggle sengaja TETAP netral (murni preferensi tampilan, bukan fungsi
+  // bermakna warna).
+  static Color scanFg(bool isDark) =>
+      isDark ? const Color(0xFF8AABC4) : const Color(0xFF3E6E92);
+  static Color scanBg(bool isDark) =>
+      isDark ? const Color(0x338AABC4) : const Color(0xFFE3EBF2);
+  static Color antrianFg(bool isDark) =>
+      isDark ? const Color(0xFFCFA75A) : const Color(0xFF9C7A2E);
+  static Color antrianBg(bool isDark) =>
+      isDark ? const Color(0x33CFA75A) : const Color(0xFFF5EBD3);
+  static Color riwayatFg(bool isDark) =>
+      isDark ? const Color(0xFFB39DDB) : const Color(0xFF6E4E92);
+  static Color riwayatBg(bool isDark) =>
+      isDark ? const Color(0x33B39DDB) : const Color(0xFFEAE3F2);
+  static Color tempelFg(bool isDark) =>
+      isDark ? const Color(0xFF8FAE7E) : const Color(0xFF4C6440);
+
+  // Item 30(b) — badge stok di layar "Cek Stok". Kritis/negatif pakai
+  // debtFg/debtBg (merah, sudah ada), aman pakai changeFg/changeBg (hijau,
+  // sudah ada) — tambahan hanya utk "menipis" (amber, belum ada pasangan).
+  static Color stockWarnFg(bool isDark) =>
+      isDark ? const Color(0xFFE0B65A) : const Color(0xFF9C6F0E);
+  static Color stockWarnBg(bool isDark) =>
+      isDark ? const Color(0x33E0B65A) : const Color(0xFFF6EAD0);
+  static Color tempelBg(bool isDark) =>
+      isDark ? const Color(0x338FAE7E) : const Color(0xFFE8EEDF);
 
   /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
   /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).

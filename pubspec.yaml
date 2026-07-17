@@ -73,3 +73,16 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Item 9 (batch 15 Juli) — font di-bundle lokal (bukan fetch runtime dari
+  # Google Fonts CDN) supaya UI konsisten offline-first bahkan saat device
+  # belum pernah online sama sekali. Lihat GoogleFonts.config.allowRuntimeFetching
+  # di main.dart. PENTING: paket `google_fonts` TIDAK memakai deklarasi
+  # `fonts:` Flutter biasa untuk self-hosting — ia mencari file di daftar
+  # `assets:` dengan pola nama PERSIS "<FamilyInternal>-<NamaBerat>.ttf"
+  # (mis. "HankenGrotesk-SemiBold.ttf") lewat AssetManifest, cocokkan
+  # manual kalau nambah berat/keluarga font baru (lihat
+  # google_fonts_variant.dart di package utk pemetaan nama berat).
+  # File instans statis di-generate dari variable-font resmi google/fonts
+  # (OFL) via fonttools; lisensi ada di assets/fonts/OFL.txt.
+  assets:
+    - assets/fonts/

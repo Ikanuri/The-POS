@@ -214,9 +214,14 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
     Product? found;
     if (kode != null && kode.trim().isNotEmpty) {
       final k = kode.trim().toLowerCase();
-      found = candidates
+      // Pakai kode HANYA bila unik. kode_produk di data user sering tidak
+      // unik (nama satuan "Dos"/"Pak" dipakai sbg kode) — ambil-pertama
+      // bikin unit nempel ke produk salah. Kalau kode tabrakan (>1) atau
+      // tak ada, jatuh ke pencocokan nama yang lebih andal.
+      final kodeMatches = candidates
           .where((p) => (p.kodeProduk ?? '').trim().toLowerCase() == k)
-          .firstOrNull;
+          .toList();
+      if (kodeMatches.length == 1) found = kodeMatches.first;
     }
     found ??= candidates.where((p) {
       if (p.name.trim().toLowerCase() != name.trim().toLowerCase()) {

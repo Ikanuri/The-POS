@@ -7,6 +7,40 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-17
+
+- `b69d538` — fix: varian produk dgn barcode bentrok gagal-diam tanpa pesan error (tangkap exception di `_addVariant`/`_editVariant`)
+- `886db53` — feat: Tutup Buku tanggal custom (bukan selalu 1 Januari), sekali per tahun (Item 31)
+- `fa3e496` — feat: opsi sinkron harga via barcode saja (Item 35 opsional)
+- `dd4bad3` — feat: kontrol stok owner — katalog auto-habis (29) + layar Cek Stok + tab audit Laporan (30)
+- `db60a4b` — fix: sinkron harga antar-toko salah cocok karena SKU non-unik (pengaman tabrakan kode + satuan wajib cocok + fix `_findOrCreateProduct`)
+
+## 2026-07-16
+
+- `c805907` — feat: aksen warna soft per-fungsi tombol toolbar kasir (scan/antrian/riwayat/tempel pesanan) — Varian C
+- `21e58c1` — fix: riwayat transaksi tampilkan nama generik "Pelanggan" utk pelanggan yang sudah dihapus, alih-alih nama aslinya
+- `839a29c` — fix: turunkan debounce scanner eksternal 300ms→150ms agar scan dobel cepat yang disengaja tidak ke-drop
+- `1d09200` — fix: 2 bug ditemukan saat testing device asli Alihkan Owner (redirect loop router + nama/kode device tidak lagi warisi punya lama)
+- `99de7ea` — feat: fitur "Alihkan Owner" (transfer data + identitas toko via file terenkripsi BPOT1) + opsi "Pulihkan dari File" di welcome screen
+- `e565430` — fix: poin loyalitas nyangkut di pelanggan lama saat transaksi diubah balik ke Umum/pelanggan lain
+- `fc991d2` — fix: device yang di-revoke bisa "membuka diri sendiri" via kode aktivasi yang sama
+- `2ade5b5` — feat: boleh naikkan qty item sama di edit sheet nota tempo yang belum ada pembayaran
+- `32d017e` — fix: poin loyalitas tidak bertambah kumulatif saat Tambah Belanjaan
+- `f098fa4` — fix: alamat pelanggan tidak tampil di dropdown picker cart bar
+- `87b8c42` — fix: teks nama produk di baris item struk in-app dibuat bold
+- `eb7da72` — feat: redesign header struk — status Lunas/Tempo jadi watermark stempel
+- `feaf7d2` — docs: perbarui catatan Item 29 — clearance stempel vs baris item sudah diverifikasi di mockup
+- `e57dcb0` — docs: simpan spesifikasi final redesign header struk (stempel) ke PLAN.md Item 29
+
+## 2026-07-15
+
+- `79b94e6` — docs: tambah rencana "Alihkan Owner" (transfer sesi) & lanjutkan pesanan lintas device ke PLAN.md
+- `99ca815` — feat: batch perbaikan modal checkout & struk (label, layout, warna, poin, alamat)
+- `791e021` — feat: bundle font lokal (Hanken Grotesk, Newsreader, Roboto Mono) — offline-first
+- `3b55d1c` — feat: tampilkan sisa waktu lisensi di Pengaturan
+- `8f0c958` — feat: toggle direct WhatsApp vs share generik untuk katalog HTML
+- `d7c257d` — fix: qty desimal (0.25) tidak tampil proper di stepper + tambah debounce anti-missclick
+- `a23c48e` — fix: struk gabungan banyak item jadi blur saat dibagikan — kirim sbg PDF
 
 ## 2026-07-14
 

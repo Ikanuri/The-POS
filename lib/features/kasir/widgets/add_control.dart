@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -7,7 +9,7 @@ import '../../../core/theme/app_theme.dart';
 /// (produk multi-satuan). Dipakai di kartu/baris produk kasir DAN di baris
 /// item keranjang (`cart_sheet.dart`) supaya gaya stepper konsisten di
 /// seluruh alur kasir.
-class AddControl extends StatelessWidget {
+class AddControl extends StatefulWidget {
   const AddControl({
     super.key,
     required this.qty,
@@ -22,7 +24,45 @@ class AddControl extends StatelessWidget {
   final double size;
 
   @override
+  State<AddControl> createState() => _AddControlState();
+}
+
+// Item 13 — jeda anti-missclick: tap +/- yang datang terlalu rapat (jari
+// sedikit geser lalu kena tombol sebelah) diabaikan, bukan diproses dobel.
+const _kMisclickDebounce = Duration(milliseconds: 150);
+
+class _AddControlState extends State<AddControl> {
+  bool _blocked = false;
+  Timer? _unblockTimer;
+
+  @override
+  void dispose() {
+    _unblockTimer?.cancel();
+    super.dispose();
+  }
+
+  bool _debounced() {
+    if (_blocked) return true;
+    _blocked = true;
+    _unblockTimer?.cancel();
+    _unblockTimer = Timer(_kMisclickDebounce, () => _blocked = false);
+    return false;
+  }
+
+  void _handleTap() {
+    if (_debounced()) return;
+    widget.onTap();
+  }
+
+  void _handleMinus() {
+    if (_debounced()) return;
+    widget.onMinus?.call();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final qty = widget.qty;
+    final size = widget.size;
     final inCart = qty > 0;
     final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -36,7 +76,7 @@ class AddControl extends StatelessWidget {
     final circleSize = size + 4;
     final mainCircle = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: _handleTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: circleSize,
@@ -51,12 +91,23 @@ class AddControl extends StatelessWidget {
         ),
         child: Center(
           child: inCart
-              ? Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: circleSize * 0.40,
+              ? Padding(
+                  // Label tetap bulat (bukan pill) — utk qty desimal (mis.
+                  // "0.25", produk timbang) yang lebih panjang dari 1-2
+                  // digit biasa, `FittedBox` menyusutkan font-nya secara
+                  // proporsional supaya tetap muat dalam lingkaran, bukan
+                  // terpotong/meluber.
+                  padding: EdgeInsets.all(circleSize * 0.12),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: circleSize * 0.40,
+                      ),
+                    ),
                   ),
                 )
               : Icon(Icons.add_rounded,
@@ -75,7 +126,7 @@ class AddControl extends StatelessWidget {
       children: [
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: onMinus,
+          onTap: _handleMinus,
           child: Container(
             width: minusSize,
             height: minusSize,

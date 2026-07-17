@@ -53,10 +53,17 @@ class WelcomeScreen extends StatelessWidget {
                 icon: const Icon(Icons.qr_code_scanner_outlined),
                 label: const Text('Gabung Toko'),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => context.go('/setup/pulihkan'),
+                icon: const Icon(Icons.folder_open_outlined),
+                label: const Text('Pulihkan dari File'),
+              ),
               const SizedBox(height: 24),
               Text(
                 'Setup Toko Baru: untuk HP owner (pertama kali).\n'
-                'Gabung Toko: scan QR dari HP owner.',
+                'Gabung Toko: scan QR dari HP owner.\n'
+                'Pulihkan dari File: sudah punya file backup/alihan owner.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,

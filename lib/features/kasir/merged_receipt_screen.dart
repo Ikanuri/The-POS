@@ -7,6 +7,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/database/app_database.dart';
@@ -25,6 +27,22 @@ class MergedReceiptScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<MergedReceiptScreen> createState() =>
       _MergedReceiptScreenState();
+
+  /// Bungkus PNG hasil capture jadi 1 halaman PDF pas ukurannya (bukan A4)
+  /// — public & static supaya testable tanpa widget tree/RepaintBoundary.
+  /// Lihat komentar `_share()` di bawah utk kenapa PDF (bukan PNG) dipilih.
+  static Future<Uint8List> buildReceiptPdfBytes({
+    required Uint8List pngBytes,
+    required double logicalWidth,
+    required double logicalHeight,
+  }) async {
+    final doc = pw.Document();
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat(logicalWidth, logicalHeight, marginAll: 0),
+      build: (_) => pw.Image(pw.MemoryImage(pngBytes)),
+    ));
+    return doc.save();
+  }
 }
 
 class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
@@ -218,21 +236,44 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
         isError: !ok);
   }
 
+  /// Struk gabungan bisa memuat PULUHAN item dari banyak nota sekaligus →
+  /// gambar hasil capture jadi SANGAT tinggi (lebar tetap 300 tapi tinggi
+  /// bertambah linear per item). Dibagikan sbg PNG lewat WhatsApp/app share
+  /// lain, gambar sepanjang ini kena downscale otomatis ke sisi terpanjang
+  /// ~1600px (perilaku umum "kirim sbg foto") — hasilnya teks jadi remuk tak
+  /// terbaca (lebar 300px asli bisa ikut mengecil sampai puluhan px). Struk
+  /// biasa (satu nota, `receipt_screen.dart`) tidak masalah krn jauh lebih
+  /// pendek. Fix: bungkus capture yang SAMA (kualitas capture tidak berubah)
+  /// jadi 1 halaman PDF berukuran pas kontennya (bukan A4, lihat
+  /// `MergedReceiptScreen.buildReceiptPdfBytes`) — dikirim sbg dokumen,
+  /// bukan foto, sehingga tidak ikut dikompresi ulang berapa pun panjangnya.
   Future<void> _share() async {
     try {
       final boundary = _boundaryKey.currentContext?.findRenderObject()
           as RenderRepaintBoundary?;
       if (boundary == null) return;
-      final image = await boundary.toImage(pixelRatio: 3.0);
+      const pixelRatio = 3.0;
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
       final byteData =
           await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
+      final pngBytes = byteData.buffer.asUint8List();
+
+      // Ukuran halaman PDF pas dgn ukuran LOGIS widget (sebelum dikali
+      // pixelRatio) — gambar raster-nya sendiri tetap resolusi tinggi
+      // (3x), cuma "dibingkai" pas, bukan diregangkan ke ukuran kertas baku.
+      final pdfBytes = await MergedReceiptScreen.buildReceiptPdfBytes(
+        pngBytes: pngBytes,
+        logicalWidth: image.width / pixelRatio,
+        logicalHeight: image.height / pixelRatio,
+      );
+
       final dir = await getTemporaryDirectory();
       final ids = _txs.map((t) => t.localId).join('_');
-      final file = File('${dir.path}/struk_gabungan_$ids.png');
-      await file.writeAsBytes(byteData.buffer.asUint8List());
+      final file = File('${dir.path}/struk_gabungan_$ids.pdf');
+      await file.writeAsBytes(pdfBytes);
       await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'image/png')],
+        [XFile(file.path, mimeType: 'application/pdf')],
         text: 'Struk Gabungan',
       );
     } catch (e) {

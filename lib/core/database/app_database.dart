@@ -94,6 +94,26 @@ const kAsistenPermissionKeys = <String>[
   Employees,
   CashClosings,
 ])
+/// Baris hasil [AppDatabase.watchStockOverview] — Item 30 ("Cek Stok").
+typedef StockOverviewRow = ({
+  String productId,
+  String name,
+  int? groupId,
+  double stock,
+  double? minStock,
+  bool markedOutOfStock,
+});
+
+/// Baris hasil [AppDatabase.getInventoryRows] — Item 30(c) (laporan
+/// analitik/audit nilai inventori di tab Laporan).
+typedef InventoryRow = ({
+  String productId,
+  String name,
+  int? groupId,
+  double stock,
+  int costPrice,
+});
+
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
 
@@ -580,6 +600,104 @@ class AppDatabase extends _$AppDatabase {
             readsFrom: {productUnits, products, stockLedger})
         .get();
     return rows.map((r) => r.data['pid'] as String).toSet();
+  }
+
+  /// Stok riil (base unit) produk aktif yang STOK-nya AKTIF DILACAK
+  /// (`isNonStock == false` DAN minimal punya 1 baris `stock_ledger`) —
+  /// dipakai Item 29 (katalog HTML auto-tandai "habis" dari stok sungguhan)
+  /// & Item 30 (kontrol stok owner). SENGAJA pakai `EXISTS` (bukan
+  /// `COALESCE(...,0)`) — produk yang BELUM PERNAH disentuh stoknya sama
+  /// sekali (baru ditambah, belum sempat "Atur Stok") secara teknis
+  /// `stock_after` terakhirnya kosong, TAPI itu bukan berarti stoknya
+  /// sungguhan 0 — cuma belum pernah dilacak. Kalau tetap diperlakukan
+  /// sbg 0, produk yg owner memang tidak berniat lacak stoknya (banyak
+  /// toko kecil pakai katalog HTML murni utk harga, bukan stok) akan
+  /// mendadak tampil "Stok Habis" di katalog publik tanpa alasan nyata.
+  /// Produk non-stok ATAU belum pernah punya histori ledger SENGAJA tidak
+  /// masuk map — pemanggil harus treat "tidak ada di map" sbg "tidak
+  /// berlaku ambang stok riil", bukan 0. Agregat 1 query, bukan N+1 per
+  /// produk (§Pola Arsitektur CLAUDE.md).
+  Future<Map<String, double>> getBaseUnitRealStock() async {
+    final rows = await customSelect('''
+      SELECT pu.product_id AS pid,
+        (SELECT sl.stock_after FROM stock_ledger sl
+         WHERE sl.product_unit_id = pu.id
+         ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1) AS stock
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      WHERE pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1
+        AND EXISTS (SELECT 1 FROM stock_ledger sl
+                    WHERE sl.product_unit_id = pu.id)
+    ''', readsFrom: {productUnits, products, stockLedger}).get();
+    return {
+      for (final r in rows)
+        r.data['pid'] as String: (r.data['stock'] as num).toDouble(),
+    };
+  }
+
+  /// Baris overview stok utk Item 30 ("Cek Stok" — kontrol stok manual
+  /// owner). BEDA tujuan dari [getBaseUnitRealStock] (Item 29, katalog
+  /// publik): di sini layar SENGAJA dibuka owner utk MEREVIEW stok, jadi
+  /// produk yang belum pernah disentuh stoknya TETAP tampil sbg "0" (biar
+  /// kelihatan perlu dicek/diisi) — bukan disembunyikan spt di Item 29.
+  Stream<List<StockOverviewRow>> watchStockOverview({int? groupId}) {
+    final variables = <Variable<Object>>[];
+    var where = 'pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1';
+    if (groupId != null) {
+      where += ' AND p.product_group_id = ?';
+      variables.add(Variable<Object>(groupId));
+    }
+    return customSelect('''
+      SELECT pu.product_id AS pid, p.name AS name,
+        p.product_group_id AS group_id, pu.min_stock AS min_stock,
+        p.marked_out_of_stock AS marked_out_of_stock,
+        COALESCE((SELECT sl.stock_after FROM stock_ledger sl
+                  WHERE sl.product_unit_id = pu.id
+                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      WHERE $where
+      ORDER BY stock ASC
+    ''', variables: variables, readsFrom: {productUnits, products, stockLedger})
+        .watch()
+        .map((rows) => rows
+            .map((r) => (
+                  productId: r.data['pid'] as String,
+                  name: r.data['name'] as String,
+                  groupId: r.data['group_id'] as int?,
+                  stock: (r.data['stock'] as num).toDouble(),
+                  minStock: (r.data['min_stock'] as num?)?.toDouble(),
+                  markedOutOfStock:
+                      (r.data['marked_out_of_stock'] as int) == 1,
+                ))
+            .toList());
+  }
+
+  /// Baris mentah utk laporan nilai inventori (Item 30(c), tab Laporan) —
+  /// agregasi (per-kategori/grand-total/deteksi harga pokok kosong) dihitung
+  /// di layer UI dari list ini, bukan di SQL — laporan, bukan hot-path,
+  /// & lebih mudah diuji/dibaca sbg logika Dart murni. 1 query, bukan N+1.
+  Future<List<InventoryRow>> getInventoryRows() async {
+    final rows = await customSelect('''
+      SELECT p.id AS pid, p.name AS name, p.product_group_id AS group_id,
+        COALESCE((SELECT sl.stock_after FROM stock_ledger sl
+                  WHERE sl.product_unit_id = pu.id
+                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock,
+        COALESCE(pt.cost_price, 0) AS cost_price
+      FROM product_units pu
+      JOIN products p ON p.id = pu.product_id
+      LEFT JOIN price_tiers pt ON pt.product_unit_id = pu.id AND pt.min_qty = 1
+      WHERE pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1
+    ''', readsFrom: {productUnits, products, stockLedger, priceTiers}).get();
+    return rows
+        .map((r) => (
+              productId: r.data['pid'] as String,
+              name: r.data['name'] as String,
+              groupId: r.data['group_id'] as int?,
+              stock: (r.data['stock'] as num).toDouble(),
+              costPrice: (r.data['cost_price'] as num).toInt(),
+            ))
+        .toList();
   }
 
   // ───────────────────────── Tutup Kasir (Item 15) ─────────────────────────
@@ -1276,6 +1394,121 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Bug dilaporkan user: ubah pelanggan dari "Umum" ke pelanggan terdaftar
+  /// DI STRUK (bukan saat checkout) tidak pernah memberi poin loyalitas —
+  /// wajar, krn poin cuma dihitung sekali di `_confirm()` (payment_screen.dart)
+  /// saat `customerId` masih null. Dipanggil dari `receipt_screen.dart`
+  /// `_saveCustomer()` setelah `customerId` transaksi diisi.
+  ///
+  /// KUMULATIF (bug susulan): hitung ulang poin TARGET dari `tx.total`
+  /// terkini, lalu tambahkan SELISIH terhadap `pointsEarned` yang sudah
+  /// tersimpan — bukan cuma no-op kalau `pointsEarned > 0`. Ini supaya
+  /// "Tambah Belanjaan" (`payment_screen.dart` `_confirmAddItems`, yang
+  /// menaikkan `tx.total` lewat item susulan) ikut menambah poin secara
+  /// proporsional, bukan cuma dihitung sekali di checkout awal. Aman
+  /// dipanggil berkali-kali dgn total yang sama (selisih 0 → no-op).
+  Future<void> awardLoyaltyPointsIfEligible({
+    required String txId,
+    required String customerId,
+  }) async {
+    final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    if (tx == null) return;
+
+    final threshold =
+        int.tryParse(await getSetting('loyalty_point_threshold') ?? '') ?? 0;
+    if (threshold <= 0) return;
+    final pointsPer =
+        int.tryParse(await getSetting('loyalty_points_per') ?? '') ?? 1;
+    final targetPoints =
+        (tx.total / threshold).floor() * (pointsPer < 1 ? 1 : pointsPer);
+    final delta = targetPoints - tx.pointsEarned;
+    if (delta <= 0) return;
+
+    final now = DateTime.now();
+    await transaction(() async {
+      await (update(transactions)..where((t) => t.id.equals(txId)))
+          .write(TransactionsCompanion(pointsEarned: Value(targetPoints)));
+      await into(loyaltyPointLedger).insert(LoyaltyPointLedgerCompanion.insert(
+        id: const Uuid().v4(),
+        customerId: customerId,
+        type: 'earn',
+        points: delta,
+        note: Value(tx.localId),
+        createdAt: Value(now),
+      ));
+      await customUpdate(
+        'UPDATE customers SET loyalty_points = loyalty_points + ? WHERE id = ?',
+        variables: [Variable.withInt(delta), Variable.withString(customerId)],
+        updates: {customers},
+      );
+    });
+  }
+
+  /// Ganti pelanggan pada transaksi (dipanggil dari `receipt_screen.dart`
+  /// `_saveCustomer` — bisa Umum->pelanggan, pelanggan->Umum, atau
+  /// pelanggan A->B). Bug dilaporkan user: poin yang SUDAH diberikan ke
+  /// pelanggan LAMA (`tx.pointsEarned`) tidak pernah ditarik balik kalau
+  /// pelanggan transaksi diubah ke Umum (`customerId` jadi null) atau ke
+  /// pelanggan lain — poin nyangkut selamanya di pelanggan lama walau
+  /// transaksinya sudah tidak lagi tercatat atas namanya (`voidTransaction`
+  /// butuh `customerId != null` utk bisa menarik baliknya, jadi sekali
+  /// customerId di-null-kan, jalur reversal lama itu tidak bisa jalan lagi).
+  ///
+  /// Fix: kalau pelanggan BERUBAH (bukan cuma nama tanpa ganti id) & tx
+  /// sudah pernah dapat poin, tarik balik dari pelanggan LAMA dulu (reset
+  /// `pointsEarned` ke 0) — baru kalau pelanggan BARU bukan null, hitung
+  /// ulang & beri poin via `awardLoyaltyPointsIfEligible` (dari 0, jadi
+  /// otomatis dapat penuh sesuai `tx.total` kalau eligible).
+  Future<void> changeTransactionCustomer({
+    required String txId,
+    String? newCustomerId,
+    String? newCustomerName,
+  }) async {
+    await transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null) return;
+
+      final oldCustomerId = tx.customerId;
+      if (oldCustomerId != null &&
+          oldCustomerId != newCustomerId &&
+          tx.pointsEarned > 0) {
+        await customUpdate(
+          'UPDATE customers SET loyalty_points = loyalty_points - ? WHERE id = ?',
+          variables: [
+            Variable.withInt(tx.pointsEarned),
+            Variable.withString(oldCustomerId),
+          ],
+          updates: {customers},
+        );
+        await into(loyaltyPointLedger)
+            .insert(LoyaltyPointLedgerCompanion.insert(
+          id: const Uuid().v4(),
+          customerId: oldCustomerId,
+          type: 'adjust',
+          points: -tx.pointsEarned,
+          note: Value('Ganti pelanggan ${tx.localId}'),
+          createdAt: Value(DateTime.now()),
+        ));
+        await (update(transactions)..where((t) => t.id.equals(txId)))
+            .write(const TransactionsCompanion(pointsEarned: Value(0)));
+      }
+
+      await (update(transactions)..where((t) => t.id.equals(txId))).write(
+        TransactionsCompanion(
+          customerName: Value(newCustomerName),
+          customerId: Value(newCustomerId),
+        ),
+      );
+
+      if (newCustomerId != null) {
+        await awardLoyaltyPointsIfEligible(
+            txId: txId, customerId: newCustomerId);
+      }
+    });
+  }
+
   Future<void> voidTransaction(String txId, String kasirId) async {
     await transaction(() async {
       // Baca items untuk reverse stock.
@@ -1576,9 +1809,17 @@ class AppDatabase extends _$AppDatabase {
 
   /// Item 5 — edit baris item di nota BELUM LUNAS langsung (bukan retur
   /// terpisah): ubah harga dan/atau catatan, atau hapus (via [newQty] = 0).
-  /// Qty TIDAK BISA dinaikkan lewat sini (cuma dikurangi/dihapus) — sama
-  /// batasan dgn [returnUnpaidTransactionItems], yang fungsi ini pinjam pola
-  /// rekonsiliasinya. Tanpa refund tunai (memang belum ada uang masuk).
+  /// Qty TIDAK BISA dinaikkan lewat sini SELAMA `tx.paid > 0` (cuma
+  /// dikurangi/dihapus, sama batasan dgn [returnUnpaidTransactionItems] yang
+  /// fungsi ini pinjam pola rekonsiliasinya — menaikkan qty saat sudah ada
+  /// uang masuk akan merusak alokasi pembayaran yang sudah tercatat).
+  ///
+  /// KHUSUS `tx.paid == 0` (belum ada uang berpindah SAMA SEKALI): qty
+  /// BOLEH dinaikkan melebihi qty asli — tidak ada risiko rekonsiliasi
+  /// pembayaran karena memang belum ada pembayaran sama sekali. Ini beda
+  /// dari "Tambah Belanjaan" (yang menambah PRODUK baru) — di sini cuma
+  /// menaikkan qty produk yang SAMA yang sudah ada di baris ini.
+  /// Tanpa refund tunai (memang belum ada uang masuk).
   Future<void> editUnpaidTransactionItem({
     required String txId,
     required String transactionItemId,
@@ -1601,17 +1842,30 @@ class AppDatabase extends _$AppDatabase {
           .getSingleOrNull();
       if (item == null || item.transactionId != txId) return;
 
-      final clampedQty = newQty.clamp(0.0, item.qty);
+      final clampedQty =
+          tx.paid == 0 ? newQty.clamp(0.0, double.infinity) : newQty.clamp(0.0, item.qty);
       final now = DateTime.now();
 
       // Qty berkurang (termasuk ke 0 = hapus) → stok yang tidak jadi
-      // terjual dikembalikan, sama seperti retur nota belum lunas.
-      final qtyReduced = item.qty - clampedQty;
-      if (qtyReduced > 0) {
+      // terjual dikembalikan, sama seperti retur nota belum lunas. Qty
+      // BERTAMBAH (hanya mungkin saat tx.paid == 0) → potong stok
+      // tambahan, sama seperti item baru di "Tambah Belanjaan".
+      final qtyDelta = clampedQty - item.qty;
+      if (qtyDelta < 0) {
         await _appendStock(
           productUnitId: item.productUnitId,
-          qtyChange: qtyReduced,
+          qtyChange: -qtyDelta,
           type: 'return_in',
+          referenceId: txId,
+          kasirId: kasirId,
+          note: 'Edit item (nota belum lunas)',
+          now: now,
+        );
+      } else if (qtyDelta > 0) {
+        await _appendStock(
+          productUnitId: item.productUnitId,
+          qtyChange: -qtyDelta,
+          type: 'sale',
           referenceId: txId,
           kasirId: kasirId,
           note: 'Edit item (nota belum lunas)',
@@ -2352,6 +2606,19 @@ class AppDatabase extends _$AppDatabase {
     return query.get();
   }
 
+  /// Peta id→nama SEMUA pelanggan, TERMASUK yang sudah di-soft-delete
+  /// (`isActive=false`). Beda dari `searchCustomers()` (khusus daftar aktif
+  /// utk dropdown/autocomplete pilih pelanggan) — dipakai utk label riwayat
+  /// transaksi HISTORIS, yang menurut desain `deactivateCustomer()` memang
+  /// harus tetap tampil nama aslinya walau pelanggannya sudah dihapus. Bug
+  /// dilaporkan user: transaksi lama nyangkut nama generik "Pelanggan"
+  /// begitu pelanggannya dihapus, krn kode lama pakai `searchCustomers('')`
+  /// yang diam-diam menyaring `isActive=true` saja.
+  Future<Map<String, String>> getAllCustomerNamesIncludingInactive() async {
+    final rows = await select(customers).get();
+    return {for (final c in rows) c.id: c.name};
+  }
+
   Stream<List<Customer>> watchCustomers({String query = ''}) {
     final q = (select(customers)..where((t) => t.isActive.equals(true)));
     if (query.isNotEmpty) {
@@ -2495,6 +2762,23 @@ class AppDatabase extends _$AppDatabase {
         }
       }
     });
+  }
+
+  /// Rekey fisik file SQLCipher ke [newKeyHex] (hex 64-char, hasil
+  /// `deriveDatabaseKey`). Dipakai "Alihkan Owner" (Item 27) saat device yang
+  /// SUDAH ada datanya menerima transfer identitas toko lain — koneksi ini
+  /// dibuka dgn key LAMA, tapi identitas device (storeKey) akan diganti ke
+  /// yang BARU setelah ini. Tanpa rekey, file fisik tetap terenkripsi dgn key
+  /// lama sementara device "mengira" key-nya sudah baru — app tidak akan bisa
+  /// membuka DB lagi sama sekali setelah restart (deadlock, tidak ada jalan
+  /// pulih tanpa key lama). WAJIB dipanggil SEBELUM identitas device diganti,
+  /// dgn koneksi yang MASIH pakai key lama (`PRAGMA rekey` butuh DB yg sudah
+  /// terbuka dgn key yang benar).
+  Future<void> rekey(String newKeyHex) async {
+    if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(newKeyHex)) {
+      throw ArgumentError('Encryption key harus hex murni; nilai tidak valid ditolak.');
+    }
+    await customStatement("PRAGMA rekey = '$newKeyHex';");
   }
 
   // ───────────────────────── Sync helpers ─────────────────────────

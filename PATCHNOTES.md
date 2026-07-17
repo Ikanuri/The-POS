@@ -8,6 +8,155 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 17 Juli 2026
+
+### ✨ Fitur Baru
+- **Katalog HTML kini otomatis menandai "Stok Habis"** dari stok riil
+  (bukan cuma tanda manual) — kalau toggle "Izinkan Stok Minus" di
+  Pengaturan sedang OFF dan stok sistem sebuah produk sudah 0, katalog
+  yang dibagikan ke pelanggan otomatis menampilkan badge "Stok Habis"
+  walau kasir lupa menandainya manual.
+- **Layar baru "Cek Stok"** (ikon 📦 di AppBar tab Produk, atau kartu
+  "Kontrol Stok" di Ringkasan Harian) — lihat semua produk diurut dari
+  yang stoknya paling tipis, difilter per kategori. Centang produk yang
+  memang habis: otomatis menandai "Stok Habis" di sistem SEKALIGUS
+  menyusun teks pesanan restock yang bisa langsung disalin atau dikirim
+  ke supplier.
+- **Kartu "Kontrol Stok" baru di Ringkasan Harian** — ringkasan cepat
+  berapa produk stok menipis/habis, dengan pratinjau produk paling
+  kritis dan tombol "Lihat semua" ke layar Cek Stok.
+- **Tab baru "Stok" di Laporan** — nilai total inventori (stok × harga
+  pokok) sekarang, dipecah per kategori (grafik donat + tabel), termasuk
+  peringatan kalau ada produk yang harga pokoknya belum diisi (supaya
+  Anda tahu angkanya belum lengkap) dan daftar produk yang stoknya
+  sedang negatif. Laporan ini melengkapi stock opname fisik, bukan
+  menggantikannya.
+- **Tutup Buku sekarang bisa pakai tanggal custom** (tidak harus selalu
+  1 Januari) — cocok untuk toko yang tutup buku mengikuti Hari Raya,
+  yang tanggalnya berubah tiap tahun. Tetap sekali per tahun, tinggal
+  pilih tanggal akhir periode lewat kalender.
+- **Opsi "Sinkron via barcode saja"** di layar Sinkron Harga — untuk
+  toko dengan kode produk yang tidak konsisten, bisa memilih mode yang
+  hanya mencocokkan lewat barcode (lebih lambat prosesnya tapi paling
+  akurat).
+
+### 🔧 Perbaikan
+- **Sinkron harga antar-toko tidak lagi salah mengubah harga produk yang
+  tak berhubungan.** Sebelumnya, saat menyamakan harga dengan toko lain,
+  sering muncul "harga berubah" untuk produk yang seharusnya tidak
+  tersentuh — bahkan setiap kali sinkron ulang selalu ada saja yang
+  berubah. Penyebabnya: produk yang **kode-nya sama** (mis. banyak produk
+  memakai kode "Dos"/"Pak"/"Bal") tertukar satu sama lain. Sekarang, kalau
+  sebuah kode dipakai lebih dari satu produk, aplikasi **tidak menebak** —
+  item seperti itu dilempar ke tab "Mirip" untuk Anda konfirmasi manual,
+  dan pencocokan lewat kode juga mengharuskan satuannya benar-benar cocok.
+  Sinkron harga jadi jauh lebih akurat dan tidak "berubah-ubah sendiri".
+- **Menambah/mengedit varian produk dengan barcode yang sudah dipakai
+  produk lain sekarang menampilkan pesan error yang jelas** — sebelumnya
+  varian gagal tersimpan tanpa pemberitahuan apa pun (terlihat seperti
+  tidak terjadi apa-apa), sekarang muncul pesan "Barcode sudah dipakai
+  produk/varian lain" supaya Anda tahu perlu pakai barcode lain.
+
+## 16 Juli 2026
+
+### 🎨 Perubahan Tampilan
+- **Header struk didesain ulang** — kotak besar "Transaksi Berhasil"/
+  "Transaksi Tempo" di atas struk sudah tidak ada lagi. Status Lunas/Tempo
+  sekarang tampil sebagai watermark stempel samar di belakang daftar
+  barang (hijau untuk Lunas, merah untuk Tempo), lengkap dengan nomor nota
+  di dalamnya — nama & harga barang tetap selalu terbaca jelas, berapa pun
+  banyaknya barang di nota. Tombol "Tandai Semua" juga diringkas jadi
+  ikon bulat kecil (hijau), senada dengan lingkaran jumlah barang yang
+  sudah ada.
+- Nama produk di baris item struk in-app sekarang lebih tebal (bold),
+  lebih mudah dibaca sekilas.
+- **Tombol toolbar di layar Kasir** (scan barcode, antrian, riwayat
+  transaksi, tempel pesanan) sekarang punya aksen warna soft sesuai
+  fungsinya masing-masing — lebih mudah dibedakan sekilas, tidak lagi
+  seragam abu-abu semua.
+
+### ✨ Fitur Baru
+- **Nota tempo yang belum dibayar sama sekali kini bisa menaikkan jumlah
+  barang langsung dari modal edit item struk** — sebelumnya cuma bisa
+  dikurangi/dihapus, sekarang jumlahnya bisa ditambah lagi kalau ternyata
+  kurang (khusus nota yang belum ada pembayaran masuk sama sekali).
+- **Fitur baru "Alihkan Owner"** (Pengaturan → Sinkronisasi) — pindahkan
+  seluruh data DAN identitas toko ke HP lain lewat file terenkripsi
+  (beda dari Backup & Restore biasa yang cuma memindahkan data). Berguna
+  kalau ganti HP owner, atau HP lama kehabisan baterai/rusak — HP baru
+  bisa langsung "menjadi" toko yang sama tanpa perlu setup ulang atau
+  pairing manual ke kasir/asisten yang sudah ada.
+- **Opsi baru "Pulihkan dari File" di layar awal** (sebelum setup toko) —
+  kalau sudah punya file backup atau file Alihan Owner, sekarang bisa
+  langsung dipulihkan dari layar pertama tanpa perlu bikin toko dummy
+  dulu.
+
+### 🐛 Perbaikan Bug
+- **Poin loyalitas sekarang bertambah sesuai kenaikan nominal saat
+  "Tambah Belanjaan"** — sebelumnya kalau nota yang sudah dapat poin
+  ditambah barang lagi, poin tambahannya tidak pernah dihitung. Sekarang
+  poin ikut bertambah proporsional dengan total nota yang baru.
+- Alamat pelanggan yang sempat belum tampil di beberapa dropdown pencarian
+  pelanggan (mis. dari tab kasir) sekarang ikut muncul, konsisten dengan
+  tempat lain.
+- **Poin loyalitas tidak lagi nyangkut di pelanggan lama** kalau nama
+  pelanggan pada nota diubah balik ke "Umum" atau diganti ke pelanggan
+  lain — poin yang sudah diberikan sekarang otomatis ditarik balik dari
+  pelanggan lama, lalu dihitung ulang untuk pelanggan baru (kalau ada).
+- **App tidak lagi bisa "macet" di halaman "Page Not Found" setelah hapus
+  data aplikasi atau install ulang** — sebelumnya bisa terjadi kondisi
+  aplikasi bolak-balik antara layar aktivasi & layar setup tanpa henti,
+  sekarang selalu tuntas berhenti di layar aktivasi.
+- **Scan barcode dobel cepat berturut sekarang lebih responsif** — jeda
+  anti-duplikat untuk scanner eksternal diturunkan (300ms → 150ms),
+  supaya scan dobel yang memang disengaja (mis. mau nambah qty 2) tidak
+  ikut ke-abaikan.
+- **Riwayat transaksi tidak lagi menampilkan "Pelanggan" generik** untuk
+  nota lama milik pelanggan yang sudah dihapus — nama aslinya sekarang
+  tetap tampil, sesuai seharusnya (riwayat historis memang dirancang
+  tidak ikut hilang saat pelanggan dihapus).
+
+## 15 Juli 2026
+
+### ✨ Fitur Baru
+- **Sisa waktu lisensi ditampilkan di Pengaturan** — di kartu "Device Ini",
+  sekarang terlihat berapa lama lagi masa aktif aplikasi, otomatis
+  menyesuaikan satuan (hari, lalu jam, lalu menit saat mendekati habis).
+- **Kirim katalog via WhatsApp bisa diatur langsung ke nomor toko atau
+  share biasa** — di Pengaturan > Katalog Pesanan, sekarang ada saklar
+  untuk memilih apakah tombol "Kirim via WhatsApp" di katalog pelanggan
+  langsung membuka chat ke nomor WA toko, atau membiarkan pelanggan
+  memilih sendiri kontak tujuannya.
+
+### 🎨 Perubahan Tampilan
+- Field Pelanggan & Pegawai di modal checkout sekarang sejajar
+  berdampingan, tidak lagi ditumpuk — lebih ringkas.
+- Beberapa keterangan yang terlalu panjang di modal checkout diringkas
+  (mis. "Pegawai (yang melayani)" menjadi "Pegawai").
+- Warna tombol "Bayar" di in-app struk sekarang sama dengan tombol Bayar
+  di modal checkout.
+- Alamat pelanggan kini ditampilkan di bawah nama pada semua daftar
+  saran pelanggan — membantu membedakan pelanggan dengan nama yang sama.
+
+### 🐛 Perbaikan Bug
+- **Poin loyalitas tidak masuk saat pelanggan diubah dari "Umum" ke
+  pelanggan terdaftar di in-app struk** — sekarang poin otomatis dihitung
+  begitu nama pelanggan diisi/diubah di struk, tidak cuma saat checkout.
+- Tombol "Transaksi Baru" di in-app struk dihapus karena sudah bisa lewat
+  tab Kasir di bawah.
+- Angka desimal (mis. 0,25 untuk produk timbang) sekarang tampil dengan
+  benar di lingkaran stepper +/- dan di notifikasi hasil scan barcode —
+  sebelumnya terpotong/tidak proporsional.
+- Tap ganda yang sangat cepat pada stepper +/- (kemungkinan salah pencet)
+  sekarang diabaikan supaya jumlah tidak bertambah tanpa sengaja.
+- **Struk gabungan (nota digabung) dengan banyak barang tidak lagi buram
+  saat dibagikan** — sebelumnya kalau nota yang digabung berisi banyak
+  sekali barang (puluhan item dari beberapa nota), gambar struk yang
+  dikirim lewat WhatsApp jadi sangat panjang dan otomatis dikompresi
+  habis-habisan sampai tulisannya tidak terbaca sama sekali. Sekarang
+  dikirim sebagai file PDF (bukan foto), jadi tetap jelas dibaca berapa
+  pun banyaknya barang.
+
 ## 14 Juli 2026
 
 ### ✨ Fitur Baru

@@ -36,7 +36,7 @@ void main() {
 
     // Device/toko TUJUAN: storeKey & storeUuid BEDA dari device asal —
     // persis skenario "restore di HP baru".
-    final payload = await DbExportService.decrypt(
+    final decrypted = await DbExportService.decrypt(
       fileBytes: bytes,
       storeKey: 'storeKey-DEVICE-TUJUAN-BEDA-TOTAL',
       storeUuid: 'storeUuid-DEVICE-TUJUAN-BEDA-TOTAL',
@@ -44,7 +44,7 @@ void main() {
     );
 
     final dbDest = AppDatabase(NativeDatabase.memory());
-    await DbExportService.restore(db: dbDest, payload: payload);
+    await DbExportService.restore(db: dbDest, payload: decrypted.payload);
     final customers = await dbDest.select(dbDest.customers).get();
     expect(customers.map((c) => c.name), contains('Budi'));
     await dbDest.close();

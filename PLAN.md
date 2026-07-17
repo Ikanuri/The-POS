@@ -24,7 +24,22 @@ di-commit, DAN SEKARANG AKTIF** — public key developer sudah ditanam
 kustom menit di generator (`3591396`). Nomor WA developer: KEPUTUSAN
 FINAL tetap `Share.share()` generik, tidak perlu deep-link `wa.me`.
 Sisa menggantung: Item 3c, 5, 23 (sebagian, lihat detail — nota gabungan
-sudah diperbaiki sesi 13 Juli)._
+sudah diperbaiki sesi 13 Juli). **Redesign header struk (watermark stempel
+Lunas/Tempo) SELESAI & di-commit** (16 Juli) — lihat CHANGELOG untuk hash.
+**Item 27 ("Alihkan Owner") SELESAI SEPENUHNYA, diverifikasi di device
+asli, & di-commit** (16 Juli, lihat CHANGELOG `99de7ea`/`1d09200`) — desain
+final beda dari catatan lama (bukan QR+LAN live, tapi file terenkripsi
+BPOT1 + rekey SQLCipher; entry point Pengaturan "Alihkan Owner" & welcome
+screen "Pulihkan dari File"). Item 28 (lanjutkan pesanan lintas device)
+masih sebatas konsep, belum didesain detail. **Item 29/30(a/b/c)/31/32/33
+SELESAI SEMUA & di-commit** (17 Juli): katalog auto-habis stok riil,
+kontrol stok (kartu Ringkasan + layar "Cek Stok" + tab analitik Laporan),
+Tutup Buku tanggal custom, debounce scanner, warna aksen toolbar. **Item
+35 (fix sinkron harga SKU non-unik + mode barcode-saja) SELESAI SEPENUHNYA
+& di-commit** (17 Juli). **Item 4/5 (migrasi data) DIPENDING** — user
+bilang migrasi sebenarnya cakup lebih dari transaksi+pelanggan (termasuk
+produk dll., scope belum dirinci) — ditahan, tunggu user re-konfirmasi
+scope lengkap & minta lanjut._
 
 ---
 
@@ -120,8 +135,14 @@ nyata dari user; kerjakan kalau ada keluhan konkret.
 
 ## Item 4 — Import pelanggan dari Griyo POS (fitur eksperimental, ANALISIS SELESAI — implementasi BELUM dimulai)
 
-**Prioritas:** Siap dikerjakan — sumber data & keputusan besar sudah ada,
-tinggal 1-2 keputusan kecil sebelum coding (lihat di bawah).
+**STATUS: DIPENDING sementara** bareng Item 5 — lihat catatan status di
+Item 5 (migrasi user ternyata cakup lebih dari transaksi+pelanggan,
+termasuk produk dll., scope penuh belum dirinci). Analisis di bawah ini
+tetap valid & siap dipakai begitu user re-konfirmasi & minta lanjut.
+
+**Prioritas (kalau nanti dilanjutkan):** Siap dikerjakan — sumber data &
+keputusan besar sudah ada, tinggal 1-2 keputusan kecil sebelum coding
+(lihat di bawah).
 
 **Sumber data dianalisis:** `Pelanggan.xlsx` (Griyo POS), 493 baris, 1 sheet.
 Kolom: `Pelanggan, Alamat, Telepon, Barcode, Keterangan, Poin, Piutang`.
@@ -182,13 +203,30 @@ cuma tes "tab pelanggan muncul" lalu anggap beres.
 
 ## Item 5 — Import riwayat transaksi dari dataset lama (fitur baru + jadi data stress-test nyata)
 
-**Prioritas:** Setelah Item 3 selesai (lihat alasan ketergantungan di
-3b — bug dedup importer di Item 2 sudah selesai dikerjakan, lihat
-CHANGELOG). User sudah konfirmasi punya beberapa file rentang tanggal (bukan cuma
-satu hari), tapi **belum diketahui apakah cakupannya mendekati riwayat penuh
-toko (Maret 2024–sekarang, sesuai rekap bulanan di file `Penjualan`) atau
-cuma beberapa sampel** — perlu dikonfirmasi user sebelum estimasi skala
-pekerjaan pencocokan produk final dibuat.
+**STATUS: DIPENDING sementara** (keputusan user) — migrasi data user
+ternyata BUKAN cuma transaksi + pelanggan (Item 4/5), tapi juga mencakup
+aspek lain (mis. produk, dll — belum dirinci detailnya). Daripada
+implementasi Item 4/5 dulu sebagian lalu ternyata perlu dirombak begitu
+scope penuh migrasi diketahui, **seluruh inisiatif migrasi data
+(Item 3c, 4, 5, dan kemungkinan item baru terkait produk) ditahan
+dulu** — user minta prioritaskan eksekusi item lain yang sudah matang
+(29/30/31/32/33) duluan. Jangan mulai Item 4/5 sebelum user re-konfirmasi
+scope migrasi lengkap & bilang siap lanjut.
+
+**Prioritas (kalau nanti dilanjutkan):** Setelah Item 3 selesai (lihat
+alasan ketergantungan di 3b — bug dedup importer di Item 2 sudah selesai
+dikerjakan, lihat CHANGELOG).
+
+**DIKONFIRMASI user (menjawab pertanyaan cakupan yang sebelumnya
+menggantung):** user punya **riwayat transaksi PENUH dari tahun lalu**,
+format `.xlsx`, **dibagi per bulan** (sengaja dipecah gitu oleh user krn
+khawatir file besar bikin crash saat diproses) — jadi bukan cuma
+beberapa sampel, tapi mendekati cakupan riwayat penuh yang diperkirakan
+sebelumnya. Siap diestimasi skala pekerjaannya & mulai diimplementasi
+kapan saja — tidak ada lagi pertanyaan menggantung soal cakupan data.
+(Konsekuensi teknis: importer harus bisa proses BANYAK file bulanan
+berurutan sbg satu batch/sesi import, bukan cuma 1 file sekali jalan —
+perlu dipikirkan UI multi-file upload atau proses berurutan.)
 
 **Konteks penemuan:** User awalnya bertanya kenapa hasil ekstraksi riwayat
 transaksi dulu membuat struk kosong (cuma nominal, tanpa rincian item).
@@ -328,6 +366,49 @@ mengalir sebagai master-data owner→kasir). UX-nya membingungkan ("sudah saya
 matikan kok kasir masih bisa?"). Perbaikan murah: tambah teks info
 "Perubahan berlaku setelah HP kasir sync berikutnya" di `kasir_permissions_screen.dart`
 & `asisten_permissions_screen.dart`.
+
+---
+
+## Item 28 — Pegawai lanjutkan pesanan yang sudah diproses (lunas/tempo) owner di device lain
+
+**Konteks:** kasus nyata yang sering terjadi: pegawai input barang di HP-nya
+→ scan/kirim ke owner → owner proses jadi lunas/tempo → pelanggan masih mau
+tambah barang lagi. Sekarang tidak ada alur untuk pegawai "buka kembali"
+pesanan yang sudah closed di device owner itu untuk ditambahi.
+
+**Belum didesain sama sekali** — baru sebatas concern yang divalidasi,
+dimasukkan ke plan dulu sesuai permintaan user ("oke yang ini masukkan plan
+tersendiri dulu"), implementasi ditunda.
+
+**Pertimbangan awal (belum keputusan final):**
+- Beda dengan "Tambah Belanjaan" yang sudah ada sekarang (`_isAddMode`,
+  keyed `tx.id`) — itu untuk transaksi yang MASIH di device yang sama.
+  Kasus ini pesanan sudah pindah tangan device (pegawai → owner) DAN sudah
+  closed (lunas/tempo), jadi butuh mekanisme "buka kembali & sinkronkan
+  balik" lintas device, bukan cuma lintas state lokal.
+- Kemungkinan pendekatan: perpanjangan dari alur QR handoff antrian
+  (`held_orders`, Item 24) — pegawai kirim "tambahan" baru sebagai request
+  terpisah yang owner approve manual (konsisten dgn keputusan "TANPA
+  notifikasi otomatis" di Item 24), owner-side gabungkan ke transaksi asli
+  (butuh logic gabung item + reconcile total/pembayaran kalau statusnya
+  sudah lunas).
+- Perlu keputusan desain: apakah transaksi asli di-void lalu dibuat ulang
+  gabungan, atau item ditambahkan langsung ke transaksi asli yang sudah
+  closed (implikasi ke `pointsEarned`, cetak struk ulang, dll perlu
+  dipikirkan).
+
+---
+
+## Item 32 — Barcode scanner eksternal kurang responsif (kode SUDAH di-fix, tunggu konfirmasi user)
+
+Debounce anti-echo scanner eksternal diturunkan 300ms→150ms (`839a29c`,
+lihat CHANGELOG). **TIDAK BISA diverifikasi otomatis** (perilaku echo
+hardware scanner sungguhan tidak bisa disimulasikan widget test) — WAJIB
+user coba langsung di device asli dgn scanner fisiknya: (a) scan dobel
+cepat yg disengaja sekarang berhasil dobel, (b) tidak muncul balik gejala
+echo lama. Kalau (b) muncul, 150ms masih kurang tinggi utk scanner user —
+perlu naik sedikit, bukan bukti keputusan salah arah. **Belum ada
+konfirmasi hasil tes user** — tanyakan kalau sesi depan lanjut.
 
 ---
 

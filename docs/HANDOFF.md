@@ -4,715 +4,630 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 14 Juli 2026 (lanjutan lagi). Sesi ini: fix bug sync
-LAN gagal total di HP yang app-nya belum ter-update (`2d4467a`, lihat
-detail di bawah — PENTING, ini kelas bug yang akan BERULANG tiap ada
-kolom skema baru selama device belum update serentak) + badge jumlah
-item di struk/keranjang disamakan gaya cart bar (`67414e1`) + katalog
-HTML kini tampilkan SEMUA satuan produk, bukan cuma satuan dasar
-(`7c65b78`) + fix susulan "N pilihan" under-count utk kombinasi
-varian+multi-satuan (`69abb77`) + tombol "Salin Teks Pesanan" di bawah QR
-handoff pegawai (`458fc77`, lihat detail di bawah — PENTING, gotcha
-`Clipboard.getData()` hang di widget test, sudah ikut ditambahkan ke
-CLAUDE.md `102399d`) + redesign kartu antrian "Pesanan Ditahan" (`3200c0e`,
-lihat detail di bawah — diusulkan via mockup Playwright dulu sebelum
-dikerjakan, sesuai permintaan user) + fix poin loyalitas tempo selalu 0 +
-tap luar tutup panel antrian (`45ac0c5`, lihat detail di bawah) + perf
-katalog HTML — update satu baris produk, bukan render ulang grid penuh
-(`d4a8e71`, lihat detail di bawah — didahului sesi riset performa
-read-only, user minta insight dulu sebelum eksekusi) + **GERBANG LISENSI
-DIAKTIFKAN SUNGGUHAN** (`0d1efe2`, lihat detail di bawah — PALING PENTING
-di sesi ini, baca dulu sebelum sentuh apa pun terkait lisensi/aktivasi)
-+ susulan lisensi: sakelar darurat `lockAll` di Lapis 3 + durasi kustom
-menit di generator (`3591396`, lihat detail di bawah).
-**schemaVersion masih 15** (tidak ada migrasi baru). Full `flutter test`
-**349 test hijau**, `flutter analyze` bersih._
-
-## Gerbang lisensi (Item 25c) SEKARANG AKTIF SUNGGUHAN — bukan lagi kill-switch mati
-
-**PALING PENTING**: `LicenseService.publicKeyBase64` (`license_service.dart`)
-TIDAK LAGI KOSONG. User sudah generate pasangan kunci Ed25519 sendiri lewat
-`scripts/license-generator.html` (100% offline, private key TIDAK PERNAH
-dikirim/terlihat di sesi ini — user cuma kirim public key base64, sudah
-divalidasi persis 32 byte sebelum ditanam). Mulai commit `0d1efe2`, app
-BENAR-BENAR mengunci: device manapun yang belum pernah aktivasi (termasuk
-SEMUA device yang sudah lama terpasang sebelum update ini) akan diarahkan
-ke `/aktivasi` begitu buka app versi ini — keputusan EKSPLISIT user
-sendiri (ditanya lewat `AskUserQuestion`, user pilih "semua device wajib
-aktivasi, termasuk yang lama" — BUKAN grandfather otomatis untuk device
-existing).
-
-**Diskusi yang mendasari keputusan ini** (kalau topik serupa muncul lagi,
-jangan ulang dari nol, user sudah paham & setuju semua poin berikut):
-- Private key hilang → device yang SUDAH aktif TETAP jalan normal (state
-  tersimpan lokal di SharedPreferences, verifikasi Ed25519 cuma sekali
-  saat `activate()`, TIDAK pernah re-verify tiap buka app). Yang hilang
-  cuma kemampuan menerbitkan kode BARU.
-- Kill/cabut device yang sudah aktif TIDAK butuh private key sama sekali
-  — cukup edit `license/revoked.json` (daftar fingerprint) & push, dicek
-  opportunistic oleh `_checkRevocation()` di `license_provider.dart`.
-- Reversible penuh kapan saja: kosongkan lagi `publicKeyBase64` (atau
-  `git revert` commit `0d1efe2`) → `isLocked` otomatis false lagi utk
-  SEMUA device tanpa syarat (guard `if (!LicenseService.isConfigured)
-  return false;` di baris paling atas `LicenseState.isLocked`).
-- Private key TIDAK PERNAH ditampilkan sebagai string di
-  `license-generator.html` (dicek eksplisit: `jwkPriv` tidak pernah
-  masuk `innerHTML`/`textContent`/`value` manapun) — cuma ada di
-  `localStorage` browser & di file backup JSON yang diunduh (isinya
-  private key + public key + `publicKeyBase64` siap pakai sekaligus).
-
-**Perubahan kode** (`0d1efe2`): cuma 1 baris konstanta di
-`license_service.dart`. Dua file test disesuaikan (BUKAN dihapus, sesuai
-catatan yang sudah ada di kode test-nya sendiri):
-- `license_service_test.dart` — grup "kill-switch & ratchet" dulu
-  membuktikan `isLocked` SELALU false (gerbang mati). Sekarang dipecah
-  jadi beberapa test yang membuktikan sebaliknya: `isConfigured` true,
-  dan `isLocked` benar-benar menegakkan tiap syarat (belum aktivasi →
-  locked, expired → locked, revoked → locked, aktif+valid → TIDAK
-  locked).
-- `kasir_hw_key_after_produk_nav_test.dart` — SATU-SATUNYA test lain yang
-  pump lewat `routerProvider` sungguhan (bukan widget langsung), jadi
-  ikut kena redirect ke `/aktivasi` begitu gerbang aktif (device default
-  licenseProvider = belum aktivasi = locked). Ditambah override
-  `licenseProvider` ke state aktif (`exp: 'selamanya'`) supaya tetap
-  fokus ke bug HID yang diuji. **Kalau bikin widget test baru yang pump
-  lewat `routerProvider` (bukan widget spesifik langsung), WAJIB override
-  `licenseProvider` juga** — kalau tidak, akan auto-redirect ke
-  `/aktivasi` dan test gagal dengan pesan yang membingungkan (widget yang
-  dicari tidak ketemu, bukan error soal lisensi).
-
-**Nomor WA — SELESAI, keputusan final**: user memutuskan tombol "Kirim
-via WhatsApp" di `AktivasiScreen` TETAP `Share.share()` generik (tidak
-perlu deep-link `wa.me`) — jangan tanya/usulkan lagi soal ini kalau topik
-muncul lagi, sudah final.
-
-## Susulan lisensi — sakelar darurat "lockAll" (Lapis 3) + durasi kustom menit (`3591396`)
-
-Follow-up diskusi dari gerbang lisensi di atas — 2 pertanyaan user:
-
-**1. "html bisa kasih opsi durasi custom/semenit paling cepat utk testing?"**
-Ditambah opsi `<option value="custom">` di `expSelect`
-(`scripts/license-generator.html`) — muncul field jumlah menit
-(`customMinutes`), exp dihitung `Date.now() + menit*60000`. Validasi:
-kosong/< 1 → error inline, tidak generate kode. Diverifikasi via
-Playwright manual (scratch script, sudah dihapus): toggle field
-tampil/sembunyi sesuai pilihan, kode ter-generate benar, payload exp
-selisih persis sesuai menit yang diisi, validasi kosong menampilkan
-error.
-
-**2. "Lapis 3 gimana? bisa kasih opsi lock all (bukan paste satu-satu)?"**
-Ditambah field `lockAll` (boolean) di `license/revoked.json`, dicek di
-`_checkRevocation()` (`license_provider.dart`) — kalau `true`, SEMUA
-device dianggap revoked terlepas dari fingerprint-nya ada di `dicabut`
-atau tidak. Skenario pakai: insiden skala besar (mis. private key
-generator bocor) yang tidak realistis ditangani satu-satu lewat daftar
-fingerprint — developer cukup ubah 1 baris di `revoked.json`, commit,
-push, TIDAK perlu tahu fingerprint siapa pun. Tetap reversible kapan
-saja (`lockAll: false` lagi → device dgn `exp` masih valid otomatis
-jalan lagi tanpa aktivasi ulang, sama seperti sifat kill-switch lain di
-sistem ini).
-
-Logika keputusan diekstrak jadi `LicenseNotifier.computeRevoked()` (pure
-function, static) — supaya testable tanpa mock `HttpClient`/jaringan
-(beda dari `_checkRevocation()` pembungkusnya yang tetap tidak
-dites langsung, konsisten dgn sebelumnya — cuma logika keputusannya yg
-sekarang testable). Test baru di `license_service_test.dart`: 4 skenario
-(tidak revoked, revoked via daftar, revoked via `lockAll`, case-
-insensitive). Revert-verify: hapus `lockAll ||` sebentar → test
-"lockAll TRUE" gagal tepat (`Expected: true, Actual: <false>`) → pasang
-lagi, hijau.
-
-**Catatan**: `revoked.json` DEFAULT tetap `{"lockAll": false, "dicabut":
-[]}` — aman, tidak mengunci siapa pun sampai developer sengaja
-mengubahnya.
-
-## Perf katalog HTML — update satu baris produk, bukan render ulang grid
-
-User tanya (insight-only dulu, TANPA kode): "html ui sudah bagus, tapi
-sekarang jadi berat, apakah bisa dibuat ringan tanpa mengorbankan
-UI/UX?" + 2 pertanyaan lain (state centang persisten? fitur useless
-resource besar?). Riset dikerjakan oleh Explore agent (read-only) +
-verifikasi manual sendiri, jawaban lengkap sudah diberikan ke user tanpa
-ubah kode dulu. User lalu approve implementasi item prioritas #1
-("boleh, kerjakan").
-
-**Akar masalah** (`order_page_service.dart`, sebelum fix): `setQty()`
-(dipanggil tiap tap +/- baik di grid produk maupun stepper keranjang)
-SELALU panggil `renderList()` penuh — rebuild SELURUH grid produk dari
-nol via `DocumentFragment`, walau cuma 1 baris yang qty-nya berubah.
-O(jumlah produk) kerja DOM per tap, makin kerasa lag makin banyak
-produk di katalog.
-
-**Fix**: `renderList()` sekarang tag tiap `.prow` dengan `row.dataset.pid
-= p.id`. `setQty()` cari produk via `findProductForUnit(unitId)` (helper
-yg sudah ada), lalu panggil `refreshProwControls(p)` baru — cari row via
-`querySelector('.prow[data-pid="..."]')`, replace HANYA `.prow-controls`
-di dalamnya (`buildProwControls(p)` baru), bukan seluruh row apalagi
-seluruh grid. Fallback ke `renderList()` penuh kalau produk tidak
-ketemu (harusnya tidak pernah terjadi). Nama/meta/harga tiap baris
-memang tidak pernah berubah gara-gara qty jadi aman di-skip dari update.
-
-**Verifikasi Playwright manual** (bukan test committed, scratch file
-sudah dihapus): generate HTML dari DB uji 5 produk, tandai semua node
-`.prow` dengan marker JS custom, klik +/- pada satu produk berkali-kali,
-buktikan SEMUA node lain (termasuk node yg diklik sendiri — cuma child
-`.prow-controls`-nya yang diganti) tetap node yang SAMA (bukan
-rebuild) — plus qty/cart bar/search debounce/stepper keranjang semua
-tetap berfungsi identik ke perilaku lama.
-
-Test committed baru: `test/order_page_service_test.dart` — assertion
-string-based (pola yang sudah dipakai file ini) mengecek `setQty()`
-memanggil `refreshProwControls(p)` bukan `renderList()` tanpa syarat lagi
-(regex atas isi fungsi `setQty`), plus keberadaan `row.dataset.pid` &
-`refreshProwControls`. Revert-verify: kembalikan `setQty` ke
-`renderList()` polos → test gagal tepat di assertion yg diharapkan →
-pasang lagi fix, hijau.
-
-**Temuan riset lain (belum ditindaklanjuti, sekadar insight ke user)**:
-2 font base64 (Hanken Grotesk + Newsreader) ±123 KB selalu ikut tiap
-file katalog di-generate (`order_page_service.dart:187,191`) — biaya
-tetap ukuran file share, bukan penyebab lag. N+1 query saat generate
-katalog di app (`unitsJsonFor` per unit produk, sequential await) — bisa
-bikin proses "Generate Katalog" lambat utk toko banyak produk, terpisah
-dari lag di HP pelanggan. Crash log tidak pernah di-rotate
-(`crash_log_service.dart`) — bisa membengkak kalau ada bug yg crash
-berulang. State "centang" struk PERMANEN di SQLite
-(`transactions.checked_item_ids`, per-baris, tidak ada masalah performa);
-cart draft (termasuk `CartItem.checked`) di SharedPreferences dgn
-cleanup 24 jam utk cart "tambah belanjaan" yatim — tidak ada potensi
-menumpuk.
-
-## Poin loyalitas transaksi tempo + tutup panel antrian via tap luar
-
-User laporkan 2 hal sekaligus:
-1. Transaksi tempo (tombol "Bayar Nanti") tidak pernah dapat poin
-   loyalitas, walau totalnya melebihi threshold di Pengaturan.
-2. Panel "Pesanan Ditahan" cuma bisa ditutup lewat tombol ✕ — user minta
-   tap/swipe di luar wadah panel juga menutupnya, dengan animasi smooth.
-
-**Poin tempo** — akar masalah di `payment_screen.dart:459` (sebelum fix):
-syarat `!isTempo` di kondisi pemberian poin bikin `pointsEarned` SELALU 0
-utk transaksi `status == 'tempo'`, tidak peduli besarnya `_total`. **Sempat
-ditanya ke user dulu** (`AskUserQuestion`) soal timing: poin langsung saat
-dicatat, atau baru saat lunas? Sebelum bertanya, sudah dicek dulu bahwa
-`voidTransaction` (`app_database.dart:1279`) SUDAH generik membalikkan
-poin berdasarkan `tx.pointsEarned` tersimpan, TIDAK peduli payment method
-— jadi kalau poin diberikan langsung saat tempo dicatat, pembatalan tetap
-otomatis aman tanpa kode tambahan. User pilih opsi ini (langsung saat
-dicatat, lebih sederhana). Fix: hapus syarat `!isTempo` — poin dihitung
-dari `_total` sama seperti tunai. Test baru: `test/tempo_loyalty_points_test.dart`
-(drive lewat `PaymentScreen` sungguhan, tap "Bayar Nanti", verifikasi
-`tx.pointsEarned`, `customer.loyaltyPoints`, & `loyaltyPointLedger`).
-
-**Tutup panel via tap luar** — `_HeldInlinePanel` di `kasir_screen.dart`
-sudah inline (bukan modal) di dalam `Listener` yang membungkus SELURUH
-area topbar-ke-bawah (termasuk panel itu sendiri) — jadi tidak bisa
-sekadar "tutup panel kalau ada tap di area Listener ini", karena tap DI
-DALAM panel (kartu antrian, tombol ✕, scroll strip horizontal) juga akan
-ke-hit-test oleh Listener yang sama. Fix: `GlobalKey _heldPanelKey`
-dipasang ke `_HeldInlinePanel`, di `onPointerDown` cek posisi tap via
-`RenderBox.globalToLocal` — kalau di LUAR bounds panel baru
-`setState(() => _heldPanelOpen = false)`. Animasi smooth otomatis dari
-`AnimatedSize` yang sudah membungkus panel (tidak perlu kode animasi
-baru). `_HeldInlinePanel` constructor perlu ditambah `super.key` (tidak
-ada sebelumnya). Test baru di `kasir_verify_order_test.dart`: 1) tap jauh
-di bawah panel (grid produk) → panel tertutup, antrian TIDAK
-ter-resume/terhapus; 2) tap DI DALAM panel (judul "PESANAN DITAHAN") →
-panel TETAP terbuka.
-
-Kedua fix sudah revert-verify (test gagal dgn pesan yang relevan sebelum
-fix dipasang, hijau lagi sesudahnya).
-
-## Redesign kartu antrian "Pesanan Ditahan"
-
-User bilang desain kartu antrian yang lama "tidak pas" — diminta
-proposalkan dulu via Playwright (mockup HTML statis, screenshot,
-dikirim ke user) SEBELUM ada perubahan kode, baru setelah user setuju
-("wah bagus itu, kerjakan sekarang juga") baru dieksekusi. Mockup ada di
-scratchpad sesi ini (`queue_redesign/mockup.html` + `proposal.png`, tidak
-di-commit — cuma alat komunikasi, bukan bagian app).
-
-Masalah desain lama (`_HeldCard` + `_HeldCardWithTab`, sebelum redesign):
-tinggi kartu dipaksa 152px demi menampung tab lipat (`_TabPainter`
-trapesium, gaya yang cuma dipakai di sini) di kartu handoff — kartu
-pesanan ditahan BIASA (tanpa handoff) jadi punya `Spacer()` kosong besar
-karena tinggi disamakan. Badge "Menunggu Anda Bayar" pakai warna `error`
-(merah) padahal bukan kondisi error — bertabrakan dgn konvensi semantik
-warna project (merah = hutang/masalah, lihat §Gotcha CLAUDE.md). Nominal
-total pakai font biasa, bukan `AppTheme.numStyle` (Newsreader) yg jadi
-konvensi semua angka uang di app.
-
-Redesign: gabung `_HeldCardWithTab` + `_HeldCard` jadi SATU class
-`_HeldCard` — tidak ada lagi tab lipat terpisah. Beda status (pesanan
-ditahan biasa vs handoff pegawai) sekarang cuma lewat warna **chip** di
-baris atas KARTU YANG SAMA: abu netral "Ditahan" vs terracotta
-(`AppTheme.accent`) berisi ikon + nama pegawai pengirim + jam. Semua kartu
-jadi tinggi konsisten (134, turun dari 152) tanpa ruang kosong. Total
-sekarang pakai `AppTheme.numStyle`. `_TabPainter` class TIDAK dihapus —
-masih dipakai `_CartMetaTab` (komponen lain) di file yg sama.
-
-**Bug ketemu saat implementasi** (langsung ke-catch oleh test yang sudah
-ada, `kasir_scan_order_code_test.dart`): chip pertama kali ditulis dengan
-`Text` polos di dalam `Row(mainAxisSize: MainAxisSize.min)` tanpa
-`Flexible` — RenderFlex overflow 3px kalau nama pegawai+jam agak panjang,
-karena Row(mainAxisSize.min) melayout child non-flex di lebar natural
-(tak terbatas), BUKAN dibatasi lebar parent, walau parent (Column di
-dalam Container lebar tetap) sudah sempit. Fix: bungkus `Text` dgn
-`Flexible` supaya Row benar-benar memberi batas lebar & ellipsis bisa
-jalan. Revert-verify: hapus `Flexible`, 4 test gagal dgn overflow error
-yang sama persis → pasang lagi, hijau semua.
-
-Test yang perlu diupdate (bukan bug, cuma teks assertion ikut desain
-baru): 2 assertion `find.text('Menunggu Anda Bayar')` di
-`kasir_scan_order_code_test.dart` diganti `find.textContaining('siap
-dibayarkan')` (teks meta baris kedua khusus kartu handoff sekarang).
-
-## Tombol "Salin Teks Pesanan" di bawah QR handoff pegawai
-
-Usulan user: tambah jalur cadangan di `_HandoffQrSheet` (`cart_sheet.dart`,
-sheet "Kirim ke Owner/Asisten" utk pegawai tanpa izin Terima Pembayaran)
-kalau scan QR susah (kamera bermasalah/pencahayaan kurang) — pegawai bisa
-salin teks pesanan (persis sama dgn isi QR, hasil `OrderParserService.
-encodeHandoff`) lewat `OutlinedButton.icon` baru di bawah caption QR,
-kirim manual via WhatsApp/Telegram, owner/asisten tempel di fitur "Tempel
-Pesanan" yang sudah ada (parser sudah baca format ini).
-
-**Gotcha besar ketemu saat nulis test** (sudah ditambahkan ke CLAUDE.md
-§Gotcha, `102399d`): `Clipboard.getData()` TIDAK di-mock otomatis oleh
-`flutter_test` di environment ini — beda dari asumsi umum "flutter_test
-punya default clipboard mock". Tanpa handler manual, `await Clipboard.
-getData(...)` di dalam test MENGGANTUNG SELAMANYA (bukan exception cepat)
-— sempat bikin test hang >5 menit (dicoba `pumpAndSettle()` → `pump()`
-biasa dulu mengira gara-gara timer SnackBar, TERNYATA bukan itu masalahnya
-sama sekali) sebelum diisolasi via scratch test minimal dan ketahuan akar
-masalahnya murni di sisi test. Fix: pasang mock method channel manual
-(`TestDefaultBinaryMessengerBinding...setMockMethodCallHandler(
-SystemChannels.platform, ...)`) yang menyimpan/mengembalikan teks sendiri
-— lihat `test/kasir_handoff_qr_test.dart` utk pola lengkapnya, tiru kalau
-nanti ada test lain yang butuh baca balik isi clipboard.
-
-## Katalog HTML — satuan lain (mis. Dus) sekarang ikut tampil
-
-User laporkan: produk yang punya >1 satuan di POS (mis. "Sedap Goreng"
-per Biji + per Dus) cuma satuan dasarnya (Biji) yang muncul di katalog
-online — Dus sama sekali tidak ada opsinya. Akar masalah: `_buildCatalogJson`
-(`order_page_service.dart`) dari awal cuma pernah mengambil SATU baris
-`product_units` per produk (yang `isBaseUnit`), field satuan lain tidak
-pernah di-query sama sekali — ini KATEGORI BEDA dari fitur varian (varian
-= produk anak terpisah, `getVariants`, sudah ter-handle lama; ini soal
-multi-SATUAN produk yang SAMA, belum pernah ditangani).
-
-Fix: field baru `units` (array semua satuan berharga valid milik produk,
-base unit selalu di indeks 0) ditambahkan ke tiap entri produk/varian di
-JSON yang di-embed. Fungsi JS (`byUnit`, `totalQtyForProduct`,
-`minPriceForProduct`, `unitOptionsFor`, `findProductForUnit`, +
-`totalOptionsFor` baru) semua digeneralisasi baca `p.units`/helper
-`_ownUnits(p)` (fallback ke `[{unitId:p.unitId,...}]` kalau field lama
-tanpa `units`, jaga-jaga data lama) — bukan cuma `p.unitId` tunggal. Kalau
-produk punya >1 satuan, chip di modal tap-item sekarang menampilkan
-SEMUA satuan (label = nama satuan, mis. "Biji"/"Dus"), dan grouping di
-teks pesanan (`buildOrderText`) + tampilan keranjang meniru pola varian
-(header nama produk + baris ber-indent per satuan) begitu produk itu
-benar-benar punya >1 satuan.
-
-**Susulan (dikonfirmasi via pertanyaan user "apakah varian juga bisa
-diinput?"):** kombinasi varian yang PUNYA >1 satuan SENDIRI (mis. varian
-"Pedas" juga py Pcs+Renceng) sudah diverifikasi nyata via Playwright —
-chip di modal tampil benar (semua kombinasi produk-induk × varian ×
-satuan muncul sbg chip terpisah, mis. "Pcs", "Pedas (Pcs)", "Pedas
-(Renceng)"), TAPI ketahuan bug turunan: teks ringkasan "N pilihan" di
-daftar produk under-count (bilang "2 pilihan" padahal 3 chip nyata
-muncul) — `totalOptionsFor` menghitung tiap varian sebagai 1 opsi tetap,
-tidak ikut menjumlahkan satuan internal varian itu. Fix: `totalOptionsFor`
-sekarang menjumlahkan satuan TIAP varian, sama seperti cara
-`unitOptionsFor` membangun chip (`69abb77`). Test baru
-(`order_page_service_test.dart`) cover kombinasi ini secara eksplisit.
-
-Diverifikasi Playwright/Chromium nyata (bukan cuma baca kode) utk KEDUA
-skenario: produk induk 2-satuan (chip Dus muncul & berfungsi), DAN
-varian+multi-satuan (3 chip benar, teks "3 pilihan" akurat setelah fix).
-
-## Badge jumlah item disatukan gayanya (struk/keranjang/cart bar)
-
-Widget `ItemCountBadge` baru (`lib/core/widgets/item_count_badge.dart`),
-diekstrak dari lingkaran badge yang dulu private di `_CartBar`
-(`kasir_screen.dart`) — dipakai ulang di `cart_sheet.dart` (samping kiri
-Total) dan `receipt_screen.dart` (menempel/mengambang di sudut kiri-atas
-kartu daftar barang struk, via `Stack`+`Positioned`+`elevated:true`,
-sesuai posisi yg diminta user dari screenshot). Sebelumnya di kedua
-tempat itu cuma teks polos "N item", tidak senada dgn cart bar.
-
-## Fix sync LAN gagal total — device tertinggal 1 kolom skema (mis. Infinix Smart 8)
-
-User laporkan error nyata saat sync dari HP Infinix Smart 8 ke host:
-`SqliteException(1): table transactions has no column named
-checked_item_ids`. Root cause (dikonfirmasi via investigasi, BUKAN
-migrasi gagal diam-diam — sudah dicek tidak ada `try/catch` yang menelan
-exception migrasi di `onUpgrade`): `AppDatabase.mergeRows()`
-(`lib/core/database/app_database.dart`) membangun `INSERT OR IGNORE/
-REPLACE` secara DINAMIS dari `row.keys` — yaitu kolom apa pun yang
-kebetulan ada di dump SELECT * milik PENGIRIM — tanpa pernah divalidasi
-ke skema fisik tabel LOKAL penerima. Device yang app-nya belum ter-update
-ke schemaVersion terbaru (kemungkinan besar kasus Infinix ini: APK yang
-ter-install lebih tua dari commit `a8c94ad`/schemaVersion 15) akan selalu
-gagal total begitu menerima dump dari device lain yang skemanya lebih
-baru — SATU kolom asing menggagalkan SELURUH baris & seluruh proses sync,
-bukan cuma baris/kolom itu.
-
-**Ini BUKAN kasus sekali-jadi** — app ini offline-first multi-perangkat
-(owner+kasir update tidak serentak by design), jadi kelas bug yang SAMA
-akan muncul lagi tiap kali ada kolom skema baru selama masih ada device
-yang belum sempat update. Fix bersifat STRUKTURAL, bukan tambal 1 kolom:
-`mergeRows()` sekarang baca kolom fisik lokal via `PRAGMA table_info
-("$tableName")` (bukan definisi tabel Drift statis di kode — supaya
-benar-benar mencerminkan skema SQLite yang SUNGGUHAN berjalan di device
-itu), lalu filter row masuk ke kolom yang benar-benar ada sebelum build
-INSERT. Kolom asing dari pengirim yang lebih baru diabaikan per-baris,
-tidak menggagalkan sync.
-
-**Belum disentuh** (di luar scope fix ini, dicatat sebagai potensi
-follow-up kalau relevan nanti): protokol `lan_sync_service.dart` tidak
-punya mekanisme cek/negosiasi `schemaVersion` sama sekali antar host↔klien
-— fix ini menangani gejalanya (sync tidak gagal), bukan menambahkan
-deteksi proaktif "device X butuh update" ke UI.
-
-Test regresi (`test/merge_rows_schema_mismatch_test.dart`) mensimulasikan
-device tertinggal dengan `ALTER TABLE transactions DROP COLUMN
-checked_item_ids` pada DB in-memory yang sudah schemaVersion 15 (paling
-presisi mereproduksi kondisi fisik device asli, dibanding coba pasang
-fixture schemaVersion lama) — diverifikasi revert-verify, pesan error
-tereproduksi PERSIS sama dengan laporan user sebelum fix dikembalikan.
-
-## Gotcha BARU — tombol lebar-penuh (Outlined/FilledButton) dalam Row di dalam AlertDialog
-
-`AppTheme` set `minimumSize: Size(double.infinity, 48)` sebagai default
-utk `OutlinedButtonThemeData`/`FilledButtonThemeData` (utk tombol CTA
-berdiri sendiri di banyak layar). Kalau taruh 2+ tombol begini dalam SATU
-`Row` (pola umum di app ini — lihat `payment_screen.dart`), WAJIB override
-`minimumSize` ke lebar sempit (mis. `Size(0, 44)`) di style masing-masing,
-KALAU TIDAK Row akan overflow.
-
-Kasus KHUSUS di dalam `AlertDialog.content` (bukan BottomSheet/Column
-biasa): `AlertDialog` SELALU membungkus content dgn `IntrinsicWidth`
-(lihat framework `dialog.dart`), dan lebar konten yang tersedia jauh lebih
-sempit dari layar penuh (dipotong `insetPadding` + `contentPadding`
-default). **3 tombol sekaligus (mis. Batal + Uang Pas + Bayar) bisa SAMA
-SEKALI TIDAK MUAT sejajar dalam satu Row** di dialog — bukan cuma soal
-`minimumSize`, override itu SAJA TIDAK CUKUP (`debt_payment_dialog.dart`
-sempat 2× salah fix sebelum benar: iterasi 1 taruh 3 tombol dlm 1 Row +
-override minimumSize → overflow tetap terjadi, "Uang Pas"/"Bayar" hilang
-total tanpa indikasi visual apapun di HP asli). **Fix yang benar:** pisah
-tombol "Batal" ke baris sendiri (tidak berebut lebar dgn tombol lain),
-baru 2 tombol utama (mis. Uang Pas + Bayar) sebaris di bawahnya dgn
-`Expanded` pada tombol primer — persis pola `payment_screen.dart`. Kalau
-nanti nemu dialog lain dgn pola serupa (>=3 tombol custom dlm 1 Row di
-AlertDialog), curigai kelas bug yang SAMA — test widget dgn surface
-SEMPIT (`tester.binding.setSurfaceSize(const Size(360, 800))`, BUKAN
-default ~800×600 flutter_test yang terlalu lebar utk menangkap bug ini)
-utk verifikasi nyata sebelum anggap fix selesai.
-
-## Sesi ini — fix tombol Tambah Bayar + checklist keranjang kasir
-
-**Bug tombol "Tambah Bayar" belum sejajar** (dilaporkan user via screenshot,
-lalu screenshot susulan menunjukkan fix pertama malah bikin tombol hilang
-total) — kronologi & akar masalah FINAL ada di section gotcha di atas,
-jangan diulang di sini.
-
-**Fitur checklist keranjang** (usulan user, disetujui setelah opini +
-riset arsitektur): keranjang kasir (`cart_sheet.dart`) sekarang punya
-- Checkbox di kiri nama tiap item (leading widget eksplisit, BUKAN
-  `CheckboxListTile` — supaya tap checkbox vs tap baris/buka modal edit
-  tidak tumpang tindih, ikuti gotcha yang sudah tercatat).
-- Cascade centang induk↔varian sama persis logika Struk (`cart_provider.dart`
-  method `setChecked`): centang induk → semua anak ikut; uncheck 1 anak →
-  induk ikut ke-uncheck (tercentang hanya kalau SEMUA anak tercentang).
-- Stepper qty diganti total: widget `_AddControl` (dulu private di
-  `kasir_screen.dart`) diekstrak jadi shared widget publik
-  `lib/features/kasir/widgets/add_control.dart` (`AddControl`), dipakai
-  kartu/baris produk DAN baris keranjang — gaya lingkaran +/− identik di
-  kedua tempat. Field qty tap-to-edit lama (`_QtyField`) dihapus total
-  (edit qty manual sekarang lewat tap item → `ItemEntrySheet`, sudah ada
-  sebelumnya).
-- Teks baris item (nama, unit·harga, catatan, subtotal) diperbesar sedikit.
-- Field `checked` baru di `CartItem` (`core/models/cart_item.dart`) — ikut
-  ter-persist ke SharedPreferences otomatis (mekanisme persist cart yang
-  sudah ada, per-perubahan state, tidak perlu kode baru).
-- Saat checkout (`payment_screen.dart` `_confirm()`): item yang `checked`
-  di cart diteruskan jadi nilai awal `checkedItemIds` transaksi baru (kolom
-  lama, sudah ada sejak schemaVersion 15) — Struk melanjutkan checklist
-  dari titik yang sama, bukan mulai dari nol.
-
-**Keputusan default yang diambil tanpa tanya balik** (dikomunikasikan ke
-user dulu, bukan sepihak diam-diam): cascade parent/varian ikut pola Struk;
-increment stepper tetap ±1/tap tanpa input manual (konsekuensi dari field
-input dihilangkan — bukan regresi baru, sudah begitu juga di stepper kartu
-produk).
-
-**Test baru** (`test/cart_checklist_test.dart`, 8 test, semua lolos
-revert-verify): serialisasi `CartItem.checked`, cascade `setChecked` (3
-skenario), UI `CartSheet` (checkbox + `AddControl` menggantikan widget
-lama), dan end-to-end checkout → `checkedItemIds` transaksi via
-`PaymentScreen` sungguhan (bukan reimplementasi logic di test).
-
-## Follow-up round setelah user test PR batch 18-item (3 laporan baru)
-
-Setelah PR batch 18-item di-merge, user langsung test & kirim 3 laporan baru
-(2 screenshot + 1 laporan tekstual):
-
-1. **Batalkan Pembayaran tidak muncul untuk pelunasan pertama kali** — akar
-   masalah: `_showPaymentTimeline` (satu-satunya tempat tombol itu berada)
-   sengaja menyembunyikan Riwayat Pembayaran untuk "penjualan tunai
-   seketika" (1 pembayaran, `paidAt == createdAt`) — padahal itu skenario
-   PALING UMUM. Fix: getter disederhanakan jadi selalu true bila ada ≥1
-   pembayaran (`receipt_screen.dart`). Efek samping: baris "Kembalian" jadi
-   tampil 2x untuk nota 1-pembayaran (Ringkasan + Riwayat) — pola yang SAMA
-   dgn nota 2-pembayaran, `receipt_change_taken_test.dart` disesuaikan.
-2. **Katalog HTML modal tap-item (baru dibuat sesi sebelumnya) TERLALU JAUH
-   dari desain yang diminta** — user kirim screenshot app kasir asli sbg
-   referensi persis. Redesain ulang signifikan di `order_page_service.dart`:
-   - Baris produk kini punya kontrol +/- lingkaran meniru `_AddControl` app
-     kasir (bukan badge angka/chevron polos) — lingkaran "+" oranye → angka
-     hijau + minus merah begitu ada qty, fungsi `buildProwControls()`/
-     `prowQuickAdd()`/`prowDecrement()` baru.
-   - **Field harga custom yang bisa diketik pelanggan DIHAPUS TOTAL**
-     (bukan cuma dikecualikan dari kode mesin seperti versi sebelumnya) —
-     `cartPriceOverride`, `priceFor()`, anotasi "(harga custom)" semua
-     dicabut. Harga di modal sekarang MURNI tampilan (`#itemPriceDisplay`,
-     ikut satuan/varian terpilih).
-   - Field jumlah jadi `<input>` beneran (bisa diketik langsung, mis. utk
-     qty desimal), bukan cuma `<span>` statis.
-   - `.cb-count` (badge jumlah item keranjang) dibuat lingkaran DIJAMIN via
-     `aspect-ratio:1` + ukuran diperbesar — sebelumnya sempat tampak lonjong
-     di screenshot user (dugaan: interaksi font-scaling browser HP).
-   - SEMUA ukuran font di halaman dinaikkan (demografi pelanggan lebih
-     terbiasa teks besar, "tidak apa-apa makan space" per instruksi user).
-   - Stok TIDAK ditampilkan di modal (diputuskan via `AskUserQuestion` —
-     user pilih rekomendasi: jangan expose jumlah stok toko ke publik).
-3. **Scan pesanan pegawai via scanner HID TERTENTU masih salah rute ke
-   Tempel Pesanan** (bukan antrian) — root cause BERBEDA dari bug serupa
-   yang "sudah diperbaiki" sesi sebelumnya (`2ee8068`, soal timing merge
-   fragmen). Kali ini: scanner tsb sama sekali TIDAK menerjemahkan newline
-   di dalam payload QR jadi keystroke Enter (beda dari scanner yang sudah
-   ditangani), jadi kode mesin & baris `Pegawai:` menyatu tanpa newline di
-   SATU string ("...=2Pegawai: Budi") — regex `^Pegawai:` (butuh awal
-   baris) gagal cocok, employeeName null. Fix di lapisan PARSER (bukan
-   lapisan HID kasir_screen.dart yang sudah ada): `OrderParserService.
-   parse()` sekarang punya `_normalizeMetaLineBreaks()` — sisipkan newline
-   di depan marker `Pegawai:`/`Nama:`/`HP:`/`Catatan:` bila menempel tanpa
-   pemisah, SEBELUM regex line-based dijalankan. **BELUM dikonfirmasi user**
-   di scanner fisik aslinya (diverifikasi via unit test yang mensimulasikan
-   payload fused, bukan hardware sungguhan) — kalau masih terjadi, curigai
-   scanner INI mungkin juga tidak kirim Enter di akhir seluruh payload sama
-   sekali (beda lagi failure mode-nya, perlu log/laporan lebih rinci).
-
-**Catatan penting**: item "Uang Pas di modal Tambah Bayar sejajar kiri
-tombol Bayar" yang disebut user di laporan #1 ternyata **SUDAH benar** di
-kode (`debt_payment_dialog.dart`, dari fix sesi sebelumnya) — tidak ada
-perubahan diperlukan, kemungkinan user menguji build lama atau cuma
-menegaskan ulang requirement yang sudah terpenuhi.
-
-## Batch 18-item bugfix/UX kasir + katalog HTML (sesi sebelumnya)
-
-User kirim 18 laporan bug/permintaan sekaligus (kasir, struk, katalog HTML)
-+ 2 screenshot bug. Instruksi eksplisit: "eksekusi dan merge, tidak perlu
-masuk plan" — 4 keputusan desain genuinely ambigu diklarifikasi dulu lewat
-`AskUserQuestion` sebelum eksekusi (lihat poin bertanda 🔀 di bawah), sisanya
-langsung dieksekusi.
-
-**Selesai (16/18):**
-1. Tombol "Bayar"/"Tambah Belanjaan" disejajarkan + "Bayar" jadi hijau.
-2. Checklist centang serah-terima di struk kini persisten (`transactions.checkedItemIds`).
-3. Retur item seharga Rp0 (promo/bonus) kini valid.
-4. 🔀 **Batalkan Pembayaran** — baris ditandai "Dibatalkan" & TETAP tersimpan
-   sbg jejak audit (bukan dihapus), `paid`/status dihitung ulang tanpa baris
-   itu. Kolom baru `transaction_payments.voided`, method `voidPayment()`.
-5. 🔀 **Edit item nota belum lunas** — tap item di struk (hanya saat
-   `kurang_bayar`/pembayaran baru dibatalkan) buka modal spt `ItemEntrySheet`:
-   ubah harga/qty/catatan atau hapus. Efek ke total/hutang **sama seperti
-   retur sebagian** (auto-recompute, tanpa refund tunai — belum pernah
-   dibayar). Method baru `editUnpaidTransactionItem()`.
-6. Tombol "Tambah Bayar" → "Bayar" saja (gabung dgn poin 1).
-7. Font struk yang dibagikan di-pin ke `GoogleFonts.robotoMono` (dulu alias
-   `'monospace'` generik → beda hasil render tablet vs HP).
-8. Startup cleanup file share sementara (`struk_*`/`katalog_*` >24 jam) di
-   temp dir — sebelumnya menumpuk selamanya (`temp_share_cleanup.dart`).
-9. 🔀+12 **"Uang Diterima" (gross)** — baris baru di atas "Kembalian" saat
-   bayar lebih dari tagihan; "Dibayar" TETAP net (Total = Dibayar + Sisa
-   tetap konsisten di layar). Diterapkan di `receipt_screen.dart` DAN
-   `merged_receipt_screen.dart`/`printer_service.dart` (nota gabungan) —
-   yang terakhir ini juga jadi tempat ditemukannya bug baru (lihat di bawah).
-10. Katalog HTML: tombol expand varian tidak responsif — **teratasi sbg efek
-    samping item 14** (dropdown `<details>` diganti total dgn modal tap-item).
-11. Modal "Tambah Bayar": "Uang Pas" pindah ke kiri tombol "Bayar" (sejajar
-    layout kalkulator checkout), "Bayar" nonaktif selagi field kosong.
-12. Lihat poin 9.
-13. **BLOCKED** — katalog HTML dilaporkan "belum identik" dgn UI app, tapi
-    investigasi menunjukkan token CSS byte-identik dgn `AppTheme.dart`. Sudah
-    diminta screenshot/spesifik ke user, BELUM dijawab sesi ini. Jangan
-    disentuh lagi tanpa info baru dari user.
-14. 🔀 **Katalog HTML — modal tap-item ganti `<details>` total** (semua
-    produk, varian atau tidak): pilih satuan/varian (chip), harga manual
-    (decimal-aware), qty stepper, catatan (dipindah OUT dari cart sheet ke
-    modal ini). Harga custom **TIDAK PERNAH** masuk baris kode mesin `#PSN:`
-    — murni anotasi teks manusia `"... (harga custom)"` di pesan WhatsApp,
-    konsisten dgn prinsip desain existing file ("kasir selalu sumber harga
-    final"). Diverifikasi nyata via Playwright/Chromium (klik alur penuh:
-    pilih varian, override harga, catatan, buka-ulang dari cart, hapus).
-15. `cart_sheet.dart`: nominal (total/harga satuan/subtotal) pakai
-    `AppTheme.numStyle` (dulu `TextStyle` polos, font beda dgn layar lain).
-16. Tombol +/- stepper di baris item kasir & modal keranjang diperbesar +
-    direnggangkan (`cart_sheet.dart`, `item_entry_sheet.dart`).
-17. `produk_list_screen.dart`: harga di bawah nama produk pakai
-    `StreamProvider` (`watchBaseUnitPrices()`) — dulu `FutureProvider`
-    snapshot sekali-jalan yg tidak ikut reaktif.
-18. Dijawab informasional (bukan kode) — stok bisa dipantau lewat filter
-    chip "Stok Menipis" + count di tab Produk, dan form edit per-produk
-    (belum ada kolom stok di list/laporan stok terpisah).
-
-**Bug tambahan ditemukan & diperbaiki di luar 18 item** (langsung
-dinecessitated oleh screenshot user "SISA Rp -31.400"): `merged_receipt_
-screen.dart` (nota gabungan) ternyata masih pakai `tx.total - tx.paid`
-MENTAH (kelas bug sama dgn "Item 23" lama di PLAN.md, yang sebelumnya
-sudah diperbaiki di `receipt_screen.dart` tapi TIDAK di file gabungan ini) —
-diperbaiki pakai `netRemainingOwed()`/`netPaidDisplay()` yg sama, plus
-`printer_service.dart` `_buildMergedBytes` (cetak ESC/POS gabungan) yg
-punya bug identik. **Item 23 di PLAN.md masih ada sisa** (single-tx
-`printer_service.dart printReceipt`, `transaksi_tab.dart`,
-`tx_history_sheet.dart`, `settleMergedDebt`, Buku Hutang, Tutup Kasir "kas
-sistem") — lihat PLAN.md.
-
-**4 keputusan desain diklarifikasi via `AskUserQuestion` sebelum eksekusi:**
-- Batalkan Pembayaran → "Tandai batal, tetap tersimpan" (bukan hapus record).
-- Edit harga item → efek ke total sama seperti retur sebagian (bukan alur baru).
-- Dibayar gross vs net → tetap net + tambah baris terpisah "Uang Diterima".
-- Modal tap-item katalog HTML → berlaku semua produk, GANTIKAN `<details>` total.
-
-**Test baru sesi ini** (semua lolos revert-verify — fix di-revert dulu,
-buktikan test gagal dgn pesan relevan, baru kembalikan): `migration_v15_
-test.dart`, `payment_void_test.dart`, `edit_unpaid_item_test.dart`,
-`watch_base_unit_prices_test.dart`, `temp_share_cleanup_test.dart`, +
-`order_page_service_test.dart` diperbarui (2 test baru utk modal tap-item,
-1 test lama disesuaikan krn `ci-note` editable input di cart sheet sengaja
-dihapus/dipindah ke modal). 6 file fixture migrasi lama (`migration_v7`
-s/d `v14_test.dart`) disesuaikan ke `schemaVersion` 15 (bumping schema
-version membuat SEMUA fixture lama ikut migrasi sampai versi terbaru, 3 di
-antaranya perlu ditambah tabel `transactions`/`transaction_payments` minimal
-krn migrasi v15 menyentuh kedua tabel itu).
-
-## Gerbang aktivasi/lisensi offline (Item 25c) — KODE SELESAI, TAPI BELUM AKTIF
-
-Selesai sesi sebelumnya (commit `174cad7`), **belum disentuh sesi ini**.
-`LicenseService.publicKeyBase64` masih string kosong (kill-switch sengaja —
-`isLocked` selalu false selama itu kosong, JANGAN hapus guard ini). Butuh 2
-input developer sebelum aktif sungguhan:
-1. **Public key developer** — buka `scripts/license-generator.html` (100%
-   offline, Web Crypto API, TIDAK disentuh app), generate keypair, WAJIB
-   unduh cadangan, kirim BALIK public key saja (private key TIDAK PERNAH
-   dikirim ke Claude — prinsip inti desain).
-2. **Nomor WhatsApp developer** — tombol "Kirim via WhatsApp" di
-   `AktivasiScreen` sementara pakai `Share.share()` generik krn tidak ada
-   nomor WA developer di codebase. Upgrade ke deep-link `wa.me` butuh nomor
-   + dependency `url_launcher` baru.
-
-Setelah keduanya diisi: tanam public key, `flutter test`/`analyze`, commit —
-barulah gerbang aktif. `PATCHNOTES.md` SENGAJA belum ditambah entri (nol
-dampak terlihat selama nonaktif).
-
-## Crash Infinix Smart 8 — fix di-merge, BELUM dikonfirmasi user
-
-Akar masalah terkonfirmasi (`fb8ba80`): APK CI sebelumnya cuma target
-`android-arm64`, HP 32-bit (armeabi-v7a) butuh `libflutter.so`/`libapp.so`
-yang tidak ada sama sekali → crash `dlopen` sebelum kode app manapun jalan.
-Fix: `build-apk.yml` → `--target-platform android-arm,android-arm64` (fat
-APK). **Kalau topik ini muncul lagi**: tanya dulu apakah user sudah install
-APK CI terbaru & app bisa dibuka normal di HP itu — kalau MASIH crash walau
-sudah fat APK, ada penyebab LAIN, jangan asumsikan sama.
-
-## Item 24 (payment gate role Pegawai via QR) — SELESAI SEPENUHNYA
-Semua sub-item (24a-24f) selesai & di-commit sesi-sesi sebelumnya. Tidak
-ada sisa pekerjaan — lihat CHANGELOG kalau perlu detail teknis.
-
-## Gotcha teknis (kumulatif, masih berlaku)
-
-- **`order_page_service.dart`**: `_htmlTemplate` punya 2 baris
-  pathologis-panjang (base64 font-face woff2, puluhan KB) — `Read` tool
-  akan error/gagal kalau range yang diminta mencakup baris itu. Selalu
-  target range yang menghindarinya, atau pakai `Grep`/`sed -n` utk baris
-  spesifik. Cek posisi barisnya dulu tiap sesi (`awk '{print length, NR}' |
-  sort -rn | head`) — bisa geser kalau ada edit sebelumnya.
-- **Playwright/Chromium tersedia tanpa install lokal**: module di
-  `/opt/node22/lib/node_modules` (butuh `NODE_PATH=/opt/node22/lib/
-  node_modules node script.js`), Chromium di `/opt/pw-browsers/chromium`.
-  Berguna utk verifikasi nyata file HTML/JS mandiri (katalog HTML, alat
-  generator lisensi) — generate output real (mis. lewat `dart run` sekali
-  pakai yg ekstrak `_htmlTemplate`), klik alur lewat Playwright, baca
-  balik state via `page.evaluate()`.
-- Bumping `schemaVersion` membuat SEMUA fixture test migrasi versi lama
-  (`migration_vN_test.dart`) ikut ter-migrasi sampai versi TERBARU (bukan
-  cuma versi yang mereka test) — fixture yang tidak punya tabel yang
-  disentuh migrasi baru akan gagal `no such table`. Cek SEMUA
-  `migration_v*_test.dart` tiap kali `schemaVersion` naik, bukan cuma
-  tambah test baru utk versi barunya.
-- `CheckboxListTile` seluruh barisnya SATU tap-target (toggle checkbox) —
-  kalau butuh gesture TERPISAH di baris yang sama (mis. tap-buka-modal),
-  restrukturisasi ke `ListTile` + `leading: Checkbox(...)` eksplisit,
-  BUKAN coba tumpuk `GestureDetector` di atas `CheckboxListTile`.
-- Lihat gotcha lama (HID scanner menelan input, `TextDirection` PDF vs
-  material, font PDF non-ASCII, `formatRupiah` non-breaking space, drift
-  `StreamProvider` widget test hang) — semua di CLAUDE.md, masih berlaku,
-  tidak diulang di sini.
+_Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
+3 bug susulan dari testing device asli + fix poin loyalitas + fix
+keamanan lisensi + fix debounce scanner + fix nama pelanggan riwayat +
+warna aksen toolbar kasir + fix sinkron harga SKU non-unik + Item
+29/30(a/b/c)/31/35(opsional) SEMUA dieksekusi & di-commit + migrasi data
+Griyo POS ke file `.berkahpos` (one-off, di luar repo) + fix silent-fail
+varian barcode bentrok)._ Full `flutter test` **442 test hijau**,
+`flutter analyze` bersih. schemaVersion masih 15
+(tidak ada migrasi baru, semua fitur baru pakai `app_settings` key baru
+`archive_manifest`/`last_archive_date` — TIDAK butuh migrasi skema).
+Branch `claude/setup-dependencies-am31te` — belum di-merge ke `main`
+(tunggu instruksi user). User sudah perbaiki `license/revoked.json` di
+`main` secara manual (typo tanda kutip) — item ini SELESAI, tidak perlu
+ditindaklanjuti lagi.
+
+## Fix: varian produk dgn barcode bentrok gagal-diam tanpa pesan error (17 Juli)
+
+User lapor: kalau varian produk diberi barcode, varian TIDAK tersimpan;
+tanpa barcode, tersimpan normal. Root cause (dikonfirmasi via DB-tier
+test): `product_barcodes.barcode` UNIQUE di seluruh katalog — kalau
+barcode yg dimasukkan sudah dipakai produk/varian LAIN mana pun,
+`db.createVariant()`/`updateVariant()` (dibungkus `transaction()`) throw
+`SqliteException` & rollback total (produk+unit+tier+barcode varian sama
+sekali tidak tersimpan). **Bug sebenarnya**: `_addVariant()`/
+`_editVariant()` di `produk_form_screen.dart` TIDAK PERNAH membungkus
+pemanggilan itu dgn try/catch — exception lolos tak tertangani, user
+cuma lihat "tidak terjadi apa-apa" tanpa pesan error sama sekali.
+
+**Fix**: try/catch di kedua fungsi, pesan spesifik via
+`_friendlyBarcodeError()` kalau exception match pola
+`UNIQUE constraint failed` + `barcode` ("Barcode sudah dipakai
+produk/varian lain..."), fallback pesan generik utk error lain.
+
+Test: `test/variant_barcode_error_banner_test.dart` (widget-tier, seed 2
+produk — satu sudah pegang barcode, satu mau ditambah varian pakai
+barcode sama — pastikan pesan error muncul DAN varian benar2 tidak
+tersimpan). Revert-verify: `rethrow` sementara di `_addVariant` → test
+gagal persis dgn `SqliteException` mentah lolos ke widget tree (sama
+seperti laporan user) → fix dikembalikan, hijau lagi.
+
+## Migrasi data Griyo POS → file `.berkahpos` (17 Juli, one-off, SELESAI)
+
+User migrasi toko produksi sungguhan dari Griyo POS. Proses:
+**BPOP2 (backup murni)** dipilih setelah diskusi tradeoff vs BPOT1
+(Alihkan Owner) — user pilih BPOP2 murni krn tidak mau ada risiko sama
+sekali (walau risiko keduanya sebenarnya setara utk restore ke device
+baru, lihat histori chat kalau perlu detail argumennya).
+
+**Sumber data**: 14 file `Transaksi <bulan>_<tahun>.xlsx` (Jun 2025–Jul
+2026, upload user, 2 file "rentang penuh" gagal upload/0-byte tapi tidak
+masalah krn tercakup file bulanan), `Pelanggan.xlsx` (493 baris, dari
+`Contoh_Dataset.rar` lama), `Products.csv` (**PENTING: sempat pakai
+versi USANG** dari `docs/reference/Products.csv` di rebuild pertama —
+user upload versi TERBARU belakangan, 80 produk beda harga + beberapa
+placeholder ternyata produk asli yg cuma hilang dari versi lama — SUDAH
+di-rebuild ulang pakai versi terbaru, jangan pakai `docs/reference/
+Products.csv` lagi kalau ada permintaan migrasi serupa, tanya user versi
+terbaru dulu).
+
+**Keputusan desain kunci** (semua sudah dieksekusi & divalidasi):
+- Harga per-item struk historis TIDAK ADA di data Griyo manapun (dicek
+  3 sumber: Transaksi, Arus Kas, Penjualan harian) — item disimpan
+  nama+qty saja (`priceAtSale=0`), Total nota tetap ASLI/akurat.
+  `stock_ledger` KOSONG sama sekali (stok mulai 0 bersih, transaksi
+  historis tidak mengurangi stok), poin loyalitas TIDAK dihitung ulang
+  dari histori (diambil langsung dari saldo `Pelanggan.xlsx`, hindari
+  dobel-hitung).
+- Barang di Rincian yang tak ada di katalog (kode_produk Griyo TIDAK
+  unik, sama seperti temuan Item 35 — banyak produk berbagi
+  `kode_produk` yg sebenarnya nama satuan spt "Dos"/"Pak") → **importer
+  CSV mem-blank kode DUPLIKAT** (kode pertama tetap, ke-2+ di-kosongkan)
+  sebelum importFromBytes, supaya dedup-by-kode importer tidak salah
+  gabung produk beda jadi satu — tanpa fix ini placeholder membengkak
+  145 nama (termasuk 1 nama dipakai 883× transaksi!). Sisanya (~38-55
+  nama tergantung versi katalog) jadi produk placeholder
+  (`isNonStock=true`, harga 0).
+- Pelanggan "Umum" tanpa profil (126 nama, TIDAK ada di `Pelanggan.xlsx`
+  maupun laporan resmi Griyo "Pelanggan Utama") → disimpan sbg
+  `customerName` teks apa adanya (termasuk karakter aneh spt
+  `"Demoiselle <3"`), BUKAN `customerId` — sesuai skema
+  `transactions.customerName` yg memang didesain utk "pembeli umum
+  bernama".
+- ~19-21 nota tempo (kolom Pembayaran = angka minus di Griyo = SISA
+  HUTANG, bukan negatif harga — divalidasi lewat pola `paid = total -
+  |angka|`, semua masuk akal) → **dipertahankan sbg hutang AKTIF**
+  (status `tempo`/`kurang_bayar`), BUKAN "Lunas" — beda dari piutang
+  SNAPSHOT lama di `Pelanggan.xlsx` yg TETAP tidak dibawa (keputusan
+  lama, tidak berubah). 2 nota tempo atas nama "Umum" (tanpa pelanggan
+  tertaut) di-treat sbg Lunas krn tidak ada yg bisa ditagih.
+- Audit cross-check dgn laporan resmi Griyo "Pelanggan Utama"
+  (`Pelanggan_Utama_....xlsx`) menemukan & menjelaskan 2 sumber
+  perbedaan kecil (~1,4% dari 14.348 tx, BUKAN bug proses): (a) 13 nama
+  py >1 profil BEDA di sistem Griyo sendiri (mis. "Bu Ika" 2x, org
+  beda), (b) transaksi yg pelanggannya "diketik bebas" vs "dipilih dari
+  daftar tersimpan" — cuma yg dipilih yg masuk hitungan resmi Griyo,
+  tapi data mentah (yg diimpor) py keduanya. Keputusan: pakai data
+  mentah apa adanya (lebih konsisten & bisa ditelusuri drpd override
+  angka dari laporan agregat yg tak py rincian transaksi).
+
+**Cara build** (kalau perlu diulang/di-generate ulang): skrip Python
+sekali-pakai (parse XML mentah xlsx via regex — openpyxl gagal krn ada
+karakter tak ter-escape spt `<` di nama pelanggan & `<dimension>` tag yg
+kadang salah/under-report jumlah kolom asli) → JSON bersih
+(`customers.json`/`transactions.json`) + CSV produk yg sudah
+di-preprocess (stok di-nol-kan, kode duplikat di-blank) → skrip Dart
+throwaway (`test/griyo_migration_build.dart`, SUDAH DIHAPUS dari repo
+setelah selesai — pola sama dipakai kalau perlu lagi) yg pakai KODE ASLI
+app (`AppDatabase`+`CsvImportService`+`DbExportService.exportPortable`)
+supaya file dijamin valid, BUKAN reimplementasi format. Self-test wajib:
+restore file ke DB kosong, cocokkan jumlah/total ke sumber (skrip kedua,
+`test/griyo_migration_verify.dart`, juga sudah dihapus).
+
+**Hasil akhir (revisi ke-2, Products.csv terbaru)**: 2.834 produk (2.791
+dari katalog + 43 placeholder), 474 pelanggan (poin loyalitas total
+27.024 terbawa), 14.348 transaksi (Rp 1.606.131.152, 19 nota tempo aktif
+Rp 418.550), 62.646 baris item. Semua tervalidasi via self-test restore
+sungguhan (bukan cuma dibaca ulang, benar2 di-decrypt+restore ke
+`AppDatabase(NativeDatabase.memory())` kosong lalu di-query). File
+terkirim ke user via `SendUserFile`, password terakhir: `riverwas`
+(sempat ganti 1x dari password acak awal atas permintaan user — kalau
+user lapor masalah restore, pastikan tanya password mana yg dipakai).
+
+**Status: SELESAI, menunggu konfirmasi user berhasil restore di device
+produksi.** Tidak ada follow-up kode diperlukan kecuali user lapor
+masalah spesifik saat restore, atau minta versi baru (mis. kalau
+Products.csv berubah lagi / mau tambah data lain).
+
+## Item 29/30/31/35(opsional) — batch besar "kerjakan semua" (17 Juli, SEMUA SELESAI & di-commit)
+
+User minta eksekusi SEKALIGUS semua yang sudah didesain/disetujui sesi
+ini. Urutan commit: `dd4bad3` (Item 29+30abc), `fa3e496` (Item 35
+opsional), `886db53` (Item 31). Ringkasan tiap bagian:
+
+### Item 29 — katalog HTML auto-"habis" dari stok riil
+`order_page_service.dart` (`_buildCatalogJson`) sekarang JUGA cek stok
+riil (base unit) via `AppDatabase.getBaseUnitRealStock()` (baru) saat
+`allow_negative_stock` OFF — `outOfStock = markedOutOfStock ||
+(!allowNegativeStock && stok<=0)`. **Keputusan desain penting**:
+`getBaseUnitRealStock()` HANYA mencakup produk yang PUNYA histori
+`stock_ledger` (pakai `EXISTS`, bukan `COALESCE(...,0)`) — produk yang
+belum pernah disentuh stoknya sama sekali TIDAK dianggap "stok 0", supaya
+toko yang belum sempat isi stok awal produknya tidak mendadak semua
+produknya jadi "Stok Habis" di katalog publik. Ini ketahuan dari test
+lama yang gagal (`Item 25a — produk TIDAK ditandai stok habis`) sebelum
+disempitkan pakai `EXISTS`.
+
+### Item 30 — kontrol stok 3 bagian
+- **(a)** Kartu "Kontrol Stok" baru di `ringkasan_screen.dart` — filter
+  kategori (state provider TERPISAH dari 30b), hitung "N menipis, M
+  habis" dari `watchStockOverview()`, preview 3 produk tertipis, tombol
+  "Lihat semua" bawa `groupId` sbg extra ke route `/produk/cek-stok`.
+- **(b)** Layar baru `cek_stok_screen.dart` (route `/produk/cek-stok`,
+  entry point SELALU terlihat: ikon 📦 di AppBar `produk_list_screen.dart`
+  — SENGAJA bukan chip kondisional spt filter "Stok Menipis" lama yg
+  hilang total kalau `lowStockCount==0`/tanpa kategori). Checkbox per
+  baris toggle `markedOutOfStock` REAL (via `setMarkedOutOfStock`) DAN
+  otomatis masuk panel "Teks Order Restock" sticky di bawah (Salin +
+  Kirim ke Supplier via `Share.share`) — BUKAN checklist manual terpisah
+  dari stok riil (poin user yg dipegang teguh: "untuk apa ada stok kalau
+  akhirnya dicek manual juga").
+- **(c)** Tab baru "Stok" (index 5) di `laporan_screen.dart` →
+  `tabs/stok_tab.dart`. TIDAK terikat rentang tanggal (beda dari tab
+  lain) — snapshot nilai SEKARANG, jadi TIDAK ada di `ReportTab` enum &
+  TIDAK bisa diekspor (sama spt tab Hutang). Agregasi (grand total,
+  per-kategori, deteksi harga-pokok-kosong, sort stok-negatif-paling-minus)
+  dihitung di provider (Dart murni) dari `AppDatabase.getInventoryRows()`
+  (1 query mentah). Ada catatan kecil permanen di UI: laporan ini
+  MELENGKAPI, bukan MENGGANTIKAN, stock opname fisik.
+
+DB baru: `AppDatabase.getBaseUnitRealStock()`, `watchStockOverview()`
+(typedef `StockOverviewRow`), `getInventoryRows()` (typedef
+`InventoryRow`) — semua di `app_database.dart`, semua 1-query
+agregat/JOIN (bukan N+1).
+
+Test: `order_page_service_test.dart` (+3 Item 29), `stock_overview_test.dart`,
+`cek_stok_screen_test.dart`, `ringkasan_stock_quick_check_test.dart`,
+`inventory_rows_test.dart`, `stok_tab_test.dart`. Revert-verify dilakukan
+utk: real-stock check Item 29, EXISTS-vs-COALESCE Item 29 (kasus paling
+krusial), toggle checkbox Cek Stok, sort stok negatif Laporan.
+
+### Item 35(opsional) — mode "sinkron via barcode saja"
+`PriceMatchService.match(barcodeOnly: true)` baru — skip SKU/fuzzy
+sepenuhnya, item tanpa barcode-cocok langsung `notFound`. Fungsi baru
+`_tryMatchBarcodeOnly` (duplikasi ringkas blok barcode di `_tryMatch`,
+SENGAJA tidak fallback ke SKU/fuzzy sama sekali). Toggle di
+`price_sync_screen.dart` (`SwitchListTile`), berlaku utk fetch LAN
+maupun import CSV. Test + revert-verify di
+`price_sync_sku_collision_test.dart`.
+
+### Item 31 — Tutup Buku tanggal custom
+`TutupBukuService.execute()` param `year` (int) → `periodStart`/
+`periodEnd` (DateTime, INKLUSIF keduanya — batas atas internal =
+periodEnd+1 hari). Label arsip (`archive_$year.db`, filename TIDAK
+berubah) = `periodEnd.year` — desain SENGAJA begini (bukan skema
+filename baru berbasis tanggal spt draft awal di PLAN.md) supaya
+`ArchiveService.open(year,...)`, exclusion sync di
+`lan_sync_service.dart` (`listArchivedYears()`), dan seluruh UI arsip
+TIDAK perlu disentuh — cukup "tahun" itu sekarang bisa merentang tanggal
+custom, bukan wajib Jan1-Des31. `suggestPeriodStart()` baru: hari SETELAH
+`last_archive_date` (setting baru, ganti `last_archive_year`) kalau sudah
+pernah tutup buku, atau tanggal transaksi PALING LAMA kalau belum pernah
+(bukan 1 Jan). Manifest (`archive_manifest` di `app_settings`, JSON
+per-tahun: start/end/txCount) dibaca via `listArchiveEntries()` — arsip
+LAMA tanpa manifest tetap tampil via fallback kalender-tahun-penuh
+(`isLegacyFallback: true`). UI (`tutup_buku_screen.dart`): label statis
+"Tahun $currentYear" diganti info dinamis + `showDatePicker` utk pilih
+periodEnd.
+
+**Test migrasi** (bukan bug, perubahan API disengaja): `db_fixes_test.dart`
+2 test lama diupdate dari `execute(year: 2024)` →
+`execute(periodStart: DateTime(2024), periodEnd: DateTime(2024,12,31))`
+(perilaku efektif SAMA, cuma API-nya berubah). Test baru
+`tutup_buku_custom_date_test.dart` (7 test: suggestPeriodStart 3 skenario,
+periode custom inklusif, manifest tersimpan+terbaca, arsip lama
+fallback, validasi periodEnd>periodStart). Revert-verify dilakukan utk
+inclusive-boundary (+1 hari) & suggestPeriodStart (+1 hari dari
+last_archive_date) — 2 bagian paling gampang salah-satu-hari.
+
+**Belum dikerjakan** (opsional, dibahas tapi tidak diminta): mode
+"barcode saja" default-ON, validasi keras jarak minimal antar tutup buku.
+
+## Item 35 — fix sinkron harga antar-toko: SKU non-unik salah cocok (17 Juli, SELESAI)
+
+User lapor: tiap sinkron harga dgn toko lain, SELALU ada harga "berubah"
+walau logikanya sama & tidak pernah konvergen. Minta log matching (tombol
+🐛 di layar Preview Harga). Log 2.745 item vs 1.831 produk lokal
+MEMBANTAH dugaan awal tier ganda (semua unit `1 buah` tier) — akar
+masalahnya **matching salah**.
+
+**Root cause**: `_tryMatch` (`price_match_service.dart`) cocok via SKU
+pakai `.firstOrNull` padahal `kode_produk` di data user TIDAK unik (banyak
+produk berkode nama satuan "Dos"/"Bal"/"Pak"). Bukti log: `Adem Sari
+Cingku/Dos` DAN `Alamo Tg/Dos` dua-duanya nyasar ke `Agar Satelit`;
+`76 12/bal` → `Atira 2000`. Saat Terapkan, harga ditulis ke produk salah
+→ sync berikutnya baris asli produk itu menimpanya balik → saling-timpa
+selamanya (non-konvergen). Bug KEMBAR di sisi apply: `_findOrCreateProduct`
+(`price_preview_screen.dart`) juga `.firstOrNull` untuk kode.
+
+**Fix** (3 bagian, disetujui user):
+1. Pengaman tabrakan SKU: cocok SKU hanya kalau kode dimiliki TEPAT 1
+   produk. Kalau >1 → tidak auto-match; fuzzy-nama fallback yang tangani
+   (masuk tab "Mirip", default skip → tidak menimpa diam-diam).
+2. `_resolveUnitStrict` baru: match SKU juga wajib satuannya ada di produk
+   lokal (cegah `76 12/bal` → `Atira 2000` yg tak punya satuan "Bal").
+   Kalau `unitTypeName` katalog kosong → fallback base unit (tak bisa lebih
+   ketat). Jalur fuzzy/ambiguous TETAP pakai `_resolveUnit` lenient (di
+   sana ada konfirmasi manusia).
+3. `_findOrCreateProduct` pakai kode hanya kalau unik; >1/0 → jatuh ke
+   pencocokan nama.
+
+Fuzzy sudah benar sejak awal (masuk tab "Mirip", TIDAK ada tombol "Samakan
+Semua" massal) — tidak diubah, cukup diverifikasi.
+
+Test: `test/price_sync_sku_collision_test.dart` (DB-tier, reproduksi persis
+kasus log: `Dos`→2 produk tidak nyasar ke Agar Satelit & masuk ambiguous;
+`bal`→produk tanpa satuan Bal ditolak → notFound; kontrol positif SKU unik
++ satuan cocok tetap match). Revert-verify: kembalikan `.firstOrNull` +
+`_resolveUnit` lenient → 2 test bug GAGAL (nyasar ke Agar Satelit/Atira),
+kontrol positif tetap hijau → fix dikembalikan, hijau lagi.
+
+**Opsi belum dikerjakan** (dibahas, tidak masuk batch ini): mode "sinkron
+via barcode saja" utk toko besar. Ada di PLAN.md Item 35 kalau user mau
+lanjut.
+
+## Item 33 — aksen warna toolbar kasir (16 Juli, SELESAI, Varian C)
+
+User pilih **Varian C** dari 3 mockup Playwright yang dikirim sesi
+sebelumnya (`toolbar_color_mockups.html/.jpg`, scratchpad — tidak
+di-commit). Ditambahkan 4 pasang warna baru di `AppTheme`
+(`scanFg/scanBg`, `antrianFg/antrianBg`, `riwayatFg/riwayatBg`,
+`tempelFg/tempelBg`, masing-masing `Color Function(bool isDark)`,
+mengikuti pola pasangan fg/bg yang sudah ada spt `debtFg`/`debtBg`).
+`_TbBtn` (`kasir_screen.dart`) diberi parameter opsional
+`fg`/`bg` (`Color Function(bool)?`) — kalau null, fallback ke warna
+netral lama (`cs.onSurfaceVariant`/`cs.surface`). 4 dari 5 tombol
+toolbar diwarnai (scan=biru, antrian=amber, riwayat=ungu, tempel
+pesanan=hijau); toggle grid/list SENGAJA dibiarkan netral (bukan
+error/kelupaan — murni preferensi tampilan, bukan fungsi yang perlu
+disorot warna).
+
+Test: `test/kasir_toolbar_accent_color_test.dart` (cek warna icon scan/
+antrian/riwayat sesuai `AppTheme`, dan toggle grid/list TETAP
+`onSurfaceVariant`). Revert-verify dilakukan (lepas `fg`/`bg` dari
+tombol scan → test gagal tepat sesuai ekspektasi → dikembalikan).
+**Item 33 SELESAI, tidak ada pekerjaan menggantung.**
+
+## Fix: riwayat transaksi nyangkut "Pelanggan" generik utk pelanggan terhapus (16 Juli)
+
+User lapor bug ini SETELAH lihat data hasil "Alihkan Owner" di device
+tujuan (screenshot: beberapa baris riwayat transaksi tampil "Pelanggan"
+polos, bukan nama asli) — TAPI setelah ditelusuri, ini BUKAN bug Alihkan
+Owner, murni bug lama yang kebetulan baru ketahuan saat review data pasca-
+transfer.
+
+**Akar masalah**: `_custNamesProvider` (`tx_history_sheet.dart:80`)
+membangun peta id→nama pelanggan lewat `db.searchCustomers('')`, yang
+DIAM-DIAM memfilter `isActive=true` (`app_database.dart:2483`, dipakai
+jg oleh dropdown pilih pelanggan — filter ini MEMANG benar utk kebutuhan
+itu). Begitu pelanggan dihapus (`deactivateCustomer()` — soft-delete, set
+`isActive=false`), namanya hilang dari peta ini → `_customerLabel()`
+(baris 791) jatuh ke fallback literal `'Pelanggan'`. Ini bertentangan
+LANGSUNG dgn komentar `deactivateCustomer()` sendiri: *"Transaksi &
+riwayat historis tetap utuh krn hanya menyembunyikan dari daftar
+aktif"* — niatnya nama tetap kelihatan di riwayat, implementasinya
+malah menyembunyikan.
+
+**Fix**: method baru `AppDatabase.getAllCustomerNamesIncludingInactive()`
+(select semua pelanggan TANPA filter isActive, khusus utk historical
+label lookup) — `_custNamesProvider` diarahkan ke situ, `searchCustomers()`
+sendiri TIDAK diubah (tetap benar utk dropdown pilih pelanggan aktif).
+
+**Bug ini akan muncul di DEVICE MANAPUN** yang pernah menghapus pelanggan
+yang sudah dipakai transaksi — tidak spesifik Alihkan Owner, cuma
+kebetulan baru kelihatan sekarang. Kalau ada laporan serupa lagi
+("riwayat transaksi nama pelanggan hilang/generik"), cek dulu apakah
+pelanggannya sudah di-soft-delete.
+
+Test: `test/customer_names_including_inactive_test.dart` (DB-tier: method
+baru TETAP include pelanggan inactive, beda dari `searchCustomers()`),
+`test/tx_history_deleted_customer_name_test.dart` (widget-tier: transaksi
+dgn `customerId` milik pelanggan terhapus & `customerName` null — pola
+NYATA saat pelanggan dipilih dari daftar, bukan diketik manual — tetap
+tampil nama asli, bukan fallback). Revert-verify dilakukan.
+
+## Fix: debounce scanner eksternal 300ms → 150ms (16 Juli)
+
+User lapor: scan barcode dobel cepat berturut (mis. sengaja scan 2x utk
+qty 2) kadang cuma menghasilkan 1 output. Akar masalah: `_handleBarcode`
+(`kasir_screen.dart:1126`) punya debounce anti-echo hardware utk scanner
+eksternal — barcode SAMA dalam window waktu tsb diabaikan. Window itu
+300ms (dari commit `051357b`, 27 Juni — DITAMBAHKAN sbg fix anti-duplikat
+saat itu, BUKAN diturunkan dari nilai lebih tinggi; ditelusuri via git
+log krn user tidak ingat detail persis, cuma ingat "dulu kurang
+responsif lalu di-fix" — kemungkinan besar memori itu soal pengalaman
+scan lain di rentang commit yg sama, bukan window 300ms spesifik ini).
+
+**Fix**: turunkan ke 150ms (matching konvensi debounce anti-misclick
+lain di app, mis. `AddControl`) — tetap ada jaring anti-echo, cuma
+window-nya separuh. **TIDAK BISA diverifikasi otomatis** (perilaku echo
+hardware scanner sungguhan tidak bisa disimulasikan widget test) — user
+SUDAH diberi tahu WAJIB coba manual di device asli dgn scanner fisiknya:
+(a) pastikan scan dobel cepat yg disengaja sekarang berhasil dobel, DAN
+(b) pastikan tidak muncul balik gejala lama (barcode kepencet dobel
+sendiri tanpa disengaja). **STATUS: kode sudah diubah & dipush, TAPI
+verifikasi manual user belum dikonfirmasi** — kalau sesi depan lanjut,
+tanyakan hasil tes user dulu sebelum menganggap ini selesai total (lihat
+juga PLAN.md Item 32).
+
+## Diskusi belum dieksekusi
+
+- **Item 4/5** (migrasi data Griyo POS/transaksi lama) — **DIPENDING**
+  atas permintaan user: scope migrasi ternyata bukan cuma
+  transaksi+pelanggan, tapi juga produk dll (belum dirinci). Jangan
+  mulai sebelum user re-konfirmasi scope penuh & minta lanjut.
+- **Item 35 mode "barcode saja" default-ON** & validasi jarak minimal
+  antar Tutup Buku — dibahas sbg opsional, belum diminta user.
+
+## Fitur baru: "Alihkan Owner" + "Pulihkan dari File" (16 Juli, Item 27/28)
+
+Diimplementasikan SELESAI setelah diskusi desain panjang (lihat CHANGELOG
+utk histori keputusan lengkap kalau perlu telusuri). Ringkasan final:
+
+**Format file baru `BPOT1`** (`db_export_service.dart`) — sama enkripsinya
+dgn `.berkahpos` portable (BPOP2, PBKDF2+salt acak), TAPI payload-nya JUGA
+bawa `storeUuid`/`storeKey`/`storeName` toko asal, dan itu BENAR-BENAR
+diterapkan ke device penerima (bukan cuma ekspor data). SENGAJA magic byte
+& fungsi terpisah dari `exportPortable`/BPOP2 (bukan sekadar flag) — supaya
+user tidak salah pencet backup rutin & tanpa sadar mengubah identitas
+device (lihat CHANGELOG utk analisis trade-off lengkap kenapa ini dipisah,
+bukan defaultnya diubah). `DbExportService.decrypt()` sekarang return
+record `({payload, isOwnerTransfer})`, bukan `Map` polos lagi — SEMUA
+caller lama (`backup_screen.dart`, `widget_test.dart`,
+`backup_restore_bug_test.dart`) sudah disesuaikan.
+
+**Rekey SQLCipher** (`AppDatabase.rekey()`, app_database.dart) — bagian
+PALING KRITIS & PALING BERISIKO di fitur ini. File fisik DB (`the_pos.db`,
+path TETAP sama apa pun storeKey-nya) di-encrypt pakai key yang diturunkan
+dari storeKey saat itu (`deriveDatabaseKey`, PRAGMA key). Kalau device yang
+SUDAH ada datanya menerima transfer (Opsi B — lihat di bawah), storeKey
+device itu BERGANTI ke storeKey toko baru — TANPA rekey fisik, file lama
+tetap terenkripsi key LAMA sementara device "mengira" key-nya sudah BARU,
+sehingga app TIDAK BISA BUKA DB LAGI SAMA SEKALI setelah restart (tidak
+ada jalan pulih tanpa tahu key lamanya). Urutan WAJIB:
+1. `DbExportService.restore()` — isi tabel pakai koneksi lama (key lama).
+2. `db.rekey(deriveDatabaseKey(storeKeyBaru))` — SEBELUM identitas diganti.
+3. `DeviceNotifier.joinStore(...)` — baru sekarang identitas berubah.
+Diimplementasikan di `DeviceNotifier.applyOwnerTransferInPlace()`
+(device_provider.dart) persis urutan ini. **Device BARU (belum pernah
+setup, welcome screen)** tidak butuh rekey sama sekali — file DB belum
+pernah ada, jadi key pertama yg dipakai otomatis "menempel" tanpa konflik.
+**CATATAN PENTING kalau lanjut kerjakan fitur ini**: rekey TIDAK bisa
+diverifikasi end-to-end di unit test (`NativeDatabase.memory()` test pakai
+sqlite3 polos, `PRAGMA rekey` dianggap no-op bukan SQLCipher asli) — cuma
+validasi hex input yg testable, PERILAKU ENKRIPSI FISIKNYA WAJIB dites
+manual di device/emulator sungguhan sebelum rilis (belum dilakukan sesi
+ini — TODO sebelum build APK dirilis kalau fitur ini dipakai user).
+
+**Siapa boleh jadi penerima — Opsi B dipilih user**: device MANAPUN,
+termasuk yang SUDAH aktif dipakai (kasir/asisten/owner toko lain) — bukan
+cuma device baru. Makanya ada 2 entry point terpisah pakai fungsi inti
+yang sama:
+- **Pengaturan → Alihkan Owner** (`alih_owner_screen.dart`, route
+  `/pengaturan/alih-owner`) — utk device yg SUDAH ada datanya. Bagian
+  "Buat File Alihan" (ekspor) HANYA tampil utk owner; "Terima Alihan"
+  (impor) tampil utk SEMUA role. Import di sini pakai dialog konfirmasi
+  KUAT (beda dari restore biasa) + checkbox manual "sudah pastikan
+  ter-sync" (BUKAN pengecekan otomatis — cek otomatis butuh query status
+  sync host yg kompleks, sengaja disederhanakan jadi acknowledgment
+  manual, keputusan sadar utk membatasi scope).
+- **Welcome screen → "Pulihkan dari File"** (`restore_file_screen.dart`,
+  route `/setup/pulihkan`) — utk device BARU (belum setup). Terima 2
+  jenis file: BPOT1 (identitas dari file langsung dipakai via `joinStore`
+  role owner) ATAU `.berkahpos` biasa (device bikin identitas toko BARU
+  spt "Setup Toko Baru", lalu data dari file di-restore di atasnya).
+
+**TIDAK ADA logika demosi/kill-switch device lama** (keputusan final dari
+diskusi panjang) — device yg "kalah" (tidak lagi jadi sumber data
+terbaru) dibiarkan begitu saja, sesuai kebiasaan user "hapus & setup ulang
+kalau mau dipakai lagi". Jalur sync biasa (`lan_sync_service.dart`,
+kasir/asisten ↔ owner) SUDAH DIKONFIRMASI tidak tersentuh sama sekali oleh
+fitur ini — protokol terpisah total, watermark sync (`last_sync_download_at`
+di tabel `app_settings`) otomatis ikut ke-restore/rekey krn `app_settings`
+termasuk `_allTables`.
+
+Test: `test/owner_transfer_export_test.dart` (round-trip export/decrypt
+BPOT1 vs BPOP2, restore, validasi rekey), `test/apply_owner_transfer_in_place_test.dart`
+(deviceName/deviceCode BARU diterapkan — lihat susulan di bawah,
+persist ke storage sungguhan via mock secure-storage channel),
+`test/alih_owner_screen_visibility_test.dart` (role gating),
+`test/welcome_screen_restore_button_test.dart`. Revert-verify dilakukan
+utk role-gating & penerapan deviceName/deviceCode baru. TIDAK ada widget
+test utk alur file-picker penuh (butuh mock platform channel
+`file_picker`, tidak ada preseden di codebase ini utk `backup_screen.dart`
+juga) — cukup DB-tier utk logika kritis (kripto/rekey/identitas), sesuai
+prinsip "pilih level sesuai yg disentuh".
+
+### Susulan (16 Juli, `1d09200`) — 2 bug ditemukan user via testing device ASLI
+
+User coba fitur ini di 2 device sungguhan, laporkan 2 temuan:
+
+1. **Nama/kode device ikut warisan data lama** — device eks-kasir/asisten
+   toko lain (mis. nama "Asisten", kode "K1") menerima transfer & jadi
+   Owner, TAPI nama/kode tetap "Asisten"/"K1" (bukan cuma tampilan aneh —
+   `deviceCode` dipakai sbg prefix nomor transaksi yg harus UNIK per
+   device DALAM SATU toko; kode lama bisa TABRAKAN dgn device lain yg
+   sudah pairing ke toko tujuan pakai kode yg sama). **Fix**:
+   `applyOwnerTransferInPlace()` (device_provider.dart) sekarang WAJIB
+   terima `deviceName`/`deviceCode` sbg parameter dari pemanggil (bukan
+   diam-diam pakai `state.deviceName`/`state.deviceCode` lama) —
+   `alih_owner_screen.dart` sekarang munculkan dialog "Identitas
+   Perangkat" (mirip pairing_screen.dart) SETELAH dialog konfirmasi
+   destruktif, SEBELUM benar-benar menerapkan transfer, default
+   "Owner"/"O1".
+2. **Redirect loop router** (`GoException: redirect loop detected /kasir
+   => /aktivasi => /aktivasi => /setup => /setup => /aktivasi`, screenshot
+   "Page Not Found") — muncul saat user hapus data aplikasi/install ulang.
+   Akar masalah: BUKAN disebabkan kode Alihkan Owner — bug PRE-EXISTING
+   di `app_router.dart`'s `redirect()`. Blok cek lisensi & blok cek device
+   dieksekusi berurutan tapi TIDAK saling eksklusif: begitu di-redirect ke
+   `/aktivasi` krn `license.isLocked`, blok device SETELAHNYA tetap sempat
+   jalan & redirect lagi ke `/setup` (device belum configured, bukan di
+   `/aktivasi`) — dari `/setup`, license masih locked & bukan di
+   `/aktivasi` → balik lagi ke `/aktivasi` — bolak-balik selamanya. Bisa
+   dialami SIAPA PUN yang hapus data app/install ulang (license & device
+   identity SAMA-SAMA di SharedPreferences, terhapus bareng), bukan
+   spesifik Alihkan Owner — cuma kebetulan ketahuan saat testing sesi ini.
+   **Fix**: restrukturisasi jadi `if (license.isLocked) return inAktivasi
+   ? null : '/aktivasi';` — begitu locked, blok device TIDAK PERNAH
+   dievaluasi sama sekali.
+
+Test baru: `test/router_redirect_loop_test.dart` (render `ThePosApp` penuh
+dgn license locked + device unconfigured bersamaan, pastikan menetap di
+`AktivasiScreen` bukan loop). `test/apply_owner_transfer_in_place_test.dart`
+diperbarui total (assersi lama "deviceName dipertahankan" DIBALIK jadi
+"deviceName BARU diterapkan"). Revert-verify dilakukan utk kedua fix.
+
+**STATUS AKHIR — SUDAH TERVERIFIKASI user di device asli** (setelah kedua
+fix `1d09200` di atas): device penerima yang SUDAH punya data sendiri
+(install ulang → buat toko → isi 1-2 data) menerima "Terima Alihan", lalu
+di-force-close & dibuka ulang — **TIDAK crash, semua data ter-update
+benar**. Ini membuktikan rekey SQLCipher (bagian paling berisiko di fitur
+ini) berfungsi sesuai desain di device sungguhan, bukan cuma di unit test.
+**Fitur "Alihkan Owner" + "Pulihkan dari File" (Item 27/28) SELESAI &
+TERVERIFIKASI — tidak ada pekerjaan menggantung dari fitur ini.**
+
+## Fix: poin loyalitas nyangkut di pelanggan lama (16 Juli)
+
+User lapor: transaksi umum diubah ke pelanggan terdaftar (dapat poin),
+lalu diubah BALIK ke Umum lagi — poin TETAP nempel di pelanggan lama,
+padahal transaksinya sudah tidak lagi tercatat atas namanya
+(`voidTransaction`'s reversal butuh `customerId != null`, jadi begitu
+customerId di-null-kan jalur reversal lama itu tidak bisa jalan lagi).
+
+**Fix**: method baru `AppDatabase.changeTransactionCustomer()`
+(app_database.dart) — atomic (`transaction()`), dipakai gantiin write
+mentah `customerId`/`customerName`. Logika: kalau pelanggan BERUBAH
+(bukan cuma nama tanpa ganti id) & tx sudah pernah dapat poin
+(`pointsEarned > 0`), tarik balik poin dari pelanggan LAMA dulu (ledger
+`adjust`, reset `pointsEarned` ke 0) — baru kalau pelanggan BARU bukan
+null, hitung ulang & beri poin via `awardLoyaltyPointsIfEligible` yang
+sudah ada (dari 0, otomatis dapat penuh sesuai `tx.total` kalau
+eligible). Kalau id sama persis (cuma ganti nama tampilan customer yang
+sama) → skip clawback sepenuhnya, tidak ada side-effect.
+
+**2 titik pemanggilan diperbaiki** (bug yang sama ada di 2 tempat,
+jangan asumsikan cuma 1 lokasi kalau nanti ada laporan serupa lagi):
+`receipt_screen.dart` `_saveCustomer()` DAN `tx_history_sheet.dart`
+`_editCustomer()` (dialog pelanggan dari layar riwayat transaksi,
+punya tombol "Umum" sendiri yang sebelumnya juga bypass poin sama
+sekali).
+
+Test: `test/change_transaction_customer_test.dart` (4 skenario DB-tier:
+balik ke Umum, ganti A→B, Umum→pelanggan baru, id sama/no-op).
+Revert-verify dilakukan (matikan blok clawback pakai `if (false && ...)`
+→ 2 test gagal tepat dgn pesan yg sesuai → dikembalikan, hijau lagi).
+`tx_history_sheet.dart` sendiri TIDAK dapat widget test baru (dialog
+`_TxDetail` cukup dalam nested-nya utk butuh setup harness signifikan) —
+cukup DB-tier krn wiring-nya cuma satu panggilan ke method yang sudah
+diuji, tidak ada logic baru di sisi UI.
+
+## Fix keamanan: device revoked bisa "membuka diri sendiri" (16 Juli, `fc991d2`)
+
+User (via eksperimen manual dgn `license/revoked.json`) menemukan celah:
+`LicenseNotifier.activate()` (`license_provider.dart`) sebelumnya
+unconditionally set `revoked=false` begitu **tanda tangan** kode aktivasi
+valid — TANPA pernah re-cek status revoked LIVE. Karena kode ber-
+`exp:'selamanya'` yang belum kadaluarsa tetap valid tanda tangannya
+selamanya (verifikasi stateless, tidak ada server utk "pakai sekali"),
+dan revoked status terikat ke fingerprint (bukan ke kode), device yang
+SUDAH di-revoke bisa membuka diri sendiri lagi cuma dgn re-entry kode
+lama yang SAMA di layar `/aktivasi` (semua state locked diarahkan ke
+layar yang sama, `app_router.dart:55`).
+
+**Fix**: `activate()` sekarang fetch `_fetchRevokedStatus()` (live) dulu
+sebelum membuka gerbang, pakai `shouldBlockReactivation(liveRevoked,
+cachedRevoked)` (logika murni, extracted spt `computeRevoked()`) —
+`liveRevoked ?? cachedRevoked`: kalau fetch sukses, live menang; kalau
+fetch gagal (offline), **fail-safe** — pertahankan status cache lama
+(BEDA dari `_checkRevocation()` rutin startup yang sengaja fail-open,
+supaya gangguan jaringan tidak pernah mengunci device tanpa alasan —
+di re-aktivasi kita tidak boleh sebaliknya, diam-diam membuka device yg
+sedang dicurigai revoked).
+
+Test: `test/license_service_test.dart` group baru
+`shouldBlockReactivation` (4 skenario: live-revoked, live-clear,
+fetch-gagal+cache-revoked, fetch-gagal+cache-clear). Tidak bisa test
+`activate()` end-to-end (hardcode public key produksi asli, tidak
+diinjeksi spt `verify()`) — sempat dicoba lalu dibatalkan, cukup test
+fungsi murni `shouldBlockReactivation` saja. Revert-verify dijalankan.
+
+**Sekaligus ditemukan (BELUM diperbaiki, bukan bug kode)**: file
+`license/revoked.json` di branch `main` sempat berisi JSON tidak valid
+(`"dicabut": [xxx]` — fingerprint tanpa tanda kutip string). User sudah
+konfirmasi ini akar masalah kenapa device yg di-revoke masih online
+(`_checkRevocation()` gagal parse → ketangkep catch-all silent-fail by
+design). **Status: belum jelas siapa yang perbaiki file JSON-nya** —
+saya tawarkan (push fix ke `main` sendiri, atau user edit manual via
+GitHub) tapi belum ada jawaban eksplisit. **Kalau sesi depan lanjut,
+tanyakan ke user dulu sebelum menyentuh `main`** (branch policy: jangan
+push ke branch lain tanpa izin). Kalau user lapor lagi "device revoked
+masih online", cek dulu validitas JSON file ini sebelum curiga bug kode.
+
+## Diskusi lain (sudah dijawab, tidak perlu tindakan kode)
+
+- **Hosting katalog HTML**: Cloudflare Pages/GitHub Pages direkomendasikan
+  (gratis, custom domain didukung keduanya, ~Rp150-250rb/tahun kalau mau
+  domain sendiri — pembelian domain terpisah dari hosting). REKOMENDASI:
+  repo TERPISAH dari `The-POS` (biar source code app tetap privat) kalau
+  pakai GitHub Pages (perlu repo publik utk Pages gratis) — Cloudflare
+  Pages bisa drag-drop tanpa perlu repo GitHub sama sekali. Katalog HTML
+  fully self-contained/client-side (semua interaksi via JS ter-embed,
+  klik stepper tidak pernah hit network) — TIDAK butuh Workers/KV.
+  Model: developer "upload" (overwrite file yg sama tiap harga berubah),
+  pelanggan cukup buka URL spt web biasa (bukan download file permanen ke
+  storage device, beda dari cara share-file mentah yang berlaku sekarang).
+  Kecepatan render tetap tergantung device pelanggan (sudah pernah ada bug
+  nyata: grid re-render penuh tiap klik stepper, sudah diperbaiki jadi
+  partial update).
+- **Serial/kode aktivasi bisa dipakai berulang**: BUKAN bug — verifikasi
+  Ed25519 stateless offline, tidak ada server utk tracking "sudah
+  dipakai". Kode yang sama tetap valid tanda tangannya selamanya (kalau
+  `exp:'selamanya'` & device belum di-revoke) — inherent trade-off
+  arsitektur no-cloud-backend, bukan sesuatu yang perlu "diperbaiki".
+
+## Item selesai sebelumnya (16 Juli, sesi awal — ringkas)
+- Redesign header struk (Item 7) → watermark stempel
+  (`status_watermark_stamp.dart`), `eb7da72` + follow-up bold nama produk,
+  alamat dropdown cart bar, poin loyalitas kumulatif Tambah Belanjaan.
+- Nota tempo `paid==0` boleh naikkan qty item sama di edit sheet
+  (`2ade5b5`) — sebelumnya cuma bisa kurang/hapus.
+- Detail teknis lengkap ada di CHANGELOG.md (baris tanggal yang sama).
+
+## Gotcha (ringkas, detail lengkap di CLAUDE.md §Gotcha — tidak diulang di sini)
+- HID scanner menelan input keyboard kalau `useRootNavigator: true`.
+- `TextDirection` bentrok material vs pdf — pakai `ui.TextDirection.ltr` eksplisit.
+- Teks putih tak terbaca di PDF — bungkus `Material` di dalam `Theme(data: AppTheme.light())`.
+- Font PDF/ESC-POS tidak dukung en-dash/non-ASCII.
+- `formatRupiah` pakai non-breaking space (U+00A0) — `find.text('Rp 5.000')` literal TIDAK match di widget test.
+- Drift `StreamProvider` widget test bisa hang 10 menit — WAJIB `drain()` di akhir test.
+- `OutlinedButton`/`FilledButton` default lebar-penuh — 2+ dalam 1 `Row` WAJIB override `minimumSize`, ekstra parah di dalam `AlertDialog.content` (`IntrinsicWidth`).
+- `Clipboard.getData()` TIDAK di-mock otomatis `flutter_test` — pasang mock manual atau test hang selamanya.
+- Stock ledger test: seed row butuh `createdAt` eksplisit di masa lalu (race dgn SQL-default timestamp vs `DateTime.now()` Dart-side).
+
+## Gerbang lisensi (Item 25c) — status terkini
+`LicenseService.publicKeyBase64` sudah ditanam (bukan kosong) — device
+manapun yang belum aktivasi diarahkan ke `/aktivasi`. Layar aktivasi yang
+SAMA dipakai utk semua state locked (belum aktivasi/expired/revoked/jam
+mundur) — sengaja tidak membedakan alasan. `activate()` sekarang re-cek
+revoked LIVE (lihat section fix di atas) — sebelumnya TIDAK. Detail
+histori lengkap di CHANGELOG (`0d1efe2`, `3591396`, `fc991d2`).
 
 ## Lingkungan sesi ini
-Flutter di `/tmp/flutter` (bukan `/opt/flutter` yg disebut CLAUDE.md — cek
-`which flutter` dulu kalau command CLAUDE.md gagal). Android SDK TIDAK ADA
-(`ANDROID_HOME` kosong) — perubahan Kotlin/Gradle cuma ditinjau manual,
-verifikasi riil lewat CI. Jalan sbg root menghasilkan warning "Woah!..."
+Flutter di `/opt/flutter`. Jalan sbg root menghasilkan warning "Woah!..."
 yang tidak menggagalkan perintah, aman diabaikan.
 
 ## Menggantung / Kandidat Berikutnya
-- **Item 13 lama (katalog HTML "belum identik" UI app) — kemungkinan
-  TERJAWAB** lewat redesain modal tap-item follow-up round #2 (user kirim
-  screenshot referensi app kasir asli, sudah ditindaklanjuti — lihat
-  section follow-up di atas). Belum ada konfirmasi eksplisit user bahwa
-  ini SUDAH cukup — kalau ada laporan susulan soal visual katalog HTML,
-  lanjutkan dari situ, bukan dari nol.
-- **Scan pesanan pegawai via HID — fix BELUM dikonfirmasi di hardware
-  fisik** (lihat detail follow-up #3 di atas) — kalau user lapor masih
-  gagal setelah fix ini, kemungkinan scanner itu juga tidak kirim Enter
-  di akhir SELURUH payload, minta detail/log lebih lanjut sebelum coba
-  fix lain.
-- **Item 23 sisa** (`printer_service.dart printReceipt` tunggal,
-  `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
-  Hutang, Tutup Kasir "kas sistem" overstated) — lihat PLAN.md.
-- **Item 21+17** (sync UI persisten lintas tab + persist antrian approval)
-  — masih sengaja ditunda dari sesi-sesi sebelumnya.
-- **Item 3c/4/5** (import data toko lama dari dataset Griyo POS) — lihat
-  PLAN.md, menunggu keputusan/data lanjutan dari user.
-- **Crash Infinix Smart 8 — tinggal konfirmasi user** (lihat section di atas).
-- **25c (gerbang lisensi)** — tunggu developer generate keypair + putuskan
-  nomor WA (lihat section di atas).
+1. Item lama yang masih terbuka: lihat PLAN.md (Item 23 sisa, Item 17+21 sync, Item 3c/4/5 import data Griyo).
 
 ## Preferensi User (masih berlaku)
 - Bahasa komunikasi & teks UI: Indonesia.
-- Untuk fitur bervisual: usulkan opsi desain dulu sebelum implementasi.
-- Untuk bug: laporkan dulu contoh kasus + severity, baru eksekusi.
-- Untuk fitur baru berisiko/besar: diskusikan cakupan dulu, eksekusi
-  setelah instruksi eksplisit ("eksekusi semua"/konfirmasi serupa/"Execute!").
-- **User sering mengoreksi/menyederhanakan scope lewat pertanyaan tajam** —
-  jangan buru-buru eksekusi desain awal kalau user masih mengajukan
-  pertanyaan klarifikasi/skeptis, itu sinyal scope akan berubah.
-- **Batch besar berisi item ambigu + jelas dicampur**: user OK item jelas
-  langsung dieksekusi tanpa PLAN.md, TAPI item genuinely ambigu tetap harus
-  diklarifikasi dulu (lihat pola `AskUserQuestion` batch sesi ini) —
-  jangan asumsikan sepihak keputusan desain yang punya >1 opsi masuk akal.
-- **User melaporkan bug dgn observasi presisi** (termasuk screenshot) —
-  baca laporan kata per kata, biasanya sudah menunjuk lokasi/skenario
-  presisi; screenshot bisa membongkar bug LAIN yang belum dilaporkan
-  eksplisit (lihat bug nota gabungan sesi ini, ditemukan dari screenshot
-  yang awalnya cuma utk melaporkan item 9).
-- Rencana yang didiskusikan tapi belum dieksekusi → masuk PLAN.md
-  komprehensif, jangan cuma tersimpan di riwayat chat.
-- Perubahan sensitif/berisiko (mis. aspek security) — tunda eksekusi
-  sampai instruksi eksplisit terpisah.
-- Untuk perubahan kecil yang jelas (tidak ambigu) — user eksplisit minta
-  langsung eksekusi + merge ke main tanpa menunggu konfirmasi tambahan.
+- Untuk fitur bervisual: usulkan opsi desain dulu (mockup/Artifact) sebelum implementasi.
+- Untuk batch besar berisi item ambigu + jelas dicampur: minta opini dulu,
+  lalu beri keputusan spesifik per-poin — item yg jelas dieksekusi
+  langsung, item ambigu didiskusikan/plan dulu (task manager, bukan
+  otomatis PLAN.md kalau user secara eksplisit minta ditahan).
+- Setiap regresi/bugfix WAJIB revert-verify (buktikan test gagal dulu
+  sebelum fix, baru pasang lagi) — sudah konsisten dijalankan sesi ini.

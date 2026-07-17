@@ -19,6 +19,7 @@ import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/widgets/item_count_badge.dart';
+import '../../core/widgets/status_watermark_stamp.dart';
 import 'widgets/debt_payment_dialog.dart';
 import 'widgets/tx_history_sheet.dart';
 
@@ -261,7 +262,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: isVariant ? 12 : 13,
-                  fontWeight: isVariant ? FontWeight.w400 : FontWeight.w500,
+                  fontWeight: isVariant ? FontWeight.w500 : FontWeight.w700,
                   decoration: checked ? TextDecoration.lineThrough : null,
                   color: checked
                       ? scheme.onSurfaceVariant
@@ -434,10 +435,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline),
-                      // Sengaja TIDAK bisa melebihi qty asli — cuma
-                      // kurangi/hapus, bukan tambah barang baru (itu sudah
-                      // ada jalur "Tambah Belanjaan" terpisah).
-                      onPressed: qty >= item.qty
+                      // Kalau nota SUDAH ada pembayaran (paid > 0), sengaja
+                      // TIDAK bisa melebihi qty asli — cuma kurangi/hapus,
+                      // bukan tambah barang baru (itu sudah ada jalur
+                      // "Tambah Belanjaan" terpisah). Khusus nota yang
+                      // BELUM ada pembayaran sama sekali (paid == 0), qty
+                      // boleh dinaikkan bebas — tidak ada risiko rekonsiliasi
+                      // pembayaran krn memang belum ada uang masuk.
+                      onPressed: (_tx!.paid > 0 && qty >= item.qty)
                           ? null
                           : () => setSheet(() => qty += 1),
                     ),
@@ -702,12 +707,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _saveCustomer({String? name, String? id}) async {
     final db = ref.read(databaseProvider);
-    await (db.update(db.transactions)
-          ..where((t) => t.id.equals(widget.transactionId)))
-        .write(TransactionsCompanion(
-      customerName: Value(name),
-      customerId: Value(id),
-    ));
+    // `changeTransactionCustomer` menangani poin loyalitas otomatis: kalau
+    // pelanggan LAMA sudah dapat poin & pelanggan berubah (termasuk balik
+    // ke Umum, id == null), poin lama ditarik balik dulu sebelum pelanggan
+    // BARU (kalau ada) dihitung ulang & diberi poin dari 0.
+    await db.changeTransactionCustomer(
+      txId: widget.transactionId,
+      newCustomerId: id,
+      newCustomerName: name,
+    );
     Customer? customer;
     if (id != null) {
       customer = await (db.select(db.customers)..where((t) => t.id.equals(id)))
@@ -971,10 +979,25 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 size: 14, color: scheme.onSurfaceVariant),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(c.name,
-                                  style: const TextStyle(fontSize: 12),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(c.name,
+                                      style: const TextStyle(fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                  // Alamat di bawah nama — disambiguasi
+                                  // pelanggan dengan nama sama.
+                                  if ((c.address ?? '').trim().isNotEmpty)
+                                    Text(c.address!.trim(),
+                                        style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: scheme.onSurfaceVariant),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -1561,60 +1584,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Status header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isKurangBayar
-                  ? scheme.errorContainer
-                  : scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isKurangBayar
-                      ? Icons.warning_amber_rounded
-                      : Icons.check_circle_outline,
-                  color: isKurangBayar
-                      ? scheme.onErrorContainer
-                      : scheme.onPrimaryContainer,
-                  size: 32,
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isKurangBayar
-                          ? (tx.status == 'tempo'
-                              ? 'Transaksi Tempo'
-                              : 'Kurang Bayar')
-                          : 'Transaksi Berhasil',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: isKurangBayar
-                                ? scheme.onErrorContainer
-                                : scheme.onPrimaryContainer,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    Text(
-                      tx.localId,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: (isKurangBayar
-                                ? scheme.onErrorContainer
-                                : scheme.onPrimaryContainer)
-                            .withOpacity(0.7),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
           // Struk header — desain cermin dari nota cetak
           Card(
             clipBehavior: Clip.antiAlias,
@@ -1799,12 +1768,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ),
           const SizedBox(height: 8),
 
-          // Verifikasi serah-terima barang
+          // Verifikasi serah-terima barang — kontrol kecil bergaya lingkaran
+          // solid, persis ItemCountBadge (cuma warna hijau) sesuai desain
+          // final yang disepakati user (PLAN.md Item 29).
           if (_items.isNotEmpty)
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () {
+              child: GestureDetector(
+                onTap: () {
                   setState(() {
                     final target = !_allChecked;
                     for (final i in _items) {
@@ -1813,10 +1784,29 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   });
                   unawaited(_persistChecked());
                 },
-                icon: Icon(_allChecked ? Icons.remove_done : Icons.done_all,
-                    size: 18),
-                label: Text(_allChecked ? 'Hapus Tanda' : 'Tandai Semua',
-                    style: const TextStyle(fontSize: 12)),
+                child: Tooltip(
+                  message: _allChecked ? 'Hapus Tanda' : 'Tandai Semua',
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: AppTheme.payGreen,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.payGreen.withOpacity(0.30),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      _allChecked ? Icons.remove_done : Icons.done_all,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ),
               ),
             ),
 
@@ -1830,9 +1820,42 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               Card(
                 child: Column(
                   children: [
-                    ..._buildItemRows(scheme,
-                        showProfit: device.canSeeReports && _showProfit,
-                        editable: isKurangBayar && !isVoid),
+                    // Watermark status Lunas/Tempo — SAMAR, di BELAKANG baris
+                    // item (bukan elemen mengambang di sudut) supaya nama &
+                    // harga produk tidak pernah tertutup apapun panjang
+                    // daftarnya. Desain final PLAN.md Item 29.
+                    if (!isVoid)
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // TIDAK dibungkus Positioned.fill — itu memaksa
+                          // tinggi watermark mengikuti tinggi Stack (bisa
+                          // sependek 1 baris item), bikin teks 3-baris di
+                          // dalamnya overflow. Sbg child non-positioned,
+                          // watermark cuma dapat batas lebar dari Stack &
+                          // bebas menentukan tinggi alaminya sendiri.
+                          FractionallySizedBox(
+                            widthFactor: 0.46,
+                            child: StatusWatermarkStamp(
+                              label: isKurangBayar ? 'TEMPO' : 'LUNAS',
+                              serial: tx.localId,
+                              color: isKurangBayar
+                                  ? scheme.error
+                                  : AppTheme.payGreen,
+                            ),
+                          ),
+                          Column(
+                            children: _buildItemRows(scheme,
+                                showProfit:
+                                    device.canSeeReports && _showProfit,
+                                editable: isKurangBayar && !isVoid),
+                          ),
+                        ],
+                      )
+                    else
+                      ..._buildItemRows(scheme,
+                          showProfit: device.canSeeReports && _showProfit,
+                          editable: isKurangBayar && !isVoid),
                     const Divider(height: 1),
                     Padding(
                       padding: const EdgeInsets.all(16),
@@ -1986,11 +2009,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ],
               ),
             ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => context.go('/kasir'),
-            child: const Text('Transaksi Baru'),
-          ),
           const SizedBox(height: 20),
         ],
       ),

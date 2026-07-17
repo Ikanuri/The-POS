@@ -9,6 +9,7 @@ import '../../features/kasir/receipt_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
+import '../../features/pengaturan/alih_owner_screen.dart';
 import '../../features/pengaturan/arsip_screen.dart';
 import '../../features/pengaturan/backup_screen.dart';
 import '../../features/pengaturan/crash_log_screen.dart';
@@ -27,6 +28,7 @@ import '../../features/pengaturan/store_info_screen.dart';
 import '../../features/pengaturan/sync_screen.dart';
 import '../../features/pengaturan/tutup_buku_screen.dart';
 import '../services/price_match_service.dart';
+import '../../features/produk/cek_stok_screen.dart';
 import '../../features/produk/price_preview_screen.dart';
 import '../../features/produk/price_sync_screen.dart';
 import '../../features/produk/product_group_screen.dart';
@@ -35,6 +37,7 @@ import '../../features/produk/produk_form_screen.dart';
 import '../../features/produk/produk_list_screen.dart';
 import '../../features/ringkasan/ringkasan_screen.dart';
 import '../../features/setup/pairing_screen.dart';
+import '../../features/setup/restore_file_screen.dart';
 import '../../features/setup/setup_toko_screen.dart';
 import '../../features/setup/welcome_screen.dart';
 import '../../features/shell/main_shell.dart';
@@ -45,15 +48,22 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/kasir',
     redirect: (context, state) {
-      // Item 25c — gerbang lisensi diperiksa PALING AWAL, bahkan sebelum
-      // /setup (copy salinan tanpa izin tidak boleh sempat sampai ke
-      // setup toko sama sekali). Kalau public key belum ditanam
-      // (LicenseService.isConfigured == false), isLocked selalu false —
-      // gerbang ini nonaktif total, tidak memengaruhi siapa pun.
+      // Item 25c — gerbang lisensi diperiksa PALING AWAL & EKSKLUSIF: kalau
+      // locked, SELALU resolve ke /aktivasi, titik — blok device di bawah
+      // TIDAK PERNAH dievaluasi selama locked. Susulan (bug ditemukan user
+      // via testing device asli, "hapus data aplikasi/install ulang"):
+      // sebelumnya kedua blok (lisensi & device) dieksekusi berurutan tapi
+      // TIDAK saling eksklusif — begitu redirect ke /aktivasi krn locked,
+      // blok device di bawah tetap sempat jalan & melihat device belum
+      // configured (bukan di /setup) → redirect ke /setup; dari /setup
+      // ternyata masih locked & bukan di /aktivasi → balik lagi ke
+      // /aktivasi — bolak-balik selamanya (GoException: redirect loop).
+      // Kondisi pemicunya realistis: SharedPreferences (tempat license &
+      // device identity SAMA-SAMA disimpan) terhapus bersamaan.
       final license = ref.read(licenseProvider);
       final inAktivasi = state.matchedLocation.startsWith('/aktivasi');
-      if (license.isLocked && !inAktivasi) return '/aktivasi';
-      if (!license.isLocked && inAktivasi) return '/kasir';
+      if (license.isLocked) return inAktivasi ? null : '/aktivasi';
+      if (inAktivasi) return '/kasir';
 
       final device = ref.read(deviceProvider);
       final inSetup = state.matchedLocation.startsWith('/setup');
@@ -75,6 +85,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: 'baru', builder: (_, __) => const SetupTokoScreen()),
           GoRoute(path: 'gabung', builder: (_, __) => const PairingScreen()),
+          GoRoute(
+              path: 'pulihkan',
+              builder: (_, __) => const RestoreFileScreen()),
         ],
       ),
       ShellRoute(
@@ -141,6 +154,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ],
               ),
               GoRoute(
+                path: 'cek-stok',
+                builder: (_, state) =>
+                    CekStokScreen(initialGroupId: state.extra as int?),
+              ),
+              GoRoute(
                 path: ':id',
                 builder: (_, state) =>
                     ProdukFormScreen(productId: state.pathParameters['id']),
@@ -191,6 +209,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'pair', builder: (_, __) => const PairDeviceScreen()),
               GoRoute(path: 'sync', builder: (_, __) => const SyncScreen()),
               GoRoute(path: 'backup', builder: (_, __) => const BackupScreen()),
+              GoRoute(
+                  path: 'alih-owner',
+                  builder: (_, __) => const AlihOwnerScreen()),
               GoRoute(
                   path: 'printer', builder: (_, __) => const PrinterScreen()),
               GoRoute(

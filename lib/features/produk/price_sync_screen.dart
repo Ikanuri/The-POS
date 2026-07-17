@@ -29,6 +29,11 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
   final _codeCtrl = TextEditingController();
   bool _fetching = false;
 
+  // Item 35(opsional) — mode "sinkron via barcode saja": lewati SKU/fuzzy
+  // sepenuhnya. Berguna kalau kode produk (SKU) toko sumber tidak bisa
+  // dipercaya (mis. diisi nama satuan "Dos"/"Pak", lihat PLAN.md Item 35).
+  bool _barcodeOnly = false;
+
   @override
   void dispose() {
     PriceSyncService.stopHost();
@@ -85,7 +90,8 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
         return;
       }
       final db = ref.read(databaseProvider);
-      final result = await PriceMatchService.match(db: db, catalog: catalog);
+      final result = await PriceMatchService.match(
+          db: db, catalog: catalog, barcodeOnly: _barcodeOnly);
       if (!mounted) return;
       context.push('/produk/sinkron-harga/preview', extra: result);
     } catch (e) {
@@ -117,7 +123,8 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
 
       if (!mounted) return;
       final db = ref.read(databaseProvider);
-      final result = await PriceMatchService.match(db: db, catalog: catalog);
+      final result = await PriceMatchService.match(
+          db: db, catalog: catalog, barcodeOnly: _barcodeOnly);
       if (!mounted) return;
       context.push('/produk/sinkron-harga/preview', extra: result);
     } catch (e) {
@@ -323,6 +330,22 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
                           ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Mode barcode-saja (Item 35 opsional) ──
+                Card(
+                  child: SwitchListTile(
+                    value: _barcodeOnly,
+                    onChanged: (v) => setState(() => _barcodeOnly = v),
+                    title: const Text('Sinkron via barcode saja'),
+                    subtitle: const Text(
+                        'Lewati pencocokan kode produk (SKU) & nama mirip — '
+                        'hanya cocokkan lewat barcode. Aman dipakai kalau '
+                        'kode produk toko sumber tidak bisa dipercaya.',
+                        style: TextStyle(fontSize: 12)),
+                    dense: true,
                   ),
                 ),
                 const SizedBox(height: 12),

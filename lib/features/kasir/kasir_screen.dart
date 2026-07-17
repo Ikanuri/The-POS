@@ -55,10 +55,17 @@ class _ScanToast {
   final String productUnitId;
   final String productName;
   final String unitName;
-  int qty;
+  double qty;
   final int price;
   Timer? timer;
 }
+
+/// Sama seperti label `AddControl` — tampilkan bulat tanpa desimal kalau
+/// memang bulat (mis. "2"), tapi TIDAK dibulatkan kalau desimal (mis.
+/// "0.25") — dulu toast scan memakai `.round()` sebelum sampai di sini,
+/// membuat qty pecahan (produk timbang) hilang jadi "0".
+String _fmtToastQty(double qty) =>
+    qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
 
 /// Kartu toast melayang di atas kamera scanner. Tombol ± identik gaya keranjang.
 class _ScanToastCard extends StatelessWidget {
@@ -104,9 +111,12 @@ class _ScanToastCard extends StatelessWidget {
               visualDensity: VisualDensity.compact,
               onPressed: onDec,
             ),
-            SizedBox(
-              width: 28,
-              child: Text('${toast.qty}',
+            ConstrainedBox(
+              // minWidth (bukan width tetap) — angka pecahan (mis. "1.25",
+              // produk timbang) lebih panjang dari 1-2 digit biasa, lebar
+              // tetap dulu bikin RenderFlex Row ini overflow.
+              constraints: const BoxConstraints(minWidth: 28),
+              child: Text(_fmtToastQty(toast.qty),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 16)),
@@ -1116,10 +1126,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   Future<void> _handleBarcode(String barcode,
       {bool fromExternal = false}) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    // Debounce lebih pendek untuk scanner eksternal (300 ms, cukup untuk
-    // mencegah echo hardware) agar scan berturut produk sama responsif.
+    // Debounce lebih pendek untuk scanner eksternal (150 ms — diturunkan
+    // dari 300ms krn user lapor scan dobel cepat yg disengaja/qty 2 ikut
+    // ke-drop; 300ms terlalu lama utk scanner yg cukup cepat) agar scan
+    // berturut produk sama tetap responsif TAPI masih ada jaring anti-echo
+    // hardware. TIDAK bisa diverifikasi otomatis di sini (perilaku echo
+    // scanner sungguhan tidak bisa disimulasikan widget test) — WAJIB
+    // dicoba manual di device asli dgn scanner fisik sebelum dianggap
+    // beres (lihat PLAN.md Item 32).
     // Kamera tetap 1.5 s karena barcode bisa terus terdeteksi selama terlihat.
-    final debounceMs = fromExternal ? 300 : 1500;
+    final debounceMs = fromExternal ? 150 : 1500;
     if (barcode == _lastScan && nowMs - _lastScanMs < debounceMs) return;
     _lastScan = barcode;
     _lastScanMs = nowMs;
@@ -1189,8 +1205,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         break;
       }
     }
-    final newQty =
-        inCart == null ? 0 : notifier.effectiveQtyFor(inCart).round();
+    final newQty = inCart == null ? 0.0 : notifier.effectiveQtyFor(inCart);
     _showOrUpdateToast(item, newQty);
   }
 
@@ -1298,7 +1313,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     if (mounted && ref.read(cartProvider(_cartId)).isNotEmpty) _openCartSheet();
   }
 
-  void _showOrUpdateToast(CartItem item, int qty) {
+  void _showOrUpdateToast(CartItem item, double qty) {
     _activeToast?.timer?.cancel();
     final toast = _ScanToast(
       productUnitId: item.productUnitId,
@@ -2181,7 +2196,9 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                                     children: [
                                       _TbBtn(
                                           icon: Icons.qr_code_scanner_rounded,
-                                          onTap: widget.onScan),
+                                          onTap: widget.onScan,
+                                          fg: AppTheme.scanFg,
+                                          bg: AppTheme.scanBg),
                                       if (widget.showQueueAndHistory) ...[
                                         const SizedBox(width: 4),
                                         _TbBtn(
@@ -2190,12 +2207,16 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                                           onTap: widget.onHeld,
                                           badgeCount: widget.heldCount,
                                           label: 'Antrian',
+                                          fg: AppTheme.antrianFg,
+                                          bg: AppTheme.antrianBg,
                                         ),
                                         const SizedBox(width: 4),
                                         _TbBtn(
                                           icon: Icons.history_rounded,
                                           onTap: widget.onHistory,
                                           label: 'Riwayat\nTransaksi',
+                                          fg: AppTheme.riwayatFg,
+                                          bg: AppTheme.riwayatBg,
                                         ),
                                       ],
                                       const SizedBox(width: 4),
@@ -2211,6 +2232,8 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                                           icon: Icons.content_paste_go_rounded,
                                           onTap: widget.onPasteOrder!,
                                           label: 'Tempel\nPesanan',
+                                          fg: AppTheme.tempelFg,
+                                          bg: AppTheme.tempelBg,
                                         ),
                                       ],
                                     ],
@@ -2288,6 +2311,8 @@ class _TbBtn extends StatelessWidget {
     required this.onTap,
     this.badgeCount = 0,
     this.label,
+    this.fg,
+    this.bg,
   });
 
   final IconData icon;
@@ -2298,15 +2323,23 @@ class _TbBtn extends StatelessWidget {
   /// untuk memaksa dua baris. Lebar dibatasi agar tidak menabrak tombol lain.
   final String? label;
 
+  /// Item 33 — aksen soft per-fungsi (mis. `AppTheme.scanFg`/`scanBg`).
+  /// Null = netral (dipakai grid/list toggle, murni preferensi tampilan).
+  final Color Function(bool isDark)? fg;
+  final Color Function(bool isDark)? bg;
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final child = Icon(icon, size: 18, color: cs.onSurfaceVariant);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = fg?.call(isDark) ?? cs.onSurfaceVariant;
+    final bgColor = bg?.call(isDark) ?? cs.surface;
+    final child = Icon(icon, size: 18, color: iconColor);
     final box = Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: cs.surface,
+        color: bgColor,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: cs.outlineVariant, width: 0.75),
       ),

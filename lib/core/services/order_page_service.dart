@@ -37,6 +37,7 @@ class OrderPageService {
     required AppDatabase db,
     required String storeName,
     String storeWhatsapp = '',
+    bool waDirect = true,
   }) async {
     final catalog = await _buildCatalogJson(db);
     final generatedAt = _formatGeneratedAt(DateTime.now());
@@ -47,6 +48,12 @@ class OrderPageService {
       'store': nameOrDefault,
       'generatedAt': generatedAt,
       'waNumber': waDigits,
+      // Item 12 — toggle dari Pengaturan: true = deep-link langsung ke nomor
+      // WA toko (`wa.me/<nomor>`); false = share WA generik (pelanggan
+      // pilih sendiri kontak tujuan, mis. lupa nomor toko atau mau simpan
+      // draft dulu). Kontrol ada di POS (order_share_screen.dart), bukan
+      // hardcoded.
+      'waDirect': waDirect,
       'machinePrefix': machineCodePrefix,
       'products': catalog,
     });
@@ -68,6 +75,26 @@ class OrderPageService {
     final priceService = PriceService(db);
     final unitTypes = await db.getAllUnitTypes();
     final typeNameById = {for (final u in unitTypes) u.id: u.name};
+
+    // Item 29 — selain flag manual `markedOutOfStock`, katalog JUGA baca
+    // stok riil kalau toko TIDAK mengizinkan stok minus (toggle "Izinkan
+    // Stok Minus" OFF) — supaya kasir yg lupa tandai manual tidak sampai
+    // menampilkan produk yg stok sistemnya sudah 0/minus. 1 query agregat
+    // (bukan N+1 per produk); toggle ON = auto-check ini DILEWATI (konsisten
+    // dgn kasir yg boleh jual minus saat toggle ON).
+    final allowNegativeStock =
+        (await db.getSetting('allow_negative_stock')) == '1';
+    final realStockByProductId =
+        allowNegativeStock ? const <String, double>{} : await db.getBaseUnitRealStock();
+
+    bool isRealOutOfStock(String productId) {
+      if (allowNegativeStock) return false;
+      final stock = realStockByProductId[productId];
+      // Produk non-stok/tanpa satuan dasar dilacak tidak ada di map —
+      // tidak berlaku ambang stok riil, hanya flag manual yang dipakai.
+      if (stock == null) return false;
+      return stock <= 0;
+    }
 
     // Semua satuan berharga valid milik SATU produk (bukan cuma satuan
     // dasar) — mis. "Sedap Goreng" bisa punya Biji (dasar) DAN Dus, dua
@@ -134,9 +161,10 @@ class OrderPageService {
         'price': base['price'],
         'units': unitsOut,
         'variants': variantsOut,
-        // Item 25a — tanda cepat "stok habis" manual (bukan sistem stok
-        // resmi). Katalog HTML statis: tombol tambah dinonaktifkan + badge.
-        'outOfStock': p.markedOutOfStock,
+        // Item 25a (flag manual) ATAU Item 29 (stok riil ≤0 saat toggle
+        // "Izinkan Stok Minus" OFF) — Katalog HTML statis: tombol tambah
+        // dinonaktifkan + badge kalau salah satu true.
+        'outOfStock': p.markedOutOfStock || isRealOutOfStock(p.id),
       });
     }
     return out;
@@ -676,7 +704,14 @@ function buildProwControls(p){
     var main = document.createElement('button');
     main.type = 'button';
     main.className = 'prow-circle prow-circle-qty';
-    main.textContent = fmtQty(qty);
+    var qtyLabel = fmtQty(qty);
+    main.textContent = qtyLabel;
+    // Lingkaran tetap bulat (bukan pill) — utk qty desimal (mis. "0.25",
+    // produk timbang) yang lebih panjang dari 1-2 digit biasa, susutkan
+    // font-nya secara proporsional supaya tetap muat, bukan meluber.
+    if (qtyLabel.length > 2) {
+      main.style.fontSize = (16 * (2 / qtyLabel.length)) + 'px';
+    }
     main.addEventListener('click', function(){ prowQuickAdd(p); });
     wrap.appendChild(minus);
     wrap.appendChild(main);
@@ -961,7 +996,11 @@ document.getElementById('waBtn').addEventListener('click', function(){
   var text = buildOrderText();
   copyText(text);
   var num = (DATA.waNumber || '').replace(/[^0-9]/g, '');
-  var url = 'https://wa.me/' + num + '?text=' + encodeURIComponent(text);
+  // Item 12 — direct: deep-link ke nomor WA toko. Non-direct: share WA
+  // generik (tanpa nomor tujuan), pelanggan pilih sendiri kontaknya.
+  var url = (DATA.waDirect && num)
+    ? ('https://wa.me/' + num + '?text=' + encodeURIComponent(text))
+    : ('https://api.whatsapp.com/send?text=' + encodeURIComponent(text));
   showToast('Teks pesanan disalin — tempel bila perlu');
   window.open(url, '_blank');
 });

@@ -16,9 +16,13 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
     with InlineBannerStateMixin<TutupBukuScreen> {
   bool _loading = true;
   bool _busy = false;
-  List<int> _archivedYears = [];
-  int _currentYear = DateTime.now().year;
-  String? _lastArchiveYear;
+  List<ArchiveManifestEntry> _archives = [];
+
+  /// Item 31 — awal periode berikutnya, otomatis dari tutup buku TERAKHIR
+  /// (`last_archive_date`) atau transaksi paling lama (kalau belum pernah
+  /// tutup buku). Null kalau database belum punya transaksi sama sekali.
+  DateTime? _suggestedStart;
+  int _pendingTxCount = 0;
 
   @override
   void initState() {
@@ -29,19 +33,56 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
   Future<void> _load() async {
     setState(() => _loading = true);
     final db = ref.read(databaseProvider);
-    final years = await TutupBukuService.listArchivedYears();
-    final last = await db.getSetting('last_archive_year');
+    final archives = await TutupBukuService.listArchiveEntries(db);
+    final suggestedStart = await TutupBukuService.suggestPeriodStart(db);
+    var pendingCount = 0;
+    if (suggestedStart != null) {
+      final row = await db.customSelect(
+        'SELECT COUNT(*) AS cnt FROM transactions WHERE created_at >= '
+        '${suggestedStart.millisecondsSinceEpoch ~/ 1000}',
+      ).getSingle();
+      pendingCount = (row.data['cnt'] as int?) ?? 0;
+    }
     if (mounted) {
       setState(() {
-        _archivedYears = years;
-        _lastArchiveYear = last;
-        _currentYear = DateTime.now().year;
+        _archives = archives;
+        _suggestedStart = suggestedStart;
+        _pendingTxCount = pendingCount;
         _loading = false;
       });
     }
   }
 
-  Future<void> _startTutupBuku(int year) async {
+  String _fmtDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  Future<void> _pickPeriodEndAndStart() async {
+    final start = _suggestedStart;
+    if (start == null) {
+      showError('Belum ada transaksi sama sekali — tidak ada yang perlu '
+          'ditutup buku.');
+      return;
+    }
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: start,
+      lastDate: DateTime.now(),
+      helpText: 'Pilih tanggal akhir periode (mis. tanggal Hari Raya)',
+    );
+    if (picked == null || !mounted) return;
+    await _startTutupBuku(periodStart: start, periodEnd: picked);
+  }
+
+  Future<void> _startTutupBuku({
+    required DateTime periodStart,
+    required DateTime periodEnd,
+  }) async {
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
 
@@ -50,14 +91,15 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: Text('Tutup Buku $year'),
+        title: Text('Tutup Buku ${periodEnd.year}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Semua transaksi tahun $year akan dipindahkan ke file arsip '
-              'archive_$year.db di perangkat ini.',
+              'Semua transaksi dari ${_fmtDate(periodStart)} s/d '
+              '${_fmtDate(periodEnd)} akan dipindahkan ke file arsip '
+              'archive_${periodEnd.year}.db di perangkat ini.',
             ),
             const SizedBox(height: 12),
             const _WarningItem(
@@ -66,9 +108,9 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
             const _WarningItem(
                 icon: Icons.inventory_2_outlined,
                 text: 'Data produk, pelanggan, dan pengaturan tetap utuh.'),
-            _WarningItem(
+            const _WarningItem(
                 icon: Icons.sync_disabled_outlined,
-                text: 'Transaksi tahun $year tidak akan tersedia di laporan '
+                text: 'Transaksi periode ini tidak akan tersedia di laporan '
                     'utama setelah tutup buku.'),
             const _WarningItem(
                 icon: Icons.warning_amber_rounded,
@@ -100,7 +142,11 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
 
     setState(() => _busy = true);
     try {
-      final result = await TutupBukuService.execute(db: db, year: year);
+      final result = await TutupBukuService.execute(
+        db: db,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+      );
       if (!mounted) return;
       await showDialog(
         context: context,
@@ -110,7 +156,8 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Tahun ${result.archivedYear} berhasil diarsipkan.'),
+              Text('Periode ${_fmtDate(result.periodStart)} – '
+                  '${_fmtDate(result.periodEnd)} berhasil diarsipkan.'),
               const SizedBox(height: 8),
               Text(
                   '${result.txArchived} transaksi dipindahkan ke arsip.'),
@@ -143,8 +190,6 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final prevYear = _currentYear - 1;
-    final alreadyArchived = _archivedYears.contains(prevYear);
 
     return Scaffold(
       appBar: AppBar(
@@ -188,11 +233,13 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
                             ]),
                             const SizedBox(height: 8),
                             const Text(
-                              'Tutup buku memindahkan semua transaksi satu tahun '
-                              'ke file arsip terpisah. Database utama menjadi lebih '
-                              'ramping dan tetap responsif.\n\n'
-                              'Data arsip dapat dibuka kembali di menu Buka Arsip '
-                              'untuk melihat laporan tahun lama.',
+                              'Tutup buku memindahkan transaksi satu periode '
+                              '(sekali per tahun, tanggal akhir bisa custom — '
+                              'mis. ikut Hari Raya) ke file arsip terpisah. '
+                              'Database utama menjadi lebih ramping dan tetap '
+                              'responsif.\n\n'
+                              'Data arsip dapat dibuka kembali di menu Buka '
+                              'Arsip untuk melihat laporan periode lama.',
                               style: TextStyle(fontSize: 13),
                             ),
                           ],
@@ -201,9 +248,8 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // Tutup buku tahun sebelumnya
                     Text(
-                      'TAHUN BERJALAN',
+                      'PERIODE BERJALAN',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                           fontWeight: FontWeight.w700,
@@ -213,61 +259,34 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
                     Card(
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: scheme.primaryContainer,
-                          child: Text(
-                            '$_currentYear',
-                            style: TextStyle(
-                                color: scheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13),
-                          ),
+                          backgroundColor: scheme.errorContainer,
+                          child: Icon(Icons.archive_outlined,
+                              color: scheme.onErrorContainer, size: 20),
                         ),
-                        title: Text('Tahun $_currentYear'),
-                        subtitle: const Text('Tahun berjalan — belum bisa ditutup'),
-                        trailing: Icon(Icons.lock_clock_outlined,
-                            color: scheme.outline),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Card(
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: alreadyArchived
-                              ? scheme.surfaceContainerHighest
-                              : scheme.errorContainer,
-                          child: Icon(
-                            alreadyArchived
-                                ? Icons.check_circle_outline
-                                : Icons.archive_outlined,
-                            color: alreadyArchived
-                                ? scheme.onSurfaceVariant
-                                : scheme.onErrorContainer,
-                            size: 20,
+                        title: _suggestedStart == null
+                            ? const Text('Belum ada transaksi')
+                            : Text(
+                                'Sejak ${_fmtDate(_suggestedStart!)}, '
+                                '$_pendingTxCount transaksi belum diarsip'),
+                        subtitle: const Text(
+                            'Pilih tanggal akhir periode (mis. Hari Raya) '
+                            'utk tutup buku'),
+                        trailing: FilledButton.tonal(
+                          style: FilledButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 14),
+                            minimumSize: const Size(0, 36),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
+                          onPressed: (_busy || _suggestedStart == null)
+                              ? null
+                              : _pickPeriodEndAndStart,
+                          child: const Text('Pilih Tanggal'),
                         ),
-                        title: Text('Tutup Buku $prevYear'),
-                        subtitle: Text(alreadyArchived
-                            ? 'Sudah diarsipkan'
-                            : 'Pindahkan semua transaksi $prevYear ke arsip'),
-                        trailing: alreadyArchived
-                            ? null
-                            : FilledButton.tonal(
-                                style: FilledButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14),
-                                  minimumSize: const Size(0, 36),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                onPressed: _busy
-                                    ? null
-                                    : () => _startTutupBuku(prevYear),
-                                child: const Text('Mulai'),
-                              ),
                       ),
                     ),
 
-                    if (_archivedYears.isNotEmpty) ...[
+                    if (_archives.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       Text(
                         'ARSIP TERSEDIA',
@@ -280,25 +299,21 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
                       Card(
                         child: Column(
                           children: [
-                            for (final year in _archivedYears.reversed)
+                            for (final entry in _archives.reversed)
                               ListTile(
                                 leading: const Icon(Icons.folder_zip_outlined),
-                                title: Text('Arsip $year'),
-                                subtitle: Text('archive_$year.db'),
+                                title: Text('Arsip ${entry.year}'),
+                                subtitle: Text(entry.isLegacyFallback
+                                    ? '${_fmtDate(entry.periodStart)} – '
+                                        '${_fmtDate(entry.periodEnd)} '
+                                        '(estimasi, arsip lama)'
+                                    : '${_fmtDate(entry.periodStart)} – '
+                                        '${_fmtDate(entry.periodEnd)}, '
+                                        '${entry.txCount} transaksi'),
                                 trailing: const Icon(Icons.chevron_right),
                               ),
                           ],
                         ),
-                      ),
-                    ],
-
-                    if (_lastArchiveYear != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tutup buku terakhir: tahun $_lastArchiveYear',
-                        style: TextStyle(
-                            color: scheme.onSurfaceVariant, fontSize: 12),
-                        textAlign: TextAlign.center,
                       ),
                     ],
                     const SizedBox(height: 32),

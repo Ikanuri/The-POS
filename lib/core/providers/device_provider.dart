@@ -124,6 +124,43 @@ class DeviceNotifier extends StateNotifier<DeviceIdentity> {
     ));
   }
 
+  /// "Alihkan Owner" (Item 27) — device ini SUDAH ada datanya (kasir/asisten
+  /// aktif, atau owner toko lain) menerima transfer identitas dari file
+  /// BPOT1 (`DbExportService.exportOwnerTransfer`). WAJIB rekey file fisik
+  /// SQLCipher ke key derivasi BARU dulu (pakai koneksi `db` yang MASIH
+  /// terbuka dgn key LAMA) SEBELUM identitas (storeKey) diganti — kalau
+  /// urutannya kebalik, app tidak akan bisa membuka DB lagi sama sekali
+  /// setelah restart (file fisik terenkripsi key lama, tapi device sudah
+  /// "mengira" key-nya yang baru).
+  ///
+  /// [deviceName]/[deviceCode] WAJIB diisi BARU oleh pemanggil (bukan
+  /// otomatis warisi punya lama) — susulan (bug ditemukan user via testing
+  /// device asli): awalnya method ini diam-diam pakai `state.deviceName`/
+  /// `state.deviceCode` lama, hasilnya device yg eks-kasir/asisten toko
+  /// LAIN tetap menampilkan nama/kode lamanya (mis. "Asisten"/"K1") walau
+  /// sudah jadi Owner toko baru — bukan cuma aneh secara tampilan, tapi
+  /// BERBAHAYA: `deviceCode` dipakai sbg prefix nomor transaksi yang harus
+  /// UNIK per device DALAM SATU toko; kode lama bisa TABRAKAN dgn device
+  /// lain yang sudah pairing ke toko tujuan pakai kode yang sama.
+  Future<void> applyOwnerTransferInPlace({
+    required AppDatabase db,
+    required String storeUuid,
+    required String storeKey,
+    required String storeName,
+    required String deviceName,
+    required String deviceCode,
+  }) async {
+    await db.rekey(deriveDatabaseKey(storeKey));
+    await joinStore(
+      storeUuid: storeUuid,
+      storeKey: storeKey,
+      storeName: storeName,
+      role: 'owner',
+      deviceName: deviceName,
+      deviceCode: deviceCode,
+    );
+  }
+
   Future<void> updateStoreName(String storeName) async {
     await _persist(DeviceIdentity(
       storeUuid: state.storeUuid,

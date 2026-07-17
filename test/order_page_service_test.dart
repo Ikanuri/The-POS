@@ -503,4 +503,102 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'Item 12: waDirect=true (default) → data DATA.waDirect true, JS pakai '
+      'deep-link wa.me ke nomor toko', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Gula Pasir', price: 15000);
+
+    final result = await OrderPageService.generateHtml(
+      db: db,
+      storeName: 'Toko Berkah',
+      storeWhatsapp: '0812-3456-7890',
+    );
+    final data = _extractEmbeddedData(result.html);
+
+    expect(data['waDirect'], isTrue);
+    expect(data['waNumber'], '081234567890',
+        reason: 'nomor WA harus disaring jadi digit murni');
+    expect(result.html.contains("'https://wa.me/' + num"), isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 29 — stok riil ≤0 & toggle "Izinkan Stok Minus" OFF → '
+      'outOfStock true walau markedOutOfStock manual tidak diset', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.setSetting('allow_negative_stock', '0');
+    final id = await _addProduct(db, name: 'Beras Habis', price: 12000);
+    final unitId = await _unitIdOf(db, id);
+    await db.adjustStock(productUnitId: unitId, newQty: 0);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final p = (data['products'] as List)
+        .firstWhere((p) => p['name'] == 'Beras Habis');
+    expect(p['outOfStock'], isTrue);
+    await db.close();
+  });
+
+  test(
+      'Item 29 — stok riil masih >0 → outOfStock tetap false meski toggle '
+      'stok minus OFF', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.setSetting('allow_negative_stock', '0');
+    final id = await _addProduct(db, name: 'Beras Ada', price: 12000);
+    final unitId = await _unitIdOf(db, id);
+    await db.adjustStock(productUnitId: unitId, newQty: 5);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final p = (data['products'] as List)
+        .firstWhere((p) => p['name'] == 'Beras Ada');
+    expect(p['outOfStock'], isFalse);
+    await db.close();
+  });
+
+  test(
+      'Item 29 — toggle "Izinkan Stok Minus" ON → stok riil ≤0 DIABAIKAN, '
+      'auto-check dilewati (konsisten dgn kasir yg boleh jual minus)',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.setSetting('allow_negative_stock', '1');
+    final id = await _addProduct(db, name: 'Beras Minus', price: 12000);
+    final unitId = await _unitIdOf(db, id);
+    await db.adjustStock(productUnitId: unitId, newQty: -3);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final p = (data['products'] as List)
+        .firstWhere((p) => p['name'] == 'Beras Minus');
+    expect(p['outOfStock'], isFalse);
+    await db.close();
+  });
+
+  test(
+      'Item 12: waDirect=false → data DATA.waDirect false, JS pakai share WA '
+      'generik (tanpa nomor tujuan)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Gula Pasir', price: 15000);
+
+    final result = await OrderPageService.generateHtml(
+      db: db,
+      storeName: 'Toko Berkah',
+      storeWhatsapp: '0812-3456-7890',
+      waDirect: false,
+    );
+    final data = _extractEmbeddedData(result.html);
+
+    expect(data['waDirect'], isFalse);
+    expect(
+        result.html.contains("'https://api.whatsapp.com/send?text=' +"), isTrue,
+        reason: 'JS harus punya fallback share generik utk waDirect=false');
+
+    await db.close();
+  });
 }

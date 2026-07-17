@@ -151,13 +151,20 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
     try {
       final device = ref.read(deviceProvider);
       final db = ref.read(databaseProvider);
-      final payload = await DbExportService.decrypt(
+      final decrypted = await DbExportService.decrypt(
         fileBytes: fileBytes,
         storeKey: device.storeKey!,
         storeUuid: device.storeUuid!,
         password: password,
       );
-      await DbExportService.restore(db: db, payload: payload);
+      if (decrypted.isOwnerTransfer) {
+        // File "Alihkan Owner" (BPOT1) butuh alur berbeda (rekey + ganti
+        // identitas device) — arahkan ke layar khusus, bukan restore biasa.
+        throw BackupException(
+            'File ini berformat "Alihkan Owner". Gunakan Pengaturan → '
+            'Alihkan Owner untuk memulihkannya, bukan Backup & Restore biasa.');
+      }
+      await DbExportService.restore(db: db, payload: decrypted.payload);
       if (!mounted) return;
       // Sebagian layar (mis. Ringkasan, grup produk) memakai cache sekali-
       // ambil yang tidak auto-refresh dari perubahan DB mendadak sebesar ini

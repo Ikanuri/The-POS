@@ -365,7 +365,11 @@ void main() {
       expect(stockKeepBefore, 80);
 
       // ── Jalankan tutup buku SUNGGUHAN (bukan reimplementasi) ──────────────
-      final result = await TutupBukuService.execute(db: db, year: archivedYear);
+      final result = await TutupBukuService.execute(
+        db: db,
+        periodStart: DateTime(archivedYear),
+        periodEnd: DateTime(archivedYear, 12, 31),
+      );
 
       expect(result.archivedYear, archivedYear);
       expect(result.txArchived, 1, reason: 'hanya tx-arch yang di tahun terarsip');
@@ -432,7 +436,11 @@ void main() {
             createdAt: Value(inCurrent),
           ));
 
-      await TutupBukuService.execute(db: db, year: archivedYear);
+      await TutupBukuService.execute(
+        db: db,
+        periodStart: DateTime(archivedYear),
+        periodEnd: DateTime(archivedYear, 12, 31),
+      );
 
       final ledger = await (db.select(db.stockLedger)
             ..where((t) => t.productUnitId.equals('U-X')))

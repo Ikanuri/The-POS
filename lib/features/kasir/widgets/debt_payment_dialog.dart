@@ -169,6 +169,10 @@ class _DebtPaymentDialogState extends State<_DebtPaymentDialog> {
                   child: SizedBox(
                     height: 44,
                     child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.payGreen,
+                        foregroundColor: Colors.white,
+                      ),
                       onPressed:
                           ThousandsSeparatorFormatter.parseValue(_ctrl.text) <=
                                   0

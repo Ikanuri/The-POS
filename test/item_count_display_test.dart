@@ -63,7 +63,9 @@ void main() {
     expect(tester.widget<ItemCountBadge>(badge).elevated, isTrue,
         reason: 'badge di struk menempel/mengambang di atas kartu, bukan '
             'sejajar biasa');
-    expect(find.text('Tandai Semua'), findsOneWidget);
+    // Item 29 — "Tandai Semua" bukan lagi tombol berlabel teks, tapi
+    // kontrol lingkaran solid (tooltip, bukan Text widget statis).
+    expect(find.byTooltip('Tandai Semua'), findsOneWidget);
   });
 
   testWidgets(

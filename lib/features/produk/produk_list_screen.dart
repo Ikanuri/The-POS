@@ -88,6 +88,14 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
       appBar: AppBar(
         title: const Text('Produk'),
         actions: [
+          // Item 30(b) — entry point SELALU terlihat (bukan chip kondisional
+          // spt "Stok Menipis" yang hilang total kalau lowStockCount==0 ATAU
+          // toko belum punya kategori bernama — lihat PLAN.md Item 30).
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined),
+            tooltip: 'Cek Stok',
+            onPressed: () => context.push('/produk/cek-stok'),
+          ),
           IconButton(
             icon: const Icon(Icons.sync_alt_outlined),
             tooltip: 'Sinkron Harga',

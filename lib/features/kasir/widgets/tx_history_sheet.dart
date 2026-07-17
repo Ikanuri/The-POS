@@ -76,11 +76,13 @@ final _txHistoryProvider =
   return rows;
 });
 
-/// Nama pelanggan terdaftar (id → nama) untuk accent & label di riwayat.
+/// Nama pelanggan (id → nama) untuk accent & label di riwayat — TERMASUK
+/// pelanggan yang sudah dihapus (soft-delete), supaya nota lama tetap
+/// menampilkan nama aslinya, bukan fallback generik "Pelanggan" (lihat
+/// `getAllCustomerNamesIncludingInactive`).
 final _custNamesProvider = FutureProvider<Map<String, String>>((ref) async {
   final db = ref.watch(databaseProvider);
-  final cs = await db.searchCustomers('');
-  return {for (final c in cs) c.id: c.name};
+  return db.getAllCustomerNamesIncludingInactive();
 });
 
 /// Detail produk yang cocok per transaksi saat filter produk aktif.
@@ -1013,11 +1015,15 @@ class _TxDetail extends ConsumerWidget {
       );
 
       if (result == null || !context.mounted) return;
-      await (db.update(db.transactions)..where((t) => t.id.equals(tx.id)))
-          .write(TransactionsCompanion(
-        customerName: Value(result.name),
-        customerId: Value(result.id),
-      ));
+      // `changeTransactionCustomer` (bukan write mentah) — supaya poin
+      // loyalitas pelanggan LAMA ikut ditarik balik kalau pelanggan diganti
+      // dari sini (dulu ada di receipt_screen.dart doang, sheet ini bug yg
+      // sama tapi lokasi beda: bisa diubah ke Umum dr riwayat transaksi).
+      await db.changeTransactionCustomer(
+        txId: tx.id,
+        newCustomerId: result.id,
+        newCustomerName: result.name,
+      );
       onChanged();
     } finally {
       ctrl.dispose();
