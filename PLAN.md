@@ -530,16 +530,19 @@ app.
   berdampingan dengan tombol "Buat & Bagikan" yang sudah ada (TIDAK
   menggantikan — publish manual/share file tetap harus jalan sbg fallback
   offline-first kalau token belum diset/publish gagal/tidak ada koneksi).
-- **PENTING — nama project Cloudflare Pages HARUS deterministik/tetap**,
-  BUKAN diketik user tiap kali. Kalau nama project berubah tiap publish
-  atau tiap reinstall, URL yang sudah dibagikan ke pelanggan jadi tidak
-  valid lagi & user harus share ulang link tiap update harga — bertentangan
-  dgn tujuan fitur ini (URL permanen, cuma kontennya yg update tiap
-  publish). Nama project **belum diputuskan** turunan dari apa — kandidat:
-  hardcode 1 nama tetap per app (kalau 1 toko = 1 device = 1 katalog
-  cukup), atau turunan dari `storeUuid`/`storeName` (kalau ke depan mau
-  dukung multi-toko/multi-device publish beda URL). **Perlu diputuskan
-  sebelum mulai coding.**
+- **Nama project Cloudflare Pages — DIPUTUSKAN (17 Juli):** deterministik,
+  turunan dari `storeName` + `storeUuid` (bukan hardcode, bukan diketik
+  user). Formula: `slug(storeName)` (lowercase, spasi/simbol → `-`) +
+  suffix pendek dari `storeUuid` (mis. 6 karakter hex pertama), contoh
+  `toko-sembako-a1b2c3`. **Alasan wajib pakai suffix uuid, bukan nama
+  toko polos:** subdomain `<project>.pages.dev` unik SECARA GLOBAL (lintas
+  akun Cloudflare siapa pun), bukan cuma unik per akun — kalau cuma pakai
+  slug nama toko, dua pengguna The POS berbeda dgn nama toko kebetulan sama
+  akan tabrakan & salah satu gagal buat project. Nama dihitung SEKALI saat
+  publish pertama & disimpan (bukan dihitung ulang tiap publish — kalau
+  user ganti `storeName` di Pengaturan setelahnya, project Cloudflare
+  TIDAK ikut pindah nama, supaya URL yang sudah dibagikan ke pelanggan
+  tetap valid).
 - Alur gagal (token invalid, tidak ada internet, dll) harus **graceful
   fallback** ke alur share-file manual yang sudah ada — jangan blocking/
   jangan bikin fitur ekspor katalog yang sudah stabil jadi bergantung ke
