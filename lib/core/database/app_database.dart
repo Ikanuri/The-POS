@@ -1020,14 +1020,18 @@ class AppDatabase extends _$AppDatabase {
     return productId;
   }
 
-  /// Soft-delete varian (set isActive=false).
-  Future<void> deleteVariant(String variantProductId) =>
-      (update(products)..where((t) => t.id.equals(variantProductId))).write(
-        ProductsCompanion(
-          isActive: const Value(false),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  /// Soft-delete varian (set isActive=false) + lepas barcode-nya (lihat
+  /// `_releaseBarcodesForProduct`) — bug yang sama dengan `deactivateProduct`.
+  Future<void> deleteVariant(String variantProductId) => transaction(() async {
+        await (update(products)..where((t) => t.id.equals(variantProductId)))
+            .write(
+          ProductsCompanion(
+            isActive: const Value(false),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+        await _releaseBarcodesForProduct(variantProductId);
+      });
 
   /// Perbarui varian (produk anak): nama, harga dasar, barcode utama, dan
   /// pelacakan stok. Mengubah satuan dasar varian beserta tier harga minQty=1
@@ -1257,9 +1261,48 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<void> deactivateProduct(String productId) =>
-      (update(products)..where((t) => t.id.equals(productId)))
-          .write(const ProductsCompanion(isActive: Value(false)));
+  Future<void> deactivateProduct(String productId) => transaction(() async {
+        await (update(products)..where((t) => t.id.equals(productId)))
+            .write(const ProductsCompanion(isActive: Value(false)));
+        await _releaseBarcodesForProduct(productId);
+      });
+
+  /// Bebaskan semua barcode milik unit-unit produk ini SUPAYA nilainya bisa
+  /// dipakai ulang produk lain — tanpa menghapus barisnya. `product_barcodes.
+  /// barcode` UNIQUE di seluruh katalog, dan deactivate/deleteVariant dulunya
+  /// cuma set `isActive=false` di produk tanpa menyentuh barcode-nya sama
+  /// sekali, jadi barcode produk yang "dihapus" via UI tetap terkunci
+  /// selamanya (blocker nyata: user tidak bisa refactor produk satu-varian
+  /// jadi satu-produk-banyak-varian selama barcode lama masih dipegang
+  /// produk lama yang cuma disembunyikan).
+  ///
+  /// SENGAJA mutasi nilai `barcode` (prefix `RELEASED:<id>:`), BUKAN DELETE
+  /// baris: baris `product_barcodes` disinkron via full-dump tanpa watermark
+  /// (lihat `dumpSince`) — kalau baris benar-benar dihapus, device lain yang
+  /// sudah punya salinannya TIDAK PERNAH menerima kabar "baris ini dihapus"
+  /// (sync tidak delete-aware), jadi salinan basi di device lain akan
+  /// mengunci barcode itu SELAMANYA di device tersebut. Dengan mutasi nilai,
+  /// barisnya tetap ada & ikut ke-dump lagi di sync berikutnya, ter-`INSERT
+  /// OR REPLACE` (keyed by id yang sama) ke device lain — pelepasan ikut
+  /// terpropagasi otomatis lewat mekanisme sync yang sudah ada, tanpa
+  /// perubahan protokol.
+  Future<void> _releaseBarcodesForProduct(String productId) async {
+    final units = await (select(productUnits)
+          ..where((t) => t.productId.equals(productId)))
+        .get();
+    if (units.isEmpty) return;
+    final unitIds = units.map((u) => u.id).toList();
+    final barcodes = await (select(productBarcodes)
+          ..where((t) => t.productUnitId.isIn(unitIds)))
+        .get();
+    for (final bc in barcodes) {
+      if (bc.barcode.startsWith('RELEASED:')) continue; // sudah dilepas
+      await (update(productBarcodes)..where((t) => t.id.equals(bc.id)))
+          .write(ProductBarcodesCompanion(
+        barcode: Value('RELEASED:${bc.id}:${bc.barcode}'),
+      ));
+    }
+  }
 
   /// Item 25a — tandai/lepas tanda "stok habis" manual (lihat komentar
   /// kolom `markedOutOfStock` di product_tables.dart).
