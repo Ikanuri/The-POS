@@ -475,10 +475,15 @@ manual (poin user: "untuk apa ada stok kalau akhirnya dicek manual juga").
    dipertahankan sbg fitur terpisah yang sudah ada di `produk_form_screen.dart`
    — tidak berubah, tidak digabung ke layar "Cek Stok" ini.
 
-**Belum diputuskan (perlu simulasi HTML dulu sebelum coding — user minta
-lihat mockup dulu):** layout persis panel output (posisi sticky vs di
-bawah biasa), format teks yang dihasilkan per baris, apakah ada tombol
-"kirim WA langsung" atau cukup "Salin".
+**Layout SUDAH DI-APPROVE user (sementara)** — mockup dirender via
+Playwright (`cek_stok_mockup.html`/`.jpg` di scratchpad sesi ini, tidak
+di-commit ke repo), dikirim sbg screenshot & disetujui: chip kategori di
+atas, list diurut tertipis dgn badge stok besar berwarna (merah=kritis/
+negatif, kuning=menipis, hijau=aman), baris tercentang berubah visual
+(border+strip aksen, nama dicoret), panel "Teks Order Restock" sticky di
+bawah dgn textarea auto-terisi + tombol Salin & Kirim ke Supplier. Kalau
+mockup-nya sudah hilang dari scratchpad (beda sesi), regenerasi dari
+deskripsi ini sudah cukup, tidak wajib lihat gambar lama lagi.
 
 ### (c) Laporan analitik/audit — tab baru di **Laporan**
 - User konfirmasi: dibutuhkan **utk audit**, meski belum ada use case
@@ -508,15 +513,14 @@ bawah biasa), format teks yang dihasilkan per baris, apakah ada tombol
   "pengganti opname" ke user — framing UI-nya harus jujur soal ini kalau
   nanti dibangun (mis. teks kecil pengingat).
 
+**KEPUTUSAN FINAL (c) — dua-duanya**: chart (donut, pola sama spt
+breakdown Pengeluaran/Prive di referensi PNL user) UNTUK proporsi
+sekilas, PLUS tabel detail di bawahnya utk angka presisi per kategori.
+Bukan salah satu saja.
+
 **Belum didesain detail (pertanyaan sebelum coding)**:
 - (a): filter kategori di kartu Ringkasan — state terpisah dari filter di
   layar "Cek Stok" (b), atau reuse begitu (b) dibuat?
-- (b): **user minta lihat simulasi HTML/mockup dulu** sebelum coding
-  (layout panel output, format teks per baris, tombol share) — JANGAN
-  langsung implementasi Flutter tanpa mockup disetujui dulu.
-- (c): breakdown per kategori itu tabel atau chart (referensi user pakai
-  donut chart utk breakdown PNL — bisa dipertimbangkan pola serupa utk
-  nilai stok per kategori, tapi belum diputuskan)?
 - Semua bagian: sumber angka stok riil per produk — agregat dari
   `stock_ledger`, pola query sama seperti `_rawBaseStock`/
   `getLowStockProductIds` (`_lowStockSql`) — WAJIB agregat/JOIN sekali
@@ -537,19 +541,43 @@ Jadi ini BUKAN sekadar ganti offset "tahun fiskal" tetap (mis. April–Maret
 konsisten tiap tahun) — tiap kali mau tutup buku, user pilih tanggal MANUAL
 saat itu juga.
 
-**Implikasi desain (belum final, perlu dipikirkan sebelum coding):**
-- Periode tutup buku jadi: **dari tanggal tutup buku TERAKHIR sampai
-  tanggal yang dipilih SEKARANG** (bukan lagi "tahun kalender") — supaya
-  tidak ada celah/tumpang tindih antar-periode. Perlu simpan "tanggal tutup
-  buku terakhir" (setting baru), dipakai sbg batas awal periode berikutnya
-  otomatis.
-- Skema penamaan arsip: `archive_$year.db` (skema sekarang) tidak cocok
-  lagi kalau periodenya bukan tahun kalender penuh — perlu ganti ke
-  penamaan berbasis rentang tanggal atau ID sekuensial.
-- UI: perlu date picker menggantikan tampilan "Tahun $currentYear" statis.
-- Tutup buku PERTAMA kali (belum ada histori "tanggal terakhir") — mulai
-  dari kapan? Kemungkinan dari awal data transaksi tertua, atau tanggal
-  setup toko.
+**Dikonfirmasi user: tutup buku tetap SEKALI PER TAHUN** — cuma
+tanggalnya geser ikut Hari Raya, bukan jadi bebas kapan saja/berkali-kali
+setahun. (Belum diputuskan: apakah perlu validasi keras "minimal ~11
+bulan dari tutup terakhir", atau cukup dibiarkan tanggung jawab user
+tanpa validasi — prioritas rendah, bisa diputuskan pas coding.)
+
+**Saran teknis (setelah baca `tutup_buku_service.dart` — fakta penting:
+proses SEKARANG copy SELURUH file `the_pos.db` jadi arsip, lalu HAPUS
+data transaksional yg jatuh di rentang tahun itu dari main.db, sisakan
+data master, bawa saldo stok terakhir spy tidak ke-reset 0):**
+
+1. **Ganti parameter `year` (int) → periode eksplisit `periodStart`–
+   `periodEnd`** (dua `DateTime`). `periodEnd` = tanggal yg dipilih
+   manual tiap kali tutup buku (Hari Raya tahun itu). `periodStart` =
+   otomatis dari tanggal tutup buku TERAKHIR (setting baru, ganti
+   `last_archive_year` jadi `last_archive_date`) — supaya periode
+   berikutnya SELALU nyambung pas, tidak ada celah/tumpang tindih.
+2. **Tutup buku PERTAMA kali** (belum ada histori) — `periodStart` =
+   tanggal transaksi PALING LAMA di database (bukan 1 Januari, bukan
+   tanggal setup toko — hindari rentang kosong tak berguna di awal).
+3. **Skema penamaan arsip**: `archive_$year.db` (skema sekarang) tidak
+   cocok lagi kalau bukan tahun kalender penuh — ganti berbasis tanggal
+   `periodEnd` (mis. `archive_20260330.db`).
+4. **Perlu "manifest" kecil** (baris di `app_settings` sbg JSON, atau
+   tabel baru) yg catat per arsip: tanggal mulai, tanggal akhir, jumlah
+   transaksi — supaya daftar arsip di UI tampil jelas ("Arsip: 12 Apr 2025
+   – 30 Mar 2026, 1.240 transaksi"), bukan cuma angka tahun polos spt
+   sekarang.
+5. **UI**: ganti tampilan statis "Tahun $currentYear" jadi info dinamis
+   ("Sejak [periodStart], X transaksi belum diarsip") + tombol buka
+   date-picker utk pilih `periodEnd` & eksekusi — validasi: tanggal harus
+   SETELAH `periodStart`, tidak boleh di masa depan.
+6. **Arsip lama** (format `archive_$year.db`, terikat tahun kalender)
+   HARUS tetap bisa dibaca/ditampilkan bareng arsip format baru di UI
+   daftar arsip — jangan sampai migrasi bikin arsip lama "hilang" dari
+   tampilan (`listArchivedYears()` perlu diperluas baca 2 format
+   sekaligus, bukan diganti total).
 
 ---
 
