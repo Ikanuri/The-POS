@@ -10,6 +10,36 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 17 Juli 2026
 
+### ✨ Fitur Baru
+- **Katalog HTML kini otomatis menandai "Stok Habis"** dari stok riil
+  (bukan cuma tanda manual) — kalau toggle "Izinkan Stok Minus" di
+  Pengaturan sedang OFF dan stok sistem sebuah produk sudah 0, katalog
+  yang dibagikan ke pelanggan otomatis menampilkan badge "Stok Habis"
+  walau kasir lupa menandainya manual.
+- **Layar baru "Cek Stok"** (ikon 📦 di AppBar tab Produk, atau kartu
+  "Kontrol Stok" di Ringkasan Harian) — lihat semua produk diurut dari
+  yang stoknya paling tipis, difilter per kategori. Centang produk yang
+  memang habis: otomatis menandai "Stok Habis" di sistem SEKALIGUS
+  menyusun teks pesanan restock yang bisa langsung disalin atau dikirim
+  ke supplier.
+- **Kartu "Kontrol Stok" baru di Ringkasan Harian** — ringkasan cepat
+  berapa produk stok menipis/habis, dengan pratinjau produk paling
+  kritis dan tombol "Lihat semua" ke layar Cek Stok.
+- **Tab baru "Stok" di Laporan** — nilai total inventori (stok × harga
+  pokok) sekarang, dipecah per kategori (grafik donat + tabel), termasuk
+  peringatan kalau ada produk yang harga pokoknya belum diisi (supaya
+  Anda tahu angkanya belum lengkap) dan daftar produk yang stoknya
+  sedang negatif. Laporan ini melengkapi stock opname fisik, bukan
+  menggantikannya.
+- **Tutup Buku sekarang bisa pakai tanggal custom** (tidak harus selalu
+  1 Januari) — cocok untuk toko yang tutup buku mengikuti Hari Raya,
+  yang tanggalnya berubah tiap tahun. Tetap sekali per tahun, tinggal
+  pilih tanggal akhir periode lewat kalender.
+- **Opsi "Sinkron via barcode saja"** di layar Sinkron Harga — untuk
+  toko dengan kode produk yang tidak konsisten, bisa memilih mode yang
+  hanya mencocokkan lewat barcode (lebih lambat prosesnya tapi paling
+  akurat).
+
 ### 🔧 Perbaikan
 - **Sinkron harga antar-toko tidak lagi salah mengubah harga produk yang
   tak berhubungan.** Sebelumnya, saat menyamakan harga dengan toko lain,

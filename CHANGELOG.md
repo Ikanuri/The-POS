@@ -10,6 +10,9 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-17
 
+- `886db53` — feat: Tutup Buku tanggal custom (bukan selalu 1 Januari), sekali per tahun (Item 31)
+- `fa3e496` — feat: opsi sinkron harga via barcode saja (Item 35 opsional)
+- `dd4bad3` — feat: kontrol stok owner — katalog auto-habis (29) + layar Cek Stok + tab audit Laporan (30)
 - `db60a4b` — fix: sinkron harga antar-toko salah cocok karena SKU non-unik (pengaman tabrakan kode + satuan wajib cocok + fix `_findOrCreateProduct`)
 
 ## 2026-07-16

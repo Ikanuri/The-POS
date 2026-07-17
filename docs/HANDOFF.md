@@ -7,13 +7,110 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 _Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
 3 bug susulan dari testing device asli + fix poin loyalitas + fix
 keamanan lisensi + fix debounce scanner + fix nama pelanggan riwayat +
-warna aksen toolbar kasir + fix sinkron harga SKU non-unik)._ Full
-`flutter test` **412 test hijau**,
+warna aksen toolbar kasir + fix sinkron harga SKU non-unik + Item
+29/30(a/b/c)/31/35(opsional) SEMUA dieksekusi & di-commit)._ Full
+`flutter test` **441 test hijau**,
 `flutter analyze` bersih. schemaVersion masih 15
-(tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` —
-belum di-merge ke `main` (tunggu instruksi user). User sudah perbaiki
-`license/revoked.json` di `main` secara manual (typo tanda kutip) —
-item ini SELESAI, tidak perlu ditindaklanjuti lagi.
+(tidak ada migrasi baru, semua fitur baru pakai `app_settings` key baru
+`archive_manifest`/`last_archive_date` — TIDAK butuh migrasi skema).
+Branch `claude/setup-dependencies-am31te` — belum di-merge ke `main`
+(tunggu instruksi user). User sudah perbaiki `license/revoked.json` di
+`main` secara manual (typo tanda kutip) — item ini SELESAI, tidak perlu
+ditindaklanjuti lagi.
+
+## Item 29/30/31/35(opsional) — batch besar "kerjakan semua" (17 Juli, SEMUA SELESAI & di-commit)
+
+User minta eksekusi SEKALIGUS semua yang sudah didesain/disetujui sesi
+ini. Urutan commit: `dd4bad3` (Item 29+30abc), `fa3e496` (Item 35
+opsional), `886db53` (Item 31). Ringkasan tiap bagian:
+
+### Item 29 — katalog HTML auto-"habis" dari stok riil
+`order_page_service.dart` (`_buildCatalogJson`) sekarang JUGA cek stok
+riil (base unit) via `AppDatabase.getBaseUnitRealStock()` (baru) saat
+`allow_negative_stock` OFF — `outOfStock = markedOutOfStock ||
+(!allowNegativeStock && stok<=0)`. **Keputusan desain penting**:
+`getBaseUnitRealStock()` HANYA mencakup produk yang PUNYA histori
+`stock_ledger` (pakai `EXISTS`, bukan `COALESCE(...,0)`) — produk yang
+belum pernah disentuh stoknya sama sekali TIDAK dianggap "stok 0", supaya
+toko yang belum sempat isi stok awal produknya tidak mendadak semua
+produknya jadi "Stok Habis" di katalog publik. Ini ketahuan dari test
+lama yang gagal (`Item 25a — produk TIDAK ditandai stok habis`) sebelum
+disempitkan pakai `EXISTS`.
+
+### Item 30 — kontrol stok 3 bagian
+- **(a)** Kartu "Kontrol Stok" baru di `ringkasan_screen.dart` — filter
+  kategori (state provider TERPISAH dari 30b), hitung "N menipis, M
+  habis" dari `watchStockOverview()`, preview 3 produk tertipis, tombol
+  "Lihat semua" bawa `groupId` sbg extra ke route `/produk/cek-stok`.
+- **(b)** Layar baru `cek_stok_screen.dart` (route `/produk/cek-stok`,
+  entry point SELALU terlihat: ikon 📦 di AppBar `produk_list_screen.dart`
+  — SENGAJA bukan chip kondisional spt filter "Stok Menipis" lama yg
+  hilang total kalau `lowStockCount==0`/tanpa kategori). Checkbox per
+  baris toggle `markedOutOfStock` REAL (via `setMarkedOutOfStock`) DAN
+  otomatis masuk panel "Teks Order Restock" sticky di bawah (Salin +
+  Kirim ke Supplier via `Share.share`) — BUKAN checklist manual terpisah
+  dari stok riil (poin user yg dipegang teguh: "untuk apa ada stok kalau
+  akhirnya dicek manual juga").
+- **(c)** Tab baru "Stok" (index 5) di `laporan_screen.dart` →
+  `tabs/stok_tab.dart`. TIDAK terikat rentang tanggal (beda dari tab
+  lain) — snapshot nilai SEKARANG, jadi TIDAK ada di `ReportTab` enum &
+  TIDAK bisa diekspor (sama spt tab Hutang). Agregasi (grand total,
+  per-kategori, deteksi harga-pokok-kosong, sort stok-negatif-paling-minus)
+  dihitung di provider (Dart murni) dari `AppDatabase.getInventoryRows()`
+  (1 query mentah). Ada catatan kecil permanen di UI: laporan ini
+  MELENGKAPI, bukan MENGGANTIKAN, stock opname fisik.
+
+DB baru: `AppDatabase.getBaseUnitRealStock()`, `watchStockOverview()`
+(typedef `StockOverviewRow`), `getInventoryRows()` (typedef
+`InventoryRow`) — semua di `app_database.dart`, semua 1-query
+agregat/JOIN (bukan N+1).
+
+Test: `order_page_service_test.dart` (+3 Item 29), `stock_overview_test.dart`,
+`cek_stok_screen_test.dart`, `ringkasan_stock_quick_check_test.dart`,
+`inventory_rows_test.dart`, `stok_tab_test.dart`. Revert-verify dilakukan
+utk: real-stock check Item 29, EXISTS-vs-COALESCE Item 29 (kasus paling
+krusial), toggle checkbox Cek Stok, sort stok negatif Laporan.
+
+### Item 35(opsional) — mode "sinkron via barcode saja"
+`PriceMatchService.match(barcodeOnly: true)` baru — skip SKU/fuzzy
+sepenuhnya, item tanpa barcode-cocok langsung `notFound`. Fungsi baru
+`_tryMatchBarcodeOnly` (duplikasi ringkas blok barcode di `_tryMatch`,
+SENGAJA tidak fallback ke SKU/fuzzy sama sekali). Toggle di
+`price_sync_screen.dart` (`SwitchListTile`), berlaku utk fetch LAN
+maupun import CSV. Test + revert-verify di
+`price_sync_sku_collision_test.dart`.
+
+### Item 31 — Tutup Buku tanggal custom
+`TutupBukuService.execute()` param `year` (int) → `periodStart`/
+`periodEnd` (DateTime, INKLUSIF keduanya — batas atas internal =
+periodEnd+1 hari). Label arsip (`archive_$year.db`, filename TIDAK
+berubah) = `periodEnd.year` — desain SENGAJA begini (bukan skema
+filename baru berbasis tanggal spt draft awal di PLAN.md) supaya
+`ArchiveService.open(year,...)`, exclusion sync di
+`lan_sync_service.dart` (`listArchivedYears()`), dan seluruh UI arsip
+TIDAK perlu disentuh — cukup "tahun" itu sekarang bisa merentang tanggal
+custom, bukan wajib Jan1-Des31. `suggestPeriodStart()` baru: hari SETELAH
+`last_archive_date` (setting baru, ganti `last_archive_year`) kalau sudah
+pernah tutup buku, atau tanggal transaksi PALING LAMA kalau belum pernah
+(bukan 1 Jan). Manifest (`archive_manifest` di `app_settings`, JSON
+per-tahun: start/end/txCount) dibaca via `listArchiveEntries()` — arsip
+LAMA tanpa manifest tetap tampil via fallback kalender-tahun-penuh
+(`isLegacyFallback: true`). UI (`tutup_buku_screen.dart`): label statis
+"Tahun $currentYear" diganti info dinamis + `showDatePicker` utk pilih
+periodEnd.
+
+**Test migrasi** (bukan bug, perubahan API disengaja): `db_fixes_test.dart`
+2 test lama diupdate dari `execute(year: 2024)` →
+`execute(periodStart: DateTime(2024), periodEnd: DateTime(2024,12,31))`
+(perilaku efektif SAMA, cuma API-nya berubah). Test baru
+`tutup_buku_custom_date_test.dart` (7 test: suggestPeriodStart 3 skenario,
+periode custom inklusif, manifest tersimpan+terbaca, arsip lama
+fallback, validasi periodEnd>periodStart). Revert-verify dilakukan utk
+inclusive-boundary (+1 hari) & suggestPeriodStart (+1 hari dari
+last_archive_date) — 2 bagian paling gampang salah-satu-hari.
+
+**Belum dikerjakan** (opsional, dibahas tapi tidak diminta): mode
+"barcode saja" default-ON, validasi keras jarak minimal antar tutup buku.
 
 ## Item 35 — fix sinkron harga antar-toko: SKU non-unik salah cocok (17 Juli, SELESAI)
 
@@ -142,24 +239,14 @@ verifikasi manual user belum dikonfirmasi** — kalau sesi depan lanjut,
 tanyakan hasil tes user dulu sebelum menganggap ini selesai total (lihat
 juga PLAN.md Item 32).
 
-## Diskusi belum dieksekusi — Item 29/30/31 siap kapan saja
+## Diskusi belum dieksekusi
 
-- **Item 29** (katalog HTML auto-"habis" dari stok ril) — desain final,
-  belum diimplementasi.
-- **Item 30(a)** (kartu cek cepat di Ringkasan Harian) — desain final,
-  agak bergantung ke 30(b) (target navigasi "Lihat semua").
-- **Item 30(b)** ("Cek Stok" screen) — layout mockup SUDAH di-approve
-  user (`cek_stok_mockup.html`/`.jpg` di scratchpad sesi ini, tidak
-  di-commit — lihat deskripsi lengkap di PLAN.md kalau perlu regenerasi).
-  Siap diimplementasi ke Flutter kapan saja.
-- **Item 30(c)** (tab analitik/audit di Laporan, chart+tabel) — desain
-  final.
-- **Item 31** (Tutup Buku tanggal custom, sekali/tahun) — redesain
-  teknis (periodStart/periodEnd) sudah disetujui, belum diimplementasi.
 - **Item 4/5** (migrasi data Griyo POS/transaksi lama) — **DIPENDING**
   atas permintaan user: scope migrasi ternyata bukan cuma
   transaksi+pelanggan, tapi juga produk dll (belum dirinci). Jangan
   mulai sebelum user re-konfirmasi scope penuh & minta lanjut.
+- **Item 35 mode "barcode saja" default-ON** & validasi jarak minimal
+  antar Tutup Buku — dibahas sbg opsional, belum diminta user.
 
 ## Fitur baru: "Alihkan Owner" + "Pulihkan dari File" (16 Juli, Item 27/28)
 
