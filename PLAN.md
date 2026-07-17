@@ -432,3 +432,121 @@ detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
    `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
    Hutang, Tutup Kasir "kas sistem" overstated) — belum disentuh, lihat
    detail Item 23 di atas.
+5. **Item 36** (stock opname/hitung fisik) & **Item 37** (publish katalog
+   otomatis ke Cloudflare Pages) — baru, hasil sesi diskusi 17 Juli, lihat
+   detail di bawah. Keduanya PRIORITAS menurut user, tapi implementasi
+   BELUM dimulai (sengaja "jangan code dulu" — masih tahap desain).
+
+---
+
+## Item 36 — Stock Opname (hitung fisik & rekonsiliasi stok)
+
+**Prioritas:** Tinggi (disebut user sbg salah satu dari "dua duanya
+prioritas"). **Belum diimplementasi** — baru desain, disetujui user lewat
+diskusi 17 Juli.
+
+**Konteks:** user ingin built-in tool untuk mencocokkan stok sistem dengan
+stok fisik riil di toko (opname), memakai infrastruktur "Cek Stok" yang
+sudah ada (Item 30b, `cek_stok_screen.dart`) sebagai basis.
+
+**Keputusan desain yang SUDAH disepakati:**
+1. **Partial + Seluruh, tanpa toggle terpisah** — "partial" = opname per
+   kategori (pakai filter kategori yang SUDAH ada di Cek Stok screen),
+   "seluruh" = tidak difilter/semua kategori. Tidak perlu mode switch baru,
+   cukup pakai filter kategori yang sudah ada sebagai mekanismenya.
+2. **Mode "buta" (blind count) — default & satu-satunya mode.** Saat user
+   input hitungan fisik, angka stok SISTEM **tidak ditampilkan** (supaya
+   tidak bias ke angka yang sudah dilihat) — hanya kolom input qty fisik
+   kosong per produk. Perbandingan sistem-vs-fisik (selisih) baru
+   ditampilkan di **layar review** SEBELUM commit ke database, bukan
+   selama proses hitung.
+3. **Riwayat sesi opname WAJIB ada** — user harus bisa lihat sesi opname
+   yang lalu (kapan, kategori apa, berapa selisih per produk). Rencana
+   implementasi TANPA tabel DB baru (sesuai preferensi proyek hindari
+   migrasi kalau bisa): pakai `AppDatabase.adjustStock()` yang sudah ada
+   (set stok absolut via entry `stock_ledger` tipe 'adjustment') dengan
+   **konvensi penamaan `note` yang konsisten**, mis. `"Opname 17 Jul 2026
+   (Kategori: Sembako)"` atau `"Opname 17 Jul 2026 (Seluruh)"` — riwayat
+   sesi lalu bisa direkonstruksi dengan query `stock_ledger` filter
+   `type = 'adjustment'` + pola teks note tsb, dikelompokkan per sesi
+   (timestamp+note yang sama = satu sesi, karena satu commit opname akan
+   insert banyak baris ledger sekaligus dgn note identik).
+
+**Yang MASIH perlu diputuskan saat mulai implementasi (belum dibahas
+detail):**
+- Layar baru atau mode di atas Cek Stok? Kemungkinan: tombol "Mulai
+  Opname" di `cek_stok_screen.dart` yang masuk ke alur terpisah (pilih
+  kategori/seluruh → input buta per produk → review selisih → commit).
+- Produk dengan stok 0/belum pernah ditrack — tetap tampil utk dihitung?
+  (kemungkinan iya, supaya opname bisa juga MENAMBAHKAN stok awal produk
+  yang belum pernah di-set).
+- Cara mengelompokkan baris `stock_ledger` jadi "satu sesi" di UI riwayat
+  — perlu timestamp presisi yang sama utk semua baris dlm 1 commit (pakai
+  `DateTime.now()` yang di-capture SEKALI di awal commit, bukan per-baris,
+  supaya grouping query akurat).
+- Tie-in ke Laporan Stok (Item 30c, `stok_tab.dart`) — tampilkan dampak
+  nilai inventori sebelum/sesudah opname di laporan? (nice-to-have, bukan
+  syarat wajib).
+
+**File yang kemungkinan terlibat:** `lib/features/produk/cek_stok_screen.dart`
+(atau layar baru terkait), `lib/core/database/app_database.dart`
+(`adjustStock()` sudah ada, mungkin perlu varian batch), tidak perlu
+migrasi schema baru (asumsi awal — validasi ulang saat desain final).
+
+---
+
+## Item 37 — Publish katalog HTML otomatis ke web (Cloudflare Pages)
+
+**Prioritas:** Tinggi (disebut user sbg salah satu dari "dua duanya
+prioritas"). **Belum diimplementasi** — baru desain, disetujui user lewat
+diskusi 17 Juli.
+
+**Konteks:** user sudah bisa ekspor katalog sbg file HTML statis
+(`order_share_screen.dart`, tombol "Buat & Bagikan" yg ada sekarang), tapi
+proses publikasi ke web masih manual (user harus drag-drop file ke hosting
+sendiri). User ingin alur **sepenuhnya otomatis**: klik tombol di app →
+file terkirim & langsung live di URL publik, tanpa langkah manual di luar
+app.
+
+**Keputusan yang SUDAH dikonfirmasi user:**
+1. **Provider: Cloudflare (Pages)** — user sudah familiar, tidak perlu
+   eksplorasi provider lain.
+2. **Mekanisme reinstall/ganti device dikonfirmasi user, BENAR:** karena
+   situs yang sudah dipublish hidup di server Cloudflare (bukan di device),
+   kalau app di-uninstall/data hilang, user cukup **paste ulang API Token**
+   Cloudflare yang sama (dari akun Cloudflare yg sama) utk lanjut publish
+   ke project/URL yang sama — TIDAK kehilangan histori/URL selama akun
+   Cloudflare-nya tetap ada.
+3. **Prioritas tinggi**, sejajar dengan Item 36 (stock opname).
+
+**Rencana teknis (direkomendasikan, belum diimplementasi):**
+- Pakai **Cloudflare Pages Direct Upload API** (HTTP POST langsung dari
+  Flutter, TIDAK perlu Git/CLI/Wrangler) — cocok utk app mobile yang cuma
+  perlu kirim 1 file HTML per publish.
+- **Field baru di Pengaturan**: API Token Cloudflare (disimpan aman, pola
+  sama seperti penyimpanan `storeKey` — cek mekanisme secure storage yang
+  sudah dipakai project sebelum pilih lokasi simpan baru).
+- **Tombol "Publish ke Web"** ditambahkan di `order_share_screen.dart`,
+  berdampingan dengan tombol "Buat & Bagikan" yang sudah ada (TIDAK
+  menggantikan — publish manual/share file tetap harus jalan sbg fallback
+  offline-first kalau token belum diset/publish gagal/tidak ada koneksi).
+- **PENTING — nama project Cloudflare Pages HARUS deterministik/tetap**,
+  BUKAN diketik user tiap kali. Kalau nama project berubah tiap publish
+  atau tiap reinstall, URL yang sudah dibagikan ke pelanggan jadi tidak
+  valid lagi & user harus share ulang link tiap update harga — bertentangan
+  dgn tujuan fitur ini (URL permanen, cuma kontennya yg update tiap
+  publish). Nama project **belum diputuskan** turunan dari apa — kandidat:
+  hardcode 1 nama tetap per app (kalau 1 toko = 1 device = 1 katalog
+  cukup), atau turunan dari `storeUuid`/`storeName` (kalau ke depan mau
+  dukung multi-toko/multi-device publish beda URL). **Perlu diputuskan
+  sebelum mulai coding.**
+- Alur gagal (token invalid, tidak ada internet, dll) harus **graceful
+  fallback** ke alur share-file manual yang sudah ada — jangan blocking/
+  jangan bikin fitur ekspor katalog yang sudah stabil jadi bergantung ke
+  koneksi internet.
+
+**File yang kemungkinan terlibat:** `lib/features/pengaturan/
+order_share_screen.dart` (tombol baru), file baru kemungkinan
+`lib/core/services/cloudflare_publish_service.dart`, field baru di layar
+Pengaturan utk simpan token (lokasi/mekanisme storage persis perlu dicek
+saat implementasi, ikuti pola `storeKey` yang sudah ada).
