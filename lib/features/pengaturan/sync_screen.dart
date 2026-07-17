@@ -207,8 +207,18 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
           Expanded(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Host mode (owner/asisten)
-          if (device.canSeeReports) ...[
+          // Host mode — HANYA owner. Master data (produk, harga, IZIN
+          // kasir/asisten) sengaja mengalir SATU ARAH host→klien
+          // (lan_sync_service.dart: klien cuma boleh upload append-only,
+          // master data tidak pernah di-merge dari klien). Kalau asisten
+          // ikut bisa "Jadi Host" (dulu pakai device.canSeeReports, owner
+          // ATAU asisten), perubahan yang dibuat owner di device-nya sendiri
+          // (jadi KLIEN dalam topologi itu) tidak akan pernah nyampe ke host
+          // asisten — bug nyata: owner nyalakan izin asisten_stok_minus,
+          // asisten tetap terblokir selamanya krn DB host-nya sendiri tidak
+          // pernah menerima perubahan itu. Owner harus SELALU jadi host
+          // supaya jadi satu-satunya sumber kebenaran master data.
+          if (device.isOwner) ...[
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
