@@ -5,14 +5,51 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 16 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
-2 bug susulan dari testing device asli + fix poin loyalitas + fix
-keamanan lisensi + fix debounce scanner eksternal)._ Full `flutter test`
-hijau (lihat commit terkait utk jumlah pasti, 405+ di titik terakhir
-sebelum fix debounce), `flutter analyze` bersih. schemaVersion masih 15
+3 bug susulan dari testing device asli + fix poin loyalitas + fix
+keamanan lisensi)._ Full `flutter test` **408 test hijau**,
+`flutter analyze` bersih. schemaVersion masih 15
 (tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` —
 belum di-merge ke `main` (tunggu instruksi user). User sudah perbaiki
 `license/revoked.json` di `main` secara manual (typo tanda kutip) —
 item ini SELESAI, tidak perlu ditindaklanjuti lagi.
+
+## Fix: riwayat transaksi nyangkut "Pelanggan" generik utk pelanggan terhapus (16 Juli)
+
+User lapor bug ini SETELAH lihat data hasil "Alihkan Owner" di device
+tujuan (screenshot: beberapa baris riwayat transaksi tampil "Pelanggan"
+polos, bukan nama asli) — TAPI setelah ditelusuri, ini BUKAN bug Alihkan
+Owner, murni bug lama yang kebetulan baru ketahuan saat review data pasca-
+transfer.
+
+**Akar masalah**: `_custNamesProvider` (`tx_history_sheet.dart:80`)
+membangun peta id→nama pelanggan lewat `db.searchCustomers('')`, yang
+DIAM-DIAM memfilter `isActive=true` (`app_database.dart:2483`, dipakai
+jg oleh dropdown pilih pelanggan — filter ini MEMANG benar utk kebutuhan
+itu). Begitu pelanggan dihapus (`deactivateCustomer()` — soft-delete, set
+`isActive=false`), namanya hilang dari peta ini → `_customerLabel()`
+(baris 791) jatuh ke fallback literal `'Pelanggan'`. Ini bertentangan
+LANGSUNG dgn komentar `deactivateCustomer()` sendiri: *"Transaksi &
+riwayat historis tetap utuh krn hanya menyembunyikan dari daftar
+aktif"* — niatnya nama tetap kelihatan di riwayat, implementasinya
+malah menyembunyikan.
+
+**Fix**: method baru `AppDatabase.getAllCustomerNamesIncludingInactive()`
+(select semua pelanggan TANPA filter isActive, khusus utk historical
+label lookup) — `_custNamesProvider` diarahkan ke situ, `searchCustomers()`
+sendiri TIDAK diubah (tetap benar utk dropdown pilih pelanggan aktif).
+
+**Bug ini akan muncul di DEVICE MANAPUN** yang pernah menghapus pelanggan
+yang sudah dipakai transaksi — tidak spesifik Alihkan Owner, cuma
+kebetulan baru kelihatan sekarang. Kalau ada laporan serupa lagi
+("riwayat transaksi nama pelanggan hilang/generik"), cek dulu apakah
+pelanggannya sudah di-soft-delete.
+
+Test: `test/customer_names_including_inactive_test.dart` (DB-tier: method
+baru TETAP include pelanggan inactive, beda dari `searchCustomers()`),
+`test/tx_history_deleted_customer_name_test.dart` (widget-tier: transaksi
+dgn `customerId` milik pelanggan terhapus & `customerName` null — pola
+NYATA saat pelanggan dipilih dari daftar, bukan diketik manual — tetap
+tampil nama asli, bukan fallback). Revert-verify dilakukan.
 
 ## Fix: debounce scanner eksternal 300ms → 150ms (16 Juli)
 

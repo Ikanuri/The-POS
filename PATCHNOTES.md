@@ -58,6 +58,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   anti-duplikat untuk scanner eksternal diturunkan (300ms → 150ms),
   supaya scan dobel yang memang disengaja (mis. mau nambah qty 2) tidak
   ikut ke-abaikan.
+- **Riwayat transaksi tidak lagi menampilkan "Pelanggan" generik** untuk
+  nota lama milik pelanggan yang sudah dihapus — nama aslinya sekarang
+  tetap tampil, sesuai seharusnya (riwayat historis memang dirancang
+  tidak ikut hilang saat pelanggan dihapus).
 
 ## 15 Juli 2026
 

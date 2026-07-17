@@ -10,6 +10,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-16
 
+- `21e58c1` — fix: riwayat transaksi tampilkan nama generik "Pelanggan" utk pelanggan yang sudah dihapus, alih-alih nama aslinya
 - `839a29c` — fix: turunkan debounce scanner eksternal 300ms→150ms agar scan dobel cepat yang disengaja tidak ke-drop
 - `1d09200` — fix: 2 bug ditemukan saat testing device asli Alihkan Owner (redirect loop router + nama/kode device tidak lagi warisi punya lama)
 - `99de7ea` — feat: fitur "Alihkan Owner" (transfer data + identitas toko via file terenkripsi BPOT1) + opsi "Pulihkan dari File" di welcome screen
