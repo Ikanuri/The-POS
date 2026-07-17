@@ -51,6 +51,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   item seperti itu dilempar ke tab "Mirip" untuk Anda konfirmasi manual,
   dan pencocokan lewat kode juga mengharuskan satuannya benar-benar cocok.
   Sinkron harga jadi jauh lebih akurat dan tidak "berubah-ubah sendiri".
+- **Menambah/mengedit varian produk dengan barcode yang sudah dipakai
+  produk lain sekarang menampilkan pesan error yang jelas** — sebelumnya
+  varian gagal tersimpan tanpa pemberitahuan apa pun (terlihat seperti
+  tidak terjadi apa-apa), sekarang muncul pesan "Barcode sudah dipakai
+  produk/varian lain" supaya Anda tahu perlu pakai barcode lain.
 
 ## 16 Juli 2026
 

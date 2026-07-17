@@ -8,8 +8,9 @@ _Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
 3 bug susulan dari testing device asli + fix poin loyalitas + fix
 keamanan lisensi + fix debounce scanner + fix nama pelanggan riwayat +
 warna aksen toolbar kasir + fix sinkron harga SKU non-unik + Item
-29/30(a/b/c)/31/35(opsional) SEMUA dieksekusi & di-commit)._ Full
-`flutter test` **441 test hijau**,
+29/30(a/b/c)/31/35(opsional) SEMUA dieksekusi & di-commit + migrasi data
+Griyo POS ke file `.berkahpos` (one-off, di luar repo) + fix silent-fail
+varian barcode bentrok)._ Full `flutter test` **442 test hijau**,
 `flutter analyze` bersih. schemaVersion masih 15
 (tidak ada migrasi baru, semua fitur baru pakai `app_settings` key baru
 `archive_manifest`/`last_archive_date` — TIDAK butuh migrasi skema).
@@ -17,6 +18,118 @@ Branch `claude/setup-dependencies-am31te` — belum di-merge ke `main`
 (tunggu instruksi user). User sudah perbaiki `license/revoked.json` di
 `main` secara manual (typo tanda kutip) — item ini SELESAI, tidak perlu
 ditindaklanjuti lagi.
+
+## Fix: varian produk dgn barcode bentrok gagal-diam tanpa pesan error (17 Juli)
+
+User lapor: kalau varian produk diberi barcode, varian TIDAK tersimpan;
+tanpa barcode, tersimpan normal. Root cause (dikonfirmasi via DB-tier
+test): `product_barcodes.barcode` UNIQUE di seluruh katalog — kalau
+barcode yg dimasukkan sudah dipakai produk/varian LAIN mana pun,
+`db.createVariant()`/`updateVariant()` (dibungkus `transaction()`) throw
+`SqliteException` & rollback total (produk+unit+tier+barcode varian sama
+sekali tidak tersimpan). **Bug sebenarnya**: `_addVariant()`/
+`_editVariant()` di `produk_form_screen.dart` TIDAK PERNAH membungkus
+pemanggilan itu dgn try/catch — exception lolos tak tertangani, user
+cuma lihat "tidak terjadi apa-apa" tanpa pesan error sama sekali.
+
+**Fix**: try/catch di kedua fungsi, pesan spesifik via
+`_friendlyBarcodeError()` kalau exception match pola
+`UNIQUE constraint failed` + `barcode` ("Barcode sudah dipakai
+produk/varian lain..."), fallback pesan generik utk error lain.
+
+Test: `test/variant_barcode_error_banner_test.dart` (widget-tier, seed 2
+produk — satu sudah pegang barcode, satu mau ditambah varian pakai
+barcode sama — pastikan pesan error muncul DAN varian benar2 tidak
+tersimpan). Revert-verify: `rethrow` sementara di `_addVariant` → test
+gagal persis dgn `SqliteException` mentah lolos ke widget tree (sama
+seperti laporan user) → fix dikembalikan, hijau lagi.
+
+## Migrasi data Griyo POS → file `.berkahpos` (17 Juli, one-off, SELESAI)
+
+User migrasi toko produksi sungguhan dari Griyo POS. Proses:
+**BPOP2 (backup murni)** dipilih setelah diskusi tradeoff vs BPOT1
+(Alihkan Owner) — user pilih BPOP2 murni krn tidak mau ada risiko sama
+sekali (walau risiko keduanya sebenarnya setara utk restore ke device
+baru, lihat histori chat kalau perlu detail argumennya).
+
+**Sumber data**: 14 file `Transaksi <bulan>_<tahun>.xlsx` (Jun 2025–Jul
+2026, upload user, 2 file "rentang penuh" gagal upload/0-byte tapi tidak
+masalah krn tercakup file bulanan), `Pelanggan.xlsx` (493 baris, dari
+`Contoh_Dataset.rar` lama), `Products.csv` (**PENTING: sempat pakai
+versi USANG** dari `docs/reference/Products.csv` di rebuild pertama —
+user upload versi TERBARU belakangan, 80 produk beda harga + beberapa
+placeholder ternyata produk asli yg cuma hilang dari versi lama — SUDAH
+di-rebuild ulang pakai versi terbaru, jangan pakai `docs/reference/
+Products.csv` lagi kalau ada permintaan migrasi serupa, tanya user versi
+terbaru dulu).
+
+**Keputusan desain kunci** (semua sudah dieksekusi & divalidasi):
+- Harga per-item struk historis TIDAK ADA di data Griyo manapun (dicek
+  3 sumber: Transaksi, Arus Kas, Penjualan harian) — item disimpan
+  nama+qty saja (`priceAtSale=0`), Total nota tetap ASLI/akurat.
+  `stock_ledger` KOSONG sama sekali (stok mulai 0 bersih, transaksi
+  historis tidak mengurangi stok), poin loyalitas TIDAK dihitung ulang
+  dari histori (diambil langsung dari saldo `Pelanggan.xlsx`, hindari
+  dobel-hitung).
+- Barang di Rincian yang tak ada di katalog (kode_produk Griyo TIDAK
+  unik, sama seperti temuan Item 35 — banyak produk berbagi
+  `kode_produk` yg sebenarnya nama satuan spt "Dos"/"Pak") → **importer
+  CSV mem-blank kode DUPLIKAT** (kode pertama tetap, ke-2+ di-kosongkan)
+  sebelum importFromBytes, supaya dedup-by-kode importer tidak salah
+  gabung produk beda jadi satu — tanpa fix ini placeholder membengkak
+  145 nama (termasuk 1 nama dipakai 883× transaksi!). Sisanya (~38-55
+  nama tergantung versi katalog) jadi produk placeholder
+  (`isNonStock=true`, harga 0).
+- Pelanggan "Umum" tanpa profil (126 nama, TIDAK ada di `Pelanggan.xlsx`
+  maupun laporan resmi Griyo "Pelanggan Utama") → disimpan sbg
+  `customerName` teks apa adanya (termasuk karakter aneh spt
+  `"Demoiselle <3"`), BUKAN `customerId` — sesuai skema
+  `transactions.customerName` yg memang didesain utk "pembeli umum
+  bernama".
+- ~19-21 nota tempo (kolom Pembayaran = angka minus di Griyo = SISA
+  HUTANG, bukan negatif harga — divalidasi lewat pola `paid = total -
+  |angka|`, semua masuk akal) → **dipertahankan sbg hutang AKTIF**
+  (status `tempo`/`kurang_bayar`), BUKAN "Lunas" — beda dari piutang
+  SNAPSHOT lama di `Pelanggan.xlsx` yg TETAP tidak dibawa (keputusan
+  lama, tidak berubah). 2 nota tempo atas nama "Umum" (tanpa pelanggan
+  tertaut) di-treat sbg Lunas krn tidak ada yg bisa ditagih.
+- Audit cross-check dgn laporan resmi Griyo "Pelanggan Utama"
+  (`Pelanggan_Utama_....xlsx`) menemukan & menjelaskan 2 sumber
+  perbedaan kecil (~1,4% dari 14.348 tx, BUKAN bug proses): (a) 13 nama
+  py >1 profil BEDA di sistem Griyo sendiri (mis. "Bu Ika" 2x, org
+  beda), (b) transaksi yg pelanggannya "diketik bebas" vs "dipilih dari
+  daftar tersimpan" — cuma yg dipilih yg masuk hitungan resmi Griyo,
+  tapi data mentah (yg diimpor) py keduanya. Keputusan: pakai data
+  mentah apa adanya (lebih konsisten & bisa ditelusuri drpd override
+  angka dari laporan agregat yg tak py rincian transaksi).
+
+**Cara build** (kalau perlu diulang/di-generate ulang): skrip Python
+sekali-pakai (parse XML mentah xlsx via regex — openpyxl gagal krn ada
+karakter tak ter-escape spt `<` di nama pelanggan & `<dimension>` tag yg
+kadang salah/under-report jumlah kolom asli) → JSON bersih
+(`customers.json`/`transactions.json`) + CSV produk yg sudah
+di-preprocess (stok di-nol-kan, kode duplikat di-blank) → skrip Dart
+throwaway (`test/griyo_migration_build.dart`, SUDAH DIHAPUS dari repo
+setelah selesai — pola sama dipakai kalau perlu lagi) yg pakai KODE ASLI
+app (`AppDatabase`+`CsvImportService`+`DbExportService.exportPortable`)
+supaya file dijamin valid, BUKAN reimplementasi format. Self-test wajib:
+restore file ke DB kosong, cocokkan jumlah/total ke sumber (skrip kedua,
+`test/griyo_migration_verify.dart`, juga sudah dihapus).
+
+**Hasil akhir (revisi ke-2, Products.csv terbaru)**: 2.834 produk (2.791
+dari katalog + 43 placeholder), 474 pelanggan (poin loyalitas total
+27.024 terbawa), 14.348 transaksi (Rp 1.606.131.152, 19 nota tempo aktif
+Rp 418.550), 62.646 baris item. Semua tervalidasi via self-test restore
+sungguhan (bukan cuma dibaca ulang, benar2 di-decrypt+restore ke
+`AppDatabase(NativeDatabase.memory())` kosong lalu di-query). File
+terkirim ke user via `SendUserFile`, password terakhir: `riverwas`
+(sempat ganti 1x dari password acak awal atas permintaan user — kalau
+user lapor masalah restore, pastikan tanya password mana yg dipakai).
+
+**Status: SELESAI, menunggu konfirmasi user berhasil restore di device
+produksi.** Tidak ada follow-up kode diperlukan kecuali user lapor
+masalah spesifik saat restore, atau minta versi baru (mis. kalau
+Products.csv berubah lagi / mau tambah data lain).
 
 ## Item 29/30/31/35(opsional) — batch besar "kerjakan semua" (17 Juli, SEMUA SELESAI & di-commit)
 
