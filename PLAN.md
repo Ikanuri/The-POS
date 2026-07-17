@@ -581,6 +581,90 @@ data master, bawa saldo stok terakhir spy tidak ke-reset 0):**
 
 ---
 
+## Item 32 — Barcode scanner eksternal kurang responsif saat scan cepat berturut
+
+**Konteks:** user lapor: kadang 2x scan cepat (barcode sama, mis. sengaja
+scan dobel utk qty 2) cuma menghasilkan 1 output.
+
+**Akar masalah ditemukan** (`kasir_screen.dart:1126-1135`, `_handleBarcode`):
+debounce anti-duplikat utk scanner eksternal (HID) di-set **300ms**
+(`debounceMs = fromExternal ? 300 : 1500`) — barcode yang SAMA dalam
+rentang 300ms dianggap "echo" hardware & diabaikan begitu saja
+(`if (barcode == _lastScan && nowMs - _lastScanMs < debounceMs) return;`).
+Kalau scanner user ternyata cukup cepat utk menyelesaikan 2 scan
+sungguhan dalam window itu, scan kedua yang genuinely disengaja ikut
+ke-drop — sama persis gejala yang dilaporkan.
+
+**Belum diputuskan (perlu digali sebelum coding):**
+- Nilai 300ms itu dipilih berdasar apa awalnya (asumsi "echo" hardware
+  tertentu)? Perlu tahu scanner model/simtom pastinya dari user — apakah
+  scanner MEMANG kadang double-fire sendiri tanpa disengaja (makanya
+  debounce ini ada), atau modelnya user tidak begitu (jadi bisa
+  diturunkan lebih rendah dgn aman)?
+- Opsi teknis: (a) turunkan angka 300ms secara empiris (butuh testing
+  nyata pakai scanner asli, bukan cuma tebak angka), atau (b) cari sinyal
+  yang lebih presisi utk bedakan "echo hardware" vs "scan sengaja
+  berturut" — mis. lihat timing antar-KARAKTER individual di dalam satu
+  burst HID (echo biasanya langsung menempel tanpa jeda wajar antar
+  karakter awal, beda dari scan baru yang alami ada jeda fisik minimal
+  mengangkat&scan ulang barang).
+- **Prioritas rendah dampak tapi perlu info user dulu** — tidak bisa
+  langsung diperbaiki tanpa tahu detail hardware yang bermasalah.
+
+---
+
+## Item 33 — Warna aksen pada tombol toolbar (scan, dll) di sebelah kolom cari produk
+
+**Konteks:** user minta tombol-tombol di toolbar kasir (scan barcode,
+antrian, riwayat transaksi, toggle grid, tempel pesanan) diberi aksen
+warna soft sesuai fungsi masing-masing — sekarang SEMUA seragam abu-abu
+netral (`_TbBtn`, `kasir_screen.dart:2294-2356`: `cs.surface` bg,
+`cs.onSurfaceVariant` ikon, `cs.outlineVariant` border, tidak ada
+pembeda warna sama sekali antar tombol).
+
+**Tombol yang perlu mapping warna** (dari `kasir_screen.dart:2190-2230`):
+scan barcode (`qr_code_scanner_rounded`), antrian pesanan tertahan
+(`pause_circle_outline_rounded`, badge count), riwayat transaksi
+(`history_rounded`), toggle grid/list (`grid_view_rounded`/
+`view_list_rounded`), tempel pesanan (icon paste, kondisional).
+
+**Usulan mapping (belum final, perlu konfirmasi user)** — soft/dim spt
+pola `accent-dim`/`errorContainer` yang sudah dipakai di app, BUKAN warna
+solid penuh:
+- Scan barcode → aksen utama toko (`AppTheme` terracotta) — tombol aksi
+  cepat paling sering dipakai.
+- Antrian (pesanan tertahan, ada badge count) → amber/kuning — semantik
+  "menunggu/pending".
+- Riwayat Transaksi → biru soft — semantik "informasi/lihat data".
+- Toggle grid/list → tetap netral (murni preferensi tampilan, bukan
+  fungsi bermakna warna).
+- Tempel Pesanan → hijau soft — semantik "menambahkan/masuk".
+
+**Belum diputuskan:** persis mapping di atas benar sesuai selera user
+atau perlu direvisi — sebaiknya bikin mockup kecil (spt Item 30b) sebelum
+diterapkan ke kode, supaya tidak bolak-balik reject di implementasi.
+
+---
+
+## Item 34 — Import riwayat transaksi detail (referensi: Item 5, dataset Griyo)
+
+User tanya ulang: apakah migrasi data transaksi bisa sedetail Griyo POS
+(rincian per-item, bukan cuma agregat), mengacu ke contoh dataset yang
+sama dgn Item 5. **Jawaban: YA, sudah dianalisis & didokumentasikan
+lengkap di Item 5 di atas** — file `Transaksi <rentang-tanggal>.xlsx`
+(BEDA dari file rekap bulanan `Penjualan ...xlsx`) punya kolom "Rincian"
+persis per-item (`NamaProduk:Qty` per baris, dipisah `\n`), sudah
+dikonfirmasi via contoh nyata (`Transaksi 2026-06-10_2026-06-11
+2026-06-10.xlsx`). Item ini BUKAN item baru, murni penanda bahwa user
+sudah menegaskan kembali minat mengerjakan Item 5 — pertanyaan yang masih
+menggantung dari Item 5 (cakupan tanggal file yang dimiliki user: apakah
+mendekati riwayat penuh toko Maret 2024–sekarang, atau cuma beberapa
+sampel) masih perlu dijawab user sebelum mulai. **Hapus Item 34 ini
+begitu Item 5 dimulai** — gabungkan detailnya ke Item 5 saja, jangan
+dipertahankan sbg entri terpisah permanen.
+
+---
+
 ## Status ringkas & urutan sisa pekerjaan
 
 **Item 9-22 (backlog audit besar 10-11 Juli) — SELESAI 12/13**, lihat
