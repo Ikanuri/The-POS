@@ -169,4 +169,72 @@ void main() {
     expect(m.localPrice, 4000);
     expect(m.priceChanged, isTrue);
   });
+
+  test('Item 35(opsional) — mode barcode-saja: item TANPA barcode langsung '
+      'notFound, TIDAK dicoba lewat SKU walau kodenya unik & cocok',
+      () async {
+    await seedProduct(
+        id: 'p_amp2',
+        name: 'Amplop Mini',
+        kode: 'amp-mini',
+        unitTypeId: 102,
+        unitId: 'u_amp2',
+        price: 4000);
+
+    final result = await PriceMatchService.match(
+      db: db,
+      barcodeOnly: true,
+      catalog: const [
+        PriceCatalogItem(
+          productName: 'Amplop Mini',
+          kodeProduk: 'amp-mini', // SKU unik & cocok, tapi HARUS diabaikan
+          barcode: null,
+          unitTypeName: 'Pak',
+          price: 5000,
+          costPrice: 0,
+        ),
+      ],
+    );
+
+    expect(result.matched, isEmpty);
+    expect(result.ambiguous, isEmpty,
+        reason: 'mode barcode-saja tidak boleh jatuh ke fuzzy sama sekali');
+    expect(result.notFound.map((c) => c.productName), contains('Amplop Mini'));
+  });
+
+  test('Item 35(opsional) — mode barcode-saja: barcode cocok TETAP match '
+      'normal', () async {
+    await seedProduct(
+        id: 'p_teh',
+        name: 'Teh Celup',
+        kode: null,
+        unitTypeId: 102,
+        unitId: 'u_teh',
+        price: 8000);
+    await db.into(db.productBarcodes).insert(ProductBarcodesCompanion.insert(
+          id: 'bc_teh',
+          productUnitId: 'u_teh',
+          barcode: '899123456',
+          isPrimary: const Value(true),
+        ));
+
+    final result = await PriceMatchService.match(
+      db: db,
+      barcodeOnly: true,
+      catalog: const [
+        PriceCatalogItem(
+          productName: 'Teh Celup',
+          kodeProduk: null,
+          barcode: '899123456',
+          unitTypeName: 'Pak',
+          price: 9000,
+          costPrice: 0,
+        ),
+      ],
+    );
+
+    expect(result.matched, hasLength(1));
+    expect(result.matched.first.matchType, MatchType.barcode);
+    expect(result.matched.first.localProductName, 'Teh Celup');
+  });
 }

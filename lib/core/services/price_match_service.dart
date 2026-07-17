@@ -67,16 +67,24 @@ class AmbiguousItem {
 class PriceMatchService {
   PriceMatchService._();
 
+  /// [barcodeOnly] — Item 35(opsional): mode "sinkron via barcode saja"
+  /// utk toko besar/data yang kode produknya (SKU) tidak bisa dipercaya
+  /// sama sekali. Kalau true, SKU & fuzzy-nama dilewati sepenuhnya — item
+  /// tanpa barcode-cocok langsung `notFound` (bukan ditebak lewat sinyal
+  /// yang lebih lemah). Paling aman utk katalog besar/data mentah yang
+  /// kode produknya diisi nama satuan (lihat Item 35 di PLAN.md/HANDOFF).
   static Future<PriceMatchResult> match({
     required AppDatabase db,
     required List<PriceCatalogItem> catalog,
+    bool barcodeOnly = false,
   }) async {
     final matched = <MatchedItem>[];
     final notFound = <PriceCatalogItem>[];
     final ambiguous = <AmbiguousItem>[];
     final log = <String>[];
 
-    log.add('=== MATCH START: ${catalog.length} catalog items ===');
+    log.add('=== MATCH START: ${catalog.length} catalog items ==='
+        '${barcodeOnly ? ' (mode barcode-saja)' : ''}');
 
     final allProducts = await db.searchProducts('');
     log.add('Produk lokal aktif: ${allProducts.length}');
@@ -85,9 +93,15 @@ class PriceMatchService {
     final typeNameById = {for (final u in unitTypes) u.id: u.name};
 
     for (final item in catalog) {
-      final result = await _tryMatch(db, item, allProducts, typeNameById, log);
+      final result = barcodeOnly
+          ? await _tryMatchBarcodeOnly(db, item, allProducts, log)
+          : await _tryMatch(db, item, allProducts, typeNameById, log);
       if (result != null) {
         matched.add(result);
+      } else if (barcodeOnly) {
+        log.add('  → Mode barcode-saja: tidak cocok → notFound (SKU/fuzzy '
+            'dilewati)');
+        notFound.add(item);
       } else {
         final fuzzyResult = _tryFuzzyMatch(item, allProducts);
         if (fuzzyResult != null) {
@@ -280,6 +294,59 @@ class PriceMatchService {
     }
 
     return null;
+  }
+
+  /// Item 35(opsional) — mode "sinkron via barcode saja". Sama persis
+  /// dengan blok barcode di [_tryMatch] (sinyal paling andal, deterministik
+  /// per unit), TAPI berhenti di situ — TIDAK jatuh ke SKU/fuzzy sama
+  /// sekali. Dipakai saat data toko sumber tidak bisa dipercaya SKU-nya
+  /// (mis. `kode_produk` diisi nama satuan seperti "Dos"/"Pak").
+  static Future<MatchedItem?> _tryMatchBarcodeOnly(
+    AppDatabase db,
+    PriceCatalogItem item,
+    List<Product> allProducts,
+    List<String> log,
+  ) async {
+    log.add('[${item.productName}] catalog: price=${item.price}, '
+        'barcode=${item.barcode ?? "null"} (mode barcode-saja)');
+
+    if (item.barcode == null || item.barcode!.isEmpty) {
+      log.add('  → Tanpa barcode → notFound (SKU/fuzzy dilewati)');
+      return null;
+    }
+
+    final bc = await db.lookupBarcode(item.barcode!);
+    if (bc == null) {
+      log.add('  → Barcode "${item.barcode}" tidak ada di DB');
+      return null;
+    }
+    final unit = await (db.select(db.productUnits)
+          ..where((t) => t.id.equals(bc.productUnitId)))
+        .getSingleOrNull();
+    if (unit == null) {
+      log.add('  → Barcode ditemukan tapi unit hilang: ${bc.productUnitId}');
+      return null;
+    }
+    final product = allProducts.where((p) => p.id == unit.productId).firstOrNull;
+    if (product == null) {
+      log.add('  → Barcode ditemukan tapi produk tidak di allProducts '
+          '(inactive?) productId=${unit.productId}');
+      return null;
+    }
+    final tiers = await db.getPriceTiers(unit.id);
+    final baseTier =
+        tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
+    log.add('  → Barcode match: unit=${_short(unit.id)}, '
+        'product="${product.name}"');
+    return MatchedItem(
+      catalogItem: item,
+      localProductId: product.id,
+      localProductUnitId: unit.id,
+      localProductName: product.name,
+      localPrice: baseTier?.price ?? 0,
+      localCostPrice: baseTier?.costPrice ?? 0,
+      matchType: MatchType.barcode,
+    );
   }
 
   static (Product, double)? _tryFuzzyMatch(
