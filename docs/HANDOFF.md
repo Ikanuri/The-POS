@@ -6,12 +6,35 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 16 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
 3 bug susulan dari testing device asli + fix poin loyalitas + fix
-keamanan lisensi)._ Full `flutter test` **408 test hijau**,
+keamanan lisensi + fix debounce scanner + fix nama pelanggan riwayat +
+warna aksen toolbar kasir)._ Full `flutter test` **409 test hijau**,
 `flutter analyze` bersih. schemaVersion masih 15
 (tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` —
 belum di-merge ke `main` (tunggu instruksi user). User sudah perbaiki
 `license/revoked.json` di `main` secara manual (typo tanda kutip) —
 item ini SELESAI, tidak perlu ditindaklanjuti lagi.
+
+## Item 33 — aksen warna toolbar kasir (16 Juli, SELESAI, Varian C)
+
+User pilih **Varian C** dari 3 mockup Playwright yang dikirim sesi
+sebelumnya (`toolbar_color_mockups.html/.jpg`, scratchpad — tidak
+di-commit). Ditambahkan 4 pasang warna baru di `AppTheme`
+(`scanFg/scanBg`, `antrianFg/antrianBg`, `riwayatFg/riwayatBg`,
+`tempelFg/tempelBg`, masing-masing `Color Function(bool isDark)`,
+mengikuti pola pasangan fg/bg yang sudah ada spt `debtFg`/`debtBg`).
+`_TbBtn` (`kasir_screen.dart`) diberi parameter opsional
+`fg`/`bg` (`Color Function(bool)?`) — kalau null, fallback ke warna
+netral lama (`cs.onSurfaceVariant`/`cs.surface`). 4 dari 5 tombol
+toolbar diwarnai (scan=biru, antrian=amber, riwayat=ungu, tempel
+pesanan=hijau); toggle grid/list SENGAJA dibiarkan netral (bukan
+error/kelupaan — murni preferensi tampilan, bukan fungsi yang perlu
+disorot warna).
+
+Test: `test/kasir_toolbar_accent_color_test.dart` (cek warna icon scan/
+antrian/riwayat sesuai `AppTheme`, dan toggle grid/list TETAP
+`onSurfaceVariant`). Revert-verify dilakukan (lepas `fg`/`bg` dari
+tombol scan → test gagal tepat sesuai ekspektasi → dikembalikan).
+**Item 33 SELESAI, tidak ada pekerjaan menggantung.**
 
 ## Fix: riwayat transaksi nyangkut "Pelanggan" generik utk pelanggan terhapus (16 Juli)
 
@@ -75,16 +98,24 @@ verifikasi manual user belum dikonfirmasi** — kalau sesi depan lanjut,
 tanyakan hasil tes user dulu sebelum menganggap ini selesai total (lihat
 juga PLAN.md Item 32).
 
-## Diskusi belum dieksekusi — Item 30(b)/33 tunggu keputusan user
+## Diskusi belum dieksekusi — Item 29/30/31 siap kapan saja
 
+- **Item 29** (katalog HTML auto-"habis" dari stok ril) — desain final,
+  belum diimplementasi.
+- **Item 30(a)** (kartu cek cepat di Ringkasan Harian) — desain final,
+  agak bergantung ke 30(b) (target navigasi "Lihat semua").
 - **Item 30(b)** ("Cek Stok" screen) — layout mockup SUDAH di-approve
   user (`cek_stok_mockup.html`/`.jpg` di scratchpad sesi ini, tidak
   di-commit — lihat deskripsi lengkap di PLAN.md kalau perlu regenerasi).
   Siap diimplementasi ke Flutter kapan saja.
-- **Item 33** (warna aksen toolbar kasir) — 3 varian mockup SUDAH
-  dikirim ke user (`toolbar_color_mockups.html`/`.jpg`, scratchpad sesi
-  ini), **BELUM ada pilihan/konfirmasi user** — jangan implementasi
-  sebelum user pilih salah satu varian (A/B/C) atau minta revisi.
+- **Item 30(c)** (tab analitik/audit di Laporan, chart+tabel) — desain
+  final.
+- **Item 31** (Tutup Buku tanggal custom, sekali/tahun) — redesain
+  teknis (periodStart/periodEnd) sudah disetujui, belum diimplementasi.
+- **Item 4/5** (migrasi data Griyo POS/transaksi lama) — **DIPENDING**
+  atas permintaan user: scope migrasi ternyata bukan cuma
+  transaksi+pelanggan, tapi juga produk dll (belum dirinci). Jangan
+  mulai sebelum user re-konfirmasi scope penuh & minta lanjut.
 
 ## Fitur baru: "Alihkan Owner" + "Pulihkan dari File" (16 Juli, Item 27/28)
 
