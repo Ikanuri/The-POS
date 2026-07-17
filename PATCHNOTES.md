@@ -54,6 +54,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   data aplikasi atau install ulang** — sebelumnya bisa terjadi kondisi
   aplikasi bolak-balik antara layar aktivasi & layar setup tanpa henti,
   sekarang selalu tuntas berhenti di layar aktivasi.
+- **Scan barcode dobel cepat berturut sekarang lebih responsif** — jeda
+  anti-duplikat untuk scanner eksternal diturunkan (300ms → 150ms),
+  supaya scan dobel yang memang disengaja (mis. mau nambah qty 2) tidak
+  ikut ke-abaikan.
 
 ## 15 Juli 2026
 

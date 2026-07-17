@@ -194,11 +194,18 @@ cuma tes "tab pelanggan muncul" lalu anggap beres.
 
 **Prioritas:** Setelah Item 3 selesai (lihat alasan ketergantungan di
 3b — bug dedup importer di Item 2 sudah selesai dikerjakan, lihat
-CHANGELOG). User sudah konfirmasi punya beberapa file rentang tanggal (bukan cuma
-satu hari), tapi **belum diketahui apakah cakupannya mendekati riwayat penuh
-toko (Maret 2024–sekarang, sesuai rekap bulanan di file `Penjualan`) atau
-cuma beberapa sampel** — perlu dikonfirmasi user sebelum estimasi skala
-pekerjaan pencocokan produk final dibuat.
+CHANGELOG).
+
+**DIKONFIRMASI user (menjawab pertanyaan cakupan yang sebelumnya
+menggantung):** user punya **riwayat transaksi PENUH dari tahun lalu**,
+format `.xlsx`, **dibagi per bulan** (sengaja dipecah gitu oleh user krn
+khawatir file besar bikin crash saat diproses) — jadi bukan cuma
+beberapa sampel, tapi mendekati cakupan riwayat penuh yang diperkirakan
+sebelumnya. Siap diestimasi skala pekerjaannya & mulai diimplementasi
+kapan saja — tidak ada lagi pertanyaan menggantung soal cakupan data.
+(Konsekuensi teknis: importer harus bisa proses BANYAK file bulanan
+berurutan sbg satu batch/sesi import, bukan cuma 1 file sekali jalan —
+perlu dipikirkan UI multi-file upload atau proses berurutan.)
 
 **Konteks penemuan:** User awalnya bertanya kenapa hasil ekstraksi riwayat
 transaksi dulu membuat struk kosong (cuma nominal, tanpa rincian item).
@@ -595,21 +602,31 @@ Kalau scanner user ternyata cukup cepat utk menyelesaikan 2 scan
 sungguhan dalam window itu, scan kedua yang genuinely disengaja ikut
 ke-drop — sama persis gejala yang dilaporkan.
 
-**Belum diputuskan (perlu digali sebelum coding):**
-- Nilai 300ms itu dipilih berdasar apa awalnya (asumsi "echo" hardware
-  tertentu)? Perlu tahu scanner model/simtom pastinya dari user — apakah
-  scanner MEMANG kadang double-fire sendiri tanpa disengaja (makanya
-  debounce ini ada), atau modelnya user tidak begitu (jadi bisa
-  diturunkan lebih rendah dgn aman)?
-- Opsi teknis: (a) turunkan angka 300ms secara empiris (butuh testing
-  nyata pakai scanner asli, bukan cuma tebak angka), atau (b) cari sinyal
-  yang lebih presisi utk bedakan "echo hardware" vs "scan sengaja
-  berturut" — mis. lihat timing antar-KARAKTER individual di dalam satu
-  burst HID (echo biasanya langsung menempel tanpa jeda wajar antar
-  karakter awal, beda dari scan baru yang alami ada jeda fisik minimal
-  mengangkat&scan ulang barang).
-- **Prioritas rendah dampak tapi perlu info user dulu** — tidak bisa
-  langsung diperbaiki tanpa tahu detail hardware yang bermasalah.
+**Riwayat ditelusuri** (user tidak ingat detail persis, cuma ingat "dulu
+kurang responsif, lalu di-fix jadi seperti sekarang"): commit `051357b`
+("Kasir: debounce scanner eksternal 300ms + auto-scroll keranjang ke
+bawah", 27 Juni) adalah asal-usul angka 300ms ini — deskripsi commit
+mengindikasikan 300ms ini DITAMBAHKAN sbg fix anti-duplikat (bukan
+diturunkan dari angka lebih tinggi sebelumnya). Jadi memori user "dulu
+kurang responsif → di-fix" kemungkinan besar soal pengalaman scan LAIN
+(haptik, redesign kapsul, animasi pulse — semua di rentang commit yang
+sama), BUKAN soal window 300ms ini spesifik — tidak ada bukti histori
+"300ms" pernah diturunkan dari nilai lebih tinggi.
+
+**Keputusan user**: coba turunkan nilainya, krn "butuh kecepatan hampir
+real time".
+
+**Rencana**: turunkan `debounceMs` (fromExternal) dari 300ms → **150ms**
+(bukan dihapus total — tetap ada anti-echo, cuma window-nya separuh;
+150ms juga angka yang sudah dipakai sbg konvensi debounce anti-misclick
+lain di app ini, mis. `AddControl`). **TIDAK BISA diverifikasi otomatis**
+di lingkungan ini (perilaku echo hardware scanner sungguhan tidak bisa
+disimulasikan di widget test) — WAJIB user coba langsung di device asli
+dgn scanner fisiknya setelah perubahan, pastikan (a) scan dobel cepat yg
+disengaja sekarang berhasil dobel, DAN (b) tidak muncul balik gejala lama
+(barcode kepencet dobel sendiri tanpa disengaja/echo hardware). Kalau
+(b) muncul, berarti 150ms masih kurang tinggi utk scanner user — perlu
+naik sedikit, bukan bukti keputusan ini salah arah.
 
 ---
 
@@ -640,28 +657,12 @@ solid penuh:
   fungsi bermakna warna).
 - Tempel Pesanan → hijau soft — semantik "menambahkan/masuk".
 
-**Belum diputuskan:** persis mapping di atas benar sesuai selera user
-atau perlu direvisi — sebaiknya bikin mockup kecil (spt Item 30b) sebelum
-diterapkan ke kode, supaya tidak bolak-balik reject di implementasi.
-
----
-
-## Item 34 — Import riwayat transaksi detail (referensi: Item 5, dataset Griyo)
-
-User tanya ulang: apakah migrasi data transaksi bisa sedetail Griyo POS
-(rincian per-item, bukan cuma agregat), mengacu ke contoh dataset yang
-sama dgn Item 5. **Jawaban: YA, sudah dianalisis & didokumentasikan
-lengkap di Item 5 di atas** — file `Transaksi <rentang-tanggal>.xlsx`
-(BEDA dari file rekap bulanan `Penjualan ...xlsx`) punya kolom "Rincian"
-persis per-item (`NamaProduk:Qty` per baris, dipisah `\n`), sudah
-dikonfirmasi via contoh nyata (`Transaksi 2026-06-10_2026-06-11
-2026-06-10.xlsx`). Item ini BUKAN item baru, murni penanda bahwa user
-sudah menegaskan kembali minat mengerjakan Item 5 — pertanyaan yang masih
-menggantung dari Item 5 (cakupan tanggal file yang dimiliki user: apakah
-mendekati riwayat penuh toko Maret 2024–sekarang, atau cuma beberapa
-sampel) masih perlu dijawab user sebelum mulai. **Hapus Item 34 ini
-begitu Item 5 dimulai** — gabungkan detailnya ke Item 5 saja, jangan
-dipertahankan sbg entri terpisah permanen.
+**Mockup 3 varian sudah dikirim** (`toolbar_color_mockups.html`/`.jpg` di
+scratchpad sesi ini, tidak di-commit): Varian A (aksen per-fungsi lengkap
+— scan=terracotta, antrian=amber, riwayat=biru, grid=netral, tempel=hijau),
+Varian B (minimal — cuma Scan yg diwarnai, sisanya netral), Varian C
+(palet beda — scan=biru, riwayat=ungu). **Menunggu user pilih salah satu
+atau minta revisi** sebelum diterapkan ke kode.
 
 ---
 

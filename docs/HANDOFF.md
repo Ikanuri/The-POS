@@ -6,12 +6,48 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 16 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
 2 bug susulan dari testing device asli + fix poin loyalitas + fix
-keamanan lisensi)._ Full `flutter test` **405 test hijau**,
-`flutter analyze` bersih. schemaVersion masih 15
+keamanan lisensi + fix debounce scanner eksternal)._ Full `flutter test`
+hijau (lihat commit terkait utk jumlah pasti, 405+ di titik terakhir
+sebelum fix debounce), `flutter analyze` bersih. schemaVersion masih 15
 (tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` —
 belum di-merge ke `main` (tunggu instruksi user). User sudah perbaiki
 `license/revoked.json` di `main` secara manual (typo tanda kutip) —
 item ini SELESAI, tidak perlu ditindaklanjuti lagi.
+
+## Fix: debounce scanner eksternal 300ms → 150ms (16 Juli)
+
+User lapor: scan barcode dobel cepat berturut (mis. sengaja scan 2x utk
+qty 2) kadang cuma menghasilkan 1 output. Akar masalah: `_handleBarcode`
+(`kasir_screen.dart:1126`) punya debounce anti-echo hardware utk scanner
+eksternal — barcode SAMA dalam window waktu tsb diabaikan. Window itu
+300ms (dari commit `051357b`, 27 Juni — DITAMBAHKAN sbg fix anti-duplikat
+saat itu, BUKAN diturunkan dari nilai lebih tinggi; ditelusuri via git
+log krn user tidak ingat detail persis, cuma ingat "dulu kurang
+responsif lalu di-fix" — kemungkinan besar memori itu soal pengalaman
+scan lain di rentang commit yg sama, bukan window 300ms spesifik ini).
+
+**Fix**: turunkan ke 150ms (matching konvensi debounce anti-misclick
+lain di app, mis. `AddControl`) — tetap ada jaring anti-echo, cuma
+window-nya separuh. **TIDAK BISA diverifikasi otomatis** (perilaku echo
+hardware scanner sungguhan tidak bisa disimulasikan widget test) — user
+SUDAH diberi tahu WAJIB coba manual di device asli dgn scanner fisiknya:
+(a) pastikan scan dobel cepat yg disengaja sekarang berhasil dobel, DAN
+(b) pastikan tidak muncul balik gejala lama (barcode kepencet dobel
+sendiri tanpa disengaja). **STATUS: kode sudah diubah & dipush, TAPI
+verifikasi manual user belum dikonfirmasi** — kalau sesi depan lanjut,
+tanyakan hasil tes user dulu sebelum menganggap ini selesai total (lihat
+juga PLAN.md Item 32).
+
+## Diskusi belum dieksekusi — Item 30(b)/33 tunggu keputusan user
+
+- **Item 30(b)** ("Cek Stok" screen) — layout mockup SUDAH di-approve
+  user (`cek_stok_mockup.html`/`.jpg` di scratchpad sesi ini, tidak
+  di-commit — lihat deskripsi lengkap di PLAN.md kalau perlu regenerasi).
+  Siap diimplementasi ke Flutter kapan saja.
+- **Item 33** (warna aksen toolbar kasir) — 3 varian mockup SUDAH
+  dikirim ke user (`toolbar_color_mockups.html`/`.jpg`, scratchpad sesi
+  ini), **BELUM ada pilihan/konfirmasi user** — jangan implementasi
+  sebelum user pilih salah satu varian (A/B/C) atau minta revisi.
 
 ## Fitur baru: "Alihkan Owner" + "Pulihkan dari File" (16 Juli, Item 27/28)
 
