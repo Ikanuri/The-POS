@@ -4,25 +4,91 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
-3 bug susulan dari testing device asli + fix poin loyalitas + fix
-keamanan lisensi + fix debounce scanner + fix nama pelanggan riwayat +
-warna aksen toolbar kasir + fix sinkron harga SKU non-unik + Item
-29/30(a/b/c)/31/35(opsional) SEMUA dieksekusi & di-commit + migrasi data
-Griyo POS ke file `.berkahpos` (one-off, di luar repo) + fix silent-fail
-varian barcode bentrok + **Item 36 (Stock Opname) & Item 37 (publish
-katalog ke Cloudflare Pages) SELESAI & di-commit**)._ Full `flutter test`
-**460 test hijau**, `flutter analyze` bersih. schemaVersion masih 15
-(Item 36/37 TIDAK butuh migrasi skema — opname pakai konvensi note di
-`stock_ledger` yg sudah ada, kredensial Cloudflare di secure storage).
-Branch `claude/setup-dependencies-am31te` sudah di-**merge ke `main`**
-(termasuk seluruh riwayat sesi sebelumnya) & di-push, lalu dilanjutkan
-lagi dgn commit Item 36/37 — **PENTING: sesi berikutnya perlu merge
-ULANG branch fitur ke main setelah commit Item 36/37 kalau user minta**
-(cek `git log --oneline --left-right origin/main...claude/setup-
-dependencies-am31te` dulu utk pastikan status terkini). User sudah
-perbaiki `license/revoked.json` di `main` secara manual (typo tanda
-kutip) — item ini SELESAI, tidak perlu ditindaklanjuti lagi.
+_Terakhir diperbarui: 17 Juli 2026 (sesi baru — fix barcode produk/varian
+terkunci permanen setelah "dihapus")._ Full `flutter test` **462 test
+hijau**, `flutter analyze` bersih (0 issue — env sesi ini sempat salah
+pakai Flutter 3.32.0 dulu, ganti ke `3.24.5` sesuai pin CI
+`.github/workflows/*.yml` sebelum dipercaya hasilnya). schemaVersion
+masih 15 (fix ini TIDAK butuh migrasi skema — cuma mutasi nilai kolom
+`product_barcodes.barcode`, bukan kolom/tabel baru). Branch kerja sesi
+ini: `claude/review-branch-changes-g5agon`. Sebelum sesi ini mulai,
+`main` == `claude/setup-dependencies-am31te` == branch ini, semua di
+commit `0928b36` (Item 36/37 sudah lama ter-merge ke `main`, dikonfirmasi
+ulang via `git merge-base --is-ancestor` — catatan "perlu merge ulang" di
+draft HANDOFF lama sudah tidak relevan, dihapus).
+
+## Fix: barcode produk/varian yang "dihapus" terkunci permanen (17 Juli, BELUM di-commit/push)
+
+User lapor: mau refactor 2 produk single-varian (mis. Pop Ice Coklat &
+Pop Ice Stroberi, masing-masing produk terpisah dgn barcode sendiri) jadi
+1 produk dgn 2 varian — TIDAK BISA, karena barcode lama masih "terkunci"
+walau produk lama sudah "dihapus" dari UI.
+
+**Root cause**: `deactivateProduct()`/`deleteVariant()`
+(`app_database.dart`) SELALU cuma soft-delete (`isActive=false`) — TIDAK
+PERNAH menyentuh `product_barcodes`. Kolom `product_barcodes.barcode`
+UNIQUE di seluruh katalog (`product_tables.dart:68`), jadi barcode produk
+lama tetap memblokir barcode yang sama dipakai produk/varian baru
+selamanya.
+
+**Trade-off hard-delete dibahas & DITOLAK** (didiskusikan dgn user
+sebelum coding): `transaction_items`/`stock_ledger` referensi
+`productId`/`productUnitId` TANPA foreign key sungguhan (beda dari
+`product_units`/`price_tiers`/`product_barcodes` yg py FK asli ke
+`Products`) — hard-delete produk yg SUDAH pernah terjual akan: (1)
+membuang baris itu total dari `getTopProductsByRevenue` (pakai
+`innerJoin`, bukan cuma nama kosong — omzet/laba historis ikut hilang
+dari laporan), (2) reprint struk lama tampil UUID mentah (`receipt_
+screen.dart` resolve nama produk via live-lookup, fallback ke id kalau
+tidak ketemu), (3) sync LAN TIDAK delete-aware (full-dump + `INSERT OR
+REPLACE`/`INSERT OR IGNORE`, tanpa tombstone) — device lain bisa
+"menghidupkan lagi" produk yg dihapus di device lain saat sync. User
+setuju: TETAP soft-delete produknya (riwayat/nama historis utuh), tapi
+lepas barcode-nya saja.
+
+**Fix**: `_releaseBarcodesForProduct()` baru — dipanggil dari
+`deactivateProduct()` maupun `deleteVariant()` (SAMA-SAMA py bug ini,
+bukan cuma satu tempat) di dalam `transaction()` yang sama dgn set
+`isActive=false`. SENGAJA **mutasi** nilai `barcode` (prefix
+`RELEASED:<id_baris>:<barcode_asli>`), **BUKAN DELETE** baris —
+`product_barcodes` di-dump PENUH setiap sync (tanpa watermark, lihat
+`dumpSince`), jadi kalau baris benar2 dihapus, device lain yg sudah py
+salinannya TIDAK PERNAH dapat kabar "baris ini dihapus" (sync bukan
+delete-aware) → salinan basi itu akan mengunci barcode SELAMANYA di
+device tersebut. Dgn mutasi nilai, barisnya tetap ada & ikut ke-dump lagi
+di sync berikutnya, ter-`INSERT OR REPLACE` (keyed by id yg sama) ke
+device lain — pelepasan otomatis terpropagasi lewat mekanisme sync yg
+SUDAH ADA, **tanpa perubahan protokol/skema sync sama sekali**.
+
+Test: `test/product_barcode_release_test.dart` (DB-tier, 2 test:
+`deactivateProduct` & `deleteVariant` masing-masing — barcode lama bisa
+dipakai ulang produk/varian baru tanpa exception, baris lama tetap ada
+dgn prefix `RELEASED:`). Revert-verify dilakukan (kedua test gagal persis
+dgn `SqliteException(UNIQUE constraint failed: product_barcodes.barcode)`
+sebelum fix → fix dikembalikan, hijau lagi, 462 total).
+
+**Belum di-commit/push** — tunggu konfirmasi user.
+
+## Diskusi belum dieksekusi (dari sesi ini, isu #2 laporan produk)
+
+User lapor kedua: "Kolom laporan statistik produk tidak sesuai dengan
+history" — **BELUM diinvestigasi tuntas, BELUM ada fix**. Analisis awal
+(baca kode, tanpa ubah apa pun): `getTopProductsByRevenue`
+(`app_database.dart`) pakai `innerJoin` ke `products` LIVE (bukan
+snapshot nama saat transaksi) utk kolom nama — kandidat kuat: kalau user
+sudah sempat hard-delete/refactor produk di branch lokal lain yg belum
+di-push, baris `transaction_items` lama yg productId-nya sudah tidak ada
+akan HILANG TOTAL dari agregasi laporan (bukan cuma nama kosong). Ada
+juga implementasi terpisah/terduplikasi utk "top produk" di
+`ringkasan_screen.dart` (`_ProductStat`, N+1 manual, beda source code
+sepenuhnya dari `getTopProductsByRevenue`) yg berpotensi divergen kalau
+ada produk yg sudah dihapus (LEFT JOIN manual vs innerJoin — beda
+behavior). **Belum dikonfirmasi user**: mismatch yang dilihat itu
+membandingkan laporan Produk vs riwayat transaksi mentah, atau vs
+Ringkasan Harian? Apakah muncul setelah user hapus/refactor produk di
+branch lokal? Tanyakan dulu sebelum lanjut investigasi/fix — lihat
+histori chat sesi ini utk detail lengkap analisis kode yang sudah
+dilakukan.
 
 ## Item 36 (Stock Opname) + Item 37 (Publish Cloudflare Pages) — SELESAI (17 Juli)
 

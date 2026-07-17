@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-17
 
+- `7f37d64` — fix: barcode produk/varian yang dinonaktifkan/dihapus terkunci permanen (lepas via mutasi nilai di `product_barcodes`, sync-safe tanpa ubah protokol)
 - `5c9de7f` — feat: Item 36 (stock opname hitung fisik BUTA + riwayat sesi) + Item 37 (publish katalog ke Cloudflare Pages otomatis, nama project deterministik slug+hash)
 - `b69d538` — fix: varian produk dgn barcode bentrok gagal-diam tanpa pesan error (tangkap exception di `_addVariant`/`_editVariant`)
 - `886db53` — feat: Tutup Buku tanggal custom (bukan selalu 1 Januari), sekali per tahun (Item 31)

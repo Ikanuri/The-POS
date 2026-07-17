@@ -70,6 +70,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   varian gagal tersimpan tanpa pemberitahuan apa pun (terlihat seperti
   tidak terjadi apa-apa), sekarang muncul pesan "Barcode sudah dipakai
   produk/varian lain" supaya Anda tahu perlu pakai barcode lain.
+- **Barcode produk/varian yang dinonaktifkan/dihapus sekarang benar-benar
+  bebas dipakai ulang.** Sebelumnya, barcode produk yang sudah "dihapus"
+  tetap terkunci selamanya (data produk memang cuma disembunyikan, bukan
+  dihapus total, tapi barcode-nya dulu ikut tersangkut) — jadi kalau Anda
+  ingin gabungkan beberapa produk lama jadi satu produk dengan varian (mis.
+  "Pop Ice" dengan varian Coklat/Stroberi, dari yang sebelumnya 2 produk
+  terpisah), barcode lama tidak bisa dipasang lagi ke produk/varian baru.
+  Sekarang begitu produk/varian dinonaktifkan, barcode-nya otomatis
+  dilepas dan siap dipakai produk lain.
 
 ## 16 Juli 2026
 
