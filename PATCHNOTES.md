@@ -79,6 +79,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   terpisah), barcode lama tidak bisa dipasang lagi ke produk/varian baru.
   Sekarang begitu produk/varian dinonaktifkan, barcode-nya otomatis
   dilepas dan siap dipakai produk lain.
+- **Asisten yang sudah diberi izin "Izinkan Stok Minus" oleh owner
+  sekarang benar-benar bisa memakainya saat toko pakai 2 HP terpisah.**
+  Sebelumnya, kalau HP asisten kebetulan yang dijadikan "Jadi Host" saat
+  sinkron (bukan HP owner), perubahan izin yang dibuat owner tidak pernah
+  sampai ke HP asisten — izin terlihat menyala di HP owner tapi asisten
+  tetap ditolak dengan pesan "Stok tidak cukup". Sekarang tombol "Jadi
+  Host" di layar Sync WiFi hanya muncul di HP owner — owner selalu jadi
+  sumber data utama, kasir & asisten selalu jadi yang menyambung ke
+  owner, supaya semua perubahan (izin, harga, produk) pasti tersalur.
 
 ## 16 Juli 2026
 

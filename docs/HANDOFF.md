@@ -4,20 +4,61 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 17 Juli 2026 (sesi baru — fix barcode produk/varian
-terkunci permanen setelah "dihapus")._ Full `flutter test` **462 test
-hijau**, `flutter analyze` bersih (0 issue — env sesi ini sempat salah
-pakai Flutter 3.32.0 dulu, ganti ke `3.24.5` sesuai pin CI
-`.github/workflows/*.yml` sebelum dipercaya hasilnya). schemaVersion
-masih 15 (fix ini TIDAK butuh migrasi skema — cuma mutasi nilai kolom
-`product_barcodes.barcode`, bukan kolom/tabel baru). Branch kerja sesi
-ini: `claude/review-branch-changes-g5agon`. Sebelum sesi ini mulai,
-`main` == `claude/setup-dependencies-am31te` == branch ini, semua di
-commit `0928b36` (Item 36/37 sudah lama ter-merge ke `main`, dikonfirmasi
-ulang via `git merge-base --is-ancestor` — catatan "perlu merge ulang" di
-draft HANDOFF lama sudah tidak relevan, dihapus).
+_Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fix barcode produk/
+varian terkunci permanen [`7f37d64`, sudah di-merge ke `main`] + fix
+asisten tidak bisa override stok minus walau sudah digrant izin)._ Full
+`flutter test` **467 test hijau**, `flutter analyze` bersih (0 issue — env
+sesi ini pakai Flutter `3.24.5` sesuai pin CI `.github/workflows/*.yml`,
+JANGAN pakai versi lebih baru spt 3.32.0 — ada breaking change `CardTheme`
+→`CardThemeData` yg bikin compile gagal). schemaVersion masih 15. Branch
+kerja: `claude/review-branch-changes-g5agon`, SUDAH di-merge ke `main`
+sampai fix barcode (`936f01a`) — fix asisten-stok-minus di bawah ini
+BELUM di-commit/push, tunggu konfirmasi user.
 
-## Fix: barcode produk/varian yang "dihapus" terkunci permanen (17 Juli, BELUM di-commit/push)
+## Fix: asisten tidak bisa override stok minus walau sudah digrant izin (17 Juli, BELUM di-commit/push)
+
+User lapor: owner sudah nyalakan izin "Izinkan Stok Minus" di layar Izin
+Asisten, tapi device asisten (2 HP fisik terpisah, terhubung via sync LAN)
+tetap muncul "Stok tidak cukup" saat checkout.
+
+**BUKAN bug di `resolveAllowNegativeStock()`/toggle UI itu sendiri** —
+sudah diverifikasi 2x via test nyata sebelum curiga ke tempat lain: (1)
+widget test tap toggle di `AsistenPermissionsScreen` → DB tersimpan benar,
+(2) test sync LAN sungguhan (2 `AppDatabase` terpisah, koneksi 127.0.0.1
+asli) dgn owner=host/asisten=client → izin ikut ter-propagate benar.
+Kedua test itu LOLOS dari awal — kalau nanti curiga bug serupa muncul
+lagi, JANGAN ulangi jalur investigasi ini, langsung ke akar masalah
+sungguhan di bawah.
+
+**Root cause sungguhan**: `sync_screen.dart` bagian "Jadi Host" pakai
+gate `device.canSeeReports` (owner ATAU asisten — flag ini aslinya untuk
+visibilitas laporan, dipinjam serampangan utk gating host sync). Tapi
+arsitektur sync SENGAJA satu arah: master data (produk, harga,
+**`kasir_permissions`**) HANYA mengalir host→klien, klien cuma boleh
+upload append-only (`lan_sync_service.dart`, komentar existing: "Master
+data tidak pernah di-merge dari klien"). Kalau **ASISTEN yang jadi
+host** (owner connect ke asisten sbg klien, bukan sebaliknya) —
+perubahan izin yang dibuat owner di device-nya sendiri (klien dalam
+topologi ini) TIDAK PERNAH sampai ke DB asisten (host), karena upload
+klien selalu cuma append-only. Bug ini generik utk SEMUA master data
+(produk/harga/pelanggan ikut kena, bukan cuma izin) kalau toko kebetulan
+punya kebiasaan "HP asisten yang selalu nyala/jadi host".
+
+**Fix**: `if (device.canSeeReports)` → `if (device.isOwner)` di gate
+"Jadi Host" — owner WAJIB selalu jadi satu-satunya host, kasir & asisten
+selalu jadi klien. Bagian klien ("Client mode") TIDAK disentuh — tetap
+terlihat semua role, sesuai komentar existing "semua device bisa sync"
+(sbg klien).
+
+Test: `test/sync_screen_host_gating_test.dart` (widget-tier, 3 skenario:
+owner LIHAT "Jadi Host", asisten & kasir TIDAK). `test/asisten_
+permissions_screen_test.dart` + `test/asisten_permission_sync_test.dart`
+(bukti pendukung bahwa toggle & sync SUDAH benar, jadi kalau ada regresi
+laporan serupa lagi, itu BUKAN dari 2 jalur itu). Revert-verify
+dilakukan utk fix utama (`canSeeReports` balik → test asisten gagal
+persis, kasir tetap lolos krn tidak pernah termasuk `canSeeReports`).
+
+**Belum di-commit/push** — tunggu konfirmasi user.
 
 User lapor: mau refactor 2 produk single-varian (mis. Pop Ice Coklat &
 Pop Ice Stroberi, masing-masing produk terpisah dgn barcode sendiri) jadi
