@@ -1011,22 +1011,49 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     );
     if (res == null) return;
     final db = ref.read(databaseProvider);
-    final variantId = await db.createVariant(
-      parentProductId: _productId!,
-      name: res.name,
-      price: res.price,
-      costPrice: base.costPrice,
-      unitTypeId: base.unitTypeId,
-      barcode: res.barcode,
-      isNonStock: !res.trackStock,
-    );
-    // Lacak agar bisa diurungkan bila edit dibatalkan; tandai dirty supaya
-    // dialog konfirmasi muncul saat menekan kembali.
-    _sessionVariantIds.add(variantId);
-    _markDirty();
-    if (mounted) {
-      _showBanner('Varian "${res.name}" ditambahkan', InlineBannerType.success);
+    try {
+      final variantId = await db.createVariant(
+        parentProductId: _productId!,
+        name: res.name,
+        price: res.price,
+        costPrice: base.costPrice,
+        unitTypeId: base.unitTypeId,
+        barcode: res.barcode,
+        isNonStock: !res.trackStock,
+      );
+      // Lacak agar bisa diurungkan bila edit dibatalkan; tandai dirty supaya
+      // dialog konfirmasi muncul saat menekan kembali.
+      _sessionVariantIds.add(variantId);
+      _markDirty();
+      if (mounted) {
+        _showBanner(
+            'Varian "${res.name}" ditambahkan', InlineBannerType.success);
+      }
+    } catch (e) {
+      // Barcode unik di seluruh katalog (tabel product_barcodes) — kalau
+      // sudah dipakai produk/varian lain, insert gagal & seluruh transaksi
+      // (produk+unit+tier+barcode varian) di-rollback total, TIDAK ada
+      // varian tersimpan sama sekali. Sebelumnya exception ini tidak
+      // ditangkap sama sekali di sini, jadi varian "hilang begitu saja"
+      // tanpa pesan apa pun ke user.
+      if (mounted) {
+        _showBanner(_friendlyBarcodeError(e, res.barcode));
+      }
     }
+  }
+
+  /// Pesan error yang jelas utk kasus barcode bentrok (paling sering
+  /// terjadi), fallback ke pesan mentah utk error lain.
+  String _friendlyBarcodeError(Object e, String? barcode) {
+    final msg = e.toString();
+    if (barcode != null &&
+        barcode.isNotEmpty &&
+        msg.contains('UNIQUE constraint failed') &&
+        msg.contains('barcode')) {
+      return 'Barcode "$barcode" sudah dipakai produk/varian lain — '
+          'gunakan barcode berbeda atau kosongkan.';
+    }
+    return 'Gagal menyimpan varian: $e';
   }
 
   Future<void> _editVariant(Product v) async {
@@ -1058,16 +1085,23 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       trackStock: trackStock,
     );
     if (res == null) return;
-    await db.updateVariant(
-      variantProductId: v.id,
-      name: res.name,
-      price: res.price,
-      barcode: res.barcode,
-      isNonStock: !res.trackStock,
-    );
-    ref.read(productUpdateCountProvider.notifier).state++;
-    if (mounted) {
-      _showBanner('Varian "${res.name}" diperbarui', InlineBannerType.success);
+    try {
+      await db.updateVariant(
+        variantProductId: v.id,
+        name: res.name,
+        price: res.price,
+        barcode: res.barcode,
+        isNonStock: !res.trackStock,
+      );
+      ref.read(productUpdateCountProvider.notifier).state++;
+      if (mounted) {
+        _showBanner(
+            'Varian "${res.name}" diperbarui', InlineBannerType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showBanner(_friendlyBarcodeError(e, res.barcode));
+      }
     }
   }
 
