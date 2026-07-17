@@ -4,15 +4,59 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 16 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
+_Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fitur Alihkan Owner +
 3 bug susulan dari testing device asli + fix poin loyalitas + fix
 keamanan lisensi + fix debounce scanner + fix nama pelanggan riwayat +
-warna aksen toolbar kasir)._ Full `flutter test` **409 test hijau**,
+warna aksen toolbar kasir + fix sinkron harga SKU non-unik)._ Full
+`flutter test` **412 test hijau**,
 `flutter analyze` bersih. schemaVersion masih 15
 (tidak ada migrasi baru). Branch `claude/setup-dependencies-am31te` —
 belum di-merge ke `main` (tunggu instruksi user). User sudah perbaiki
 `license/revoked.json` di `main` secara manual (typo tanda kutip) —
 item ini SELESAI, tidak perlu ditindaklanjuti lagi.
+
+## Item 35 — fix sinkron harga antar-toko: SKU non-unik salah cocok (17 Juli, SELESAI)
+
+User lapor: tiap sinkron harga dgn toko lain, SELALU ada harga "berubah"
+walau logikanya sama & tidak pernah konvergen. Minta log matching (tombol
+🐛 di layar Preview Harga). Log 2.745 item vs 1.831 produk lokal
+MEMBANTAH dugaan awal tier ganda (semua unit `1 buah` tier) — akar
+masalahnya **matching salah**.
+
+**Root cause**: `_tryMatch` (`price_match_service.dart`) cocok via SKU
+pakai `.firstOrNull` padahal `kode_produk` di data user TIDAK unik (banyak
+produk berkode nama satuan "Dos"/"Bal"/"Pak"). Bukti log: `Adem Sari
+Cingku/Dos` DAN `Alamo Tg/Dos` dua-duanya nyasar ke `Agar Satelit`;
+`76 12/bal` → `Atira 2000`. Saat Terapkan, harga ditulis ke produk salah
+→ sync berikutnya baris asli produk itu menimpanya balik → saling-timpa
+selamanya (non-konvergen). Bug KEMBAR di sisi apply: `_findOrCreateProduct`
+(`price_preview_screen.dart`) juga `.firstOrNull` untuk kode.
+
+**Fix** (3 bagian, disetujui user):
+1. Pengaman tabrakan SKU: cocok SKU hanya kalau kode dimiliki TEPAT 1
+   produk. Kalau >1 → tidak auto-match; fuzzy-nama fallback yang tangani
+   (masuk tab "Mirip", default skip → tidak menimpa diam-diam).
+2. `_resolveUnitStrict` baru: match SKU juga wajib satuannya ada di produk
+   lokal (cegah `76 12/bal` → `Atira 2000` yg tak punya satuan "Bal").
+   Kalau `unitTypeName` katalog kosong → fallback base unit (tak bisa lebih
+   ketat). Jalur fuzzy/ambiguous TETAP pakai `_resolveUnit` lenient (di
+   sana ada konfirmasi manusia).
+3. `_findOrCreateProduct` pakai kode hanya kalau unik; >1/0 → jatuh ke
+   pencocokan nama.
+
+Fuzzy sudah benar sejak awal (masuk tab "Mirip", TIDAK ada tombol "Samakan
+Semua" massal) — tidak diubah, cukup diverifikasi.
+
+Test: `test/price_sync_sku_collision_test.dart` (DB-tier, reproduksi persis
+kasus log: `Dos`→2 produk tidak nyasar ke Agar Satelit & masuk ambiguous;
+`bal`→produk tanpa satuan Bal ditolak → notFound; kontrol positif SKU unik
++ satuan cocok tetap match). Revert-verify: kembalikan `.firstOrNull` +
+`_resolveUnit` lenient → 2 test bug GAGAL (nyasar ke Agar Satelit/Atira),
+kontrol positif tetap hijau → fix dikembalikan, hijau lagi.
+
+**Opsi belum dikerjakan** (dibahas, tidak masuk batch ini): mode "sinkron
+via barcode saja" utk toko besar. Ada di PLAN.md Item 35 kalau user mau
+lanjut.
 
 ## Item 33 — aksen warna toolbar kasir (16 Juli, SELESAI, Varian C)
 

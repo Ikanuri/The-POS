@@ -8,6 +8,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > bawah tanggal yang sesuai (paling atas).
 
 
+## 2026-07-17
+
+- `db60a4b` — fix: sinkron harga antar-toko salah cocok karena SKU non-unik (pengaman tabrakan kode + satuan wajib cocok + fix `_findOrCreateProduct`)
+
 ## 2026-07-16
 
 - `c805907` — feat: aksen warna soft per-fungsi tombol toolbar kasir (scan/antrian/riwayat/tempel pesanan) — Varian C
