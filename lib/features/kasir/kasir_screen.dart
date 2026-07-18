@@ -1781,7 +1781,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                           : const SizedBox(width: double.infinity),
                     ),
                     Expanded(
-                      child: productsAsync.when(
+                      child: StepperActiveScope(
+                        child: productsAsync.when(
                         data: (prods) {
                           if (prods.isEmpty) {
                             return Center(
@@ -1853,6 +1854,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                         loading: () =>
                             const Center(child: CircularProgressIndicator()),
                         error: (e, _) => Center(child: Text('Error: $e')),
+                      ),
                       ),
                     ),
                   ],

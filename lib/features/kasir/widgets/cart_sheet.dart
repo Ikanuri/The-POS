@@ -193,23 +193,25 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   )
                 : Builder(builder: (_) {
                     final ordered = orderCartItems(cart);
-                    return ListView.separated(
-                      controller: scrollCtrl,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: ordered.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 1, indent: 56),
-                      itemBuilder: (ctx2, i) {
-                        final item = ordered[i];
-                        final effQty = notifier.effectiveQtyFor(item);
-                        return _CartItemTile(
-                          index: i,
-                          item: item,
-                          isVariant: item.isVariant,
-                          effectiveQty: effQty,
-                          cartId: widget.cartId,
-                        );
-                      },
+                    return StepperActiveScope(
+                      child: ListView.separated(
+                        controller: scrollCtrl,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: ordered.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1, indent: 56),
+                        itemBuilder: (ctx2, i) {
+                          final item = ordered[i];
+                          final effQty = notifier.effectiveQtyFor(item);
+                          return _CartItemTile(
+                            index: i,
+                            item: item,
+                            isVariant: item.isVariant,
+                            effectiveQty: effQty,
+                            cartId: widget.cartId,
+                          );
+                        },
+                      ),
                     );
                   }),
           ),

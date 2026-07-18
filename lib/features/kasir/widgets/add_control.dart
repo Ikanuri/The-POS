@@ -25,25 +25,36 @@ class AddControl extends StatefulWidget {
 
   @override
   State<AddControl> createState() => _AddControlState();
+
+  /// Permintaan user: stepper yang baru saja di-tap "tetap besar" (pijakan
+  /// jempol, supaya tap berikutnya — mis. nambah qty lagi — tidak gampang
+  /// missclick) sampai user tap AREA LAIN atau scroll, BUKAN cuma sesaat
+  /// selagi ditekan. Karena stepper dirender berulang di banyak kartu/baris
+  /// berbeda (widget baru dibuat tiap rebuild), "mana yang aktif" dilacak
+  /// via instance State (stabil selama widget tetap di tree), disimpan di
+  /// sini (satu per app — cukup, cuma 1 stepper yang relevan aktif kapan
+  /// saja) alih-alih di-plumb sbg id ke semua pemanggil.
+  static final ValueNotifier<State<AddControl>?> activeStepper =
+      ValueNotifier(null);
+
+  /// Dipanggil dari layar pemanggil (kasir_screen.dart/cart_sheet.dart) saat
+  /// area LAIN di-tap atau list di-scroll, supaya stepper yang lagi
+  /// "membesar" kembali normal.
+  static void clearActive() => activeStepper.value = null;
 }
 
 // Item 13 — jeda anti-missclick: tap +/- yang datang terlalu rapat (jari
 // sedikit geser lalu kena tombol sebelah) diabaikan, bukan diproses dobel.
 const _kMisclickDebounce = Duration(milliseconds: 150);
 
-// Feedback taktil: tombol membesar sesaat saat ditekan, mengecil lagi saat
-// dilepas ATAU jari geser keluar area tombol (TapGestureRecognizer bawaan
-// Flutter otomatis membatalkan tap-nya sendiri kalau pointer bergerak keluar
-// batas toleransi geser saat masih ditekan, jadi onTapCancel juga menangani
-// kasus "pindah ke area lain" tanpa perlu deteksi posisi manual).
-const _kPressScale = 1.15;
-const _kPressScaleDuration = Duration(milliseconds: 100);
+// Pijakan jempol: stepper yang habis di-tap membesar & TETAP besar (lihat
+// AddControl.activeStepper) sampai di-nonaktifkan dari luar.
+const _kActiveScale = 1.15;
+const _kActiveScaleDuration = Duration(milliseconds: 150);
 
 class _AddControlState extends State<AddControl> {
   bool _blocked = false;
   Timer? _unblockTimer;
-  bool _mainPressed = false;
-  bool _minusPressed = false;
 
   @override
   void dispose() {
@@ -59,12 +70,16 @@ class _AddControlState extends State<AddControl> {
     return false;
   }
 
+  void _activate() => AddControl.activeStepper.value = this;
+
   void _handleTap() {
+    _activate();
     if (_debounced()) return;
     widget.onTap();
   }
 
   void _handleMinus() {
+    _activate();
     if (_debounced()) return;
     widget.onMinus?.call();
   }
@@ -87,13 +102,14 @@ class _AddControlState extends State<AddControl> {
     final mainCircle = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _handleTap,
-      onTapDown: (_) => setState(() => _mainPressed = true),
-      onTapUp: (_) => setState(() => _mainPressed = false),
-      onTapCancel: () => setState(() => _mainPressed = false),
-      child: AnimatedScale(
-        scale: _mainPressed ? _kPressScale : 1.0,
-        duration: _kPressScaleDuration,
-        curve: Curves.easeOut,
+      child: ValueListenableBuilder<State<AddControl>?>(
+        valueListenable: AddControl.activeStepper,
+        builder: (context, active, child) => AnimatedScale(
+          scale: identical(active, this) ? _kActiveScale : 1.0,
+          duration: _kActiveScaleDuration,
+          curve: Curves.easeOut,
+          child: child,
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: circleSize,
@@ -103,9 +119,7 @@ class _AddControlState extends State<AddControl> {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                  color: shadowColor,
-                  blurRadius: 6,
-                  offset: const Offset(0, 2)),
+                  color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
             ],
           ),
           child: Center(
@@ -147,13 +161,14 @@ class _AddControlState extends State<AddControl> {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleMinus,
-          onTapDown: (_) => setState(() => _minusPressed = true),
-          onTapUp: (_) => setState(() => _minusPressed = false),
-          onTapCancel: () => setState(() => _minusPressed = false),
-          child: AnimatedScale(
-            scale: _minusPressed ? _kPressScale : 1.0,
-            duration: _kPressScaleDuration,
-            curve: Curves.easeOut,
+          child: ValueListenableBuilder<State<AddControl>?>(
+            valueListenable: AddControl.activeStepper,
+            builder: (context, active, child) => AnimatedScale(
+              scale: identical(active, this) ? _kActiveScale : 1.0,
+              duration: _kActiveScaleDuration,
+              curve: Curves.easeOut,
+              child: child,
+            ),
             child: Container(
               width: minusSize,
               height: minusSize,
@@ -171,6 +186,37 @@ class _AddControlState extends State<AddControl> {
         const SizedBox(width: 6),
         mainCircle,
       ],
+    );
+  }
+}
+
+/// Bungkus area yang berisi [AddControl] (grid/list produk kasir, daftar
+/// item keranjang) supaya stepper yang lagi "membesar" (`AddControl.
+/// activeStepper`) otomatis kembali normal saat user tap di LUAR stepper
+/// mana pun (kartu produk lain, area kosong, dst.) atau mulai scroll area
+/// ini. `Listener` (bukan `GestureDetector`) SENGAJA dipakai — tidak ikut
+/// gesture arena sama sekali, jadi tetap terpanggil di SETIAP pointer-down
+/// dalam area ini TERMASUK yang jatuh tepat di atas sebuah `AddControl`
+/// (aman: pembatalan di sini terjadi saat pointer DOWN, sedangkan
+/// `AddControl` menjadikan dirinya aktif lagi saat tap-nya BENAR-BENAR
+/// dikenali — event UP yang datang belakangan — jadi urutannya tidak
+/// pernah balapan).
+class StepperActiveScope extends StatelessWidget {
+  const StepperActiveScope({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => AddControl.clearActive(),
+      child: NotificationListener<ScrollStartNotification>(
+        onNotification: (_) {
+          AddControl.clearActive();
+          return false;
+        },
+        child: child,
+      ),
     );
   }
 }
