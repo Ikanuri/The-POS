@@ -4,28 +4,35 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 18 Juli 2026 (sesi AUDIT KODE — baca-kode saja,
-TIDAK ada perubahan kode produksi). Hasil: **PLAN.md Item 41** berisi
-daftar temuan lengkap (A bug/silent bug, B keamanan, C performa/daya,
-D kompatibilitas, E clean code) dengan prioritas [P1]–[P3]; belum ada
-satu pun yang dieksekusi — mulai dari [P1]: stok multi-device korup
-pasca-sync (`stock_after` tidak direkonsiliasi), zona waktu watermark
-sync (`toIso8601String()` lokal tanpa offset), dan storeKey polos di QR
-pairing tanpa mekanisme revoke. Lanjutan sesi yang sama: Flutter 3.24.5
-(persis pin CI) di-install manual → `flutter analyze` BERSIH (0 issue) &
-`flutter test` **498 test SEMUA HIJAU** (2m36s) — klaim terverifikasi
-ulang. Percobaan SDK 3.44.6 stable: proyek GAGAL kompilasi (1 error
-CardTheme→CardThemeData + 53 deprecation) → tercatat sbg Item 41 D.5
-(rencanakan sesi upgrade SDK khusus). Sesi sebelumnya (18 Juli):
-Item 40 "usulan harga/produk dari device non-owner" [`fcadcb1`] — kini
-SUDAH ada di `main`; Item 39 [`5c244da`] + fix kembalian struk
-[`3f3a4c0`] juga sudah di `main`._ Full `flutter test` **498 test, SEMUA
-HIJAU** (per sesi 18 Juli pra-audit; 9 test baru Item 40:
-`product_proposal_test.dart` 6, `migration_v16_test.dart` 1,
-`product_proposal_review_screen_test.dart` 2), `flutter analyze` bersih
-(0 issue). **schemaVersion 16** (kolom `products.locally_modified`).
-CLAUDE.md masih menulis schemaVersion 9 — basi, kode adalah sumber
-kebenaran (tercatat di Item 41 D.4).
+_Terakhir diperbarui: 18 Juli 2026 (sesi audit + EKSEKUSI P1/P2 Item 41,
+di branch `claude/project-code-audit-4pxi9b`). Yang dieksekusi &
+teruji (bukti revert-merah utk tiap fix perilaku): **A.1** rekonsiliasi
+`stock_after` pasca-merge sync (`rebuildStockAfterForUnits`, dipanggil
+di `approveSync` host & `syncToHost` klien), **A.2** semua timestamp
+protokol sync + watermark ke UTC eksplisit, **A.3** satu slot antrian
+approval per IP klien, **A.4** BytesBuilder + base64 sekali-hitung
+(hemat ~4x memori puncak sync; format HMAC TIDAK berubah — kompatibel
+lintas versi), **A.5** BackupException konsisten utk password salah,
+**A.6** layar `/kunci-hilang` (`store_key_lost_screen.dart`) + getter
+`DeviceIdentity.storeKeyLost` + `resetIdentity()` — keystore gagal
+TIDAK lagi jatuh diam-diam ke /setup, **A.7** parseValue anti-overflow,
+**B.2** respons host ber-HMAC + verifikasi klien (header absen = host
+lama, diterima demi kompat — downgrade sadar utk transisi), **B.3**
+allowlist tabel sisi klien + guard regex identifier di `mergeRows`,
+**B.4** crash log dipotong (2k/6k chars — file di Downloads publik),
+**B.5** password ekspor min 8 karakter (impor lama tetap diterima),
+**B.6** prune lockout kedaluwarsa, **C.1** cache SQLCipher 64→16 MB &
+mmap 256→128 MB, **D.1** manifest BT legacy maxSdkVersion=30 + dok
+kenapa TANPA izin lokasi (bonded-only), **B.1 sebagian** — risiko
+storeKey di QR didokumentasikan keras di `pairing_service.dart`;
+MEKANISME rotasi kunci masih menunggu keputusan user (PLAN Item 41).
+Test baru: `test/lan_sync_item41_test.dart` (round-trip HTTP asli) +
+`test/audit_item41_unit_test.dart` — total 510 test. Environment:
+Flutter 3.24.5 (persis pin CI) di `/opt/flutter` (di-install manual;
+ephemeral — sesi berikutnya install ulang). SDK 3.44.6 stable = proyek
+gagal kompilasi (Item 41 D.5, sesi upgrade SDK tersendiri). Sisa
+Item 41 (B.1 rotasi kunci, C.2 gabung Item 17+21, P3) di PLAN.md._
+**schemaVersion 16** (tidak berubah sesi ini — tidak ada migrasi).
 
 ## Item 40 — Usulan harga/produk dari device non-owner via sync LAN (18 Juli, SELESAI & di-commit `fcadcb1`)
 

@@ -440,218 +440,86 @@ konfirmasi hasil tes user** — tanyakan kalau sesi depan lanjut.
 
 ---
 
-## Item 41 — Audit kode menyeluruh (18 Juli 2026) — temuan menunggu keputusan/eksekusi
+## Item 41 — Audit kode menyeluruh (18 Juli 2026) — SISA yang belum dieksekusi
 
-Sesi audit baca-kode penuh (tanpa perubahan kode): clean code, bug/silent
-bug, keamanan, kompatibilitas, performa/daya. Prioritas ditandai **[P1]**
-(berisiko data/uang), **[P2]** (patut segera), **[P3]** (nice-to-have).
-Update (masih 18 Juli, sesi yang sama): Flutter SDK akhirnya di-install
-manual di environment (3.24.5, persis versi CI) — `flutter analyze`
-**bersih (0 issue)** dan `flutter test` **498 test SEMUA HIJAU** (2m36s),
-konsisten dgn klaim HANDOFF. Temuan tambahan dari percobaan SDK terbaru
-(3.44.6 stable): proyek **TIDAK terkompilasi** di sana — 1 error
-`CardTheme` → `CardThemeData` (`app_theme.dart:175`, breaking change
-Material) + 53 info deprecation (`withOpacity`→`withValues`,
-`DropdownButtonFormField.value`→`initialValue`, `onReorder`→
-`onReorderItem`). Lihat D.5 di bawah.
+Audit baca-kode penuh + verifikasi nyata (Flutter 3.24.5 pin CI: analyze
+0 issue, full test hijau; SDK 3.44.6 terbaru: gagal kompilasi — lihat
+D.5). **Sebagian besar temuan P1/P2 SUDAH DIEKSEKUSI & di-commit di sesi
+yang sama** (rekonsiliasi stok pasca-sync, UTC watermark, satu slot
+antrian/IP, hemat memori sync, HMAC respons, allowlist klien + guard
+identifier, layar pemulihan kunci, BackupException konsisten, parseValue
+anti-overflow, potong crash log, password ekspor min 8, prune lockout,
+turunkan cache/mmap SQLCipher, rapikan izin Bluetooth legacy) — detail di
+CHANGELOG 2026-07-18; test regresi: `test/lan_sync_item41_test.dart` +
+`test/audit_item41_unit_test.dart`, semua dgn bukti revert-merah.
+Di bawah ini HANYA yang masih menggantung.
 
-### A. Bug & silent bug
+### Sisa [P1]/[P2] — butuh keputusan/desain atau device fisik
 
-1. **[P1] Stok multi-device korup diam-diam setelah sync.** `stock_ledger`
-   memakai rantai `stock_after` (saldo = baris terakhir), tapi merge sync
-   (`approveSync`/`mergeRows` INSERT OR IGNORE) menyisipkan baris ledger
-   device lain yang `stock_after`-nya dihitung dari saldo LOKAL device itu
-   — tidak pernah direkonsiliasi ulang (beda dari transaksi yang punya
-   `reconcileTransactionsByIds`). Contoh: host stok 10, klien (yang tahu
-   stok 5) jual 2 → baris klien `stock_after=3`; setelah merge, baris
-   klien jadi "terbaru" → host membaca stok 3, bukan 8. Perlu langkah
-   rebuild saldo (recompute `stock_after` kronologis per unit, atau ganti
-   sumber kebenaran ke `SUM(qty_change)`) setiap selesai merge kategori
-   Stok. Terkait tapi BEDA dari Item 38 (tie-break detik yang sama).
-2. **[P1] Zona waktu watermark sync.** `syncToHost` mengirim
-   `since` = `DateTime.toIso8601String()` **waktu lokal tanpa offset**;
-   host mem-parse dengan `DateTime.parse` → ditafsirkan pada zona waktu
-   HOST. Kalau dua HP beda zona (WIB/WITA/WIT nyata di Indonesia, atau
-   salah setel zona), `dumpSince` host bisa **melewatkan data hingga
-   selisih jamnya** (klien WITA + host WIB → 1 jam data host tidak pernah
-   terkirim) atau dump berlebih. Fix: selalu `toUtc().toIso8601String()`
-   di kedua arah + parse `DateTime.parse(...).toLocal()` konsisten
-   (perhatikan juga watermark tersimpan `last_sync_download_at`).
-3. **[P2] Antrian approval host tak berbatas di RAM.**
-   `_pendingQueue`/`_pendingProposals` menampung SELURUH payload
-   (full-dump riwayat, hingga 50 MB per item) di memori; klien yang
-   nge-sync berulang sebelum owner sempat approve menumpuk banyak salinan
-   → OOM realistis di HP RAM 1–2 GB. Minimal: tolak/timpa item pending
-   dari IP+device yang sama (satu slot per klien), atau persist antrian ke
-   DB (sekalian membuka jalan Item 17+21 watermark upload).
-4. **[P2] Puncak memori sync boros ~4× payload.** HMAC dihitung atas
-   `base64Encode(bodyBytes)` (string 1,33×) lalu `utf8.encode` lagi, plus
-   `request.read().expand().toList()` membangun `List<int>` per-byte.
-   Payload 50 MB → puncak >180 MB. Hitung HMAC langsung atas bytes mentah
-   (ubah kedua sisi serentak — ini breaking change protokol antar versi
-   app!) atau minimal atas bytes tanpa base64, dan pakai `BytesBuilder`.
-5. **[P2] `DbExportService.decrypt`: password salah bisa melempar error
-   mentah.** Hanya `decryptBytes` yang dibungkus try/catch; padding CBC
-   kebetulan valid (~1/256 percobaan) membuat `GZipCodec().decode` /
-   `utf8.decode` / `jsonDecode` melempar `FormatException` polos ke UI,
-   bukan `BackupException('Password salah atau file rusak')`. Perluas
-   try/catch sampai `jsonDecode`.
-6. **[P2] Recovery identitas: keystore gagal SETELAH migrasi = data
-   "hilang".** `DeviceNotifier.load`: fallback ke SharedPreferences hanya
-   menolong bila salinan legacy masih ada, padahal `_persist` menghapus
-   salinan itu. Device yang keystore-nya mendadak error (kasus nyata
-   Transsion/Infinix) akan tampak belum setup → user bisa "Setup Toko
-   Baru" → storeKey baru → DB lama permanen tak terbuka. Simpan flag
-   non-rahasia `was_configured` di prefs; kalau flag ada tapi storeKey
-   gagal dibaca, tampilkan layar error/retry, JANGAN jatuh ke /setup.
-7. **[P3] `ThousandsSeparatorFormatter.parseValue` pakai `int.parse`** —
-   input >19 digit (field tanpa `maxLength`, mis. dialog Ubah Total)
-   melempar `FormatException` tak tertangani. Ganti `int.tryParse` +
-   clamp.
-8. **[P3] Redirect router tidak reaktif.** `routerProvider` memakai
-   `ref.read` tanpa `refreshListenable`/`ref.watch` — perubahan state
-   lisensi (mis. hasil `_checkRevocation` async) atau device TIDAK
-   memicu redirect sampai user kebetulan navigasi. Kalau perilaku "kunci
-   baru berlaku saat navigasi" memang disengaja, dokumentasikan; kalau
-   tidak, pakai `refreshListenable` (Listenable dari kedua provider).
-9. **[P3] `beforeOpen` menyisipkan `unitTypes` dengan `insertOrReplace`**
-   padahal komentarnya bilang insertOrIgnore — menimpa nama unit type
-   setiap app dibuka. Hari ini tak ada UI edit unit type jadi tak
-   terasa; jadi bom waktu begitu fitur edit satuan muncul. Samakan dengan
-   `_seedDefaults` (insertOrIgnore) atau perbaiki komentar + sadari
-   konsekuensinya.
-10. **[P3] Master data tanpa tombstone.** Penghapusan produk / tier /
-    barcode / pelanggan di owner tidak pernah menghapus baris di klien
-    (merge = INSERT OR REPLACE saja) → data hantu menumpuk di device
-    kasir/asisten selamanya (tier lama bisa ikut kepakai lagi lewat
-    dedup (unit,min_qty) — sebagian tertolong, sisanya tidak). Butuh
-    keputusan desain: soft-delete (`is_active`/`deleted_at` yang ikut
-    tersinkron) vs tabel tombstone.
-11. **[P3] `mergeRows` menghitung "diterima N" dari nilai balik
-    `customInsert`** — untuk INSERT OR IGNORE yang ter-skip, nilai balik
-    (rowid terakhir) tetap bisa >0 → angka "diterima" di UI bisa
-    overcount. Kosmetik, tapi menyesatkan saat debugging sync.
-12. **[P3] Tutup buku: crash di antara copy-arsip dan delete-data**
-    meninggalkan state nyangkut — file `archive_YYYY.db` sudah ada
-    (percobaan ulang ditolak "Arsip tahun X sudah ada") padahal data
-    belum dihapus dari DB utama. Sediakan jalur pemulihan (deteksi arsip
-    tanpa manifest → tawarkan hapus/lanjutkan).
+1. **[P1] B.1 — rotasi/pencabutan storeKey.** Risiko QR pairing membawa
+   storeKey master polos SUDAH didokumentasikan keras di
+   `pairing_service.dart`, tapi MEKANISME mitigasi belum ada: fitur
+   "rotasi kunci toko" (generate storeKey baru + rekey SQLCipher +
+   re-pair semua device) dan/atau un-pair device (HP kasir hilang,
+   pegawai keluar). Butuh desain UX + keputusan user — jangan dieksekusi
+   sepihak. Sementara: kunci bocor = jalur "Alihkan Owner" ke identitas
+   toko baru.
+2. **[P2] C.2 — upload klien→host selalu full-dump sejak epoch.** Fix
+   minimal (satu slot antrian per IP) sudah menutup risiko OOM, tapi
+   biaya CPU/transfer tetap tumbuh seiring umur toko. Solusi struktural
+   SATU PAKET dgn Item 17+21: persist antrian approval host ke DB →
+   watermark upload aman dimajukan. Sesi fokus tersendiri (risiko
+   data-loss, wajib test round-trip HTTP asli).
+3. **[P2] D.1 sisa — uji printer Bluetooth di device fisik Android
+   10/11.** Manifest sudah dirapikan (maxSdkVersion=30 utk izin legacy;
+   ACCESS_FINE_LOCATION sengaja TIDAK diminta karena app hanya membaca
+   bonded list, bukan discovery scan). Verifikasi di HP Android ≤11
+   sungguhan bahwa daftar printer tetap muncul.
 
-### B. Keamanan
+### Sisa [P3]
 
-1. **[P1] QR pairing memuat `store_key` master polos.** Siapa pun yang
-   memotret layar QR pairing mendapat storeKey permanen = bisa menurunkan
-   kunci SQLCipher DB & kunci sync selamanya. Expiry 5 menit hanya dicek
-   di sisi klien (payload tidak ditandatangani), dan TIDAK ada mekanisme
-   un-pair/rotasi storeKey untuk mencabut device (mis. HP kasir hilang /
-   pegawai keluar). Minimal: dokumentasikan risiko + rencana fitur
-   "rotasi kunci toko" (rekey DB + re-pair semua device).
-2. **[P2] Respons host sync terenkripsi tapi TIDAK di-HMAC** (arah
-   request sudah encrypt-then-MAC, arah response belum) — active MITM di
-   LAN bisa men-tamper/replay respons. Dikombinasikan dengan (3) di bawah
-   jadi rantai yang patut ditutup: tambahkan header HMAC yang sama di
-   respons + verifikasi di klien (kompatibilitas mundur: klien lama
-   abaikan header baru).
-3. **[P2] Klien menerima nama tabel APA PUN dari respons host.**
-   `syncToHost` → `db.mergeRows(entry.key, ...)` tanpa allowlist (host
-   punya guard `appendOnlyTables`, klien tidak), dan nama tabel/kolom
-   disisipkan ke SQL sebagai identifier `"$name"` tanpa sanitasi kutip.
-   Praktis butuh kunci enkripsi utk dieksploitasi, tapi ini
-   defense-in-depth murah: allowlist tabel di sisi klien + tolak
-   identifier ber-karakter di luar `[a-z0-9_]`.
-4. **[P2] Crash log ditulis ke folder Downloads PUBLIK** (`CrashLogWriter`
-   via MediaStore) — pesan exception bisa memuat data sensitif (IP, isi
-   SQL/data saat error). Bisa dibaca siapa pun yang pegang HP & app lain
-   ber-izin storage. Pertimbangkan: redaksi/potong pesan, atau tetap di
-   folder privat + tombol "Bagikan log" eksplisit dari dalam app.
-5. **[P3] Backup `.berkahpos` AES-CBC tanpa MAC** (integritas tak
-   terjamin, hanya "gagal gzip"), BPOSP legacy salt statis (baca-saja,
-   sudah oke), dan TIDAK ada aturan panjang/kekuatan password — padahal
-   BPOT1 memuat storeKey, kekuatannya = kekuatan password user (210k
-   PBKDF2 membantu tapi password 4 digit tetap tembus). Minimal wajibkan
-   panjang ≥8 di UI ekspor.
-6. **[P3] Peta lockout brute-force tidak pernah dibersihkan** —
-   `_lockoutUntil[ip]` entri kadaluarsa menetap sampai `stopHost`; bocor
-   memori kecil di sesi host panjang. Sekalian: role kasir/asisten adalah
-   batas UI, BUKAN batas keamanan (semua device pegang storeKey + full
-   DB) — patut ditulis eksplisit di dokumentasi ancaman.
-7. **[P3] `minifyEnabled=false`** — APK gampang di-decompile/patch
-   (termasuk mem-bypass gerbang lisensi client-side dengan repack;
-   inheren tak bisa dicegah total, minify+obfuscation cuma menaikkan
-   biaya). Ukuran APK juga membengkak. Coba aktifkan R8 + aturan keep
-   utk plugin (perlu uji regresi penuh, terutama drift/sqlcipher/BT).
-8. **[P3] `HttpCloudflareApi` tanpa timeout** (connect/response) — beda
-   dari LAN sync yang sudah rapi timeout-nya; jaringan buruk = UI publish
-   menggantung lama. Tambah `connectionTimeout` + `.timeout()`.
-
-### C. Performa & konsumsi daya
-
-Kabar baik: TIDAK ditemukan sumber "hunger power" klasik — tidak ada
-`Timer.periodic`/polling liar, tidak ada wakelock, font sudah bundel
-lokal, satu-satunya network background = cek revoked 3 detik saat
-startup. Konsumsi daya nyata datang dari pemakaian normal (kamera
-scanner, Bluetooth print, layar). Yang patut dibenahi:
-
-1. **[P2] `PRAGMA cache_size = -65536` (64 MB) + `mmap_size` 256 MB per
-   koneksi** — agresif utk HP target (RAM 1–2 GB, banyak 32-bit).
-   Cache 64 MB itu heap SQLCipher murni; di device sempit malah memicu
-   LMK/OOM-kill (app "tiba-tiba tertutup"). Pertimbangkan 8–16 MB cache
-   + mmap 64–128 MB; benchmark di device lambat sebelum/sesudah.
-2. **[P2] Upload klien→host selalu full-dump sejak epoch** (sengaja,
-   karena antrian host in-memory — lihat A.3). Biaya CPU (PBKDF2 2×,
-   AES, HMAC, base64) + RAM + waktu transfer tumbuh tanpa batas seiring
-   umur toko. Solusi struktural satu paket dengan Item 17+21: persist
-   antrian approval → watermark upload aman dimajukan.
-3. **[P3] `SystemChrome.setSystemUIOverlayStyle` dipanggil di
-   `MaterialApp.builder`** (tiap rebuild) — murah tapi gratis dihindari
-   (panggil hanya saat brightness berubah). Sekalian: `ref.watch`
-   di dalam closure `builder` (fontScaleProvider) adalah anti-pattern
-   riverpod — pindahkan watch ke method `build` ThePosApp.
-4. **[P3] `generateUniqueLocalId` memuat semua transaksi hari ini** tiap
-   penjualan (SELECT semua baris LIKE prefix) — aman utk skala toko
-   sekarang; kalau mau rapi, `SELECT MAX(local_id)` + fallback.
-
-### D. Kompatibilitas
-
-1. **[P2] Izin Bluetooth legacy:** `BLUETOOTH`/`BLUETOOTH_ADMIN` tanpa
-   `android:maxSdkVersion="30"`, dan TIDAK ada `ACCESS_FINE_LOCATION` —
-   di Android 10–11 discovery/scan Bluetooth butuh izin lokasi. Kalau
-   `print_bluetooth_thermal` hanya menampilkan bonded devices, aman;
-   kalau ternyata ada jalur scan, di HP Android ≤11 daftar printer bisa
-   kosong DIAM-DIAM. Uji di device Android 10/11 fisik.
-2. **[P3] Sync LAN memakai HTTP cleartext via `dart:io` HttpClient** —
-   kebetulan TIDAK terkena blokir cleartext Android 9+ (network security
-   config hanya mengikat stack Java). Kalau suatu saat migrasi ke package
-   `http`/cronet, sync akan mendadak gagal tanpa `usesCleartextTraffic`.
-   Catat di CLAUDE.md sebagai gotcha.
-3. **[P3] Java 8 tanpa core library desugaring** — beberapa plugin versi
-   baru mensyaratkan desugaring; potensi build mendadak gagal saat
-   upgrade dependency.
-4. **[P3] CLAUDE.md basi:** tertulis `schemaVersion = 9`, kode sudah 16.
-   (Perbaiki saat menyentuh CLAUDE.md berikutnya.)
-5. **[P3] Terkunci di Flutter 3.24.5 (CI pin):** diverifikasi nyata — di
-   Flutter stable terbaru (3.44.6) proyek gagal kompilasi: 1 error
-   `cardTheme: CardTheme(...)` harus jadi `CardThemeData(...)`
-   (`app_theme.dart:175`) + 53 deprecation (`withOpacity`,
-   `DropdownButtonFormField.value`, `onReorder`). Bukan darurat (CI pin
-   3.24.5 tetap hijau), tapi makin lama makin mahal: rencanakan satu sesi
-   upgrade SDK khusus (fix error+deprecation serentak, full test).
-
-### E. Clean code
-
-1. File raksasa: `kasir_screen.dart` 3.739 baris, `app_database.dart`
-   3.420, `receipt_screen.dart` 2.694 — pecah bertahap (mis. mixin/bagian
-   query DB per domain) saat menyentuh area itu, jangan big-bang.
-2. `LanSyncService` full-static + callback tunggal (`onQueueChanged`,
-   `onProposalsChanged`) — kalau nanti ada 2 listener (mis. badge +
-   layar), yang satu menimpa yang lain diam-diam. Pertimbangkan
-   `ChangeNotifier`/stream.
-3. `discount_allocation.dart`: loop pencari `lastQtyIdx` mati — `lines`
-   sudah difilter `eq > 0`, jadi selalu = index terakhir; sederhanakan.
-4. `payment_screen.dart` `_change`: `clamp(0, double.maxFinite.toInt())`
-   → cukup `max(0, _paid - _total)`.
-5. Duplikasi validasi hex key (`rekey` vs `_openConnection`) → satu
-   helper.
+1. **A.8 redirect router tidak reaktif** — `ref.read` tanpa
+   `refreshListenable`: perubahan state lisensi async tidak memicu
+   redirect sampai navigasi berikutnya. Dokumentasikan atau pasang
+   Listenable gabungan.
+2. **A.9 `beforeOpen` unitTypes pakai `insertOrReplace`** padahal
+   komentar bilang insertOrIgnore — bom waktu kalau kelak ada UI edit
+   satuan; samakan dgn `_seedDefaults`.
+3. **A.10 master data tanpa tombstone** — penghapusan produk/tier/
+   pelanggan di owner tidak pernah menghapus di klien (data hantu).
+   Butuh keputusan desain: soft-delete tersinkron vs tabel tombstone.
+4. **A.11 `mergeRows` menghitung "diterima N" dari return `customInsert`**
+   — INSERT OR IGNORE yang ter-skip bisa tetap terhitung (kosmetik,
+   menyesatkan saat debug sync).
+5. **A.12 tutup buku: crash di antara copy-arsip & delete-data**
+   meninggalkan state nyangkut ("Arsip tahun X sudah ada" padahal data
+   belum terhapus) tanpa jalur pemulihan.
+6. **B.7 `minifyEnabled=false`** — aktifkan R8 + keep rules (uji regresi
+   penuh, terutama drift/sqlcipher/BT).
+7. **B.8 `HttpCloudflareApi` tanpa timeout** — tambah connectionTimeout +
+   `.timeout()` seperti LAN sync.
+8. **C.3 `SystemChrome.setSystemUIOverlayStyle` & `ref.watch` di dalam
+   `MaterialApp.builder`** — guard per perubahan brightness; pindahkan
+   watch ke build.
+9. **C.4 `generateUniqueLocalId` memuat semua transaksi hari itu** —
+   ganti `SELECT MAX(local_id)` + fallback bila mau rapi.
+10. **D.2 gotcha cleartext HTTP** — sync LAN kebetulan lolos blokir
+    cleartext Android karena dart:io; catat di CLAUDE.md (migrasi ke
+    package `http`/cronet akan mendadak gagal tanpa NSC exception).
+11. **D.3 Java 8 tanpa core library desugaring** — potensi build gagal
+    saat upgrade plugin.
+12. **D.4 CLAUDE.md basi** — tertulis `schemaVersion = 9`, kode 16.
+13. **D.5 terkunci di Flutter 3.24.5 (pin CI)** — di 3.44.6 stable gagal
+    kompilasi: 1 error `CardTheme`→`CardThemeData` (`app_theme.dart:175`)
+    + 53 deprecation (`withOpacity`, `DropdownButtonFormField.value`,
+    `onReorder`). Rencanakan sesi upgrade SDK khusus (fix serentak +
+    full test + uji APK device fisik).
+14. **E — clean code**: pecah bertahap file raksasa (`kasir_screen.dart`
+    3.7k, `app_database.dart` 3.4k, `receipt_screen.dart` 2.7k);
+    `LanSyncService` full-static callback tunggal (2 listener saling
+    timpa); loop mati `lastQtyIdx` di `discount_allocation.dart`;
+    `_change` clamp `double.maxFinite.toInt()` → `max(0, ...)`;
+    duplikasi validasi hex key (`rekey` vs `_openConnection`).
 
 ---
 
@@ -678,6 +546,7 @@ detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
 5. **Item 38** (tie-break `_rawBaseStock` tidak kronologis kalau 2
    perubahan stok jatuh di detik yang sama) — prioritas rendah, ditemukan
    tak sengaja lewat test, belum ada laporan dampak nyata di device asli.
-6. **Item 41** (audit kode menyeluruh 18 Juli — daftar temuan A–E di
-   atas) — BELUM ada yang dieksekusi; mulai dari yang bertanda [P1]
-   (stok korup pasca-sync, zona waktu watermark, storeKey di QR pairing).
+6. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
+   di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
+   keputusan desain user), C.2 (gabung Item 17+21), uji printer device
+   fisik Android ≤11, dan daftar P3 — detail di Item 41 di atas.
