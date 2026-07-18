@@ -61,6 +61,14 @@ class PengaturanScreen extends ConsumerWidget {
     final device = ref.watch(deviceProvider);
     final themeMode = ref.watch(themeModeProvider);
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Aksen warna soft per fungsi (mockup Varian B, dipilih user): tiap
+    // kartu SEKSI diwarnai menurut domainnya — hue sama dgn Ringkasan/
+    // Laporan (bukan warna baru per layar). "Device Ini"/"Toko" sengaja
+    // netral (isinya campuran, tidak mewakili satu domain tunggal).
+    final syncBg = AppTheme.riwayatBg(isDark); // Sinkronisasi → ungu
+    final expBg = AppTheme.stockWarnBg(isDark); // Eksperimental → amber (hati-hati)
+    final dataMgmtBg = AppTheme.debtBg(isDark); // Manajemen Data → merah (berisiko tinggi)
 
     // Item 24d — label "Pegawai" KOSMETIK saja. Nilai internal deviceRole
     // TETAP 'kasir' (lihat catatan di kKasirPermissionKeys/PLAN.md) — jangan
@@ -225,6 +233,7 @@ class PengaturanScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           const _SectionHeader('Sinkronisasi'),
           Card(
+            color: syncBg,
             child: Column(
               children: [
                 ListTile(
@@ -288,6 +297,7 @@ class PengaturanScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             const _SectionHeader('Eksperimental'),
             Card(
+              color: expBg,
               child: ListTile(
                 leading: const Icon(Icons.science_outlined),
                 title: const Text('Import dari Griyo POS'),
@@ -302,6 +312,7 @@ class PengaturanScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             const _SectionHeader('Manajemen Data'),
             Card(
+              color: dataMgmtBg,
               child: Column(
                 children: [
                   ListTile(

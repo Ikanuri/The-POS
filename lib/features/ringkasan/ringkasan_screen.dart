@@ -130,6 +130,16 @@ class _RingkasanBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Aksen warna soft per fungsi (mockup Varian B, dipilih user): tiap
+    // kartu diwarnai menurut domainnya, memakai palet yang sudah ada
+    // (dipakai jg oleh toolbar kasir Item 33) — hue-nya konsisten lintas
+    // layar (Ringkasan/Laporan/Pengaturan), bukan warna baru per layar.
+    final uangFg = AppTheme.changeFg(isDark); // Uang & Kas → hijau
+    final uangBg = AppTheme.changeBg(isDark);
+    final produkFg = AppTheme.scanFg(isDark); // Produk & Data → biru
+    final produkBg = AppTheme.scanBg(isDark);
+    final stokBg = AppTheme.stockWarnBg(isDark); // Stok → amber
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -143,7 +153,8 @@ class _RingkasanBody extends ConsumerWidget {
               value: formatRupiah(data.todayRevenue),
               sub: '${data.todayTransactions} transaksi',
               icon: Icons.today_outlined,
-              color: scheme.primary,
+              color: uangFg,
+              bg: uangBg,
             )),
             const SizedBox(width: 12),
             Expanded(
@@ -151,7 +162,8 @@ class _RingkasanBody extends ConsumerWidget {
               label: 'Minggu Ini',
               value: formatRupiah(data.weekRevenue),
               icon: Icons.date_range_outlined,
-              color: scheme.secondary,
+              color: uangFg,
+              bg: uangBg,
             )),
           ],
         ),
@@ -163,7 +175,8 @@ class _RingkasanBody extends ConsumerWidget {
               label: 'Bulan Ini',
               value: formatRupiah(data.monthRevenue),
               icon: Icons.calendar_month_outlined,
-              color: scheme.tertiary,
+              color: uangFg,
+              bg: uangBg,
             )),
             const SizedBox(width: 12),
             Expanded(
@@ -172,13 +185,14 @@ class _RingkasanBody extends ConsumerWidget {
               value: formatRupiah(data.monthRevenue ~/
                   DateTime.now().day.clamp(1, 31)),
               icon: Icons.trending_up_outlined,
-              color: scheme.onSurfaceVariant,
+              color: uangFg,
+              bg: uangBg,
             )),
           ],
         ),
         const SizedBox(height: 20),
 
-        // Hourly chart
+        // Hourly chart — netral, bukan kartu per-fungsi.
         Text('Penjualan Per Jam (Hari Ini)',
             style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
@@ -190,27 +204,27 @@ class _RingkasanBody extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
 
-        // Item 30(a) — kartu cek cepat stok.
+        // Item 30(a) — kartu cek cepat stok (fungsi: Stok → amber).
         Text('Kontrol Stok', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
-        const _StockQuickCheckCard(),
+        _StockQuickCheckCard(bg: stokBg),
         const SizedBox(height: 20),
 
-        // Top products
+        // Top products (fungsi: Produk & Data → biru).
         if (data.topProducts.isNotEmpty) ...[
           Text('Produk Terlaris Hari Ini',
               style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           Card(
+            color: produkBg,
             child: Column(
               children: data.topProducts.asMap().entries.map((e) {
                 final rank = e.key + 1;
                 final prod = e.value;
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: rank == 1
-                        ? scheme.primary
-                        : scheme.surfaceContainerHighest,
+                    backgroundColor:
+                        rank == 1 ? produkFg : scheme.surfaceContainerHighest,
                     child: Text(
                       '$rank',
                       style: TextStyle(
@@ -231,8 +245,7 @@ class _RingkasanBody extends ConsumerWidget {
                           TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
                   trailing: Text(
                     formatRupiah(prod.revenue),
-                    style: TextStyle(
-                        color: scheme.primary, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: produkFg, fontWeight: FontWeight.w600),
                   ),
                 );
               }).toList(),
@@ -251,6 +264,7 @@ class _KpiCard extends StatelessWidget {
     this.sub,
     required this.icon,
     required this.color,
+    this.bg,
   });
 
   final String label;
@@ -258,10 +272,12 @@ class _KpiCard extends StatelessWidget {
   final String? sub;
   final IconData icon;
   final Color color;
+  final Color? bg;
 
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: bg,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -364,7 +380,8 @@ class _HourlyChart extends StatelessWidget {
 }
 
 class _StockQuickCheckCard extends ConsumerWidget {
-  const _StockQuickCheckCard();
+  const _StockQuickCheckCard({this.bg});
+  final Color? bg;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -374,6 +391,7 @@ class _StockQuickCheckCard extends ConsumerWidget {
     final rowsAsync = ref.watch(_stockOverviewForRingkasanProvider(groupId));
 
     return Card(
+      color: bg,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

@@ -60,6 +60,11 @@ class RingkasanTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dataAsync = ref.watch(_ringkasanTabProvider(range));
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Aksen warna soft per fungsi (mockup Varian B): KPI uang & metode
+    // pembayaran → hijau (fungsi Uang & Kas), konsisten dgn layar Ringkasan
+    // utama & tab Laporan lain.
+    final uangBg = AppTheme.changeBg(isDark);
 
     return dataAsync.when(
       data: (data) => ListView(
@@ -67,6 +72,7 @@ class RingkasanTab extends ConsumerWidget {
         children: [
           // Main KPIs
           _KpiRow(
+            bg: uangBg,
             items: [
               _KpiItem('Omzet', formatRupiah(data.revenue), scheme.primary),
               _KpiItem('Transaksi', '${data.txCount}', scheme.secondary),
@@ -74,6 +80,7 @@ class RingkasanTab extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           _KpiRow(
+            bg: uangBg,
             items: [
               _KpiItem('HPP', formatRupiah(data.cogs), scheme.onSurfaceVariant),
               _KpiItem('Laba Kotor', formatRupiah(data.profit),
@@ -82,6 +89,7 @@ class RingkasanTab extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           _KpiRow(
+            bg: uangBg,
             items: [
               _KpiItem('Pengeluaran', formatRupiah(data.expenses),
                   data.expenses > 0 ? scheme.error : scheme.onSurfaceVariant),
@@ -99,6 +107,7 @@ class RingkasanTab extends ConsumerWidget {
             if (data.byMethod.length >= 2)
               _PaymentDonut(byMethod: data.byMethod, total: data.revenue),
             Card(
+              color: uangBg,
               child: Column(
                 children: data.byMethod.entries.map((e) {
                   final pct = data.revenue > 0
@@ -213,8 +222,9 @@ class _PaymentDonut extends StatelessWidget {
 }
 
 class _KpiRow extends StatelessWidget {
-  const _KpiRow({required this.items});
+  const _KpiRow({required this.items, this.bg});
   final List<_KpiItem> items;
+  final Color? bg;
 
   @override
   Widget build(BuildContext context) {
@@ -222,6 +232,7 @@ class _KpiRow extends StatelessWidget {
       children: items
           .map((item) => Expanded(
                 child: Card(
+                  color: bg,
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Column(

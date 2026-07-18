@@ -75,6 +75,12 @@ class StokTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dataAsync = ref.watch(_stokTabProvider);
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Aksen warna soft per fungsi (mockup Varian B): kartu stok → amber,
+    // kecuali kartu "Stok Negatif" (kondisi kritis) → merah, konsisten dgn
+    // ikon/teks di dalamnya yang sudah pakai debtFg.
+    final stokBg = AppTheme.stockWarnBg(isDark);
+    final negBg = AppTheme.debtBg(isDark);
 
     return dataAsync.when(
       data: (report) {
@@ -88,6 +94,7 @@ class StokTab extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           children: [
             Card(
+              color: stokBg,
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
@@ -105,7 +112,7 @@ class StokTab extends ConsumerWidget {
                       const SizedBox(height: 6),
                       Row(children: [
                         Icon(Icons.warning_amber_rounded,
-                            size: 14, color: AppTheme.stockWarnFg(false)),
+                            size: 14, color: AppTheme.stockWarnFg(isDark)),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -129,6 +136,7 @@ class StokTab extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
               Card(
+                color: stokBg,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: _CategoryDonut(categories: report.perCategory),
@@ -140,6 +148,7 @@ class StokTab extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             Card(
+              color: stokBg,
               child: Column(
                 children: [
                   for (var i = 0; i < report.perCategory.length; i++) ...[
@@ -163,6 +172,7 @@ class StokTab extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
               Card(
+                color: negBg,
                 child: Column(
                   children: [
                     for (var i = 0; i < report.negativeStock.length; i++) ...[
@@ -170,14 +180,14 @@ class StokTab extends ConsumerWidget {
                       ListTile(
                         dense: true,
                         leading: Icon(Icons.error_outline,
-                            size: 18, color: AppTheme.debtFg(false)),
+                            size: 18, color: AppTheme.debtFg(isDark)),
                         title: Text(report.negativeStock[i].name,
                             style: const TextStyle(fontSize: 13)),
                         trailing: Text(
                           report.negativeStock[i].stock.toString(),
                           style: TextStyle(
                               fontWeight: FontWeight.w700,
-                              color: AppTheme.debtFg(false)),
+                              color: AppTheme.debtFg(isDark)),
                         ),
                       ),
                     ],
