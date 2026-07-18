@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-18
 
+- `98ab0df` — fix: stepper (AddControl) tetap besar setelah tap sampai tap area lain/scroll (bukan cuma sesaat selagi ditahan) — AddControl.activeStepper (ValueNotifier statis) + StepperActiveScope di kasir_screen.dart & cart_sheet.dart
 - `3c1525e` — feat: aksen warna soft per fungsi di kartu Ringkasan/Laporan/Pengaturan (Varian B dari mockup, dipilih user) — hijau=Uang&Kas, amber=Stok, merah=kritis, biru=Produk&Data, ungu=Sinkronisasi
 - `58faf98` — feat: stepper feedback taktil (AnimatedScale saat ditekan), bulk add/remove kategori produk, opsi Bagikan langsung utk backup (BPOP2/BPOT1)
 - `da2aa8e` — fix: kartu Usulan Harga/Produk overflow di HP sempit (tombol Tinjau ListTile trailing lebar-penuh meremas title/subtitle jadi 1 karakter/baris) — tambah LanSyncService.debugAddProposal/debugClearProposals (seam test-only, hindari real socket di test render)

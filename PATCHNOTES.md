@@ -11,8 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 18 Juli 2026
 
 ### ✨ Fitur Baru
-- **Tombol +/- di kasir kini terasa lebih "hidup"** — sedikit membesar saat
-  ditekan, mengecil lagi saat dilepas atau kalau jari geser ke tombol lain.
+- **Tombol +/- di kasir kini punya "pijakan jempol"** — setelah ditap,
+  tombol membesar dan TETAP besar (bukan cuma sesaat) supaya tap
+  berikutnya (mis. nambah qty lagi) lebih besar targetnya dan tidak
+  gampang salah pencet. Mengecil lagi otomatis begitu tap di tempat
+  lain atau mulai scroll.
 - **Kelola Kategori kini bisa "Tambah Massal"** (tambah banyak kategori
   sekaligus, satu nama per baris) dan **hapus banyak sekaligus** (tekan
   lama salah satu kategori untuk masuk mode pilih).
