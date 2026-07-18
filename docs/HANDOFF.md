@@ -35,19 +35,81 @@ Item 41 (B.1 rotasi kunci, C.2 gabung Item 17+21, P3) di PLAN.md._
 **schemaVersion 16** (tidak berubah sesi ini — tidak ada migrasi).
 
 _Update sesi lanjutan (18 Juli, branch `claude/setup-dependencies-am31te`,
-SUDAH di-commit s.d. `3c1525e` & di-push, BELUM di-merge ke `main` —
+SUDAH di-commit s.d. `98ab0df`, `58faf98`/`3c1525e` SUDAH di-push &
+di-merge ke `main`, `98ab0df` SUDAH di-push tapi BELUM di-merge —
 tanyakan user): (1) fix bug "Usulan Harga/Produk" overflow (`da2aa8e`,
 lihat detail di bawah), (2) batch 4 permintaan user — stepper feedback
-taktil + bulk add/remove kategori + share backup langsung (`58faf98`),
-aksen warna soft per fungsi Varian B (`3c1525e`, lihat detail di bawah).
-Full `flutter test` **523 test, SEMUA HIJAU**, `flutter analyze` bersih.
-**Catatan environment**: `flutter test` FULL SUITE sempat mati diam-diam
-(exit tanpa error, tanpa "All tests passed!") setelah cuma ~18 test
-2x berturut-turut sesi ini — bukan OOM/disk (RAM 12GB+ bebas, disk 27G+
-bebas saat dicek), retry ke-3 baru sukses lengkap. Root cause belum
-ditemukan — kalau full-suite run mati lagi tanpa pesan error yang jelas,
-langsung retry (jangan asumsikan ada test yang gagal, cek dulu apa
-prosesnya benar2 masih hidup via `ps`)._
+taktil (kemudian DIKOREKSI, lihat #4) + bulk add/remove kategori + share
+backup langsung (`58faf98`), aksen warna soft per fungsi Varian B
+(`3c1525e`, lihat detail di bawah), (4) **koreksi perilaku stepper**
+(`98ab0df`) — user klarifikasi maksudnya BUKAN "membesar selagi ditahan"
+(implementasi awal di `58faf98`) tapi "membesar setelah tap DAN TETAP
+besar sampai tap area lain/scroll" (pijakan jempol, lihat detail di
+bawah). Full `flutter test` **524 test** (1 gagal — `stock_opname_
+screen_test.dart`, DIKONFIRMASI flaky pra-ada & TIDAK terkait perubahan
+sesi ini: re-run terisolasi 2x menghasilkan gagal lalu lolos tanpa ubah
+apa pun), `flutter analyze` bersih.
+
+**Catatan environment PENTING**: `flutter test` FULL SUITE berulang kali
+mati DIAM-DIAM (proses exit, TIDAK ada "All tests passed!"/"Some tests
+failed" di akhir, TIDAK ada pesan error) sepanjang sesi ini — terjadi
+lagi 2x tambahan saat verifikasi fix stepper (mati di ~39 test, lalu di
+~477 test), baru retry ke-3 mencapai akhir beneran. Bukan OOM/disk (RAM
+12GB+ bebas, disk 27G+ bebas saat dicek). Root cause BELUM ditemukan —
+**kalau full-suite run berhenti tanpa baris akhir yang jelas, JANGAN
+asumsikan semua test lolos ATAU semua gagal — cek dulu proses masih
+hidup via `ps aux | grep "flutter test"`, kalau sudah mati langsung
+retry** (biasanya sukses di percobaan ke-2/ke-3, tanpa perlu ubah kode
+apa pun).
+
+## Koreksi perilaku stepper: "tetap besar" bukan "cuma sesaat" (18 Juli, SELESAI & di-commit `98ab0df`)
+
+Implementasi awal Item batch-4 (`58faf98`) salah tangkap maksud user:
+dibuat "membesar SELAGI ditekan (onTapDown), mengecil lagi begitu
+dilepas (onTapUp/onTapCancel)" — animasi sesaat khas tombol biasa. User
+klarifikasi ulang 2x sampai jelas: maksudnya "pijakan jempol" — begitu
+di-tap, stepper membesar dan **TETAP besar** (survive lepas jari) supaya
+TAP BERIKUTNYA (mis. nambah qty lagi beberapa kali berturut-turut) py
+target lebih besar & kecil kemungkinan missclick. Mengecil lagi HANYA
+saat: (a) tap di AREA LAIN (stepper lain, kartu produk lain, ruang
+kosong), atau (b) mulai scroll list/grid-nya.
+
+**Desain**: `AddControl.activeStepper` — `ValueNotifier<State<AddControl>?>`
+STATIS (satu utk seluruh app, BUKAN per-halaman) — nge-track instance
+`State` mana yang terakhir "aktif" (`identical()` check, bukan id
+eksplisit — State instance stabil selama widget yg sama tetap di tree,
+jadi tidak perlu plumb id produk/productUnitId ke seluruh pemanggil).
+`_handleTap`/`_handleMinus` set `activeStepper.value = this` (State-nya
+sendiri) SETIAP kali tap BENAR-BENAR dikenali (via `onTap`, bukan
+`onTapDown` — lihat alasan urutan di bawah).
+
+`StepperActiveScope` (widget baru, sama file) — bungkus area yg berisi
+`AddControl` (grid/list produk `kasir_screen.dart`, daftar keranjang
+`cart_sheet.dart`) dgn `Listener(behavior: translucent, onPointerDown:
+AddControl.clearActive)` + `NotificationListener<ScrollStartNotification>`
+(clear jg saat mulai scroll).
+
+**Kenapa `Listener` bukan `GestureDetector`, dan kenapa clear di DOWN
+tapi set-aktif di tap-recognized (UP)**: `Listener` TIDAK ikut gesture
+arena sama sekali — selalu terpanggil di SETIAP pointer-down dalam
+areanya, TERMASUK yg jatuh tepat di atas sebuah `AddControl` (beda dari
+`GestureDetector` yg bisa "kalah" arbitrase arena thd descendant lain).
+Karena clear terjadi di event DOWN (lebih awal, síncron) dan
+`activeStepper` di-set-ulang oleh stepper yg BENAR-BENAR di-tap di event
+UP (JAUH belakangan, event terpisah) — urutannya TIDAK PERNAH balapan:
+down selalu membersihkan dulu, baru up (kalau ada tap valid) menyalakan
+lagi punya sendiri. Sempat dipertimbangkan tapi DIHINDARI: clear di
+`onTapDown` milik `GestureDetector` ancestor (bisa balapan/terbalik
+urutannya thd `onTapDown` descendant dalam event-loop yg SAMA — dianalisa
+manual, disimpulkan tidak reliable, makanya pindah ke `Listener`+event UP).
+
+Test: `test/add_control_press_scale_test.dart` (ditulis ULANG total,
+4 test: tetap besar setelah lepas, tap area lain via `StepperActiveScope`
+mengecilkan, scroll mengecilkan, tap stepper KEDUA mengecilkan yg
+PERTAMA). Revert-verify: stash implementasi produksi → 4 test gagal
+compile persis (`Method not found: StepperActiveScope`) → restore, hijau
+lagi. Regresi: seluruh test kasir/cart existing (55 test) tetap hijau
+stlh `StepperActiveScope` dibungkus di kedua layar.
 
 ## Item baru: aksen warna soft per fungsi — kartu Ringkasan/Laporan/Pengaturan (18 Juli, SELESAI & di-commit `3c1525e`)
 
