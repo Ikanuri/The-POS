@@ -35,10 +35,131 @@ Item 41 (B.1 rotasi kunci, C.2 gabung Item 17+21, P3) di PLAN.md._
 **schemaVersion 16** (tidak berubah sesi ini — tidak ada migrasi).
 
 _Update sesi lanjutan (18 Juli, branch `claude/setup-dependencies-am31te`,
-SUDAH di-commit `da2aa8e` & di-push, BELUM di-merge ke `main` — tanyakan
-user): fix bug NYATA yang dilaporkan user via screenshot langsung dari
-device fisik (bukan laporan teks) — lihat detail di bawah. Full
-`flutter test` **511 test, SEMUA HIJAU**, `flutter analyze` bersih._
+SUDAH di-commit s.d. `3c1525e` & di-push, BELUM di-merge ke `main` —
+tanyakan user): (1) fix bug "Usulan Harga/Produk" overflow (`da2aa8e`,
+lihat detail di bawah), (2) batch 4 permintaan user — stepper feedback
+taktil + bulk add/remove kategori + share backup langsung (`58faf98`),
+aksen warna soft per fungsi Varian B (`3c1525e`, lihat detail di bawah).
+Full `flutter test` **523 test, SEMUA HIJAU**, `flutter analyze` bersih.
+**Catatan environment**: `flutter test` FULL SUITE sempat mati diam-diam
+(exit tanpa error, tanpa "All tests passed!") setelah cuma ~18 test
+2x berturut-turut sesi ini — bukan OOM/disk (RAM 12GB+ bebas, disk 27G+
+bebas saat dicek), retry ke-3 baru sukses lengkap. Root cause belum
+ditemukan — kalau full-suite run mati lagi tanpa pesan error yang jelas,
+langsung retry (jangan asumsikan ada test yang gagal, cek dulu apa
+prosesnya benar2 masih hidup via `ps`)._
+
+## Item baru: aksen warna soft per fungsi — kartu Ringkasan/Laporan/Pengaturan (18 Juli, SELESAI & di-commit `3c1525e`)
+
+User minta 4 perubahan sekaligus, salah satunya (aksen warna) diminta
+"suggest beberapa mockupnya ke saya dulu" — dibuatkan mockup HTML
+interaktif (font lokal Hanken Grotesk/Newsreader di-embed base64 dari
+`assets/fonts/`, published via Artifact tool) menampilkan 3 varian (A
+subtle-icon-only, B latar kartu penuh ditint, C garis aksen kiri) x 3
+layar (Ringkasan/Laporan/Pengaturan), toggle terang/gelap. User pilih
+**Varian B** ("B saja").
+
+**Sistem warna** (dipetakan per DOMAIN fungsi, bukan per layar — hue
+sama dipakai ulang lintas Ringkasan/Laporan/Pengaturan, konsisten dgn
+palet toolbar kasir Item 39/33 yg sudah ada — `AppTheme.changeFg/Bg`
+hijau, `stockWarnFg/Bg` amber, `debtFg/Bg` merah, `scanFg/Bg` biru,
+`riwayatFg/Bg` ungu): Uang & Kas → hijau, Stok → amber, Hutang/kritis →
+merah, Produk & Data → biru, Pelanggan/Sinkronisasi → ungu, Umum →
+netral (kartu TIDAK diberi `color:` sama sekali).
+
+**Ditemukan saat implementasi (BUKAN sesuai asumsi mockup)**: tab-tab di
+`laporan_screen.dart` TERNYATA TIDAK semuanya pakai `Card` — hanya tab
+Ringkasan (`tabs/ringkasan_tab.dart`) & tab Stok (`tabs/stok_tab.dart`)
+yg punya widget `Card` sungguhan; tab Produk/Pelanggan/Transaksi/Hutang
+murni `ListView`/`ListTile` tanpa `Card` sama sekali (`hutang_tab.dart`
+dicek detail: search field + total row + `ListView.separated`, nol
+`Card`). Scope aksen warna Laporan disempitkan ke 2 tab itu saja — TIDAK
+menambah `Card` baru ke tab lain (di luar scope "beri aksen ke kartu yg
+SUDAH ADA").
+
+**Perubahan per file**:
+- `ringkasan_screen.dart` (layar Ringkasan utama): 4 kartu KPI + kartu
+  Kontrol Stok + kartu Produk Terlaris → `_KpiCard`/`_StockQuickCheckCard`
+  dapat param `bg` baru, `Card(color: bg)`.
+- `laporan/tabs/ringkasan_tab.dart`: `_KpiRow` dapat param `bg` (dipakai
+  sama utk 3 baris KPI uang), kartu daftar metode pembayaran → hijau.
+  Foreground merah utk laba negatif/pengeluaran TETAP dipertahankan
+  (semantik "angka ini buruk", terpisah dari tint latar kartu "domain
+  uang") — TIDAK dihilangkan.
+- `laporan/tabs/stok_tab.dart`: 3 kartu nilai inventori/kategori → amber,
+  kartu "Stok Negatif" (kondisi kritis) → MERAH (beda dari kartu stok
+  lain, konsisten dgn ikon/teks `debtFg` yg sudah ada di situ). Sekalian
+  fix bug kecil YG TIDAK DISENGAJA ditemukan: `AppTheme.stockWarnFg(false)`
+  /`debtFg(false)` di file ini SELALU hardcode mode terang (`false`)
+  walau app sedang dark mode — diganti ke `isDark` sungguhan (perubahan
+  murni bonus, ditemukan krn menyentuh baris yg sama, BUKAN laporan user).
+- `pengaturan_screen.dart`: kartu seksi "Sinkronisasi" → ungu,
+  "Eksperimental" → amber (semantik beda dari "Stok" amber — di sini
+  artinya "fitur baru, hati-hati"), "Manajemen Data" → merah. Seksi
+  "Device Ini"/"Toko"/"Perangkat"/"Diagnostik" SENGAJA netral (isinya
+  campuran, tidak mewakili satu domain).
+
+Test: `test/ringkasan_accent_color_test.dart` (cek `Card.color` PERSIS,
+bukan cuma cek teks tampil), `test/laporan_pengaturan_accent_color_test.dart`
+(2 test: tab Stok Laporan + seksi Pengaturan). Revert-verify dilakukan
+(stash semua file produksi → test gagal `Expected: non-empty, Actual:
+[]` persis, krn `Card.color` masih null → restore, hijau lagi).
+
+## Batch 4 perubahan user: stepper feedback taktil, bulk kategori, share backup (18 Juli, SELESAI & di-commit `58faf98`)
+
+User minta 4 hal sekaligus dlm 1 pesan (bukan "langsung eksekusi" eksplisit
+tapi 3 dari 4 tidak diberi syarat "tunjukkan dulu" spt permintaan #2 aksen
+warna — dieksekusi langsung utk yg 3, mockup dulu utk yg #2 lihat section
+di atas):
+
+1. **Stepper (`AddControl`) feedback taktil** — `add_control.dart`: tombol
+   "+"/"-" membesar (`AnimatedScale`, scale 1.15, 100ms) saat `onTapDown`,
+   kembali normal saat `onTapUp`/`onTapCancel`. `onTapCancel` OTOMATIS
+   menangani kasus "jari geser ke tombol lain" — `TapGestureRecognizer`
+   bawaan Flutter membatalkan tap-nya sendiri kalau pointer keluar batas
+   toleransi geser saat masih ditekan, TIDAK perlu deteksi posisi manual.
+   Test: `test/add_control_press_scale_test.dart` (pakai `tester.
+   startGesture`/`gesture.moveBy` utk simulasi tekan-tahan-geser).
+
+2. **Bulk add/remove kategori produk** — `app_database.dart`:
+   `addProductGroups(List<String>)` (satu nama per baris, trim, skip
+   kosong, dibungkus 1 `transaction()`), `deleteProductGroups(List<int>)`
+   (sama, reuse `deleteProductGroup` per-id). `product_group_screen.dart`:
+   tombol AppBar "Tambah Massal" (dialog multiline `TextField`) + mode
+   pilih (long-press kategori → `_selectionMode`, `Checkbox` jadi leading,
+   AppBar berubah jadi "N dipilih" + tombol Hapus Terpilih). Kolom id
+   `product_groups` pakai pola "slot" lama (reuse id kosong/`name=null`)
+   — TIDAK diubah, `addProductGroups` cuma loop panggil `addProductGroup`
+   yg sudah benar. Test: `test/product_group_bulk_test.dart` (DB-tier),
+   `test/product_group_screen_bulk_test.dart` (widget-tier).
+
+3. **Opsi "Bagikan" utk backup (BUKAN cuma simpan lokal)** — helper baru
+   `core/utils/export_destination.dart`: `saveOrShareExport()` — dialog
+   pilihan "Simpan Backup" (Bagikan via `Share.shareXFiles` share sheet
+   OS, ATAU Simpan ke Perangkat via `FilePicker.saveFile` spt sebelumnya).
+   **PENTING desain dialog**: 2 tombol besar (Bagikan/Simpan) SENGAJA
+   ditumpuk VERTIKAL di `content` AlertDialog (bukan di `actions` sbg Row)
+   — persis gotcha CLAUDE.md soal tombol lebar-penuh bentrok dlm `Row`
+   `actions`/`AlertDialog`, dihindari dgn stacking bukan Row. Dipakai di
+   `backup_screen.dart` (BPOP2) DAN `alih_owner_screen.dart` (BPOT1) —
+   "semua jenis backup" sesuai minta user. `temp_share_cleanup.dart`
+   ditambah prefix `'backup_'` (file share sementara ikut dibersihkan
+   otomatis spt struk/katalog). Test: `test/backup_share_option_test.dart`
+   — TIDAK menembus sampai plugin native sungguhan (`Share.shareXFiles`/
+   `FilePicker.saveFile` tak ada mock method channel-nya di codebase ini
+   sama sekali, dicek dulu sebelum nulis test) — cukup buktikan dialog
+   pilihan muncul dgn kedua opsi & Batal berfungsi, utk KEDUA layar
+   (BPOP2 & BPOT1) dgn dialog yg SAMA persis.
+   **Catatan test infra**: `pumpAndSettle()` SETELAH tap "Lanjutkan" di
+   dialog password bikin test macet selamanya — `_busy=true` menampilkan
+   `CircularProgressIndicator` (animasi tak berhenti) SELAGI proses
+   export berjalan & dialog baru ditunggu, `pumpAndSettle` menunggu
+   animasi berhenti dulu yg TIDAK PERNAH terjadi. Fix: `tester.pump()` +
+   `tester.pump(Duration(milliseconds: 500))` eksplisit, bukan
+   `pumpAndSettle()`, di titik itu saja.
+
+4. **Aksen warna kartu Ringkasan/Laporan/Pengaturan** — lihat section
+   terpisah di atas ("Item baru: aksen warna...").
 
 ## Fix: kartu "Usulan Harga/Produk" overflow di HP sempit (18 Juli, SELESAI & di-commit `da2aa8e`)
 

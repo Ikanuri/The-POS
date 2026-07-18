@@ -10,6 +10,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 18 Juli 2026
 
+### ✨ Fitur Baru
+- **Tombol +/- di kasir kini terasa lebih "hidup"** — sedikit membesar saat
+  ditekan, mengecil lagi saat dilepas atau kalau jari geser ke tombol lain.
+- **Kelola Kategori kini bisa "Tambah Massal"** (tambah banyak kategori
+  sekaligus, satu nama per baris) dan **hapus banyak sekaligus** (tekan
+  lama salah satu kategori untuk masuk mode pilih).
+- **Backup & Restore dan Alihkan Owner kini bisa langsung "Bagikan"** —
+  selain disimpan ke penyimpanan HP, file backup terenkripsi bisa langsung
+  dikirim ke Google Drive/WhatsApp/email dll lewat menu bagikan bawaan HP,
+  tanpa perlu tersimpan di HP dulu.
+- **Kartu-kartu di layar Ringkasan, Laporan, dan Pengaturan kini punya
+  warna lembut sesuai fungsinya** — hijau untuk uang/kas, amber untuk
+  stok, merah untuk hutang/hal mendesak, biru untuk produk, ungu untuk
+  sinkronisasi — supaya lebih cepat dikenali sekilas.
+
 ### 🔧 Perbaikan
 - **Kartu "Usulan Harga/Produk" di layar Sync WiFi tidak lagi tampil
   berantakan** — sebelumnya di HP dengan layar sempit, teks IP & jumlah
