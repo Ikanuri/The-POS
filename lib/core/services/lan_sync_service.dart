@@ -339,11 +339,15 @@ class LanSyncService {
       // shelf secara paralel, tapi tetap baik untuk membatasi resource yg
       // nyangkut. Titik infinite-loading yang dilaporkan user ada di sisi
       // KLIEN (syncToHost), ini cuma pengaman tambahan di sisi host.
+      // `.timeout()` WAJIB di atas Stream (sebelum `.toList()`) — timeout
+      // PER-EVENT/idle, bukan deadline total, supaya upload besar yang
+      // sedang aktif mengalir tidak diputus paksa (lihat catatan sama di
+      // syncToHost).
       final bodyBytes = await request
           .read()
           .expand((c) => c)
-          .toList()
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 30))
+          .toList();
       if (bodyBytes.length > _kMaxPayloadBytes) {
         return shelf.Response(413, body: 'Payload too large');
       }
@@ -526,8 +530,14 @@ class LanSyncService {
     DateTime? since,
     // Dapat dipersingkat di test (mis. simulasi host yang tidak pernah
     // membalas) tanpa memperlambat suite dgn menunggu timeout produksi.
+    // `responseTimeout` dipakai utk 2 hal: (1) deadline TOTAL menunggu host
+    // mulai membalas (host perlu waktu susun+enkripsi SELURUH dump SEBELUM
+    // kirim byte pertama, bisa lama utk toko data besar), dan (2) idle-
+    // timeout PER-CHUNK saat membaca body (reset tiap ada data baru lewat —
+    // lihat catatan di titik pemakaiannya, JANGAN diterapkan sbg deadline
+    // total di sana, toko data besar bisa transfer >20s scr wajar).
     Duration connectTimeout = const Duration(seconds: 10),
-    Duration responseTimeout = const Duration(seconds: 20),
+    Duration responseTimeout = const Duration(seconds: 30),
   }) async {
     final key = CryptoService.deriveSyncKey(storeKey, syncToken);
     // Watermark host→klien: kalau caller tidak beri `since` eksplisit, pakai
@@ -590,8 +600,16 @@ class LanSyncService {
         request.headers.set('content-type', 'application/octet-stream');
         request.add(encryptedBytes);
         response = await request.close().timeout(responseTimeout);
-        respBytes =
-            await response.expand((c) => c).toList().timeout(responseTimeout);
+        // PENTING: `.timeout()` di sini WAJIB dipasang SEBELUM `.toList()`
+        // (di atas Stream<int>, bukan di atas Future<List<int>> hasil
+        // toList()) — Stream.timeout() itu timeout PER-EVENT (reset tiap ada
+        // chunk baru lewat), sedangkan Future.timeout() adalah deadline
+        // TOTAL yang tidak peduli progres. Toko dengan data besar (banyak
+        // produk/transaksi, terutama sync pertama kali yang full-dump) bisa
+        // transfer >20 detik SECARA WAJAR selama datanya terus mengalir —
+        // pola lama (`.toList().timeout(...)`) memutus transfer itu di
+        // tengah jalan padahal sedang aktif menerima data, bukan macet.
+        respBytes = await response.expand((c) => c).timeout(responseTimeout).toList();
       } on TimeoutException {
         throw Exception(
             'Tidak ada respons dari host dalam waktu wajar. Pastikan kedua '
