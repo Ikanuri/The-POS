@@ -177,6 +177,25 @@ class LanSyncService {
     'expenses',
   };
 
+  /// Item 41 B.3 — tabel yang boleh di-merge KLIEN dari respons host.
+  /// Host sudah lama punya guard [appendOnlyTables]; klien dulu menerima
+  /// nama tabel APA PUN dari respons (respons memang terenkripsi, tapi
+  /// defense-in-depth murah: kalaupun ada yang bisa memanipulasi respons,
+  /// merge tetap terkurung di daftar ini — bukan tabel arbitrer macam
+  /// `app_settings`).
+  static const clientMergeableTables = {
+    ...appendOnlyTables,
+    'products',
+    'product_units',
+    'price_tiers',
+    'alt_prices',
+    'product_barcodes',
+    'customers',
+    'customer_groups',
+    'customer_group_prices',
+    'kasir_permissions',
+  };
+
   /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi
   /// digabung (header + item + pembayaran) agar tidak pernah terpisah.
   /// Tabel pertama tiap kategori dipakai untuk menghitung jumlah tampilan.
@@ -406,6 +425,7 @@ class LanSyncService {
 
     int received = 0;
     final touchedTxIds = <String>{};
+    final touchedStockUnitIds = <String>{};
     for (final entry in tables.entries) {
       // Guard satu arah: hanya tabel append-only yang boleh dari klien.
       if (!appendOnlyTables.contains(entry.key)) continue;
@@ -413,12 +433,19 @@ class LanSyncService {
       if (allowedTables != null && !allowedTables.contains(entry.key)) continue;
       received += await _db!.mergeRows(entry.key, entry.value, true);
       _collectTxIds(entry.key, entry.value, touchedTxIds);
+      _collectStockUnitIds(entry.key, entry.value, touchedStockUnitIds);
     }
     // Rekonsiliasi total/paid dari child rows sebelum membangun ringkasan.
     // Id diambil juga dari item/pembayaran, sehingga transaksi lama yang hanya
     // menerima cicilan / item susulan via sync ikut dikoreksi headernya.
     await _db!.reconcileTransactionsByIds(touchedTxIds);
     await _db!.rebuildSummariesForTxIds(touchedTxIds);
+    // Item 41 A.1 — saldo stok WAJIB dihitung ulang setelah merge: baris
+    // ledger dari device lain membawa `stock_after` hasil hitungan saldo
+    // LOKAL device itu (bisa beda dari saldo di sini) — tanpa rebuild,
+    // baris "terbaru" milik device lain menimpa pandangan saldo host
+    // secara diam-diam (lihat rebuildStockAfterForUnits).
+    await _db!.rebuildStockAfterForUnits(touchedStockUnitIds);
     return received;
   }
 
@@ -436,6 +463,19 @@ class LanSyncService {
     for (final r in rows) {
       final id = r[key];
       if (id is String && id.isNotEmpty) out.add(id);
+    }
+  }
+
+  /// Kumpulkan product_unit_id dari baris `stock_ledger` sebuah payload —
+  /// untuk [AppDatabase.rebuildStockAfterForUnits] setelah merge (Item 41
+  /// A.1). Ledger selalu ditulis pada satuan DASAR (di device asal), jadi
+  /// id di sini sudah id satuan dasar.
+  static void _collectStockUnitIds(
+      String table, List<Map<String, Object?>> rows, Set<String> out) {
+    if (table != 'stock_ledger') return;
+    for (final r in rows) {
+      final uid = r['product_unit_id'];
+      if (uid is String && uid.isNotEmpty) out.add(uid);
     }
   }
 
@@ -467,9 +507,13 @@ class LanSyncService {
                 .address ??
             'unknown';
 
-    // Rate-limiting: check lockout before reading body.
+    // Rate-limiting: check lockout before reading body. Entri yang sudah
+    // kedaluwarsa dibuang sekalian (Item 41 B.6) — tanpa ini map tumbuh
+    // terus selama sesi host panjang (satu entri per IP yang pernah gagal).
+    final nowForLockout = DateTime.now();
+    _lockoutUntil.removeWhere((_, until) => !until.isAfter(nowForLockout));
     final lockedUntil = _lockoutUntil[ip];
-    if (lockedUntil != null && lockedUntil.isAfter(DateTime.now())) {
+    if (lockedUntil != null) {
       return shelf.Response(429, body: 'Too many attempts. Try again later.');
     }
 
@@ -487,18 +531,25 @@ class LanSyncService {
       // shelf secara paralel, tapi tetap baik untuk membatasi resource yg
       // nyangkut. Titik infinite-loading yang dilaporkan user ada di sisi
       // KLIEN (syncToHost), ini cuma pengaman tambahan di sisi host.
-      // `.timeout()` WAJIB di atas Stream (sebelum `.toList()`) — timeout
+      // `.timeout()` WAJIB di atas Stream (sebelum dikumpulkan) — timeout
       // PER-EVENT/idle, bukan deadline total, supaya upload besar yang
       // sedang aktif mengalir tidak diputus paksa (lihat catatan sama di
       // syncToHost).
-      final bodyBytes = await request
+      //
+      // Item 41 A.4 — kumpulkan via BytesBuilder per-CHUNK, bukan
+      // `.expand().toList()` per-BYTE: List<int> growable menyimpan tiap
+      // byte sbg elemen 8-byte (payload 50 MB ≈ 400 MB list) — di HP RAM
+      // 1-2 GB itu OOM nyata. BytesBuilder(copy:false) menahan chunk asli
+      // lalu digabung sekali di takeBytes() (~1x ukuran payload).
+      final bodyBuilder = BytesBuilder(copy: false);
+      await request
           .read()
-          .expand((c) => c)
           .timeout(const Duration(seconds: 30))
-          .toList();
-      if (bodyBytes.length > _kMaxPayloadBytes) {
+          .forEach(bodyBuilder.add);
+      if (bodyBuilder.length > _kMaxPayloadBytes) {
         return shelf.Response(413, body: 'Payload too large');
       }
+      final bodyBytes = bodyBuilder.takeBytes();
 
       final token = request.headers['x-sync-token'] ?? '';
       if (!_constantTimeEqual(token, _syncToken ?? '')) {
@@ -539,21 +590,26 @@ class LanSyncService {
       while (_usedNonces.length >= 5000) {
         _usedNonces.remove(_usedNonces.first);
       }
+      // Item 41 A.4 — base64 payload dihitung SEKALI lalu dipakai dua kali
+      // (HMAC & decrypt); sebelumnya di-encode 2x (~1,33x payload per
+      // encode). CATATAN protokol: input HMAC memang atas string base64
+      // (bukan bytes mentah) — JANGAN diubah, klien versi lama menghitung
+      // dgn format ini; mengganti format = sync lintas versi app mendadak
+      // gagal "HMAC mismatch" tanpa pesan yang bisa dimengerti user.
+      final bodyB64 = base64Encode(bodyBytes);
       final hmacKey = CryptoService.deriveSyncHmacKey(_storeKey!, _syncToken!);
       final expectedHmac = CryptoService.hmacSha256(
-        utf8.encode('$nonce:$tsStr:${base64Encode(bodyBytes)}'),
+        utf8.encode('$nonce:$tsStr:$bodyB64'),
         hmacKey,
       );
-      final expectedHex =
-          expectedHmac.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-      if (!_constantTimeEqual(clientHmac, expectedHex)) {
+      if (!_constantTimeEqual(clientHmac, _hexOf(expectedHmac))) {
         return shelf.Response.forbidden('HMAC mismatch');
       }
       _usedNonces.add(nonce);
 
       final key = CryptoService.deriveSyncKey(_storeKey!, _syncToken!);
-      final payloadJson = CryptoService.decryptText(
-          base64Encode(bodyBytes), Uint8List.fromList(key));
+      final payloadJson =
+          CryptoService.decryptText(bodyB64, Uint8List.fromList(key));
       final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
 
       final sinceStr = payload['since'] as String?;
@@ -580,6 +636,13 @@ class LanSyncService {
       }
       final summary = parts.isEmpty ? 'tidak ada data baru' : parts.join(', ');
 
+      // Item 41 A.3 — satu slot antrian per IP klien: klien yang nge-sync
+      // berulang sebelum owner sempat approve TIDAK menumpuk banyak salinan
+      // full-dump di RAM host (payload 50 MB x N = OOM nyata di HP 1-2 GB).
+      // AMAN menimpa item lama karena upload klien SELALU full-dump sejak
+      // epoch (lihat catatan _kDownloadWatermarkKey) — item terbaru pasti
+      // superset dari item lama yang dibuang.
+      _pendingQueue.removeWhere((i) => i.fromIp == ip);
       final itemId = _generateNonce();
       _pendingQueue.add(PendingSyncItem(
         id: itemId,
@@ -603,6 +666,10 @@ class LanSyncService {
       });
       final proposedProducts = proposalRows['products'] ?? const [];
       if (proposedProducts.isNotEmpty) {
+        // Item 41 A.3 — sama seperti _pendingQueue: satu slot per IP.
+        // dumpLocalProposals juga selalu paket penuh (semua produk ber-flag
+        // locallyModified), jadi usulan terbaru superset dari yang lama.
+        _pendingProposals.removeWhere((p) => p.fromIp == ip);
         _pendingProposals.add(PendingProductProposal(
           id: _generateNonce(),
           fromIp: ip,
@@ -618,7 +685,8 @@ class LanSyncService {
       final outDump = await _db!.dumpSince(since);
       final outPayload = {
         'tables': outDump,
-        'since': DateTime.now().toIso8601String(),
+        // Item 41 A.2 — selalu UTC (lihat catatan zona waktu di syncToHost).
+        'since': DateTime.now().toUtc().toIso8601String(),
         'pendingId': itemId,
         'status': 'pending_approval',
       };
@@ -626,9 +694,25 @@ class LanSyncService {
       final encrypted =
           CryptoService.encryptText(outJson, Uint8List.fromList(key));
 
+      // Item 41 B.2 — respons juga di-HMAC (dulu hanya arah request):
+      // tanpa ini, MITM aktif di LAN bisa men-tamper/replay respons host
+      // (CBC tanpa MAC itu malleable). Klien versi lama mengabaikan header
+      // tambahan ini (kompatibel mundur), klien baru memverifikasi bila ada.
+      final respNonce = _generateNonce();
+      final respTs = DateTime.now().toUtc().toIso8601String();
+      final respHmac = _hexOf(CryptoService.hmacSha256(
+        utf8.encode('$respNonce:$respTs:$encrypted'),
+        hmacKey,
+      ));
+
       return shelf.Response.ok(
         base64Decode(encrypted),
-        headers: {'content-type': 'application/octet-stream'},
+        headers: {
+          'content-type': 'application/octet-stream',
+          'x-sync-nonce': respNonce,
+          'x-sync-ts': respTs,
+          'x-sync-hmac': respHmac,
+        },
       );
     } catch (e, st) {
       // Log utk diagnosis laporan "kadang tidak tersambung" — request yang
@@ -659,6 +743,10 @@ class LanSyncService {
 
   static String _tableLabel(String tableName) =>
       _kTableLabels[tableName] ?? tableName;
+
+  /// Representasi hex lowercase dari bytes (dipakai HMAC request & respons).
+  static String _hexOf(List<int> bytes) =>
+      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   /// Constant-time string comparison — prevents timing side-channel on token.
   static bool _constantTimeEqual(String a, String b) {
@@ -693,8 +781,10 @@ class LanSyncService {
     return DateTime.tryParse(raw);
   }
 
+  // Item 41 A.2 — simpan UTC eksplisit ('Z') supaya tidak ditafsirkan ulang
+  // pada zona waktu berbeda (mis. user pindah zona / ganti setelan jam).
   static Future<void> _saveDownloadWatermark(AppDatabase db, DateTime at) =>
-      db.setSetting(_kDownloadWatermarkKey, at.toIso8601String());
+      db.setSetting(_kDownloadWatermarkKey, at.toUtc().toIso8601String());
 
   static Future<SyncResult> syncToHost({
     required AppDatabase db,
@@ -721,10 +811,16 @@ class LanSyncService {
     // berubah SELAMA sync ini berlangsung tidak "terlewat" di sync
     // berikutnya (lebih baik terima sedikit dobel yang aman di-merge ulang,
     // daripada kehilangan data).
+    // Item 41 A.2 — SEMUA timestamp protokol sync WAJIB UTC eksplisit
+    // (suffix 'Z'). `toIso8601String()` waktu LOKAL tidak membawa offset,
+    // dan `DateTime.parse` di sisi seberang menafsirkannya pada zona waktu
+    // device SANA — dua HP beda zona (WIB/WITA/WIT itu nyata, atau salah
+    // setel zona) membuat host melewatkan data hingga selisih jamnya
+    // secara diam-diam.
     final downloadSince = since ??
         await _loadDownloadWatermark(db) ??
         DateTime.fromMillisecondsSinceEpoch(0);
-    final downloadSyncStartedAt = DateTime.now();
+    final downloadSyncStartedAt = DateTime.now().toUtc();
 
     // Klien (perangkat bawahan) hanya mengirim data append-only ke atas.
     // Master data (produk, harga, izin) tidak diunggah agar tidak menimpa
@@ -739,7 +835,8 @@ class LanSyncService {
     // (`{}`) di device owner (tidak pernah menandai produknya sendiri).
     final proposals = await db.dumpLocalProposals();
     final payload = {
-      'since': downloadSince.toIso8601String(),
+      // Item 41 A.2 — UTC eksplisit, lihat catatan di atas.
+      'since': downloadSince.toUtc().toIso8601String(),
       'tables': outDump,
       'proposals': proposals,
     };
@@ -749,14 +846,17 @@ class LanSyncService {
     final encryptedBytes = base64Decode(encrypted);
 
     // B-3: Tambah nonce + timestamp + HMAC ke setiap request.
+    // Item 41 A.4 — `encrypted` SUDAH string base64 payload; pakai ulang utk
+    // input HMAC (dulu di-base64Encode ULANG dari bytes — salinan ~1,33x
+    // payload yang tidak perlu). Format input HMAC tetap sama persis.
     final nonce = _generateNonce();
     final tsStr = DateTime.now().toUtc().toIso8601String();
     final hmacKey = CryptoService.deriveSyncHmacKey(storeKey, syncToken);
     final hmac = CryptoService.hmacSha256(
-      utf8.encode('$nonce:$tsStr:${base64Encode(encryptedBytes)}'),
+      utf8.encode('$nonce:$tsStr:$encrypted'),
       hmacKey,
     );
-    final hmacHex = hmac.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final hmacHex = _hexOf(hmac);
 
     // B-5: tanpa timeout, request yang hang (mis. IP host sudah tidak valid,
     // AP client isolation di WiFi diam-diam membuang paket, atau host sempat
@@ -789,7 +889,11 @@ class LanSyncService {
         // transfer >20 detik SECARA WAJAR selama datanya terus mengalir —
         // pola lama (`.toList().timeout(...)`) memutus transfer itu di
         // tengah jalan padahal sedang aktif menerima data, bukan macet.
-        respBytes = await response.expand((c) => c).timeout(responseTimeout).toList();
+        // Item 41 A.4 — BytesBuilder per-chunk, bukan .expand().toList()
+        // per-byte (alasan memori sama dgn sisi host, lihat _handleRequest).
+        final respBuilder = BytesBuilder(copy: false);
+        await response.timeout(responseTimeout).forEach(respBuilder.add);
+        respBytes = respBuilder.takeBytes();
       } on TimeoutException catch (e, st) {
         await CrashLogService.record(e, st,
             context: 'lan_sync_client_timeout hostIp=$hostIp '
@@ -827,14 +931,43 @@ class LanSyncService {
         throw Exception('Server error ${response.statusCode}: $body');
       }
 
-      final respJson = CryptoService.decryptText(
-          base64Encode(respBytes), Uint8List.fromList(key));
+      final respB64 = base64Encode(respBytes);
+
+      // Item 41 B.2 — verifikasi HMAC respons BILA host mengirim headernya
+      // (host versi baru selalu kirim). Host versi lama tidak mengirim →
+      // dilewati demi kompatibilitas mundur; konsekuensinya MITM aktif bisa
+      // "menelanjangi" header utk memaksa jalur tanpa-verifikasi (downgrade)
+      // — diterima sadar utk masa transisi, tetap jauh lebih baik daripada
+      // tidak pernah verifikasi sama sekali.
+      final respHmacHeader = response.headers.value('x-sync-hmac');
+      if (respHmacHeader != null) {
+        final respNonce = response.headers.value('x-sync-nonce') ?? '';
+        final respTs = response.headers.value('x-sync-ts') ?? '';
+        final hmacKey = CryptoService.deriveSyncHmacKey(storeKey, syncToken);
+        final expected = _hexOf(CryptoService.hmacSha256(
+          utf8.encode('$respNonce:$respTs:$respB64'),
+          hmacKey,
+        ));
+        if (!_constantTimeEqual(respHmacHeader, expected)) {
+          throw Exception(
+              'Respons host tidak lolos verifikasi keamanan (HMAC). Data '
+              'TIDAK di-merge. Coba sync ulang; kalau terus terjadi, mulai '
+              'ulang server di HP owner lalu scan ulang QR.');
+        }
+      }
+
+      final respJson =
+          CryptoService.decryptText(respB64, Uint8List.fromList(key));
       final respPayload = jsonDecode(respJson) as Map<String, dynamic>;
 
       int received = 0;
       final tables = respPayload['tables'] as Map<String, dynamic>? ?? {};
       final touchedTxIds = <String>{};
+      final touchedStockUnitIds = <String>{};
       for (final entry in tables.entries) {
+        // Item 41 B.3 — hanya tabel yang memang disinkronkan (allowlist);
+        // nama tak dikenal dilewati, bukan diteruskan mentah ke merge.
+        if (!clientMergeableTables.contains(entry.key)) continue;
         final rows =
             (entry.value as List).cast<Map<String, dynamic>>().map((r) {
           return r.map<String, Object?>((k, v) => MapEntry(k, v));
@@ -844,12 +977,16 @@ class LanSyncService {
         received += await db.mergeRows(
             entry.key, rows, appendOnlyTables.contains(entry.key));
         _collectTxIds(entry.key, rows, touchedTxIds);
+        _collectStockUnitIds(entry.key, rows, touchedStockUnitIds);
       }
       // Rekonsiliasi total/paid dari child rows, lalu refresh ringkasan harian
       // untuk tanggal yang tersentuh — termasuk transaksi lama yang hanya
       // menerima cicilan / item susulan (headernya tidak ada di payload).
       await db.reconcileTransactionsByIds(touchedTxIds);
       await db.rebuildSummariesForTxIds(touchedTxIds);
+      // Item 41 A.1 — hitung ulang saldo stok utk unit yang tersentuh merge
+      // (alasan sama dgn approveSync di sisi host).
+      await db.rebuildStockAfterForUnits(touchedStockUnitIds);
 
       // Watermark HANYA disimpan setelah data host benar-benar ter-merge
       // permanen ke DB lokal (baris di atas ini) — kalau ada exception di

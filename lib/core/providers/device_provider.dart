@@ -31,6 +31,15 @@ class DeviceIdentity {
   final String deviceRole; // owner | kasir | asisten
 
   bool get isConfigured => storeUuid != null && storeKey != null;
+
+  /// Item 41 A.6 — identitas PERNAH ada (storeUuid tersimpan di prefs) tapi
+  /// storeKey tidak terbaca: keystore error (kasus nyata sebagian
+  /// Transsion/Infinix) ATAU secure storage terhapus. JANGAN diperlakukan
+  /// sbg belum-setup — router mengarah ke layar pemulihan, bukan /setup;
+  /// kalau user sampai "Setup Toko Baru" di kondisi ini, storeKey baru
+  /// dibuat dan DB lama permanen tak terbuka (terlihat sbg data hilang).
+  bool get storeKeyLost => storeUuid != null && storeKey == null;
+
   bool get isOwner => deviceRole == 'owner';
   bool get canSeeReports => deviceRole == 'owner' || deviceRole == 'asisten';
 }
@@ -159,6 +168,28 @@ class DeviceNotifier extends StateNotifier<DeviceIdentity> {
       deviceName: deviceName,
       deviceCode: deviceCode,
     );
+  }
+
+  /// Item 41 A.6 — reset identitas device secara EKSPLISIT dari layar
+  /// pemulihan kunci (setelah konfirmasi ganda user). Menghapus identitas
+  /// prefs + salinan storeKey di secure storage; file DB TIDAK dihapus
+  /// (tanpa kunci memang tak terbaca, tapi biarkan utk forensik/berjaga
+  /// kalau kunci ternyata bisa dipulihkan cara lain).
+  Future<void> resetIdentity() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      await _secureStorage.delete(key: _keys.storeKey);
+    } catch (_) {
+      // Keystore sedang rusak justru skenario utama layar pemulihan —
+      // gagal hapus bukan alasan menahan reset.
+    }
+    await prefs.remove(_keys.storeUuid);
+    await prefs.remove(_keys.storeKey);
+    await prefs.remove(_keys.storeName);
+    await prefs.remove(_keys.deviceName);
+    await prefs.remove(_keys.deviceCode);
+    await prefs.remove(_keys.deviceRole);
+    state = const DeviceIdentity();
   }
 
   Future<void> updateStoreName(String storeName) async {

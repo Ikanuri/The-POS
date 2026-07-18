@@ -28,38 +28,55 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
   Future<void> _export() async {
     final device = ref.read(deviceProvider);
     final pwCtrl = TextEditingController();
+    // Item 41 B.5 — file BPOT1 membawa storeKey; kekuatannya = kekuatan
+    // password ini. Minimal 8 karakter utk ekspor baru (impor file lama
+    // ber-password pendek tetap diterima).
+    String? pwError;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Password File Alihan'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Masukkan password untuk mengenkripsi file. File ini membawa '
-              'SELURUH data DAN identitas toko ini — device yang membuka file '
-              'ini akan "menjadi" toko ini.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: pwCtrl,
-              autofocus: true,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password', isDense: true),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Password File Alihan'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Masukkan password untuk mengenkripsi file. File ini membawa '
+                'SELURUH data DAN identitas toko ini — device yang membuka file '
+                'ini akan "menjadi" toko ini.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pwCtrl,
+                autofocus: true,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  helperText: 'Minimal 8 karakter',
+                  errorText: pwError,
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                if (pwCtrl.text.trim().length < 8) {
+                  setDialogState(
+                      () => pwError = 'Password minimal 8 karakter');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Lanjutkan'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () {
-              if (pwCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Lanjutkan'),
-          ),
-        ],
       ),
     );
     if (confirmed != true) return;

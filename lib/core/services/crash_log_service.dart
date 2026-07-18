@@ -33,6 +33,17 @@ class CrashLogService {
   static const fileName = 'the_pos_crash_log.jsonl';
   static const _channel = MethodChannel('com.thepos/crash_log');
 
+  /// Item 41 B.4 — file log ada di Downloads PUBLIK (keputusan sadar agar
+  /// pasti terlihat user, lihat dok kelas); batasi panjang pesan & stack
+  /// supaya exception yang kebetulan membawa data (mis. isi SQL) tidak
+  /// menumpahkan data toko bulat-bulat ke file publik. Batasnya longgar —
+  /// cukup utk diagnosis, bukan sensor.
+  static const _maxPesanChars = 2000;
+  static const _maxStackChars = 6000;
+
+  static String _cap(String s, int max) =>
+      s.length <= max ? s : '${s.substring(0, max)}...[dipotong]';
+
   /// Bagian JSON murni (testable tanpa I/O nyata).
   static String buildEntry({
     required Object error,
@@ -44,8 +55,8 @@ class CrashLogService {
       'waktu': time.toIso8601String(),
       'context': context,
       'jenis': error.runtimeType.toString(),
-      'pesan': error.toString(),
-      'stackTrace': stack?.toString() ?? '',
+      'pesan': _cap(error.toString(), _maxPesanChars),
+      'stackTrace': _cap(stack?.toString() ?? '', _maxStackChars),
       'platform': defaultTargetPlatform.name,
     });
   }

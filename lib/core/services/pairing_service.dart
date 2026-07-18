@@ -3,6 +3,18 @@ import 'dart:convert';
 /// Payload QR pairing antar device. QR = base64url(json).
 /// Hanya untuk setup awal, bukan transfer data — tidak dienkripsi,
 /// tapi expired 5 menit.
+///
+/// PERINGATAN KEAMANAN (Item 41 B.1, risiko diterima sadar — belum ada
+/// mitigasi): QR ini membawa `store_key` MASTER dalam bentuk polos. Siapa
+/// pun yang sempat MEMOTRET layar QR mendapat kunci turunan database
+/// SQLCipher & kunci sync SELAMANYA — expiry 5 menit hanya dicek di sisi
+/// klien app (payload tidak ditandatangani), TIDAK menghapus nilai kunci
+/// yang sudah terlanjur terlihat. Belum ada mekanisme un-pair / rotasi
+/// storeKey utk mencabut device (HP kasir hilang, pegawai keluar) — fitur
+/// "rotasi kunci toko" (rekey DB + re-pair semua device) masih rencana di
+/// PLAN.md. Sampai itu ada: tampilkan QR hanya saat layar benar-benar
+/// diawasi owner, dan anggap kunci bocor = harus Alihkan Owner ke
+/// identitas toko baru.
 class PairingPayload {
   const PairingPayload({
     required this.storeUuid,

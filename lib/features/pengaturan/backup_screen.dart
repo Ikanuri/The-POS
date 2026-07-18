@@ -26,36 +26,51 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
 
   Future<void> _export() async {
     final pwCtrl = TextEditingController();
+    // Item 41 B.5 — password ekspor minimal 8 karakter: kekuatan enkripsi
+    // file backup = kekuatan password ini (BPOP2 murni dari password).
+    // HANYA berlaku utk ekspor baru — impor file lama ber-password pendek
+    // tetap diterima (lihat _import, tanpa batasan).
+    String? pwError;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Password Backup'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Masukkan password untuk mengenkripsi file backup.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: pwCtrl,
-              autofocus: true,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                isDense: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Password Backup'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Masukkan password untuk mengenkripsi file backup.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pwCtrl,
+                autofocus: true,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  helperText: 'Minimal 8 karakter',
+                  errorText: pwError,
+                  isDense: true,
+                ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                if (pwCtrl.text.trim().length < 8) {
+                  setDialogState(
+                      () => pwError = 'Password minimal 8 karakter');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Lanjutkan'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () {
-              if (pwCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Lanjutkan'),
-          ),
-        ],
       ),
     );
     if (confirmed != true) return;
