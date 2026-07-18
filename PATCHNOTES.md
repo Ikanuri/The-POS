@@ -88,6 +88,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Host" di layar Sync WiFi hanya muncul di HP owner — owner selalu jadi
   sumber data utama, kasir & asisten selalu jadi yang menyambung ke
   owner, supaya semua perubahan (izin, harga, produk) pasti tersalur.
+- **Sinkron WiFi tidak lagi bisa "loading selamanya" tanpa kabar apa
+  pun.** Sebelumnya, kalau ada gangguan jaringan sesaat (mis. WiFi
+  tertentu memblokir HP-ke-HP walau satu jaringan yang sama), tombol
+  "Sync" di HP kasir/asisten bisa berputar tanpa henti — tidak pernah
+  berhasil maupun gagal, dan HP owner juga tidak pernah tahu ada
+  percobaan sync yang bermasalah. Sekarang sinkron otomatis berhenti &
+  menampilkan pesan error yang jelas kalau tidak ada respons dalam waktu
+  wajar, supaya Anda tahu harus coba lagi (bukan menunggu tanpa batas).
 
 ## 16 Juli 2026
 

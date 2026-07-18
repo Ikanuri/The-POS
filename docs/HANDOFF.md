@@ -5,17 +5,70 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fix barcode produk/
-varian terkunci permanen [`7f37d64`, sudah di-merge ke `main`] + fix
-asisten tidak bisa override stok minus walau sudah digrant izin)._ Full
-`flutter test` **467 test hijau**, `flutter analyze` bersih (0 issue — env
-sesi ini pakai Flutter `3.24.5` sesuai pin CI `.github/workflows/*.yml`,
-JANGAN pakai versi lebih baru spt 3.32.0 — ada breaking change `CardTheme`
-→`CardThemeData` yg bikin compile gagal). schemaVersion masih 15. Branch
-kerja: `claude/review-branch-changes-g5agon`, SUDAH di-merge ke `main`
-sampai fix barcode (`936f01a`) — fix asisten-stok-minus di bawah ini
-BELUM di-commit/push, tunggu konfirmasi user.
+varian terkunci permanen [`7f37d64`] + fix "Jadi Host" khusus owner
+[`d21889f`] + fix sync HTTP client TANPA TIMEOUT [belum di-commit] — 3
+babak dari satu laporan user yang sama "asisten tidak bisa override stok
+minus")._ Full `flutter test` **468 test hijau**, `flutter analyze` bersih
+(0 issue — env sesi ini pakai Flutter `3.24.5` sesuai pin CI
+`.github/workflows/*.yml`, JANGAN pakai versi lebih baru spt 3.32.0 — ada
+breaking change `CardTheme`→`CardThemeData` yg bikin compile gagal).
+schemaVersion masih 15. Branch kerja: `claude/review-branch-changes-g5agon`,
+SUDAH di-merge ke `main` sampai `e1d35f5` (fix "Jadi Host" owner-only) —
+fix timeout HTTP di bawah ini BELUM di-commit/push, tunggu konfirmasi user.
 
-## Fix: asisten tidak bisa override stok minus walau sudah digrant izin (17 Juli, BELUM di-commit/push)
+**PENTING kalau laporan serupa muncul lagi**: bug "asisten tidak bisa
+override X walau sudah digrant izin" di app ini historisnya SELALU
+berlapis, jangan berhenti di investigasi pertama yang "lolos test" —
+lihat 3 babak di bawah, tiap babak nemuin lapisan baru yang test
+sebelumnya TIDAK menyentuh sama sekali (logic fungsi izin → topologi
+host/klien sync → reliability jaringan HTTP-nya sendiri).
+
+## Fix: sync HTTP client tanpa timeout → infinite loading di klien (17 Juli, BELUM di-commit/push, babak ke-3)
+
+Lanjutan laporan "asisten tidak bisa override stok minus" — setelah fix
+"Jadi Host" khusus owner (`d21889f`) dipasang di APK & dites ulang, user
+konfirmasi: owner TETAP di layar Sync (tidak pindah tab sama sekali, jadi
+BUKAN Item 21/dispose()-stopHost), tapi di layar ASISTEN **tidak muncul
+apa pun — infinite loading**, tombol sync berputar terus tanpa pernah
+sukses/gagal.
+
+**Root cause**: `LanSyncService.syncToHost()` (`lan_sync_service.dart`)
+SAMA SEKALI TIDAK PUNYA TIMEOUT di request HTTP-nya (`client.post()`,
+`request.close()`, baca body respons) — kalau paket dibuang diam-diam di
+jaringan (mis. AP client isolation di router/WiFi tertentu yang
+memblokir device-to-device walau satu SSID, atau host sempat freeze
+sebentar), Future-nya menggantung SELAMANYA. UI klien (`_sync()` di
+`sync_screen.dart`) sebenarnya sudah benar (`finally` reset `_syncing =
+false`), tapi itu tidak pernah tereksekusi krn `await` di dalamnya tidak
+pernah selesai — persis "infinite loading" yang dilaporkan. Ini juga
+menjelaskan "owner tidak menerima konfirmasi sync": request klien
+kemungkinan besar tidak pernah benar-benar nyampe/selesai diproses host.
+
+**Fix**: `connectTimeout`/`responseTimeout` (parameter opsional,
+default 10s/20s, dapat dipersingkat di test) dibungkus ke
+`client.post()`, `request.close()`, dan pembacaan body respons —
+`on TimeoutException`/`on SocketException` ditangkap & dilempar ulang
+sbg pesan error Bahasa Indonesia yg jelas ("Tidak ada respons dari host
+dalam waktu wajar..."/"Tidak bisa terhubung ke host..."). Sisi HOST
+(`_handleRequest`) juga dikasih timeout 30s di pembacaan body request
+sbg defense-in-depth (bukan titik infinite-loading yg dilaporkan, tapi
+prinsip sama).
+
+Test: `test/lan_sync_timeout_test.dart` — `ServerSocket` mentah yg
+terima koneksi tapi SENGAJA tidak pernah membalas (simulasi paket
+dibuang diam-diam), buktikan `syncToHost` throw dalam batas waktu custom
+(bukan hang). Revert-verify: tanpa fix, test gagal compile (parameter
+`connectTimeout` belum ada) — dibuktikan dgn `git apply`/`git checkout --`
+bolak-balik, bukan cuma dibaca.
+
+**Belum di-commit/push** — tunggu konfirmasi user. Kalau user lapor lagi
+sync masih bermasalah SETELAH fix ini dipasang di APK, kemungkinan
+BUKAN lagi soal timeout/topologi — mungkin genuinely masalah jaringan
+fisik (AP client isolation permanen di router toko, dll, di luar
+kendali app) atau something else sama sekali baru, jangan otomatis
+curiga ke 3 hal yang sudah dites di atas lagi.
+
+## Fix: asisten tidak bisa override stok minus walau sudah digrant izin (17 Juli, babak ke-2, SUDAH di-commit `d21889f`/`e1d35f5`, SUDAH di-merge ke main)
 
 User lapor: owner sudah nyalakan izin "Izinkan Stok Minus" di layar Izin
 Asisten, tapi device asisten (2 HP fisik terpisah, terhubung via sync LAN)

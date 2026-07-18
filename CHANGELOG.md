@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-17
 
+- `939048a` — fix: sync LAN tanpa timeout HTTP → infinite loading di klien (babak ke-3 laporan asisten stok minus)
 - `d21889f` — fix: asisten tidak bisa override stok minus walau sudah digrant izin ("Jadi Host" sync khusus owner — master data cuma boleh mengalir dari owner sbg host)
 - `7f37d64` — fix: barcode produk/varian yang dinonaktifkan/dihapus terkunci permanen (lepas via mutasi nilai di `product_barcodes`, sync-safe tanpa ubah protokol)
 - `5c9de7f` — feat: Item 36 (stock opname hitung fisik BUTA + riwayat sesi) + Item 37 (publish katalog ke Cloudflare Pages otomatis, nama project deterministik slug+hash)
