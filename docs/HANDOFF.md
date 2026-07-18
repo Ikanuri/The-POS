@@ -4,20 +4,123 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 18 Juli 2026 (sesi lanjutan — Item 39 "sync LAN
-lebih andal" [`5c244da`] + fix "Kembali" struk cetak/gambar akumulasi
-[`3f3a4c0`], SUDAH di-commit & di-push ke
-`claude/setup-dependencies-am31te`). Sesi 17 Juli sebelumnya (4 babak
-laporan "asisten tidak bisa override stok minus": fix barcode terkunci
-`7f37d64`, "Jadi Host" khusus owner `d21889f`, timeout HTTP client
-`939048a`, idle-vs-total timeout `a1c2776`) SEMUA SUDAH di-commit & SUDAH
-di-merge ke `main` (lihat CHANGELOG `2026-07-17` — status "belum
-di-commit" yg mungkin masih tertulis di bagian bawah dokumen ini SUDAH
-BASI, abaikan, cek CHANGELOG sbg sumber kebenaran commit)._ Full `flutter
-test` **489 test, SEMUA HIJAU** (naik dari 488 setelah Item 39 — 1 test
-baru dari fix kembalian struk), `flutter analyze` bersih (0 issue).
-schemaVersion masih 15 (baik Item 39 maupun fix kembalian TIDAK butuh
-migrasi skema).
+_Terakhir diperbarui: 18 Juli 2026 (sesi lanjutan — Item 40 "usulan
+harga/produk dari device non-owner via sync LAN" [`fcadcb1`], SUDAH
+di-commit & di-push ke `claude/setup-dependencies-am31te`, BELUM
+di-merge ke `main` — tanyakan user kalau mau merge). Sebelumnya di sesi
+yg sama: Item 39 "sync LAN lebih andal" [`5c244da`] + fix "Kembali" struk
+cetak/gambar akumulasi [`3f3a4c0`], SUDAH di-commit & SUDAH di-merge ke
+`main`. Sesi 17 Juli sebelumnya (4 babak laporan "asisten tidak bisa
+override stok minus": fix barcode terkunci `7f37d64`, "Jadi Host" khusus
+owner `d21889f`, timeout HTTP client `939048a`, idle-vs-total timeout
+`a1c2776`) SEMUA SUDAH di-commit & SUDAH di-merge ke `main` (lihat
+CHANGELOG `2026-07-17` — status "belum di-commit" yg mungkin masih
+tertulis di bagian bawah dokumen ini SUDAH BASI, abaikan, cek CHANGELOG
+sbg sumber kebenaran commit)._ Full `flutter test` **498 test, SEMUA
+HIJAU** (naik dari 489 — 9 test baru Item 40: `product_proposal_test.
+dart` 6, `migration_v16_test.dart` 1, `product_proposal_review_screen_
+test.dart` 2), `flutter analyze` bersih (0 issue). **schemaVersion 15 ->
+16** (kolom `products.locally_modified`).
+
+## Item 40 — Usulan harga/produk dari device non-owner via sync LAN (18 Juli, SELESAI & di-commit `fcadcb1`)
+
+**Konteks**: user lapor kasus nyata — asisten kadang lebih update soal
+harga terbaru (kadang juga nambah produk sendiri) & input langsung di
+HP-nya sendiri; begitu sync, perubahan asisten itu malah TERTIMPA balik
+oleh data owner yang belum di-update (arsitektur sync sengaja satu-arah
+host→klien utk master data). User minta: perubahan dari asisten TETAP
+perlu approval eksplisit dari owner (bukan otomatis timestamp-based
+last-write-wins) — owner lihat pop-up/list utk setuju/tolak per
+perubahan. Ditanya soal produk BARU beserta atributnya (satuan, barcode,
+harga lain, varian) — dijawab: seluruh row-set terkait (bukan cuma
+kolom harga) ikut diusulkan sbg 1 paket. User: **"tidak perlu masukkan
+ke plan, langsung eksekusi"** — dieksekusi langsung tanpa masuk PLAN.md.
+
+**Desain**: kolom baru `products.locally_modified` (default false) —
+di-set true oleh `produk_form_screen.dart` (`_persistProduct`/
+`_addVariant`/`_editVariant`) HANYA kalau `!device.isOwner`. Saat sync
+(`syncToHost`), klien panggil `db.dumpLocalProposals()` — bundel PENUH
+row-set (products+product_units+price_tiers+alt_prices+product_barcodes)
+utk produk yg ditandai, dikirim lewat key **`proposals`** TERPISAH dari
+key `tables` (append-only queue yg sudah ada) di payload sync — sengaja
+tidak digabung ke `_pendingQueue`/`PendingSyncItem` yg sudah ada supaya
+lifecycle approve/reject harga TIDAK bercampur dgn approve/reject
+transaksi append-only. Host simpan ke queue baru `_pendingProposals`/
+`PendingProductProposal` (in-memory, sama polanya spt `_pendingQueue`).
+
+**Review UI**: `ProductProposalReviewScreen` (baru,
+`lib/features/pengaturan/product_proposal_review_screen.dart`) — diff
+row usulan vs data host LIVE (BUKAN vs snapshot lama) saat layar dibuka,
+kelompokkan jadi "Harga/Produk Berubah" (tampil harga lama→baru via
+`RichText` strikethrough) vs "Produk Baru". Semua item default TERCENTANG,
+owner bisa uncheck yg tidak mau, tombol "Terapkan (N produk)" panggil
+`LanSyncService.applyProposal(id, approvedIds)` →
+`db.applyProductProposals()` (INSERT OR REPLACE per row, urutan
+products→product_units→price_tiers/alt_prices/product_barcodes, filter
+child row by parent id yg di-approve, paksa `locally_modified=0` di
+kolom yg ditulis krn host jadi sumber kebenaran baru). Diakses dari
+`sync_screen.dart` bagian "Usulan Harga/Produk (N)" (owner-only, listen
+`LanSyncService.onProposalsChanged`).
+
+**Keputusan desain kunci** (divalidasi eksplisit dgn user, JANGAN diubah
+tanpa didiskusikan ulang): usulan yg TIDAK direview/di-apply TIDAK
+disimpan sbg "ditolak" permanen — akan otomatis muncul lagi di sync
+BERIKUTNYA (kolom `locally_modified` di device asisten tetap true sampai
+diterapkan host, TIDAK ada mekanisme dismiss permanen). User pernah
+tanya soal konflik "kalau owner JUGA ubah harga yg sama, mana yg
+menang?" — jawabannya: TIDAK ada resolusi otomatis via timestamp,
+review screen selalu diff terhadap data host LIVE saat itu, jadi owner
+yg lihat & putuskan sendiri, bukan sistem yg diam-diam pilih salah satu.
+
+**Environment issue besar ditemukan sesi ini (BUKAN bug kode, catat utk
+sesi depan)**: `dart run build_runner build --delete-conflicting-outputs`
+GAGAL total meregenerasi `app_database.g.dart` di environment ini —
+selalu lapor "sukses" tapi file hasil generate tidak pernah muncul di
+disk (dikonfirmasi lewat file intermediate drift analyzer sendiri,
+`*.drift_elements.json`, isinya `"elements": []` bahkan utk
+`app_database.dart` yg PRISTINE/belum diubah sama sekali — jadi bukan
+gara-gara perubahan skema Item 40). **Root cause belum ditemukan**
+(bukan disk space/memory/inode — semua sudah dicek cukup). **Workaround
+yg dipakai**: hand-patch `app_database.g.dart` langsung via script Python
+(cari-ganti presisi, tiap blok diverifikasi match PERSIS 1x sebelum
+diterapkan) meniru pola kode generated kolom `markedOutOfStock` yg sudah
+ada, utk kolom baru `locallyModified`. **Kalau sesi depan perlu ubah
+skema DB lagi**: build_runner kemungkinan BESAR gagal lagi dgn cara yg
+sama — coba dulu (barangkali sudah kebetulan jalan), tapi kalau gagal,
+pola hand-patch yg sama (tiru struktur kolom `BoolColumn`/`markedOutOfStock`
+yg sudah ada persis) adalah fallback yg TERBUKTI berhasil.
+
+**Bug tersembunyi ditemukan & diperbaiki via full-suite test run (BUKAN
+regresi dari kode produksi Item 40 — murni fixture test lama yg kurang
+lengkap)**: `test/migration_v15_test.dart` fixture DB v14 mentah tidak
+pernah bikin tabel `products` sama sekali (beda dari fixture migration
+test lain spt v9/v10/v13/v14 yg semuanya sudah py `CREATE TABLE
+products(id TEXT PRIMARY KEY);` stub) — begitu schemaVersion naik ke 16
+& migrasi `from<16` (`addColumn(products, products.locallyModified)`)
+ikut jalan di atas fixture v14 itu, kena `SqliteException: no such
+table: products`. HANYA muncul di full-suite run (test lain di suite yg
+sama tidak memicu jalur ini krn masing2 py DB fixture sendiri) — test
+individual `migration_v15_test.dart` tetap lolos sendirian sebelum fix
+krn... (catatan: sebenarnya tetap gagal sendirian juga, bukan cuma
+full-suite — dikonfirmasi via revert-verify). Fix: tambah baris yg sama
+(`CREATE TABLE products(id TEXT PRIMARY KEY);`) ke fixture v14 di
+`migration_v15_test.dart`. Revert-verify dilakukan (hapus baris fix →
+`SqliteException` yg sama persis muncul lagi → fix dikembalikan, hijau).
+
+**Temuan test infra baru (widget test gotcha, catat utk CLAUDE.md kalau
+perlu)**: `RichText`/`Text.rich` dgn `TextSpan` children TIDAK terlihat
+oleh `find.text()`/`find.textContaining()` (matcher itu cuma cek widget
+`Text`/`EditableText`) — dipakai `_ProposalTile` utk render diff harga
+strikethrough. Solusi: `find.byWidgetPredicate((w) => w is RichText &&
+w.text.toPlainText().contains(substring))` (lihat helper
+`findRichTextContaining` di `product_proposal_review_screen_test.dart`).
+
+**Belum dikerjakan/didiskusikan lebih lanjut**: tidak ada — fitur ini
+dianggap SELESAI oleh user (diminta eksekusi langsung, tidak ada
+follow-up terbuka). Kalau muncul laporan lanjutan (mis. owner mau
+approve/reject dari notifikasi push, atau mau riwayat "siapa usul apa"),
+itu scope BARU, masukkan ke PLAN.md dulu sebelum eksekusi (beda dari
+sesi ini yg eksplisit diminta skip planning).
 
 ## Fix: struk cetak/gambar "Kembali" akumulasi, bukan pembayaran terakhir (18 Juli, SELESAI & di-commit `3f3a4c0`)
 

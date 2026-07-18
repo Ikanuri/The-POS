@@ -11,6 +11,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 18 Juli 2026
 
 ### ✨ Fitur Baru
+- **Usulan harga/produk dari kasir/asisten kini bisa direview owner sebelum
+  masuk ke data toko** — kalau kasir/asisten sempat ubah harga produk atau
+  tambah produk baru langsung di HP-nya, perubahan itu TIDAK langsung
+  menimpa data owner saat sync. Owner akan melihat daftar "Usulan
+  Harga/Produk" di layar Sinkronisasi, bisa lihat harga lama vs baru
+  (atau detail produk baru), pilih mana yang mau diterapkan, baru tekan
+  "Terapkan". Usulan yang belum ditinjau tetap aman dan akan muncul lagi
+  di sync berikutnya.
 - **Layar Sync WiFi kini punya pengaturan "Batas Waktu Tunggu (Timeout)"**
   — bisa dipilih Cepat/Normal/Lambat/Sangat Lambat. Kalau toko Anda punya
   riwayat data besar atau WiFi yang cenderung lemot sehingga sync sering
