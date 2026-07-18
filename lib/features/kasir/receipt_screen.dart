@@ -26,10 +26,11 @@ import 'widgets/tx_history_sheet.dart';
 /// Sisa tagihan yang BENAR: `total - paid` mentah bisa understate kalau
 /// kembalian yang sudah pernah diberikan (baris pembayaran manapun) dipakai
 /// ulang sebagai pembayaran baru — uang yang sama ke-hitung dobel di `paid`
-/// tanpa pernah dikurangi saat keluar sbg kembalian sebelumnya. `paid` &
-/// `changeAmount` sendiri TIDAK diubah (tetap dipakai apa adanya di struk
-/// cetak "Bayar../Kembali") — koreksi ini murni utk "berapa yang beneran
-/// masih harus dibayar".
+/// tanpa pernah dikurangi saat keluar sbg kembalian sebelumnya. `tx.paid` &
+/// `tx.changeAmount` MENTAH (kolom header, dipakai apa adanya utk rekonsiliasi
+/// internal) TIDAK diubah — tapi SEMUA tampilan ke user (Ringkasan on-screen,
+/// struk cetak/gambar tunggal, nota gabungan) pakai fungsi net di file ini
+/// ([netPaidDisplay]/[latestChangeGiven]), BUKAN kolom mentahnya langsung.
 /// Pembayaran yang DIBATALKAN ("Batalkan Pembayaran") tetap ada di [payments]
 /// (jejak audit, tampil dicoret di Riwayat Pembayaran) tapi tidak boleh ikut
 /// hitungan finansial mana pun — `tx.paid` sendiri sudah dijaga tidak
@@ -61,6 +62,21 @@ int netPaidDisplay(Transaction tx, List<TransactionPayment> payments) {
 /// padahal saya kasih 400rb").
 int grossReceived(List<TransactionPayment> payments) =>
     payments.where((p) => !p.voided).fold<int>(0, (s, p) => s + p.amount);
+
+/// Kembalian yang BENAR untuk struk cetak/gambar (`_ReceiptPaper`): dari
+/// pembayaran TERAKHIR yang tidak dibatalkan — BUKAN akumulasi
+/// `tx.changeAmount`, yang bisa salah kalau kembalian yang sudah pernah
+/// diberikan dipakai ulang sbg pembayaran baru (mis. tambah belanjaan) —
+/// akar masalah sama dgn [netRemainingOwed]. Dipakai juga oleh
+/// `printer_service.dart` (struk cetak ESC/POS) via logika sepadan.
+int latestChangeGiven(List<TransactionPayment> payments) {
+  TransactionPayment? latest;
+  for (final p in payments) {
+    if (p.voided || p.changeGiven <= 0) continue;
+    if (latest == null || p.paidAt.isAfter(latest.paidAt)) latest = p;
+  }
+  return latest?.changeGiven ?? 0;
+}
 
 class ReceiptScreen extends ConsumerStatefulWidget {
   const ReceiptScreen({super.key, required this.transactionId});
@@ -2429,22 +2445,23 @@ class _ReceiptPaper extends StatelessWidget {
                       fontSize: 14, fontWeight: FontWeight.w900)),
             ],
           ),
-          if (tx.paid > 0)
+          if (netPaidDisplay(tx, payments) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Bayar..', style: _mono),
-                Text('Rp ${_fmtNum(tx.paid)}', style: _mono),
+                Text('Rp ${_fmtNum(netPaidDisplay(tx, payments))}',
+                    style: _mono),
               ],
             ),
-          if (tx.changeAmount > 0)
+          if (latestChangeGiven(payments) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Kembali',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
-                Text('Rp ${_fmtNum(tx.changeAmount)}',
+                Text('Rp ${_fmtNum(latestChangeGiven(payments))}',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
@@ -2466,8 +2483,11 @@ class _ReceiptPaper extends StatelessWidget {
             ...payments.map((p) => Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('${_fmtDateTime(p.paidAt)} ${_methodShort(p.method)}',
-                        style: _mono.copyWith(fontSize: 11)),
+                    Expanded(
+                      child: Text(
+                          '${_fmtDateTime(p.paidAt)} ${_methodShort(p.method)}',
+                          style: _mono.copyWith(fontSize: 11)),
+                    ),
                     Text('Rp ${_fmtNum(p.amount)}',
                         style: _mono.copyWith(fontSize: 11)),
                   ],

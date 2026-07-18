@@ -675,15 +675,39 @@ class PrinterService {
     out.addAll(wideNominal('Rp ${_fmtNum(tx.total)}'));
 
     if (settings.showPaymentDetail) {
-      out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(tx.paid)}'));
+      // `tx.paid`/`tx.changeAmount` mentah bisa SALAH kalau kembalian yang
+      // sudah pernah diberikan dipakai ulang sbg pembayaran baru (mis. tambah
+      // belanjaan) — uang yang sama ke-hitung dobel di `paid` tanpa pernah
+      // dikurangi saat keluar sbg kembalian sebelumnya (akar masalah sama
+      // dgn Item 23, sudah diperbaiki di `receipt_screen.dart`/nota gabungan,
+      // sekarang dikonsistenkan ke struk cetak tunggal). "Kembali" HARUS
+      // dari pembayaran TERAKHIR saja (bukan akumulasi seluruh riwayat nota).
+      final sumChangeGiven =
+          payments.where((p) => !p.voided).fold<int>(0, (s, p) => s + p.changeGiven);
+      final netPaid = tx.paid - sumChangeGiven;
+      out.addAll(
+          bodyLR('Bayar', 'Rp ${_fmtNum(netPaid > 0 ? netPaid : 0)}'));
 
-      if (tx.changeAmount > 0) {
+      TransactionPayment? latestWithChange;
+      for (final p in payments) {
+        if (p.voided || p.changeGiven <= 0) continue;
+        if (latestWithChange == null ||
+            p.paidAt.isAfter(latestWithChange.paidAt)) {
+          latestWithChange = p;
+        }
+      }
+      if (latestWithChange != null) {
+        // Item 9 — uang tender ASLI (gross) dari pembayaran TERAKHIR, supaya
+        // tidak membingungkan pembeli yang kasih lebih ("bayar 300rb" padahal
+        // kasih 400rb) — konsisten dgn Ringkasan on-screen & nota gabungan.
+        out.addAll(bodyLR(
+            'Uang Diterima', 'Rp ${_fmtNum(latestWithChange.amount)}'));
         out.addAll(bodyText('Kembali', styles: const PosStyles(bold: true)));
-        out.addAll(wideNominal('Rp ${_fmtNum(tx.changeAmount)}'));
+        out.addAll(wideNominal('Rp ${_fmtNum(latestWithChange.changeGiven)}'));
       } else if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
-        final remaining = tx.total - tx.paid;
+        final remaining = tx.total - netPaid;
         out.addAll(bodyText('Kurang', styles: const PosStyles(bold: true)));
-        out.addAll(wideNominal('Rp ${_fmtNum(remaining)}'));
+        out.addAll(wideNominal('Rp ${_fmtNum(remaining > 0 ? remaining : 0)}'));
       }
     }
 
