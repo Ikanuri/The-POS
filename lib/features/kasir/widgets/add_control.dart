@@ -31,9 +31,19 @@ class AddControl extends StatefulWidget {
 // sedikit geser lalu kena tombol sebelah) diabaikan, bukan diproses dobel.
 const _kMisclickDebounce = Duration(milliseconds: 150);
 
+// Feedback taktil: tombol membesar sesaat saat ditekan, mengecil lagi saat
+// dilepas ATAU jari geser keluar area tombol (TapGestureRecognizer bawaan
+// Flutter otomatis membatalkan tap-nya sendiri kalau pointer bergerak keluar
+// batas toleransi geser saat masih ditekan, jadi onTapCancel juga menangani
+// kasus "pindah ke area lain" tanpa perlu deteksi posisi manual).
+const _kPressScale = 1.15;
+const _kPressScaleDuration = Duration(milliseconds: 100);
+
 class _AddControlState extends State<AddControl> {
   bool _blocked = false;
   Timer? _unblockTimer;
+  bool _mainPressed = false;
+  bool _minusPressed = false;
 
   @override
   void dispose() {
@@ -77,41 +87,51 @@ class _AddControlState extends State<AddControl> {
     final mainCircle = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _handleTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: circleSize,
-        height: circleSize,
-        decoration: BoxDecoration(
-          color: bgColor,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-                color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Center(
-          child: inCart
-              ? Padding(
-                  // Label tetap bulat (bukan pill) — utk qty desimal (mis.
-                  // "0.25", produk timbang) yang lebih panjang dari 1-2
-                  // digit biasa, `FittedBox` menyusutkan font-nya secara
-                  // proporsional supaya tetap muat dalam lingkaran, bukan
-                  // terpotong/meluber.
-                  padding: EdgeInsets.all(circleSize * 0.12),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: circleSize * 0.40,
+      onTapDown: (_) => setState(() => _mainPressed = true),
+      onTapUp: (_) => setState(() => _mainPressed = false),
+      onTapCancel: () => setState(() => _mainPressed = false),
+      child: AnimatedScale(
+        scale: _mainPressed ? _kPressScale : 1.0,
+        duration: _kPressScaleDuration,
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: circleSize,
+          height: circleSize,
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                  color: shadowColor,
+                  blurRadius: 6,
+                  offset: const Offset(0, 2)),
+            ],
+          ),
+          child: Center(
+            child: inCart
+                ? Padding(
+                    // Label tetap bulat (bukan pill) — utk qty desimal (mis.
+                    // "0.25", produk timbang) yang lebih panjang dari 1-2
+                    // digit biasa, `FittedBox` menyusutkan font-nya secara
+                    // proporsional supaya tetap muat dalam lingkaran, bukan
+                    // terpotong/meluber.
+                    padding: EdgeInsets.all(circleSize * 0.12),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: circleSize * 0.40,
+                        ),
                       ),
                     ),
-                  ),
-                )
-              : Icon(Icons.add_rounded,
-                  color: Colors.white, size: circleSize * 0.6),
+                  )
+                : Icon(Icons.add_rounded,
+                    color: Colors.white, size: circleSize * 0.6),
+          ),
         ),
       ),
     );
@@ -127,16 +147,24 @@ class _AddControlState extends State<AddControl> {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleMinus,
-          child: Container(
-            width: minusSize,
-            height: minusSize,
-            decoration: const BoxDecoration(
-              color: Color(0xFFD64545),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Icon(Icons.remove_rounded,
-                  color: Colors.white, size: minusSize * 0.6),
+          onTapDown: (_) => setState(() => _minusPressed = true),
+          onTapUp: (_) => setState(() => _minusPressed = false),
+          onTapCancel: () => setState(() => _minusPressed = false),
+          child: AnimatedScale(
+            scale: _minusPressed ? _kPressScale : 1.0,
+            duration: _kPressScaleDuration,
+            curve: Curves.easeOut,
+            child: Container(
+              width: minusSize,
+              height: minusSize,
+              decoration: const BoxDecoration(
+                color: Color(0xFFD64545),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Icon(Icons.remove_rounded,
+                    color: Colors.white, size: minusSize * 0.6),
+              ),
             ),
           ),
         ),

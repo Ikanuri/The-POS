@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/db_export_service.dart';
+import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
 
 /// Item 27 "Alihkan Owner" — pindahkan SELURUH data + identitas toko (bukan
@@ -97,11 +98,14 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
       final now = DateTime.now();
       final fname =
           'alihkan_owner_${now.year}${_p(now.month)}${_p(now.day)}.berkahpos';
-      await FilePicker.platform.saveFile(
-        fileName: fname,
+      if (!mounted) return;
+      final done = await saveOrShareExport(
+        context: context,
         bytes: bytes,
-        type: FileType.any,
+        fileName: fname,
+        shareText: 'File Alihkan Owner',
       );
+      if (!done) return;
       if (!mounted) return;
       showSuccess('File alihan berhasil dibuat');
     } catch (e) {

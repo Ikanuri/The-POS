@@ -9,11 +9,12 @@ import 'package:path_provider/path_provider.dart';
 /// sebelumnya tidak pernah dihapus lagi — menumpuk selamanya di OS temp dir.
 /// Dibersihkan best-effort saat startup (bukan langsung setelah share,
 /// karena OS mungkin masih butuh file itu selagi share sheet/app tujuan
-/// masih membacanya).
+/// masih membacanya). Prefix `backup_` = file backup (BPOP2/BPOT1/dst) yang
+/// dibagikan langsung via `saveOrShareExport` (`export_destination.dart`).
 class TempShareCleanup {
   TempShareCleanup._();
 
-  static const _prefixes = ['struk_', 'katalog_'];
+  static const _prefixes = ['struk_', 'katalog_', 'backup_'];
   static const _maxAge = Duration(hours: 24);
 
   static Future<void> run() async {

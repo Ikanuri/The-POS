@@ -1166,6 +1166,22 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Tambah banyak kategori sekaligus (satu nama per baris di UI). Nama
+  /// kosong dilewati; tiap nama diproses lewat `addProductGroup` yang sama
+  /// (alokasi slot id tetap konsisten, dieksekusi berurutan dlm 1 transaksi
+  /// supaya tidak ada baris lain yg nyelip di antaranya).
+  Future<int> addProductGroups(List<String> names) async {
+    final cleaned = names.map((n) => n.trim()).where((n) => n.isNotEmpty);
+    var count = 0;
+    await transaction(() async {
+      for (final name in cleaned) {
+        await addProductGroup(name);
+        count++;
+      }
+    });
+    return count;
+  }
+
   Future<void> renameProductGroup(int id, String newName) =>
       (update(productGroups)..where((t) => t.id.equals(id)))
           .write(ProductGroupsCompanion(name: Value(newName)));
@@ -1175,6 +1191,16 @@ class AppDatabase extends _$AppDatabase {
         .write(const ProductsCompanion(productGroupId: Value(null)));
     await (update(productGroups)..where((t) => t.id.equals(id)))
         .write(const ProductGroupsCompanion(name: Value(null)));
+  }
+
+  /// Hapus banyak kategori sekaligus — produk yg memakainya jadi tanpa
+  /// kategori (sama spt `deleteProductGroup` tunggal), dibungkus 1 transaksi.
+  Future<void> deleteProductGroups(List<int> ids) async {
+    await transaction(() async {
+      for (final id in ids) {
+        await deleteProductGroup(id);
+      }
+    });
   }
 
   Future<int> countProductsInGroup(int groupId) async {

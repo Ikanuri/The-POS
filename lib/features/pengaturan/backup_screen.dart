@@ -6,6 +6,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/services/backup_reminder.dart';
 import '../../core/services/db_export_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
 
 /// Status backup (waktu terakhir + setting otomatis) untuk kartu pengingat.
@@ -95,11 +96,14 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
       final now = DateTime.now();
       final fname =
           'backup_${now.year}${_p(now.month)}${_p(now.day)}.berkahpos';
-      await FilePicker.platform.saveFile(
-        fileName: fname,
+      if (!mounted) return;
+      final done = await saveOrShareExport(
+        context: context,
         bytes: bytes,
-        type: FileType.any,
+        fileName: fname,
+        shareText: 'Backup data toko',
       );
+      if (!done) return;
 
       await BackupReminder.recordBackupNow(db); // Item 13: catat waktu backup
       ref.invalidate(_backupStatusProvider);
