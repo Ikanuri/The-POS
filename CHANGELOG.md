@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-18
 
+- `da2aa8e` — fix: kartu Usulan Harga/Produk overflow di HP sempit (tombol Tinjau ListTile trailing lebar-penuh meremas title/subtitle jadi 1 karakter/baris) — tambah LanSyncService.debugAddProposal/debugClearProposals (seam test-only, hindari real socket di test render)
 - `d2b4c4d` — fix: eksekusi P1/P2 audit Item 41 — rekonsiliasi stok pasca-sync (rebuildStockAfterForUnits), UTC timestamp sync, satu slot antrian/IP, hemat memori BytesBuilder, HMAC respons + verifikasi klien, allowlist tabel + guard identifier, layar /kunci-hilang (keystore gagal), BackupException konsisten, parseValue anti-overflow, potong crash log, password ekspor min 8, prune lockout, cache/mmap SQLCipher diturunkan, manifest BT legacy maxSdkVersion=30 — 510 test hijau + bukti revert-merah
 - `3e9d2e1` — docs: hasil verifikasi test nyata (Flutter 3.24.5: analyze 0 issue, 498 test hijau) + temuan D.5 gagal kompilasi di SDK 3.44.6
 - `b00d8bc` — docs: perbarui CHANGELOG/HANDOFF untuk sesi audit kode (Item 41)

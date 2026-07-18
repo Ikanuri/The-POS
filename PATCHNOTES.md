@@ -10,6 +10,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 18 Juli 2026
 
+### 🔧 Perbaikan
+- **Kartu "Usulan Harga/Produk" di layar Sync WiFi tidak lagi tampil
+  berantakan** — sebelumnya di HP dengan layar sempit, teks IP & jumlah
+  produk di kartu itu bisa terpotong jadi satu huruf per baris (susah
+  dibaca). Sekarang tampil rapi satu baris seperti seharusnya.
+
 ### 🛡️ Keamanan & Keandalan Data
 - **Stok kini dihitung ulang dengan benar setelah sinkronisasi antar-HP** —
   sebelumnya, kalau HP kasir dan HP owner sama-sama mencatat pergerakan

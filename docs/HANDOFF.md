@@ -34,6 +34,61 @@ gagal kompilasi (Item 41 D.5, sesi upgrade SDK tersendiri). Sisa
 Item 41 (B.1 rotasi kunci, C.2 gabung Item 17+21, P3) di PLAN.md._
 **schemaVersion 16** (tidak berubah sesi ini — tidak ada migrasi).
 
+_Update sesi lanjutan (18 Juli, branch `claude/setup-dependencies-am31te`,
+SUDAH di-commit `da2aa8e` & di-push, BELUM di-merge ke `main` — tanyakan
+user): fix bug NYATA yang dilaporkan user via screenshot langsung dari
+device fisik (bukan laporan teks) — lihat detail di bawah. Full
+`flutter test` **511 test, SEMUA HIJAU**, `flutter analyze` bersih._
+
+## Fix: kartu "Usulan Harga/Produk" overflow di HP sempit (18 Juli, SELESAI & di-commit `da2aa8e`)
+
+User lapor lewat 2 screenshot: (1) awalnya bingung tidak menemukan usulan
+harga/produk (Item 40) di layar Sync — ternyata dia belum sync ulang
+setelah asisten edit produk; (2) setelah sync ulang, kartu "Usulan
+Harga/Produk (1)" MUNCUL tapi teks IP host (`192.168.2.186`) & subtitle
+jumlah produk tampil TERPOTONG VERTIKAL — tiap karakter jadi baris
+sendiri, menutupi hampir seluruh kartu, menimpa tombol "Tinjau".
+
+**Root cause**: tombol "Tinjau" (`FilledButton.tonal`) ditaruh di slot
+`trailing` sebuah `ListTile` (`sync_screen.dart`) TANPA override
+`minimumSize` — default `AppTheme` utk `FilledButton` adalah lebar
+PENUH. `ListTile` menghitung intrinsic width `trailing` dulu sebelum
+membagi sisa lebar ke `title`/`subtitle`; kalau trailing minta lebar
+nyaris tak terbatas, sisa lebar utk title/subtitle jadi ~0px, sehingga
+`Text(p.fromIp)` terpaksa wrap SATU KARAKTER PER BARIS. Ini VARIAN BARU
+dari gotcha yang sudah tercatat di CLAUDE.md (tombol lebar-penuh dlm
+`Row` di dalam `AlertDialog`) — kali ini lewat slot `trailing` `ListTile`,
+bukan `Row` biasa, jadi dicatat terpisah krn mekanisme peremasannya beda
+(`ListTile` custom render object, bukan `Flex`/`Row` biasa).
+
+**Fix**: `FilledButton.styleFrom(minimumSize: Size(0, 36))` di tombol itu.
+
+**Temuan infra penting saat menulis test**: percobaan pertama test ini
+pakai host+HTTP sungguhan (pola sama dgn `asisten_permission_sync_test.
+dart`/`product_proposal_review_screen_test.dart`) via `setUpAll` — LOLOS
+sendirian, tapi bikin SELURUH `flutter test` suite MATI DIAM-DIAM
+tanpa pesan error/summary sama sekali (2x percobaan, macet di titik
+berbeda: test #62 lalu test #467) begitu dijalankan sbg bagian full
+suite. Dugaan kuat: tabrakan port sync tetap (8625) dgn test lain yg
+JUGA bind socket sungguhan, saat `flutter test` menjalankan banyak file
+konkuren di worker paralel (catatan serupa sudah ada di HANDOFF lama utk
+`lan_sync_*_test.dart`, tapi kali ini BENAR-BENAR bikin seluruh proses
+mati, bukan cuma 1 test gagal). **Solusi**: HAPUS kebutuhan
+host/HTTP sungguhan sama sekali dari test render murni ini — tambah
+seam test-only `LanSyncService.debugAddProposal()`/`debugClearProposals()`
+(anotasi `@visibleForTesting`) utk isi `_pendingProposals` langsung.
+Test jadi lebih cepat & TIDAK PERNAH menyentuh network sama sekali.
+**Kalau nanti nulis test baru yg cuma perlu render UI dari state
+`LanSyncService`/`_pendingQueue`/`_pendingProposals`, JANGAN pakai host
+sungguhan spt pola lama — pakai seam debug spt ini kalau tersedia, host
+sungguhan HANYA utk test yg memang menguji jalur network itu sendiri.**
+
+Test: `test/sync_screen_proposal_layout_test.dart` (1 test, `setSurfaceSize
+(360, 800)` wajib spt gotcha CLAUDE.md, cari `Text` yg `data` PERSIS
+`'192.168.2.186'` — kalau ada wrap-per-karakter, `Text` utuh itu TIDAK
+akan ketemu). Revert-verify: lepas `minimumSize` fix → test gagal
+persis (Text IP utuh tidak ditemukan) → fix dikembalikan, hijau lagi.
+
 ## Item 40 — Usulan harga/produk dari device non-owner via sync LAN (18 Juli, SELESAI & di-commit `fcadcb1`)
 
 **Konteks**: user lapor kasus nyata — asisten kadang lebih update soal
