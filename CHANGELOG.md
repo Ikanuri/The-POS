@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-18
+
+- `5c244da` — feat: Item 39 — sync LAN lebih andal (deteksi IP dual-strategi + tombol Refresh IP + profil timeout dipilih user + pesan error dipertajam + logging CrashLogService)
+
 ## 2026-07-17
 
 - `a1c2776` — fix: timeout total (bukan idle) memutus transfer sync besar yang masih aktif (babak ke-4 laporan asisten stok minus)

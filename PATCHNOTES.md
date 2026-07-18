@@ -8,6 +8,27 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 18 Juli 2026
+
+### ✨ Fitur Baru
+- **Layar Sync WiFi kini punya pengaturan "Batas Waktu Tunggu (Timeout)"**
+  — bisa dipilih Cepat/Normal/Lambat/Sangat Lambat. Kalau toko Anda punya
+  riwayat data besar atau WiFi yang cenderung lemot sehingga sync sering
+  gagal timeout padahal sebenarnya masih berjalan, naikkan ke profil yang
+  lebih longgar.
+- **Tombol "Refresh IP" baru di kartu "Jadi Host"** — kalau IP HP owner
+  berubah setelah server dinyalakan (ganti jaringan, HP baru reconnect
+  WiFi), tekan tombol ini supaya QR/IP yang dibagikan ke kasir selalu yang
+  terbaru, tanpa perlu matikan-nyalakan ulang server.
+
+### 🔧 Perbaikan
+- **Pesan error sync WiFi sekarang lebih jelas & actionable** kalau gagal
+  terhubung — misalnya menyebutkan kemungkinan router memblokir koneksi
+  antar-HP (fitur "isolasi klien" WiFi), HP owner mengunci layar/pindah
+  app sehingga koneksi terputus otomatis, atau HP kasir sedang pakai jalur
+  data seluler alih-alih WiFi. Deteksi IP host juga dibuat lebih andal
+  (pakai cara cadangan otomatis kalau cara utama gagal di HP tertentu).
+
 ## 17 Juli 2026
 
 ### ✨ Fitur Baru

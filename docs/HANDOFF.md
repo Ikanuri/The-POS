@@ -4,23 +4,98 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fix barcode produk/
-varian terkunci permanen [`7f37d64`] + fix "Jadi Host" khusus owner
-[`d21889f`] + fix sync HTTP client TANPA TIMEOUT [`939048a`] + fix
-timeout TOTAL vs IDLE yang memutus transfer besar di tengah jalan [belum
-di-commit] — 4 babak dari SATU laporan user yang sama "asisten tidak
-bisa override stok minus")._ Full `flutter test` **469 test** (468 hijau
-+ 1 test PRE-EXISTING FLAKY tidak terkait sesi ini — `stock_opname_
-screen_test.dart` gagal jg di baseline SEBELUM sentuhan apa pun sesi ini,
-dibuktikan via `git stash`; JANGAN otomatis curigai perubahan sync kalau
-lihat gagal ini lagi, cek dulu apakah memang flaky independen).
-`flutter analyze` bersih (0 issue — env sesi ini pakai Flutter `3.24.5`
-sesuai pin CI `.github/workflows/*.yml`, JANGAN pakai versi lebih baru
-spt 3.32.0 — ada breaking change `CardTheme`→`CardThemeData` yg bikin
-compile gagal). schemaVersion masih 15. Branch kerja:
-`claude/review-branch-changes-g5agon`, SUDAH di-merge ke `main` sampai
-`2a7ef21` (fix timeout HTTP dasar) — fix idle-vs-total timeout di bawah
-ini BELUM di-commit/push, tunggu konfirmasi user.
+_Terakhir diperbarui: 18 Juli 2026 (sesi lanjutan — Item 39 "sync LAN
+lebih andal" [`5c244da`], SUDAH di-commit & di-push ke
+`claude/setup-dependencies-am31te`). Sesi 17 Juli sebelumnya (4 babak
+laporan "asisten tidak bisa override stok minus": fix barcode terkunci
+`7f37d64`, "Jadi Host" khusus owner `d21889f`, timeout HTTP client
+`939048a`, idle-vs-total timeout `a1c2776`) SEMUA SUDAH di-commit & SUDAH
+di-merge ke `main` (lihat CHANGELOG `2026-07-17` — status "belum
+di-commit" yg mungkin masih tertulis di bagian bawah dokumen ini SUDAH
+BASI, abaikan, cek CHANGELOG sbg sumber kebenaran commit)._ Full `flutter
+test` **488 test, SEMUA HIJAU** (naik dari 469 sebelum sesi ini — 19 test
+baru dari Item 39), `flutter analyze` bersih (0 issue). schemaVersion
+masih 15 (Item
+39 tidak butuh migrasi — profil timeout disimpan sbg key `app_settings`
+baru `sync_timeout_profile`).
+
+## Item 39 — Sync LAN lebih andal: deteksi IP + profil timeout + logging (18 Juli, SELESAI & di-commit)
+
+**Konteks**: user minta analisis kenapa "kadang di jaringan WiFi yang
+sama tapi tidak tersambung" — bukan laporan bug spesifik, tapi diskusi
+open-ended yang menghasilkan 5 kandidat penyebab (lihat histori chat kalau
+perlu detail lengkap analisisnya): (1) AP/client isolation di router,
+(2) `NetworkInfo.getWifiIP()` tidak selalu andal di semua ROM Android,
+(3) IP host berubah tapi UI tidak refresh, (4) battery optimization/Doze
+membekukan koneksi background saat layar owner mati, (5) HP kasir salah
+rute lewat data seluler alih-alih WiFi. User minta "kerjakan semua, beri
+log jika perlu" + tambah setting timeout bervariasi.
+
+**Yang DIKERJAKAN (executable dari Dart, tanpa native platform channel
+baru)**:
+1. **Deteksi IP dual-strategi** (`LanSyncService.detectHostIp()`): coba
+   `NetworkInfo.getWifiIP()` dulu (utama), fallback ke
+   `NetworkInterface.list()` (dart:io murni, TIDAK butuh izin tambahan
+   apa pun, tidak lewat API WiFi manager Android sama sekali) kalau hasil
+   utama null/kosong/`0.0.0.0`. Filter `isPrivateIPv4()` (public, pure,
+   testable) memilih alamat privat (10.x/172.16-31.x/192.168.x) dari
+   daftar interface, melewati IP publik (VPN/tethering).
+2. **Tombol "Refresh IP"** baru di kartu "Jadi Host" (`sync_screen.dart`)
+   — `LanSyncService.refreshHostIp()` deteksi ulang TANPA restart server,
+   utk kasus IP berubah SAAT server sudah jalan (poin #3 di atas).
+3. **`SyncTimeoutProfile` enum** (Cepat/Normal/Lambat/Sangat Lambat),
+   dropdown baru di kartu "Hubungkan ke Host", tersimpan persisten ke
+   `app_settings` key `sync_timeout_profile`, di-load ulang tiap layar
+   dibuka & dipakai sbg `connectTimeout`/`responseTimeout` ke
+   `syncToHost()`.
+4. **Pesan error client dipertajam** per jenis `SocketException` — pesan
+   `TimeoutException` sekarang sebut 3 kemungkinan (isolasi AP, battery
+   optimization/layar mati, data besar → naikkan profil timeout);
+   `SocketException` cek substring pesan OS ("unreachable" → kemungkinan
+   salah rute data seluler, "refused"/"no route" → kemungkinan IP
+   basi/isolasi router).
+5. **`CrashLogService.record()`** dipasang di titik gagal: client
+   timeout/socket exception, host request handler catch-all, kegagalan
+   deteksi IP (kedua strategi) — bisa dicek user via layar "Log Error
+   Terakhir" yg sudah ada kalau laporan berulang.
+6. **Hint teks UI** di kartu "Jadi Host": jangan kunci layar/pindah app
+   selama menunggu kasir sync (poin #4, battery optimization) — TIDAK
+   minta permission `ignoreBatteryOptimizations` (butuh entry manifest
+   baru + ada risiko kebijakan Play Store utk app non-utilitas — sengaja
+   dihindari, cukup edukasi teks).
+
+**SENGAJA TIDAK dikerjakan (di luar jangkauan Dart murni)**: poin #1 (AP
+isolation) & #5 (client salah rute lewat data seluler) BUKAN sesuatu yang
+bisa "diperbaiki" dari kode app — keduanya keputusan level OS/router.
+Yang bisa dilakukan cuma diagnosis lebih baik (pesan error #4) supaya
+user tahu harus ngapain (matikan data seluler, cek pengaturan router),
+bukan fix otomatis. Kalau nanti mau coba fix #5 beneran (bind proses ke
+network WiFi spesifik), itu perlu platform channel native Android
+(`ConnectivityManager.bindProcessToNetwork`) — belum dikerjakan, catat di
+PLAN.md kalau user minta lanjut.
+
+**Test**: `test/lan_sync_ip_detect_test.dart` (16 test: `isPrivateIPv4`
+pure logic, `detectHostIp` dgn dependency-injection utk
+getWifiIpOverride/listInterfacesOverride — TIDAK hit network sungguhan,
+`SyncTimeoutProfile` save/load/fromKey) + `test/sync_screen_timeout_ip_
+test.dart` (3 widget test: dropdown default & persist, tombol Refresh IP
+TIDAK muncul sebelum host aktif).
+
+**Temuan penting saat menulis test (test infra, BUKAN bug produksi)**:
+mem-bind `HttpServer` sungguhan (`shelf_io.serve`, dipakai `startHost()`)
+di DALAM `testWidgets(...)` terbukti bikin `AppDatabase.close()` sesudahnya
+HANG TANPA BATAS WAKTU — dikonfirmasi via debug bertahap (server bind
+sendiri OK, `db.close()` sendiri OK, kombinasi keduanya dalam SATU
+`testWidgets` yang hang). Root cause pastinya belum ditelusuri sampai
+tuntas (dugaan: interaksi `TestWidgetsFlutterBinding`'s fake-async/timer
+tracking dgn socket TCP asli yang terdaftar di event loop), tapi **solusi
+aman**: jangan pernah start host sungguhan di dalam `testWidgets` — test
+level service (`test()` polos, tanpa widget pump) utk `startHost`/
+`refreshHostIp` bekerja normal tanpa masalah (lihat grup test di
+`lan_sync_ip_detect_test.dart`). Kalau nanti nulis test baru yang perlu
+mengetes UI + host sungguhan berbarengan, JANGAN diulang caranya —
+pisahkan jadi 2 test terpisah (service-level utk network asli, widget-
+level utk UI murni tanpa network asli), persis pola yang dipakai di sini.
 
 **PENTING kalau laporan serupa muncul lagi**: bug "asisten tidak bisa
 override X walau sudah digrant izin" di app ini historisnya SELALU
