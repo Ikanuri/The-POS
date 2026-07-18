@@ -440,6 +440,89 @@ konfirmasi hasil tes user** — tanyakan kalau sesi depan lanjut.
 
 ---
 
+## Item 41 — Audit kode menyeluruh (18 Juli 2026) — SISA yang belum dieksekusi
+
+Audit baca-kode penuh + verifikasi nyata (Flutter 3.24.5 pin CI: analyze
+0 issue, full test hijau; SDK 3.44.6 terbaru: gagal kompilasi — lihat
+D.5). **Sebagian besar temuan P1/P2 SUDAH DIEKSEKUSI & di-commit di sesi
+yang sama** (rekonsiliasi stok pasca-sync, UTC watermark, satu slot
+antrian/IP, hemat memori sync, HMAC respons, allowlist klien + guard
+identifier, layar pemulihan kunci, BackupException konsisten, parseValue
+anti-overflow, potong crash log, password ekspor min 8, prune lockout,
+turunkan cache/mmap SQLCipher, rapikan izin Bluetooth legacy) — detail di
+CHANGELOG 2026-07-18; test regresi: `test/lan_sync_item41_test.dart` +
+`test/audit_item41_unit_test.dart`, semua dgn bukti revert-merah.
+Di bawah ini HANYA yang masih menggantung.
+
+### Sisa [P1]/[P2] — butuh keputusan/desain atau device fisik
+
+1. **[P1] B.1 — rotasi/pencabutan storeKey.** Risiko QR pairing membawa
+   storeKey master polos SUDAH didokumentasikan keras di
+   `pairing_service.dart`, tapi MEKANISME mitigasi belum ada: fitur
+   "rotasi kunci toko" (generate storeKey baru + rekey SQLCipher +
+   re-pair semua device) dan/atau un-pair device (HP kasir hilang,
+   pegawai keluar). Butuh desain UX + keputusan user — jangan dieksekusi
+   sepihak. Sementara: kunci bocor = jalur "Alihkan Owner" ke identitas
+   toko baru.
+2. **[P2] C.2 — upload klien→host selalu full-dump sejak epoch.** Fix
+   minimal (satu slot antrian per IP) sudah menutup risiko OOM, tapi
+   biaya CPU/transfer tetap tumbuh seiring umur toko. Solusi struktural
+   SATU PAKET dgn Item 17+21: persist antrian approval host ke DB →
+   watermark upload aman dimajukan. Sesi fokus tersendiri (risiko
+   data-loss, wajib test round-trip HTTP asli).
+3. **[P2] D.1 sisa — uji printer Bluetooth di device fisik Android
+   10/11.** Manifest sudah dirapikan (maxSdkVersion=30 utk izin legacy;
+   ACCESS_FINE_LOCATION sengaja TIDAK diminta karena app hanya membaca
+   bonded list, bukan discovery scan). Verifikasi di HP Android ≤11
+   sungguhan bahwa daftar printer tetap muncul.
+
+### Sisa [P3]
+
+1. **A.8 redirect router tidak reaktif** — `ref.read` tanpa
+   `refreshListenable`: perubahan state lisensi async tidak memicu
+   redirect sampai navigasi berikutnya. Dokumentasikan atau pasang
+   Listenable gabungan.
+2. **A.9 `beforeOpen` unitTypes pakai `insertOrReplace`** padahal
+   komentar bilang insertOrIgnore — bom waktu kalau kelak ada UI edit
+   satuan; samakan dgn `_seedDefaults`.
+3. **A.10 master data tanpa tombstone** — penghapusan produk/tier/
+   pelanggan di owner tidak pernah menghapus di klien (data hantu).
+   Butuh keputusan desain: soft-delete tersinkron vs tabel tombstone.
+4. **A.11 `mergeRows` menghitung "diterima N" dari return `customInsert`**
+   — INSERT OR IGNORE yang ter-skip bisa tetap terhitung (kosmetik,
+   menyesatkan saat debug sync).
+5. **A.12 tutup buku: crash di antara copy-arsip & delete-data**
+   meninggalkan state nyangkut ("Arsip tahun X sudah ada" padahal data
+   belum terhapus) tanpa jalur pemulihan.
+6. **B.7 `minifyEnabled=false`** — aktifkan R8 + keep rules (uji regresi
+   penuh, terutama drift/sqlcipher/BT).
+7. **B.8 `HttpCloudflareApi` tanpa timeout** — tambah connectionTimeout +
+   `.timeout()` seperti LAN sync.
+8. **C.3 `SystemChrome.setSystemUIOverlayStyle` & `ref.watch` di dalam
+   `MaterialApp.builder`** — guard per perubahan brightness; pindahkan
+   watch ke build.
+9. **C.4 `generateUniqueLocalId` memuat semua transaksi hari itu** —
+   ganti `SELECT MAX(local_id)` + fallback bila mau rapi.
+10. **D.2 gotcha cleartext HTTP** — sync LAN kebetulan lolos blokir
+    cleartext Android karena dart:io; catat di CLAUDE.md (migrasi ke
+    package `http`/cronet akan mendadak gagal tanpa NSC exception).
+11. **D.3 Java 8 tanpa core library desugaring** — potensi build gagal
+    saat upgrade plugin.
+12. **D.4 CLAUDE.md basi** — tertulis `schemaVersion = 9`, kode 16.
+13. **D.5 terkunci di Flutter 3.24.5 (pin CI)** — di 3.44.6 stable gagal
+    kompilasi: 1 error `CardTheme`→`CardThemeData` (`app_theme.dart:175`)
+    + 53 deprecation (`withOpacity`, `DropdownButtonFormField.value`,
+    `onReorder`). Rencanakan sesi upgrade SDK khusus (fix serentak +
+    full test + uji APK device fisik).
+14. **E — clean code**: pecah bertahap file raksasa (`kasir_screen.dart`
+    3.7k, `app_database.dart` 3.4k, `receipt_screen.dart` 2.7k);
+    `LanSyncService` full-static callback tunggal (2 listener saling
+    timpa); loop mati `lastQtyIdx` di `discount_allocation.dart`;
+    `_change` clamp `double.maxFinite.toInt()` → `max(0, ...)`;
+    duplikasi validasi hex key (`rekey` vs `_openConnection`).
+
+---
+
 ## Status ringkas & urutan sisa pekerjaan
 
 **Item 9-22 (backlog audit besar 10-11 Juli) — SELESAI 12/13**, lihat
@@ -463,3 +546,7 @@ detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
 5. **Item 38** (tie-break `_rawBaseStock` tidak kronologis kalau 2
    perubahan stok jatuh di detik yang sama) — prioritas rendah, ditemukan
    tak sengaja lewat test, belum ada laporan dampak nyata di device asli.
+6. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
+   di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
+   keputusan desain user), C.2 (gabung Item 17+21), uji printer device
+   fisik Android ≤11, dan daftar P3 — detail di Item 41 di atas.

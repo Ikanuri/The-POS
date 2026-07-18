@@ -40,6 +40,7 @@ import '../../features/ringkasan/ringkasan_screen.dart';
 import '../../features/setup/pairing_screen.dart';
 import '../../features/setup/restore_file_screen.dart';
 import '../../features/setup/setup_toko_screen.dart';
+import '../../features/setup/store_key_lost_screen.dart';
 import '../../features/setup/welcome_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../providers/device_provider.dart';
@@ -67,6 +68,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (inAktivasi) return '/kasir';
 
       final device = ref.read(deviceProvider);
+      // Item 41 A.6 — kunci toko tidak terbaca padahal identitas pernah
+      // ada: WAJIB dicek SEBELUM blok !isConfigured di bawah, kalau tidak
+      // kondisi ini jatuh ke /setup dan user bisa tak sengaja membuat toko
+      // baru (storeKey baru = DB lama permanen tak terbuka).
+      final inKunciHilang = state.matchedLocation.startsWith('/kunci-hilang');
+      if (device.storeKeyLost) return inKunciHilang ? null : '/kunci-hilang';
+      if (inKunciHilang) return '/kasir';
+
       final inSetup = state.matchedLocation.startsWith('/setup');
       if (!device.isConfigured && !inSetup) return '/setup';
       if (device.isConfigured && inSetup) return '/kasir';
@@ -79,6 +88,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/aktivasi',
         builder: (_, __) => const AktivasiScreen(),
+      ),
+      GoRoute(
+        path: '/kunci-hilang',
+        builder: (_, __) => const StoreKeyLostScreen(),
       ),
       GoRoute(
         path: '/setup',

@@ -3,9 +3,18 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Getar: haptik konfirmasi saat barcode berhasil discan -->
     <uses-permission android:name="android.permission.VIBRATE"/>
-    <!-- Bluetooth: printer thermal -->
-    <uses-permission android:name="android.permission.BLUETOOTH"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
+    <!-- Bluetooth: printer thermal. Izin legacy hanya berlaku sampai
+         Android 11 (API 30) — di 12+ digantikan BLUETOOTH_CONNECT/SCAN;
+         maxSdkVersion mencegah izin usang ikut terdeklarasi di OS baru.
+         Catatan (Item 41 D.1): app HANYA memakai daftar bonded/paired
+         (PrintBluetoothThermal.pairedBluetooths), TIDAK discovery scan —
+         karena itu ACCESS_FINE_LOCATION (syarat scan di Android 10-11)
+         sengaja TIDAK diminta. Kalau suatu saat menambah discovery scan,
+         izin lokasi + runtime request WAJIB ditambahkan utk API <= 30. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />

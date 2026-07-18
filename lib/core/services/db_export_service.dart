@@ -136,15 +136,20 @@ class DbExportService {
       key = CryptoService.deriveFileKey(storeKey, password, storeUuid);
     }
 
-    late List<int> compressed;
+    // Item 41 A.5 — password salah TIDAK selalu tertangkap di decryptBytes:
+    // padding CBC bisa kebetulan valid (~1/256 percobaan) sehingga error
+    // baru muncul di gunzip/utf8/json — dulu lolos sbg FormatException
+    // mentah ke UI. Seluruh rantai parse dibungkus agar pesannya selalu
+    // konsisten & bisa dimengerti user.
+    late Map<String, dynamic> payload;
     try {
-      compressed = CryptoService.decryptBytes(
+      final compressed = CryptoService.decryptBytes(
           Uint8List.fromList(cipherBytes), key, Uint8List.fromList(iv));
+      final jsonBytes = GZipCodec().decode(compressed);
+      payload = jsonDecode(utf8.decode(jsonBytes)) as Map<String, dynamic>;
     } catch (_) {
       throw BackupException('Password salah atau file rusak');
     }
-    final jsonBytes = GZipCodec().decode(compressed);
-    final payload = jsonDecode(utf8.decode(jsonBytes)) as Map<String, dynamic>;
     final payloadUuid = payload['storeUuid'] as String?;
     // File portable sengaja lintas-toko — lewati pengecekan asal toko.
     // BPOT1 juga lewati (memang TUJUANNYA lintas-toko, storeUuid di payload

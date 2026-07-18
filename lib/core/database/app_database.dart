@@ -3166,9 +3166,60 @@ class AppDatabase extends _$AppDatabase {
     return count;
   }
 
+  /// Item 41 A.1 — hitung ulang rantai `stock_after` per satuan (dasar)
+  /// secara kronologis dari `qty_change`. WAJIB dipanggil setelah merge
+  /// `stock_ledger` dari device lain (sync LAN, kedua arah): baris kiriman
+  /// membawa `stock_after` hasil hitungan saldo LOKAL device asal — bisa
+  /// beda dari saldo di device ini — dan [currentStock] membaca saldo dari
+  /// baris "terbaru", jadi tanpa rebuild saldo di sini diam-diam melompat
+  /// ke pandangan device lain (mis. host 10, klien yang mengira stok 5
+  /// jual 2 → baris klien `stock_after=3` menimpa pandangan host; yang
+  /// benar 10-2=8). Σ`qty_change` menghitung tiap pergerakan tepat sekali
+  /// (dedup PK oleh INSERT OR IGNORE), jadi rantai hasil rebuild adalah
+  /// interpretasi konsisten gabungan kedua device.
+  ///
+  /// Urutan pakai (created_at ASC, id ASC) — tie-break id utk baris pada
+  /// detik yang sama memang tidak kronologis-sejati (uuid acak, Item 38),
+  /// tapi saldo AKHIR tidak terpengaruh urutan (penjumlahan komutatif);
+  /// hanya nilai `stock_after` antara di detik itu yang kosmetik.
+  Future<void> rebuildStockAfterForUnits(Set<String> unitIds) async {
+    if (unitIds.isEmpty) return;
+    await transaction(() async {
+      for (final uid in unitIds) {
+        final rows = await customSelect(
+          'SELECT id, qty_change, stock_after FROM stock_ledger '
+          'WHERE product_unit_id = ? ORDER BY created_at ASC, id ASC',
+          variables: [Variable.withString(uid)],
+        ).get();
+        var running = 0.0;
+        for (final r in rows) {
+          running += (r.data['qty_change'] as num?)?.toDouble() ?? 0;
+          final current = (r.data['stock_after'] as num?)?.toDouble();
+          if (current == running) continue; // sudah benar — hemat tulis
+          await customUpdate(
+            'UPDATE stock_ledger SET stock_after = ? WHERE id = ?',
+            variables: [
+              Variable.withReal(running),
+              Variable.withString(r.data['id'] as String),
+            ],
+            updates: {stockLedger},
+            updateKind: UpdateKind.update,
+          );
+        }
+      }
+    });
+  }
+
   /// Merge rows from sync payload (INSERT OR IGNORE for ledger, last-write-wins for master).
   Future<int> mergeRows(String tableName, List<Map<String, Object?>> rows,
       bool isAppendOnly) async {
+    // Item 41 B.3 — nama tabel disisipkan ke SQL sbg identifier; payload
+    // sync datang dari luar device, jadi kunci ke bentuk identifier wajar
+    // (huruf kecil/underscore/digit) sebelum menyentuh PRAGMA/INSERT.
+    // Pemanggil sah selalu lolos (semua nama tabel app berpola ini).
+    if (!RegExp(r'^[a-z_][a-z0-9_]*$').hasMatch(tableName)) {
+      throw ArgumentError('Nama tabel sync tidak valid: $tableName');
+    }
     var count = 0;
     // Perangkat berbeda (owner/kasir) bisa update app tidak serentak — dump
     // dari pengirim yang schemanya lebih baru bisa membawa kolom yang belum
@@ -3366,11 +3417,16 @@ QueryExecutor _openConnection(String encryptionKey) {
         }
         rawDb.execute("PRAGMA key = '$encryptionKey';");
         // Performance tuning — dipasang setiap koneksi dibuka. WAL + cache
-        // besar + mmap menjaga query tetap cepat walau data menumpuk.
+        // + mmap menjaga query tetap cepat walau data menumpuk.
+        // Item 41 C.1 — cache diturunkan 64→16 MB & mmap 256→128 MB:
+        // target app ini HP kelas bawah RAM 1-2 GB (banyak 32-bit murni);
+        // cache 64 MB adalah heap murni SQLCipher yang justru memancing
+        // LMK/OOM-kill ("app tiba-tiba tertutup") — 16 MB masih sangat
+        // longgar utk pola query POS (baris kecil, indeks sudah lengkap).
         rawDb.execute('PRAGMA journal_mode = WAL;');
         rawDb.execute('PRAGMA synchronous = NORMAL;');
-        rawDb.execute('PRAGMA cache_size = -65536;'); // 64 MB page cache
-        rawDb.execute('PRAGMA mmap_size = 268435456;'); // 256 MB mmap
+        rawDb.execute('PRAGMA cache_size = -16384;'); // 16 MB page cache
+        rawDb.execute('PRAGMA mmap_size = 134217728;'); // 128 MB mmap
         rawDb.execute('PRAGMA temp_store = MEMORY;');
         rawDb.execute('PRAGMA foreign_keys = ON;');
       },

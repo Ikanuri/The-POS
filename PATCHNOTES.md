@@ -10,6 +10,29 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 18 Juli 2026
 
+### 🛡️ Keamanan & Keandalan Data
+- **Stok kini dihitung ulang dengan benar setelah sinkronisasi antar-HP** —
+  sebelumnya, kalau HP kasir dan HP owner sama-sama mencatat pergerakan
+  stok lalu sync, angka stok bisa diam-diam "melompat" mengikuti pandangan
+  salah satu HP saja (penjualan dari HP lain seolah hilang dari hitungan).
+  Sekarang seluruh pergerakan dari kedua HP digabung dan dihitung ulang
+  urut waktu, jadi angka stok selalu jumlah yang sebenarnya.
+- **Layar penyelamat "Kunci Toko Tidak Terbaca"** — di HP tertentu, sistem
+  penyimpanan aman Android bisa sesekali gagal dibaca. Dulu kondisi ini
+  membuat aplikasi tampak "ter-reset" ke layar setup dan data seolah
+  hilang. Sekarang muncul layar khusus dengan tombol "Coba Lagi"
+  (biasanya beres setelah HP di-restart) — data Anda tidak disentuh
+  sama sekali.
+- **Password backup minimal 8 karakter** — file backup/alihan owner hanya
+  sekuat password-nya; ekspor baru kini mewajibkan minimal 8 karakter.
+  File backup lama dengan password pendek tetap bisa dibuka seperti biasa.
+- **Pesan "Password salah" yang konsisten saat memulihkan backup** — dulu
+  dalam kasus langka, password salah bisa memunculkan error teknis yang
+  membingungkan alih-alih pesan yang jelas.
+- **Aplikasi lebih hemat memori saat sinkronisasi data besar** — sync toko
+  dengan riwayat panjang tidak lagi berisiko membuat aplikasi tertutup
+  sendiri di HP dengan RAM kecil.
+
 ### ✨ Fitur Baru
 - **Usulan harga/produk dari kasir/asisten kini bisa direview owner sebelum
   masuk ke data toko** — kalau kasir/asisten sempat ubah harga produk atau

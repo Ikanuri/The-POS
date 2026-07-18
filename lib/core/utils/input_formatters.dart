@@ -40,8 +40,14 @@ class ThousandsSeparatorFormatter extends TextInputFormatter {
   static String format(int value) => _group(value.toString());
 
   /// Ambil nilai integer dari string terformat ("150.000" → 150000).
+  /// Item 41 A.7 — input digit sangat panjang (field tanpa maxLength, mis.
+  /// dialog Ubah Total) dulu bikin `int.parse` melempar FormatException tak
+  /// tertangani (>19 digit melewati batas int 64-bit). Dipotong ke 15 digit
+  /// (ratusan triliun — jauh di atas nominal wajar) alih-alih throw.
   static int parseValue(String formatted) {
-    final digits = formatted.replaceAll(RegExp(r'[^0-9]'), '');
-    return digits.isEmpty ? 0 : int.parse(digits);
+    var digits = formatted.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return 0;
+    if (digits.length > 15) digits = digits.substring(0, 15);
+    return int.parse(digits);
   }
 }
