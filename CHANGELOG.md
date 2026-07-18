@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-17
 
+- `a1c2776` — fix: timeout total (bukan idle) memutus transfer sync besar yang masih aktif (babak ke-4 laporan asisten stok minus)
 - `939048a` — fix: sync LAN tanpa timeout HTTP → infinite loading di klien (babak ke-3 laporan asisten stok minus)
 - `d21889f` — fix: asisten tidak bisa override stok minus walau sudah digrant izin ("Jadi Host" sync khusus owner — master data cuma boleh mengalir dari owner sbg host)
 - `7f37d64` — fix: barcode produk/varian yang dinonaktifkan/dihapus terkunci permanen (lepas via mutasi nilai di `product_barcodes`, sync-safe tanpa ubah protokol)

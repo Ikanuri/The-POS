@@ -89,13 +89,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sumber data utama, kasir & asisten selalu jadi yang menyambung ke
   owner, supaya semua perubahan (izin, harga, produk) pasti tersalur.
 - **Sinkron WiFi tidak lagi bisa "loading selamanya" tanpa kabar apa
-  pun.** Sebelumnya, kalau ada gangguan jaringan sesaat (mis. WiFi
-  tertentu memblokir HP-ke-HP walau satu jaringan yang sama), tombol
-  "Sync" di HP kasir/asisten bisa berputar tanpa henti — tidak pernah
-  berhasil maupun gagal, dan HP owner juga tidak pernah tahu ada
+  pun** — sekaligus tidak lagi salah putus transfer yang sebenarnya
+  masih berjalan normal. Sebelumnya, kalau ada gangguan jaringan sesaat
+  (mis. WiFi tertentu memblokir HP-ke-HP walau satu jaringan yang sama),
+  tombol "Sync" di HP kasir/asisten bisa berputar tanpa henti — tidak
+  pernah berhasil maupun gagal, dan HP owner juga tidak pernah tahu ada
   percobaan sync yang bermasalah. Sekarang sinkron otomatis berhenti &
-  menampilkan pesan error yang jelas kalau tidak ada respons dalam waktu
-  wajar, supaya Anda tahu harus coba lagi (bukan menunggu tanpa batas).
+  menampilkan pesan error yang jelas kalau BENAR-BENAR tidak ada respons
+  sama sekali — tapi toko dengan data banyak (sync pertama kali,
+  katalog/riwayat besar) yang wajar makan waktu lebih lama tetap
+  dibiarkan selesai selama datanya terus mengalir, tidak lagi ikut
+  terputus paksa.
 
 ## 16 Juli 2026
 

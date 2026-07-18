@@ -6,24 +6,85 @@ keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 17 Juli 2026 (sesi lanjutan — fix barcode produk/
 varian terkunci permanen [`7f37d64`] + fix "Jadi Host" khusus owner
-[`d21889f`] + fix sync HTTP client TANPA TIMEOUT [belum di-commit] — 3
-babak dari satu laporan user yang sama "asisten tidak bisa override stok
-minus")._ Full `flutter test` **468 test hijau**, `flutter analyze` bersih
-(0 issue — env sesi ini pakai Flutter `3.24.5` sesuai pin CI
-`.github/workflows/*.yml`, JANGAN pakai versi lebih baru spt 3.32.0 — ada
-breaking change `CardTheme`→`CardThemeData` yg bikin compile gagal).
-schemaVersion masih 15. Branch kerja: `claude/review-branch-changes-g5agon`,
-SUDAH di-merge ke `main` sampai `e1d35f5` (fix "Jadi Host" owner-only) —
-fix timeout HTTP di bawah ini BELUM di-commit/push, tunggu konfirmasi user.
+[`d21889f`] + fix sync HTTP client TANPA TIMEOUT [`939048a`] + fix
+timeout TOTAL vs IDLE yang memutus transfer besar di tengah jalan [belum
+di-commit] — 4 babak dari SATU laporan user yang sama "asisten tidak
+bisa override stok minus")._ Full `flutter test` **469 test** (468 hijau
++ 1 test PRE-EXISTING FLAKY tidak terkait sesi ini — `stock_opname_
+screen_test.dart` gagal jg di baseline SEBELUM sentuhan apa pun sesi ini,
+dibuktikan via `git stash`; JANGAN otomatis curigai perubahan sync kalau
+lihat gagal ini lagi, cek dulu apakah memang flaky independen).
+`flutter analyze` bersih (0 issue — env sesi ini pakai Flutter `3.24.5`
+sesuai pin CI `.github/workflows/*.yml`, JANGAN pakai versi lebih baru
+spt 3.32.0 — ada breaking change `CardTheme`→`CardThemeData` yg bikin
+compile gagal). schemaVersion masih 15. Branch kerja:
+`claude/review-branch-changes-g5agon`, SUDAH di-merge ke `main` sampai
+`2a7ef21` (fix timeout HTTP dasar) — fix idle-vs-total timeout di bawah
+ini BELUM di-commit/push, tunggu konfirmasi user.
 
 **PENTING kalau laporan serupa muncul lagi**: bug "asisten tidak bisa
 override X walau sudah digrant izin" di app ini historisnya SELALU
 berlapis, jangan berhenti di investigasi pertama yang "lolos test" —
-lihat 3 babak di bawah, tiap babak nemuin lapisan baru yang test
+lihat 4 babak di bawah, tiap babak nemuin lapisan baru yang test
 sebelumnya TIDAK menyentuh sama sekali (logic fungsi izin → topologi
-host/klien sync → reliability jaringan HTTP-nya sendiri).
+host/klien sync → ADA-tidaknya timeout jaringan → jenis timeout yang
+BENAR/idle vs total). Kalau user lapor lagi soal sync lambat/lag/gagal
+SETELAH fix idle-timeout ini terpasang, curigai dulu: apakah timeout-nya
+(default 30s connect/response) masih kurang panjang utk ukuran data
+toko itu, sebelum cari bug baru dari nol.
 
-## Fix: sync HTTP client tanpa timeout → infinite loading di klien (17 Juli, BELUM di-commit/push, babak ke-3)
+## Fix: timeout TOTAL memutus transfer besar di tengah jalan (17 Juli, BELUM di-commit/push, babak ke-4)
+
+Lanjutan lagi — setelah fix timeout dasar (`939048a`) dipasang di APK &
+dites, user konfirmasi sync jadi SUKSES tapi user laporkan "ada sedikit
+lag", lalu setelah dicek lebih lanjut: **"Timeout memutus rantai
+transfer, padahal baru sampai"** — transfer yang SEDANG AKTIF mengalir
+(bukan macet) tetap terputus paksa.
+
+**Root cause**: di fix babak ke-3, `.timeout()` dipasang SETELAH
+`.toList()` — `respBytes = await response.expand((c) => c).toList()
+.timeout(responseTimeout)`. `Future.timeout()` adalah DEADLINE TOTAL
+(tidak peduli progres, cuma peduli total durasi sejak awal), BUKAN
+idle-timeout. Toko dengan data besar (banyak produk/transaksi, apalagi
+sync pertama kali yang full-dump) bisa transfer >20-30 detik SECARA
+WAJAR selama datanya terus mengalir — pola lama itu memutus transfer di
+tengah jalan walau tidak macet sama sekali, cuma butuh waktu lebih lama.
+
+**Fix**: pindahkan `.timeout()` ke SEBELUM `.toList()` — diterapkan ke
+`Stream<int>` (`response.expand((c) => c).timeout(responseTimeout)
+.toList()`), bukan ke `Future<List<int>>` hasil `.toList()`.
+`Stream.timeout()` itu timeout PER-EVENT (reset tiap ada chunk baru
+lewat) — jadi transfer lambat-tapi-terus-progresif TIDAK pernah kena,
+cuma transfer yang benar2 STALL (tidak ada byte baru sama sekali dalam
+`responseTimeout`) yang kena. Pola sama diterapkan ke sisi HOST
+(pembacaan body request klien). `responseTimeout` default dinaikkan
+20s→30s (dipakai dobel: deadline total tunggu host MULAI membalas — host
+perlu waktu susun+enkripsi SELURUH dump SEBELUM kirim byte pertama sama
+sekali, tidak streaming — DAN idle-timeout per-chunk saat baca body).
+
+Test: `test/lan_sync_slow_transfer_test.dart` — server TCP mentah
+mengirim body ASLI (payload terenkripsi valid, dibangun pakai
+`CryptoService` yg sama persis dgn yg dipakai host sungguhan) dalam 5
+potongan kecil dgn jeda 300ms antar-chunk (total ~1.5s), timeout test
+di-set 800ms — total durasi (1.5s) MELEBIHI timeout (800ms) tapi tiap
+jeda individual (300ms) DI BAWAHNYA — buktikan `syncToHost` tetap
+SUKSES (bukan gagal krn total durasi). Revert-verify: pola lama
+(`.toList().timeout()`) bikin test ini gagal persis dgn pesan "Tidak ada
+respons dari host dalam waktu wajar" walau data terus mengalir —
+dibuktikan via `git apply`/`git checkout --` bolak-balik.
+
+**Catatan test infra (bukan bug produksi)**: test file baru ini &
+`lan_sync_timeout_test.dart`/`lan_sync_watermark_test.dart` semua bind
+ke port TCP 8625 yg sama (port sync tetap) — kalau `flutter test`
+menjalankan beberapa file itu di worker paralel yg sama scr kebetulan,
+bisa tabrakan "Address already in use" (flaky, BUKAN bug kode). Sudah
+diverifikasi TIDAK terjadi di full-suite run normal (467-468 test lain
+tidak terpengaruh), kalau muncul lagi jalankan ulang atau pakai
+`--concurrency=1` utk isolasi.
+
+**Belum di-commit/push** — tunggu konfirmasi user.
+
+## Fix: sync HTTP client tanpa timeout → infinite loading di klien (17 Juli, babak ke-3, SUDAH di-commit `939048a`/`2a7ef21`, SUDAH di-merge ke main)
 
 Lanjutan laporan "asisten tidak bisa override stok minus" — setelah fix
 "Jadi Host" khusus owner (`d21889f`) dipasang di APK & dites ulang, user
