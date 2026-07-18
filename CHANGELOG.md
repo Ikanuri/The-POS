@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-18
 
+- `3e9d2e1` — docs: hasil verifikasi test nyata (Flutter 3.24.5: analyze 0 issue, 498 test hijau) + temuan D.5 gagal kompilasi di SDK 3.44.6
+- `b00d8bc` — docs: perbarui CHANGELOG/HANDOFF untuk sesi audit kode (Item 41)
 - `5944593` — docs: audit kode menyeluruh — temuan lengkap ke PLAN.md Item 41 (bug/silent bug, keamanan, performa/daya, kompatibilitas, clean code; prioritas P1-P3)
 - `120ead6` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk Item 40 (usulan harga/produk)
 - `fcadcb1` — feat: Item 40 — usulan harga/produk dari device non-owner via sync LAN (kolom products.locally_modified, dumpLocalProposals/applyProductProposals, queue _pendingProposals terpisah dari _pendingQueue, layar ProductProposalReviewScreen) — schemaVersion 15 -> 16
