@@ -11,9 +11,12 @@ D kompatibilitas, E clean code) dengan prioritas [P1]–[P3]; belum ada
 satu pun yang dieksekusi — mulai dari [P1]: stok multi-device korup
 pasca-sync (`stock_after` tidak direkonsiliasi), zona waktu watermark
 sync (`toIso8601String()` lokal tanpa offset), dan storeKey polos di QR
-pairing tanpa mekanisme revoke. Catatan environment: Flutter SDK tidak
-tersedia di sesi audit, jadi `flutter analyze`/`test` TIDAK dijalankan
-(angka test di bawah dari sesi sebelumnya). Sesi sebelumnya (18 Juli):
+pairing tanpa mekanisme revoke. Lanjutan sesi yang sama: Flutter 3.24.5
+(persis pin CI) di-install manual → `flutter analyze` BERSIH (0 issue) &
+`flutter test` **498 test SEMUA HIJAU** (2m36s) — klaim terverifikasi
+ulang. Percobaan SDK 3.44.6 stable: proyek GAGAL kompilasi (1 error
+CardTheme→CardThemeData + 53 deprecation) → tercatat sbg Item 41 D.5
+(rencanakan sesi upgrade SDK khusus). Sesi sebelumnya (18 Juli):
 Item 40 "usulan harga/produk dari device non-owner" [`fcadcb1`] — kini
 SUDAH ada di `main`; Item 39 [`5c244da`] + fix kembalian struk
 [`3f3a4c0`] juga sudah di `main`._ Full `flutter test` **498 test, SEMUA

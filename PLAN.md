@@ -445,9 +445,15 @@ konfirmasi hasil tes user** — tanyakan kalau sesi depan lanjut.
 Sesi audit baca-kode penuh (tanpa perubahan kode): clean code, bug/silent
 bug, keamanan, kompatibilitas, performa/daya. Prioritas ditandai **[P1]**
 (berisiko data/uang), **[P2]** (patut segera), **[P3]** (nice-to-have).
-Catatan: Flutter SDK tidak tersedia di environment sesi ini, jadi
-`flutter analyze`/`flutter test` TIDAK dijalankan — semua temuan dari
-pembacaan kode.
+Update (masih 18 Juli, sesi yang sama): Flutter SDK akhirnya di-install
+manual di environment (3.24.5, persis versi CI) — `flutter analyze`
+**bersih (0 issue)** dan `flutter test` **498 test SEMUA HIJAU** (2m36s),
+konsisten dgn klaim HANDOFF. Temuan tambahan dari percobaan SDK terbaru
+(3.44.6 stable): proyek **TIDAK terkompilasi** di sana — 1 error
+`CardTheme` → `CardThemeData` (`app_theme.dart:175`, breaking change
+Material) + 53 info deprecation (`withOpacity`→`withValues`,
+`DropdownButtonFormField.value`→`initialValue`, `onReorder`→
+`onReorderItem`). Lihat D.5 di bawah.
 
 ### A. Bug & silent bug
 
@@ -623,6 +629,13 @@ scanner, Bluetooth print, layar). Yang patut dibenahi:
    upgrade dependency.
 4. **[P3] CLAUDE.md basi:** tertulis `schemaVersion = 9`, kode sudah 16.
    (Perbaiki saat menyentuh CLAUDE.md berikutnya.)
+5. **[P3] Terkunci di Flutter 3.24.5 (CI pin):** diverifikasi nyata — di
+   Flutter stable terbaru (3.44.6) proyek gagal kompilasi: 1 error
+   `cardTheme: CardTheme(...)` harus jadi `CardThemeData(...)`
+   (`app_theme.dart:175`) + 53 deprecation (`withOpacity`,
+   `DropdownButtonFormField.value`, `onReorder`). Bukan darurat (CI pin
+   3.24.5 tetap hijau), tapi makin lama makin mahal: rencanakan satu sesi
+   upgrade SDK khusus (fix error+deprecation serentak, full test).
 
 ### E. Clean code
 
