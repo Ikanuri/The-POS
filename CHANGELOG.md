@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-18
 
+- `5944593` — docs: audit kode menyeluruh — temuan lengkap ke PLAN.md Item 41 (bug/silent bug, keamanan, performa/daya, kompatibilitas, clean code; prioritas P1-P3)
+- `120ead6` — docs: perbarui CHANGELOG/PATCHNOTES/HANDOFF untuk Item 40 (usulan harga/produk)
 - `fcadcb1` — feat: Item 40 — usulan harga/produk dari device non-owner via sync LAN (kolom products.locally_modified, dumpLocalProposals/applyProductProposals, queue _pendingProposals terpisah dari _pendingQueue, layar ProductProposalReviewScreen) — schemaVersion 15 -> 16
 - `3f3a4c0` — fix: struk cetak/gambar tampilkan kembalian pembayaran TERAKHIR (bukan tx.changeAmount akumulasi) — printer_service.dart + _ReceiptPaper, konsisten dgn Ringkasan on-screen & nota gabungan
 - `5c244da` — feat: Item 39 — sync LAN lebih andal (deteksi IP dual-strategi + tombol Refresh IP + profil timeout dipilih user + pesan error dipertajam + logging CrashLogService)

@@ -4,23 +4,25 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Terakhir diperbarui: 18 Juli 2026 (sesi lanjutan — Item 40 "usulan
-harga/produk dari device non-owner via sync LAN" [`fcadcb1`], SUDAH
-di-commit & di-push ke `claude/setup-dependencies-am31te`, BELUM
-di-merge ke `main` — tanyakan user kalau mau merge). Sebelumnya di sesi
-yg sama: Item 39 "sync LAN lebih andal" [`5c244da`] + fix "Kembali" struk
-cetak/gambar akumulasi [`3f3a4c0`], SUDAH di-commit & SUDAH di-merge ke
-`main`. Sesi 17 Juli sebelumnya (4 babak laporan "asisten tidak bisa
-override stok minus": fix barcode terkunci `7f37d64`, "Jadi Host" khusus
-owner `d21889f`, timeout HTTP client `939048a`, idle-vs-total timeout
-`a1c2776`) SEMUA SUDAH di-commit & SUDAH di-merge ke `main` (lihat
-CHANGELOG `2026-07-17` — status "belum di-commit" yg mungkin masih
-tertulis di bagian bawah dokumen ini SUDAH BASI, abaikan, cek CHANGELOG
-sbg sumber kebenaran commit)._ Full `flutter test` **498 test, SEMUA
-HIJAU** (naik dari 489 — 9 test baru Item 40: `product_proposal_test.
-dart` 6, `migration_v16_test.dart` 1, `product_proposal_review_screen_
-test.dart` 2), `flutter analyze` bersih (0 issue). **schemaVersion 15 ->
-16** (kolom `products.locally_modified`).
+_Terakhir diperbarui: 18 Juli 2026 (sesi AUDIT KODE — baca-kode saja,
+TIDAK ada perubahan kode produksi). Hasil: **PLAN.md Item 41** berisi
+daftar temuan lengkap (A bug/silent bug, B keamanan, C performa/daya,
+D kompatibilitas, E clean code) dengan prioritas [P1]–[P3]; belum ada
+satu pun yang dieksekusi — mulai dari [P1]: stok multi-device korup
+pasca-sync (`stock_after` tidak direkonsiliasi), zona waktu watermark
+sync (`toIso8601String()` lokal tanpa offset), dan storeKey polos di QR
+pairing tanpa mekanisme revoke. Catatan environment: Flutter SDK tidak
+tersedia di sesi audit, jadi `flutter analyze`/`test` TIDAK dijalankan
+(angka test di bawah dari sesi sebelumnya). Sesi sebelumnya (18 Juli):
+Item 40 "usulan harga/produk dari device non-owner" [`fcadcb1`] — kini
+SUDAH ada di `main`; Item 39 [`5c244da`] + fix kembalian struk
+[`3f3a4c0`] juga sudah di `main`._ Full `flutter test` **498 test, SEMUA
+HIJAU** (per sesi 18 Juli pra-audit; 9 test baru Item 40:
+`product_proposal_test.dart` 6, `migration_v16_test.dart` 1,
+`product_proposal_review_screen_test.dart` 2), `flutter analyze` bersih
+(0 issue). **schemaVersion 16** (kolom `products.locally_modified`).
+CLAUDE.md masih menulis schemaVersion 9 — basi, kode adalah sumber
+kebenaran (tercatat di Item 41 D.4).
 
 ## Item 40 — Usulan harga/produk dari device non-owner via sync LAN (18 Juli, SELESAI & di-commit `fcadcb1`)
 
