@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -332,7 +333,17 @@ class LanSyncService {
     }
 
     try {
-      final bodyBytes = await request.read().expand((c) => c).toList();
+      // Defense-in-depth: kalau koneksi klien berhenti mengirim di tengah
+      // jalan (mis. klien crash/app dibunuh OS saat transfer), jangan
+      // gantung handler ini selamanya — request lain masih bisa diproses
+      // shelf secara paralel, tapi tetap baik untuk membatasi resource yg
+      // nyangkut. Titik infinite-loading yang dilaporkan user ada di sisi
+      // KLIEN (syncToHost), ini cuma pengaman tambahan di sisi host.
+      final bodyBytes = await request
+          .read()
+          .expand((c) => c)
+          .toList()
+          .timeout(const Duration(seconds: 30));
       if (bodyBytes.length > _kMaxPayloadBytes) {
         return shelf.Response(413, body: 'Payload too large');
       }
@@ -513,6 +524,10 @@ class LanSyncService {
     required String hostIp,
     required String syncToken,
     DateTime? since,
+    // Dapat dipersingkat di test (mis. simulasi host yang tidak pernah
+    // membalas) tanpa memperlambat suite dgn menunggu timeout produksi.
+    Duration connectTimeout = const Duration(seconds: 10),
+    Duration responseTimeout = const Duration(seconds: 20),
   }) async {
     final key = CryptoService.deriveSyncKey(storeKey, syncToken);
     // Watermark host→klien: kalau caller tidak beri `since` eksplisit, pakai
@@ -553,23 +568,46 @@ class LanSyncService {
     );
     final hmacHex = hmac.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-    final client = HttpClient();
+    // B-5: tanpa timeout, request yang hang (mis. IP host sudah tidak valid,
+    // AP client isolation di WiFi diam-diam membuang paket, atau host sempat
+    // freeze) bikin _sync() di UI klien LOADING SELAMANYA — tidak pernah
+    // sukses ATAUPUN gagal, jadi owner juga tidak pernah lihat konfirmasi
+    // apa pun (klien-nya sendiri tidak pernah selesai memproses). Timeout di
+    // sini memastikan syncToHost SELALU akhirnya throw kalau jaringan
+    // bermasalah, supaya UI bisa tampilkan pesan error & berhenti spinning.
+    final client = HttpClient()..connectionTimeout = connectTimeout;
     try {
-      final request = await client.post(hostIp, _kSyncPort, 'sync');
-      request.headers.set('x-sync-token', syncToken);
-      request.headers.set('x-sync-nonce', nonce);
-      request.headers.set('x-sync-ts', tsStr);
-      request.headers.set('x-sync-hmac', hmacHex);
-      request.headers.set('content-type', 'application/octet-stream');
-      request.add(encryptedBytes);
-      final response = await request.close();
+      final HttpClientResponse response;
+      final List<int> respBytes;
+      try {
+        final request = await client
+            .post(hostIp, _kSyncPort, 'sync')
+            .timeout(connectTimeout);
+        request.headers.set('x-sync-token', syncToken);
+        request.headers.set('x-sync-nonce', nonce);
+        request.headers.set('x-sync-ts', tsStr);
+        request.headers.set('x-sync-hmac', hmacHex);
+        request.headers.set('content-type', 'application/octet-stream');
+        request.add(encryptedBytes);
+        response = await request.close().timeout(responseTimeout);
+        respBytes =
+            await response.expand((c) => c).toList().timeout(responseTimeout);
+      } on TimeoutException {
+        throw Exception(
+            'Tidak ada respons dari host dalam waktu wajar. Pastikan kedua '
+            'perangkat terhubung ke WiFi yang sama, dan IP/Token host masih '
+            'berlaku (coba mulai ulang server di HP owner lalu scan ulang).');
+      } on SocketException catch (e) {
+        throw Exception(
+            'Tidak bisa terhubung ke host ($hostIp): ${e.message}. Pastikan '
+            'kedua perangkat terhubung ke WiFi yang sama & IP masih benar.');
+      }
 
       if (response.statusCode != 200) {
-        final body = await response.transform(utf8.decoder).join();
+        final body = utf8.decode(respBytes);
         throw Exception('Server error ${response.statusCode}: $body');
       }
 
-      final respBytes = await response.expand((c) => c).toList();
       final respJson = CryptoService.decryptText(
           base64Encode(respBytes), Uint8List.fromList(key));
       final respPayload = jsonDecode(respJson) as Map<String, dynamic>;
