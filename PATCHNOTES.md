@@ -28,6 +28,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   app sehingga koneksi terputus otomatis, atau HP kasir sedang pakai jalur
   data seluler alih-alih WiFi. Deteksi IP host juga dibuat lebih andal
   (pakai cara cadangan otomatis kalau cara utama gagal di HP tertentu).
+- **Struk cetak & struk gambar (share) sekarang menampilkan kembalian yang
+  benar** — sebelumnya, kalau kembalian yang sudah pernah diberikan
+  dipakai lagi sebagai pembayaran (mis. saat "Tambah Belanjaan"), baris
+  "Kembali" di struk bisa menampilkan angka yang salah (akumulasi dari
+  seluruh riwayat pembayaran nota, bukan kembalian yang baru saja
+  diberikan). Sekarang selalu menampilkan kembalian dari pembayaran
+  TERAKHIR, konsisten dengan Ringkasan di layar.
 
 ## 17 Juli 2026
 

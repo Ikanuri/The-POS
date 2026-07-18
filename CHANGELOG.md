@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-18
 
+- `3f3a4c0` — fix: struk cetak/gambar tampilkan kembalian pembayaran TERAKHIR (bukan tx.changeAmount akumulasi) — printer_service.dart + _ReceiptPaper, konsisten dgn Ringkasan on-screen & nota gabungan
 - `5c244da` — feat: Item 39 — sync LAN lebih andal (deteksi IP dual-strategi + tombol Refresh IP + profil timeout dipilih user + pesan error dipertajam + logging CrashLogService)
 
 ## 2026-07-17

@@ -5,7 +5,8 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Terakhir diperbarui: 18 Juli 2026 (sesi lanjutan — Item 39 "sync LAN
-lebih andal" [`5c244da`], SUDAH di-commit & di-push ke
+lebih andal" [`5c244da`] + fix "Kembali" struk cetak/gambar akumulasi
+[`3f3a4c0`], SUDAH di-commit & di-push ke
 `claude/setup-dependencies-am31te`). Sesi 17 Juli sebelumnya (4 babak
 laporan "asisten tidak bisa override stok minus": fix barcode terkunci
 `7f37d64`, "Jadi Host" khusus owner `d21889f`, timeout HTTP client
@@ -13,11 +14,58 @@ laporan "asisten tidak bisa override stok minus": fix barcode terkunci
 di-merge ke `main` (lihat CHANGELOG `2026-07-17` — status "belum
 di-commit" yg mungkin masih tertulis di bagian bawah dokumen ini SUDAH
 BASI, abaikan, cek CHANGELOG sbg sumber kebenaran commit)._ Full `flutter
-test` **488 test, SEMUA HIJAU** (naik dari 469 sebelum sesi ini — 19 test
-baru dari Item 39), `flutter analyze` bersih (0 issue). schemaVersion
-masih 15 (Item
-39 tidak butuh migrasi — profil timeout disimpan sbg key `app_settings`
-baru `sync_timeout_profile`).
+test` **489 test, SEMUA HIJAU** (naik dari 488 setelah Item 39 — 1 test
+baru dari fix kembalian struk), `flutter analyze` bersih (0 issue).
+schemaVersion masih 15 (baik Item 39 maupun fix kembalian TIDAK butuh
+migrasi skema).
+
+## Fix: struk cetak/gambar "Kembali" akumulasi, bukan pembayaran terakhir (18 Juli, SELESAI & di-commit `3f3a4c0`)
+
+User lapor: di nota/struk yang dicetak, baris "Kembali" seharusnya
+menampilkan kembalian TERAKHIR, bukan akumulasi. Root cause: baik
+`printer_service.dart` (`_buildBytes`, struk ESC/POS tunggal) maupun
+`_ReceiptPaper` (widget struk gambar/share di `receipt_screen.dart`)
+masih memakai `tx.changeAmount` MENTAH — kolom header yang dihitung ulang
+dari `Σpayments.amount - total` tiap kali `_reconcileTransactionTotals`
+jalan, sehingga kalau kembalian lama dipakai ulang sbg pembayaran baru
+(mis. "Tambah Belanjaan"), nilainya jadi AKUMULASI seluruh riwayat
+kembalian nota, bukan cuma yang baru saja diberikan. Ini adalah lokasi
+YANG SAMA yang sudah lama tercatat sbg "belum diperbaiki" di Item 23 lama
+(scope "printer_service.dart printReceipt tunggal — beda dari
+_ReceiptPaper yang SUDAH diperbaiki" — catatan itu keliru: `_ReceiptPaper`
+TERNYATA belum pernah diperbaiki juga, sama-sama pakai `tx.changeAmount`
+mentah).
+
+**Fix**: tambah fungsi `latestChangeGiven(payments)` di `receipt_screen.
+dart` (pola sepadan dgn `netRemainingOwed`/`netPaidDisplay` yg sudah ada)
+— ambil `changeGiven` dari pembayaran TERAKHIR yang tidak dibatalkan.
+Dipakai di `_ReceiptPaper` (ganti `tx.changeAmount`) & logika sepadan
+inline di `printer_service.dart._buildBytes` (ganti `tx.changeAmount`,
+plus tambah baris "Uang Diterima" gross dari pembayaran terakhir, sama
+seperti pola nota gabungan `_buildMergedBytes` yang sudah lama benar).
+"Bayar"/"Bayar.." juga diganti dari `tx.paid` mentah ke net (dikurangi
+total kembalian yg pernah diberikan) supaya "Total = Bayar + Kembali"
+tetap konsisten — bukan cuma baris Kembali yang diperbaiki sendirian.
+
+**Bug kecil ikut ketemu & diperbaiki** (bukan yg dilaporkan user, ketahuan
+saat menulis test skenario 2-pembayaran): Row timeline riwayat pembayaran
+di `_ReceiptPaper` overflow kalau teks tanggal+metode cukup panjang —
+dibungkus `Expanded`. Jalur ini rupanya belum pernah teruji sebelumnya di
+widget struk gambar (beda dari timeline di Ringkasan on-screen yang sudah
+ada test-nya).
+
+Test: `test/receipt_paper_kembali_net_test.dart` — skenario 2 pembayaran
+di mana `tx.changeAmount` (akumulasi, 15.000) BEDA dari kembalian
+pembayaran terakhir yang benar (5.000), verifikasi struk gambar tampilkan
+5.000 bukan 15.000. Revert-verify: kembalikan ke `tx.changeAmount` mentah
+→ test gagal persis ("Rp 5.000" tidak ditemukan) → fix dikembalikan,
+hijau lagi.
+
+**Catatan test infra (bukan bug produksi)**: pastikan `db.close()` HANYA
+dipanggil sekali (via `tearDown`, JANGAN dobel dgn pemanggilan eksplisit
+di akhir body test) — sempat bikin test ini HANG >3 menit tanpa pesan
+error yang jelas sebelum ketahuan akar masalahnya murni dari double-close,
+bukan bug di kode yang diuji.
 
 ## Item 39 — Sync LAN lebih andal: deteksi IP + profil timeout + logging (18 Juli, SELESAI & di-commit)
 
