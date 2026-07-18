@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:drift/drift.dart' show Variable;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -144,6 +145,17 @@ class LanSyncService {
 
   static List<PendingProductProposal> get pendingProposals =>
       List.unmodifiable(_pendingProposals);
+
+  /// Test-only seam: isi `_pendingProposals` tanpa perlu host/HTTP
+  /// sungguhan (real socket dari beberapa test file berjalan konkuren di
+  /// full-suite bisa saling tabrakan/hang di port sync yang sama).
+  @visibleForTesting
+  static void debugAddProposal(PendingProductProposal p) {
+    _pendingProposals.add(p);
+  }
+
+  @visibleForTesting
+  static void debugClearProposals() => _pendingProposals.clear();
 
   /// Buang usulan tanpa menerapkan apa pun — TIDAK ada tracking "ditolak"
   /// permanen: kalau device asal belum mengubah produk itu lagi, usulan

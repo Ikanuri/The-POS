@@ -461,6 +461,9 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                         '${mins == 0 ? 'Baru saja' : '$mins menit lalu'}',
                         style: const TextStyle(fontSize: 12)),
                     trailing: FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                      ),
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) =>
