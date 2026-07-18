@@ -20,6 +20,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   bool _hostRunning = false;
   String _hostIp = '';
   String _hostToken = '';
+  bool _refreshingIp = false;
   List<PendingSyncItem> _queue = [];
 
   // Client state
@@ -27,6 +28,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   final _tokenCtrl = TextEditingController();
   bool _syncing = false;
   String? _syncResult;
+  SyncTimeoutProfile _timeoutProfile = SyncTimeoutProfile.normal;
 
   @override
   void initState() {
@@ -35,6 +37,30 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
     LanSyncService.onQueueChanged = () {
       if (mounted) setState(() => _queue = LanSyncService.pendingQueue.toList());
     };
+    _loadTimeoutProfile();
+  }
+
+  Future<void> _loadTimeoutProfile() async {
+    final db = ref.read(databaseProvider);
+    final profile = await SyncTimeoutProfile.load(db);
+    if (mounted) setState(() => _timeoutProfile = profile);
+  }
+
+  Future<void> _refreshIp() async {
+    setState(() => _refreshingIp = true);
+    try {
+      final ip = await LanSyncService.refreshHostIp();
+      if (!mounted) return;
+      final changed = ip != _hostIp;
+      setState(() => _hostIp = ip);
+      showSuccess(changed
+          ? 'IP diperbarui: $ip — bagikan ulang QR ke kasir'
+          : 'IP masih sama: $ip');
+    } catch (e) {
+      if (mounted) showError('Gagal refresh IP: $e');
+    } finally {
+      if (mounted) setState(() => _refreshingIp = false);
+    }
   }
 
   @override
@@ -178,6 +204,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
         storeKey: device.storeKey!,
         hostIp: ip,
         syncToken: token,
+        connectTimeout: _timeoutProfile.connectTimeout,
+        responseTimeout: _timeoutProfile.responseTimeout,
       );
       if (!mounted) return;
       setState(() {
@@ -236,12 +264,55 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                       'perlu terhubung ke jaringan WiFi yang sama.',
                       style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
                     ),
+                    if (_hostRunning) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 14, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Biarkan layar HP ini menyala & aplikasi tetap '
+                              'di depan selama menunggu kasir sync — sebagian '
+                              'HP mematikan koneksi latar belakang otomatis '
+                              'kalau layar dikunci/app di-minimize.',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     if (_hostRunning) ...[
                       _InfoRow(
                         label: 'IP',
                         value: '$_hostIp:8625',
                         onCopy: () => _copy('$_hostIp:8625', 'IP'),
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _refreshingIp ? null : _refreshIp,
+                          icon: _refreshingIp
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2))
+                              : const Icon(Icons.refresh, size: 16),
+                          label: const Text('Refresh IP',
+                              style: TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 32),
+                              tapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       _InfoRow(
@@ -406,6 +477,34 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                     maxLength: 12,
                   ),
                   const SizedBox(height: 4),
+                  DropdownButtonFormField<SyncTimeoutProfile>(
+                    value: _timeoutProfile,
+                    decoration: const InputDecoration(
+                      labelText: 'Batas Waktu Tunggu (Timeout)',
+                      isDense: true,
+                    ),
+                    items: SyncTimeoutProfile.values
+                        .map((p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(p.label,
+                                  style: const TextStyle(fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (p) async {
+                      if (p == null) return;
+                      setState(() => _timeoutProfile = p);
+                      await SyncTimeoutProfile.save(
+                          ref.read(databaseProvider), p);
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Naikkan kalau sync sering gagal timeout padahal jaringan '
+                    'sebenarnya OK (mis. toko dgn riwayat data besar, atau '
+                    'WiFi yang cenderung lemot).',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
                   if (_syncing)
                     const Row(children: [
                       SizedBox(

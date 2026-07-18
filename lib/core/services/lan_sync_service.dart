@@ -10,8 +10,41 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import '../database/app_database.dart';
+import 'crash_log_service.dart';
 import 'crypto_service.dart';
 import 'tutup_buku_service.dart';
+
+/// Profil timeout sync (Item 39) — beberapa toko punya data jauh lebih besar
+/// (sync pertama kali, riwayat panjang) atau jaringan WiFi yang lemot/tidak
+/// stabil, jadi default 10s/30s bisa kepotong sebelum transfer selesai.
+/// Disimpan sbg key `app_settings` (`sync_timeout_profile`), dipilih owner/
+/// kasir di layar Sync WiFi, dibaca ulang tiap mau sync (bukan tersimpan di
+/// memori — supaya konsisten walau app di-restart di antara sync).
+enum SyncTimeoutProfile {
+  cepat('cepat', 'Cepat (LAN bagus)', Duration(seconds: 5), Duration(seconds: 15)),
+  normal('normal', 'Normal (default)', Duration(seconds: 10), Duration(seconds: 30)),
+  lambat('lambat', 'Lambat (data besar/WiFi lemot)', Duration(seconds: 20), Duration(seconds: 90)),
+  sangatLambat('sangat_lambat', 'Sangat Lambat (toko besar)', Duration(seconds: 30), Duration(seconds: 180));
+
+  const SyncTimeoutProfile(this.key, this.label, this.connectTimeout, this.responseTimeout);
+  final String key;
+  final String label;
+  final Duration connectTimeout;
+  final Duration responseTimeout;
+
+  static const _kSettingKey = 'sync_timeout_profile';
+
+  static SyncTimeoutProfile fromKey(String? key) =>
+      values.firstWhere((p) => p.key == key, orElse: () => normal);
+
+  static Future<SyncTimeoutProfile> load(AppDatabase db) async {
+    final raw = await db.getSetting(_kSettingKey);
+    return fromKey(raw);
+  }
+
+  static Future<void> save(AppDatabase db, SyncTimeoutProfile profile) =>
+      db.setSetting(_kSettingKey, profile.key);
+}
 
 const _kSyncPort = 8625;
 // 50 MB max payload — protects the host from memory-exhaustion DoS.
@@ -124,9 +157,75 @@ class LanSyncService {
     _server =
         await shelf_io.serve(handler, InternetAddress.anyIPv4, _kSyncPort);
 
-    final networkInfo = NetworkInfo();
-    final ip = await networkInfo.getWifiIP() ?? 'Unknown IP';
+    final ip = await detectHostIp();
     return (ip, _syncToken!);
+  }
+
+  /// Deteksi ulang IP host TANPA restart server — dipakai tombol "Refresh
+  /// IP" di layar Sync WiFi. IP device bisa berubah SAAT server sudah jalan
+  /// (lease DHCP baru, roaming antar-titik akses mesh WiFi, reconnect
+  /// setelah layar mati lama) tanpa server itu sendiri ikut mati — QR/IP
+  /// yang ditampilkan jadi basi kalau owner tidak pernah refresh manual.
+  static Future<String> refreshHostIp() => detectHostIp();
+
+  /// Deteksi IP LAN device ini. Strategi ganda:
+  /// 1. `NetworkInfo.getWifiIP()` (API WiFi manager Android) — cara utama,
+  ///    tapi TIDAK selalu bisa diandalkan di semua ROM/versi Android (bisa
+  ///    balik null/basi di device tertentu).
+  /// 2. Fallback: enumerasi `NetworkInterface.list()` langsung (dart:io,
+  ///    TIDAK butuh izin tambahan apa pun) mencari alamat IPv4 privat
+  ///    pertama — cara ini independen dari API WiFi manager sama sekali,
+  ///    jadi tetap jalan walau strategi 1 gagal karena alasan platform.
+  /// Kegagalan fallback dicatat ke [CrashLogService] (bukan dilempar) —
+  /// murni utk membantu diagnosis laporan "kadang tidak tersambung" nanti,
+  /// bukan fitur inti yang boleh menggagalkan start host.
+  static Future<String> detectHostIp({
+    Future<String?> Function()? getWifiIpOverride,
+    Future<List<NetworkInterface>> Function()? listInterfacesOverride,
+  }) async {
+    try {
+      final wifiIp = await (getWifiIpOverride ?? _defaultGetWifiIp)();
+      if (wifiIp != null && wifiIp.isNotEmpty && wifiIp != '0.0.0.0') {
+        return wifiIp;
+      }
+    } catch (e, st) {
+      await CrashLogService.record(e, st, context: 'lan_sync_ip_wifi_api');
+    }
+
+    try {
+      final interfaces =
+          await (listInterfacesOverride ?? _defaultListInterfaces)();
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (isPrivateIPv4(addr.address)) return addr.address;
+        }
+      }
+    } catch (e, st) {
+      await CrashLogService.record(e, st, context: 'lan_sync_ip_fallback');
+    }
+
+    await CrashLogService.record(
+        'Gagal deteksi IP LAN via kedua strategi (WiFi API & NetworkInterface)',
+        null,
+        context: 'lan_sync_ip_detect_failed');
+    return 'Unknown IP';
+  }
+
+  static Future<String?> _defaultGetWifiIp() => NetworkInfo().getWifiIP();
+
+  static Future<List<NetworkInterface>> _defaultListInterfaces() =>
+      NetworkInterface.list(
+          includeLoopback: false, type: InternetAddressType.IPv4);
+
+  /// true bila [ip] termasuk rentang IPv4 privat (RFC 1918) — dipakai
+  /// filter kandidat IP LAN dari [detectHostIp]. Public & pure (mudah
+  /// diuji tanpa I/O nyata).
+  static bool isPrivateIPv4(String ip) {
+    final parts = ip.split('.').map(int.tryParse).toList();
+    if (parts.length != 4 || parts.any((p) => p == null)) return false;
+    final a = parts[0]!, b = parts[1]!;
+    if (a < 0 || a > 255 || b < 0 || b > 255) return false;
+    return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168);
   }
 
   /// Buang baris append-only yang tanggalnya jatuh di tahun yang SUDAH
@@ -460,7 +559,11 @@ class LanSyncService {
         base64Decode(encrypted),
         headers: {'content-type': 'application/octet-stream'},
       );
-    } catch (e) {
+    } catch (e, st) {
+      // Log utk diagnosis laporan "kadang tidak tersambung" — request yang
+      // sampai sini SUDAH lolos rate-limit/token, jadi gagalnya di tahap
+      // decrypt/parse/merge, bukan masalah jaringan (itu domain klien).
+      await CrashLogService.record(e, st, context: 'lan_sync_host_request');
       return shelf.Response.internalServerError(body: 'Sync failed');
     }
   }
@@ -610,15 +713,36 @@ class LanSyncService {
         // pola lama (`.toList().timeout(...)`) memutus transfer itu di
         // tengah jalan padahal sedang aktif menerima data, bukan macet.
         respBytes = await response.expand((c) => c).timeout(responseTimeout).toList();
-      } on TimeoutException {
+      } on TimeoutException catch (e, st) {
+        await CrashLogService.record(e, st,
+            context: 'lan_sync_client_timeout hostIp=$hostIp '
+                'connectTimeout=$connectTimeout responseTimeout=$responseTimeout');
         throw Exception(
-            'Tidak ada respons dari host dalam waktu wajar. Pastikan kedua '
-            'perangkat terhubung ke WiFi yang sama, dan IP/Token host masih '
-            'berlaku (coba mulai ulang server di HP owner lalu scan ulang).');
-      } on SocketException catch (e) {
+            'Tidak ada respons dari host dalam waktu wajar. Kemungkinan '
+            'penyebab: (1) router memblokir koneksi antar-HP walau satu '
+            'WiFi (fitur "isolasi klien"), (2) HP owner mengunci layar/'
+            'pindah app lain sehingga koneksi latar belakang dimatikan '
+            'sistem, atau (3) data toko sangat besar & butuh waktu lebih '
+            'lama — coba naikkan profil timeout di bawah. Pastikan juga '
+            'IP/Token host masih berlaku (mulai ulang server di HP owner '
+            'lalu scan ulang).');
+      } on SocketException catch (e, st) {
+        await CrashLogService.record(e, st,
+            context: 'lan_sync_client_socket hostIp=$hostIp');
+        final msg = e.message.toLowerCase();
+        final hint = msg.contains('unreachable')
+            ? ' Kemungkinan HP ini sedang pakai jalur data seluler, bukan '
+                'WiFi, utk koneksi ke perangkat lain — coba matikan data '
+                'seluler sementara lalu sync ulang.'
+            : msg.contains('refused') || msg.contains('no route')
+                ? ' Kemungkinan IP sudah tidak sesuai (device owner ganti '
+                    'jaringan/restart) atau router mengisolasi koneksi '
+                    'antar-HP — minta owner refresh IP & bagikan ulang QR.'
+                : '';
         throw Exception(
-            'Tidak bisa terhubung ke host ($hostIp): ${e.message}. Pastikan '
-            'kedua perangkat terhubung ke WiFi yang sama & IP masih benar.');
+            'Tidak bisa terhubung ke host ($hostIp): ${e.message}.$hint '
+            'Pastikan kedua perangkat terhubung ke WiFi yang sama & IP '
+            'masih benar.');
       }
 
       if (response.statusCode != 200) {
