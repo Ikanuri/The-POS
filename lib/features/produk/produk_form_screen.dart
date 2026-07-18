@@ -449,6 +449,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         altPricesByUnitTempId: altPrices,
       );
 
+      // Item 40 — tandai "usulan harga/produk" HANYA di device non-owner
+      // (owner adalah sumber kebenaran, tidak perlu mengusulkan ke diri
+      // sendiri). Dikirim ke owner via sync LAN utk direview manual.
+      if (!ref.read(deviceProvider).isOwner) {
+        await db.markProductLocallyModified(prodId);
+      }
+
       // Invalidate catalog detail cache (price tiers don't trigger watchProducts).
       ref.read(productUpdateCountProvider.notifier).state++;
 
@@ -1021,6 +1028,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         barcode: res.barcode,
         isNonStock: !res.trackStock,
       );
+      // Item 40 — usulan harga/produk dari device non-owner (lihat catatan
+      // sama di _persistProduct).
+      if (!ref.read(deviceProvider).isOwner) {
+        await db.markProductLocallyModified(variantId);
+      }
       // Lacak agar bisa diurungkan bila edit dibatalkan; tandai dirty supaya
       // dialog konfirmasi muncul saat menekan kembali.
       _sessionVariantIds.add(variantId);
@@ -1093,6 +1105,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         barcode: res.barcode,
         isNonStock: !res.trackStock,
       );
+      // Item 40 — usulan harga/produk dari device non-owner.
+      if (!ref.read(deviceProvider).isOwner) {
+        await db.markProductLocallyModified(v.id);
+      }
       ref.read(productUpdateCountProvider.notifier).state++;
       if (mounted) {
         _showBanner(

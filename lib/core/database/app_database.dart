@@ -145,7 +145,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -259,6 +259,10 @@ class AppDatabase extends _$AppDatabase {
             // lokal, tidak disimpan) + "Batalkan Pembayaran" per-baris.
             await m.addColumn(transactions, transactions.checkedItemIds);
             await m.addColumn(transactionPayments, transactionPayments.voided);
+          }
+          if (from < 16) {
+            // Item 40 — usulan harga/produk dari device non-owner via sync.
+            await m.addColumn(products, products.locallyModified);
           }
         },
         beforeOpen: (details) async {
@@ -3044,6 +3048,122 @@ class AppDatabase extends _$AppDatabase {
       dump['kasir_permissions'] = rows.map((r) => r.data).toList();
     }
     return dump;
+  }
+
+  /// Set produk sbg "diedit lokal" (Item 40 — usulan harga/produk dari
+  /// device non-owner). Dipanggil UI setelah simpan produk/varian/harga di
+  /// device yang BUKAN owner. TIDAK pernah dipanggil dari device owner
+  /// (owner adalah sumber kebenaran, tidak perlu mengusulkan ke diri
+  /// sendiri) — pemanggil (UI) yang jaga itu via `device.isOwner`.
+  Future<void> markProductLocallyModified(String productId) async {
+    await (update(products)..where((t) => t.id.equals(productId))).write(
+      ProductsCompanion(
+        locallyModified: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Kumpulkan seluruh baris (produk + satuan + tier harga + harga
+  /// alternatif + barcode) utk produk yang ditandai `locallyModified` di
+  /// device ini — dikirim sbg "usulan harga/produk" ke owner via sync
+  /// (Item 40). BEDA dari [dumpSince]: bukan delta by-timestamp, tapi
+  /// SEMUA baris terkait produk yang ditandai, supaya owner terima paket
+  /// utuh (produk baru dgn banyak satuan/varian/harga tidak "kepotong").
+  /// TIDAK menghapus flag di sini — flag baru hilang otomatis saat baris
+  /// ini ditimpa push resmi dari host (lihat dok kolom `locallyModified`).
+  Future<Map<String, List<Map<String, Object?>>>> dumpLocalProposals() async {
+    final productRows = await customSelect(
+      'SELECT * FROM "products" WHERE locally_modified = 1',
+    ).get();
+    if (productRows.isEmpty) return {};
+
+    final productIds = productRows.map((r) => r.data['id'] as String).toList();
+    final placeholders = List.filled(productIds.length, '?').join(', ');
+    final vars = [for (final id in productIds) Variable.withString(id)];
+
+    final unitRows = await customSelect(
+      'SELECT * FROM "product_units" WHERE product_id IN ($placeholders)',
+      variables: vars,
+    ).get();
+    final unitIds = unitRows.map((r) => r.data['id'] as String).toList();
+
+    Future<List<Map<String, Object?>>> byUnitIds(String table) async {
+      if (unitIds.isEmpty) return [];
+      final ph = List.filled(unitIds.length, '?').join(', ');
+      final rows = await customSelect(
+        'SELECT * FROM "$table" WHERE product_unit_id IN ($ph)',
+        variables: [for (final id in unitIds) Variable.withString(id)],
+      ).get();
+      return rows.map((r) => r.data).toList();
+    }
+
+    return {
+      'products': productRows.map((r) => r.data).toList(),
+      'product_units': unitRows.map((r) => r.data).toList(),
+      'price_tiers': await byUnitIds('price_tiers'),
+      'alt_prices': await byUnitIds('alt_prices'),
+      'product_barcodes': await byUnitIds('product_barcodes'),
+    };
+  }
+
+  /// Terapkan usulan produk/harga yang DISETUJUI owner (Item 40) — tulis
+  /// langsung ke tabel master (INSERT OR REPLACE, sama seperti [mergeRows]
+  /// versi master data) HANYA utk produk dgn id di [approvedProductIds].
+  /// `locallyModified` DIPAKSA false di sini (host adalah sumber kebenaran
+  /// resmi sekarang) — saat baris ini nanti di-push ke device asisten via
+  /// sync normal, flag `false` ini ikut menimpa flag lokal asisten,
+  /// menutup "usulan" itu tanpa perlu tracking status terpisah.
+  Future<int> applyProductProposals(
+      Map<String, List<Map<String, Object?>>> proposals,
+      Set<String> approvedProductIds) async {
+    if (approvedProductIds.isEmpty) return 0;
+    var count = 0;
+    // Urutan TETAP (bukan `proposals.entries` mentah — urutan Map hasil
+    // decode JSON tidak boleh diasumsikan): product_units WAJIB diproses
+    // sebelum tabel anak-satuan, supaya `approvedUnitIds` sudah terisi.
+    const order = [
+      'products',
+      'product_units',
+      'price_tiers',
+      'alt_prices',
+      'product_barcodes',
+    ];
+    await transaction(() async {
+      final approvedUnitIds = <String>{};
+      for (final table in order) {
+        final rows = proposals[table] ?? const [];
+        if (rows.isEmpty) continue;
+        final localColumns = (await customSelect('PRAGMA table_info("$table")')
+                .get())
+            .map((r) => r.data['name'] as String)
+            .toSet();
+        for (final row in rows) {
+          if (table == 'products') {
+            if (!approvedProductIds.contains(row['id'])) continue;
+          } else if (table == 'product_units') {
+            if (!approvedProductIds.contains(row['product_id'])) continue;
+            approvedUnitIds.add(row['id'] as String);
+          } else {
+            if (!approvedUnitIds.contains(row['product_unit_id'])) continue;
+          }
+          var cleaned = Map<String, Object?>.from(row)
+            ..removeWhere((k, _) => !localColumns.contains(k));
+          if (cleaned.isEmpty) continue;
+          if (table == 'products') {
+            cleaned['locally_modified'] = 0;
+          }
+          final cols = cleaned.keys.map((k) => '"$k"').join(', ');
+          final placeholders = cleaned.values.map((_) => '?').join(', ');
+          await customInsert(
+            'INSERT OR REPLACE INTO "$table" ($cols) VALUES ($placeholders)',
+            variables: _rowToVars(cleaned),
+          );
+          count++;
+        }
+      }
+    });
+    return count;
   }
 
   /// Merge rows from sync payload (INSERT OR IGNORE for ledger, last-write-wins for master).

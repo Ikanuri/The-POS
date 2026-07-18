@@ -95,6 +95,27 @@ class PendingSyncItem {
   final String tablesSummary;
 }
 
+/// Item 40 — usulan harga/produk dari device non-owner, ANTRIAN TERPISAH
+/// dari [PendingSyncItem] (data append-only transaksi/stok/dll). Sengaja
+/// dipisah supaya alur setuju/tolak salah satu TIDAK saling mengganggu
+/// (mis. owner sudah setuju data transaksi tapi belum sempat tinjau
+/// usulan harga — keduanya independen, bukan satu paket all-or-nothing).
+class PendingProductProposal {
+  PendingProductProposal({
+    required this.id,
+    required this.fromIp,
+    required this.arrivedAt,
+    required this.rows,
+    required this.productCount,
+  });
+
+  final String id;
+  final String fromIp;
+  final DateTime arrivedAt;
+  final Map<String, List<Map<String, Object?>>> rows;
+  final int productCount;
+}
+
 class LanSyncService {
   LanSyncService._();
 
@@ -116,6 +137,34 @@ class LanSyncService {
 
   static List<PendingSyncItem> get pendingQueue =>
       List.unmodifiable(_pendingQueue);
+
+  // Item 40 — antrian usulan harga/produk (terpisah dari _pendingQueue).
+  static final _pendingProposals = <PendingProductProposal>[];
+  static void Function()? onProposalsChanged;
+
+  static List<PendingProductProposal> get pendingProposals =>
+      List.unmodifiable(_pendingProposals);
+
+  /// Buang usulan tanpa menerapkan apa pun — TIDAK ada tracking "ditolak"
+  /// permanen: kalau device asal belum mengubah produk itu lagi, usulan
+  /// yang sama akan otomatis muncul lagi di sync berikutnya (keputusan
+  /// eksplisit: lebih baik owner ditanya ulang daripada usulan hilang
+  /// diam-diam selamanya).
+  static void dismissProposal(String id) {
+    _pendingProposals.removeWhere((p) => p.id == id);
+    onProposalsChanged?.call();
+  }
+
+  /// Terapkan produk yang disetujui (subset [approvedProductIds] dari
+  /// usulan [id]) ke DB host, lalu buang usulan dari antrian.
+  static Future<int> applyProposal(
+      String id, Set<String> approvedProductIds) async {
+    final idx = _pendingProposals.indexWhere((p) => p.id == id);
+    if (idx < 0) return 0;
+    final item = _pendingProposals.removeAt(idx);
+    onProposalsChanged?.call();
+    return _db!.applyProductProposals(item.rows, approvedProductIds);
+  }
 
   /// Tabel append-only yang boleh diunggah klien ke host. Master data tidak
   /// pernah di-merge dari klien (alir satu arah host → bawahan).
@@ -542,6 +591,28 @@ class LanSyncService {
       ));
       onQueueChanged?.call();
 
+      // Item 40 — usulan harga/produk, antrian TERPISAH dari _pendingQueue
+      // (lihat dok PendingProductProposal soal alasan dipisah).
+      final rawProposals =
+          payload['proposals'] as Map<String, dynamic>? ?? {};
+      final proposalRows = rawProposals.map((k, v) {
+        final rows = (v as List).cast<Map<String, dynamic>>().map((r) {
+          return r.map<String, Object?>((rk, rv) => MapEntry(rk, rv));
+        }).toList();
+        return MapEntry(k, rows);
+      });
+      final proposedProducts = proposalRows['products'] ?? const [];
+      if (proposedProducts.isNotEmpty) {
+        _pendingProposals.add(PendingProductProposal(
+          id: _generateNonce(),
+          fromIp: ip,
+          arrivedAt: DateTime.now(),
+          rows: proposalRows,
+          productCount: proposedProducts.length,
+        ));
+        onProposalsChanged?.call();
+      }
+
       // Immediately send back the host's data since the client's timestamp.
       // The client receives host updates even before their data is approved.
       final outDump = await _db!.dumpSince(since);
@@ -662,9 +733,15 @@ class LanSyncService {
     // _kDownloadWatermarkKey soal kenapa arah upload tidak dioptimasi.
     final outDump = await db.dumpSince(DateTime.fromMillisecondsSinceEpoch(0),
         includeMasterData: false);
+    // Item 40 — usulan harga/produk (device non-owner) SELALU ikut terkirim
+    // apa adanya (bukan lewat jalur merge master data biasa) — owner review
+    // manual lewat antrian TERPISAH (lihat PendingProductProposal). Kosong
+    // (`{}`) di device owner (tidak pernah menandai produknya sendiri).
+    final proposals = await db.dumpLocalProposals();
     final payload = {
       'since': downloadSince.toIso8601String(),
       'tables': outDump,
+      'proposals': proposals,
     };
     final payloadJson = jsonEncode(payload);
     final encrypted =

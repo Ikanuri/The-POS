@@ -22,6 +22,8 @@ void main() {
 
     // ── 1. Bangun DB "v14" mentah: kedua tabel TANPA kolom baru. ──
     final v14 = raw.sqlite3.open(path);
+    // products diperlukan agar migrasi v16 (addColumn locally_modified) tak gagal.
+    v14.execute('CREATE TABLE products(id TEXT PRIMARY KEY);');
     v14.execute('''
       CREATE TABLE transactions(
         id TEXT PRIMARY KEY, local_id TEXT UNIQUE, kasir_id TEXT,
@@ -82,7 +84,7 @@ void main() {
     expect(pay.amount, 10000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 15);
+    expect(ver.data.values.first, 16);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

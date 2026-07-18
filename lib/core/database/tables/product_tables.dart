@@ -17,6 +17,16 @@ class Products extends Table {
   /// menonaktifkan tombol tambah di katalog HTML statis.
   BoolColumn get markedOutOfStock =>
       boolean().withDefault(const Constant(false))();
+  /// Item 40 — true bila produk ini diedit LOKAL di device non-owner
+  /// (asisten/kasir) sejak terakhir diketahui identik dengan data host.
+  /// Dipakai `dumpLocalProposals()` utk kirim "usulan harga/produk" ke
+  /// owner via sync — TIDAK pernah di-set true di device owner (owner
+  /// adalah sumber kebenaran, tidak perlu mengusulkan ke diri sendiri).
+  /// Otomatis kembali false saat baris ini ditimpa oleh push resmi dari
+  /// host (mis. setelah owner setuju) — lihat AppDatabase.mergeRows,
+  /// row dari host SELALU bawa locally_modified=false.
+  BoolColumn get locallyModified =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 

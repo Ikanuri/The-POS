@@ -284,6 +284,16 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("marked_out_of_stock" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _locallyModifiedMeta =
+      const VerificationMeta('locallyModified');
+  @override
+  late final GeneratedColumn<bool> locallyModified = GeneratedColumn<bool>(
+      'locally_modified', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("locally_modified" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -309,6 +319,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         parentProductId,
         isActive,
         markedOutOfStock,
+        locallyModified,
         createdAt,
         updatedAt
       ];
@@ -361,6 +372,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           markedOutOfStock.isAcceptableOrUnknown(
               data['marked_out_of_stock']!, _markedOutOfStockMeta));
     }
+    if (data.containsKey('locally_modified')) {
+      context.handle(
+          _locallyModifiedMeta,
+          locallyModified.isAcceptableOrUnknown(
+              data['locally_modified']!, _locallyModifiedMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -392,6 +409,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
       markedOutOfStock: attachedDatabase.typeMapping.read(
           DriftSqlType.bool, data['${effectivePrefix}marked_out_of_stock'])!,
+      locallyModified: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -423,6 +442,7 @@ class Product extends DataClass implements Insertable<Product> {
   /// fungsi + — itu wewenang izin "Izinkan Stok Minus"), tapi benar-benar
   /// menonaktifkan tombol tambah di katalog HTML statis.
   final bool markedOutOfStock;
+  final bool locallyModified;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Product(
@@ -433,6 +453,7 @@ class Product extends DataClass implements Insertable<Product> {
       this.parentProductId,
       required this.isActive,
       required this.markedOutOfStock,
+      required this.locallyModified,
       required this.createdAt,
       required this.updatedAt});
   @override
@@ -451,6 +472,7 @@ class Product extends DataClass implements Insertable<Product> {
     }
     map['is_active'] = Variable<bool>(isActive);
     map['marked_out_of_stock'] = Variable<bool>(markedOutOfStock);
+    map['locally_modified'] = Variable<bool>(locallyModified);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -471,6 +493,7 @@ class Product extends DataClass implements Insertable<Product> {
           : Value(parentProductId),
       isActive: Value(isActive),
       markedOutOfStock: Value(markedOutOfStock),
+      locallyModified: Value(locallyModified),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -487,6 +510,7 @@ class Product extends DataClass implements Insertable<Product> {
       parentProductId: serializer.fromJson<String?>(json['parentProductId']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       markedOutOfStock: serializer.fromJson<bool>(json['markedOutOfStock']),
+      locallyModified: serializer.fromJson<bool>(json['locallyModified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -502,6 +526,7 @@ class Product extends DataClass implements Insertable<Product> {
       'parentProductId': serializer.toJson<String?>(parentProductId),
       'isActive': serializer.toJson<bool>(isActive),
       'markedOutOfStock': serializer.toJson<bool>(markedOutOfStock),
+      'locallyModified': serializer.toJson<bool>(locallyModified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -515,6 +540,7 @@ class Product extends DataClass implements Insertable<Product> {
           Value<String?> parentProductId = const Value.absent(),
           bool? isActive,
           bool? markedOutOfStock,
+          bool? locallyModified,
           DateTime? createdAt,
           DateTime? updatedAt}) =>
       Product(
@@ -528,6 +554,7 @@ class Product extends DataClass implements Insertable<Product> {
             : this.parentProductId,
         isActive: isActive ?? this.isActive,
         markedOutOfStock: markedOutOfStock ?? this.markedOutOfStock,
+        locallyModified: locallyModified ?? this.locallyModified,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -547,6 +574,9 @@ class Product extends DataClass implements Insertable<Product> {
       markedOutOfStock: data.markedOutOfStock.present
           ? data.markedOutOfStock.value
           : this.markedOutOfStock,
+      locallyModified: data.locallyModified.present
+          ? data.locallyModified.value
+          : this.locallyModified,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -562,6 +592,7 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('parentProductId: $parentProductId, ')
           ..write('isActive: $isActive, ')
           ..write('markedOutOfStock: $markedOutOfStock, ')
+          ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -569,8 +600,17 @@ class Product extends DataClass implements Insertable<Product> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, productGroupId, kodeProduk,
-      parentProductId, isActive, markedOutOfStock, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      name,
+      productGroupId,
+      kodeProduk,
+      parentProductId,
+      isActive,
+      markedOutOfStock,
+      locallyModified,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -582,6 +622,7 @@ class Product extends DataClass implements Insertable<Product> {
           other.parentProductId == this.parentProductId &&
           other.isActive == this.isActive &&
           other.markedOutOfStock == this.markedOutOfStock &&
+          other.locallyModified == this.locallyModified &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -594,6 +635,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<String?> parentProductId;
   final Value<bool> isActive;
   final Value<bool> markedOutOfStock;
+  final Value<bool> locallyModified;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -605,6 +647,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.parentProductId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.markedOutOfStock = const Value.absent(),
+    this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -617,6 +660,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.parentProductId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.markedOutOfStock = const Value.absent(),
+    this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -630,6 +674,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<String>? parentProductId,
     Expression<bool>? isActive,
     Expression<bool>? markedOutOfStock,
+    Expression<bool>? locallyModified,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -642,6 +687,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (parentProductId != null) 'parent_product_id': parentProductId,
       if (isActive != null) 'is_active': isActive,
       if (markedOutOfStock != null) 'marked_out_of_stock': markedOutOfStock,
+      if (locallyModified != null) 'locally_modified': locallyModified,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -656,6 +702,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<String?>? parentProductId,
       Value<bool>? isActive,
       Value<bool>? markedOutOfStock,
+      Value<bool>? locallyModified,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
@@ -667,6 +714,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       parentProductId: parentProductId ?? this.parentProductId,
       isActive: isActive ?? this.isActive,
       markedOutOfStock: markedOutOfStock ?? this.markedOutOfStock,
+      locallyModified: locallyModified ?? this.locallyModified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -697,6 +745,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (markedOutOfStock.present) {
       map['marked_out_of_stock'] = Variable<bool>(markedOutOfStock.value);
     }
+    if (locallyModified.present) {
+      map['locally_modified'] = Variable<bool>(locallyModified.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -719,6 +770,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('parentProductId: $parentProductId, ')
           ..write('isActive: $isActive, ')
           ..write('markedOutOfStock: $markedOutOfStock, ')
+          ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -10880,6 +10932,7 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   Value<String?> parentProductId,
   Value<bool> isActive,
   Value<bool> markedOutOfStock,
+  Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -10892,6 +10945,7 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<String?> parentProductId,
   Value<bool> isActive,
   Value<bool> markedOutOfStock,
+  Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -10948,6 +11002,10 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<bool> get markedOutOfStock => $composableBuilder(
       column: $table.markedOutOfStock,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
@@ -11011,6 +11069,10 @@ class $$ProductsTableOrderingComposer
       column: $table.markedOutOfStock,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -11047,6 +11109,9 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<bool> get markedOutOfStock => $composableBuilder(
       column: $table.markedOutOfStock, builder: (column) => column);
+
+  GeneratedColumn<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -11106,6 +11171,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<String?> parentProductId = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
             Value<bool> markedOutOfStock = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -11118,6 +11184,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             parentProductId: parentProductId,
             isActive: isActive,
             markedOutOfStock: markedOutOfStock,
+            locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -11130,6 +11197,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<String?> parentProductId = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
             Value<bool> markedOutOfStock = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -11142,6 +11210,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             parentProductId: parentProductId,
             isActive: isActive,
             markedOutOfStock: markedOutOfStock,
+            locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,

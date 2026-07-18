@@ -6,6 +6,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/services/lan_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/qr_sync_widgets.dart';
+import 'product_proposal_review_screen.dart';
 
 class SyncScreen extends ConsumerStatefulWidget {
   const SyncScreen({super.key});
@@ -22,6 +23,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   String _hostToken = '';
   bool _refreshingIp = false;
   List<PendingSyncItem> _queue = [];
+  // Item 40 — antrian usulan harga/produk, TERPISAH dari _queue.
+  List<PendingProductProposal> _proposals = [];
 
   // Client state
   final _ipCtrl = TextEditingController();
@@ -37,6 +40,12 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
     LanSyncService.onQueueChanged = () {
       if (mounted) setState(() => _queue = LanSyncService.pendingQueue.toList());
     };
+    LanSyncService.onProposalsChanged = () {
+      if (mounted) {
+        setState(() => _proposals = LanSyncService.pendingProposals.toList());
+      }
+    };
+    _proposals = LanSyncService.pendingProposals.toList();
     _loadTimeoutProfile();
   }
 
@@ -66,6 +75,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   @override
   void dispose() {
     LanSyncService.onQueueChanged = null;
+    LanSyncService.onProposalsChanged = null;
     LanSyncService.stopHost();
     _ipCtrl.dispose();
     _tokenCtrl.dispose();
@@ -417,6 +427,47 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                           ],
                         ),
                       ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
+
+            // Item 40 — antrian usulan harga/produk, TERPISAH dari antrian
+            // data transaksi/stok di atas (independen, bisa ditinjau kapan
+            // saja tanpa perlu setuju/tolak data append-only dulu).
+            if (_proposals.isNotEmpty) ...[
+              Row(children: [
+                Icon(Icons.storefront_outlined,
+                    color: scheme.tertiary, size: 18),
+                const SizedBox(width: 6),
+                Text('Usulan Harga/Produk (${_proposals.length})',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ]),
+              const SizedBox(height: 6),
+              ..._proposals.map((p) {
+                final mins =
+                    DateTime.now().difference(p.arrivedAt).inMinutes;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(Icons.storefront_outlined,
+                        color: scheme.tertiary),
+                    title: Text(p.fromIp,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                        '${p.productCount} produk diusulkan · '
+                        '${mins == 0 ? 'Baru saja' : '$mins menit lalu'}',
+                        style: const TextStyle(fontSize: 12)),
+                    trailing: FilledButton.tonal(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ProductProposalReviewScreen(proposal: p),
+                        ),
+                      ),
+                      child: const Text('Tinjau'),
                     ),
                   ),
                 );
