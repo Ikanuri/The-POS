@@ -3230,6 +3230,25 @@ class AppDatabase extends _$AppDatabase {
       final approvedUnitIds = <String>{};
       for (final table in order) {
         final rows = proposals[table] ?? const [];
+        // Replace PENUH baris anak per satuan yang di-approve: hapus tier
+        // harga & harga-alternatif LAMA milik owner utk satuan itu SEBELUM
+        // menuliskan baris dari usulan. Tanpa ini, id tier yang diregenerasi
+        // tiap edit di form (produk_form_screen) menumpuk jadi tier duplikat
+        // `min_qty=1` di owner → harga owner "tak berubah" & saat sync balik
+        // ke asisten, tier lama ikut ter-dump lalu menimpa harga terbaru
+        // asisten. Satuan (product_unit_id) stabil, jadi cukup di-scope per
+        // unit. Barcode SENGAJA tidak di-clear di sini: UNIQUE(barcode) sudah
+        // menangani replace, dan mekanisme rilis barcode (RELEASED:) tak boleh
+        // terganggu. Aman thd gagal di tengah: SELURUH fungsi dalam satu
+        // transaction() — error apa pun me-rollback semuanya.
+        if ((table == 'price_tiers' || table == 'alt_prices') &&
+            approvedUnitIds.isNotEmpty) {
+          final ph = List.filled(approvedUnitIds.length, '?').join(', ');
+          await customStatement(
+            'DELETE FROM "$table" WHERE product_unit_id IN ($ph)',
+            approvedUnitIds.toList(),
+          );
+        }
         if (rows.isEmpty) continue;
         final localColumns = (await customSelect('PRAGMA table_info("$table")')
                 .get())

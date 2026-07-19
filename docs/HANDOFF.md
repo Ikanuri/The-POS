@@ -4,6 +4,23 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19 Juli 2026 (bugfix sync usulan harga, branch
+`claude/setup-dependencies-am31te`) — BUG NYATA Item 40: usulan UBAH HARGA
+yg di-approve tak mengubah harga owner & malah me-revert harga asisten saat
+sync. Akar: form (`produk_form_screen`) meregenerasi id price_tier tiap
+simpan (`_uuid.v4()`), sedangkan `applyProductProposals` (`app_database.dart`)
+cuma INSERT OR REPLACE per-id TANPA hapus tier LAMA owner → tier `min_qty=1`
+menumpuk (2 baris) → harga owner ambigu/tak berubah, lalu tier lama ikut
+ter-dump balik & (via `mergeRows` dedup) menimpa harga terbaru asisten. FIX:
+di `applyProductProposals`, sebelum insert baris `price_tiers`/`alt_prices`,
+DELETE baris lama utk `product_unit_id IN (approvedUnitIds)` (unit id stabil,
+hanya tier id yg regenerasi) → replace penuh, owner cuma punya tier baru.
+Barcode SENGAJA tak di-clear (UNIQUE(barcode) sudah handle + jaga mekanisme
+RELEASED:). Aman thd gagal-di-tengah: seluruh `applyProductProposals` dalam
+satu `transaction()` (rollback total bila error). Test: `proposal_price_
+change_apply_test` (DB-tier 2-DB, pakai `applyProductProposals` + `mergeRows`
+sungguhan, revert-verified: tanpa fix owner dpt 2 tier). schemaVersion 16.
+
 _Update sesi 19 Juli 2026 (lanjutan, branch `claude/setup-dependencies-am31te`)
 — 2 penyesuaian: (A) hapus aksen warna kartu "Device Ini" di Pengaturan
 (user minta netral; Toko hijau & Perangkat teal tetap) — `daca3a6`. (B)

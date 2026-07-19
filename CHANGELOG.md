@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-19
 
+- `d291e5d` — fix: usulan ubah harga (sync antar-role) — applyProductProposals replace penuh price_tiers/alt_prices per satuan yg di-approve (hapus tier lama sebelum insert) supaya harga owner benar berubah & tidak me-revert harga asisten saat sync balik
 - `37fe379` — feat: pembatas "----- Tambahan HH:MM -----" (Gaya A) di struk share (_ReceiptPaper) & cetak thermal (printer_service), sebelumnya cuma di struk in-app
 - `daca3a6` — fix: hapus aksen warna kartu "Device Ini" di Pengaturan (netral kembali; Toko hijau & Perangkat teal tetap)
 - `f7de38a` — revert: batalkan total eksperimen ikon peach (emoji bawaan tak sempat diverifikasi), kembali ke Icons.shopping_basket_rounded default

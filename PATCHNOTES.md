@@ -33,6 +33,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   HH:MM -----", sama seperti struk di dalam aplikasi (sebelumnya batas ini
   hanya ada di layar, hilang saat dibagikan/dicetak).
 
+### 🛠️ Perbaikan
+- **Usulan ubah harga dari kasir/asisten kini benar-benar diterapkan** —
+  sebelumnya, saat owner menyetujui usulan perubahan harga, harga di HP
+  owner tidak ikut berubah dan harga di HP asisten malah balik ke harga
+  lama saat sinkronisasi. Sekarang harga baru diterapkan dengan benar di
+  kedua perangkat.
+
 ### ✨ Fitur Baru
 - **Cari produk berikutnya lebih cepat** — saat Anda menyentuh kolom cari
   di kasir lagi sementara kata pencarian sebelumnya masih ada, seluruh kata
