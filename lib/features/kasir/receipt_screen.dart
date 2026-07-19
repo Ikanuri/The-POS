@@ -2345,6 +2345,9 @@ class _ReceiptPaper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final remaining = netRemainingOwed(tx, payments);
+    // Pembatas batch "Tambah Belanjaan" (Gaya A) — dilacak lintas iterasi
+    // item saat menyusun baris di bawah.
+    String? lastBatch;
     final date =
         '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year} '
         '${tx.createdAt.hour.toString().padLeft(2, '0')}:${tx.createdAt.minute.toString().padLeft(2, '0')}';
@@ -2404,7 +2407,24 @@ class _ReceiptPaper extends StatelessWidget {
             final isPlaceholder = !isVar && effQty == 0;
             final qtyStr =
                 effQty % 1 == 0 ? effQty.toInt().toString() : effQty.toString();
+            // Pembatas batch "Tambah Belanjaan" (Gaya A) sebelum item induk
+            // susulan — "----- Tambahan HH:MM -----" rata tengah.
+            Widget? sep;
+            if (!isVar && item.addedAt != null) {
+              final a = item.addedAt!;
+              final hhmm =
+                  '${a.hour.toString().padLeft(2, '0')}:${a.minute.toString().padLeft(2, '0')}';
+              if (hhmm != lastBatch) {
+                lastBatch = hhmm;
+                sep = Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Text('----- Tambahan $hhmm -----',
+                      textAlign: TextAlign.center, style: _mono),
+                );
+              }
+            }
             return [
+              if (sep != null) sep,
               Text('$mark$namePrefix${productNames[item.productId] ?? ''}',
                   style: _mono.copyWith(
                       fontWeight: isVar ? FontWeight.w400 : FontWeight.w700)),
