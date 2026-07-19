@@ -427,6 +427,77 @@ class AppDatabase extends _$AppDatabase {
     return info.ratio <= 0 ? base : base / info.ratio;
   }
 
+  /// Item 46 — teks stok tersisa sebuah produk dalam satuan dasar + konversi
+  /// ke satuan lain dalam kurung, mis. "100 biji (5 pak, 1 dus)". Satuan lain
+  /// hanya ikut bila hasil konversi >= 1 (agar tidak "0 dus"). null bila
+  /// produk tak punya satuan.
+  Future<String?> stockBreakdownText(String productId) async {
+    final units = await (select(productUnits)
+          ..where((t) => t.productId.equals(productId)))
+        .get();
+    if (units.isEmpty) return null;
+    var base = units.first;
+    for (final u in units) {
+      if (u.isBaseUnit) {
+        base = u;
+        break;
+      }
+    }
+    final baseStock = await _rawBaseStock(base.id);
+    final typeIds =
+        units.map((u) => u.unitTypeId).whereType<int>().toSet().toList();
+    final types = typeIds.isEmpty
+        ? <UnitType>[]
+        : await (select(unitTypes)..where((t) => t.id.isIn(typeIds))).get();
+    final typeName = {for (final t in types) t.id: t.name};
+    String fmt(double q) =>
+        q % 1 == 0 ? q.toInt().toString() : q.toStringAsFixed(1);
+    final buf = StringBuffer('${fmt(baseStock)} '
+        '${typeName[base.unitTypeId] ?? 'satuan'}');
+    final others = <String>[];
+    for (final u in units) {
+      if (u.id == base.id || u.ratioToBase <= 0) continue;
+      final q = baseStock / u.ratioToBase;
+      if (q < 1) continue;
+      others.add('${fmt(q)} ${typeName[u.unitTypeId] ?? 'satuan'}');
+    }
+    if (others.isNotEmpty) buf.write(' (${others.join(', ')})');
+    return buf.toString();
+  }
+
+  /// Item 46 — dari sekumpulan productId yang BARU terjual, kembalikan pesan
+  /// siap-tampil untuk produk yang stok satuan dasarnya kini <= ambang
+  /// minStock (ambang hanya di satuan dasar, Item 11). Kosong bila tak ada
+  /// yang menipis.
+  Future<List<String>> lowStockAlertsForProducts(
+      Set<String> productIds) async {
+    final msgs = <String>[];
+    for (final pid in productIds) {
+      final units = await (select(productUnits)
+            ..where((t) => t.productId.equals(pid)))
+          .get();
+      if (units.isEmpty) continue;
+      ProductUnit? base;
+      for (final u in units) {
+        if (u.isBaseUnit) {
+          base = u;
+          break;
+        }
+      }
+      base ??= units.first;
+      final min = base.minStock;
+      if (min == null) continue;
+      final baseStock = await _rawBaseStock(base.id);
+      if (baseStock > min) continue; // masih di atas ambang → bukan menipis
+      final breakdown = await stockBreakdownText(pid);
+      final prod = await (select(products)..where((t) => t.id.equals(pid)))
+          .getSingleOrNull();
+      final name = prod?.name ?? 'Produk';
+      msgs.add('Stok $name menipis: sisa ${breakdown ?? '$baseStock'}');
+    }
+    return msgs;
+  }
+
   /// Tulis satu entry ke stock_ledger, selalu pada satuan dasar.
   /// [productUnitId] boleh satuan apa pun; [qtyChange] dalam satuan itu.
   Future<void> _appendStock({

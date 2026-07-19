@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/providers/product_providers.dart';
 import '../../core/services/order_page_service.dart';
 import '../../core/services/order_parser_service.dart';
@@ -717,6 +718,13 @@ const _kAvatarGradients = [
 List<Color> _gradFor(String name) => _kAvatarGradients[
     (name.isEmpty ? 0 : name.codeUnitAt(0)) % _kAvatarGradients.length];
 
+/// Item 46 — observer rute navigator shell, dipakai `_KasirScreenState`
+/// (RouteAware) untuk tahu kapan pengguna KEMBALI ke kasir (dari layar
+/// bayar/struk) → saat itulah banner "stok menipis" ditampilkan. Dipasang di
+/// `ShellRoute.observers` (app_router.dart).
+final RouteObserver<ModalRoute<void>> kasirRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
 class KasirScreen extends ConsumerStatefulWidget {
   const KasirScreen({super.key, this.addToTxId, this.catalogMode = false});
 
@@ -734,7 +742,7 @@ class KasirScreen extends ConsumerStatefulWidget {
   ConsumerState<KasirScreen> createState() => _KasirScreenState();
 }
 
-class _KasirScreenState extends ConsumerState<KasirScreen> {
+class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   /// Slot keranjang aktif: katalog, tambah belanjaan, atau keranjang utama.
   String get _cartId =>
       widget.catalogMode ? kCatalogCartId : (widget.addToTxId ?? kMainCartId);
@@ -842,13 +850,33 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   // Banner notifikasi inline (bukan SnackBar overlay)
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
+  Duration _bannerDuration = const Duration(seconds: 4);
 
   void _showBanner(String msg,
-      [InlineBannerType type = InlineBannerType.error]) {
+      [InlineBannerType type = InlineBannerType.error,
+      Duration duration = const Duration(seconds: 4)]) {
     setState(() {
       _bannerMsg = msg;
       _bannerType = type;
+      _bannerDuration = duration;
     });
+  }
+
+  /// Item 46 — tampilkan banner peringatan stok menipis yang mengantre dari
+  /// checkout terakhir, LALU kuras antriannya. Digabung jadi satu banner
+  /// (~5 detik) bila lebih dari satu produk. [onlyIfCurrent] dipakai jalur
+  /// build/post-frame (rebuild bisa terjadi saat kasir masih tertutup layar
+  /// struk) agar banner TIDAK muncul selagi kasir belum jadi rute teratas;
+  /// jalur RouteAware (didPush/didPopNext) memanggil tanpa guard karena
+  /// keduanya hanya terpicu saat kasir memang sudah jadi rute teratas.
+  void _drainLowStockAlerts({bool onlyIfCurrent = false}) {
+    if (!mounted || widget.catalogMode) return;
+    if (onlyIfCurrent && !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    final alerts = ref.read(pendingLowStockAlertsProvider);
+    if (alerts.isEmpty) return;
+    ref.read(pendingLowStockAlertsProvider.notifier).state = const [];
+    _showBanner(alerts.join('\n'), InlineBannerType.warning,
+        const Duration(seconds: 5));
   }
 
   Future<void> _initSwipeHint() async {
@@ -872,6 +900,26 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
     _initSwipeHint();
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Item 46 — berlangganan observer rute agar tahu saat kasir kembali jadi
+    // rute teratas (didPopNext) untuk menampilkan banner stok menipis.
+    final route = ModalRoute.of(context);
+    if (route is ModalRoute<void>) {
+      kasirRouteObserver.subscribe(this, route);
+    }
+  }
+
+  /// Kasir baru pertama kali muncul (mis. buka app langsung di /kasir) —
+  /// antrian biasanya kosong; drain aman (no-op bila kosong).
+  @override
+  void didPush() => _drainLowStockAlerts();
+
+  /// Kembali ke kasir dari layar bayar/struk → tampilkan banner stok menipis.
+  @override
+  void didPopNext() => _drainLowStockAlerts();
 
   /// Handler global untuk scanner barcode eksternal (HID keyboard mode).
   /// Mengembalikan true (consume) saat karakter/Enter berasal dari scan,
@@ -1001,6 +1049,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   @override
   void dispose() {
+    kasirRouteObserver.unsubscribe(this);
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     _searchFocus.dispose();
     _searchCtrl.dispose();
@@ -1533,6 +1582,22 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Item 46 — fallback jalur `context.go('/kasir')` (menutup struk dgn
+    // MENGHAPUS halaman, bukan pop → RouteObserver.didPopNext belum tentu
+    // terpicu, tapi KasirScreen di-rebuild oleh shell). Tampilkan banner
+    // stok menipis via post-frame, HANYA bila kasir sudah jadi rute teratas
+    // (guard: rebuild juga terjadi saat provider di-set selagi kasir masih
+    // tertutup layar struk). Jalur pop (tombol back HP) ditangani didPopNext.
+    // Item 46 — fallback jalur `context.go('/kasir')` (menutup struk dgn
+    // MENGHAPUS halaman, bukan pop → RouteObserver.didPopNext belum tentu
+    // terpicu, tapi KasirScreen di-rebuild oleh shell). Tampilkan banner
+    // stok menipis via post-frame, HANYA bila kasir sudah jadi rute teratas
+    // (guard: rebuild juga terjadi saat provider di-set selagi kasir masih
+    // tertutup layar struk). Jalur pop (tombol back HP) ditangani didPopNext.
+    if (ref.watch(pendingLowStockAlertsProvider).isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _drainLowStockAlerts(onlyIfCurrent: true));
+    }
     if (_scannerOpen && _scannerCtrl != null) {
       // Item 24f — kontrol scanner sebagai kapsul-kapsul kecil melayang
       // langsung di frame kamera (gaya kamera bawaan HP, mis. pill zoom
@@ -1763,6 +1828,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                     InlineBanner(
                       message: _bannerMsg,
                       type: _bannerType,
+                      duration: _bannerDuration,
                       onDismiss: () => setState(() => _bannerMsg = null),
                     ),
                     // Panel pesanan ditahan — slide inline dari atas (mendorong

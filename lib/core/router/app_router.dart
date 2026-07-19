@@ -105,6 +105,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       ShellRoute(
+        // Item 46 — observer navigator shell agar KasirScreen (RouteAware)
+        // tahu saat pengguna kembali dari layar bayar/struk → menampilkan
+        // banner "stok menipis".
+        observers: [kasirRouteObserver],
         builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(

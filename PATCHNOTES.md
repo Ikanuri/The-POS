@@ -11,6 +11,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 18 Juli 2026
 
 ### ✨ Fitur Baru
+- **Peringatan stok menipis muncul di kasir setelah jualan** — begitu
+  sebuah produk terjual dan stoknya turun sampai/di bawah batas minimum
+  yang Anda set, saat kembali ke layar kasir muncul notifikasi singkat
+  (± 5 detik, bisa ditutup): mis. "Stok Gula menipis: sisa 100 biji
+  (5 pak, 1 dus)" — stok dalam satuan dasar plus konversi ke satuan lain
+  dalam kurung.
+- **Pengeluaran bisa difilter per periode** — di layar Pengeluaran,
+  pilih Hari Ini / Minggu Ini / Bulan Ini / rentang tanggal Custom;
+  total & daftar ikut menyesuaikan (sebelumnya selalu bulan berjalan).
+- **Angka jumlah barang kini juga tampil di kiri tiap item di keranjang**
+  (di samping kotak centang), tidak cuma di tombol +/- sebelah kanan.
+- **Tombol +/- kasir: angka jumlah berpindah ke sisi berlawanan dari
+  tombol yang baru ditekan** — begitu tombol ditekan, tombol itu jadi
+  ikon polos dan angkanya pindah ke tombol satunya (supaya angka tidak
+  ketutup jempol). Kembali normal saat menyentuh area lain / scroll.
 - **Tombol +/- di kasir kini punya "pijakan jempol"** — setelah ditap,
   tombol membesar dan TETAP besar (bukan cuma sesaat) supaya tap
   berikutnya (mis. nambah qty lagi) lebih besar targetnya dan tidak

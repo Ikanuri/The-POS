@@ -41,25 +41,71 @@ bilang migrasi sebenarnya cakup lebih dari transaksi+pelanggan (termasuk
 produk dll., scope belum dirinci) — ditahan, tunggu user re-konfirmasi
 scope lengkap & minta lanjut. **Item 36 (Stock Opname) & Item 37 (publish
 katalog ke Cloudflare Pages) SELESAI SEMUA & di-commit** (17 Juli,
-`5c9de7f`) — lihat CHANGELOG untuk detail teknis._
+`5c9de7f`) — lihat CHANGELOG untuk detail teknis. **Item 41 (audit kode)
+P1/P2 SELESAI & di-commit** (18 Juli, lihat CHANGELOG `d2b4c4d`), sisa
+B.1/C.2/P3 masih menggantung. **Item 42/43/44/45/46 SELESAI & di-commit**
+(18 Juli, batch "kerjakan 42-46"): filter periode tab Pengeluaran (42),
+stepper angka qty berpindah sisi +/- (43), qty di kiri item keranjang
+(44), fix 2 satuan dasar aktif sekaligus (45), banner stok menipis di
+kasir pasca-checkout (46) — semua dgn test + revert-verify, lihat
+CHANGELOG. **Item 47/48 BELUM dieksekusi** (user bilang "sisanya
+biarkan"): Item 47 = pengeluaran tidak ikut ekspor PDF/Excel Laporan
+(root cause + fix jelas); Item 48 = warna avatar produk kasir jadi
+soft/pastel (root cause + fix jelas). **Item 3c/4/5 (migrasi data Griyo)
+DICORET user** (18 Juli, "coret: 4, 3c, 5") — dihapus dari plan._
 
 ---
 
-## Konteks — kenapa semua item di bawah ini muncul
+## Item 47 — Pengeluaran tidak ikut ke ekspor laporan PDF/Excel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
 
-User punya dataset toko lama (`docs/reference/Contoh_Dataset.rar`,
-`docs/reference/Products.csv`) yang ingin dipindahkan ke The POS: katalog
-produk, data pelanggan + poin loyalty, dan riwayat transaksi. Diskusi dimulai
-dari 3 pertanyaan (mekanisme update data berkala, dropdown pelanggan tidak
-scrollable, bug pencarian nama pelanggan) yang ternyata saling terkait dan
-mengarah ke beberapa temuan bug nyata di importer CSV yang sudah ada.
+**Root cause dikonfirmasi**: `report_export.dart` (ekspor PDF/Excel tab
+Ringkasan Laporan) TIDAK PERNAH memanggil `getNetProfitExpenseTotal()` —
+`_fetchRingkasan()` (~baris 526-553) cuma pakai `getDailySummaries()`
+(revenue/cogs/txCount/metode bayar/harian), `d.profit` di situ murni
+**Laba Kotor** (revenue−cogs). Grid KPI PDF (~baris 102-107) & baris
+Excel (~baris 304) cuma berisi Omzet/Transaksi/HPP/Laba Kotor — TIDAK
+ADA "Pengeluaran" maupun "Laba Bersih" sama sekali. Bandingkan dgn
+`ringkasan_tab.dart` (tampilan ON-SCREEN Laporan → Ringkasan) yang
+SUDAH benar: baris 16 manggil `getNetProfitExpenseTotal()`, baris 94
+render kartu "Pengeluaran". Jadi yang tampil di layar vs yang keluar di
+file ekspor **tidak konsisten** — bukan placeholder kosong, memang belum
+pernah diprogram di file exportnya sama sekali.
 
-**Prinsip yang disepakati:** Claude TIDAK punya akses berkelanjutan ke
-database toko (offline-first, terenkripsi SQLCipher, HP user adalah satu-
-satunya sumber kebenaran). Jadi update data dari dataset selalu berbentuk:
-user kirim data mentah → Claude olah/format jadi bentuk yang bisa diimpor →
-user jalankan import sendiri di app lewat fitur yang sudah ada (atau yang
-akan dibangun). Bukan Claude yang menulis langsung ke database terenkripsi.
+**Fix (disetujui, siap eksekusi)**: tambahkan pemanggilan
+`db.getNetProfitExpenseTotal(range.start, range.end)` di
+`_fetchRingkasan()` (`report_export.dart`), alirkan field `expenses`
+(dan hitung `netProfit = profit - expenses` bila mau tambahkan "Laba
+Bersih" jg, konsisten dgn on-screen yg py keduanya) lewat
+`_RingkasanData`, tambahkan baris "Pengeluaran" (+ "Laba Bersih" bila
+disepakati) ke grid KPI PDF (~baris 102-107) dan baris Excel (~baris
+304). Test: bandingkan output `_fetchRingkasan()` vs data on-screen
+`ringkasan_tab.dart` utk skenario yg sama (ada expense `daily_expense`+
+`change_given`) — pastikan angka Pengeluaran identik antara keduanya.
+
+## Item 48 — Kotak warna avatar produk di kasir dibuat soft/pastel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
+
+**Konteks**: BUKAN aksen fungsional bermakna (beda dari kerjaan Item
+"aksen warna Ringkasan/Laporan/Pengaturan" sebelumnya) — ini avatar-
+huruf (inisial nama produk) di kartu/baris produk kasir, warnanya
+dipilih dari hash huruf pertama nama produk (`_gradFor()`,
+`kasir_screen.dart` ~baris 707-715, palet `_kAvatarGradients` — 6 pasang
+gradient 2-warna cukup vivid/saturated), dipakai di `_ProductCard` (mode
+grid, ~baris 2441+2467-2490) & `_ProductListTileState` (mode list,
+~baris 2609+2636-2659) — teks huruf-nya putih di atas gradient.
+
+**Fix (disetujui, siap eksekusi)**: ganti `_kAvatarGradients` (gradient
+vivid) jadi palet solid pastel/soft — ikuti bahasa desain `AppTheme`
+yang sudah ada (pasangan bg-lembut + fg-redup, theme-aware light/dark,
+pola sama spt `scanFg/scanBg`, `antrianFg/antrianBg` dll di
+`app_theme.dart`). Huruf avatar ikut ganti dari putih ke warna gelap
+redup (fg pasangannya) — putih di atas background pastel terang akan
+sulit terbaca. Perlu palet baru dgn variasi cukup (minimal sama seperti
+jumlah gradient lama, 6 warna) supaya beda produk masih cukup
+terbedakan visual — BUKAN cuma reuse 5 pasang fg/bg yang sudah dipakai
+utk kartu Ringkasan/Laporan/Pengaturan (supaya avatar produk tidak
+tertukar makna dgn aksen fungsional itu). Test: widget test verifikasi
+warna avatar BUKAN dari `_kAvatarGradients` lama (atau verifikasi warna
+baru match palet pastel baru) di kedua mode (grid & list).
 
 ---
 
@@ -115,188 +161,6 @@ perlu pikirkan ulang apakah "kas sistem" harus juga netral terhadap
 `changeTaken` (kembalian yang belum diambil vs sudah), karena itu
 memengaruhi apakah uangnya SUNGGUHAN sudah keluar dari laci fisik atau
 belum.
-
----
-
-## Item 3 — SEBAGIAN SELESAI (superseded oleh fitur "Import dari Griyo POS")
-
-3a (delimiter `;`, alias header "Produk"/"Kode Produk"/"Grup Produk"/
-"Harga Jual"/"Harga Pokok", ID satuan/grup legacy mentah) **SUDAH
-DIPERBAIKI** — lihat CHANGELOG `63d0f2d`. 3b (auto-gabung baris nama-sama-
-satuan-beda jadi 1 produk multi-satuan) **DITOLAK user** — keputusan final:
-import tetap FLAT, counter `sameNameDifferentUnit` menandai kandidat gabung
-manual (rasio konversi antar satuan memang tidak ada di CSV Griyo, jadi
-auto-gabung berisiko rasio salah/tersembunyi).
-
-**Sisa terbuka (prioritas rendah):** 3c — kolom "Non Stok" dari export
-Griyo masih belum dibaca sama sekali oleh `csv_import_service.dart` (semua
-produk hasil import selalu `isNonStock: false`). Belum ada laporan dampak
-nyata dari user; kerjakan kalau ada keluhan konkret.
-
----
-
-## Item 4 — Import pelanggan dari Griyo POS (fitur eksperimental, ANALISIS SELESAI — implementasi BELUM dimulai)
-
-**STATUS: DIPENDING sementara** bareng Item 5 — lihat catatan status di
-Item 5 (migrasi user ternyata cakup lebih dari transaksi+pelanggan,
-termasuk produk dll., scope penuh belum dirinci). Analisis di bawah ini
-tetap valid & siap dipakai begitu user re-konfirmasi & minta lanjut.
-
-**Prioritas (kalau nanti dilanjutkan):** Siap dikerjakan — sumber data &
-keputusan besar sudah ada, tinggal 1-2 keputusan kecil sebelum coding
-(lihat di bawah).
-
-**Sumber data dianalisis:** `Pelanggan.xlsx` (Griyo POS), 493 baris, 1 sheet.
-Kolom: `Pelanggan, Alamat, Telepon, Barcode, Keterangan, Poin, Piutang`.
-Semua kolom tersimpan sebagai TEXT di file (termasuk Poin & Piutang yang
-seharusnya angka) — parser perlu `double.tryParse`, BUKAN `int.tryParse`,
-karena minimal 1 baris Piutang dalam notasi ilmiah (`"1.23745e+06"`) yang
-akan gagal-diam-diam-jadi-0 kalau dipakai `int.tryParse`.
-
-**Kecocokan skema `Customers`:** `Pelanggan`→`name`, `Alamat`→`address`,
-`Telepon`→`phone`, `Poin`→`loyaltyPoints`, `Keterangan`→`notes` (kosong
-semua di file ini). `Barcode` (kartu member) **tidak ada field setara**
-di skema `Customers` sekarang — The POS belum punya fitur kartu
-member/barcode pelanggan sama sekali; datanya toh nyaris kosong (1/493
-baris) jadi kemungkinan besar cukup diabaikan.
-
-**Keputusan yang SUDAH DIJAWAB user:**
-1. **Piutang lama dari Griyo (327 pelanggan berpiutang) — TIDAK dibawa.**
-   Import nama/alamat/telepon/poin saja, piutang mulai dari nol bersih di
-   The POS. (Alasan yang dipertimbangkan: `customers.outstandingDebt` cuma
-   cache lama — tab Buku Hutang menghitung fresh dari transaksi asli, jadi
-   kalau field itu diisi langsung dari Griyo akan muncul di badge pelanggan
-   TAPI TIDAK di Buku Hutang, dua tempat beda angka. User pilih untuk tidak
-   membawa data ini sama sekali daripada membuat transaksi tempo pembuka
-   sintetis.)
-2. **Baris bernama "-" dengan Piutang ~Rp1,2 juta (bucket pelanggan
-   umum/tanpa nama Griyo) — DILEWATI**, tidak diimport sebagai pelanggan.
-
-**Sisa keputusan kecil (belum ditanyakan/dijawab eksplisit, ambil default
-masuk akal saat implementasi kecuali user koreksi):**
-- **17 nama duplikat** (mis. "Bu Ika" 2x) — sudah dicek manual pakai kolom
-  Alamat: mayoritas memang orang BEDA (panggilan sama, lazim di kampung).
-  Beberapa ambigu (alamat sama-sama kosong/nyaris identik: "Mbak Dwi",
-  "Suhar", "Tantowi"). Default: import apa adanya sebagai entri terpisah
-  (tidak bisa dibedakan otomatis dari data yang tersedia) — user gabung
-  manual via UI kalau ternyata orang yang sama.
-- **23 nama dengan whitespace nyasar** (mis. `"Bu Abi "`) — trim saat
-  import supaya tidak dianggap beda dari pencarian nama tanpa spasi.
-- **Piutang blank (bukan "0")** untuk 166 baris — treat sebagai 0 (tidak
-  relevan lagi karena Piutang keputusan #1 di atas: tidak dibawa sama
-  sekali).
-
-**File yang kemungkinan terlibat:** file BARU, kemungkinan
-`lib/core/services/customer_import_service.dart` (pola sama seperti
-`csv_import_service.dart`, tapi untuk `.xlsx` bukan `.csv` — perlu cek
-package excel yang sudah dipakai project, lihat §Stack di CLAUDE.md).
-UI: entry baru di Pengaturan → Eksperimental (pola sama seperti "Import
-dari Griyo POS" produk).
-
-**Gotcha wajib diwariskan dari bug import produk (Item terbaru, `e4baa92`):**
-`ProductUnitsCompanion` yang dibuat importer HARUS eksplisit set field yang
-constraint lain di app diam-diam mengasumsikan ada nilainya (kasus produk:
-`isBaseUnit`) — kalau ada pola serupa di `Customers`/relasi terkait
-(mis. field yang beberapa layar UI baca dengan fallback tapi ada SATU layar
-yang tidak), cek dulu SEMUA titik baca sebelum importer selesai, jangan
-cuma tes "tab pelanggan muncul" lalu anggap beres.
-
----
-
-## Item 5 — Import riwayat transaksi dari dataset lama (fitur baru + jadi data stress-test nyata)
-
-**STATUS: DIPENDING sementara** (keputusan user) — migrasi data user
-ternyata BUKAN cuma transaksi + pelanggan (Item 4/5), tapi juga mencakup
-aspek lain (mis. produk, dll — belum dirinci detailnya). Daripada
-implementasi Item 4/5 dulu sebagian lalu ternyata perlu dirombak begitu
-scope penuh migrasi diketahui, **seluruh inisiatif migrasi data
-(Item 3c, 4, 5, dan kemungkinan item baru terkait produk) ditahan
-dulu** — user minta prioritaskan eksekusi item lain yang sudah matang
-(29/30/31/32/33) duluan. Jangan mulai Item 4/5 sebelum user re-konfirmasi
-scope migrasi lengkap & bilang siap lanjut.
-
-**Prioritas (kalau nanti dilanjutkan):** Setelah Item 3 selesai (lihat
-alasan ketergantungan di 3b — bug dedup importer di Item 2 sudah selesai
-dikerjakan, lihat CHANGELOG).
-
-**DIKONFIRMASI user (menjawab pertanyaan cakupan yang sebelumnya
-menggantung):** user punya **riwayat transaksi PENUH dari tahun lalu**,
-format `.xlsx`, **dibagi per bulan** (sengaja dipecah gitu oleh user krn
-khawatir file besar bikin crash saat diproses) — jadi bukan cuma
-beberapa sampel, tapi mendekati cakupan riwayat penuh yang diperkirakan
-sebelumnya. Siap diestimasi skala pekerjaannya & mulai diimplementasi
-kapan saja — tidak ada lagi pertanyaan menggantung soal cakupan data.
-(Konsekuensi teknis: importer harus bisa proses BANYAK file bulanan
-berurutan sbg satu batch/sesi import, bukan cuma 1 file sekali jalan —
-perlu dipikirkan UI multi-file upload atau proses berurutan.)
-
-**Konteks penemuan:** User awalnya bertanya kenapa hasil ekstraksi riwayat
-transaksi dulu membuat struk kosong (cuma nominal, tanpa rincian item).
-
-**Root cause struk kosong (dikonfirmasi):** File `docs/reference/.../
-Penjualan <rentang>.xlsx` yang tersedia adalah **rekap agregat BULANAN**
-(kolom: Bulan, Penjualan, Transaksi, Item, Diskon, Biaya admin, Laba) — satu
-baris = satu bulan, TIDAK ADA nama produk atau rincian item sama sekali di
-file ini. Kalau file inilah yang dulu dipakai sebagai sumber import
-transaksi, struk pasti kosong rinciannya karena informasinya sendiri sudah
-tidak ada di sumbernya (bukan bug proses import).
-
-**Kabar baik — ditemukan file lain yang jauh lebih detail:** file
-`Transaksi <rentang-tanggal>.xlsx` (contoh yang sudah dicek:
-`Transaksi 2026-06-10_2026-06-11 2026-06-10.xlsx`) punya struktur PER
-TRANSAKSI dengan kolom:
-```
-Tanggal | ID | Pelanggan | Subtotal | Diskon | Total | Pembayaran |
-Biaya admin | Laba | Poin | Pegawai | Catatan Internal | Catatan Struk | Rincian
-```
-Kolom **"Rincian"** berisi rincian item sebagai teks bebas, format
-`NamaProduk:Qty` dipisah baris baru (`\n`) di dalam satu sel, contoh:
-```
-Minyak Filma:1
-Intermie:5
-Power F:1
-Golda:4
-...
-```
-(Nota #13164 milik "Mbak Ima" — nama yang sama dengan kasus pencarian di
-Item 1, ditemukan langsung sebagai bukti nyata di dataset ini.)
-
-**Kenapa item ini bernilai ganda:**
-1. Mengembalikan rincian struk yang hilang (tujuan awal).
-2. Karena ini data transaksi ASLI (bukan dummy/buatan), begitu masuk
-   database ini otomatis jadi uji beban NYATA untuk seluruh aplikasi:
-   pencarian riwayat transaksi, laporan, kartu poin pelanggan, performa
-   daftar (grid/list) — semuanya teruji dengan volume & pola yang benar-
-   benar terjadi di toko user, bukan skenario buatan yang bisa saja meleset
-   dari kondisi sesungguhnya.
-
-**Ketergantungan (urutan tidak boleh dibalik):** HARUS dikerjakan setelah
-Item 3 terutama 3b (fix rasio multi-satuan) selesai. Alasan: pencocokan
-nama produk di kolom "Rincian" bergantung penuh pada katalog yang sudah
-lengkap & berstruktur benar. Kalau strukturnya kacau (Item 3b — "Sedap
-Goreng" jadi banyak entitas tak berhubungan), baris rincian transaksi yang
-menyebut produk itu otomatis ikut gagal/salah cocok juga — bug akan menumpuk
-kalau urutan pengerjaan dibalik.
-
-**Risiko/keputusan yang perlu diantisipasi saat implementasi (belum
-diputuskan):**
-- Nama produk di "Rincian" bisa ambigu kalau produk itu ternyata punya
-  beberapa satuan/varian dengan nama sama (persis kasus "Sedap Goreng" per
-  dus vs per biji). Perlu aturan: default ke satuan dasar? Tandai untuk
-  direview manual kalau ambigu?
-- Baris item yang nama produknya sama sekali tidak ketemu di katalog
-  (produk sudah dihapus/berganti nama sejak transaksi itu terjadi asli) —
-  dilewati dengan catatan, atau dibuat "produk tak dikenal" sebagai
-  placeholder?
-- Kolom "Poin" di file — direkonstruksi ke ledger poin pelanggan juga, atau
-  cukup catatan transaksinya saja tanpa menyentuh poin (untuk menghindari
-  dobel-hitung kalau poin di app sekarang sudah berbeda dari saat itu)?
-- Ini akan jadi jalur "import transaksi" PERTAMA di aplikasi — pekerjaan
-  baru dari nol, bukan modifikasi importer yang sudah ada.
-
-**File yang kemungkinan terlibat (belum pasti):** file BARU, kemungkinan
-`lib/core/services/transaction_import_service.dart`. Perlu menulis ke
-`transactions`, `transaction_items`, kemungkinan `loyalty_point_ledger`.
 
 ---
 
@@ -530,23 +394,27 @@ CHANGELOG untuk hash tiap item. Sisa satu: **Item 17+21 (sync)** — lihat
 detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
 "majukan watermark upload" butuh test round-trip HTTP asli).
 
+**Item migrasi data Griyo (Item 3c/4/5) DICORET user** (18 Juli) — dihapus
+dari plan. Kalau nanti user mau lanjut migrasi data lama, mulai analisis
+dari nol (riwayat teknis lama sudah dibuang dari plan ini).
+
 **Item lain yang masih terbuka:**
-1. **Item 4** (import pelanggan Griyo) — analisis + keputusan besar SELESAI,
-   siap diimplementasikan (lihat detail di atas).
-2. **Item 3c** (kolom "Non Stok" diabaikan importer produk) — prioritas
-   rendah, tunggu keluhan konkret.
-3. **Item 5** (import riwayat transaksi dari dataset lama) — perlu
-   konfirmasi user soal cakupan tanggal file `Transaksi ...xlsx` sebelum
-   mulai; dependensi ke Item 3b (rasio multi-satuan) sekarang longgar
-   karena user sudah memilih flat-import tanpa auto-gabung.
-4. **Item 23 sisa** (`printer_service.dart` `printReceipt` tunggal,
+1. **Item 47** (pengeluaran tidak ikut ekspor PDF/Excel Laporan) & **Item
+   48** (avatar produk kasir jadi soft/pastel) — user setuju, siap
+   eksekusi, ditahan atas permintaan ("sisanya biarkan"). Detail di atas.
+2. **Item 23 sisa** (`printer_service.dart` `printReceipt` tunggal,
    `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
    Hutang, Tutup Kasir "kas sistem" overstated) — belum disentuh, lihat
    detail Item 23 di atas.
+3. **Item 17+21 (sync)** — ditunda ke sesi fokus (risiko data-loss).
+4. **Item 28** (pegawai lanjutkan pesanan owner lintas device) — konsep,
+   belum didesain.
 5. **Item 38** (tie-break `_rawBaseStock` tidak kronologis kalau 2
    perubahan stok jatuh di detik yang sama) — prioritas rendah, ditemukan
    tak sengaja lewat test, belum ada laporan dampak nyata di device asli.
-6. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
+6. **Item 32** (debounce scanner eksternal) — tunggu konfirmasi user tes
+   device fisik.
+7. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
    di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
    keputusan desain user), C.2 (gabung Item 17+21), uji printer device
    fisik Android ≤11, dan daftar P3 — detail di Item 41 di atas.

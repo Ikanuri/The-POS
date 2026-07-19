@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import 'cart_meta_provider.dart';
@@ -573,6 +574,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         now: now,
         loyaltyEntry: loyaltyEntry,
       );
+
+      // Item 46 — peringatan stok menipis dari produk yang baru terjual,
+      // disimpan untuk ditampilkan sbg banner saat pengguna kembali ke kasir
+      // (setelah alur struk), bukan sekarang (masih di layar bayar/struk).
+      final soldProductIds = cart
+          .where((item) => effQty(item) > 0)
+          .map((item) => item.productId)
+          .toSet();
+      final lowStock = await db.lowStockAlertsForProducts(soldProductIds);
+      if (lowStock.isNotEmpty) {
+        ref.read(pendingLowStockAlertsProvider.notifier).state = lowStock;
+      }
 
       ref.read(cartProvider(_cartId).notifier).clear();
       ref.read(cartMetaProvider(_cartId).notifier).clear();

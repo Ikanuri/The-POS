@@ -742,7 +742,27 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                               onChanged: _readOnly
                                   ? (_) {}
                                   : (updated) {
-                                      setState(() => _units[e.key] = updated);
+                                      setState(() {
+                                        _units[e.key] = updated;
+                                        // Satuan dasar wajib TUNGGAL: begitu
+                                        // satu unit dijadikan dasar, lepaskan
+                                        // flag dasar dari unit lain. Tanpa ini
+                                        // flag lama tak pernah di-clear (checkbox
+                                        // "Jadikan Satuan Dasar"-nya keburu
+                                        // hilang dari tampilan) → 2 unit dasar
+                                        // aktif sekaligus tersimpan ke DB.
+                                        if (updated.isBaseUnit) {
+                                          for (var i = 0;
+                                              i < _units.length;
+                                              i++) {
+                                            if (i != e.key &&
+                                                _units[i].isBaseUnit) {
+                                              _units[i] = _units[i]
+                                                  .copyWith(isBaseUnit: false);
+                                            }
+                                          }
+                                        }
+                                      });
                                       _markDirty();
                                     },
                               onRemove: () => _removeUnit(e.key),
@@ -1862,8 +1882,14 @@ class _UnitCardState extends State<_UnitCard> {
                     ? null
                     : (v) {
                         if (v == true) {
-                          widget.onChanged(
-                              widget.entry.copyWith(isBaseUnit: true));
+                          // Satuan dasar WAJIB rasio 1.0 (basis konversi stok
+                          // — `currentStock` membagi stok base dgn ratioToBase,
+                          // jadi base unit ber-rasio != 1 merusak hitungan).
+                          // Sinkron controller-nya juga supaya field "Isi per
+                          // Satuan" langsung menampilkan 1.
+                          _ratioCtrl.text = '1';
+                          widget.onChanged(widget.entry
+                              .copyWith(isBaseUnit: true, ratioToBase: 1.0));
                         }
                       },
               ),
