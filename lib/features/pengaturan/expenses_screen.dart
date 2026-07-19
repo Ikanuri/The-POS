@@ -48,12 +48,50 @@ DateTimeRange _thisMonth() {
   );
 }
 
-final _expensesProvider =
-    StreamProvider.autoDispose<List<Expense>>((ref) {
-  final db = ref.watch(databaseProvider);
-  final r = _thisMonth();
-  return db.watchExpenses(r.start, r.end);
+// Item 42 — filter periode di tab Pengeluaran. Preset terpilih ('hari'/
+// 'minggu'/'bulan'/'custom') + rentang custom bila preset = 'custom'.
+final _expensePeriodProvider = StateProvider<String>((ref) => 'bulan');
+final _expenseCustomRangeProvider =
+    StateProvider<DateTimeRange?>((ref) => null);
+
+/// Rentang efektif dari preset terpilih. Untuk 'hari'/'minggu'/'bulan'
+/// dihitung dari `DateTime.now()` saat provider dibangun (segar tiap layar
+/// dibuka; sama seperti perilaku lama yang selalu bulan berjalan).
+final _expenseRangeProvider = Provider.autoDispose<DateTimeRange>((ref) {
+  final kind = ref.watch(_expensePeriodProvider);
+  final now = DateTime.now();
+  switch (kind) {
+    case 'hari':
+      return DateTimeRange(
+        start: DateTime(now.year, now.month, now.day),
+        end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      );
+    case 'minggu':
+      final ws = now.subtract(Duration(days: now.weekday - 1));
+      return DateTimeRange(
+        start: DateTime(ws.year, ws.month, ws.day),
+        end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      );
+    case 'custom':
+      return ref.watch(_expenseCustomRangeProvider) ?? _thisMonth();
+    case 'bulan':
+    default:
+      return _thisMonth();
+  }
 });
+
+final _expensesProvider = StreamProvider.autoDispose<List<Expense>>((ref) {
+  final db = ref.watch(databaseProvider);
+  final range = ref.watch(_expenseRangeProvider);
+  return db.watchExpenses(range.start, range.end);
+});
+
+String _periodLabel(String kind) => switch (kind) {
+      'hari' => 'hari ini',
+      'minggu' => 'minggu ini',
+      'custom' => 'periode ini',
+      _ => 'bulan ini',
+    };
 
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
@@ -61,6 +99,7 @@ class ExpensesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncExpenses = ref.watch(_expensesProvider);
+    final kind = ref.watch(_expensePeriodProvider);
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -70,74 +109,148 @@ class ExpensesScreen extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Pengeluaran'),
       ),
-      body: asyncExpenses.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (expenses) {
-          if (expenses.isEmpty) {
-            return Center(
-              child: Text('Belum ada pengeluaran bulan ini.',
-                  style: TextStyle(color: scheme.onSurfaceVariant)),
-            );
-          }
-          final total =
-              expenses.fold<int>(0, (s, e) => s + e.amount);
-          // Kelompokkan per tanggal (yyyy-MM-dd).
-          final groups = <String, List<Expense>>{};
-          for (final e in expenses) {
-            final key = DateFormat('yyyy-MM-dd').format(e.createdAt);
-            groups.putIfAbsent(key, () => []).add(e);
-          }
-          final device = ref.watch(deviceProvider);
+      body: Column(
+        children: [
+          _periodSelector(context, ref),
+          Expanded(
+            child: asyncExpenses.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (expenses) {
+                if (expenses.isEmpty) {
+                  return Center(
+                    child: Text(
+                        'Belum ada pengeluaran ${_periodLabel(kind)}.',
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                  );
+                }
+                final total = expenses.fold<int>(0, (s, e) => s + e.amount);
+                // Kelompokkan per tanggal (yyyy-MM-dd).
+                final groups = <String, List<Expense>>{};
+                for (final e in expenses) {
+                  final key = DateFormat('yyyy-MM-dd').format(e.createdAt);
+                  groups.putIfAbsent(key, () => []).add(e);
+                }
+                final device = ref.watch(deviceProvider);
 
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 96),
-            children: [
-              Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                return ListView(
+                  padding: const EdgeInsets.only(bottom: 96),
                   children: [
-                    Flexible(
-                      child: Text('Total bulan ini',
-                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text('Total ${_periodLabel(kind)}',
+                                style: TextStyle(
+                                    color: scheme.onSurfaceVariant)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(formatRupiah(total),
+                              style: AppTheme.numStyle(context,
+                                  size: 18, weight: FontWeight.w700)),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(formatRupiah(total),
-                        style: AppTheme.numStyle(context,
-                            size: 18, weight: FontWeight.w700)),
+                    for (final entry in groups.entries) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Text(
+                          _fmtTanggal(DateTime.parse(entry.key)),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                      ...entry.value.map((e) => _ExpenseTile(
+                            expense: e,
+                            // Owner/asisten boleh hapus apa saja; kasir
+                            // hanya pengeluaran miliknya sendiri.
+                            canDelete: device.canSeeReports ||
+                                e.kasirId == device.deviceCode,
+                          )),
+                    ],
                   ],
-                ),
-              ),
-              for (final entry in groups.entries) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Text(
-                    _fmtTanggal(DateTime.parse(entry.key)),
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onSurfaceVariant),
-                  ),
-                ),
-                ...entry.value.map((e) => _ExpenseTile(
-                      expense: e,
-                      // Owner/asisten boleh hapus apa saja; kasir hanya
-                      // pengeluaran miliknya sendiri.
-                      canDelete: device.canSeeReports ||
-                          e.kasirId == device.deviceCode,
-                    )),
-              ],
-            ],
-          );
-        },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// Item 42 — pemilih periode (Hari Ini / Minggu Ini / Bulan Ini / Custom).
+  Widget _periodSelector(BuildContext context, WidgetRef ref) {
+    final kind = ref.watch(_expensePeriodProvider);
+    final range = ref.watch(_expenseRangeProvider);
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+          child: Row(
+            children: [
+              for (final (k, label) in const [
+                ('hari', 'Hari Ini'),
+                ('minggu', 'Minggu Ini'),
+                ('bulan', 'Bulan Ini'),
+                ('custom', 'Custom'),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(label),
+                    selected: kind == k,
+                    onSelected: (_) => _selectPeriod(context, ref, k),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (kind == 'custom')
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+            child: Text(
+              '${_fmtTanggalShort(range.start)} – '
+              '${_fmtTanggalShort(range.end)}',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _selectPeriod(
+      BuildContext context, WidgetRef ref, String kind) async {
+    if (kind == 'custom') {
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now(),
+        initialDateRange:
+            ref.read(_expenseCustomRangeProvider) ?? _thisMonth(),
+      );
+      if (picked == null) return;
+      ref.read(_expenseCustomRangeProvider.notifier).state = DateTimeRange(
+        start: DateTime(picked.start.year, picked.start.month, picked.start.day),
+        end: DateTime(
+            picked.end.year, picked.end.month, picked.end.day, 23, 59, 59),
+      );
+      ref.read(_expensePeriodProvider.notifier).state = 'custom';
+    } else {
+      ref.read(_expensePeriodProvider.notifier).state = kind;
+    }
   }
 
   void _showAddSheet(BuildContext context, WidgetRef ref) {
