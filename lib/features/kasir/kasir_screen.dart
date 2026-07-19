@@ -2240,10 +2240,8 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.shopping_basket_rounded,
-                    color: Colors.white,
-                    size: 18,
+                  child: const Center(
+                    child: _PeachGlyph(size: 20, color: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -3818,4 +3816,62 @@ class _VerifyOrderSheetState extends ConsumerState<_VerifyOrderSheet> {
       ),
     );
   }
+}
+
+/// Ikon peach (buah persik) sederhana — siluet putih terisi, gaya senada
+/// dengan glyph Material lain (filled, tanpa outline). Dipakai di kotak
+/// gradient pojok kiri atas toolbar kasir (revisi user: ganti bentuk saja,
+/// gaya & warna tetap). Digambar via [CustomPaint] karena Material tidak
+/// punya ikon peach bawaan.
+class _PeachGlyph extends StatelessWidget {
+  const _PeachGlyph({required this.size, required this.color});
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(size: Size.square(size), painter: _PeachPainter(color));
+}
+
+class _PeachPainter extends CustomPainter {
+  _PeachPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    // Koordinat unit (0..1) diskalakan ke kanvas — badan peach: dua lobus di
+    // atas dgn celah di tengah, membulat penuh di bawah.
+    Offset p(double x, double y) => Offset(x * w, y * h);
+    final body = Path()
+      ..moveTo(p(0.5, 0.30).dx, p(0.5, 0.30).dy)
+      ..cubicTo(p(0.42, 0.14).dx, p(0.42, 0.14).dy, p(0.18, 0.13).dx,
+          p(0.18, 0.13).dy, p(0.13, 0.36).dx, p(0.13, 0.36).dy)
+      ..cubicTo(p(0.07, 0.58).dx, p(0.07, 0.58).dy, p(0.12, 0.92).dx,
+          p(0.12, 0.92).dy, p(0.5, 0.96).dx, p(0.5, 0.96).dy)
+      ..cubicTo(p(0.88, 0.92).dx, p(0.88, 0.92).dy, p(0.93, 0.58).dx,
+          p(0.93, 0.58).dy, p(0.87, 0.36).dx, p(0.87, 0.36).dy)
+      ..cubicTo(p(0.82, 0.13).dx, p(0.82, 0.13).dy, p(0.58, 0.14).dx,
+          p(0.58, 0.14).dy, p(0.5, 0.30).dx, p(0.5, 0.30).dy)
+      ..close();
+    canvas.drawPath(body, paint);
+
+    // Daun kecil di atas celah (menandai "peach", bukan sekadar bulatan/hati).
+    final leaf = Path()
+      ..moveTo(p(0.52, 0.25).dx, p(0.52, 0.25).dy)
+      ..cubicTo(p(0.60, 0.06).dx, p(0.60, 0.06).dy, p(0.78, 0.02).dx,
+          p(0.78, 0.02).dy, p(0.86, 0.11).dx, p(0.86, 0.11).dy)
+      ..cubicTo(p(0.80, 0.21).dx, p(0.80, 0.21).dy, p(0.66, 0.28).dx,
+          p(0.66, 0.28).dy, p(0.52, 0.25).dx, p(0.52, 0.25).dy)
+      ..close();
+    canvas.drawPath(leaf, paint);
+  }
+
+  @override
+  bool shouldRepaint(_PeachPainter old) => old.color != color;
 }

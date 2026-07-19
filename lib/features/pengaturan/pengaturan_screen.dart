@@ -64,8 +64,10 @@ class PengaturanScreen extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Aksen warna soft per fungsi (mockup Varian B, dipilih user): tiap
     // kartu SEKSI diwarnai menurut domainnya — hue sama dgn Ringkasan/
-    // Laporan (bukan warna baru per layar). "Device Ini"/"Toko" sengaja
-    // netral (isinya campuran, tidak mewakili satu domain tunggal).
+    // Laporan (bukan warna baru per layar).
+    final deviceBg = AppTheme.scanBg(isDark); // Device Ini → biru (identitas)
+    final tokoBg = AppTheme.changeBg(isDark); // Toko → hijau (usaha)
+    final perangkatBg = AppTheme.tealBg(isDark); // Perangkat → teal (hardware)
     final syncBg = AppTheme.riwayatBg(isDark); // Sinkronisasi → ungu
     final expBg = AppTheme.stockWarnBg(isDark); // Eksperimental → amber (hati-hati)
     final dataMgmtBg = AppTheme.debtBg(isDark); // Manajemen Data → merah (berisiko tinggi)
@@ -87,6 +89,7 @@ class PengaturanScreen extends ConsumerWidget {
         children: [
           const _SectionHeader('Device Ini'),
           Card(
+            color: deviceBg,
             child: Column(
               children: [
                 ListTile(
@@ -125,6 +128,7 @@ class PengaturanScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           const _SectionHeader('Toko'),
           Card(
+            color: tokoBg,
             child: Column(
               children: [
                 ListTile(
@@ -345,6 +349,7 @@ class PengaturanScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           const _SectionHeader('Perangkat'),
           Card(
+            color: perangkatBg,
             child: Column(
               children: [
                 ListTile(

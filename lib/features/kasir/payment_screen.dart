@@ -1259,7 +1259,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     (_isSaving || !_bayarEnabled) ? null : _onBayarNantiPressed,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
-                  backgroundColor: Theme.of(context).colorScheme.error,
+                  // Mode gelap: scheme.error terlalu pucat — pakai merah solid
+                  // yang sama dgn stepper state merah (tombol minus).
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFFD64545)
+                          : Theme.of(context).colorScheme.error,
                   foregroundColor: Colors.white,
                 ),
                 child:
@@ -1703,6 +1708,35 @@ class _Keypad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Aksen soft keypad (permintaan user): angka 1-9 hijau soft; tombol nol
+    // (0/00/000) biru bertahap makin gelap; C/⌫ tetap netral. Softness setara
+    // dgn latar aksi (C/⌫) yg sudah ada.
+    // Biru bertahap: 0 termuda → 000 tertua.
+    final blueLight = [
+      const Color(0xFFE7EEF5),
+      const Color(0xFFD3E1EE),
+      const Color(0xFFBFD4E7),
+    ];
+    final blueDark = [
+      const Color(0x268AABC4),
+      const Color(0x408AABC4),
+      const Color(0x598AABC4),
+    ];
+    Color? keyBg(String k, bool isAction) {
+      if (isAction) return scheme.surfaceContainerHighest;
+      final blueIdx = k == '0' ? 0 : (k == '00' ? 1 : (k == '000' ? 2 : -1));
+      if (blueIdx >= 0) return (isDark ? blueDark : blueLight)[blueIdx];
+      return AppTheme.changeBg(isDark); // 1-9 → hijau soft
+    }
+
+    Color keyFg(String k, bool isAction) {
+      if (isAction) return scheme.onSurfaceVariant;
+      final isZero = k == '0' || k == '00' || k == '000';
+      return isZero ? AppTheme.scanFg(isDark) : AppTheme.changeFg(isDark);
+    }
+
     Widget key(String k, {int flex = 1}) {
       final isAction = k == 'C' || k == '⌫';
       return Expanded(
@@ -1710,7 +1744,7 @@ class _Keypad extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(3),
           child: Material(
-            color: isAction ? scheme.surfaceContainerHighest : scheme.surface,
+            color: keyBg(k, isAction),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
               side: BorderSide(color: scheme.outlineVariant, width: 0.5),
@@ -1726,8 +1760,7 @@ class _Keypad extends StatelessWidget {
                     style: TextStyle(
                       fontSize: k.length > 1 && !isAction ? 16 : 20,
                       fontWeight: FontWeight.w600,
-                      color:
-                          isAction ? scheme.onSurfaceVariant : scheme.onSurface,
+                      color: keyFg(k, isAction),
                     ),
                   ),
                 ),

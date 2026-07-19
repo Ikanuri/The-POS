@@ -17,6 +17,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   supaya nominal harga di sebelahnya tidak lagi terasa tertutup.
 - **Tombol +/- kasir: angka tidak lagi "berkedip"** saat tombol + ditekan
   berkali-kali beruntun.
+- **Tombol +/- kasir kini lebih responsif** — jeda anti-salah-pencet yang
+  membuat penekanan cepat berturut-turut terasa lambat sudah dihapus.
+- **Keypad kalkulator uang tunai diberi warna** — angka 1–9 hijau soft,
+  tombol nol (0 / 00 / 000) biru bertahap, agar lebih mudah dibaca cepat.
+- **Tombol "Bayar" di struk kini hijau tegas** sama seperti tombol Bayar
+  di halaman pembayaran (sebelumnya hijau samar).
+- **Menu Pengaturan lebih berwarna** — seksi Device Ini (biru), Toko (hijau),
+  dan Perangkat (teal) kini punya aksen warna soft seperti seksi lain.
+- **Mode gelap:** angka pada tombol hijau (barang di keranjang) kini gelap
+  agar terbaca jelas; tombol "Bayar Nanti" di pembayaran tidak lagi terlalu
+  pucat (merah tegas).
+- **Ikon pojok kiri atas kasir** diganti jadi bentuk buah persik 🍑.
 
 ### ✨ Fitur Baru
 - **Cari produk berikutnya lebih cepat** — saat Anda menyentuh kolom cari

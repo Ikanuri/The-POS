@@ -1969,10 +1969,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     child: FilledButton(
                       onPressed: () => _showTambahBayar(context),
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.changeBg(
-                            Theme.of(context).brightness == Brightness.dark),
-                        foregroundColor: AppTheme.changeFg(
-                            Theme.of(context).brightness == Brightness.dark),
+                        backgroundColor: AppTheme.payGreen,
+                        foregroundColor: Colors.white,
                       ),
                       child: const Text('Bayar'),
                     ),

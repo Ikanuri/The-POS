@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -46,10 +44,6 @@ class AddControl extends StatefulWidget {
   }
 }
 
-// Item 13 — jeda anti-missclick: tap +/- yang datang terlalu rapat (jari
-// sedikit geser lalu kena tombol sebelah) diabaikan, bukan diproses dobel.
-const _kMisclickDebounce = Duration(milliseconds: 150);
-
 // Pijakan jempol: stepper yang habis di-tap membesar & TETAP besar (lihat
 // AddControl.activeStepper) sampai di-nonaktifkan dari luar.
 const _kActiveScale = 1.15;
@@ -66,29 +60,12 @@ const _kActiveScaleDuration = Duration(milliseconds: 150);
 bool _pointerDownOnStepper = false;
 
 class _AddControlState extends State<AddControl> {
-  bool _blocked = false;
-  Timer? _unblockTimer;
-
   // Item 43 — sisi mana angka qty ditampilkan SELAGI stepper aktif. true =
   // angka pindah ke tombol minus (kiri), tombol plus (kanan) jadi ikon "+"
   // polos (dipakai setelah tombol "+" ditekan). false = normal (angka di
   // tombol +/kanan). Hanya berpengaruh saat stepper aktif — begitu tidak
   // aktif, rendering selalu normal (lihat `qtyOnLeft` di build).
   bool _qtyOnLeft = false;
-
-  @override
-  void dispose() {
-    _unblockTimer?.cancel();
-    super.dispose();
-  }
-
-  bool _debounced() {
-    if (_blocked) return true;
-    _blocked = true;
-    _unblockTimer?.cancel();
-    _unblockTimer = Timer(_kMisclickDebounce, () => _blocked = false);
-    return false;
-  }
 
   void _activate() => AddControl.activeStepper.value = this;
 
@@ -99,7 +76,6 @@ class _AddControlState extends State<AddControl> {
     // notifier ke nilai sama (this) → ValueNotifier TIDAK memberitahu, jadi
     // perpindahan angka tak akan ter-render tanpa setState eksplisit ini.
     setState(() => _qtyOnLeft = true);
-    if (_debounced()) return;
     widget.onTap();
   }
 
@@ -108,21 +84,22 @@ class _AddControlState extends State<AddControl> {
     // Tombol minus yang baru ditekan jadi ikon polos → angka kembali ke sisi
     // plus (kanan).
     setState(() => _qtyOnLeft = false);
-    if (_debounced()) return;
     widget.onMinus?.call();
   }
 
   /// Label angka qty bulat, disusutkan `FittedBox` agar qty desimal panjang
   /// (mis. "0.25", produk timbang) tetap muat dalam lingkaran, bukan
   /// terpotong/meluber.
-  Widget _qtyLabel(String label, double circleSize) => Padding(
+  Widget _qtyLabel(String label, double circleSize,
+          {Color color = Colors.white}) =>
+      Padding(
         padding: EdgeInsets.all(circleSize * 0.12),
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
             label,
             style: TextStyle(
-              color: Colors.white,
+              color: color,
               fontWeight: FontWeight.w700,
               fontSize: circleSize * 0.40,
             ),
@@ -143,6 +120,12 @@ class _AddControlState extends State<AddControl> {
         : const Color(0x33C96442);
     final circleSize = size + 4;
     final minusSize = size - 2;
+    // Item 6 revisi — di mode gelap, lingkaran hijau (sudah di keranjang)
+    // pakai warna hijau muda (changeFg dark) → angka/"+" putih jadi kurang
+    // kontras. Pakai warna gelap untuk angka/ikon di lingkaran hijau saja
+    // (lingkaran terracotta saat belum di keranjang tetap putih).
+    final mainFg =
+        (inCart && isDark) ? const Color(0xFF0A3D28) : Colors.white;
 
     return ValueListenableBuilder<State<AddControl>?>(
       valueListenable: AddControl.activeStepper,
@@ -182,8 +165,8 @@ class _AddControlState extends State<AddControl> {
               child: Center(
                 child: rightShowsPlus
                     ? Icon(Icons.add_rounded,
-                        color: Colors.white, size: circleSize * 0.6)
-                    : _qtyLabel(label, circleSize),
+                        color: mainFg, size: circleSize * 0.6)
+                    : _qtyLabel(label, circleSize, color: mainFg),
               ),
             ),
           ),
