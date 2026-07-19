@@ -41,7 +41,14 @@ bilang migrasi sebenarnya cakup lebih dari transaksi+pelanggan (termasuk
 produk dll., scope belum dirinci) — ditahan, tunggu user re-konfirmasi
 scope lengkap & minta lanjut. **Item 36 (Stock Opname) & Item 37 (publish
 katalog ke Cloudflare Pages) SELESAI SEMUA & di-commit** (17 Juli,
-`5c9de7f`) — lihat CHANGELOG untuk detail teknis._
+`5c9de7f`) — lihat CHANGELOG untuk detail teknis. **Item 41 (audit kode)
+P1/P2 SELESAI & di-commit** (18 Juli, lihat CHANGELOG `d2b4c4d`), sisa
+B.1/C.2/P3 masih menggantung. **Item 42/43/44 BARU (18 Juli) — SEMUA
+BELUM dieksekusi, disimpan atas permintaan user**: Item 42 = investigasi
+"total pengeluaran tidak sinkron" (root cause SUDAH ketemu, tunggu
+konfirmasi user) + filter periode tab Pengeluaran; Item 43 = stepper
+angka qty berpindah sisi +/- selagi aktif; Item 44 = tampilkan qty di
+kiri item keranjang._
 
 ---
 
@@ -60,6 +67,106 @@ satunya sumber kebenaran). Jadi update data dari dataset selalu berbentuk:
 user kirim data mentah → Claude olah/format jadi bentuk yang bisa diimpor →
 user jalankan import sendiri di app lewat fitur yang sudah ada (atau yang
 akan dibangun). Bukan Claude yang menulis langsung ke database terenkripsi.
+
+---
+
+## Item 42 — Total pengeluaran "tidak sinkron" antara tab Pengeluaran & Laporan + filter periode (18 Juli, BELUM dieksekusi — user bilang "skip dulu")
+
+**Laporan user**: total pengeluaran di tab Pengeluaran (Pengaturan →
+Pengeluaran) tidak cocok/sinkron angkanya. Diminta juga: total pengeluaran
+bisa difilter harian/mingguan/bulanan/custom (bandingkan dgn tab Laporan
+yang sudah punya date-range picker).
+
+**Root cause SUDAH ditemukan (investigasi selesai, BELUM dikonfirmasi user
+krn AskUserQuestion sempat error saat sesi berjalan)**: ada 4 jenis
+pengeluaran (`daily_expense`/operasional, `owner_withdrawal`/ambil pribadi
+owner, `supplier_payment`/bayar supplier, `change_given`/uang keluar laci
+tanpa transaksi):
+- `expenses_screen.dart` ("Total bulan ini"): jumlah **SEMUA 4 jenis**,
+  rentang **selalu bulan berjalan** (`_thisMonth()`, hardcode, tidak bisa
+  diubah/difilter sama sekali).
+- `app_database.dart` `getNetProfitExpenseTotal()` (dipakai KPI
+  "Pengeluaran" di tab Laporan → Ringkasan, `AppDatabase.
+  netProfitExpenseTypes`): cuma **2 dari 4 jenis** (`daily_expense` +
+  `change_given`) — `owner_withdrawal`/`supplier_payment` SENGAJA
+  dikecualikan (komentar existing: `owner_withdrawal` bukan biaya
+  operasional, `supplier_payment` sudah terhitung via `cost_at_sale` di
+  HPP — kalau ikut dijumlah di sini akan dobel-hitung pengurang Laba
+  Bersih).
+
+Jadi KEDUA angka itu **memang berbeda by design** kapan pun toko pernah
+punya transaksi "Ambil Pribadi (Owner)" atau "Bayar Supplier" di periode
+yang sama — bukan bug sinkronisasi data/LAN sync, murni beda definisi
+"pengeluaran" antara dua layar (satu = seluruh kas keluar, satu = khusus
+pengurang Laba Bersih). Tidak ada indikasi duplikasi data dari sync (tabel
+`expenses` punya `localId` unique, primary key `id`, `INSERT OR REPLACE`
+by id — aman idempotent).
+
+**Rencana (BELUM disetujui detail UI-nya, keputusan cepat diambil sesi ini
+tanpa konfirmasi eksplisit user karena tool tanya sempat gagal)**:
+tambahkan filter periode (Harian/Mingguan/Bulanan/Custom, pola serupa
+`dateRangeProvider`+`showDateRangePicker` di `laporan_screen.dart`) ke
+`expenses_screen.dart` — TIDAK mengubah `getNetProfitExpenseTotal`/definisi
+Laba Bersih di Laporan (itu logic yang benar & sengaja begitu). Pertanyaan
+terbuka yang masih perlu dikonfirmasi user sebelum eksekusi:
+1. Filter ditaruh di tab Pengeluaran saja, atau juga perlu cara
+   membandingkan/menyelaraskan definisi dengan KPI Laporan?
+2. Apakah user setuju root cause di atas (beda definisi 4-jenis vs
+   2-jenis) memang penyebabnya, atau ada gejala lain yg belum tertangkap
+   (mis. angka beda antar-device setelah sync LAN, bukan cuma beda
+   antar-layar)?
+
+**Status: SKIP dulu atas permintaan user — jangan eksekusi sampai user
+minta lanjut & jawab 2 pertanyaan di atas.**
+
+## Item 43 — Stepper: angka qty "berpindah" antara tombol +/- (18 Juli, BELUM dieksekusi — "simpan dalam task dulu")
+
+User klarifikasi maksud lanjutan dari fitur "pijakan jempol" (`AddControl.
+activeStepper`, `98ab0df`) yang barusan selesai: SELAGI stepper dalam
+kondisi "aktif" (membesar & tetap besar), angka qty **berpindah tempat**
+tergantung tombol mana yang BARU SAJA ditekan:
+- Tap **+** (kanan/main circle) → tombol **+** balik jadi ikon "+" polos;
+  **angka qty pindah ke tombol minus (kiri)**.
+- Tap **-** (kiri) → tombol **-** balik jadi ikon "-" polos; **angka qty
+  pindah ke tombol plus (kanan)**.
+- Alasan (dikonfirmasi user, "sepemahaman"): tombol yang BARU ditekan
+  biasanya ketutupan jempol sendiri — angka ditampilkan di sisi yang
+  TIDAK ketutupan supaya tetap kebaca tanpa mindahin jempol.
+- Begitu stepper tidak lagi "aktif" (tap area lain/scroll, via
+  `StepperActiveScope` yg sudah ada) → kembali ke tampilan NORMAL: angka
+  selalu di tombol **+** (kanan), persis perilaku default saat ini
+  (`_AddControlState.build()` — main circle selalu tampilkan qty saat
+  `inCart`, minus selalu cuma ikon).
+
+**File terdampak (belum disentuh)**: `lib/features/kasir/widgets/
+add_control.dart` — perlu state baru (mis. `_numberOnMinusSide` bool,
+di-reset via listener `AddControl.activeStepper` yg sudah ada: begitu
+`activeStepper.value != this` → reset ke `false`/normal). Perlu tes
+widget baru (tap +/- berurutan, verifikasi lokasi Text qty vs Icon +/-
+di kedua circle, plus verifikasi reset ke normal saat `AddControl.
+clearActive()`/tap-lain/scroll dipanggil).
+
+**Status: BELUM dieksekusi, disimpan sbg rencana atas permintaan user.**
+
+## Item 44 — Tampilkan qty di kiri item keranjang (18 Juli, BELUM dieksekusi — "simpan dalam task dulu")
+
+User minta: baris item di keranjang (`_CartItemTile`,
+`cart_sheet.dart`) tampilkan angka qty JUGA di kiri item (leading),
+bukan cuma di stepper kanan. Saat ini `leading` cuma `Checkbox`
+verifikasi (`item.checked`) — belum ada indikator qty sama sekali di
+sisi kiri.
+
+**File terdampak (belum disentuh)**: `lib/features/kasir/widgets/
+cart_sheet.dart` `_CartItemTile` (baris ~291-301, `leading: Checkbox(...)`)
+— perlu desain kecil: badge/teks qty ditaruh di mana persis relatif
+terhadap Checkbox (di samping? menggantikan sebagian ruang leading yg
+sekarang cuma checkbox tunggal — `ListTile.leading` biasanya 1 widget,
+perlu dibungkus `Row`/`Column` kalau mau checkbox+badge qty sekaligus).
+Perlu tes widget baru (qty tampil benar di kiri utk item qty>1 & qty
+desimal spt 0.25 — ingat gotcha `formatRupiah`/tampilan desimal yg
+sudah beberapa kali jadi sumber bug di app ini).
+
+**Status: BELUM dieksekusi, disimpan sbg rencana atas permintaan user.**
 
 ---
 
