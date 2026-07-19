@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-19
 
+- `c371bd0` — revert: batalkan ikon peach toolbar kasir (user: "tidak mirip sama sekali"), kembalikan ke Icons.shopping_basket_rounded
+- `b0e16d2` — refine: ikon peach toolbar kasir menyerupai referensi (tangkai + daun + garis lekuk) — kemudian direvert di c371bd0
 - `772e492` — feat: batch redesign UI — keypad tunai berwarna (1-9 hijau, 0/00/000 biru bertahap), tombol Bayar struk hijau solid (payGreen) samakan checkout, HAPUS debounce stepper (bikin lemot multi-tap), aksen seksi Pengaturan (Device=biru/Toko=hijau/Perangkat=teal baru), ikon keranjang toolbar → peach custom (_PeachGlyph), mode gelap: angka lingkaran hijau stepper jadi gelap + Bayar Nanti merah solid
 - `9e52eb6` — fix: revisi UI keranjang/stepper/struk (qty di kiri keranjang jadi teks biasa, stepper minus tak berkedip saat + ditekan berulang, qty+satuan struk in-app dibold tapi tak lebih tebal dari nama produk)
 - `df48d8f` — feat: select-all teks lama saat kolom cari kasir dapat fokus ulang (ketik langsung menimpa, tak perlu jangkau tombol x) — _KasirTopbarState._onFocusChange via post-frame

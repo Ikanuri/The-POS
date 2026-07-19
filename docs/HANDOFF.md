@@ -15,9 +15,15 @@ tap) — `_kMisclickDebounce`/`_debounced()`/`dart:async` dibuang di
 `add_control.dart`, test lama `add_control_debounce_test.dart` DIHAPUS; (4)
 aksen seksi Pengaturan: Device Ini=biru(scanBg), Toko=hijau(changeBg),
 Perangkat=teal (warna BARU `AppTheme.tealFg/tealBg`) (`pengaturan_screen.dart`);
-(5) ikon keranjang toolbar kasir → siluet peach custom `_PeachGlyph`/
-`_PeachPainter` (CustomPaint, putih, di kotak gradient) — hanya toolbar kasir
-(`kasir_screen.dart`); (6) mode gelap: angka/"+" di lingkaran HIJAU stepper
+(5) ikon keranjang toolbar kasir — DIBATALKAN: sempat diganti siluet peach
+custom (`_PeachGlyph`/`_PeachPainter`), user coba 2 iterasi (mockup awal
++ mockup meniru referensi stok gambar user) tapi user putuskan "tidak
+mirip sama sekali, batalkan" — direvert total ke `Icons.shopping_
+basket_rounded` semula, kedua class custom painter DIHAPUS dari
+`kasir_screen.dart`. **Jangan coba lagi bikin custom painter peach
+tanpa arahan desain lebih presisi dari user** (mis. path SVG asli/aset
+gambar) — 2 percobaan freehand cubic bezier sebelumnya dianggap tidak
+mirip; (6) mode gelap: angka/"+" di lingkaran HIJAU stepper
 (inCart) pakai warna gelap `0xFF0A3D28` bukan putih (`add_control.dart`,
 `mainFg`); (7) tombol "Bayar Nanti" checkout mode gelap → merah solid
 `0xFFD64545` (bukan scheme.error pucat) (`payment_screen.dart`). Test baru

@@ -2240,8 +2240,10 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                       ),
                     ],
                   ),
-                  child: const Center(
-                    child: _PeachGlyph(size: 20, color: Colors.white),
+                  child: const Icon(
+                    Icons.shopping_basket_rounded,
+                    color: Colors.white,
+                    size: 18,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -3816,90 +3818,4 @@ class _VerifyOrderSheetState extends ConsumerState<_VerifyOrderSheet> {
       ),
     );
   }
-}
-
-/// Ikon peach (buah persik) sederhana — siluet putih terisi, gaya senada
-/// dengan glyph Material lain (filled, tanpa outline). Dipakai di kotak
-/// gradient pojok kiri atas toolbar kasir (revisi user: ganti bentuk saja,
-/// gaya & warna tetap). Digambar via [CustomPaint] karena Material tidak
-/// punya ikon peach bawaan.
-class _PeachGlyph extends StatelessWidget {
-  const _PeachGlyph({required this.size, required this.color});
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) =>
-      CustomPaint(size: Size.square(size), painter: _PeachPainter(color));
-}
-
-class _PeachPainter extends CustomPainter {
-  _PeachPainter(this.color);
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-
-    // Koordinat unit (0..1) diskalakan ke kanvas. Badan berlekuk dua lobus,
-    // tangkai pendek + daun runcing di atas, garis lekuk (groove) di depan
-    // dibolongkan agar latar tembus.
-    Offset p(double x, double y) => Offset(x * w, y * h);
-
-    final body = Path()
-      ..moveTo(p(0.47, 0.98).dx, p(0.47, 0.98).dy)
-      ..cubicTo(p(0.16, 0.95).dx, p(0.16, 0.95).dy, p(0.05, 0.66).dx,
-          p(0.05, 0.66).dy, p(0.08, 0.44).dx, p(0.08, 0.44).dy)
-      ..cubicTo(p(0.10, 0.25).dx, p(0.10, 0.25).dy, p(0.20, 0.16).dx,
-          p(0.20, 0.16).dy, p(0.31, 0.17).dx, p(0.31, 0.17).dy)
-      ..cubicTo(p(0.39, 0.18).dx, p(0.39, 0.18).dy, p(0.44, 0.24).dx,
-          p(0.44, 0.24).dy, p(0.48, 0.30).dx, p(0.48, 0.30).dy)
-      ..cubicTo(p(0.52, 0.22).dx, p(0.52, 0.22).dy, p(0.61, 0.16).dx,
-          p(0.61, 0.16).dy, p(0.72, 0.19).dx, p(0.72, 0.19).dy)
-      ..cubicTo(p(0.87, 0.23).dx, p(0.87, 0.23).dy, p(0.94, 0.40).dx,
-          p(0.94, 0.40).dy, p(0.93, 0.56).dx, p(0.93, 0.56).dy)
-      ..cubicTo(p(0.92, 0.75).dx, p(0.92, 0.75).dy, p(0.78, 0.93).dx,
-          p(0.78, 0.93).dy, p(0.47, 0.98).dx, p(0.47, 0.98).dy)
-      ..close();
-
-    final groove = Path()
-      ..moveTo(p(0.51, 0.32).dx, p(0.51, 0.32).dy)
-      ..cubicTo(p(0.40, 0.46).dx, p(0.40, 0.46).dy, p(0.37, 0.61).dx,
-          p(0.37, 0.61).dy, p(0.43, 0.77).dx, p(0.43, 0.77).dy)
-      ..cubicTo(p(0.45, 0.80).dx, p(0.45, 0.80).dy, p(0.48, 0.80).dx,
-          p(0.48, 0.80).dy, p(0.49, 0.76).dx, p(0.49, 0.76).dy)
-      ..cubicTo(p(0.44, 0.61).dx, p(0.44, 0.61).dy, p(0.47, 0.47).dx,
-          p(0.47, 0.47).dy, p(0.55, 0.34).dx, p(0.55, 0.34).dy)
-      ..close();
-    final bodyGrooved = Path.combine(PathOperation.difference, body, groove);
-
-    final stem = Path()
-      ..moveTo(p(0.45, 0.31).dx, p(0.45, 0.31).dy)
-      ..cubicTo(p(0.40, 0.22).dx, p(0.40, 0.22).dy, p(0.40, 0.13).dx,
-          p(0.40, 0.13).dy, p(0.46, 0.09).dx, p(0.46, 0.09).dy)
-      ..cubicTo(p(0.51, 0.11).dx, p(0.51, 0.11).dy, p(0.51, 0.16).dx,
-          p(0.51, 0.16).dy, p(0.50, 0.20).dx, p(0.50, 0.20).dy)
-      ..cubicTo(p(0.49, 0.24).dx, p(0.49, 0.24).dy, p(0.50, 0.28).dx,
-          p(0.50, 0.28).dy, p(0.51, 0.31).dx, p(0.51, 0.31).dy)
-      ..close();
-
-    final leaf = Path()
-      ..moveTo(p(0.51, 0.21).dx, p(0.51, 0.21).dy)
-      ..cubicTo(p(0.62, 0.09).dx, p(0.62, 0.09).dy, p(0.80, 0.07).dx,
-          p(0.80, 0.07).dy, p(0.91, 0.13).dx, p(0.91, 0.13).dy)
-      ..cubicTo(p(0.80, 0.19).dx, p(0.80, 0.19).dy, p(0.63, 0.26).dx,
-          p(0.63, 0.26).dy, p(0.51, 0.21).dx, p(0.51, 0.21).dy)
-      ..close();
-
-    final withStem = Path.combine(PathOperation.union, bodyGrooved, stem);
-    final full = Path.combine(PathOperation.union, withStem, leaf);
-    canvas.drawPath(full, paint);
-  }
-
-  @override
-  bool shouldRepaint(_PeachPainter old) => old.color != color;
 }
