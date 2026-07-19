@@ -67,16 +67,22 @@ void main() {
     expect(await db.stockBreakdownText('gula'), '40 Biji (2 Pak)');
   });
 
-  test(
-      'lowStockAlertsForProducts: stok <= minStock → pesan menipis; > minStock '
-      '→ kosong', () async {
+  // Dua skenario ambang dipisah ke test terpisah (db baru per test via
+  // setUp) — SENGAJA tidak dua kali adjustStock pada unit yang sama dalam
+  // satu test, karena created_at stock_ledger presisi detik + tie-break id
+  // UUID acak bisa salah pilih baris kalau dua penulisan jatuh di detik yang
+  // sama (Item 38 PLAN.md; bikin test flaky di full-suite).
+  test('lowStockAlertsForProducts: stok == minStock → pesan menipis',
+      () async {
     await seedGula(minStock: 100);
-
-    await db.adjustStock(productUnitId: 'biji', newQty: 100); // == ambang
+    await db.adjustStock(productUnitId: 'biji', newQty: 100);
     expect(await db.lowStockAlertsForProducts({'gula'}),
         ['Stok Gula menipis: sisa 100 Biji (5 Pak, 1 Dos)']);
+  });
 
-    await db.adjustStock(productUnitId: 'biji', newQty: 150); // di atas ambang
+  test('lowStockAlertsForProducts: stok > minStock → kosong', () async {
+    await seedGula(minStock: 100);
+    await db.adjustStock(productUnitId: 'biji', newQty: 150);
     expect(await db.lowStockAlertsForProducts({'gula'}), isEmpty);
   });
 

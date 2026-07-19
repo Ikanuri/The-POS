@@ -43,234 +43,18 @@ scope lengkap & minta lanjut. **Item 36 (Stock Opname) & Item 37 (publish
 katalog ke Cloudflare Pages) SELESAI SEMUA & di-commit** (17 Juli,
 `5c9de7f`) — lihat CHANGELOG untuk detail teknis. **Item 41 (audit kode)
 P1/P2 SELESAI & di-commit** (18 Juli, lihat CHANGELOG `d2b4c4d`), sisa
-B.1/C.2/P3 masih menggantung. **Item 42/43/44 BARU (18 Juli) — SEMUA
-BELUM dieksekusi, disimpan atas permintaan user**: Item 42 = investigasi
-"total pengeluaran tidak sinkron" (root cause SUDAH ketemu, tunggu
-konfirmasi user) + filter periode tab Pengeluaran; Item 43 = stepper
-angka qty berpindah sisi +/- selagi aktif; Item 44 = tampilkan qty di
-kiri item keranjang. **Item 45/46/47/48 BARU (18 Juli) — SEMUA BELUM
-dieksekusi, user SUDAH SETUJU/beri spesifikasi lengkap, siap eksekusi
-kapan saja diminta**: Item 45 = bug 2 satuan dasar aktif sekaligus
-(root cause + fix jelas); Item 46 = notifikasi inline stok menipis di
-kasir pasca-checkout (spesifikasi lengkap dari user, 1 risiko timing
-teknis blm final); Item 47 = pengeluaran tidak ikut ekspor PDF/Excel
-Laporan (root cause + fix jelas); Item 48 = warna avatar produk kasir
-jadi soft/pastel (root cause + fix jelas)._
+B.1/C.2/P3 masih menggantung. **Item 42/43/44/45/46 SELESAI & di-commit**
+(18 Juli, batch "kerjakan 42-46"): filter periode tab Pengeluaran (42),
+stepper angka qty berpindah sisi +/- (43), qty di kiri item keranjang
+(44), fix 2 satuan dasar aktif sekaligus (45), banner stok menipis di
+kasir pasca-checkout (46) — semua dgn test + revert-verify, lihat
+CHANGELOG. **Item 47/48 BELUM dieksekusi** (user bilang "sisanya
+biarkan"): Item 47 = pengeluaran tidak ikut ekspor PDF/Excel Laporan
+(root cause + fix jelas); Item 48 = warna avatar produk kasir jadi
+soft/pastel (root cause + fix jelas). **Item 3c/4/5 (migrasi data Griyo)
+DICORET user** (18 Juli, "coret: 4, 3c, 5") — dihapus dari plan._
 
 ---
-
-## Konteks — kenapa semua item di bawah ini muncul
-
-User punya dataset toko lama (`docs/reference/Contoh_Dataset.rar`,
-`docs/reference/Products.csv`) yang ingin dipindahkan ke The POS: katalog
-produk, data pelanggan + poin loyalty, dan riwayat transaksi. Diskusi dimulai
-dari 3 pertanyaan (mekanisme update data berkala, dropdown pelanggan tidak
-scrollable, bug pencarian nama pelanggan) yang ternyata saling terkait dan
-mengarah ke beberapa temuan bug nyata di importer CSV yang sudah ada.
-
-**Prinsip yang disepakati:** Claude TIDAK punya akses berkelanjutan ke
-database toko (offline-first, terenkripsi SQLCipher, HP user adalah satu-
-satunya sumber kebenaran). Jadi update data dari dataset selalu berbentuk:
-user kirim data mentah → Claude olah/format jadi bentuk yang bisa diimpor →
-user jalankan import sendiri di app lewat fitur yang sudah ada (atau yang
-akan dibangun). Bukan Claude yang menulis langsung ke database terenkripsi.
-
----
-
-## Item 42 — Total pengeluaran "tidak sinkron" antara tab Pengeluaran & Laporan + filter periode (18 Juli, BELUM dieksekusi — user bilang "skip dulu")
-
-**Laporan user**: total pengeluaran di tab Pengeluaran (Pengaturan →
-Pengeluaran) tidak cocok/sinkron angkanya. Diminta juga: total pengeluaran
-bisa difilter harian/mingguan/bulanan/custom (bandingkan dgn tab Laporan
-yang sudah punya date-range picker).
-
-**Root cause SUDAH ditemukan (investigasi selesai, BELUM dikonfirmasi user
-krn AskUserQuestion sempat error saat sesi berjalan)**: ada 4 jenis
-pengeluaran (`daily_expense`/operasional, `owner_withdrawal`/ambil pribadi
-owner, `supplier_payment`/bayar supplier, `change_given`/uang keluar laci
-tanpa transaksi):
-- `expenses_screen.dart` ("Total bulan ini"): jumlah **SEMUA 4 jenis**,
-  rentang **selalu bulan berjalan** (`_thisMonth()`, hardcode, tidak bisa
-  diubah/difilter sama sekali).
-- `app_database.dart` `getNetProfitExpenseTotal()` (dipakai KPI
-  "Pengeluaran" di tab Laporan → Ringkasan, `AppDatabase.
-  netProfitExpenseTypes`): cuma **2 dari 4 jenis** (`daily_expense` +
-  `change_given`) — `owner_withdrawal`/`supplier_payment` SENGAJA
-  dikecualikan (komentar existing: `owner_withdrawal` bukan biaya
-  operasional, `supplier_payment` sudah terhitung via `cost_at_sale` di
-  HPP — kalau ikut dijumlah di sini akan dobel-hitung pengurang Laba
-  Bersih).
-
-Jadi KEDUA angka itu **memang berbeda by design** kapan pun toko pernah
-punya transaksi "Ambil Pribadi (Owner)" atau "Bayar Supplier" di periode
-yang sama — bukan bug sinkronisasi data/LAN sync, murni beda definisi
-"pengeluaran" antara dua layar (satu = seluruh kas keluar, satu = khusus
-pengurang Laba Bersih). Tidak ada indikasi duplikasi data dari sync (tabel
-`expenses` punya `localId` unique, primary key `id`, `INSERT OR REPLACE`
-by id — aman idempotent).
-
-**Rencana (BELUM disetujui detail UI-nya, keputusan cepat diambil sesi ini
-tanpa konfirmasi eksplisit user karena tool tanya sempat gagal)**:
-tambahkan filter periode (Harian/Mingguan/Bulanan/Custom, pola serupa
-`dateRangeProvider`+`showDateRangePicker` di `laporan_screen.dart`) ke
-`expenses_screen.dart` — TIDAK mengubah `getNetProfitExpenseTotal`/definisi
-Laba Bersih di Laporan (itu logic yang benar & sengaja begitu). Pertanyaan
-terbuka yang masih perlu dikonfirmasi user sebelum eksekusi:
-1. Filter ditaruh di tab Pengeluaran saja, atau juga perlu cara
-   membandingkan/menyelaraskan definisi dengan KPI Laporan?
-2. Apakah user setuju root cause di atas (beda definisi 4-jenis vs
-   2-jenis) memang penyebabnya, atau ada gejala lain yg belum tertangkap
-   (mis. angka beda antar-device setelah sync LAN, bukan cuma beda
-   antar-layar)?
-
-**Status: SKIP dulu atas permintaan user — jangan eksekusi sampai user
-minta lanjut & jawab 2 pertanyaan di atas.**
-
-## Item 43 — Stepper: angka qty "berpindah" antara tombol +/- (18 Juli, BELUM dieksekusi — "simpan dalam task dulu")
-
-User klarifikasi maksud lanjutan dari fitur "pijakan jempol" (`AddControl.
-activeStepper`, `98ab0df`) yang barusan selesai: SELAGI stepper dalam
-kondisi "aktif" (membesar & tetap besar), angka qty **berpindah tempat**
-tergantung tombol mana yang BARU SAJA ditekan:
-- Tap **+** (kanan/main circle) → tombol **+** balik jadi ikon "+" polos;
-  **angka qty pindah ke tombol minus (kiri)**.
-- Tap **-** (kiri) → tombol **-** balik jadi ikon "-" polos; **angka qty
-  pindah ke tombol plus (kanan)**.
-- Alasan (dikonfirmasi user, "sepemahaman"): tombol yang BARU ditekan
-  biasanya ketutupan jempol sendiri — angka ditampilkan di sisi yang
-  TIDAK ketutupan supaya tetap kebaca tanpa mindahin jempol.
-- Begitu stepper tidak lagi "aktif" (tap area lain/scroll, via
-  `StepperActiveScope` yg sudah ada) → kembali ke tampilan NORMAL: angka
-  selalu di tombol **+** (kanan), persis perilaku default saat ini
-  (`_AddControlState.build()` — main circle selalu tampilkan qty saat
-  `inCart`, minus selalu cuma ikon).
-
-**File terdampak (belum disentuh)**: `lib/features/kasir/widgets/
-add_control.dart` — perlu state baru (mis. `_numberOnMinusSide` bool,
-di-reset via listener `AddControl.activeStepper` yg sudah ada: begitu
-`activeStepper.value != this` → reset ke `false`/normal). Perlu tes
-widget baru (tap +/- berurutan, verifikasi lokasi Text qty vs Icon +/-
-di kedua circle, plus verifikasi reset ke normal saat `AddControl.
-clearActive()`/tap-lain/scroll dipanggil).
-
-**Status: BELUM dieksekusi, disimpan sbg rencana atas permintaan user.**
-
-## Item 44 — Tampilkan qty di kiri item keranjang (18 Juli, BELUM dieksekusi — "simpan dalam task dulu")
-
-User minta: baris item di keranjang (`_CartItemTile`,
-`cart_sheet.dart`) tampilkan angka qty JUGA di kiri item (leading),
-bukan cuma di stepper kanan. Saat ini `leading` cuma `Checkbox`
-verifikasi (`item.checked`) — belum ada indikator qty sama sekali di
-sisi kiri.
-
-**File terdampak (belum disentuh)**: `lib/features/kasir/widgets/
-cart_sheet.dart` `_CartItemTile` (baris ~291-301, `leading: Checkbox(...)`)
-— perlu desain kecil: badge/teks qty ditaruh di mana persis relatif
-terhadap Checkbox (di samping? menggantikan sebagian ruang leading yg
-sekarang cuma checkbox tunggal — `ListTile.leading` biasanya 1 widget,
-perlu dibungkus `Row`/`Column` kalau mau checkbox+badge qty sekaligus).
-Perlu tes widget baru (qty tampil benar di kiri utk item qty>1 & qty
-desimal spt 0.25 — ingat gotcha `formatRupiah`/tampilan desimal yg
-sudah beberapa kali jadi sumber bug di app ini).
-
-**Status: BELUM dieksekusi, disimpan sbg rencana atas permintaan user.**
-
-## Item 45 — Bug: 2 satuan dasar aktif sekaligus per produk (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
-
-**Root cause dikonfirmasi via baca kode langsung**: di `produk_form_
-screen.dart`, checkbox "Jadikan Satuan Dasar" (`_UnitCard`, ~baris
-1854-1870) cuma dirender `if (!widget.entry.isBaseUnit)` (hilang dari
-tampilan begitu unit itu jadi base — jadi TIDAK BISA di-uncheck manual,
-aman dari kasus "0 base unit"), TAPI `onChanged`-nya (~baris 1861-1868)
-cuma `widget.onChanged(widget.entry.copyWith(isBaseUnit: true))` — cuma
-mengubah unit YANG DICENTANG, tidak pernah membersihkan flag di unit
-lain. Parent `onChanged` (~baris 742-747, `setState(() => _units[e.key]
-= updated)`) juga cuma replace 1 entry, tidak ada loop clear ke unit
-lain. Hasilnya: unit lama TETAP `isBaseUnit=true` (checkbox-nya sudah
-hilang jadi tidak kelihatan lagi, tapi datanya tak pernah di-clear),
-unit baru JUGA `true` — 2 unit base sekaligus tersimpan ke DB via
-`saveProduct`. **Tidak ada constraint DB** yang mencegah ini
-(`product_tables.dart` — `isBaseUnit` cuma `BoolColumn` polos, tanpa
-unique/partial-index).
-
-**Fix (disetujui, siap eksekusi)**: di parent `onChanged` (produk_form_
-screen.dart ~baris 742-747) — begitu `updated.isBaseUnit == true` dan
-beda dari sebelumnya, loop semua entry lain di `_units` & paksa
-`isBaseUnit: false`. Satu titik perbaikan, risiko kecil. Test: DB-tier
-(saveProduct 2 unit, set base ke unit ke-2, verifikasi unit pertama
-`isBaseUnit=false`) + widget-tier (toggle base unit di form, verifikasi
-checkbox unit lama hilang & baru muncul di tempat yang benar).
-
-## Item 46 — Notifikasi inline stok menipis di kasir setelah checkout (18 Juli, BELUM dieksekusi — user sudah beri spesifikasi lengkap)
-
-**Konteks**: user bilang "saya tidak menemukan peringatannya di
-manapun" — dikonfirmasi lewat investigasi: memang TIDAK ADA notifikasi
-proaktif soal stok menipis di app ini sama sekali. Yang ADA sekarang
-semuanya PASIF (user harus buka manual): chip "Stok Menipis (N)" di
-layar Produk, kartu "Kontrol Stok" di Ringkasan (cuma teks ringkas +
-nama produk, TANPA angka stok), layar Cek Stok, tab Stok Laporan (malah
-TIDAK ada peringatan menipis sama sekali di situ).
-
-**Spesifikasi FINAL dari user (sudah lengkap, siap desain teknis)**:
-1. **Trigger**: HANYA setelah checkout selesai DAN produk yang barusan
-   terjual sekarang **hit/di bawah minimum stok**-nya.
-2. **Lokasi tampil**: HANYA di layar **kasir** (`kasir_screen.dart`),
-   BUKAN di layar lain.
-3. **Timing**: muncul setelah user **kembali ke kasir** (bukan langsung
-   sesaat checkout selesai — mengikuti alur nota/struk dulu).
-4. **Format pesan**: `Stok sisa <base_qty> <base_unit_name> (<qty_lain>
-   <unit_lain>, ...)` — base unit ditampilkan apa adanya, tiap satuan
-   LAIN yang ada di produk itu dikonversi (total_base ÷ ratioToBase
-   masing-masing) & ditaruh dalam kurung, dipisah koma. Contoh:
-   "Stok sisa 100 biji (5 pak, 1 dus)".
-5. **Gaya notifikasi**: pakai `InlineBanner` yang SUDAH ADA di
-   `lib/core/widgets/inline_banner.dart` (`InlineBannerType.warning`
-   paling cocok — sudah ada varian oranye theme-aware), auto-dismiss
-   ~5 detik (`duration` param, default widget 4s — bisa di-override ke
-   5s persis permintaan user), tombol ✕ manual dismiss (SUDAH built-in
-   di widget ini, tidak perlu bikin baru). `kasir_screen.dart` sudah
-   punya helper `_showBanner(msg, type)` sendiri (beda dari
-   `InlineBannerStateMixin` generik) — tinggal reuse.
-
-**Desain teknis yang perlu diputuskan saat implementasi (blm final)**:
-- **Sumber & konversi**: helper `AppTheme`-style/`AppDatabase` baru,
-  mis. `getStockBreakdownText(productId)` — ambil semua `ProductUnits`
-  produk itu + base stock via pola `_baseUnitOf`/`currentStock` yang
-  SUDAH ADA (`app_database.dart` ~baris 387-428), convert tiap unit non-
-  base via `totalBase / ratioToBase`, format sesuai spesifikasi #4.
-- **Deteksi "hit minimum" pasca-checkout**: setelah `saveTransaction()`
-  (dipanggil dari `payment_screen.dart`) berhasil, untuk tiap
-  `productUnitId` yang barusan terjual (dari `stockItems`), cek base
-  stock produk itu SEKARANG vs `minStock`-nya (base unit) — kalau
-  `stock <= minStock` (min_stock non-null), tandai produk itu sbg
-  "baru saja hit minimum".
-- **Cara kirim sinyal dari `payment_screen.dart` balik ke
-  `kasir_screen.dart`** (2 screen berbeda, kasir_screen tetap hidup di
-  ShellRoute saat payment+struk di-push di atasnya): kandidat paling
-  masuk akal — provider Riverpod baru (mis.
-  `pendingLowStockAlertsProvider`, `StateProvider<List<String>>` berisi
-  pesan siap-tampil) yang di-set oleh `payment_screen.dart` setelah
-  `saveTransaction` sukses, di-dengarkan (`ref.listen`) oleh
-  `kasir_screen.dart`.
-- **RISIKO TIMING yang perlu diantisipasi (belum ada solusi final)**:
-  kalau banner langsung ditampilkan begitu provider berubah (via
-  `ref.listen` yg terpasang di widget `kasir_screen.dart` yang MASIH
-  HIDUP walau sedang tidak current route), timer auto-dismiss 5 detik
-  `InlineBanner` bisa MULAI MENGHITUNG & HABIS SEBELUM user benar-benar
-  kembali dari layar struk (kalau user berlama-lama lihat struk) —
-  banner sudah hilang duluan sebelum sempat dilihat. **Solusi yang
-  disarankan**: cek `ModalRoute.of(context)?.isCurrent` (pola yang
-  SUDAH dipakai di app ini utk kasus serupa — lihat gotcha HID scanner
-  di CLAUDE.md) sebelum benar-benar memanggil `_showBanner`, ATAU tunda
-  pemanggilan banner sampai route kasir kembali current (butuh
-  observer/hook route-lifecycle — belum diriset caranya paling simpel
-  di setup GoRouter app ini, perlu dicek saat implementasi).
-
-**Test yang perlu ditulis**: DB-tier (helper breakdown format string,
-skenario base+2 unit lain, produk tanpa unit lain, produk dgn minStock
-null), widget/service-tier (checkout yg bikin stok di bawah minimum →
-banner muncul di kasir dgn teks benar; checkout yg TIDAK bikin stok
-turun ke bawah minimum → banner TIDAK muncul).
 
 ## Item 47 — Pengeluaran tidak ikut ke ekspor laporan PDF/Excel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
 
@@ -377,188 +161,6 @@ perlu pikirkan ulang apakah "kas sistem" harus juga netral terhadap
 `changeTaken` (kembalian yang belum diambil vs sudah), karena itu
 memengaruhi apakah uangnya SUNGGUHAN sudah keluar dari laci fisik atau
 belum.
-
----
-
-## Item 3 — SEBAGIAN SELESAI (superseded oleh fitur "Import dari Griyo POS")
-
-3a (delimiter `;`, alias header "Produk"/"Kode Produk"/"Grup Produk"/
-"Harga Jual"/"Harga Pokok", ID satuan/grup legacy mentah) **SUDAH
-DIPERBAIKI** — lihat CHANGELOG `63d0f2d`. 3b (auto-gabung baris nama-sama-
-satuan-beda jadi 1 produk multi-satuan) **DITOLAK user** — keputusan final:
-import tetap FLAT, counter `sameNameDifferentUnit` menandai kandidat gabung
-manual (rasio konversi antar satuan memang tidak ada di CSV Griyo, jadi
-auto-gabung berisiko rasio salah/tersembunyi).
-
-**Sisa terbuka (prioritas rendah):** 3c — kolom "Non Stok" dari export
-Griyo masih belum dibaca sama sekali oleh `csv_import_service.dart` (semua
-produk hasil import selalu `isNonStock: false`). Belum ada laporan dampak
-nyata dari user; kerjakan kalau ada keluhan konkret.
-
----
-
-## Item 4 — Import pelanggan dari Griyo POS (fitur eksperimental, ANALISIS SELESAI — implementasi BELUM dimulai)
-
-**STATUS: DIPENDING sementara** bareng Item 5 — lihat catatan status di
-Item 5 (migrasi user ternyata cakup lebih dari transaksi+pelanggan,
-termasuk produk dll., scope penuh belum dirinci). Analisis di bawah ini
-tetap valid & siap dipakai begitu user re-konfirmasi & minta lanjut.
-
-**Prioritas (kalau nanti dilanjutkan):** Siap dikerjakan — sumber data &
-keputusan besar sudah ada, tinggal 1-2 keputusan kecil sebelum coding
-(lihat di bawah).
-
-**Sumber data dianalisis:** `Pelanggan.xlsx` (Griyo POS), 493 baris, 1 sheet.
-Kolom: `Pelanggan, Alamat, Telepon, Barcode, Keterangan, Poin, Piutang`.
-Semua kolom tersimpan sebagai TEXT di file (termasuk Poin & Piutang yang
-seharusnya angka) — parser perlu `double.tryParse`, BUKAN `int.tryParse`,
-karena minimal 1 baris Piutang dalam notasi ilmiah (`"1.23745e+06"`) yang
-akan gagal-diam-diam-jadi-0 kalau dipakai `int.tryParse`.
-
-**Kecocokan skema `Customers`:** `Pelanggan`→`name`, `Alamat`→`address`,
-`Telepon`→`phone`, `Poin`→`loyaltyPoints`, `Keterangan`→`notes` (kosong
-semua di file ini). `Barcode` (kartu member) **tidak ada field setara**
-di skema `Customers` sekarang — The POS belum punya fitur kartu
-member/barcode pelanggan sama sekali; datanya toh nyaris kosong (1/493
-baris) jadi kemungkinan besar cukup diabaikan.
-
-**Keputusan yang SUDAH DIJAWAB user:**
-1. **Piutang lama dari Griyo (327 pelanggan berpiutang) — TIDAK dibawa.**
-   Import nama/alamat/telepon/poin saja, piutang mulai dari nol bersih di
-   The POS. (Alasan yang dipertimbangkan: `customers.outstandingDebt` cuma
-   cache lama — tab Buku Hutang menghitung fresh dari transaksi asli, jadi
-   kalau field itu diisi langsung dari Griyo akan muncul di badge pelanggan
-   TAPI TIDAK di Buku Hutang, dua tempat beda angka. User pilih untuk tidak
-   membawa data ini sama sekali daripada membuat transaksi tempo pembuka
-   sintetis.)
-2. **Baris bernama "-" dengan Piutang ~Rp1,2 juta (bucket pelanggan
-   umum/tanpa nama Griyo) — DILEWATI**, tidak diimport sebagai pelanggan.
-
-**Sisa keputusan kecil (belum ditanyakan/dijawab eksplisit, ambil default
-masuk akal saat implementasi kecuali user koreksi):**
-- **17 nama duplikat** (mis. "Bu Ika" 2x) — sudah dicek manual pakai kolom
-  Alamat: mayoritas memang orang BEDA (panggilan sama, lazim di kampung).
-  Beberapa ambigu (alamat sama-sama kosong/nyaris identik: "Mbak Dwi",
-  "Suhar", "Tantowi"). Default: import apa adanya sebagai entri terpisah
-  (tidak bisa dibedakan otomatis dari data yang tersedia) — user gabung
-  manual via UI kalau ternyata orang yang sama.
-- **23 nama dengan whitespace nyasar** (mis. `"Bu Abi "`) — trim saat
-  import supaya tidak dianggap beda dari pencarian nama tanpa spasi.
-- **Piutang blank (bukan "0")** untuk 166 baris — treat sebagai 0 (tidak
-  relevan lagi karena Piutang keputusan #1 di atas: tidak dibawa sama
-  sekali).
-
-**File yang kemungkinan terlibat:** file BARU, kemungkinan
-`lib/core/services/customer_import_service.dart` (pola sama seperti
-`csv_import_service.dart`, tapi untuk `.xlsx` bukan `.csv` — perlu cek
-package excel yang sudah dipakai project, lihat §Stack di CLAUDE.md).
-UI: entry baru di Pengaturan → Eksperimental (pola sama seperti "Import
-dari Griyo POS" produk).
-
-**Gotcha wajib diwariskan dari bug import produk (Item terbaru, `e4baa92`):**
-`ProductUnitsCompanion` yang dibuat importer HARUS eksplisit set field yang
-constraint lain di app diam-diam mengasumsikan ada nilainya (kasus produk:
-`isBaseUnit`) — kalau ada pola serupa di `Customers`/relasi terkait
-(mis. field yang beberapa layar UI baca dengan fallback tapi ada SATU layar
-yang tidak), cek dulu SEMUA titik baca sebelum importer selesai, jangan
-cuma tes "tab pelanggan muncul" lalu anggap beres.
-
----
-
-## Item 5 — Import riwayat transaksi dari dataset lama (fitur baru + jadi data stress-test nyata)
-
-**STATUS: DIPENDING sementara** (keputusan user) — migrasi data user
-ternyata BUKAN cuma transaksi + pelanggan (Item 4/5), tapi juga mencakup
-aspek lain (mis. produk, dll — belum dirinci detailnya). Daripada
-implementasi Item 4/5 dulu sebagian lalu ternyata perlu dirombak begitu
-scope penuh migrasi diketahui, **seluruh inisiatif migrasi data
-(Item 3c, 4, 5, dan kemungkinan item baru terkait produk) ditahan
-dulu** — user minta prioritaskan eksekusi item lain yang sudah matang
-(29/30/31/32/33) duluan. Jangan mulai Item 4/5 sebelum user re-konfirmasi
-scope migrasi lengkap & bilang siap lanjut.
-
-**Prioritas (kalau nanti dilanjutkan):** Setelah Item 3 selesai (lihat
-alasan ketergantungan di 3b — bug dedup importer di Item 2 sudah selesai
-dikerjakan, lihat CHANGELOG).
-
-**DIKONFIRMASI user (menjawab pertanyaan cakupan yang sebelumnya
-menggantung):** user punya **riwayat transaksi PENUH dari tahun lalu**,
-format `.xlsx`, **dibagi per bulan** (sengaja dipecah gitu oleh user krn
-khawatir file besar bikin crash saat diproses) — jadi bukan cuma
-beberapa sampel, tapi mendekati cakupan riwayat penuh yang diperkirakan
-sebelumnya. Siap diestimasi skala pekerjaannya & mulai diimplementasi
-kapan saja — tidak ada lagi pertanyaan menggantung soal cakupan data.
-(Konsekuensi teknis: importer harus bisa proses BANYAK file bulanan
-berurutan sbg satu batch/sesi import, bukan cuma 1 file sekali jalan —
-perlu dipikirkan UI multi-file upload atau proses berurutan.)
-
-**Konteks penemuan:** User awalnya bertanya kenapa hasil ekstraksi riwayat
-transaksi dulu membuat struk kosong (cuma nominal, tanpa rincian item).
-
-**Root cause struk kosong (dikonfirmasi):** File `docs/reference/.../
-Penjualan <rentang>.xlsx` yang tersedia adalah **rekap agregat BULANAN**
-(kolom: Bulan, Penjualan, Transaksi, Item, Diskon, Biaya admin, Laba) — satu
-baris = satu bulan, TIDAK ADA nama produk atau rincian item sama sekali di
-file ini. Kalau file inilah yang dulu dipakai sebagai sumber import
-transaksi, struk pasti kosong rinciannya karena informasinya sendiri sudah
-tidak ada di sumbernya (bukan bug proses import).
-
-**Kabar baik — ditemukan file lain yang jauh lebih detail:** file
-`Transaksi <rentang-tanggal>.xlsx` (contoh yang sudah dicek:
-`Transaksi 2026-06-10_2026-06-11 2026-06-10.xlsx`) punya struktur PER
-TRANSAKSI dengan kolom:
-```
-Tanggal | ID | Pelanggan | Subtotal | Diskon | Total | Pembayaran |
-Biaya admin | Laba | Poin | Pegawai | Catatan Internal | Catatan Struk | Rincian
-```
-Kolom **"Rincian"** berisi rincian item sebagai teks bebas, format
-`NamaProduk:Qty` dipisah baris baru (`\n`) di dalam satu sel, contoh:
-```
-Minyak Filma:1
-Intermie:5
-Power F:1
-Golda:4
-...
-```
-(Nota #13164 milik "Mbak Ima" — nama yang sama dengan kasus pencarian di
-Item 1, ditemukan langsung sebagai bukti nyata di dataset ini.)
-
-**Kenapa item ini bernilai ganda:**
-1. Mengembalikan rincian struk yang hilang (tujuan awal).
-2. Karena ini data transaksi ASLI (bukan dummy/buatan), begitu masuk
-   database ini otomatis jadi uji beban NYATA untuk seluruh aplikasi:
-   pencarian riwayat transaksi, laporan, kartu poin pelanggan, performa
-   daftar (grid/list) — semuanya teruji dengan volume & pola yang benar-
-   benar terjadi di toko user, bukan skenario buatan yang bisa saja meleset
-   dari kondisi sesungguhnya.
-
-**Ketergantungan (urutan tidak boleh dibalik):** HARUS dikerjakan setelah
-Item 3 terutama 3b (fix rasio multi-satuan) selesai. Alasan: pencocokan
-nama produk di kolom "Rincian" bergantung penuh pada katalog yang sudah
-lengkap & berstruktur benar. Kalau strukturnya kacau (Item 3b — "Sedap
-Goreng" jadi banyak entitas tak berhubungan), baris rincian transaksi yang
-menyebut produk itu otomatis ikut gagal/salah cocok juga — bug akan menumpuk
-kalau urutan pengerjaan dibalik.
-
-**Risiko/keputusan yang perlu diantisipasi saat implementasi (belum
-diputuskan):**
-- Nama produk di "Rincian" bisa ambigu kalau produk itu ternyata punya
-  beberapa satuan/varian dengan nama sama (persis kasus "Sedap Goreng" per
-  dus vs per biji). Perlu aturan: default ke satuan dasar? Tandai untuk
-  direview manual kalau ambigu?
-- Baris item yang nama produknya sama sekali tidak ketemu di katalog
-  (produk sudah dihapus/berganti nama sejak transaksi itu terjadi asli) —
-  dilewati dengan catatan, atau dibuat "produk tak dikenal" sebagai
-  placeholder?
-- Kolom "Poin" di file — direkonstruksi ke ledger poin pelanggan juga, atau
-  cukup catatan transaksinya saja tanpa menyentuh poin (untuk menghindari
-  dobel-hitung kalau poin di app sekarang sudah berbeda dari saat itu)?
-- Ini akan jadi jalur "import transaksi" PERTAMA di aplikasi — pekerjaan
-  baru dari nol, bukan modifikasi importer yang sudah ada.
-
-**File yang kemungkinan terlibat (belum pasti):** file BARU, kemungkinan
-`lib/core/services/transaction_import_service.dart`. Perlu menulis ke
-`transactions`, `transaction_items`, kemungkinan `loyalty_point_ledger`.
 
 ---
 
@@ -792,23 +394,27 @@ CHANGELOG untuk hash tiap item. Sisa satu: **Item 17+21 (sync)** — lihat
 detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
 "majukan watermark upload" butuh test round-trip HTTP asli).
 
+**Item migrasi data Griyo (Item 3c/4/5) DICORET user** (18 Juli) — dihapus
+dari plan. Kalau nanti user mau lanjut migrasi data lama, mulai analisis
+dari nol (riwayat teknis lama sudah dibuang dari plan ini).
+
 **Item lain yang masih terbuka:**
-1. **Item 4** (import pelanggan Griyo) — analisis + keputusan besar SELESAI,
-   siap diimplementasikan (lihat detail di atas).
-2. **Item 3c** (kolom "Non Stok" diabaikan importer produk) — prioritas
-   rendah, tunggu keluhan konkret.
-3. **Item 5** (import riwayat transaksi dari dataset lama) — perlu
-   konfirmasi user soal cakupan tanggal file `Transaksi ...xlsx` sebelum
-   mulai; dependensi ke Item 3b (rasio multi-satuan) sekarang longgar
-   karena user sudah memilih flat-import tanpa auto-gabung.
-4. **Item 23 sisa** (`printer_service.dart` `printReceipt` tunggal,
+1. **Item 47** (pengeluaran tidak ikut ekspor PDF/Excel Laporan) & **Item
+   48** (avatar produk kasir jadi soft/pastel) — user setuju, siap
+   eksekusi, ditahan atas permintaan ("sisanya biarkan"). Detail di atas.
+2. **Item 23 sisa** (`printer_service.dart` `printReceipt` tunggal,
    `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
    Hutang, Tutup Kasir "kas sistem" overstated) — belum disentuh, lihat
    detail Item 23 di atas.
+3. **Item 17+21 (sync)** — ditunda ke sesi fokus (risiko data-loss).
+4. **Item 28** (pegawai lanjutkan pesanan owner lintas device) — konsep,
+   belum didesain.
 5. **Item 38** (tie-break `_rawBaseStock` tidak kronologis kalau 2
    perubahan stok jatuh di detik yang sama) — prioritas rendah, ditemukan
    tak sengaja lewat test, belum ada laporan dampak nyata di device asli.
-6. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
+6. **Item 32** (debounce scanner eksternal) — tunggu konfirmasi user tes
+   device fisik.
+7. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
    di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
    keputusan desain user), C.2 (gabung Item 17+21), uji printer device
    fisik Android ≤11, dan daftar P3 — detail di Item 41 di atas.

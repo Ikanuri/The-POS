@@ -4,6 +4,32 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19 Juli 2026 (branch `claude/setup-dependencies-am31te`,
+commit `7f5012e`/`e8f7b87`/`9eabb9b` + commit docs/test-fix) — EKSEKUSI
+batch Item 42-46 (user: "Kerjakan: 42-46. Sisanya biarkan"; Item 47/48
+SENGAJA ditinggal di PLAN.md). Ringkas: **45** satuan dasar tunggal
+(pilih satu → yg lain otomatis batal jadi dasar + ratio dipaksa 1.0,
+`produk_form_screen.dart`), **43** angka qty stepper pindah ke sisi
+BERLAWANAN tombol yg baru ditekan (tap plus → qty ke slot minus, dst;
+reset ke normal saat scope di-clear, `add_control.dart`), **44** badge
+qty (`N×`) di kiri tiap item keranjang (`cart_sheet.dart`), **42** filter
+periode Hari/Minggu/Bulan/Custom di tab Pengeluaran (`expenses_screen.dart`
+— provider `_expensePeriod`/`_expenseCustomRange`/`_expenseRange`), **46**
+banner inline "Stok X menipis: sisa 100 Biji (5 Pak, 1 Dos)" di kasir
+setelah produk di-checkout & stok base <= minStock (DB:
+`stockBreakdownText`/`lowStockAlertsForProducts` di `app_database.dart`;
+provider `pendingLowStockAlertsProvider`; deteksi return-ke-kasir via
+`kasirRouteObserver` RouteAware + fallback post-frame guarded isCurrent).
+Full `flutter test` **537 test hijau**, `flutter analyze` bersih. Test
+baru (semua revert-verified): `produk_base_unit_single_test`,
+`add_control_qty_swap_test`, `cart_item_qty_left_badge_test`,
+`expenses_period_filter_test`, `low_stock_breakdown_test` (DIPISAH jadi
+5 test agar tak flaky — Item 38 tie-break, JANGAN dua adjustStock pada
+unit sama dalam detik yg sama), `kasir_low_stock_banner_test`.
+schemaVersion 16 tak berubah (tak ada migrasi). Sisa di PLAN.md: Item 47
+(pengeluaran belum ikut ekspor PDF/Excel laporan), Item 48 (avatar box
+produk kasir dibuat soft)._
+
 _Terakhir diperbarui: 18 Juli 2026 (sesi audit + EKSEKUSI P1/P2 Item 41,
 di branch `claude/project-code-audit-4pxi9b`). Yang dieksekusi &
 teruji (bukti revert-merah utk tiap fix perilaku): **A.1** rekonsiliasi
