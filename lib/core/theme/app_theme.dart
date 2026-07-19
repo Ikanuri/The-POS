@@ -54,6 +54,13 @@ class AppTheme {
   static Color tempelBg(bool isDark) =>
       isDark ? const Color(0x338FAE7E) : const Color(0xFFE8EEDF);
 
+  // Aksen teal — dipakai seksi "Perangkat" di Pengaturan (hardware), hue baru
+  // agar tidak bentrok dgn ungu(sync)/amber(eksperimental)/merah(data).
+  static Color tealFg(bool isDark) =>
+      isDark ? const Color(0xFF6FC7BC) : const Color(0xFF2E7D74);
+  static Color tealBg(bool isDark) =>
+      isDark ? const Color(0x336FC7BC) : const Color(0xFFDDEEEB);
+
   /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
   /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).
   static void showSnack(BuildContext context, String message,
