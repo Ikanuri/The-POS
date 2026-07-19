@@ -306,10 +306,19 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         style: TextStyle(
                             fontSize: 11, color: scheme.onSurfaceVariant),
                         children: [
+                          // Jumlah qty + satuan di-bold (mudah dibaca), tapi
+                          // TIDAK lebih tebal dari nama produk (w700 induk /
+                          // w500 varian). Bagian "× harga" tetap berat normal.
                           TextSpan(
                             text: '${effQty % 1 == 0 ? effQty.toInt() : effQty} '
-                                '${_unitNames[item.productUnitId] ?? ''} × '
-                                '${formatRupiah(item.priceAtSale)}',
+                                '${_unitNames[item.productUnitId] ?? ''}',
+                            style: TextStyle(
+                                fontWeight: isVariant
+                                    ? FontWeight.w500
+                                    : FontWeight.w600),
+                          ),
+                          TextSpan(
+                            text: ' × ${formatRupiah(item.priceAtSale)}',
                           ),
                           if (item.priceOverridden &&
                               item.originalPrice != item.priceAtSale) ...[
@@ -2405,9 +2414,26 @@ class _ReceiptPaper extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                        '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''} x ${_fmtNum(item.priceAtSale)}',
-                        style: _mono),
+                    // Jumlah qty + satuan di-bold (biar mudah dibaca), tapi
+                    // TIDAK lebih tebal dari nama produk (w700 utk induk, w400
+                    // utk varian). Bagian "x harga" tetap berat normal.
+                    Text.rich(
+                      TextSpan(
+                        style: _mono,
+                        children: [
+                          TextSpan(
+                            text:
+                                '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''}',
+                            style: _mono.copyWith(
+                                fontWeight: isVar
+                                    ? FontWeight.w400
+                                    : FontWeight.w600),
+                          ),
+                          TextSpan(
+                              text: ' x ${_fmtNum(item.priceAtSale)}'),
+                        ],
+                      ),
+                    ),
                     Text(_fmtNum((item.priceAtSale * effQty).round()),
                         style: _mono),
                   ],

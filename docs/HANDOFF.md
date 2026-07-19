@@ -4,6 +4,24 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19 Juli 2026 (revisi kecil UI, branch
+`claude/setup-dependencies-am31te`) — 3 revisi user: (1) badge qty di kiri
+item keranjang diubah dari pill/kotak jadi teks biasa (`cart_sheet.dart`,
+warna onSurfaceVariant w600) supaya nominal harga tak terasa tertutup; (2)
+angka qty di stepper minus tak lagi "berkedip" saat tombol + ditekan
+berulang — `StepperActiveScope` tak lagi menonaktifkan stepper saat
+pointer-down jatuh DI stepper itu sendiri (flag `_pointerDownOnStepper`
+di-set Listener dalam AddControl, dibaca scope; aman krn dispatch
+pointer-down target→root), `add_control.dart`; (3) di struk in-app
+(baris item on-screen `receipt_screen.dart` DAN `_ReceiptPaper`), qty +
+satuan di-bold w600 (varian w500/w400) tapi TIDAK lebih tebal dari nama
+produk (w700). Test baru (revert-verified): `add_control_no_blink_test`,
+`receipt_qty_unit_bold_test`. CATATAN ENVIRONMENT: full-suite compact
+run kadang lapor 1 gagal TANPA jejak [E]/exception (flaky diam-diam,
+sudah lama tercatat) — 2 dari 4 run penuh sesi ini hijau (termasuk
+`--reporter expanded`), SEMUA test yg tersentuh hijau saat diisolasi;
+jangan asумsikan regresi tanpa [E] yg jelas — retry. analyze bersih.
+
 _Update sesi 19 Juli 2026 (lanjutan, branch `claude/setup-dependencies-am31te`)
 — refactor UX kolom cari kasir: saat field dapat fokus ULANG & teks lama
 masih ada, seluruh kata otomatis di-select-all (`_KasirTopbarState.

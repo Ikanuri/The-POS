@@ -10,6 +10,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 19 Juli 2026
 
+### 🎨 Penyempurnaan Tampilan
+- **Struk (dalam aplikasi): jumlah & satuan barang kini dicetak tebal** —
+  lebih mudah dibaca sekilas, tapi tetap lebih tipis dari nama produk.
+- **Keranjang: jumlah barang di kiri item jadi teks biasa** (tanpa kotak),
+  supaya nominal harga di sebelahnya tidak lagi terasa tertutup.
+- **Tombol +/- kasir: angka tidak lagi "berkedip"** saat tombol + ditekan
+  berkali-kali beruntun.
+
 ### ✨ Fitur Baru
 - **Cari produk berikutnya lebih cepat** — saat Anda menyentuh kolom cari
   di kasir lagi sementara kata pencarian sebelumnya masih ada, seluruh kata
