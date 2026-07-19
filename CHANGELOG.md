@@ -7,8 +7,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-19
+
+- `df48d8f` — feat: select-all teks lama saat kolom cari kasir dapat fokus ulang (ketik langsung menimpa, tak perlu jangkau tombol x) — _KasirTopbarState._onFocusChange via post-frame
+
 ## 2026-07-18
 
+- `3cbbb54` — docs: HANDOFF/PLAN/CHANGELOG/PATCHNOTES batch Item 42-46 + pisah test flaky low-stock
 - `9eabb9b` — feat: Item 46 — banner stok menipis di kasir setelah checkout (lowStockAlertsForProducts + stockBreakdownText "100 Biji (5 Pak, 1 Dos)", pendingLowStockAlertsProvider, RouteAware.didPopNext + fallback post-frame build)
 - `e8f7b87` — feat: Item 42 — filter periode (Hari/Minggu/Bulan/Custom) di tab Pengeluaran (getNetProfitExpenseTotal Laporan sengaja tak diubah)
 - `7f5012e` — feat: fix satuan dasar ganda (45), stepper qty berpindah sisi (43), qty di kiri item keranjang (44)

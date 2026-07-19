@@ -2140,6 +2140,20 @@ class _KasirTopbarState extends State<_KasirTopbar> {
   }
 
   void _onFocusChange() {
+    // Saat field cari dapat fokus ulang & sudah ada teks lama, select-all
+    // seluruh kata — supaya ketik langsung menimpa (cari produk berikutnya
+    // tanpa harus jangkau tombol x dulu), atau geser cursor untuk koreksi.
+    // Post-frame: TextField default menaruh cursor di ujung saat fokus, jadi
+    // selection kita harus dipasang SETELAH itu agar tidak ditimpa.
+    if (widget.searchFocus.hasFocus && widget.searchCtrl.text.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !widget.searchFocus.hasFocus) return;
+        final len = widget.searchCtrl.text.length;
+        if (len == 0) return;
+        widget.searchCtrl.selection =
+            TextSelection(baseOffset: 0, extentOffset: len);
+      });
+    }
     if (widget.searchFocus.hasFocus != _expanded) {
       setState(() => _expanded = widget.searchFocus.hasFocus);
     }
