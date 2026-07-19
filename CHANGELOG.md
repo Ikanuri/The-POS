@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-19
 
+- `9e52eb6` — fix: revisi UI keranjang/stepper/struk (qty di kiri keranjang jadi teks biasa, stepper minus tak berkedip saat + ditekan berulang, qty+satuan struk in-app dibold tapi tak lebih tebal dari nama produk)
 - `df48d8f` — feat: select-all teks lama saat kolom cari kasir dapat fokus ulang (ketik langsung menimpa, tak perlu jangkau tombol x) — _KasirTopbarState._onFocusChange via post-frame
 
 ## 2026-07-18

@@ -40,7 +40,10 @@ class AddControl extends StatefulWidget {
   /// Dipanggil dari layar pemanggil (kasir_screen.dart/cart_sheet.dart) saat
   /// area LAIN di-tap atau list di-scroll, supaya stepper yang lagi
   /// "membesar" kembali normal.
-  static void clearActive() => activeStepper.value = null;
+  static void clearActive() {
+    activeStepper.value = null;
+    _pointerDownOnStepper = false;
+  }
 }
 
 // Item 13 — jeda anti-missclick: tap +/- yang datang terlalu rapat (jari
@@ -51,6 +54,16 @@ const _kMisclickDebounce = Duration(milliseconds: 150);
 // AddControl.activeStepper) sampai di-nonaktifkan dari luar.
 const _kActiveScale = 1.15;
 const _kActiveScaleDuration = Duration(milliseconds: 150);
+
+// Di-set true oleh Listener di dalam [AddControl] saat pointer turun TEPAT di
+// atas sebuah stepper, lalu dibaca-dan-direset oleh [StepperActiveScope].
+// Guna: saat user menekan lagi stepper yang SAMA (mis. tambah qty berkali-
+// kali), scope TIDAK ikut menonaktifkannya di event pointer-down — kalau
+// dinonaktifkan sekejap lalu diaktifkan lagi saat tap dikenali (event up),
+// angka qty "berkedip" pindah sisi. Karena pointer-down di-dispatch dari
+// target (descendant) ke root, Listener AddControl SELALU jalan sebelum
+// Listener scope, jadi flag ini pasti sudah ter-set saat scope membacanya.
+bool _pointerDownOnStepper = false;
 
 class _AddControlState extends State<AddControl> {
   bool _blocked = false;
@@ -176,7 +189,17 @@ class _AddControlState extends State<AddControl> {
           ),
         );
 
-        if (!inCart) return mainCircle;
+        // Tandai pointer-down yang jatuh di atas stepper ini supaya
+        // StepperActiveScope tidak menonaktifkannya (cegah kedip angka qty
+        // saat tombol yang sama ditekan berulang). deferToChild: hanya
+        // menandai bila benar-benar mengenai tombol (bukan celah antar-tombol).
+        Widget markDown(Widget child) => Listener(
+              behavior: HitTestBehavior.deferToChild,
+              onPointerDown: (_) => _pointerDownOnStepper = true,
+              child: child,
+            );
+
+        if (!inCart) return markDown(mainCircle);
 
         // Tombol minus: merah, sedikit lebih kecil dari lingkaran jumlah.
         // Pakai HitTestBehavior.opaque agar tap tidak "tembus" ke InkWell
@@ -206,14 +229,14 @@ class _AddControlState extends State<AddControl> {
           ),
         );
 
-        return Row(
+        return markDown(Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             minusButton,
             const SizedBox(width: 6),
             mainCircle,
           ],
-        );
+        ));
       },
     );
   }
@@ -238,7 +261,17 @@ class StepperActiveScope extends StatelessWidget {
   Widget build(BuildContext context) {
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => AddControl.clearActive(),
+      onPointerDown: (_) {
+        // Pointer turun di atas sebuah stepper (Listener di AddControl sudah
+        // jalan lebih dulu & menyalakan flag) → JANGAN nonaktifkan, cukup
+        // konsumsi flag-nya. Selain itu (area kosong/kartu lain) → nonaktifkan
+        // stepper yang sedang membesar.
+        if (_pointerDownOnStepper) {
+          _pointerDownOnStepper = false;
+          return;
+        }
+        AddControl.clearActive();
+      },
       child: NotificationListener<ScrollStartNotification>(
         onNotification: (_) {
           AddControl.clearActive();

@@ -308,21 +308,13 @@ class _CartItemTile extends ConsumerWidget {
             ),
             if (effectiveQty > 0)
               Padding(
-                padding: const EdgeInsets.only(left: 2),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}×',
-                    style: AppTheme.numStyle(context,
-                        size: 13,
-                        weight: FontWeight.w700,
-                        color: scheme.primary),
-                  ),
+                padding: const EdgeInsets.only(left: 2, right: 2),
+                child: Text(
+                  '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}×',
+                  style: AppTheme.numStyle(context,
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant),
                 ),
               ),
           ],
