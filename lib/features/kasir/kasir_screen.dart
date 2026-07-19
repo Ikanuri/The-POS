@@ -2240,10 +2240,11 @@ class _KasirTopbarState extends State<_KasirTopbar> {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.shopping_basket_rounded,
-                    color: Colors.white,
-                    size: 18,
+                  // Emoji peach bawaan (bukan gambar tangan) — akurat krn
+                  // dirender font emoji sistem (Noto Color Emoji di
+                  // Android), tanpa dependency/aset baru.
+                  child: const Center(
+                    child: Text('🍑', style: TextStyle(fontSize: 20)),
                   ),
                 ),
                 const SizedBox(width: 8),

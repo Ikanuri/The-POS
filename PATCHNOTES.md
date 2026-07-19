@@ -28,6 +28,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Mode gelap:** angka pada tombol hijau (barang di keranjang) kini gelap
   agar terbaca jelas; tombol "Bayar Nanti" di pembayaran tidak lagi terlalu
   pucat (merah tegas).
+- **Ikon pojok kiri atas kasir** diganti jadi emoji buah persik 🍑.
+
 ### ✨ Fitur Baru
 - **Cari produk berikutnya lebih cepat** — saat Anda menyentuh kolom cari
   di kasir lagi sementara kata pencarian sebelumnya masih ada, seluruh kata

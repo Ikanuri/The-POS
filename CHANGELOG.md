@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-19
 
+- `05c4413` — feat: ikon toolbar kasir jadi emoji peach bawaan (Text('🍑'), bukan custom painter — akurat via font emoji sistem, tanpa dependency/lisensi baru)
 - `c371bd0` — revert: batalkan ikon peach toolbar kasir (user: "tidak mirip sama sekali"), kembalikan ke Icons.shopping_basket_rounded
 - `b0e16d2` — refine: ikon peach toolbar kasir menyerupai referensi (tangkai + daun + garis lekuk) — kemudian direvert di c371bd0
 - `772e492` — feat: batch redesign UI — keypad tunai berwarna (1-9 hijau, 0/00/000 biru bertahap), tombol Bayar struk hijau solid (payGreen) samakan checkout, HAPUS debounce stepper (bikin lemot multi-tap), aksen seksi Pengaturan (Device=biru/Toko=hijau/Perangkat=teal baru), ikon keranjang toolbar → peach custom (_PeachGlyph), mode gelap: angka lingkaran hijau stepper jadi gelap + Bayar Nanti merah solid
