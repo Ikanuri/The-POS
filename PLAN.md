@@ -48,7 +48,14 @@ BELUM dieksekusi, disimpan atas permintaan user**: Item 42 = investigasi
 "total pengeluaran tidak sinkron" (root cause SUDAH ketemu, tunggu
 konfirmasi user) + filter periode tab Pengeluaran; Item 43 = stepper
 angka qty berpindah sisi +/- selagi aktif; Item 44 = tampilkan qty di
-kiri item keranjang._
+kiri item keranjang. **Item 45/46/47/48 BARU (18 Juli) — SEMUA BELUM
+dieksekusi, user SUDAH SETUJU/beri spesifikasi lengkap, siap eksekusi
+kapan saja diminta**: Item 45 = bug 2 satuan dasar aktif sekaligus
+(root cause + fix jelas); Item 46 = notifikasi inline stok menipis di
+kasir pasca-checkout (spesifikasi lengkap dari user, 1 risiko timing
+teknis blm final); Item 47 = pengeluaran tidak ikut ekspor PDF/Excel
+Laporan (root cause + fix jelas); Item 48 = warna avatar produk kasir
+jadi soft/pastel (root cause + fix jelas)._
 
 ---
 
@@ -167,6 +174,154 @@ desimal spt 0.25 — ingat gotcha `formatRupiah`/tampilan desimal yg
 sudah beberapa kali jadi sumber bug di app ini).
 
 **Status: BELUM dieksekusi, disimpan sbg rencana atas permintaan user.**
+
+## Item 45 — Bug: 2 satuan dasar aktif sekaligus per produk (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
+
+**Root cause dikonfirmasi via baca kode langsung**: di `produk_form_
+screen.dart`, checkbox "Jadikan Satuan Dasar" (`_UnitCard`, ~baris
+1854-1870) cuma dirender `if (!widget.entry.isBaseUnit)` (hilang dari
+tampilan begitu unit itu jadi base — jadi TIDAK BISA di-uncheck manual,
+aman dari kasus "0 base unit"), TAPI `onChanged`-nya (~baris 1861-1868)
+cuma `widget.onChanged(widget.entry.copyWith(isBaseUnit: true))` — cuma
+mengubah unit YANG DICENTANG, tidak pernah membersihkan flag di unit
+lain. Parent `onChanged` (~baris 742-747, `setState(() => _units[e.key]
+= updated)`) juga cuma replace 1 entry, tidak ada loop clear ke unit
+lain. Hasilnya: unit lama TETAP `isBaseUnit=true` (checkbox-nya sudah
+hilang jadi tidak kelihatan lagi, tapi datanya tak pernah di-clear),
+unit baru JUGA `true` — 2 unit base sekaligus tersimpan ke DB via
+`saveProduct`. **Tidak ada constraint DB** yang mencegah ini
+(`product_tables.dart` — `isBaseUnit` cuma `BoolColumn` polos, tanpa
+unique/partial-index).
+
+**Fix (disetujui, siap eksekusi)**: di parent `onChanged` (produk_form_
+screen.dart ~baris 742-747) — begitu `updated.isBaseUnit == true` dan
+beda dari sebelumnya, loop semua entry lain di `_units` & paksa
+`isBaseUnit: false`. Satu titik perbaikan, risiko kecil. Test: DB-tier
+(saveProduct 2 unit, set base ke unit ke-2, verifikasi unit pertama
+`isBaseUnit=false`) + widget-tier (toggle base unit di form, verifikasi
+checkbox unit lama hilang & baru muncul di tempat yang benar).
+
+## Item 46 — Notifikasi inline stok menipis di kasir setelah checkout (18 Juli, BELUM dieksekusi — user sudah beri spesifikasi lengkap)
+
+**Konteks**: user bilang "saya tidak menemukan peringatannya di
+manapun" — dikonfirmasi lewat investigasi: memang TIDAK ADA notifikasi
+proaktif soal stok menipis di app ini sama sekali. Yang ADA sekarang
+semuanya PASIF (user harus buka manual): chip "Stok Menipis (N)" di
+layar Produk, kartu "Kontrol Stok" di Ringkasan (cuma teks ringkas +
+nama produk, TANPA angka stok), layar Cek Stok, tab Stok Laporan (malah
+TIDAK ada peringatan menipis sama sekali di situ).
+
+**Spesifikasi FINAL dari user (sudah lengkap, siap desain teknis)**:
+1. **Trigger**: HANYA setelah checkout selesai DAN produk yang barusan
+   terjual sekarang **hit/di bawah minimum stok**-nya.
+2. **Lokasi tampil**: HANYA di layar **kasir** (`kasir_screen.dart`),
+   BUKAN di layar lain.
+3. **Timing**: muncul setelah user **kembali ke kasir** (bukan langsung
+   sesaat checkout selesai — mengikuti alur nota/struk dulu).
+4. **Format pesan**: `Stok sisa <base_qty> <base_unit_name> (<qty_lain>
+   <unit_lain>, ...)` — base unit ditampilkan apa adanya, tiap satuan
+   LAIN yang ada di produk itu dikonversi (total_base ÷ ratioToBase
+   masing-masing) & ditaruh dalam kurung, dipisah koma. Contoh:
+   "Stok sisa 100 biji (5 pak, 1 dus)".
+5. **Gaya notifikasi**: pakai `InlineBanner` yang SUDAH ADA di
+   `lib/core/widgets/inline_banner.dart` (`InlineBannerType.warning`
+   paling cocok — sudah ada varian oranye theme-aware), auto-dismiss
+   ~5 detik (`duration` param, default widget 4s — bisa di-override ke
+   5s persis permintaan user), tombol ✕ manual dismiss (SUDAH built-in
+   di widget ini, tidak perlu bikin baru). `kasir_screen.dart` sudah
+   punya helper `_showBanner(msg, type)` sendiri (beda dari
+   `InlineBannerStateMixin` generik) — tinggal reuse.
+
+**Desain teknis yang perlu diputuskan saat implementasi (blm final)**:
+- **Sumber & konversi**: helper `AppTheme`-style/`AppDatabase` baru,
+  mis. `getStockBreakdownText(productId)` — ambil semua `ProductUnits`
+  produk itu + base stock via pola `_baseUnitOf`/`currentStock` yang
+  SUDAH ADA (`app_database.dart` ~baris 387-428), convert tiap unit non-
+  base via `totalBase / ratioToBase`, format sesuai spesifikasi #4.
+- **Deteksi "hit minimum" pasca-checkout**: setelah `saveTransaction()`
+  (dipanggil dari `payment_screen.dart`) berhasil, untuk tiap
+  `productUnitId` yang barusan terjual (dari `stockItems`), cek base
+  stock produk itu SEKARANG vs `minStock`-nya (base unit) — kalau
+  `stock <= minStock` (min_stock non-null), tandai produk itu sbg
+  "baru saja hit minimum".
+- **Cara kirim sinyal dari `payment_screen.dart` balik ke
+  `kasir_screen.dart`** (2 screen berbeda, kasir_screen tetap hidup di
+  ShellRoute saat payment+struk di-push di atasnya): kandidat paling
+  masuk akal — provider Riverpod baru (mis.
+  `pendingLowStockAlertsProvider`, `StateProvider<List<String>>` berisi
+  pesan siap-tampil) yang di-set oleh `payment_screen.dart` setelah
+  `saveTransaction` sukses, di-dengarkan (`ref.listen`) oleh
+  `kasir_screen.dart`.
+- **RISIKO TIMING yang perlu diantisipasi (belum ada solusi final)**:
+  kalau banner langsung ditampilkan begitu provider berubah (via
+  `ref.listen` yg terpasang di widget `kasir_screen.dart` yang MASIH
+  HIDUP walau sedang tidak current route), timer auto-dismiss 5 detik
+  `InlineBanner` bisa MULAI MENGHITUNG & HABIS SEBELUM user benar-benar
+  kembali dari layar struk (kalau user berlama-lama lihat struk) —
+  banner sudah hilang duluan sebelum sempat dilihat. **Solusi yang
+  disarankan**: cek `ModalRoute.of(context)?.isCurrent` (pola yang
+  SUDAH dipakai di app ini utk kasus serupa — lihat gotcha HID scanner
+  di CLAUDE.md) sebelum benar-benar memanggil `_showBanner`, ATAU tunda
+  pemanggilan banner sampai route kasir kembali current (butuh
+  observer/hook route-lifecycle — belum diriset caranya paling simpel
+  di setup GoRouter app ini, perlu dicek saat implementasi).
+
+**Test yang perlu ditulis**: DB-tier (helper breakdown format string,
+skenario base+2 unit lain, produk tanpa unit lain, produk dgn minStock
+null), widget/service-tier (checkout yg bikin stok di bawah minimum →
+banner muncul di kasir dgn teks benar; checkout yg TIDAK bikin stok
+turun ke bawah minimum → banner TIDAK muncul).
+
+## Item 47 — Pengeluaran tidak ikut ke ekspor laporan PDF/Excel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
+
+**Root cause dikonfirmasi**: `report_export.dart` (ekspor PDF/Excel tab
+Ringkasan Laporan) TIDAK PERNAH memanggil `getNetProfitExpenseTotal()` —
+`_fetchRingkasan()` (~baris 526-553) cuma pakai `getDailySummaries()`
+(revenue/cogs/txCount/metode bayar/harian), `d.profit` di situ murni
+**Laba Kotor** (revenue−cogs). Grid KPI PDF (~baris 102-107) & baris
+Excel (~baris 304) cuma berisi Omzet/Transaksi/HPP/Laba Kotor — TIDAK
+ADA "Pengeluaran" maupun "Laba Bersih" sama sekali. Bandingkan dgn
+`ringkasan_tab.dart` (tampilan ON-SCREEN Laporan → Ringkasan) yang
+SUDAH benar: baris 16 manggil `getNetProfitExpenseTotal()`, baris 94
+render kartu "Pengeluaran". Jadi yang tampil di layar vs yang keluar di
+file ekspor **tidak konsisten** — bukan placeholder kosong, memang belum
+pernah diprogram di file exportnya sama sekali.
+
+**Fix (disetujui, siap eksekusi)**: tambahkan pemanggilan
+`db.getNetProfitExpenseTotal(range.start, range.end)` di
+`_fetchRingkasan()` (`report_export.dart`), alirkan field `expenses`
+(dan hitung `netProfit = profit - expenses` bila mau tambahkan "Laba
+Bersih" jg, konsisten dgn on-screen yg py keduanya) lewat
+`_RingkasanData`, tambahkan baris "Pengeluaran" (+ "Laba Bersih" bila
+disepakati) ke grid KPI PDF (~baris 102-107) dan baris Excel (~baris
+304). Test: bandingkan output `_fetchRingkasan()` vs data on-screen
+`ringkasan_tab.dart` utk skenario yg sama (ada expense `daily_expense`+
+`change_given`) — pastikan angka Pengeluaran identik antara keduanya.
+
+## Item 48 — Kotak warna avatar produk di kasir dibuat soft/pastel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
+
+**Konteks**: BUKAN aksen fungsional bermakna (beda dari kerjaan Item
+"aksen warna Ringkasan/Laporan/Pengaturan" sebelumnya) — ini avatar-
+huruf (inisial nama produk) di kartu/baris produk kasir, warnanya
+dipilih dari hash huruf pertama nama produk (`_gradFor()`,
+`kasir_screen.dart` ~baris 707-715, palet `_kAvatarGradients` — 6 pasang
+gradient 2-warna cukup vivid/saturated), dipakai di `_ProductCard` (mode
+grid, ~baris 2441+2467-2490) & `_ProductListTileState` (mode list,
+~baris 2609+2636-2659) — teks huruf-nya putih di atas gradient.
+
+**Fix (disetujui, siap eksekusi)**: ganti `_kAvatarGradients` (gradient
+vivid) jadi palet solid pastel/soft — ikuti bahasa desain `AppTheme`
+yang sudah ada (pasangan bg-lembut + fg-redup, theme-aware light/dark,
+pola sama spt `scanFg/scanBg`, `antrianFg/antrianBg` dll di
+`app_theme.dart`). Huruf avatar ikut ganti dari putih ke warna gelap
+redup (fg pasangannya) — putih di atas background pastel terang akan
+sulit terbaca. Perlu palet baru dgn variasi cukup (minimal sama seperti
+jumlah gradient lama, 6 warna) supaya beda produk masih cukup
+terbedakan visual — BUKAN cuma reuse 5 pasang fg/bg yang sudah dipakai
+utk kartu Ringkasan/Laporan/Pengaturan (supaya avatar produk tidak
+tertukar makna dgn aksen fungsional itu). Test: widget test verifikasi
+warna avatar BUKAN dari `_kAvatarGradients` lama (atau verifikasi warna
+baru match palet pastel baru) di kedua mode (grid & list).
 
 ---
 
