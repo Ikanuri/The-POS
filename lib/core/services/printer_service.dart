@@ -617,9 +617,25 @@ class PrinterService {
 
     // ── Item ─────────────────────────────────────────────────────────────
     int productCount = 0;
+    String? lastBatch;
     for (final item in _orderItems(items, parentOf)) {
       final isVar = _parentItemOf(item, items, parentOf) != null;
       if (!isVar) productCount++;
+
+      // Pembatas batch "Tambah Belanjaan" (Gaya A): "----- Tambahan HH:MM
+      // -----" rata tengah, sebelum barang susulan. Hanya utk item induk;
+      // varian ikut batch induknya.
+      if (!isVar && item.addedAt != null) {
+        final a = item.addedAt!;
+        final hhmm =
+            '${a.hour.toString().padLeft(2, '0')}:${a.minute.toString().padLeft(2, '0')}';
+        if (hhmm != lastBatch) {
+          lastBatch = hhmm;
+          final label = '----- Tambahan $hhmm -----';
+          final left = label.length >= innerW ? 0 : (innerW - label.length) ~/ 2;
+          out.addAll(bodyText('${' ' * left}$label'));
+        }
+      }
 
       final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
       final prefix = isVar ? '  > ' : '';

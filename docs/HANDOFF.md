@@ -4,6 +4,22 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19 Juli 2026 (lanjutan, branch `claude/setup-dependencies-am31te`)
+— 2 penyesuaian: (A) hapus aksen warna kartu "Device Ini" di Pengaturan
+(user minta netral; Toko hijau & Perangkat teal tetap) — `daca3a6`. (B)
+pembatas batch "Tambah Belanjaan" (Gaya A: `----- Tambahan HH:MM -----`
+rata tengah) kini juga di struk SHARE (`_ReceiptPaper` di `receipt_screen.
+dart`, lacak `lastBatch` di build, sisip Widget sebelum item induk
+susulan) & struk CETAK thermal (`printer_service._buildBytes`, sisip
+`bodyText` di-center manual dalam innerW, sebelum item induk susulan) —
+sebelumnya pembatas cuma ada di struk in-app (`_buildItemRows`). Item susulan
+dideteksi via `transaction_items.addedAt != null`, hanya untuk item INDUK
+(varian ikut batch induk). Mockup HTML ditunjukkan dulu (user pilih Gaya
+A dari 2 opsi). Test: `receipt_paper_tambahan_boundary_test` (widget-tier
+share, revert-verified). CATATAN: struk CETAK TIDAK ada test (`_buildBytes`
+private, tanpa seam; logika identik dgn share yg sudah ditest — verifikasi
+byte perlu printer/seam, sengaja tidak ditambah). schemaVersion 16 tetap.
+
 _Update sesi 19 Juli 2026 (batch redesign UI, branch
 `claude/setup-dependencies-am31te`) — 7 item (3 opsi warna dikonfirmasi via
 AskUserQuestion): (1) keypad tunai `_Keypad` diberi warna — 1-9 hijau
