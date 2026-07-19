@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-19
 
+- `f7de38a` — revert: batalkan total eksperimen ikon peach (emoji bawaan tak sempat diverifikasi), kembali ke Icons.shopping_basket_rounded default
 - `05c4413` — feat: ikon toolbar kasir jadi emoji peach bawaan (Text('🍑'), bukan custom painter — akurat via font emoji sistem, tanpa dependency/lisensi baru)
 - `c371bd0` — revert: batalkan ikon peach toolbar kasir (user: "tidak mirip sama sekali"), kembalikan ke Icons.shopping_basket_rounded
 - `b0e16d2` — refine: ikon peach toolbar kasir menyerupai referensi (tangkai + daun + garis lekuk) — kemudian direvert di c371bd0

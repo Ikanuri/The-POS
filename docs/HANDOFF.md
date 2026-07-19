@@ -15,21 +15,16 @@ tap) — `_kMisclickDebounce`/`_debounced()`/`dart:async` dibuang di
 `add_control.dart`, test lama `add_control_debounce_test.dart` DIHAPUS; (4)
 aksen seksi Pengaturan: Device Ini=biru(scanBg), Toko=hijau(changeBg),
 Perangkat=teal (warna BARU `AppTheme.tealFg/tealBg`) (`pengaturan_screen.dart`);
-(5) ikon keranjang toolbar kasir — setelah 2 iterasi custom painter freehand
-DITOLAK user ("tidak mirip sama sekali"), ditanya opsi lanjutan (emoji
-bawaan / SVG open-source berlisensi / user kirim aset sendiri / batal) —
-user pilih "no preference", diputuskan pakai **emoji bawaan 🍑**
-(`Text('🍑')`, bukan custom painter) — akurat krn dirender font emoji
-sistem (Noto Color Emoji Android), TANPA dependency/aset baru, TANPA isu
-lisensi (`kasir_screen.dart`, hanya toolbar kasir). **CATATAN**: environment
-sandbox headless test ini TIDAK BISA render emoji berwarna sama sekali
-(dicoba `RepaintBoundary.toImage()` untuk preview → HANG total, proses
-di-kill paksa) — bukan bug kode, cuma keterbatasan environment tanpa
-font emoji berwarna terpasang. Full `flutter test` tetap 543 hijau (teks
-emoji tidak memicu masalah rendering di test biasa, hanya capture-ke-
-gambar yang hang) — **verifikasi visual HARUS di HP asli**, tidak bisa
-dari sesi ini. Kalau nanti perlu preview emoji lagi, JANGAN pakai
-`RepaintBoundary.toImage()` di widget test — akan hang; (6) mode gelap: angka/"+" di lingkaran HIJAU stepper
+(5) ikon keranjang toolbar kasir — DIBATALKAN TOTAL setelah 3 percobaan:
+custom painter freehand (2 iterasi, DITOLAK user "tidak mirip sama
+sekali") lalu emoji bawaan 🍑 (`Text('🍑')`, tak sempat diverifikasi visual
+krn environment sandbox tak bisa render emoji berwarna — `RepaintBoundary.
+toImage()` HANG total saat dicoba preview) — user akhirnya minta **revert
+semua, kembali ke default**. Ikon toolbar kasir tetap `Icons.shopping_
+basket_rounded` semula, TIDAK ADA perubahan bersih di area ini.
+**JANGAN ulangi eksperimen ikon peach lagi tanpa arahan aset/desain
+presisi dari user** (SVG asli/file gambar) — 3 percobaan sebelumnya semua
+gagal/tak terverifikasi; (6) mode gelap: angka/"+" di lingkaran HIJAU stepper
 (inCart) pakai warna gelap `0xFF0A3D28` bukan putih (`add_control.dart`,
 `mainFg`); (7) tombol "Bayar Nanti" checkout mode gelap → merah solid
 `0xFFD64545` (bukan scheme.error pucat) (`payment_screen.dart`). Test baru
