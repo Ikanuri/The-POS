@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 19 Juli 2026
+
+### ✨ Fitur Baru
+- **Cari produk berikutnya lebih cepat** — saat Anda menyentuh kolom cari
+  di kasir lagi sementara kata pencarian sebelumnya masih ada, seluruh kata
+  otomatis tersorot. Tinggal ketik langsung untuk menggantinya (tak perlu
+  lagi menghapus satu per satu atau menjangkau tombol × di atas), atau geser
+  kursor bila hanya ingin mengoreksi sebagian.
+
+---
+
 ## 18 Juli 2026
 
 ### ✨ Fitur Baru

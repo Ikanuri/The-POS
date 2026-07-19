@@ -4,6 +4,18 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19 Juli 2026 (lanjutan, branch `claude/setup-dependencies-am31te`)
+— refactor UX kolom cari kasir: saat field dapat fokus ULANG & teks lama
+masih ada, seluruh kata otomatis di-select-all (`_KasirTopbarState.
+_onFocusChange` di `kasir_screen.dart`, via post-frame agar tak ditimpa
+cursor-di-ujung bawaan TextField). Efek: cari produk berikutnya cukup tap
+field lalu ketik (langsung menimpa) tanpa menjangkau tombol x; geser cursor
+tetap bisa utk koreksi. Tombol x expanded dipertahankan (hapus filter →
+tampil semua). Proposal user "x di collapsed state" SENGAJA ditolak
+(misclick-prone + jadi redundan setelah select-all). Test:
+`kasir_search_select_all_refocus_test.dart` (revert-verified). Full
+`flutter test` 539 hijau, analyze bersih. Sudah di-merge ke main.
+
 _Update sesi 19 Juli 2026 (branch `claude/setup-dependencies-am31te`,
 commit `7f5012e`/`e8f7b87`/`9eabb9b` + commit docs/test-fix) — EKSEKUSI
 batch Item 42-46 (user: "Kerjakan: 42-46. Sisanya biarkan"; Item 47/48
