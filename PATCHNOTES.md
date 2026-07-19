@@ -23,8 +23,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   tombol nol (0 / 00 / 000) biru bertahap, agar lebih mudah dibaca cepat.
 - **Tombol "Bayar" di struk kini hijau tegas** sama seperti tombol Bayar
   di halaman pembayaran (sebelumnya hijau samar).
-- **Menu Pengaturan lebih berwarna** — seksi Device Ini (biru), Toko (hijau),
-  dan Perangkat (teal) kini punya aksen warna soft seperti seksi lain.
+- **Menu Pengaturan lebih berwarna** — seksi Toko (hijau) dan Perangkat
+  (teal) kini punya aksen warna soft seperti seksi lain.
 - **Mode gelap:** angka pada tombol hijau (barang di keranjang) kini gelap
   agar terbaca jelas; tombol "Bayar Nanti" di pembayaran tidak lagi terlalu
   pucat (merah tegas).
