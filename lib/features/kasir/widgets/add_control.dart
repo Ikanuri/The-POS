@@ -56,6 +56,13 @@ class _AddControlState extends State<AddControl> {
   bool _blocked = false;
   Timer? _unblockTimer;
 
+  // Item 43 — sisi mana angka qty ditampilkan SELAGI stepper aktif. true =
+  // angka pindah ke tombol minus (kiri), tombol plus (kanan) jadi ikon "+"
+  // polos (dipakai setelah tombol "+" ditekan). false = normal (angka di
+  // tombol +/kanan). Hanya berpengaruh saat stepper aktif — begitu tidak
+  // aktif, rendering selalu normal (lihat `qtyOnLeft` di build).
+  bool _qtyOnLeft = false;
+
   @override
   void dispose() {
     _unblockTimer?.cancel();
@@ -74,15 +81,41 @@ class _AddControlState extends State<AddControl> {
 
   void _handleTap() {
     _activate();
+    // Tombol yang BARU ditekan (plus) jadi ikon polos → angka pindah ke sisi
+    // minus. setState WAJIB: kalau stepper sudah aktif, `_activate()` men-set
+    // notifier ke nilai sama (this) → ValueNotifier TIDAK memberitahu, jadi
+    // perpindahan angka tak akan ter-render tanpa setState eksplisit ini.
+    setState(() => _qtyOnLeft = true);
     if (_debounced()) return;
     widget.onTap();
   }
 
   void _handleMinus() {
     _activate();
+    // Tombol minus yang baru ditekan jadi ikon polos → angka kembali ke sisi
+    // plus (kanan).
+    setState(() => _qtyOnLeft = false);
     if (_debounced()) return;
     widget.onMinus?.call();
   }
+
+  /// Label angka qty bulat, disusutkan `FittedBox` agar qty desimal panjang
+  /// (mis. "0.25", produk timbang) tetap muat dalam lingkaran, bukan
+  /// terpotong/meluber.
+  Widget _qtyLabel(String label, double circleSize) => Padding(
+        padding: EdgeInsets.all(circleSize * 0.12),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: circleSize * 0.40,
+            ),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -95,80 +128,67 @@ class _AddControlState extends State<AddControl> {
     final shadowColor = inCart
         ? AppTheme.changeFg(isDark).withOpacity(0.30)
         : const Color(0x33C96442);
-
-    // Lingkaran utama (jumlah / "+") berukuran sama baik saat kosong maupun
-    // saat sudah ada di keranjang, agar tidak "melompat" ukuran.
     final circleSize = size + 4;
-    final mainCircle = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _handleTap,
-      child: ValueListenableBuilder<State<AddControl>?>(
-        valueListenable: AddControl.activeStepper,
-        builder: (context, active, child) => AnimatedScale(
-          scale: identical(active, this) ? _kActiveScale : 1.0,
-          duration: _kActiveScaleDuration,
-          curve: Curves.easeOut,
-          child: child,
-        ),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: circleSize,
-          height: circleSize,
-          decoration: BoxDecoration(
-            color: bgColor,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                  color: shadowColor, blurRadius: 6, offset: const Offset(0, 2)),
-            ],
-          ),
-          child: Center(
-            child: inCart
-                ? Padding(
-                    // Label tetap bulat (bukan pill) — utk qty desimal (mis.
-                    // "0.25", produk timbang) yang lebih panjang dari 1-2
-                    // digit biasa, `FittedBox` menyusutkan font-nya secara
-                    // proporsional supaya tetap muat dalam lingkaran, bukan
-                    // terpotong/meluber.
-                    padding: EdgeInsets.all(circleSize * 0.12),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: circleSize * 0.40,
-                        ),
-                      ),
-                    ),
-                  )
-                : Icon(Icons.add_rounded,
-                    color: Colors.white, size: circleSize * 0.6),
-          ),
-        ),
-      ),
-    );
-
-    if (!inCart) return mainCircle;
-
-    // Tombol minus: merah, sedikit lebih kecil dari lingkaran jumlah. Pakai
-    // HitTestBehavior.opaque agar tap tidak "tembus" ke InkWell kartu produk.
     final minusSize = size - 2;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
+
+    return ValueListenableBuilder<State<AddControl>?>(
+      valueListenable: AddControl.activeStepper,
+      builder: (context, active, _) {
+        final isActive = identical(active, this);
+        // Angka pindah ke sisi minus HANYA saat aktif, sudah di keranjang,
+        // dan tombol terakhir yang ditekan adalah "+" (`_qtyOnLeft`). Selain
+        // itu selalu normal (angka di tombol +/kanan).
+        final qtyOnLeft = inCart && isActive && _qtyOnLeft;
+        // Lingkaran utama (kanan) tampil "+" bila belum di keranjang ATAU
+        // angka sedang dipindah ke sisi minus.
+        final rightShowsPlus = !inCart || qtyOnLeft;
+
+        // Lingkaran utama (jumlah / "+") berukuran sama baik saat kosong
+        // maupun saat sudah ada di keranjang, agar tidak "melompat" ukuran.
+        final mainCircle = GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleTap,
+          child: AnimatedScale(
+            scale: isActive ? _kActiveScale : 1.0,
+            duration: _kActiveScaleDuration,
+            curve: Curves.easeOut,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: circleSize,
+              height: circleSize,
+              decoration: BoxDecoration(
+                color: bgColor,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                      color: shadowColor,
+                      blurRadius: 6,
+                      offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Center(
+                child: rightShowsPlus
+                    ? Icon(Icons.add_rounded,
+                        color: Colors.white, size: circleSize * 0.6)
+                    : _qtyLabel(label, circleSize),
+              ),
+            ),
+          ),
+        );
+
+        if (!inCart) return mainCircle;
+
+        // Tombol minus: merah, sedikit lebih kecil dari lingkaran jumlah.
+        // Pakai HitTestBehavior.opaque agar tap tidak "tembus" ke InkWell
+        // kartu produk. Menampilkan angka qty saat `qtyOnLeft` (setelah "+"
+        // ditekan), selain itu ikon "-".
+        final minusButton = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleMinus,
-          child: ValueListenableBuilder<State<AddControl>?>(
-            valueListenable: AddControl.activeStepper,
-            builder: (context, active, child) => AnimatedScale(
-              scale: identical(active, this) ? _kActiveScale : 1.0,
-              duration: _kActiveScaleDuration,
-              curve: Curves.easeOut,
-              child: child,
-            ),
+          child: AnimatedScale(
+            scale: isActive ? _kActiveScale : 1.0,
+            duration: _kActiveScaleDuration,
+            curve: Curves.easeOut,
             child: Container(
               width: minusSize,
               height: minusSize,
@@ -177,15 +197,24 @@ class _AddControlState extends State<AddControl> {
                 shape: BoxShape.circle,
               ),
               child: Center(
-                child: Icon(Icons.remove_rounded,
-                    color: Colors.white, size: minusSize * 0.6),
+                child: qtyOnLeft
+                    ? _qtyLabel(label, minusSize)
+                    : Icon(Icons.remove_rounded,
+                        color: Colors.white, size: minusSize * 0.6),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
-        mainCircle,
-      ],
+        );
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            minusButton,
+            const SizedBox(width: 6),
+            mainCircle,
+          ],
+        );
+      },
     );
   }
 }

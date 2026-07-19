@@ -294,10 +294,38 @@ class _CartItemTile extends ConsumerWidget {
         // Checklist verifikasi barang sebelum bayar — independen dari tap
         // baris (yang membuka modal edit). Leading widget eksplisit (bukan
         // CheckboxListTile) supaya kedua gesture ini tidak tumpang tindih.
-        leading: Checkbox(
-          value: item.checked,
-          onChanged: (v) =>
-              notifier.setChecked(item.productUnitId, v ?? false),
+        // Item 44 — badge jumlah qty di KIRI item (selain angka di stepper
+        // kanan), supaya qty langsung kebaca tanpa lihat ke stepper. Hanya
+        // tampil bila qty > 0 (baris "via varian" qty 0 tidak diberi badge).
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Checkbox(
+              value: item.checked,
+              visualDensity: VisualDensity.compact,
+              onChanged: (v) =>
+                  notifier.setChecked(item.productUnitId, v ?? false),
+            ),
+            if (effectiveQty > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}×',
+                    style: AppTheme.numStyle(context,
+                        size: 13,
+                        weight: FontWeight.w700,
+                        color: scheme.primary),
+                  ),
+                ),
+              ),
+          ],
         ),
         title: Row(
           children: [
