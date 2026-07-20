@@ -78,6 +78,20 @@ int latestChangeGiven(List<TransactionPayment> payments) {
   return latest?.changeGiven ?? 0;
 }
 
+/// Dibayar utk ringkasan SAAT ada baris Kembalian (lunas kelebihan bayar) —
+/// beda dari [netPaidDisplay] (dipasangkan dgn Sisa Tagihan, dipakai HANYA
+/// saat TIDAK ada kembalian). Dihitung dari Total + Kembalian (bukan sum
+/// mentah `payment.amount`) supaya "Total = Dibayar - Kembalian" SELALU
+/// konsisten di layar — bug nyata dilaporkan user (screenshot): struk
+/// menampilkan "Dibayar Rp 231.200" (persis = Total) BERSAMA "Kembalian
+/// Rp 18.800" sekaligus, padahal Riwayat Pembayaran totalnya Rp 250.000 —
+/// pembaca tidak bisa merekonsiliasi kenapa ada kembalian kalau Dibayar
+/// sudah pas dgn Total.
+int dibayarDisplay(Transaction tx, List<TransactionPayment> payments) {
+  final kembalian = latestChangeGiven(payments);
+  return kembalian > 0 ? tx.total + kembalian : netPaidDisplay(tx, payments);
+}
+
 class ReceiptScreen extends ConsumerStatefulWidget {
   const ReceiptScreen({super.key, required this.transactionId});
   final String transactionId;
@@ -1978,7 +1992,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           if (tx.paid > 0)
                             _SummaryRow('Dibayar',
                                 '${_methodLabel(tx.paymentMethod)} · '
-                                '${formatRupiah(netPaidDisplay(tx, _payments))}'),
+                                '${formatRupiah(dibayarDisplay(tx, _payments))}'),
                           // Item 49b — ringkasan disederhanakan jadi 3 baris
                           // inti (state akhir akumulatif): Total / Dibayar /
                           // Kembalian-ATAU-Sisa. Baris "Uang Diterima" (uang
@@ -2655,12 +2669,12 @@ class _ReceiptPaper extends StatelessWidget {
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
             ),
-          if (netPaidDisplay(tx, payments) > 0)
+          if (dibayarDisplay(tx, payments) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Bayar..', style: _mono),
-                Text('Rp ${_fmtNum(netPaidDisplay(tx, payments))}',
+                Text('Rp ${_fmtNum(dibayarDisplay(tx, payments))}',
                     style: _mono),
               ],
             ),
