@@ -8,6 +8,7 @@ import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'package:sqlite3/open.dart';
 import 'package:uuid/uuid.dart';
 
+import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
 import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
@@ -3621,6 +3622,23 @@ class AppDatabase extends _$AppDatabase {
           if (cleaned.isEmpty) continue;
           if (table == 'products') {
             cleaned['locally_modified'] = 0;
+            // Bug nyata dilaporkan user: usulan harga yang SUDAH diterapkan
+            // owner tetap muncul lagi terus-menerus di sync berikutnya.
+            // Akar masalah: baris ini disalin APA ADANYA dari usulan klien,
+            // termasuk `updated_at` LAMA (waktu klien mengedit, BUKAN waktu
+            // owner menerapkan). `dumpSince` (host→klien) memfilter master
+            // data produk dgn `WHERE updated_at >= since` — begitu watermark
+            // klien maju melewati timestamp lama itu (sync-sync berikutnya),
+            // baris hasil approve ini TIDAK PERNAH lagi ikut terkirim balik
+            // ke klien, jadi `locally_modified` di device klien TIDAK PERNAH
+            // ke-reset ke false (lihat dok kolom di product_tables.dart yang
+            // mengasumsikan baris SELALU "ditimpa oleh push resmi dari host"
+            // — asumsi itu gagal persis di sini). Fix: cap `updated_at` ke
+            // SAAT INI supaya baris yang baru di-approve ini pasti lolos
+            // filter watermark pada sync berikutnya & benar-benar sampai
+            // balik ke klien (unix detik, format sama seperti dumpSince).
+            cleaned['updated_at'] =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
           }
           final cols = cleaned.keys.map((k) => '"$k"').join(', ');
           final placeholders = cleaned.values.map((_) => '?').join(', ');
@@ -3796,11 +3814,30 @@ class AppDatabase extends _$AppDatabase {
         final placeholders = row.values.map((_) => '?').join(', ');
         final variables = _rowToVars(row);
         final mode = isAppendOnly ? 'INSERT OR IGNORE' : 'INSERT OR REPLACE';
-        final inserted = await customInsert(
-          '$mode INTO "$tableName" ($cols) VALUES ($placeholders)',
-          variables: variables,
-        );
-        if (inserted > 0) count++;
+        // Bug nyata dilaporkan user: struk yang diterima lewat sync tampil
+        // TANPA daftar item sama sekali (header & pembayaran normal). Akar
+        // masalah: `INSERT OR IGNORE` HANYA menekan pelanggaran UNIQUE/PK —
+        // pelanggaran FOREIGN KEY (mis. baris `transaction_items` yatim,
+        // transaction_id-nya tidak ada di device pengirim maupun penerima)
+        // TETAP throw, dan exception itu keluar dari callback `transaction()`
+        // di atas → Drift rollback SELURUH baris dalam SATU panggilan
+        // `mergeRows` ini (bukan cuma baris yang salah) — satu baris korup
+        // milik SATU transaksi meracuni item transaksi LAIN yang valid dalam
+        // batch sync yang sama, konsisten dgn tiap sync berikutnya (klien
+        // selalu full-dump) selama baris korup itu masih ada di device
+        // pengirim. Tangkap per-baris di sini supaya SATU baris gagal cuma
+        // di-skip (dicatat ke CrashLogService utk diagnosis), baris lain
+        // dalam batch yang sama tetap ter-merge.
+        try {
+          final inserted = await customInsert(
+            '$mode INTO "$tableName" ($cols) VALUES ($placeholders)',
+            variables: variables,
+          );
+          if (inserted > 0) count++;
+        } catch (e, st) {
+          await CrashLogService.record(e, st,
+              context: 'app_database_merge_rows_row table=$tableName');
+        }
       }
     });
     return count;
