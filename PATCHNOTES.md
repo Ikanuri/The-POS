@@ -34,6 +34,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   hanya ada di layar, hilang saat dibagikan/dicetak).
 
 ### 🛠️ Perbaikan
+- **Laporan Ringkasan kini cocok dengan transaksi sebenarnya setelah sync** —
+  sebelumnya, transaksi dari kasir/asisten yang sudah masuk lewat sinkronisasi
+  kadang tidak terhitung di Laporan Ringkasan (angka lebih kecil dari yang
+  seharusnya, walau transaksinya sudah sama di kedua HP). Sekarang laporan
+  otomatis membetulkan diri saat dibuka.
 - **Usulan ubah harga dari kasir/asisten kini benar-benar diterapkan** —
   sebelumnya, saat owner menyetujui usulan perubahan harga, harga di HP
   owner tidak ikut berubah dan harga di HP asisten malah balik ke harga

@@ -10,7 +10,11 @@ final _ringkasanTabProvider =
     FutureProvider.family<_RingkasanTabData, DateTimeRange>((ref, range) async {
   final db = ref.watch(databaseProvider);
   // Baca dari ringkasan harian ter-materialisasi (O(hari)) alih-alih memindai
-  // seluruh transaksi + item (O(transaksi)).
+  // seluruh transaksi + item (O(transaksi)). Perbaiki-sendiri dulu entri yang
+  // BASI di rentang ini — transaksi hasil sync/merge kadang tak ikut merebuild
+  // cache ini, bikin laporan lebih kecil dari data sebenarnya walau baris
+  // transaksi sudah sama antar-device.
+  await db.rebuildStaleSummariesInRange(range.start, range.end);
   final summaries = await db.getDailySummaries(range.start, range.end);
   final expenses =
       await db.getNetProfitExpenseTotal(range.start, range.end);

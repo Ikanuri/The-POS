@@ -4,6 +4,31 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19 Juli 2026 (bugfix laporan basi pasca-sync, branch
+`claude/setup-dependencies-am31te`) — user lapor: transaksi asisten sudah
+ter-merge & SAMA di kedua HP, tapi Laporan Ringkasan owner (filter 1 hari)
+cuma tampil 2jt sedangkan asisten (data identik) tampil 8jt. Akar: Laporan
+Ringkasan (`ringkasan_tab.dart`) baca cache `daily_summaries` (materialized,
+O(hari)) yg TIDAK disinkron — dihitung ulang lokal tiap merge via
+`rebuildSummariesForTxIds`. Kalau cache basi (transaksi masuk tapi rebuild
+terlewat: build lama, restore, atau jalur merge tanpa wiring), laporan lebih
+kecil dari transaksi nyata. Merge path SAAT INI sudah panggil rebuild
+(approveSync & syncToHost), tapi cache lama bisa terlanjur basi. FIX
+DEFENSIF (self-heal): `AppDatabase.rebuildStaleSummariesInRange(from,to)` —
+1 query agregat (COUNT+SUM(total) per tanggal) bandingkan vs cache, rebuild
+HANYA tanggal yg jumlah/omzet-nya beda (umumnya nol; juga hapus phantom).
+Dipanggil di provider `_ringkasanTabProvider` (`ringkasan_tab.dart`) &
+`_fetchRingkasan` (`report_export.dart`) SEBELUM baca `getDailySummaries`,
+jadi laporan+ekspor selalu cermin transaksi nyata di device itu. Murah utk
+filter harian/bulanan; setahun = 1 scan agregat + rebuild sedikit tanggal.
+Test: `report_summary_selfheal_test` (DB-tier, reproduksi 2jt-basi→8jt,
+revert-verified). CATATAN AUDIT SYNC (belum dikerjakan, user masih pilih
+scope): tabel TAK tersinkron sama sekali = `product_groups`(kategori),
+`payment_methods`, `app_settings`(info toko/header struk); `customers` hanya
+turun (owner→kasir), pelanggan buatan kasir TAK naik → nama/hutang bisa
+kosong di laporan owner; caveat watermark: transaksi `created_at < since`
+device yg baru di-approve belakangan bisa terlewat saat device itu download.
+
 _Update sesi 19 Juli 2026 (bugfix sync usulan harga, branch
 `claude/setup-dependencies-am31te`) — BUG NYATA Item 40: usulan UBAH HARGA
 yg di-approve tak mengubah harga owner & malah me-revert harga asisten saat
