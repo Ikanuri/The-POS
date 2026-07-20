@@ -315,6 +315,8 @@ body{
   margin:10px auto 4px;flex-shrink:0;}
 .sheet-head{display:flex;align-items:center;padding:6px 16px 10px;flex-shrink:0;}
 .sheet-head b{font-size:18px;}
+.clear-cart-btn{margin-left:12px;border:none;background:transparent;color:var(--ink-3);
+  font-size:13px;font-weight:600;cursor:pointer;padding:4px 0;text-decoration:underline;}
 .sheet-x{margin-left:auto;border:none;background:transparent;color:var(--ink-3);
   font-size:24px;cursor:pointer;padding:4px;}
 .sheet-body{overflow-y:auto;padding:0 16px;flex:1;}
@@ -403,7 +405,7 @@ textarea.tfield{resize:none;min-height:64px;}
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-grip"></div>
-  <div class="sheet-head"><b>Pesanan Anda</b><button class="sheet-x" id="sheetClose">&times;</button></div>
+  <div class="sheet-head"><b>Pesanan Anda</b><button class="clear-cart-btn" id="clearCartBtn" type="button">Kosongkan</button><button class="sheet-x" id="sheetClose">&times;</button></div>
   <div class="sheet-body">
     <div id="cartItems"></div>
     <div class="field-label">Nama</div>
@@ -483,6 +485,49 @@ document.getElementById('themeBtn').addEventListener('click', function(){
   try { localStorage.setItem('posOrderTheme', next); } catch (e) {}
 });
 initTheme();
+
+// ── Persist keranjang lewat localStorage — permintaan user: katalog HTML
+// ini statis (bukan app), refresh/reload browser HILANGKAN state JS murni
+// (var cart di memori) tanpa ini. Di-keyed per DATA.generatedAt (versi
+// katalog) supaya kalau toko generate katalog baru (harga/stok beda), cache
+// lama dari katalog SEBELUMNYA otomatis dianggap basi & tidak dipakai —
+// PLUS kedaluwarsa 1 hari sbg jaga-jaga tambahan (pelanggan buka lagi jauh
+// hari kemudian). Tombol "Kosongkan" disediakan (di header sheet Pesanan)
+// utk kasus cache masih ada tapi pelanggan mau mulai pesanan batch baru.
+var CART_TTL_MS = 24 * 60 * 60 * 1000;
+var CART_STORAGE_KEY = 'posOrderCart';
+
+function saveCart(){
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({
+      generatedAt: DATA.generatedAt,
+      savedAt: Date.now(),
+      cart: cart,
+      cartNotes: cartNotes
+    }));
+  } catch (e) {}
+}
+
+function loadCart(){
+  try {
+    var raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return;
+    var saved = JSON.parse(raw);
+    if (!saved || saved.generatedAt !== DATA.generatedAt) return;
+    if (typeof saved.savedAt !== 'number' || (Date.now() - saved.savedAt) > CART_TTL_MS) return;
+    cart = saved.cart || {};
+    cartNotes = saved.cartNotes || {};
+  } catch (e) {}
+}
+
+function clearCart(){
+  if (cartCount() > 0 && !confirm('Kosongkan semua barang di pesanan ini?')) return;
+  cart = {};
+  cartNotes = {};
+  try { localStorage.removeItem(CART_STORAGE_KEY); } catch (e) {}
+  render();
+}
+document.getElementById('clearCartBtn').addEventListener('click', clearCart);
 
 DATA.products.forEach(function(p){
   // Satuan lain (mis. Dus di samping Biji) sama-sama milik produk INI —
@@ -610,6 +655,7 @@ function setQty(unitId, qty){
   if (p) refreshProwControls(p); else renderList();
   renderCartBar();
   if (sheetOpen) renderCartSheet();
+  saveCart();
 }
 
 // Update badge +/qty SATU baris produk di tempat (tanpa rebuild grid).
@@ -883,6 +929,7 @@ document.getElementById('itemAddBtn').addEventListener('click', function(){
   }
   closeItemModal();
   render();
+  saveCart();
 });
 document.getElementById('itemRemoveBtn').addEventListener('click', function(){
   if (!itemModalUnitId) return;
@@ -890,6 +937,7 @@ document.getElementById('itemRemoveBtn').addEventListener('click', function(){
   delete cartNotes[itemModalUnitId];
   closeItemModal();
   render();
+  saveCart();
 });
 
 function render(){ renderList(); renderCartBar(); if (sheetOpen) renderCartSheet(); }
@@ -1011,6 +1059,7 @@ document.getElementById('copyBtn').addEventListener('click', function(){
   showToast(ok ? 'Teks pesanan disalin' : 'Gagal menyalin — salin manual dari WhatsApp');
 });
 
+loadCart();
 render();
 </script>
 </body>

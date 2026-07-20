@@ -34,6 +34,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   hanya ada di layar, hilang saat dibagikan/dicetak).
 
 ### ✨ Fitur Baru
+- **Keranjang katalog pesanan (link WhatsApp) tidak lagi hilang saat
+  di-refresh** — pilihan barang pelanggan kini tersimpan otomatis di
+  browser, bertahan sampai 1 hari atau sampai toko generate ulang
+  katalognya. Ditambah tombol "Kosongkan" untuk mulai pesanan batch baru.
 - **Kartu baru "Selisih Kas Operasional" di Laporan Ringkasan** — Omzet
   dikurangi Pengeluaran (tanpa memperhitungkan modal barang), sebagai
   gambaran kas masuk vs kas keluar operasional, berdampingan dengan
