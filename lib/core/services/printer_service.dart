@@ -646,7 +646,13 @@ class PrinterService {
           styles: const PosStyles(bold: true)));
 
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-        out.addAll(bodyText(_toAscii(item.itemNote!)));
+        // Item 49c — catatan barang bisa multi-baris (maxLines:2 di UI);
+        // split dulu supaya tiap baris tercetak sendiri (`_toAscii` buang
+        // karakter \n mentah, jadi kalau digabung sebelum split baris-baris
+        // itu akan nyambung jadi satu teks tanpa pemisah).
+        for (final line in item.itemNote!.split('\n')) {
+          out.addAll(bodyText(_toAscii(line)));
+        }
       }
 
       final uName = _toAscii(unitNames[item.productUnitId] ?? 'pcs');
@@ -748,17 +754,25 @@ class PrinterService {
     }
 
     // ── Footer ────────────────────────────────────────────────────────────
+    // Item 49c — catatan nota/toko bisa multi-baris (maxLines:3 di UI);
+    // split per '\n' dulu (pola sama dgn receiptHeader di atas) supaya tiap
+    // baris tercetak sendiri — `_toAscii` membuang karakter \n mentah.
     if (strukNote != null && strukNote.isNotEmpty) {
       out.addAll(bodySep());
-      out.addAll(gen.text(_toAscii(strukNote),
-          styles: const PosStyles(align: PosAlign.center)));
+      for (final line in strukNote.split('\n')) {
+        out.addAll(gen.text(_toAscii(line),
+            styles: const PosStyles(align: PosAlign.center)));
+      }
     }
     // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima kasih!" bila
     // belum diisi user, sama seperti hint field-nya & struk in-app/share.
     out.addAll(bodySep());
-    out.addAll(gen.text(
-        _toAscii(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!'),
-        styles: const PosStyles(align: PosAlign.center)));
+    final footerText =
+        receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!';
+    for (final line in footerText.split('\n')) {
+      out.addAll(gen.text(_toAscii(line),
+          styles: const PosStyles(align: PosAlign.center)));
+    }
 
     out.addAll(gen.feed(3));
     out.addAll(gen.cut());
@@ -995,7 +1009,10 @@ class PrinterService {
         out.addAll(
             gen.text('$prefix$rawName', styles: const PosStyles(bold: true)));
         if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-          out.addAll(gen.text(_toAscii(item.itemNote!)));
+          // Item 49c — sama seperti struk tunggal, split per baris dulu.
+          for (final line in item.itemNote!.split('\n')) {
+            out.addAll(gen.text(_toAscii(line)));
+          }
         }
         final uName = _toAscii(unitNames[item.productUnitId] ?? 'pcs');
         final qtyStr = item.qty % 1 == 0
@@ -1059,10 +1076,14 @@ class PrinterService {
 
     out.addAll(gen.text(_sep(w)));
     // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima kasih!" bila
-    // belum diisi user, sama seperti hint field-nya.
-    out.addAll(gen.text(
-        _toAscii(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!'),
-        styles: const PosStyles(align: PosAlign.center)));
+    // belum diisi user, sama seperti hint field-nya. Item 49c — split per
+    // baris dulu (bisa multi-baris, sama pola dgn struk tunggal di atas).
+    final mergedFooterText =
+        receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!';
+    for (final line in mergedFooterText.split('\n')) {
+      out.addAll(gen.text(_toAscii(line),
+          styles: const PosStyles(align: PosAlign.center)));
+    }
     out.addAll(gen.feed(3));
     out.addAll(gen.cut());
     return Uint8List.fromList(out);
