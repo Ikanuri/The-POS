@@ -1423,6 +1423,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       storeWhatsapp: prefs.whatsapp,
       storeTelegram: prefs.telegram,
       receiptHeader: prefs.header,
+      receiptFooter: prefs.footer,
       strukNote: _tx!.strukNote,
       parentOf: _parentOf,
     );
@@ -1440,6 +1441,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         String whatsapp,
         String telegram,
         String header,
+        String footer,
       })> _getStorePrefs() async {
     final db = ref.read(databaseProvider);
     return (
@@ -1449,6 +1451,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       whatsapp: await db.getSetting('store_whatsapp') ?? '',
       telegram: await db.getSetting('store_telegram') ?? '',
       header: await db.getSetting('receipt_header') ?? '',
+      // "Catatan di Struk" (Informasi Toko) — sebelumnya disimpan tapi TIDAK
+      // PERNAH dibaca; struk selalu menampilkan "Terima kasih!" hardcode.
+      footer: await db.getSetting('receipt_note') ?? '',
     );
   }
 
@@ -1498,6 +1503,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       storeWhatsapp: prefs.whatsapp,
                       storeTelegram: prefs.telegram,
                       receiptHeader: prefs.header,
+                      receiptFooter: prefs.footer,
                       parentOf: _parentOf,
                       checkedIds: _checkedIds,
                     ),
@@ -2290,6 +2296,7 @@ class _ReceiptPaper extends StatelessWidget {
     this.storeWhatsapp = '',
     this.storeTelegram = '',
     this.receiptHeader = '',
+    this.receiptFooter = '',
     this.parentOf = const {},
     this.checkedIds = const {},
   });
@@ -2309,6 +2316,7 @@ class _ReceiptPaper extends StatelessWidget {
   final String storeWhatsapp;
   final String storeTelegram;
   final String receiptHeader;
+  final String receiptFooter;
   final Set<String> checkedIds;
 
   static const _ink = Color(0xFF111111);
@@ -2544,7 +2552,9 @@ class _ReceiptPaper extends StatelessWidget {
                 style: _mono.copyWith(fontSize: 11)),
           ],
           const _DashedLine(),
-          Text('Terima kasih!',
+          // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima
+          // kasih!" bila belum diisi user, sama seperti hint field-nya.
+          Text(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!',
               textAlign: TextAlign.center, style: _mono.copyWith(fontSize: 11)),
         ],
       ),

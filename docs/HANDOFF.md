@@ -4,6 +4,26 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19-20 Juli 2026 (2 permintaan user, branch
+`claude/setup-dependencies-am31te`) — (1) BUG NYATA: "Catatan di Struk"
+(setting `receipt_note` di Informasi Toko/`store_info_screen.dart`) DISIMPAN
+tapi TIDAK PERNAH DIBACA di mana pun — ketiga jalur struk (in-app/share
+`_ReceiptPaper` di `receipt_screen.dart`, cetak single `printer_service.
+_buildBytes`, cetak/share gabungan `merged_receipt_screen.dart` +
+`printer_service._buildMergedBytes`) semua hardcode teks "Terima kasih!".
+FIX: baca `receipt_note`, thread sbg param `receiptFooter` ke semua 3+1
+jalur, fallback ke "Terima kasih!" bila kosong (sama seperti hint field-nya).
+CATATAN: strukNote (per-transaksi, "Catatan Nota") itu FITUR TERPISAH yg
+sudah bekerja normal — jangan disamakan lagi kalau ada laporan serupa. (2)
+Kartu KPI baru "Selisih Kas Operasional" = Omzet − Pengeluaran (SENGAJA
+TANPA kurangi HPP, beda dari "Laba Bersih" yg sudah ada) di tab Ringkasan
+Laporan (`ringkasan_tab.dart`, getter `cashDifference` di `_RingkasanTabData`)
+— HANYA di layar in-app, TIDAK ditambah ke ekspor PDF/Excel (`report_export.
+dart` — scope sengaja disempitkan, `_RingkasanData` ekspor bahkan belum
+punya field expenses/netProfit sama sekali, gap pre-existing terpisah, belum
+dikerjakan). Test baru (revert-verified): `receipt_footer_note_test`,
+`ringkasan_cash_difference_test`. analyze bersih.
+
 _Update sesi 19 Juli 2026 (bugfix laporan basi pasca-sync, branch
 `claude/setup-dependencies-am31te`) — user lapor: transaksi asisten sudah
 ter-merge & SAMA di kedua HP, tapi Laporan Ringkasan owner (filter 1 hari)

@@ -64,6 +64,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   String _storeWhatsapp = '';
   String _storeTelegram = '';
   String _receiptHeader = '';
+  String _receiptFooter = '';
 
   final GlobalKey _boundaryKey = GlobalKey();
 
@@ -145,6 +146,9 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
     final storeTelegram = await db.getSetting('store_telegram') ?? '';
     final receiptHeader = await db.getSetting('receipt_header') ?? '';
+    // "Catatan di Struk" (Informasi Toko) — sebelumnya disimpan tapi TIDAK
+    // PERNAH dibaca; struk selalu menampilkan "Terima kasih!" hardcode.
+    final receiptFooter = await db.getSetting('receipt_note') ?? '';
     final showEmp = await db.getSetting('receipt_show_employee');
 
     if (mounted) {
@@ -165,6 +169,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
         _storeWhatsapp = storeWhatsapp;
         _storeTelegram = storeTelegram;
         _receiptHeader = receiptHeader;
+        _receiptFooter = receiptFooter;
         _loading = false;
       });
     }
@@ -227,6 +232,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
       storeWhatsapp: _storeWhatsapp,
       storeTelegram: _storeTelegram,
       receiptHeader: _receiptHeader,
+      receiptFooter: _receiptFooter,
       parentOf: _parentOf,
       lastPaymentAt: _lastPaymentAt,
     );
@@ -328,6 +334,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
                   storeWhatsapp: _storeWhatsapp,
                   storeTelegram: _storeTelegram,
                   receiptHeader: _receiptHeader,
+                  receiptFooter: _receiptFooter,
                   grandTotal: _grandTotal,
                   grandPaid: _grandPaid,
                   grandSisa: _grandSisa,
@@ -362,6 +369,7 @@ class _MergedReceiptPaper extends StatelessWidget {
     required this.storeWhatsapp,
     required this.storeTelegram,
     required this.receiptHeader,
+    this.receiptFooter = '',
     required this.grandTotal,
     required this.grandPaid,
     required this.grandSisa,
@@ -384,6 +392,7 @@ class _MergedReceiptPaper extends StatelessWidget {
   final String storeWhatsapp;
   final String storeTelegram;
   final String receiptHeader;
+  final String receiptFooter;
   final int grandTotal;
   final int grandPaid;
   final int grandSisa;
@@ -600,7 +609,9 @@ class _MergedReceiptPaper extends StatelessWidget {
                   style: _mono.copyWith(fontSize: 11)),
             ),
           const _DashedLine(),
-          Text('Terima kasih!',
+          // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima
+          // kasih!" bila belum diisi user, sama seperti hint field-nya.
+          Text(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!',
               textAlign: TextAlign.center,
               style: _mono.copyWith(fontSize: 11)),
         ],

@@ -101,6 +101,20 @@ class RingkasanTab extends ConsumerWidget {
                   data.netProfit >= 0 ? scheme.tertiary : scheme.error),
             ],
           ),
+          const SizedBox(height: 12),
+          // Selisih Kas Operasional = Omzet - Pengeluaran (TANPA kurangi
+          // HPP) — beda dari Laba Bersih, jadi disendirikan barisnya biar
+          // tak tertukar maknanya. Label eksplisit spy tak disalahartikan
+          // sbg laba sebenarnya.
+          _KpiRow(
+            bg: uangBg,
+            items: [
+              _KpiItem(
+                  'Selisih Kas Operasional',
+                  formatRupiah(data.cashDifference),
+                  data.cashDifference >= 0 ? scheme.tertiary : scheme.error),
+            ],
+          ),
           const SizedBox(height: 20),
 
           // Payment breakdown
@@ -364,4 +378,11 @@ class _RingkasanTabData {
 
   /// Laba Bersih = Laba Kotor − Pengeluaran.
   int get netProfit => profit - expenses;
+
+  /// Selisih Kas Operasional = Omzet − Pengeluaran (TANPA kurangi HPP).
+  /// Berbeda dari Laba Bersih (yang sudah menghitung modal barang terjual)
+  /// — metrik ini murni kas masuk (penjualan) dikurangi kas keluar
+  /// (pengeluaran operasional), berguna sbg gambaran arus kas sederhana
+  /// terlepas dari akurasi harga pokok yang ter-input.
+  int get cashDifference => revenue - expenses;
 }

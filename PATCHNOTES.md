@@ -33,7 +33,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   HH:MM -----", sama seperti struk di dalam aplikasi (sebelumnya batas ini
   hanya ada di layar, hilang saat dibagikan/dicetak).
 
+### ✨ Fitur Baru
+- **Kartu baru "Selisih Kas Operasional" di Laporan Ringkasan** — Omzet
+  dikurangi Pengeluaran (tanpa memperhitungkan modal barang), sebagai
+  gambaran kas masuk vs kas keluar operasional, berdampingan dengan
+  Laba Bersih yang sudah ada.
+
 ### 🛠️ Perbaikan
+- **"Catatan di Struk" (Informasi Toko) kini benar-benar tampil di struk**
+  — sebelumnya, teks yang Anda isi di sana (mis. "Terima kasih telah
+  berbelanja") tidak pernah muncul; struk selalu menampilkan "Terima
+  kasih!" bawaan. Sekarang berlaku di struk share, cetak, maupun nota
+  gabungan (fallback ke "Terima kasih!" bila belum diisi).
 - **Laporan Ringkasan kini cocok dengan transaksi sebenarnya setelah sync** —
   sebelumnya, transaksi dari kasir/asisten yang sudah masuk lewat sinkronisasi
   kadang tidak terhitung di Laporan Ringkasan (angka lebih kecil dari yang

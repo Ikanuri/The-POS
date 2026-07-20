@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-19
 
+- `fa79eb0` — feat: Catatan di Struk (receipt_note) benar-benar terpakai di struk share/cetak/gabungan (sebelumnya disimpan tapi tak pernah dibaca) + kartu KPI baru "Selisih Kas Operasional" (Omzet - Pengeluaran) di tab Ringkasan
 - `c094014` — fix: Laporan Ringkasan basi pasca-sync — rebuildStaleSummariesInRange (self-heal cache daily_summaries yang tak ikut ter-rebuild saat merge) dipanggil di provider Ringkasan & ekspor laporan sebelum baca cache
 - `d291e5d` — fix: usulan ubah harga (sync antar-role) — applyProductProposals replace penuh price_tiers/alt_prices per satuan yg di-approve (hapus tier lama sebelum insert) supaya harga owner benar berubah & tidak me-revert harga asisten saat sync balik
 - `37fe379` — feat: pembatas "----- Tambahan HH:MM -----" (Gaya A) di struk share (_ReceiptPaper) & cetak thermal (printer_service), sebelumnya cuma di struk in-app
