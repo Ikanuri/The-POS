@@ -40,6 +40,11 @@ void main() {
         change_amount INTEGER, payment_method TEXT, internal_note TEXT,
         struk_note TEXT, employee_name TEXT, points_earned INTEGER,
         created_at INTEGER, synced_at INTEGER);
+      CREATE TABLE transaction_items(
+        id TEXT PRIMARY KEY, transaction_id TEXT, product_id TEXT,
+        product_unit_id TEXT, qty REAL, price_at_sale INTEGER,
+        original_price INTEGER, price_overridden INTEGER, cost_at_sale INTEGER,
+        item_note TEXT, subtotal INTEGER, added_at INTEGER);
     ''');
     v7.execute("INSERT INTO products(id, name, is_active) "
         "VALUES('p1','Gula Pasir',1)");
@@ -87,7 +92,7 @@ void main() {
     // Versi schema benar-benar naik ke skema terkini (10 — migrasi lanjutan
     // menambah change_taken & sort_order, tapi test ini fokus ke migrasi 7->8).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 16);
+    expect(ver.data.values.first, 17);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

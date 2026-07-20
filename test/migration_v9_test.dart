@@ -41,6 +41,15 @@ void main() {
         id TEXT PRIMARY KEY, transaction_id TEXT, amount INTEGER, method TEXT,
         paid_at INTEGER, kasir_id TEXT, note TEXT);
     ''');
+    // transaction_items diperlukan agar migrasi v17 (addColumn returned_at)
+    // tak gagal — Item 49g.
+    v8.execute('''
+      CREATE TABLE transaction_items(
+        id TEXT PRIMARY KEY, transaction_id TEXT, product_id TEXT,
+        product_unit_id TEXT, qty REAL, price_at_sale INTEGER,
+        original_price INTEGER, price_overridden INTEGER, cost_at_sale INTEGER,
+        item_note TEXT, subtotal INTEGER, added_at INTEGER);
+    ''');
     v8.execute(
         "INSERT INTO transactions(id, local_id, status, total, paid, change_amount, "
         "payment_method, points_earned, created_at) "
@@ -74,7 +83,7 @@ void main() {
     expect(updated.changeTaken, isTrue);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 16);
+    expect(ver.data.values.first, 17);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

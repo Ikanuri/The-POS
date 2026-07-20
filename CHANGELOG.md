@@ -9,6 +9,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-20
 
+- `f14e06e` — feat: Item 49b/49d/49f/49g — struk ringkasan 3-baris (Total/Dibayar/Sisa-Kembalian, hapus "Uang Diterima"), tab Laporan Pengeluaran baru (KPI+donut+grafik harian), filter baris audit 'edit'/'retur' dari struk share/cetak, retur & edit item transaksi lunas kini update nota yang sama (bukan bikin nota baru) via kolom `returnedAt` (migrasi v16->v17) + pembatas "Retur HH:MM" + ringkasan Total awal/Retur/Akhir/Refund
+- `257bdf8` — feat: Item 49e — Tambah Satuan langsung scroll-into-view + autofocus field harga
+- `df7cd02` — fix: Item 49c — catatan struk cetak (itemNote/strukNote/receiptFooter) rusak kalau multi-baris
+- `4b57450` — feat: Item 49a — tombol "000" pindah ke baris bawah, setelah "00"
+- `46531a9` — docs: catat rencana batch besar (Item 49) ke PLAN.md — keypad, struk 3-baris, catatan cetak, tab Pengeluaran, jump-to-edit satuan, retur/edit in-place nota lunas, filter audit trail
 - `d3d9403` — feat: cache keranjang katalog HTML (order_page_service) ke localStorage keyed per versi katalog + TTL 1 hari, tombol "Kosongkan" baru — refresh browser tak lagi hilangkan pilihan pelanggan
 
 ## 2026-07-19

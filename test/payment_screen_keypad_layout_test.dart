@@ -76,24 +76,30 @@ void main() {
     expect(uangPasX, lessThan(bayarX));
   });
 
-  testWidgets('tombol "00" sebaris (Y sama) dengan "0", BUKAN dengan "7"',
-      (tester) async {
+  testWidgets(
+      'Item 49a — tombol "0"/"00"/"000" sebaris (Y sama) di baris paling '
+      'bawah, BUKAN "000" sebaris dengan "7"', (tester) async {
     final db = await pumpPaymentWithCartOpen(tester);
     addTearDown(() async => db.close());
 
     final zeroY = tester.getCenter(find.text('0')).dy;
     final zeroZeroY = tester.getCenter(find.text('00')).dy;
+    final threeZeroY = tester.getCenter(find.text('000')).dy;
     final sevenY = tester.getCenter(find.text('7')).dy;
 
     expect((zeroY - zeroZeroY).abs(), lessThan(2),
         reason: '"00" harus sebaris dengan "0"');
+    expect((zeroY - threeZeroY).abs(), lessThan(2),
+        reason: '"000" harus sebaris dengan "0" dan "00" (baris paling '
+            'bawah), bukan lagi sebaris dengan "7 8 9"');
     expect((sevenY - zeroZeroY).abs(), greaterThan(10),
-        reason: '"00" TIDAK lagi sebaris dengan "7" (baris digit atas)');
+        reason: '"00"/"000" TIDAK sebaris dengan "7" (baris digit atas)');
 
-    // "000" masih ada (dipindah ke baris digit, bukan dihapus).
-    expect(find.text('000'), findsOneWidget);
-    final threeZeroY = tester.getCenter(find.text('000')).dy;
-    expect((threeZeroY - sevenY).abs(), lessThan(2),
-        reason: '"000" pindah ke baris "7 8 9" (bekas slot "00")');
+    // "0" di KIRI "00" di KIRI "000" (urutan kalkulator).
+    final zeroX = tester.getCenter(find.text('0')).dx;
+    final zeroZeroX = tester.getCenter(find.text('00')).dx;
+    final threeZeroX = tester.getCenter(find.text('000')).dx;
+    expect(zeroX, lessThan(zeroZeroX));
+    expect(zeroZeroX, lessThan(threeZeroX));
   });
 }

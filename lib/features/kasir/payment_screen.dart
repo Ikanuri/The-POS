@@ -1697,12 +1697,12 @@ class _Keypad extends StatelessWidget {
   const _Keypad({required this.onPress});
   final ValueChanged<String> onPress;
 
-  // Item 26c — "00" ditukar posisi dengan "000" (bukan dihapus) supaya
-  // "00" berjajar dengan "0" di baris paling bawah/tengah keypad.
+  // Item 49a — "000" pindah ke baris paling bawah, setelah "00" (gaya
+  // kalkulator: 0/00/000 sebaris sama besar, bukan "0" dilebarkan 2x).
   static const _rows = [
     ['1', '2', '3', '⌫'],
     ['4', '5', '6', 'C'],
-    ['7', '8', '9', '000'],
+    ['7', '8', '9'],
   ];
 
   @override
@@ -1774,7 +1774,7 @@ class _Keypad extends StatelessWidget {
     return Column(
       children: [
         for (final row in _rows) Row(children: [for (final k in row) key(k)]),
-        Row(children: [key('0', flex: 2), key('00', flex: 2)]),
+        Row(children: [key('0'), key('00'), key('000')]),
       ],
     );
   }

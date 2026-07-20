@@ -570,18 +570,11 @@ class _MergedReceiptPaper extends StatelessWidget {
               Text('Rp ${_fmtNum(grandPaid)}', style: _mono),
             ],
           ),
-          // Item 9 — uang tender ASLI (gross) dari pembayaran terakhir yang
-          // menghasilkan kembalian, supaya tidak membingungkan pembeli yang
-          // kasih lebih dari tagihan gabungan.
-          if (latestPaymentWithChange != null)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Uang Diterima', style: _mono),
-                Text('Rp ${_fmtNum(latestPaymentWithChange!.amount)}',
-                    style: _mono),
-              ],
-            ),
+          // Item 49b — ringkasan 3-baris (state akhir akumulatif): TOTAL
+          // TAGIHAN / Terbayar / Kembalian-ATAU-SISA. Baris "Uang Diterima"
+          // (uang tender kotor, Item 9 lama) DIHAPUS, "SISA" jadi kondisional
+          // (bukan selalu tampil apa pun kondisinya, & tak lagi tampil
+          // bareng "Kembalian" sekaligus) — konsisten dgn struk tunggal.
           if (latestPaymentWithChange != null)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -590,18 +583,19 @@ class _MergedReceiptPaper extends StatelessWidget {
                 Text('Rp ${_fmtNum(latestPaymentWithChange!.changeGiven)}',
                     style: _mono),
               ],
+            )
+          else if (grandSisa > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('SISA',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+                Text('Rp ${_fmtNum(grandSisa)}',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+              ],
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('SISA',
-                  style: _mono.copyWith(
-                      fontSize: 14, fontWeight: FontWeight.w900)),
-              Text('Rp ${_fmtNum(grandSisa)}',
-                  style: _mono.copyWith(
-                      fontSize: 14, fontWeight: FontWeight.w900)),
-            ],
-          ),
           if (lastPaymentAt != null)
             Align(
               alignment: Alignment.centerRight,

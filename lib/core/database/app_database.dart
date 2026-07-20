@@ -145,7 +145,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -263,6 +263,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 16) {
             // Item 40 — usulan harga/produk dari device non-owner via sync.
             await m.addColumn(products, products.locallyModified);
+          }
+          if (from < 17) {
+            // Item 49g — retur nota LUNAS tanpa nota baru: baris item retur
+            // (qty negatif) ditandai returnedAt, pola sama dgn addedAt.
+            await m.addColumn(transactionItems, transactionItems.returnedAt);
           }
         },
         beforeOpen: (details) async {
@@ -2191,6 +2196,248 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Item 49g — qty yang sudah diretur (baris `qty` NEGATIF) per
+  /// productUnitId DALAM transaksi yang SAMA. Retur nota lunas TIDAK bikin
+  /// nota terpisah lagi (beda dari [getReturnedQtyByUnit] lama yang match
+  /// by `internalNote 'RETUR:txId'` pada nota LAIN) — cukup jumlah baris
+  /// `qty<0` pada tx yang sama.
+  Future<Map<String, double>> getReturnedQtyInTx(String txId) async {
+    final rows = await (select(transactionItems)
+          ..where((t) =>
+              t.transactionId.equals(txId) & t.qty.isSmallerThanValue(0)))
+        .get();
+    final out = <String, double>{};
+    for (final r in rows) {
+      out[r.productUnitId] = (out[r.productUnitId] ?? 0) + (-r.qty);
+    }
+    return out;
+  }
+
+  /// Item 49g — retur nota SUDAH LUNAS: TIDAK bikin nota baru (beda dari
+  /// [addReturnTransaction] lama, dipertahankan tapi tidak lagi dipanggil
+  /// dari sheet retur in-app). Insert baris item BARU ber-qty NEGATIF (item
+  /// ASLI tidak pernah dihapus/diubah) ditandai `returnedAt` — dikelompokkan
+  /// render-nya via separator "--- Retur HH:MM ---", pola sama dgn
+  /// `addedAt`/"Tambahan" — plus baris `transactionPayments` refund NEGATIF
+  /// SUNGGUHAN (uang fisik keluar, method dipilih user, BUKAN marker Rp0
+  /// spt nota belum-lunas) supaya Tutup Kasir bisa rekonsiliasi kas dgn
+  /// benar. [_reconcileTransactionTotals] (dipanggil di akhir) otomatis
+  /// menghitung ulang total/paid NET dari SUM seluruh item/payment (positif
+  /// & negatif tercampur) — tidak perlu logic manual terpisah utk itu.
+  Future<void> returnPaidTransactionItems({
+    required String txId,
+    required List<({String transactionItemId, double qty})> returns,
+    required String kasirId,
+    required String refundMethod,
+  }) async {
+    if (returns.isEmpty) return;
+    await transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null || tx.status == 'void') return;
+      if (tx.status != 'lunas') {
+        throw StateError(
+            'returnPaidTransactionItems hanya untuk nota LUNAS (status saat '
+            'ini: ${tx.status})');
+      }
+      final now = DateTime.now();
+      final alreadyReturned = await getReturnedQtyInTx(txId);
+      var refundTotal = 0;
+      var anyReturned = false;
+
+      for (final r in returns) {
+        if (r.qty <= 0) continue;
+        final item = await (select(transactionItems)
+              ..where((t) => t.id.equals(r.transactionItemId)))
+            .getSingleOrNull();
+        // Hanya boleh meretur baris PENJUALAN (qty positif) — baris retur
+        // lama (qty negatif) bukan target retur ulang.
+        if (item == null || item.transactionId != txId || item.qty <= 0) {
+          continue;
+        }
+
+        // "Sudah dibeli" bersih utk unit ini — bisa gabungan baris asli +
+        // susulan Tambah Belanjaan, semua baris qty positif unit yang sama.
+        final boughtRows = await (select(transactionItems)
+              ..where((t) =>
+                  t.transactionId.equals(txId) &
+                  t.productUnitId.equals(item.productUnitId) &
+                  t.qty.isBiggerThanValue(0)))
+            .get();
+        final bought = boughtRows.fold<double>(0, (s, i) => s + i.qty);
+        final returnedSoFar = alreadyReturned[item.productUnitId] ?? 0;
+        final maxReturnable =
+            (bought - returnedSoFar).clamp(0.0, double.infinity);
+        final retQty = r.qty.clamp(0.0, maxReturnable);
+        if (retQty <= 0) continue;
+        anyReturned = true;
+        // Lacak supaya retur MULTI-BARIS (beberapa productUnitId sekaligus
+        // dlm satu panggilan) tidak saling melebihi batas masing-masing.
+        alreadyReturned[item.productUnitId] = returnedSoFar + retQty;
+
+        final subtotal = (item.priceAtSale * retQty).round();
+        refundTotal += subtotal;
+
+        await into(transactionItems).insert(TransactionItemsCompanion.insert(
+          id: const Uuid().v4(),
+          transactionId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: -retQty,
+          priceAtSale: item.priceAtSale,
+          originalPrice: item.originalPrice,
+          subtotal: -subtotal,
+          returnedAt: Value(now),
+        ));
+
+        await _appendStock(
+          productUnitId: item.productUnitId,
+          qtyChange: retQty,
+          type: 'return_in',
+          referenceId: txId,
+          kasirId: kasirId,
+          note: 'Retur (nota lunas)',
+          now: now,
+        );
+      }
+      if (!anyReturned) return;
+
+      // Refund SUNGGUHAN (uang fisik keluar) — beda dari marker Rp0 nota
+      // belum-lunas, method dipilih user (tunai/transfer/dst).
+      await into(transactionPayments)
+          .insert(TransactionPaymentsCompanion.insert(
+        id: const Uuid().v4(),
+        transactionId: txId,
+        amount: -refundTotal,
+        method: refundMethod,
+        paidAt: Value(now),
+        kasirId: Value(kasirId),
+        note: const Value('Refund retur (nota lunas)'),
+      ));
+
+      // Poin loyalty direverse proporsional thd nilai refund (pola sama
+      // dgn addReturnTransaction lama).
+      if (tx.customerId != null && tx.pointsEarned > 0 && tx.total > 0) {
+        final proportion = (refundTotal / tx.total).clamp(0.0, 1.0);
+        final pointsToReverse =
+            (tx.pointsEarned * proportion).round().clamp(0, tx.pointsEarned);
+        if (pointsToReverse > 0) {
+          await customUpdate(
+            'UPDATE customers SET loyalty_points = loyalty_points - ? WHERE id = ?',
+            variables: [
+              Variable.withInt(pointsToReverse),
+              Variable.withString(tx.customerId!),
+            ],
+            updates: {customers},
+          );
+          await into(loyaltyPointLedger)
+              .insert(LoyaltyPointLedgerCompanion.insert(
+            id: const Uuid().v4(),
+            customerId: tx.customerId!,
+            type: 'adjust',
+            points: -pointsToReverse,
+            note: Value('Retur ${tx.localId}'),
+            createdAt: Value(now),
+          ));
+        }
+      }
+
+      await _reconcileTransactionTotals(txId);
+      await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
+    });
+  }
+
+  /// Item 49g — edit baris item nota SUDAH LUNAS langsung DI TEMPAT (bukan
+  /// separator+baris terpisah spt retur — user pilih "update langsung",
+  /// konsisten visual dgn [editUnpaidTransactionItem]). Constraint SAMA
+  /// dgn nota belum-lunas: qty cuma boleh BERKURANG/dihapus (menaikkan qty
+  /// di nota yg uangnya sudah settled akan merusak alokasi pembayaran).
+  /// Kalau nilai baris turun (harga/qty berkurang), sisipkan refund NEGATIF
+  /// SUNGGUHAN (beda dari nota belum-lunas yg cukup marker Rp0, krn di sini
+  /// uangnya memang sudah pernah masuk).
+  Future<void> editPaidTransactionItem({
+    required String txId,
+    required String transactionItemId,
+    required double newQty,
+    required int newPrice,
+    String? newNote,
+    required String kasirId,
+    required String refundMethod,
+  }) async {
+    await transaction(() async {
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
+      if (tx == null || tx.status == 'void') return;
+      if (tx.status != 'lunas') {
+        throw StateError(
+            'editPaidTransactionItem hanya untuk nota LUNAS (status saat '
+            'ini: ${tx.status})');
+      }
+      final item = await (select(transactionItems)
+            ..where((t) => t.id.equals(transactionItemId)))
+          .getSingleOrNull();
+      if (item == null || item.transactionId != txId || item.qty <= 0) return;
+
+      final clampedQty = newQty.clamp(0.0, item.qty);
+      final now = DateTime.now();
+      final newSubtotal = (newPrice * clampedQty).round();
+      final delta = item.subtotal - newSubtotal; // > 0 = nilai turun -> refund
+      // Cuma boleh nilai turun/tetap, tidak boleh naik (qty SUDAH di-clamp
+      // ke item.qty, jadi ini menangkap kasus harga dinaikkan juga). delta
+      // == 0 tetap DIIZINKAN (mis. cuma catatan yang diubah, harga/qty
+      // sama) — jangan return lebih awal, baris item tetap perlu diupdate.
+      if (newSubtotal > item.subtotal) return;
+
+      final qtyDelta = clampedQty - item.qty; // selalu <= 0 di sini
+      if (qtyDelta < 0) {
+        await _appendStock(
+          productUnitId: item.productUnitId,
+          qtyChange: -qtyDelta,
+          type: 'return_in',
+          referenceId: txId,
+          kasirId: kasirId,
+          note: 'Edit item (nota lunas)',
+          now: now,
+        );
+      }
+
+      if (clampedQty <= 0) {
+        await (delete(transactionItems)..where((t) => t.id.equals(item.id)))
+            .go();
+      } else {
+        await (update(transactionItems)..where((t) => t.id.equals(item.id)))
+            .write(TransactionItemsCompanion(
+          qty: Value(clampedQty),
+          priceAtSale: Value(newPrice),
+          subtotal: Value(newSubtotal),
+          itemNote: Value(newNote?.isEmpty ?? true ? null : newNote),
+        ));
+      }
+
+      // Refund SUNGGUHAN (beda dari marker Rp0 nota belum-lunas — di sini
+      // uangnya memang sudah masuk sebelumnya) — cuma kalau NILAINYA
+      // beneran turun (delta > 0). Edit yang cuma ubah catatan (delta == 0)
+      // tidak butuh refund sama sekali.
+      if (delta > 0) {
+        await into(transactionPayments)
+            .insert(TransactionPaymentsCompanion.insert(
+          id: const Uuid().v4(),
+          transactionId: txId,
+          amount: -delta,
+          method: refundMethod,
+          paidAt: Value(now),
+          kasirId: Value(kasirId),
+          note: Value(clampedQty <= 0
+              ? 'Refund: item dihapus (nota lunas)'
+              : 'Refund: item diubah (nota lunas)'),
+        ));
+      }
+
+      await _reconcileTransactionTotals(txId);
+      await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
+    });
+  }
+
   // ───────────────────────── Customer debt ─────────────────────────
 
   /// Buku hutang: pelanggan dengan nota belum lunas, diurut dari yang paling
@@ -2434,6 +2681,50 @@ class AppDatabase extends _$AppDatabase {
               expenses.createdAt.isSmallerOrEqualValue(to)))
         .getSingle();
     return row.read(amountSum) ?? 0;
+  }
+
+  /// Item 49d — breakdown pengeluaran per JENIS (`type`) dalam rentang, utk
+  /// tab Laporan Pengeluaran (rincian + grafik). SEMUA jenis (daily_expense/
+  /// owner_withdrawal/supplier_payment/change_given) — beda dari
+  /// [getNetProfitExpenseTotal] yang cuma hitung subset [netProfitExpenseTypes]
+  /// yang mengurangi Laba Bersih. Tab ini murni "ke mana saja uang mengalir",
+  /// bukan P&L.
+  Future<Map<String, int>> getExpenseBreakdownByType(
+      DateTime from, DateTime to) async {
+    final amountSum = expenses.amount.sum();
+    final rows = await (selectOnly(expenses)
+          ..addColumns([expenses.type, amountSum])
+          ..where(expenses.createdAt.isBiggerOrEqualValue(from) &
+              expenses.createdAt.isSmallerOrEqualValue(to))
+          ..groupBy([expenses.type]))
+        .get();
+    return {
+      for (final r in rows) r.read(expenses.type)!: r.read(amountSum) ?? 0,
+    };
+  }
+
+  /// Item 49d — total pengeluaran (SEMUA jenis digabung) per HARI (lokal)
+  /// dalam rentang, utk grafik tren tab Laporan Pengeluaran. Pola query sama
+  /// dgn `rebuildStaleSummariesInRange` (strftime unixepoch→localtime).
+  Future<Map<DateTime, int>> getExpenseDailyTotals(
+      DateTime from, DateTime to) async {
+    final fromSec = from.millisecondsSinceEpoch ~/ 1000;
+    final toSec = to.millisecondsSinceEpoch ~/ 1000;
+    final rows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(created_at,'unixepoch','localtime')) AS d, "
+      'COALESCE(SUM(amount),0) AS total '
+      'FROM expenses WHERE created_at >= ? AND created_at <= ? GROUP BY d',
+      variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
+      readsFrom: {expenses},
+    ).get();
+    final out = <DateTime, int>{};
+    for (final r in rows) {
+      final parts =
+          (r.data['d'] as String).split('-').map(int.parse).toList();
+      out[DateTime(parts[0], parts[1], parts[2])] =
+          (r.data['total'] as num).round();
+    }
+    return out;
   }
 
   /// Lunasi beberapa nota sekaligus (gabung nota) dengan distribusi FIFO:

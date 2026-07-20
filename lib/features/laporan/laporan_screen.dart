@@ -9,6 +9,7 @@ import 'tabs/pelanggan_tab.dart';
 import 'tabs/transaksi_tab.dart';
 import 'tabs/hutang_tab.dart';
 import 'tabs/stok_tab.dart';
+import 'tabs/pengeluaran_tab.dart';
 
 final dateRangeProvider = StateProvider<DateTimeRange>((ref) {
   final now = DateTime.now();
@@ -27,8 +28,14 @@ class LaporanScreen extends ConsumerStatefulWidget {
 
 class _LaporanScreenState extends ConsumerState<LaporanScreen>
     with SingleTickerProviderStateMixin {
+  // Item 49d — "Pengeluaran" ditambah di PALING AKHIR (bukan disisipkan di
+  // tengah) supaya index tab 0-3 yg dipakai `ReportTab.values[index]` utk
+  // ekspor PDF/Excel tetap sama persis, tak perlu ubah pemetaan itu. Sama
+  // seperti "Hutang"/"Stok" (index 4/5), tab ini TIDAK punya padanan
+  // `ReportTab` & tidak bisa diekspor (lihat _canExportCurrentTab) —
+  // ekspor PDF/Excel utk Pengeluaran scope terpisah (PLAN.md Item 47).
   late final TabController _tabController =
-      TabController(length: 6, vsync: this);
+      TabController(length: 7, vsync: this);
 
   @override
   void dispose() {
@@ -80,6 +87,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             Tab(text: 'Transaksi'),
             Tab(text: 'Hutang'),
             Tab(text: 'Stok'),
+            Tab(text: 'Pengeluaran'),
           ],
         ),
       ),
@@ -92,6 +100,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
           TransaksiTab(range: range),
           const HutangTab(),
           const StokTab(),
+          PengeluaranTab(range: range),
         ],
       ),
     );
@@ -103,13 +112,15 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         'Pelanggan',
         'Transaksi',
         'Hutang',
-        'Stok'
+        'Stok',
+        'Pengeluaran',
       ][i];
 
-  /// Tab Hutang (index 4) & Stok (index 5, Item 30c) tidak punya padanan
-  /// [ReportTab] & tidak diekspor — Stok adalah snapshot "sekarang", bukan
-  /// data terikat rentang tanggal spt tab lain, jadi ekspor PDF/Excel
-  /// periode tidak relevan utknya.
+  /// Tab Hutang (index 4), Stok (index 5, Item 30c) & Pengeluaran (index 6,
+  /// Item 49d) tidak punya padanan [ReportTab] & tidak diekspor — Stok
+  /// adalah snapshot "sekarang" (bukan data terikat rentang tanggal spt tab
+  /// lain); Pengeluaran sengaja ditahan dari ekspor (scope terpisah, lihat
+  /// PLAN.md Item 47 soal ekspor PDF/Excel pengeluaran).
   bool get _canExportCurrentTab =>
       _tabController.index < ReportTab.values.length;
 

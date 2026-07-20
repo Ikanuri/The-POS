@@ -4,6 +4,87 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Juli 2026 (batch Item 49a-49g, branch
+`claude/onboarding-setup-9bsu52`, commit `f14e06e`+`257bdf8`+`df7cd02`+
+`4b57450`+`46531a9`) — user minta 8 "penyesuaian masif" sekaligus,
+didiskusikan dulu (trade-off & contoh kasus per poin) via AskUserQuestion
+2x baru **"Eksekusi"**. Semua SELESAI & di-commit:
+
+- **49a** keypad pembayaran: tombol "000" pindah dari baris `7 8 9 000`
+  ke baris bawah `0 00 000` (`payment_screen.dart` `_Keypad._rows`).
+- **49b** ringkasan struk (in-app/share/print/merged) disederhanakan jadi
+  3 baris: Total/Dibayar/Sisa-atau-Kembalian — baris "Uang Diterima"
+  (gross tender per transaksi cicilan, membingungkan) DIHAPUS. Poin
+  Didapat TETAP ada (eksplisit diminta user jangan dihapus).
+- **49c** bug nyata: catatan multi-baris (`itemNote`/`strukNote`/
+  `receiptFooter`) di struk CETAK thermal terpotong jadi 1 baris — akar:
+  `_toAscii()` di `printer_service.dart` men-strip `\n` SEBELUM di-split.
+  Fix: split per `\n` dulu, sanitasi ASCII per baris, loop `bodyText()`.
+- **49d** tab baru "Laporan Pengeluaran" (`pengeluaran_tab.dart`) — KPI
+  total + donut per jenis + grafik batang harian. Query baru
+  `getExpenseBreakdownByType`/`getExpenseDailyTotals` (agregat, no N+1).
+  Tab ditaruh di UJUNG `TabController(length: 7)` (bukan tengah) supaya
+  indeks `ReportTab` enum (dipakai ekspor PDF/Excel) tidak bergeser.
+- **49e** form produk "Tambah Satuan" kini auto-scroll-into-view +
+  autofocus field harga satuan baru (sebelumnya user harus scroll manual).
+  Fix bonus TAK TERDUGA ditemukan saat test: `produk_form_screen.dart`
+  nge-spread widget kartu satuan LANGSUNG sbg `children:` `ListView` —
+  di viewport pendek, kartu ke-2/ke-3 pun (yg SUDAH ADA, bukan cuma yg
+  baru) TIDAK ke-build (lazy sliver windowing). Fix: bungkus `Column`.
+- **49f** struk SHARE & CETAK (single + merged) tidak lagi menampilkan
+  baris riwayat berjenis `method == 'edit'/'retur'` — jejak audit
+  internal ITU BUKAN utk pelanggan (kata user persis), detail lengkap
+  tetap ada di struk IN-APP.
+- **49g** (paling besar) — retur & edit item pada transaksi **LUNAS**
+  kini update NOTA YANG SAMA, bukan bikin transaksi/struk baru terpisah
+  (tujuan inti: "retur tidak bikin nota baru"). Kolom baru
+  `transaction_items.returnedAt` (migrasi **v16→v17**, `schemaVersion`
+  sekarang **17**) dipakai persis spt pola `addedAt`/"Tambahan HH:MM" yg
+  sudah ada — insert pembatas "----- Retur HH:MM -----" di daftar item.
+  Ringkasan struk jadi Total awal/Retur/Akhir + baris Refund `[metode]`
+  kalau ada retur. Edit (koreksi harga/qty/catatan) pada tx lunas UPDATE
+  BARIS DI TEMPAT tanpa baris jejak terpisah (user pilih opsi ini saat
+  ditanya, bukan pola separator spt retur). DB baru:
+  `getReturnedQtyInTx`, `returnPaidTransactionItems`,
+  `editPaidTransactionItem`. **Insight desain kunci**: `_reconcileTransactionTotals`
+  yg SUDAH ADA generik menjumlah SEMUA subtotal item & SEMUA amount
+  pembayaran (tanda apa pun) → retur (qty negatif) & refund (amount
+  negatif) "just work" tanpa logic khusus. Retur tx BELUM LUNAS SENGAJA
+  TIDAK diubah (tetap mekanisme lama `addReturnTransaction`, keputusan
+  eksplisit user: "biarkan seperti sekarang").
+
+**Environment**: `build_runner` GAGAL LAGI meregenerasi `app_database.g.dart`
+(pola sama persis spt yg sudah tercatat utk `locallyModified` sesi lalu)
+— hand-patch manual ~40 blok utk kolom `returnedAt` (tiru struktur
+`addedAt` yg sudah ada persis), diverifikasi `flutter analyze` bersih.
+**Migration test fixture ripple**: bump `schemaVersion` ke 17 bikin 8
+file `migration_v7..v16_test.dart` gagal 2 lapis — (1) fixture lama tak
+punya tabel `transaction_items` stub → "no such table" saat migrasi
+berantai nyampe v17, (2) assert hardcode `expect(ver..., 16)` jadi basi.
+Fix keduanya di semua 8 file + `migration_v17_test.dart` baru.
+
+**Test baru** (semua revert-verified): `expense_breakdown_query_test`,
+`pengeluaran_tab_test`, `receipt_paper_audit_marker_hidden_test`,
+`receipt_summary_three_line_test`, `migration_v17_test`,
+`return_edit_paid_transaction_test` (8 test DB-tier — termasuk bug nyata
+ketemu & diperbaiki: `editPaidTransactionItem` awalnya `if (delta <= 0)
+return;` salah blokir edit CATATAN-SAJA (delta=0) dari tersimpan sama
+sekali, fix jadi `if (newSubtotal > item.subtotal) return;` — hanya
+tolak kenaikan asli), `receipt_screen_retur_rendering_test`,
+`receipt_paper_retur_footer_test` (3 overflow `RenderFlex` ditemukan &
+diperbaiki di sini: label "Total akhir"→"Akhir", "Refund Tunai"
+di-`Expanded`, Row qty/harga item di-`Expanded` krn qty negatif nambah
+karakter "-"). `flutter analyze` bersih, `flutter test` penuh hijau
+(1 gagal `stock_opname_screen_test.dart` di full-run — DIKONFIRMASI
+flaky pra-ada & tak terkait, lolos sendirian saat diisolasi; beda file
+dari flaky sebelumnya `cek_stok_screen_test.dart` yg JUGA dicek lolos
+sendirian sesi ini — pola flaky 1-test-acak-tanpa-[E] di full-run sudah
+lama tercatat, JANGAN asumsikan regresi tanpa jejak `[E]` yg jelas).
+
+**Belum ada follow-up terbuka** — kedelapan sub-item dianggap SELESAI
+oleh user (instruksi eksplisit "Eksekusi", tanpa syarat scope lanjutan).
+Item 49 sudah dihapus dari PLAN.md._
+
 _Update sesi 20 Juli 2026 (katalog HTML — cache keranjang, branch
 `claude/setup-dependencies-am31te`) — user lapor: katalog pesanan (link
 WhatsApp, `order_page_service.dart`) itu HTML statis, `cart` murni var JS

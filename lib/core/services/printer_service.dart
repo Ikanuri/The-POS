@@ -621,6 +621,7 @@ class PrinterService {
     // ── Item ─────────────────────────────────────────────────────────────
     int productCount = 0;
     String? lastBatch;
+    String? lastRetur;
     for (final item in _orderItems(items, parentOf)) {
       final isVar = _parentItemOf(item, items, parentOf) != null;
       if (!isVar) productCount++;
@@ -639,6 +640,19 @@ class PrinterService {
           out.addAll(bodyText('${' ' * left}$label'));
         }
       }
+      // Item 49g — pembatas "----- Retur HH:MM -----" sebelum baris retur
+      // nota lunas (qty negatif, item ASLI di atasnya tetap utuh).
+      if (!isVar && item.returnedAt != null) {
+        final r = item.returnedAt!;
+        final hhmm =
+            '${r.hour.toString().padLeft(2, '0')}:${r.minute.toString().padLeft(2, '0')}';
+        if (hhmm != lastRetur) {
+          lastRetur = hhmm;
+          final label = '----- Retur $hhmm -----';
+          final left = label.length >= innerW ? 0 : (innerW - label.length) ~/ 2;
+          out.addAll(bodyText('${' ' * left}$label'));
+        }
+      }
 
       final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
       final prefix = isVar ? '  > ' : '';
@@ -646,7 +660,13 @@ class PrinterService {
           styles: const PosStyles(bold: true)));
 
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-        out.addAll(bodyText(_toAscii(item.itemNote!)));
+        // Item 49c — catatan barang bisa multi-baris (maxLines:2 di UI);
+        // split dulu supaya tiap baris tercetak sendiri (`_toAscii` buang
+        // karakter \n mentah, jadi kalau digabung sebelum split baris-baris
+        // itu akan nyambung jadi satu teks tanpa pemisah).
+        for (final line in item.itemNote!.split('\n')) {
+          out.addAll(bodyText(_toAscii(line)));
+        }
       }
 
       final uName = _toAscii(unitNames[item.productUnitId] ?? 'pcs');
@@ -690,8 +710,23 @@ class PrinterService {
           styles: const PosStyles(bold: true, width: PosTextSize.size2));
     }
 
-    out.addAll(bodyText('Total', styles: const PosStyles(bold: true)));
-    out.addAll(wideNominal('Rp ${_fmtNum(tx.total)}'));
+    // Item 49g — nota yg PERNAH diretur pakai footer breakdown, pengecualian
+    // yg disengaja dari pola 3-baris biasa (Item 49b).
+    final hasRetur = items.any((i) => i.returnedAt != null);
+    if (hasRetur) {
+      final totalAwal =
+          items.where((i) => i.qty > 0).fold<int>(0, (s, i) => s + i.subtotal);
+      final returAmount = -items
+          .where((i) => i.qty < 0)
+          .fold<int>(0, (s, i) => s + i.subtotal);
+      out.addAll(bodyLR('Total awal', 'Rp ${_fmtNum(totalAwal)}'));
+      out.addAll(bodyLR('Retur', '- Rp ${_fmtNum(returAmount)}'));
+      out.addAll(bodyText('Total akhir', styles: const PosStyles(bold: true)));
+      out.addAll(wideNominal('Rp ${_fmtNum(tx.total)}'));
+    } else {
+      out.addAll(bodyText('Total', styles: const PosStyles(bold: true)));
+      out.addAll(wideNominal('Rp ${_fmtNum(tx.total)}'));
+    }
 
     if (settings.showPaymentDetail) {
       // `tx.paid`/`tx.changeAmount` mentah bisa SALAH kalau kembalian yang
@@ -715,18 +750,31 @@ class PrinterService {
           latestWithChange = p;
         }
       }
+      // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total /
+      // Bayar / Kembali-ATAU-Sisa. Baris "Uang Diterima" (uang tender
+      // kotor, Item 9 lama) DIHAPUS — riwayat pembayaran (timeline di
+      // bawah, bila ada) sudah simpan info itu.
       if (latestWithChange != null) {
-        // Item 9 — uang tender ASLI (gross) dari pembayaran TERAKHIR, supaya
-        // tidak membingungkan pembeli yang kasih lebih ("bayar 300rb" padahal
-        // kasih 400rb) — konsisten dgn Ringkasan on-screen & nota gabungan.
-        out.addAll(bodyLR(
-            'Uang Diterima', 'Rp ${_fmtNum(latestWithChange.amount)}'));
         out.addAll(bodyText('Kembali', styles: const PosStyles(bold: true)));
         out.addAll(wideNominal('Rp ${_fmtNum(latestWithChange.changeGiven)}'));
       } else if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
         final remaining = tx.total - netPaid;
-        out.addAll(bodyText('Kurang', styles: const PosStyles(bold: true)));
+        out.addAll(bodyText('Sisa', styles: const PosStyles(bold: true)));
         out.addAll(wideNominal('Rp ${_fmtNum(remaining > 0 ? remaining : 0)}'));
+      }
+
+      if (hasRetur) {
+        final refundTotal = -payments
+            .where((p) => !p.voided && p.amount < 0)
+            .fold<int>(0, (s, p) => s + p.amount);
+        if (refundTotal > 0) {
+          final refundMethod = payments
+              .where((p) => !p.voided && p.amount < 0)
+              .lastOrNull
+              ?.method;
+          out.addAll(bodyLR('Refund ${_methodShort(refundMethod ?? '')}',
+              'Rp ${_fmtNum(refundTotal)}'));
+        }
       }
     }
 
@@ -736,29 +784,46 @@ class PrinterService {
 
     // ── Timeline pembayaran ───────────────────────────────────────────────
     // Sembunyikan hanya untuk tunai seketika (paidAt == createdAt persis).
-    final showTimeline = payments.length > 1 ||
-        (payments.length == 1 && payments.first.paidAt != tx.createdAt);
+    // Item 49f — baris audit-trail internal (method 'edit'/'retur', amount
+    // selalu 0, dipakai returnUnpaidTransactionItems/editUnpaidTransactionItem
+    // sbg jejak internal) BUKAN utk konsumsi pelanggan — _methodShort tak
+    // kenal method itu shg tampil sbg string mentah "edit"/"retur" di struk
+    // fisik. Difilter di sini (share pakai pola sama, in-app tetap tampilkan
+    // semua).
+    final visiblePayments =
+        payments.where((p) => p.method != 'edit' && p.method != 'retur');
+    final showTimeline = visiblePayments.length > 1 ||
+        (visiblePayments.length == 1 &&
+            visiblePayments.first.paidAt != tx.createdAt);
     if (showTimeline) {
       out.addAll(bodySep());
       out.addAll(bodyText('Pembayaran:', styles: const PosStyles(bold: true)));
-      for (final p in payments) {
+      for (final p in visiblePayments) {
         final left = '${_fmtDateTimeFull(p.paidAt)} ${_methodShort(p.method)}';
         out.addAll(bodyLR(left, 'Rp ${_fmtNum(p.amount)}'));
       }
     }
 
     // ── Footer ────────────────────────────────────────────────────────────
+    // Item 49c — catatan nota/toko bisa multi-baris (maxLines:3 di UI);
+    // split per '\n' dulu (pola sama dgn receiptHeader di atas) supaya tiap
+    // baris tercetak sendiri — `_toAscii` membuang karakter \n mentah.
     if (strukNote != null && strukNote.isNotEmpty) {
       out.addAll(bodySep());
-      out.addAll(gen.text(_toAscii(strukNote),
-          styles: const PosStyles(align: PosAlign.center)));
+      for (final line in strukNote.split('\n')) {
+        out.addAll(gen.text(_toAscii(line),
+            styles: const PosStyles(align: PosAlign.center)));
+      }
     }
     // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima kasih!" bila
     // belum diisi user, sama seperti hint field-nya & struk in-app/share.
     out.addAll(bodySep());
-    out.addAll(gen.text(
-        _toAscii(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!'),
-        styles: const PosStyles(align: PosAlign.center)));
+    final footerText =
+        receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!';
+    for (final line in footerText.split('\n')) {
+      out.addAll(gen.text(_toAscii(line),
+          styles: const PosStyles(align: PosAlign.center)));
+    }
 
     out.addAll(gen.feed(3));
     out.addAll(gen.cut());
@@ -995,7 +1060,10 @@ class PrinterService {
         out.addAll(
             gen.text('$prefix$rawName', styles: const PosStyles(bold: true)));
         if (item.itemNote != null && item.itemNote!.isNotEmpty) {
-          out.addAll(gen.text(_toAscii(item.itemNote!)));
+          // Item 49c — sama seperti struk tunggal, split per baris dulu.
+          for (final line in item.itemNote!.split('\n')) {
+            out.addAll(gen.text(_toAscii(line)));
+          }
         }
         final uName = _toAscii(unitNames[item.productUnitId] ?? 'pcs');
         final qtyStr = item.qty % 1 == 0
@@ -1030,8 +1098,11 @@ class PrinterService {
     out.addAll(wideNominal('Rp ${_fmtNum(grandTotal)}'));
     out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandPaid)}', w)));
 
-    // Item 9 — uang tender ASLI (gross) dari pembayaran terakhir yg
-    // menghasilkan kembalian, lintas semua nota tergabung.
+    // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total nota
+    // gabungan / Terbayar / Kembalian-ATAU-Sisa. Baris "Uang Diterima"
+    // (uang tender kotor, Item 9 lama) DIHAPUS, "Sisa" jadi kondisional
+    // (bukan selalu tampil apa pun kondisinya) — konsisten dgn struk
+    // tunggal & in-app/share.
     TransactionPayment? latestWithChange;
     for (final pays in paymentsByTx.values) {
       for (final p in pays) {
@@ -1043,15 +1114,12 @@ class PrinterService {
       }
     }
     if (latestWithChange != null) {
-      out.addAll(gen.text(_rowLR(
-          'Uang Diterima', 'Rp ${_fmtNum(latestWithChange.amount)}', w)));
-      out.addAll(gen.text(_rowLR(
-          'Kembalian', 'Rp ${_fmtNum(latestWithChange.changeGiven)}', w)));
+      out.addAll(gen.text('Kembalian', styles: const PosStyles(bold: true)));
+      out.addAll(wideNominal('Rp ${_fmtNum(latestWithChange.changeGiven)}'));
+    } else if (grandSisa > 0) {
+      out.addAll(gen.text('Sisa', styles: const PosStyles(bold: true)));
+      out.addAll(wideNominal('Rp ${_fmtNum(grandSisa)}'));
     }
-
-    out.addAll(gen.text('Sisa',
-        styles: const PosStyles(bold: true)));
-    out.addAll(wideNominal('Rp ${_fmtNum(grandSisa)}'));
     if (lastPaymentAt != null) {
       out.addAll(gen.text(
           _rowLR('', 'Pelunasan: ${_fmtDateTimeFull(lastPaymentAt)}', w)));
@@ -1059,10 +1127,14 @@ class PrinterService {
 
     out.addAll(gen.text(_sep(w)));
     // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima kasih!" bila
-    // belum diisi user, sama seperti hint field-nya.
-    out.addAll(gen.text(
-        _toAscii(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!'),
-        styles: const PosStyles(align: PosAlign.center)));
+    // belum diisi user, sama seperti hint field-nya. Item 49c — split per
+    // baris dulu (bisa multi-baris, sama pola dgn struk tunggal di atas).
+    final mergedFooterText =
+        receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!';
+    for (final line in mergedFooterText.split('\n')) {
+      out.addAll(gen.text(_toAscii(line),
+          styles: const PosStyles(align: PosAlign.center)));
+    }
     out.addAll(gen.feed(3));
     out.addAll(gen.cut());
     return Uint8List.fromList(out);

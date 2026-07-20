@@ -111,6 +111,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   List<_UnitEntry> _units = [];
 
+  /// Item 49e — id satuan yang baru saja ditambahkan lewat "Tambah Satuan"
+  /// di sesi ini, dipakai utk scroll-into-view + autofocus kartunya.
+  String? _justAddedUnitId;
+
   /// Id satuan yang sudah tersimpan di DB (saat load). Hanya satuan tersimpan
   /// yang punya stok untuk disesuaikan — satuan baru belum ada di stock_ledger.
   final Set<String> _persistedUnitIds = {};
@@ -482,15 +486,19 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   void _addUnit() {
     final defaultUnitTypeId = _unitTypes.isNotEmpty ? _unitTypes.first.id : 1;
+    final newId = _uuid.v4();
     setState(() {
       _units.add(_UnitEntry(
-        id: _uuid.v4(),
+        id: newId,
         unitTypeId: defaultUnitTypeId,
         isBaseUnit: false,
         ratioToBase: 1.0,
         price: 0,
         costPrice: 0,
       ));
+      // Item 49e — tandai kartu ini utk scroll-into-view + autofocus di
+      // _UnitCard.initState (jalan sekali, cuma utk kartu yg baru dibuat).
+      _justAddedUnitId = newId;
     });
     _markDirty();
   }
@@ -714,60 +722,71 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          ..._units.asMap().entries.map((e) {
-                            final unitId = e.value.id;
-                            final showStock =
-                                _persistedUnitIds.contains(unitId);
-                            final unitLabel = _unitTypes
-                                    .where((t) => t.id == e.value.unitTypeId)
-                                    .map((t) => t.name)
-                                    .firstOrNull ??
-                                'Satuan ${e.key + 1}';
-                            return _UnitCard(
-                              key: ValueKey(unitId),
-                              entry: e.value,
-                              index: e.key,
-                              unitTypes: _unitTypes,
-                              canRemove: !_readOnly && _units.length > 1,
-                              readOnly: _readOnly,
-                              showStock: showStock,
-                              canAdjustStock: showStock && !_readOnly,
-                              loadStock: showStock
-                                  ? () => ref
-                                      .read(databaseProvider)
-                                      .currentStock(unitId)
-                                  : null,
-                              onAdjustStock: () =>
-                                  _adjustStockDialog(unitId, unitLabel),
-                              onChanged: _readOnly
-                                  ? (_) {}
-                                  : (updated) {
-                                      setState(() {
-                                        _units[e.key] = updated;
-                                        // Satuan dasar wajib TUNGGAL: begitu
-                                        // satu unit dijadikan dasar, lepaskan
-                                        // flag dasar dari unit lain. Tanpa ini
-                                        // flag lama tak pernah di-clear (checkbox
-                                        // "Jadikan Satuan Dasar"-nya keburu
-                                        // hilang dari tampilan) → 2 unit dasar
-                                        // aktif sekaligus tersimpan ke DB.
-                                        if (updated.isBaseUnit) {
-                                          for (var i = 0;
-                                              i < _units.length;
-                                              i++) {
-                                            if (i != e.key &&
-                                                _units[i].isBaseUnit) {
-                                              _units[i] = _units[i]
-                                                  .copyWith(isBaseUnit: false);
+                          // Item 49e — dibungkus Column (bukan spread biasa
+                          // ke ListView) supaya SEMUA kartu satuan ter-build
+                          // langsung, bukan lazy-windowed per-item oleh
+                          // sliver ListView terluar (daftar ini kecil &
+                          // terbatas — bukan skenario yg butuh virtualisasi,
+                          // & lazy per-item bikin kartu yg baru ditambah tak
+                          // bisa di-scroll-into-view krn Element-nya belum
+                          // pernah dibuat).
+                          Column(
+                            children: _units.asMap().entries.map((e) {
+                              final unitId = e.value.id;
+                              final showStock =
+                                  _persistedUnitIds.contains(unitId);
+                              final unitLabel = _unitTypes
+                                      .where((t) => t.id == e.value.unitTypeId)
+                                      .map((t) => t.name)
+                                      .firstOrNull ??
+                                  'Satuan ${e.key + 1}';
+                              return _UnitCard(
+                                key: ValueKey(unitId),
+                                entry: e.value,
+                                index: e.key,
+                                unitTypes: _unitTypes,
+                                canRemove: !_readOnly && _units.length > 1,
+                                readOnly: _readOnly,
+                                showStock: showStock,
+                                canAdjustStock: showStock && !_readOnly,
+                                loadStock: showStock
+                                    ? () => ref
+                                        .read(databaseProvider)
+                                        .currentStock(unitId)
+                                    : null,
+                                onAdjustStock: () =>
+                                    _adjustStockDialog(unitId, unitLabel),
+                                autofocusFirstField: unitId == _justAddedUnitId,
+                                onChanged: _readOnly
+                                    ? (_) {}
+                                    : (updated) {
+                                        setState(() {
+                                          _units[e.key] = updated;
+                                          // Satuan dasar wajib TUNGGAL: begitu
+                                          // satu unit dijadikan dasar, lepaskan
+                                          // flag dasar dari unit lain. Tanpa ini
+                                          // flag lama tak pernah di-clear (checkbox
+                                          // "Jadikan Satuan Dasar"-nya keburu
+                                          // hilang dari tampilan) → 2 unit dasar
+                                          // aktif sekaligus tersimpan ke DB.
+                                          if (updated.isBaseUnit) {
+                                            for (var i = 0;
+                                                i < _units.length;
+                                                i++) {
+                                              if (i != e.key &&
+                                                  _units[i].isBaseUnit) {
+                                                _units[i] = _units[i].copyWith(
+                                                    isBaseUnit: false);
+                                              }
                                             }
                                           }
-                                        }
-                                      });
-                                      _markDirty();
-                                    },
-                              onRemove: () => _removeUnit(e.key),
-                            );
-                          }),
+                                        });
+                                        _markDirty();
+                                      },
+                                onRemove: () => _removeUnit(e.key),
+                              );
+                            }).toList(),
+                          ),
 
                           // ── Varian (produk anak / add-on) ────────────────────
                           if (!_readOnly || _productId != null) ...[
@@ -1294,6 +1313,7 @@ class _UnitCard extends StatefulWidget {
     this.canAdjustStock = false,
     this.loadStock,
     this.onAdjustStock,
+    this.autofocusFirstField = false,
   });
 
   final _UnitEntry entry;
@@ -1311,6 +1331,13 @@ class _UnitCard extends StatefulWidget {
 
   /// Buka dialog penyesuaian; true bila stok berubah → kartu menyegarkan.
   final Future<bool> Function()? onAdjustStock;
+
+  /// Item 49e — true HANYA untuk kartu yang baru saja ditambahkan lewat
+  /// "Tambah Satuan". `key: ValueKey(unitId)` di parent menjamin kartu ini
+  /// betul-betul instance BARU (bukan rebuild kartu lama) begitu ditambahkan,
+  /// jadi `initState` di bawah cuma jalan sekali persis saat kartu ini
+  /// pertama kali muncul — pas dipakai utk scroll-into-view + autofocus.
+  final bool autofocusFirstField;
 
   @override
   State<_UnitCard> createState() => _UnitCardState();
@@ -1370,6 +1397,20 @@ class _UnitCardState extends State<_UnitCard> {
         .map((a) =>
             TextEditingController(text: a.price > 0 ? a.price.toString() : ''))
         .toList();
+
+    // Item 49e — kartu satuan baru langsung digulir ke pandangan (form bisa
+    // panjang, kartu baru ada di paling bawah). Autofocus field-nya sendiri
+    // dipasang lewat `autofocus:` di TextFormField terkait (lihat build()).
+    if (widget.autofocusFirstField) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(context,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+              alignment: 0.1);
+        }
+      });
+    }
   }
 
   @override
@@ -1591,6 +1632,7 @@ class _UnitCardState extends State<_UnitCard> {
                   child: TextFormField(
                     controller: _priceCtrl,
                     readOnly: widget.readOnly,
+                    autofocus: widget.autofocusFirstField && !widget.readOnly,
                     decoration: const InputDecoration(
                       labelText: 'Harga Jual (Rp)',
                       isDense: true,

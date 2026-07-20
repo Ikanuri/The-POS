@@ -4700,6 +4700,12 @@ class $TransactionItemsTable extends TransactionItems
   late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
       'added_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _returnedAtMeta =
+      const VerificationMeta('returnedAt');
+  @override
+  late final GeneratedColumn<DateTime> returnedAt = GeneratedColumn<DateTime>(
+      'returned_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -4713,7 +4719,8 @@ class $TransactionItemsTable extends TransactionItems
         costAtSale,
         itemNote,
         subtotal,
-        addedAt
+        addedAt,
+        returnedAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4800,6 +4807,12 @@ class $TransactionItemsTable extends TransactionItems
       context.handle(_addedAtMeta,
           addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta));
     }
+    if (data.containsKey('returned_at')) {
+      context.handle(
+          _returnedAtMeta,
+          returnedAt.isAcceptableOrUnknown(
+              data['returned_at']!, _returnedAtMeta));
+    }
     return context;
   }
 
@@ -4833,6 +4846,8 @@ class $TransactionItemsTable extends TransactionItems
           .read(DriftSqlType.int, data['${effectivePrefix}subtotal'])!,
       addedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}added_at']),
+      returnedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}returned_at']),
     );
   }
 
@@ -4859,6 +4874,13 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
   /// belanjaan"). null = item asli saat transaksi dibuat. Terisi = item susulan;
   /// dipakai struk in-app untuk memberi pembatas "Tambahan <jam>".
   final DateTime? addedAt;
+
+  /// Item 49g — waktu baris retur INI dibuat (nota SUDAH LUNAS). null =
+  /// baris penjualan biasa (baik asli maupun susulan). Terisi = baris retur
+  /// (selalu `qty` NEGATIF, item ASLI yang diretur tidak pernah dihapus/
+  /// diubah) — dipakai struk utk pembatas "Retur <jam>", pola sama dgn
+  /// `addedAt`/"Tambahan".
+  final DateTime? returnedAt;
   const TransactionItem(
       {required this.id,
       required this.transactionId,
@@ -4871,7 +4893,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       required this.costAtSale,
       this.itemNote,
       required this.subtotal,
-      this.addedAt});
+      this.addedAt,
+      this.returnedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4890,6 +4913,9 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
     map['subtotal'] = Variable<int>(subtotal);
     if (!nullToAbsent || addedAt != null) {
       map['added_at'] = Variable<DateTime>(addedAt);
+    }
+    if (!nullToAbsent || returnedAt != null) {
+      map['returned_at'] = Variable<DateTime>(returnedAt);
     }
     return map;
   }
@@ -4912,6 +4938,9 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       addedAt: addedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(addedAt),
+      returnedAt: returnedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(returnedAt),
     );
   }
 
@@ -4931,6 +4960,7 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       itemNote: serializer.fromJson<String?>(json['itemNote']),
       subtotal: serializer.fromJson<int>(json['subtotal']),
       addedAt: serializer.fromJson<DateTime?>(json['addedAt']),
+      returnedAt: serializer.fromJson<DateTime?>(json['returnedAt']),
     );
   }
   @override
@@ -4949,6 +4979,7 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       'itemNote': serializer.toJson<String?>(itemNote),
       'subtotal': serializer.toJson<int>(subtotal),
       'addedAt': serializer.toJson<DateTime?>(addedAt),
+      'returnedAt': serializer.toJson<DateTime?>(returnedAt),
     };
   }
 
@@ -4964,7 +4995,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           int? costAtSale,
           Value<String?> itemNote = const Value.absent(),
           int? subtotal,
-          Value<DateTime?> addedAt = const Value.absent()}) =>
+          Value<DateTime?> addedAt = const Value.absent(),
+          Value<DateTime?> returnedAt = const Value.absent()}) =>
       TransactionItem(
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
@@ -4978,6 +5010,7 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
         itemNote: itemNote.present ? itemNote.value : this.itemNote,
         subtotal: subtotal ?? this.subtotal,
         addedAt: addedAt.present ? addedAt.value : this.addedAt,
+        returnedAt: returnedAt.present ? returnedAt.value : this.returnedAt,
       );
   TransactionItem copyWithCompanion(TransactionItemsCompanion data) {
     return TransactionItem(
@@ -5003,6 +5036,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       itemNote: data.itemNote.present ? data.itemNote.value : this.itemNote,
       subtotal: data.subtotal.present ? data.subtotal.value : this.subtotal,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+      returnedAt:
+          data.returnedAt.present ? data.returnedAt.value : this.returnedAt,
     );
   }
 
@@ -5020,7 +5055,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           ..write('costAtSale: $costAtSale, ')
           ..write('itemNote: $itemNote, ')
           ..write('subtotal: $subtotal, ')
-          ..write('addedAt: $addedAt')
+          ..write('addedAt: $addedAt, ')
+          ..write('returnedAt: $returnedAt')
           ..write(')'))
         .toString();
   }
@@ -5038,7 +5074,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
       costAtSale,
       itemNote,
       subtotal,
-      addedAt);
+      addedAt,
+      returnedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5054,7 +5091,8 @@ class TransactionItem extends DataClass implements Insertable<TransactionItem> {
           other.costAtSale == this.costAtSale &&
           other.itemNote == this.itemNote &&
           other.subtotal == this.subtotal &&
-          other.addedAt == this.addedAt);
+          other.addedAt == this.addedAt &&
+          other.returnedAt == this.returnedAt);
 }
 
 class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
@@ -5070,6 +5108,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
   final Value<String?> itemNote;
   final Value<int> subtotal;
   final Value<DateTime?> addedAt;
+  final Value<DateTime?> returnedAt;
   final Value<int> rowid;
   const TransactionItemsCompanion({
     this.id = const Value.absent(),
@@ -5084,6 +5123,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     this.itemNote = const Value.absent(),
     this.subtotal = const Value.absent(),
     this.addedAt = const Value.absent(),
+    this.returnedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionItemsCompanion.insert({
@@ -5099,6 +5139,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     this.itemNote = const Value.absent(),
     required int subtotal,
     this.addedAt = const Value.absent(),
+    this.returnedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         transactionId = Value(transactionId),
@@ -5121,6 +5162,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     Expression<String>? itemNote,
     Expression<int>? subtotal,
     Expression<DateTime>? addedAt,
+    Expression<DateTime>? returnedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5136,6 +5178,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
       if (itemNote != null) 'item_note': itemNote,
       if (subtotal != null) 'subtotal': subtotal,
       if (addedAt != null) 'added_at': addedAt,
+      if (returnedAt != null) 'returned_at': returnedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5153,6 +5196,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
       Value<String?>? itemNote,
       Value<int>? subtotal,
       Value<DateTime?>? addedAt,
+      Value<DateTime?>? returnedAt,
       Value<int>? rowid}) {
     return TransactionItemsCompanion(
       id: id ?? this.id,
@@ -5167,6 +5211,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
       itemNote: itemNote ?? this.itemNote,
       subtotal: subtotal ?? this.subtotal,
       addedAt: addedAt ?? this.addedAt,
+      returnedAt: returnedAt ?? this.returnedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5210,6 +5255,9 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
     }
+    if (returnedAt.present) {
+      map['returned_at'] = Variable<DateTime>(returnedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5231,6 +5279,7 @@ class TransactionItemsCompanion extends UpdateCompanion<TransactionItem> {
           ..write('itemNote: $itemNote, ')
           ..write('subtotal: $subtotal, ')
           ..write('addedAt: $addedAt, ')
+          ..write('returnedAt: $returnedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -14363,6 +14412,7 @@ typedef $$TransactionItemsTableCreateCompanionBuilder
   Value<String?> itemNote,
   required int subtotal,
   Value<DateTime?> addedAt,
+  Value<DateTime?> returnedAt,
   Value<int> rowid,
 });
 typedef $$TransactionItemsTableUpdateCompanionBuilder
@@ -14379,6 +14429,7 @@ typedef $$TransactionItemsTableUpdateCompanionBuilder
   Value<String?> itemNote,
   Value<int> subtotal,
   Value<DateTime?> addedAt,
+  Value<DateTime?> returnedAt,
   Value<int> rowid,
 });
 
@@ -14443,6 +14494,9 @@ class $$TransactionItemsTableFilterComposer
 
   ColumnFilters<DateTime> get addedAt => $composableBuilder(
       column: $table.addedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get returnedAt => $composableBuilder(
+      column: $table.returnedAt, builder: (column) => ColumnFilters(column));
 
   $$TransactionsTableFilterComposer get transactionId {
     final $$TransactionsTableFilterComposer composer = $composerBuilder(
@@ -14510,6 +14564,9 @@ class $$TransactionItemsTableOrderingComposer
   ColumnOrderings<DateTime> get addedAt => $composableBuilder(
       column: $table.addedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get returnedAt => $composableBuilder(
+      column: $table.returnedAt, builder: (column) => ColumnOrderings(column));
+
   $$TransactionsTableOrderingComposer get transactionId {
     final $$TransactionsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -14573,6 +14630,9 @@ class $$TransactionItemsTableAnnotationComposer
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get returnedAt => $composableBuilder(
+      column: $table.returnedAt, builder: (column) => column);
+
   $$TransactionsTableAnnotationComposer get transactionId {
     final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -14630,6 +14690,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             Value<String?> itemNote = const Value.absent(),
             Value<int> subtotal = const Value.absent(),
             Value<DateTime?> addedAt = const Value.absent(),
+            Value<DateTime?> returnedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionItemsCompanion(
@@ -14645,6 +14706,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             itemNote: itemNote,
             subtotal: subtotal,
             addedAt: addedAt,
+            returnedAt: returnedAt,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -14660,6 +14722,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             Value<String?> itemNote = const Value.absent(),
             required int subtotal,
             Value<DateTime?> addedAt = const Value.absent(),
+            Value<DateTime?> returnedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionItemsCompanion.insert(
@@ -14675,6 +14738,7 @@ class $$TransactionItemsTableTableManager extends RootTableManager<
             itemNote: itemNote,
             subtotal: subtotal,
             addedAt: addedAt,
+            returnedAt: returnedAt,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
