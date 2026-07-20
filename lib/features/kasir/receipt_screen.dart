@@ -78,17 +78,31 @@ int latestChangeGiven(List<TransactionPayment> payments) {
   return latest?.changeGiven ?? 0;
 }
 
-/// Dibayar utk ringkasan SAAT ada baris Kembalian (lunas kelebihan bayar) —
-/// beda dari [netPaidDisplay] (dipasangkan dgn Sisa Tagihan, dipakai HANYA
-/// saat TIDAK ada kembalian). Dihitung dari Total + Kembalian (bukan sum
-/// mentah `payment.amount`) supaya "Total = Dibayar - Kembalian" SELALU
-/// konsisten di layar — bug nyata dilaporkan user (screenshot): struk
-/// menampilkan "Dibayar Rp 231.200" (persis = Total) BERSAMA "Kembalian
-/// Rp 18.800" sekaligus, padahal Riwayat Pembayaran totalnya Rp 250.000 —
-/// pembaca tidak bisa merekonsiliasi kenapa ada kembalian kalau Dibayar
-/// sudah pas dgn Total.
-int dibayarDisplay(Transaction tx, List<TransactionPayment> payments) {
-  final kembalian = latestChangeGiven(payments);
+/// Dibayar utk ringkasan SAAT [kembalian] > 0 (baris Kembalian ditampilkan)
+/// — beda dari [netPaidDisplay] (dipasangkan dgn Sisa Tagihan, dipakai
+/// HANYA saat TIDAK ada kembalian). Dihitung dari Total + [kembalian]
+/// (bukan sum mentah `payment.amount`) supaya "Total = Dibayar -
+/// Kembalian" SELALU konsisten di layar — bug nyata dilaporkan user
+/// (screenshot): struk menampilkan "Dibayar Rp 231.200" (persis = Total)
+/// BERSAMA "Kembalian Rp 18.800" sekaligus, padahal Riwayat Pembayaran
+/// totalnya Rp 250.000 — pembaca tidak bisa merekonsiliasi kenapa ada
+/// kembalian kalau Dibayar sudah pas dgn Total.
+///
+/// [kembalian] SENGAJA jadi parameter (bukan dihitung ulang via
+/// [latestChangeGiven] di dalam sini) — caller WAJIB memberi nilai yang
+/// PERSIS SAMA dgn yang dipakai memutuskan baris Kembalian tampil atau
+/// tidak. In-app pakai [_ReceiptScreenState._latestPayment] (pembayaran
+/// PALING AKHIR apa pun changeGiven-nya — kalau itu 0, TIDAK ada
+/// Kembalian meski pembayaran SEBELUMNYA sempat memberi kembalian, mis.
+/// kembalian lama dipakai ulang sbg pembayaran baru "Tambah Belanjaan");
+/// share/`_ReceiptPaper` & cetak pakai [latestChangeGiven] (pembayaran
+/// PALING AKHIR yang changeGiven-nya > 0, mengabaikan pembayaran
+/// berikutnya yg changeGiven-nya 0) — dua definisi ini SUDAH beda sejak
+/// fix Item 23 lama, TIDAK diseragamkan di sini (di luar scope perbaikan
+/// ini). Salah kirim nilai [kembalian] akan membuat Dibayar tidak
+/// konsisten dgn baris Kembalian yang BENAR-BENAR dirender di layar itu.
+int dibayarDisplay(
+    Transaction tx, List<TransactionPayment> payments, int kembalian) {
   return kembalian > 0 ? tx.total + kembalian : netPaidDisplay(tx, payments);
 }
 
@@ -1992,7 +2006,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           if (tx.paid > 0)
                             _SummaryRow('Dibayar',
                                 '${_methodLabel(tx.paymentMethod)} · '
-                                '${formatRupiah(dibayarDisplay(tx, _payments))}'),
+                                '${formatRupiah(dibayarDisplay(tx, _payments, _latestPayment?.changeGiven ?? 0))}'),
                           // Item 49b — ringkasan disederhanakan jadi 3 baris
                           // inti (state akhir akumulatif): Total / Dibayar /
                           // Kembalian-ATAU-Sisa. Baris "Uang Diterima" (uang
@@ -2669,12 +2683,13 @@ class _ReceiptPaper extends StatelessWidget {
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
             ),
-          if (dibayarDisplay(tx, payments) > 0)
+          if (dibayarDisplay(tx, payments, latestChangeGiven(payments)) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Bayar..', style: _mono),
-                Text('Rp ${_fmtNum(dibayarDisplay(tx, payments))}',
+                Text(
+                    'Rp ${_fmtNum(dibayarDisplay(tx, payments, latestChangeGiven(payments)))}',
                     style: _mono),
               ],
             ),
