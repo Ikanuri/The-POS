@@ -69,6 +69,13 @@ class TransactionItems extends Table {
   /// dipakai struk in-app untuk memberi pembatas "Tambahan <jam>".
   DateTimeColumn get addedAt => dateTime().nullable()();
 
+  /// Item 49g — waktu baris retur INI dibuat (nota SUDAH LUNAS). null =
+  /// baris penjualan biasa (baik asli maupun susulan). Terisi = baris retur
+  /// (selalu `qty` NEGATIF, item ASLI yang diretur tidak pernah dihapus/
+  /// diubah) — dipakai struk utk pembatas "Retur <jam>", pola sama dgn
+  /// `addedAt`/"Tambahan".
+  DateTimeColumn get returnedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

@@ -46,6 +46,9 @@ void main() {
         amount INTEGER NOT NULL, method TEXT NOT NULL,
         paid_at INTEGER NOT NULL);
     ''');
+    // transaction_items diperlukan agar migrasi v17 (addColumn returned_at)
+    // tak gagal — Item 49g.
+    v13.execute('CREATE TABLE transaction_items(id TEXT PRIMARY KEY);');
 
     final preCols = v13
         .select('PRAGMA table_info(products)')
@@ -67,7 +70,7 @@ void main() {
     expect(p.name, 'Sedap Goreng', reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 16);
+    expect(ver.data.values.first, 17);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

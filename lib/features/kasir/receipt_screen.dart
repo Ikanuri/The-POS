@@ -151,6 +151,34 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   TransactionPayment? get _latestPayment =>
       _payments.where((p) => !p.voided).lastOrNull;
 
+  /// Item 49g — true bila nota ini PERNAH diretur (ada baris `returnedAt`
+  /// != null). Footer ringkasan ganti dari 3-baris biasa jadi breakdown
+  /// "Total awal/Retur/Total akhir/Refund".
+  bool get _hasRetur => _items.any((i) => i.returnedAt != null);
+
+  /// Total SEBELUM retur — sum baris PENJUALAN (qty positif, baik asli
+  /// maupun susulan Tambah Belanjaan). BUKAN cuma baris asli.
+  int get _totalAwal =>
+      _items.where((i) => i.qty > 0).fold(0, (s, i) => s + i.subtotal);
+
+  /// Nilai retur (positif utk tampilan "- Rp X") — sum ABS baris qty
+  /// negatif.
+  int get _returAmount =>
+      -_items.where((i) => i.qty < 0).fold(0, (s, i) => s + i.subtotal);
+
+  /// Total refund SUNGGUHAN (uang fisik keluar) — sum ABS baris pembayaran
+  /// ber-amount negatif (retur/edit nota lunas, BUKAN marker Rp0 nota
+  /// belum-lunas yang amount-nya selalu 0).
+  int get _refundTotal => -_payments
+      .where((p) => !p.voided && p.amount < 0)
+      .fold(0, (s, p) => s + p.amount);
+
+  /// Method refund yang dipakai (dari pembayaran refund TERAKHIR).
+  String? get _refundMethod => _payments
+      .where((p) => !p.voided && p.amount < 0)
+      .lastOrNull
+      ?.method;
+
   /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
   /// induknya tidak ada di transaksi ini).
   TransactionItem? _parentItemOf(TransactionItem item) {
@@ -196,11 +224,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   /// Susun baris item untuk struk in-app. Bila ada item susulan (addedAt != null,
   /// fitur tambah belanjaan), sisipkan pembatas "Tambahan <jam>" sebelum batch
-  /// item susulan. Khusus tampilan in-app — share/cetak tetap menyatu.
+  /// item susulan. Item 49g — begitu juga item retur nota lunas (returnedAt
+  /// != null, qty NEGATIF, item ASLI tetap ada di atasnya): sisipkan
+  /// pembatas "Retur <jam>". Khusus tampilan in-app — share/cetak tetap
+  /// menyatu (lihat _ReceiptPaper/printer_service).
   List<Widget> _buildItemRows(ColorScheme scheme,
       {bool showProfit = false, bool editable = false}) {
     final rows = <Widget>[];
     String? lastBatchLabel;
+    String? lastReturLabel;
     for (final parent in _topLevelItems) {
       final added = parent.addedAt;
       if (added != null) {
@@ -211,14 +243,26 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           rows.add(_AddedSeparator(time: label, scheme: scheme));
         }
       }
+      final returned = parent.returnedAt;
+      if (returned != null) {
+        final label =
+            '${returned.hour.toString().padLeft(2, '0')}:${returned.minute.toString().padLeft(2, '0')}';
+        if (label != lastReturLabel) {
+          lastReturLabel = label;
+          rows.add(_AddedSeparator(
+              time: label, scheme: scheme, prefix: 'Retur'));
+        }
+      }
       rows.add(_itemCheckRow(parent, scheme,
-          isVariant: false, showProfit: showProfit, editable: editable));
+          isVariant: false,
+          showProfit: showProfit,
+          editable: editable && returned == null));
       for (final child in _childrenOf(parent)) {
         rows.add(_itemCheckRow(child, scheme,
             isVariant: true,
             parent: parent,
             showProfit: showProfit,
-            editable: editable));
+            editable: editable && child.returnedAt == null));
       }
     }
     return rows;
@@ -428,7 +472,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     style: Theme.of(ctx).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text(
-                  'Nota belum lunas — perubahan langsung menyesuaikan total & hutang.',
+                  _tx!.status == 'lunas'
+                      // Item 49g — nota lunas: nilai turun -> refund
+                      // sungguhan (uang sudah pernah masuk), bukan hutang.
+                      ? 'Nota sudah lunas — nilai yang berkurang dikembalikan '
+                          'sbg refund ${_methodLabel(_tx!.paymentMethod)}.'
+                      : 'Nota belum lunas — perubahan langsung menyesuaikan total & hutang.',
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 16),
@@ -511,14 +560,28 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     noteCtrl.dispose();
 
     try {
-      await db.editUnpaidTransactionItem(
-        txId: widget.transactionId,
-        transactionItemId: item.id,
-        newQty: qty,
-        newPrice: newPrice,
-        newNote: newNote,
-        kasirId: device.deviceCode,
-      );
+      if (_tx!.status == 'lunas') {
+        // Item 49g — update DI TEMPAT (tanpa baris/separator terpisah,
+        // beda dari retur), refund sungguhan kalau nilai turun.
+        await db.editPaidTransactionItem(
+          txId: widget.transactionId,
+          transactionItemId: item.id,
+          newQty: qty,
+          newPrice: newPrice,
+          newNote: newNote,
+          kasirId: device.deviceCode,
+          refundMethod: _tx!.paymentMethod,
+        );
+      } else {
+        await db.editUnpaidTransactionItem(
+          txId: widget.transactionId,
+          transactionItemId: item.id,
+          newQty: qty,
+          newPrice: newPrice,
+          newNote: newNote,
+          kasirId: device.deviceCode,
+        );
+      }
     } catch (_) {
       if (mounted) {
         AppTheme.showSnack(context, 'Gagal menyimpan perubahan', isError: true);
@@ -1081,19 +1144,25 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Future<void> _showReturSheet(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final db = ref.read(databaseProvider);
-    final returnQty = <String, double>{for (final i in _items) i.id: 0};
+    // Item 49g — hanya baris PENJUALAN (qty positif) yang boleh diretur;
+    // `_items` bisa sudah berisi baris retur lama (qty negatif, returnedAt
+    // != null) dari retur sebelumnya di nota LUNAS ini — baris itu sendiri
+    // bukan target retur ulang.
+    final returnableItems = _items.where((i) => i.qty > 0).toList();
+    final returnQty = <String, double>{for (final i in returnableItems) i.id: 0};
 
     // Nota belum lunas (tempo/kurang_bayar): retur mengedit nota ASLI langsung
     // (kurangi/hapus baris item, hutang berkurang) — tidak ada nota retur
     // terpisah & tidak ada refund tunai, karena memang belum ada uang masuk.
-    // Nota sudah lunas: tetap nota retur terpisah + refund (uang sudah
-    // benar-benar berpindah).
+    // Nota sudah lunas: retur di nota yg SAMA (baris qty negatif baru) +
+    // refund tunai sungguhan (uang sudah benar-benar berpindah) — Item 49g,
+    // BUKAN nota terpisah lagi spt sebelumnya.
     final isUnpaidTx = _tx!.status == 'tempo' || _tx!.status == 'kurang_bayar';
 
     // Qty yang sudah pernah diretur sebelumnya (cegah double-retur). Untuk
-    // nota belum lunas ini selalu kosong (baris sudah dikurangi in-place),
-    // tapi aman dipanggil di kedua jalur.
-    final alreadyReturned = await db.getReturnedQtyByUnit(_tx!.id);
+    // nota belum lunas ini selalu kosong (baris sudah dikurangi in-place).
+    // Sama-sama query dalam TRANSAKSI INI SENDIRI (bukan lintas-nota lagi).
+    final alreadyReturned = await db.getReturnedQtyInTx(_tx!.id);
 
     // Load metode pembayaran untuk pilihan refund.
     final paymentMethods = await (db.select(db.paymentMethods)
@@ -1129,7 +1198,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           builder: (ctx, setSheet) {
             int refund = 0;
             var anyQtySelected = false;
-            for (final i in _items) {
+            for (final i in returnableItems) {
               final q = returnQty[i.id] ?? 0;
               if (q > 0) anyQtySelected = true;
               refund += (i.priceAtSale * q).round();
@@ -1152,7 +1221,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     Flexible(
                       child: ListView(
                         shrinkWrap: true,
-                        children: _items.map((item) {
+                        children: returnableItems.map((item) {
                           final maxQty = remainingFor(item);
                           final q = returnQty[item.id] ?? 0;
                           return ListTile(
@@ -1322,7 +1391,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       // Nota belum lunas: edit nota asli langsung, tidak ada nota retur
       // terpisah / refund tunai (lihat returnUnpaidTransactionItems).
       final returns = [
-        for (final item in _items)
+        for (final item in returnableItems)
           if ((returnQty[item.id] ?? 0) > 0)
             (transactionItemId: item.id, qty: returnQty[item.id]!),
       ];
@@ -1344,34 +1413,30 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       return;
     }
 
-    final localId = await db.generateUniqueLocalId(device.deviceCode);
-    if (!mounted) return;
-
-    final returnItems = [
-      for (final item in _items)
+    // Item 49g — nota SUDAH LUNAS: retur TIDAK bikin nota baru lagi (beda
+    // dari addReturnTransaction lama) — item ASLI diedit di TEMPAT (baris
+    // retur baru qty negatif dlm nota yg SAMA, refund tunai sungguhan).
+    final returns = [
+      for (final item in returnableItems)
         if ((returnQty[item.id] ?? 0) > 0)
-          (
-            productUnitId: item.productUnitId,
-            productId: item.productId,
-            qty: returnQty[item.id]!,
-            price: item.priceAtSale,
-            costPrice: item.costAtSale,
-            itemNote: item.itemNote,
-          ),
+          (transactionItemId: item.id, qty: returnQty[item.id]!),
     ];
-    if (returnItems.isEmpty) return;
+    if (returns.isEmpty) return;
 
     // Terjemahkan id metode terpilih kembali ke `type` (yang disimpan DB).
     final refundMethod =
         paymentMethods.where((m) => m.id == refundMethodId).firstOrNull?.type ??
             'tunai';
-    await db.addReturnTransaction(
-      originalTxId: _tx!.id,
-      localId: localId,
-      returnItems: returnItems,
+    await db.returnPaidTransactionItems(
+      txId: _tx!.id,
+      returns: returns,
       kasirId: device.deviceCode,
       refundMethod: refundMethod,
     );
+    // Nota berubah (baris retur baru & total berkurang) — muat ulang agar
+    // layar (footer breakdown Total awal/Retur/dst) tidak menampilkan data
+    // basi, konsisten dgn jalur nota belum-lunas di atas.
+    await _load();
     if (mounted) {
       messenger.showSnackBar(
           const SnackBar(content: Text('Retur dicatat, stok dikembalikan')));
@@ -1570,6 +1635,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final isKurangBayar = tx.status == 'kurang_bayar' || tx.status == 'tempo';
     final isVoid = tx.status == 'void';
     final isRetur = tx.internalNote?.startsWith('RETUR:') ?? false;
+    // Item 49g — edit item nota LUNAS langsung di tempat (mirip nota
+    // belum-lunas, tapi lewat editPaidTransactionItem: refund sungguhan
+    // kalau nilai turun, bukan cuma kurangi hutang).
+    final isLunas = tx.status == 'lunas';
 
     return Scaffold(
       appBar: AppBar(
@@ -1879,36 +1948,43 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             children: _buildItemRows(scheme,
                                 showProfit:
                                     device.canSeeReports && _showProfit,
-                                editable: isKurangBayar && !isVoid),
+                                editable: (isKurangBayar || isLunas) && !isVoid),
                           ),
                         ],
                       )
                     else
                       ..._buildItemRows(scheme,
                           showProfit: device.canSeeReports && _showProfit,
-                          editable: isKurangBayar && !isVoid),
+                          editable: (isKurangBayar || isLunas) && !isVoid),
                     const Divider(height: 1),
                     Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          _SummaryRow('Total', formatRupiah(tx.total),
-                              bold: true, color: scheme.primary),
+                          // Item 49g — nota yg PERNAH diretur pakai footer
+                          // breakdown, pengecualian yg disengaja dari pola
+                          // 3-baris biasa (Item 49b).
+                          if (_hasRetur) ...[
+                            _SummaryRow('Total awal', formatRupiah(_totalAwal)),
+                            _SummaryRow('Retur', '- ${formatRupiah(_returAmount)}',
+                                color: scheme.error),
+                            _SummaryRow('Total akhir', formatRupiah(tx.total),
+                                bold: true, color: scheme.primary),
+                          ] else
+                            _SummaryRow('Total', formatRupiah(tx.total),
+                                bold: true, color: scheme.primary),
                           if (device.canSeeReports && _showProfit)
                             _buildTotalProfitRow(scheme),
                           if (tx.paid > 0)
                             _SummaryRow('Dibayar',
                                 '${_methodLabel(tx.paymentMethod)} · '
                                 '${formatRupiah(netPaidDisplay(tx, _payments))}'),
-                          // Item 9 — uang tender ASLI dari pembayaran TERAKHIR
-                          // (gross, sebelum dikurangi kembalian) supaya tidak
-                          // membingungkan pembeli yang kasih lebih ("bayar
-                          // 300rb" padahal kasih 400rb). Cuma tampil kalau
-                          // memang ada kembalian (kalau pas, "Dibayar" di atas
-                          // sudah sama dengan uang diterima).
-                          if ((_latestPayment?.changeGiven ?? 0) > 0)
-                            _SummaryRow('Uang Diterima',
-                                formatRupiah(_latestPayment!.amount)),
+                          // Item 49b — ringkasan disederhanakan jadi 3 baris
+                          // inti (state akhir akumulatif): Total / Dibayar /
+                          // Kembalian-ATAU-Sisa. Baris "Uang Diterima" (uang
+                          // tender kotor, Item 9 lama) DIHAPUS — user: riwayat
+                          // pembayaran (timeline di bawah) sudah simpan info
+                          // itu, tak perlu diulang di ringkasan.
                           if ((_latestPayment?.changeGiven ?? 0) > 0)
                             _ChangeTakenRow(
                               amount:
@@ -1926,6 +2002,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               formatRupiah(netRemainingOwed(tx, _payments)),
                               color: scheme.error,
                               bold: true,
+                            ),
+                          if (_hasRetur && _refundTotal > 0)
+                            _SummaryRow(
+                              'Refund ${_methodLabel(_refundMethod ?? '')}',
+                              formatRupiah(_refundTotal),
+                              color: scheme.error,
                             ),
                           if (tx.pointsEarned > 0)
                             _SummaryRow(
@@ -2336,6 +2418,26 @@ class _ReceiptPaper extends StatelessWidget {
     return null;
   }
 
+  /// Item 49g — true bila nota ini PERNAH diretur (ada baris `returnedAt`
+  /// != null). Footer ganti dari 3-baris biasa jadi breakdown "Total
+  /// awal/Retur/Total akhir/Refund".
+  bool get _hasRetur => items.any((i) => i.returnedAt != null);
+
+  int get _totalAwal =>
+      items.where((i) => i.qty > 0).fold(0, (s, i) => s + i.subtotal);
+
+  int get _returAmount =>
+      -items.where((i) => i.qty < 0).fold(0, (s, i) => s + i.subtotal);
+
+  int get _refundTotal => -payments
+      .where((p) => !p.voided && p.amount < 0)
+      .fold(0, (s, p) => s + p.amount);
+
+  String? get _refundMethod => payments
+      .where((p) => !p.voided && p.amount < 0)
+      .lastOrNull
+      ?.method;
+
   /// Item terurut: induk diikuti varian-variannya.
   List<TransactionItem> get _ordered {
     final out = <TransactionItem>[];
@@ -2356,6 +2458,8 @@ class _ReceiptPaper extends StatelessWidget {
     // Pembatas batch "Tambah Belanjaan" (Gaya A) — dilacak lintas iterasi
     // item saat menyusun baris di bawah.
     String? lastBatch;
+    // Item 49g — sama pola, utk batch retur nota lunas.
+    String? lastRetur;
     final date =
         '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year} '
         '${tx.createdAt.hour.toString().padLeft(2, '0')}:${tx.createdAt.minute.toString().padLeft(2, '0')}';
@@ -2431,6 +2535,22 @@ class _ReceiptPaper extends StatelessWidget {
                 );
               }
             }
+            // Item 49g — pembatas "----- Retur HH:MM -----" sebelum baris
+            // retur nota lunas (qty negatif, item ASLI di atasnya tetap
+            // utuh), pola sama dgn "Tambahan".
+            if (!isVar && item.returnedAt != null) {
+              final r = item.returnedAt!;
+              final hhmm =
+                  '${r.hour.toString().padLeft(2, '0')}:${r.minute.toString().padLeft(2, '0')}';
+              if (hhmm != lastRetur) {
+                lastRetur = hhmm;
+                sep = Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Text('----- Retur $hhmm -----',
+                      textAlign: TextAlign.center, style: _mono),
+                );
+              }
+            }
             return [
               if (sep != null) sep,
               Text('$mark$namePrefix${productNames[item.productId] ?? ''}',
@@ -2443,21 +2563,26 @@ class _ReceiptPaper extends StatelessWidget {
                     // Jumlah qty + satuan di-bold (biar mudah dibaca), tapi
                     // TIDAK lebih tebal dari nama produk (w700 utk induk, w400
                     // utk varian). Bagian "x harga" tetap berat normal.
-                    Text.rich(
-                      TextSpan(
-                        style: _mono,
-                        children: [
-                          TextSpan(
-                            text:
-                                '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''}',
-                            style: _mono.copyWith(
-                                fontWeight: isVar
-                                    ? FontWeight.w400
-                                    : FontWeight.w600),
-                          ),
-                          TextSpan(
-                              text: ' x ${_fmtNum(item.priceAtSale)}'),
-                        ],
+                    // Expanded — Item 49g: qty NEGATIF (baris retur) nambah
+                    // 1 karakter "-" yg bisa bikin Row ini overflow tipis di
+                    // container lebar tetap (300px) kalau tidak dibungkus.
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          style: _mono,
+                          children: [
+                            TextSpan(
+                              text:
+                                  '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''}',
+                              style: _mono.copyWith(
+                                  fontWeight: isVar
+                                      ? FontWeight.w400
+                                      : FontWeight.w600),
+                            ),
+                            TextSpan(
+                                text: ' x ${_fmtNum(item.priceAtSale)}'),
+                          ],
+                        ),
                       ),
                     ),
                     Text(_fmtNum((item.priceAtSale * effQty).round()),
@@ -2486,17 +2611,50 @@ class _ReceiptPaper extends StatelessWidget {
             ),
           Text('Produk: ${items.length}', style: _mono),
           const _DashedLine(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Total',
-                  style: _mono.copyWith(
-                      fontSize: 14, fontWeight: FontWeight.w900)),
-              Text('Rp ${_fmtNum(tx.total)}',
-                  style: _mono.copyWith(
-                      fontSize: 14, fontWeight: FontWeight.w900)),
-            ],
-          ),
+          // Item 49g — nota yg PERNAH diretur pakai footer breakdown,
+          // pengecualian yg disengaja dari pola 3-baris biasa (Item 49b).
+          if (_hasRetur) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Total awal', style: _mono),
+                Text('Rp ${_fmtNum(_totalAwal)}', style: _mono),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Retur', style: _mono),
+                Text('- Rp ${_fmtNum(_returAmount)}', style: _mono),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // "Akhir" (bukan "Total akhir") — dgn style bold/fontSize14
+                // spt "Total"/"Kembali"/"Sisa", label lebih panjang bikin
+                // Row ini overflow di container struk gambar yg lebar tetap
+                // (300px, beda dari in-app yg lebih lentur).
+                Text('Akhir',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+                Text('Rp ${_fmtNum(tx.total)}',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ] else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Total',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+                Text('Rp ${_fmtNum(tx.total)}',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+              ],
+            ),
           if (netPaidDisplay(tx, payments) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2506,6 +2664,11 @@ class _ReceiptPaper extends StatelessWidget {
                     style: _mono),
               ],
             ),
+          // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total /
+          // Dibayar / Kembalian-ATAU-Sisa (mutually exclusive — baris teks
+          // "Sudah bayar"/"Sisa hutang" yg SELALU tampil apa pun kondisinya
+          // DIHAPUS, diganti baris "Sisa" kondisional yg konsisten dgn
+          // struk in-app/cetak).
           if (latestChangeGiven(payments) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2517,22 +2680,40 @@ class _ReceiptPaper extends StatelessWidget {
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
+            )
+          else if (remaining > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Sisa',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+                Text('Rp ${_fmtNum(remaining)}',
+                    style: _mono.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w900)),
+              ],
             ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              remaining <= 0
-                  ? 'Sudah bayar'
-                  : 'Sisa hutang Rp ${_fmtNum(remaining)}',
-              style: _mono,
+          if (_hasRetur && _refundTotal > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Expanded — nama metode refund panjangnya bervariasi
+                // (Tunai/Transfer/E-Wallet/dst), beda dari label tetap spt
+                // "Total awal"/"Retur" — cegah overflow di container lebar
+                // tetap (300px).
+                Expanded(
+                  child: Text('Refund ${_methodShort(_refundMethod ?? '')}',
+                      style: _mono),
+                ),
+                Text('Rp ${_fmtNum(_refundTotal)}', style: _mono),
+              ],
             ),
-          ),
           // Timeline pembayaran (mis. hutang dilunasi belakangan / dicicil).
           if (_showTimeline) ...[
             const _DashedLine(),
             Text('Pembayaran:',
                 style: _mono.copyWith(fontWeight: FontWeight.w700)),
-            ...payments.map((p) => Row(
+            ..._visiblePayments.map((p) => Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
@@ -2561,9 +2742,20 @@ class _ReceiptPaper extends StatelessWidget {
     );
   }
 
+  /// Item 49f — baris audit-trail internal (`method` 'edit'/'retur', amount
+  /// selalu 0 — dipakai `returnUnpaidTransactionItems`/
+  /// `editUnpaidTransactionItem` sbg jejak kapan ada perubahan) BUKAN utk
+  /// konsumsi pelanggan (`_methodShort` tak kenal method itu, jadi tampil
+  /// sbg string mentah "edit"/"retur" di struk fisik). Sembunyikan dari
+  /// share — in-app tetap tampilkan semua (lihat _buildPaymentTimeline).
+  List<TransactionPayment> get _visiblePayments => payments
+      .where((p) => p.method != 'edit' && p.method != 'retur')
+      .toList();
+
   bool get _showTimeline {
-    if (payments.length > 1) return true;
-    if (payments.length == 1) return payments.first.paidAt != tx.createdAt;
+    final visible = _visiblePayments;
+    if (visible.length > 1) return true;
+    if (visible.length == 1) return visible.first.paidAt != tx.createdAt;
     return false;
   }
 
@@ -2589,11 +2781,14 @@ class _ReceiptPaper extends StatelessWidget {
   }
 }
 
-/// Pembatas "Tambahan <jam>" untuk item susulan (hanya struk in-app).
+/// Pembatas "Tambahan <jam>" (item susulan) / "Retur <jam>" (Item 49g,
+/// retur nota lunas) — hanya struk in-app.
 class _AddedSeparator extends StatelessWidget {
-  const _AddedSeparator({required this.time, required this.scheme});
+  const _AddedSeparator(
+      {required this.time, required this.scheme, this.prefix = 'Tambahan'});
   final String time;
   final ColorScheme scheme;
+  final String prefix;
 
   @override
   Widget build(BuildContext context) {
@@ -2605,7 +2800,7 @@ class _AddedSeparator extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'Tambahan $time',
+              '$prefix $time',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,

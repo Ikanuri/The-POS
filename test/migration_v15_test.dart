@@ -43,6 +43,9 @@ void main() {
         change_given INTEGER NOT NULL DEFAULT 0,
         change_taken INTEGER NOT NULL DEFAULT 0);
     ''');
+    // transaction_items diperlukan agar migrasi v17 (addColumn returned_at)
+    // tak gagal — Item 49g.
+    v14.execute('CREATE TABLE transaction_items(id TEXT PRIMARY KEY);');
     v14.execute(
         "INSERT INTO transactions(id, local_id, status, total, paid, "
         "change_amount, payment_method, created_at) VALUES('t1','K1-1',"
@@ -84,7 +87,7 @@ void main() {
     expect(pay.amount, 10000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 16);
+    expect(ver.data.values.first, 17);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
