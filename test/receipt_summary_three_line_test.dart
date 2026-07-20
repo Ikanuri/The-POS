@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/theme/app_theme.dart' show formatRupiah;
 import 'package:the_pos/features/kasir/merged_receipt_screen.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 
@@ -87,6 +88,80 @@ void main() {
           findsNothing,
           reason: 'nota sudah lunas dgn kembalian tidak boleh punya baris '
               'Sisa sekaligus');
+    });
+  });
+
+  group('nota lunas dgn CICILAN (beberapa pembayaran) + kembalian', () {
+    // Reproduksi laporan user (screenshot): 3 barang total 231.200, dibayar
+    // via 4 baris tunai (50.000+50.000+100.000+50.000=250.000), kembalian
+    // 18.800 diberikan di pembayaran terakhir. Bug: "Dibayar" sempat
+    // menampilkan `netPaidDisplay` (= Total, 231.200) BERSAMA "Kembalian
+    // 18.800" sekaligus — tak bisa direkonsiliasi pembaca ("kok ada
+    // kembalian kalau Dibayar sudah pas Total?"). Seharusnya Dibayar =
+    // 250.000 (persis jumlah Riwayat Pembayaran) supaya Total = Dibayar -
+    // Kembalian (231.200 = 250.000 - 18.800).
+    Future<void> seedCicilan() async {
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            id: 'tx5',
+            localId: 'A1-1',
+            status: 'lunas',
+            total: 231200,
+            paid: 250000,
+            changeAmount: 18800,
+            paymentMethod: 'tunai',
+          ));
+      await insertItem('i5a', 'tx5', 19400);
+      await insertItem('i5b', 'tx5', 19300);
+      await insertItem('i5c', 'tx5', 192500);
+      for (final p in [
+        ('pay5a', 50000, 0),
+        ('pay5b', 50000, 0),
+        ('pay5c', 100000, 0),
+        ('pay5d', 50000, 18800),
+      ]) {
+        await db.into(db.transactionPayments).insert(
+            TransactionPaymentsCompanion.insert(
+                id: p.$1,
+                transactionId: 'tx5',
+                amount: p.$2,
+                method: 'tunai',
+                changeGiven: Value(p.$3)));
+      }
+    }
+
+    testWidgets(
+        'in-app: "Dibayar" = 250.000 (jumlah semua pembayaran), BUKAN '
+        '231.200 (= Total, salah)', (tester) async {
+      await seedCicilan();
+      await pumpWithFakeApp(tester,
+          db: db, child: const ReceiptScreen(transactionId: 'tx5'));
+
+      // formatRupiah() pakai non-breaking space (U+00A0) antara "Rp" dan
+      // angka — find.text('Rp 250.000') literal TIDAK match walau
+      // tampilannya sama persis (gotcha CLAUDE.md).
+      expect(find.textContaining(formatRupiah(250000)), findsOneWidget,
+          reason: 'Dibayar harus = Total + Kembalian (231.200 + 18.800), '
+              'sama dgn jumlah Riwayat Pembayaran, bukan netPaidDisplay '
+              'yang kebetulan sama dgn Total');
+    });
+
+    testWidgets(
+        'share (_ReceiptPaper): "Bayar.." = 250.000, BUKAN 231.200',
+        (tester) async {
+      await seedCicilan();
+      await pumpWithFakeApp(tester,
+          db: db, child: const ReceiptScreen(transactionId: 'tx5'));
+      await tester.tap(find.byTooltip('Bagikan Struk'));
+      await tester.pumpAndSettle();
+
+      final receiptPaper = find.byWidgetPredicate(
+          (w) => w.runtimeType.toString() == '_ReceiptPaper');
+      expect(receiptPaper, findsOneWidget);
+
+      expect(
+          find.descendant(
+              of: receiptPaper, matching: find.text('Rp 250.000')),
+          findsOneWidget);
     });
   });
 

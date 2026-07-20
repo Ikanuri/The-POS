@@ -739,8 +739,6 @@ class PrinterService {
       final sumChangeGiven =
           payments.where((p) => !p.voided).fold<int>(0, (s, p) => s + p.changeGiven);
       final netPaid = tx.paid - sumChangeGiven;
-      out.addAll(
-          bodyLR('Bayar', 'Rp ${_fmtNum(netPaid > 0 ? netPaid : 0)}'));
 
       TransactionPayment? latestWithChange;
       for (final p in payments) {
@@ -750,6 +748,16 @@ class PrinterService {
           latestWithChange = p;
         }
       }
+      // "Bayar" HARUS Total + Kembalian (bukan netPaid mentah) saat ada
+      // baris Kembalian — supaya "Total = Bayar - Kembalian" konsisten di
+      // struk. netPaid dipakai HANYA saat tak ada kembalian (dipasangkan
+      // dgn Sisa) — lihat dibayarDisplay() di receipt_screen.dart utk
+      // penjelasan lengkap bug yg diperbaiki di sini.
+      final bayar = latestWithChange != null
+          ? tx.total + latestWithChange.changeGiven
+          : (netPaid > 0 ? netPaid : 0);
+      out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(bayar)}'));
+
       // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total /
       // Bayar / Kembali-ATAU-Sisa. Baris "Uang Diterima" (uang tender
       // kotor, Item 9 lama) DIHAPUS — riwayat pembayaran (timeline di
@@ -1093,11 +1101,6 @@ class PrinterService {
           styles: const PosStyles(bold: true, width: PosTextSize.size2));
     }
 
-    out.addAll(gen.text('Total Tagihan',
-        styles: const PosStyles(bold: true)));
-    out.addAll(wideNominal('Rp ${_fmtNum(grandTotal)}'));
-    out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandPaid)}', w)));
-
     // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total nota
     // gabungan / Terbayar / Kembalian-ATAU-Sisa. Baris "Uang Diterima"
     // (uang tender kotor, Item 9 lama) DIHAPUS, "Sisa" jadi kondisional
@@ -1113,6 +1116,17 @@ class PrinterService {
         }
       }
     }
+    out.addAll(gen.text('Total Tagihan',
+        styles: const PosStyles(bold: true)));
+    out.addAll(wideNominal('Rp ${_fmtNum(grandTotal)}'));
+    // "Terbayar" HARUS Total + Kembalian saat ada kembalian (bukan grandPaid
+    // net) — supaya "Total Tagihan = Terbayar - Kembalian" konsisten, sama
+    // fix dgn struk tunggal di atas.
+    final grandBayar = latestWithChange != null
+        ? grandTotal + latestWithChange.changeGiven
+        : grandPaid;
+    out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandBayar)}', w)));
+
     if (latestWithChange != null) {
       out.addAll(gen.text('Kembalian', styles: const PosStyles(bold: true)));
       out.addAll(wideNominal('Rp ${_fmtNum(latestWithChange.changeGiven)}'));

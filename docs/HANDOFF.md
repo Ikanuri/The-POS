@@ -4,6 +4,76 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Juli 2026 (bugfix pasca-49b, branch
+`claude/onboarding-setup-9bsu52`, commit `cec17f5`, PR #33) — user lapor
+via screenshot: nota lunas dibayar 4x cicilan tunai (50.000+50.000+
+100.000+50.000=250.000) dgn Total 231.200 & Kembalian 18.800, tapi baris
+"Dibayar" struk menampilkan "Rp 231.200" — PERSIS sama dgn Total, bukan
+250.000 yg sungguhan dibayarkan (jumlah semua baris Riwayat Pembayaran).
+**Akar masalah**: sejak Item 49b, "Dibayar" dihitung pakai
+`netPaidDisplay()` (paid dikurangi akumulasi kembalian) yang didesain utk
+dipasangkan dgn "Sisa Tagihan" pada transaksi KURANG-BAYAR (`Total =
+Dibayar + Sisa`) — tapi fungsi yang SAMA juga dipakai di kasus LUNAS dgn
+Kembalian, di mana `netPaidDisplay` KEBETULAN collapse jadi persis =
+Total (krn nota sudah lunas penuh), sehingga baris Dibayar jadi redundan
+& TIDAK bisa direkonsiliasi pembaca dgn baris Kembalian di sebelahnya
+("kok ada kembalian kalau Dibayar sudah pas Total?").
+
+**Fix**: fungsi baru `dibayarDisplay(tx, payments)` (`receipt_screen.
+dart`) — dipakai saat ADA baris Kembalian: `Total + Kembalian` (dijamin
+`Total = Dibayar - Kembalian` selalu konsisten di layar, terlepas dari
+kembalian lama yg sempat dipakai ulang sbg pembayaran baru); TANPA
+Kembalian (dipasangkan dgn Sisa): tetap `netPaidDisplay` seperti semula.
+Diterapkan konsisten ke SEMUA 4 renderer (duplikasi per-renderer, pola
+lama codebase ini): in-app + share (`dibayarDisplay` langsung), cetak
+tunggal (`printer_service.dart._buildBytes`, var lokal `bayar`), cetak
+gabungan (`_buildMergedBytes`, var lokal `grandBayar` — computed
+`latestWithChange` DIPINDAH ke atas baris "Terbayar" krn urutan kode
+lama menghitungnya SETELAH baris itu ditulis), in-app/share gabungan
+(`merged_receipt_screen.dart`, getter `_grandPaid` diubah kondisional).
+
+**Test**: `receipt_summary_three_line_test.dart` ditambah skenario
+persis laporan user (3 barang 231.200, 4 pembayaran tunai 250.000,
+kembalian 18.800 di pembayaran terakhir) — assert baris Dibayar/Bayar..
+= "Rp 250.000". Revert-verify: stash fix (`git stash push` scoped ke 3
+file produksi) → 2 test baru gagal PERSIS "Rp 250.000 tidak ditemukan"
+(masih 231.200) → restore, hijau lagi. **Gotcha ketemu saat nulis test
+ini**: assertion in-app pertama pakai `find.text('Rp 250.000')` literal
+GAGAL walau fix sudah benar — `formatRupiah()` (in-app) pakai
+non-breaking space (U+00A0) jadi harus `find.textContaining(formatRupiah(
+250000))`, TAPI baris share/print pakai `'Rp ${_fmtNum(x)}'` string
+interpolation manual (spasi biasa) jadi `find.text('Rp 250.000')` justru
+BENAR di situ — dua widget berbeda, dua cara format berbeda, jangan
+disamaratakan (gotcha CLAUDE.md soal nbsp, tapi ternyata tidak berlaku
+seragam di semua renderer struk). `flutter analyze` bersih, test terkait
+(retur/edit 49g, audit marker 49f, 3-baris 49b) semua tetap hijau.
+
+**Regresi ketemu via FULL-SUITE run** (bukan test file baru — inilah
+tepatnya kenapa metode test CLAUDE.md wajib jalankan seluruh
+`flutter test`, bukan cuma file yg baru diubah): `receipt_dibayar_net_
+test.dart` (test LAMA, dari sesi sebelumnya, skenario kembalian lama
+dipakai ulang sbg pembayaran baru via "Tambah Belanjaan") gagal setelah
+fix di atas — akar masalah: `dibayarDisplay()` versi pertama menghitung
+ulang "kembalian" secara internal via `latestChangeGiven()` (cari
+pembayaran PALING AKHIR yg changeGiven>0, ABAIKAN pembayaran berikutnya
+yg changeGiven-nya 0) — TAPI baris Kembalian yg BENAR-BENAR dirender
+in-app pakai definisi BEDA: `_latestPayment` (pembayaran PALING AKHIR
+apa pun changeGiven-nya — kalau 0, Sisa Tagihan yg tampil, BUKAN
+Kembalian, meski pembayaran sebelumnya sempat kasih kembalian). Dua
+definisi "kembalian terakhir" ini SUDAH beda sejak fix Item 23 lama
+(satu dipakai in-app, satu dipakai share/cetak) — versi pertama
+`dibayarDisplay` cuma pakai SATU definisi utk SEMUA caller, jadi
+mismatch dgn in-app di skenario reused-change. **Fix**: `dibayarDisplay`
+diubah terima param `kembalian` eksplisit (bukan hitung sendiri) — tiap
+caller kirim definisi kembalian yg SAMA PERSIS dgn yg dipakai memutuskan
+baris Kembalian tampil di renderer itu (in-app: `_latestPayment?.
+changeGiven`, share: `latestChangeGiven(payments)`). Revert-verify utk
+lapisan fix ini SUDAH otomatis lewat full-suite run itu sendiri (fail →
+fix → re-run confirm hijau), tidak perlu stash terpisah. Dikirim sbg
+commit KEDUA terpisah (bukan amend `cec17f5` yg sudah ada) — ketemu
+SEBELUM `cec17f5` sempat di-push, tapi kebijakan repo ini "SELALU commit
+baru, jangan amend" tetap berlaku apa pun kondisi push-nya._
+
 _Update sesi 20 Juli 2026 (batch Item 49a-49g, branch
 `claude/onboarding-setup-9bsu52`, commit `f14e06e`+`257bdf8`+`df7cd02`+
 `4b57450`+`46531a9`) — user minta 8 "penyesuaian masif" sekaligus,

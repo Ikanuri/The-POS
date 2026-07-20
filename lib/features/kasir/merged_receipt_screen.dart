@@ -177,12 +177,19 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
 
   int get _grandTotal => _txs.fold(0, (s, t) => s + t.total);
 
-  /// Terbayar NET (dikurangi kembalian per nota, sama pola dengan
-  /// `netPaidDisplay` di receipt_screen.dart) — BUKAN `Σ tx.paid` mentah,
-  /// yang bisa menghitung dobel kembalian yang dipakai ulang sbg pembayaran
-  /// baru (akar masalah Item 23, sebelumnya belum ikut diperbaiki di sini).
-  int get _grandPaid => _txs.fold(
-      0, (s, t) => s + netPaidDisplay(t, _paymentsByTx[t.id] ?? const []));
+  /// Terbayar utk ringkasan. SAAT ada Kembalian lintas nota: Total + Kembalian
+  /// (bukan sum netPaid) supaya "TOTAL TAGIHAN = Terbayar - Kembalian"
+  /// konsisten di layar — bug nyata dilaporkan user (lihat `dibayarDisplay`
+  /// di receipt_screen.dart utk penjelasan lengkap). TANPA kembalian: NET
+  /// (dikurangi kembalian per nota, sama pola dgn `netPaidDisplay`) — BUKAN
+  /// `Σ tx.paid` mentah, yang bisa menghitung dobel kembalian yang dipakai
+  /// ulang sbg pembayaran baru (akar masalah Item 23).
+  int get _grandPaid {
+    final kembalian = _latestPaymentWithChange?.changeGiven ?? 0;
+    if (kembalian > 0) return _grandTotal + kembalian;
+    return _txs.fold(
+        0, (s, t) => s + netPaidDisplay(t, _paymentsByTx[t.id] ?? const []));
+  }
 
   /// Sisa NET, dijumlah per nota (masing-masing sudah di-clamp ≥0) — supaya
   /// TOTAL = Terbayar + Sisa tetap konsisten & tidak pernah muncul angka
