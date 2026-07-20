@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-20
+
+- `d3d9403` — feat: cache keranjang katalog HTML (order_page_service) ke localStorage keyed per versi katalog + TTL 1 hari, tombol "Kosongkan" baru — refresh browser tak lagi hilangkan pilihan pelanggan
+
 ## 2026-07-19
 
 - `fa79eb0` — feat: Catatan di Struk (receipt_note) benar-benar terpakai di struk share/cetak/gabungan (sebelumnya disimpan tapi tak pernah dibaca) + kartu KPI baru "Selisih Kas Operasional" (Omzet - Pengeluaran) di tab Ringkasan

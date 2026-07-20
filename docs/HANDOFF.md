@@ -4,6 +4,36 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Juli 2026 (katalog HTML — cache keranjang, branch
+`claude/setup-dependencies-am31te`) — user lapor: katalog pesanan (link
+WhatsApp, `order_page_service.dart`) itu HTML statis, `cart` murni var JS
+di memori → refresh browser HILANGKAN seluruh pilihan pelanggan. Tombol
+refresh tak bisa diblokir/dihilangkan dari halaman web (dikonfirmasi user
+sendiri) — didiskusikan block vs warning-konfirmasi vs cache; direkomendasi
+CACHE krn `beforeunload` tak reliable di in-app browser WhatsApp (tempat
+katalog ini realistis dibuka). User setuju + minta 2 tambahan: (a) TTL 1
+hari sbg jaga-jaga (di atas cache permanen), (b) tombol "Kosongkan
+Keranjang" utk kasus cache lama nyangkut tapi mau pesan batch baru. FIX:
+`saveCart()`/`loadCart()`/`clearCart()` baru — persist ke `localStorage`
+key `posOrderCart`, payload `{generatedAt, savedAt, cart, cartNotes}`.
+`loadCart()` HANYA pakai cache kalau `generatedAt` cocok DATA.generatedAt
+(versi katalog sama — beda kalau toko generate ulang katalog) DAN
+`savedAt` masih dalam `CART_TTL_MS` (24 jam). `saveCart()` dipanggil di
+SEMUA titik mutasi cart: akhir `setQty()` (dipakai tombol +/- daftar &
+stepper sheet keranjang) DAN kedua handler `itemAddBtn`/`itemRemoveBtn`
+modal tap-item (jalur mutasi langsung, TIDAK lewat `setQty`) — kalau
+cuma pasang di `setQty` saja, separuh jalur akan terlewat. `loadCart()`
+dipanggil SEBELUM `render()` pertama di akhir skrip. Tombol "Kosongkan"
+baru di header sheet Pesanan (`id="clearCartBtn"`) — pakai `confirm()`
+browser HANYA kalau cart berisi (tidak mengganggu kalau memang sudah
+kosong). Test: `order_page_service_cart_persist_test` (2 test — assert
+string-content pada HTML/JS ter-generate, pola sama dgn test
+`order_page_service_test.dart` lain karena JS di sini tidak benar2
+dieksekusi di test Dart; verifikasi urutan `loadCart()` sebelum `render()`
+via `indexOf`, verifikasi `saveCart()` ada di badan tiap fungsi mutasi via
+substring-antar-fungsi). Revert-verified. schemaVersion 16 tak berubah
+(murni fitur sisi-klien HTML/JS, tak sentuh DB).
+
 _Update sesi 19-20 Juli 2026 (2 permintaan user, branch
 `claude/setup-dependencies-am31te`) — (1) BUG NYATA: "Catatan di Struk"
 (setting `receipt_note` di Informasi Toko/`store_info_screen.dart`) DISIMPAN
