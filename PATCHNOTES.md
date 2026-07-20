@@ -8,6 +8,37 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 20 Juli 2026
+
+### ✨ Fitur Baru
+- **Tab baru "Laporan Pengeluaran"** di halaman Laporan — ringkasan total,
+  grafik lingkaran (donut) per jenis pengeluaran, dan grafik batang harian.
+- **Retur & koreksi barang di transaksi yang sudah lunas kini update nota
+  yang sama** — tidak lagi bikin transaksi/struk baru terpisah. Barang yang
+  diretur ditandai dengan pembatas "Retur HH:MM" di daftar barang, dan
+  ringkasan struk menampilkan Total awal, jumlah Retur, Total akhir, serta
+  Refund yang diberikan.
+
+### 🎨 Penyempurnaan Tampilan
+- **Tombol "000" di keypad pembayaran dipindah ke baris bawah**, sejajar
+  dengan "0" dan "00" — lebih mudah dijangkau & konsisten posisinya.
+- **Ringkasan struk (dalam aplikasi, share, cetak) disederhanakan jadi 3
+  baris: Total, Dibayar, dan Sisa/Kembalian** — baris "Uang Diterima" yang
+  sebelumnya bisa membingungkan (menampilkan jumlah tunai kotor per
+  transaksi cicilan) dihapus. Poin yang didapat tetap ditampilkan.
+- **Struk share & cetak tidak lagi menampilkan jejak internal** (baris edit
+  harga/qty atau retur) — informasi itu untuk kebutuhan toko sendiri, bukan
+  konsumsi pelanggan. Detail lengkapnya tetap tersimpan di struk dalam
+  aplikasi.
+- **Tambah Satuan baru di form produk kini langsung meloncat & fokus ke
+  kolom harga** satuan yang baru ditambahkan — tidak perlu scroll manual
+  lagi untuk mulai mengisi.
+
+### 🐛 Perbaikan
+- **Catatan struk (catatan item, catatan struk, footer) yang lebih dari
+  satu baris kini tercetak utuh di printer thermal** — sebelumnya baris
+  kedua dst. terpotong hilang saat dicetak (walau tampil normal di layar).
+
 ## 19 Juli 2026
 
 ### 🎨 Penyempurnaan Tampilan
