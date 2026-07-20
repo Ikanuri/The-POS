@@ -38,6 +38,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Catatan struk (catatan item, catatan struk, footer) yang lebih dari
   satu baris kini tercetak utuh di printer thermal** — sebelumnya baris
   kedua dst. terpotong hilang saat dicetak (walau tampil normal di layar).
+- **Baris "Dibayar" di struk kini menampilkan jumlah cicilan yang benar-
+  benar dibayarkan** — sebelumnya, untuk transaksi lunas yang dibayar
+  bertahap (beberapa kali tunai) dan ada kembalian, baris "Dibayar" salah
+  menampilkan angka yang sama persis dengan "Total" (bukan jumlah uang
+  yang sebenarnya diterima), sehingga tidak nyambung dengan baris
+  Kembalian di bawahnya.
 
 ## 19 Juli 2026
 

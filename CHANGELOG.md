@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-20
 
+- `ed177ac` — fix: `dibayarDisplay()` di `receipt_screen.dart` diubah jadi terima param `kembalian` eksplisit (bukan hitung ulang internal via `latestChangeGiven`) — full-suite run menemukan regresi di `receipt_dibayar_net_test.dart` (skenario kembalian lama dipakai ulang sbg pembayaran baru via Tambah Belanjaan): in-app pakai definisi kembalian `_latestPayment` (pembayaran PALING AKHIR apa pun nilainya), share/cetak pakai `latestChangeGiven` (pembayaran PALING AKHIR yg changeGiven>0) — dua definisi ini sudah beda sejak lama, caller sekarang WAJIB kirim nilai yg konsisten dgn baris Kembalian yg benar2 dirender
+- `cec17f5` — fix: baris "Dibayar"/"Bayar"/"Terbayar" di struk (in-app/share/cetak/gabungan) salah menampilkan `netPaidDisplay` (= Total persis) alih-alih Total+Kembalian saat nota lunas dgn kembalian — pembaca tak bisa merekonsiliasi kenapa ada Kembalian kalau Dibayar sudah = Total (bug nyata dilaporkan user via screenshot, cicilan 4-pembayaran 250.000 tapi Dibayar tampil 231.200)
 - `f14e06e` — feat: Item 49b/49d/49f/49g — struk ringkasan 3-baris (Total/Dibayar/Sisa-Kembalian, hapus "Uang Diterima"), tab Laporan Pengeluaran baru (KPI+donut+grafik harian), filter baris audit 'edit'/'retur' dari struk share/cetak, retur & edit item transaksi lunas kini update nota yang sama (bukan bikin nota baru) via kolom `returnedAt` (migrasi v16->v17) + pembatas "Retur HH:MM" + ringkasan Total awal/Retur/Akhir/Refund
 - `257bdf8` — feat: Item 49e — Tambah Satuan langsung scroll-into-view + autofocus field harga
 - `df7cd02` — fix: Item 49c — catatan struk cetak (itemNote/strukNote/receiptFooter) rusak kalau multi-baris
