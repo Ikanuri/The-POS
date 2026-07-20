@@ -44,6 +44,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   menampilkan angka yang sama persis dengan "Total" (bukan jumlah uang
   yang sebenarnya diterima), sehingga tidak nyambung dengan baris
   Kembalian di bawahnya.
+- **Sinkronisasi antar-HP (owner & asisten/kasir): transaksi yang diterima
+  lewat sync kini selalu tampil lengkap dengan daftar barangnya** —
+  sebelumnya, satu transaksi bermasalah bisa membuat daftar barang
+  transaksi LAIN yang dikirim di waktu bersamaan ikut hilang di struk
+  (hanya nomor nota, total, dan riwayat pembayaran yang tampil, daftar
+  barang kosong).
+- **Usulan perubahan harga dari HP asisten yang sudah disetujui owner
+  tidak lagi terus muncul ulang** di layar sync — sebelumnya usulan yang
+  sudah diterapkan bisa terus muncul kembali setiap kali sync, seolah
+  belum pernah disetujui.
 
 ## 19 Juli 2026
 

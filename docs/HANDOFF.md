@@ -4,6 +4,70 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Juli 2026 (bugfix sync riwayat kosong + usulan harga
+berulang, branch `claude/owner-assistant-sync-history-30fuua`, commit
+`1d47b2a`) — user lapor via screenshot: setelah sync antara owner &
+asisten, transaksi yang diterima di sisi OWNER tampil TANPA daftar
+barang sama sekali (struk cuma stempel Lunas/Tempo + Total + Riwayat
+Pembayaran — kartu daftar item kosong), padahal di sisi asisten (device
+asal transaksi) tampilannya normal. **Akar masalah** (dibuktikan via
+test `lan_sync_transaction_items_repro_test.dart`, PRAGMA foreign_keys
+ON spt production — test lain di suite ini pakai `NativeDatabase.
+memory()` polos TANPA FK on, jadi kelas bug ini bisa lolos dari test
+lama): `AppDatabase.mergeRows` (dipakai `approveSync` sisi host) tiap
+tabel append-only diproses dalam SATU `transaction()` yang membungkus
+SELURUH baris. SQLite `INSERT OR IGNORE` hanya menekan pelanggaran
+UNIQUE/PK — TIDAK menekan pelanggaran FOREIGN KEY. Kalau SATU baris
+`transaction_items`/`transaction_payments` di batch itu yatim (transaction_id
+tidak ada, mis. dari state korup/parsial di device pengirim), baris itu
+throw `SqliteException(787)` yang keluar dari callback `transaction()`
+→ Drift rollback SELURUH baris dalam panggilan `mergeRows` itu, bukan
+cuma baris yang salah — satu baris korup meracuni item transaksi LAIN
+yang valid dalam batch sync yang SAMA. Karena klien selalu full-dump
+(lihat catatan Item 17 di bawah), baris korup itu akan terus
+meracuni SETIAP sync berikutnya dari device itu selama baris itu masih
+ada di lokal — cocok persis dgn "SEMUA riwayat kosong" yang dilaporkan
+(header & pembayaran tetap normal krn diproses di `mergeRows` call
+TERPISAH/transaksi lain). **Fix**: bungkus insert per-baris dgn
+try/catch DI DALAM loop (bukan biarkan exception keluar ke callback
+`transaction()`) — satu baris gagal cuma di-skip & dicatat ke
+`CrashLogService`, baris lain dalam batch yang sama tetap ter-merge.
+Root cause pastinya baris yatim itu sendiri BELUM ditemukan (kemungkinan
+state lokal korup di salah satu device — tidak sempat diselidiki lebih
+jauh sesi ini), tapi fix ini membuat merge RESILIEN terhadap kelas bug
+itu apa pun sumbernya, konsisten dgn pola defensif yg sudah ada di
+`mergeRows` (filter kolom skema beda device biar 1 kolom baru tak
+gagalkan seluruh sync — comment lama di situ SUDAH mengantisipasi "1 hal
+kecil gagalkan semua", tinggal diperluas ke FK).
+
+**Fix kedua** (request user #4, terkait tapi kausa beda): usulan
+harga/produk (Item 40) yang SUDAH direview & diterapkan owner ("Terapkan")
+tetap terus muncul lagi di sync berikutnya. Akar: `applyProductProposals`
+menyalin baris `products` APA ADANYA dari payload usulan klien, termasuk
+`updated_at` LAMA (waktu klien mengedit, jauh sebelum owner approve).
+`dumpSince` (host→klien, arah TURUN) memfilter tabel `products` dgn
+`WHERE updated_at >= since` — begitu watermark download klien maju
+melewati timestamp lama itu (WAJAR terjadi di sync-sync berikutnya),
+baris hasil approve TIDAK PERNAH lagi ikut terkirim balik ke klien,
+sehingga `products.locally_modified` di device klien TIDAK PERNAH
+ke-reset ke false (dok kolom di `product_tables.dart` mengasumsikan baris
+SELALU "ditimpa oleh push resmi dari host" — asumsi itu gagal persis di
+sini krn watermark). **Fix**: `applyProductProposals` sekarang mencap
+`updated_at` ke `DateTime.now()` (unix detik, format sama dgn `dumpSince`)
+saat menulis baris `products`, BUKAN mempertahankan timestamp lama usulan
+— baris pasti lolos filter watermark pada sync berikutnya & benar-benar
+sampai balik ke klien.
+
+Test baru (revert-verified, keduanya): `lan_sync_transaction_items_repro_test.dart`
+(2 test: alur normal end-to-end via `syncToHost`+`approveSync` port
+127.0.0.1 asli — MASIH lolos tanpa fix krn skenario simpel tidak
+menyentuh baris yatim; test kedua LANGSUNG uji `mergeRows` dgn 1 baris
+valid + 1 baris yatim dalam batch yang sama — GAGAL tanpa fix persis
+`SqliteException(787)`, item valid ikut hilang), `proposal_apply_updated_at_test.dart`
+(assert `updated_at` dicap ke sekarang + `dumpSince` dgn watermark di
+ANTARA edit-lama dan approve-baru tetap menyertakan baris). Full
+`flutter test` **580 hijau**, `flutter analyze` bersih.
+
 _Update sesi 20 Juli 2026 (bugfix pasca-49b, branch
 `claude/onboarding-setup-9bsu52`, commit `cec17f5`, PR #33) — user lapor
 via screenshot: nota lunas dibayar 4x cicilan tunai (50.000+50.000+
