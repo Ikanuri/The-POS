@@ -4,6 +4,68 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 19-20 Juli 2026 (2 permintaan user, branch
+`claude/setup-dependencies-am31te`) — (1) BUG NYATA: "Catatan di Struk"
+(setting `receipt_note` di Informasi Toko/`store_info_screen.dart`) DISIMPAN
+tapi TIDAK PERNAH DIBACA di mana pun — ketiga jalur struk (in-app/share
+`_ReceiptPaper` di `receipt_screen.dart`, cetak single `printer_service.
+_buildBytes`, cetak/share gabungan `merged_receipt_screen.dart` +
+`printer_service._buildMergedBytes`) semua hardcode teks "Terima kasih!".
+FIX: baca `receipt_note`, thread sbg param `receiptFooter` ke semua 3+1
+jalur, fallback ke "Terima kasih!" bila kosong (sama seperti hint field-nya).
+CATATAN: strukNote (per-transaksi, "Catatan Nota") itu FITUR TERPISAH yg
+sudah bekerja normal — jangan disamakan lagi kalau ada laporan serupa. (2)
+Kartu KPI baru "Selisih Kas Operasional" = Omzet − Pengeluaran (SENGAJA
+TANPA kurangi HPP, beda dari "Laba Bersih" yg sudah ada) di tab Ringkasan
+Laporan (`ringkasan_tab.dart`, getter `cashDifference` di `_RingkasanTabData`)
+— HANYA di layar in-app, TIDAK ditambah ke ekspor PDF/Excel (`report_export.
+dart` — scope sengaja disempitkan, `_RingkasanData` ekspor bahkan belum
+punya field expenses/netProfit sama sekali, gap pre-existing terpisah, belum
+dikerjakan). Test baru (revert-verified): `receipt_footer_note_test`,
+`ringkasan_cash_difference_test`. analyze bersih.
+
+_Update sesi 19 Juli 2026 (bugfix laporan basi pasca-sync, branch
+`claude/setup-dependencies-am31te`) — user lapor: transaksi asisten sudah
+ter-merge & SAMA di kedua HP, tapi Laporan Ringkasan owner (filter 1 hari)
+cuma tampil 2jt sedangkan asisten (data identik) tampil 8jt. Akar: Laporan
+Ringkasan (`ringkasan_tab.dart`) baca cache `daily_summaries` (materialized,
+O(hari)) yg TIDAK disinkron — dihitung ulang lokal tiap merge via
+`rebuildSummariesForTxIds`. Kalau cache basi (transaksi masuk tapi rebuild
+terlewat: build lama, restore, atau jalur merge tanpa wiring), laporan lebih
+kecil dari transaksi nyata. Merge path SAAT INI sudah panggil rebuild
+(approveSync & syncToHost), tapi cache lama bisa terlanjur basi. FIX
+DEFENSIF (self-heal): `AppDatabase.rebuildStaleSummariesInRange(from,to)` —
+1 query agregat (COUNT+SUM(total) per tanggal) bandingkan vs cache, rebuild
+HANYA tanggal yg jumlah/omzet-nya beda (umumnya nol; juga hapus phantom).
+Dipanggil di provider `_ringkasanTabProvider` (`ringkasan_tab.dart`) &
+`_fetchRingkasan` (`report_export.dart`) SEBELUM baca `getDailySummaries`,
+jadi laporan+ekspor selalu cermin transaksi nyata di device itu. Murah utk
+filter harian/bulanan; setahun = 1 scan agregat + rebuild sedikit tanggal.
+Test: `report_summary_selfheal_test` (DB-tier, reproduksi 2jt-basi→8jt,
+revert-verified). CATATAN AUDIT SYNC (belum dikerjakan, user masih pilih
+scope): tabel TAK tersinkron sama sekali = `product_groups`(kategori),
+`payment_methods`, `app_settings`(info toko/header struk); `customers` hanya
+turun (owner→kasir), pelanggan buatan kasir TAK naik → nama/hutang bisa
+kosong di laporan owner; caveat watermark: transaksi `created_at < since`
+device yg baru di-approve belakangan bisa terlewat saat device itu download.
+
+_Update sesi 19 Juli 2026 (bugfix sync usulan harga, branch
+`claude/setup-dependencies-am31te`) — BUG NYATA Item 40: usulan UBAH HARGA
+yg di-approve tak mengubah harga owner & malah me-revert harga asisten saat
+sync. Akar: form (`produk_form_screen`) meregenerasi id price_tier tiap
+simpan (`_uuid.v4()`), sedangkan `applyProductProposals` (`app_database.dart`)
+cuma INSERT OR REPLACE per-id TANPA hapus tier LAMA owner → tier `min_qty=1`
+menumpuk (2 baris) → harga owner ambigu/tak berubah, lalu tier lama ikut
+ter-dump balik & (via `mergeRows` dedup) menimpa harga terbaru asisten. FIX:
+di `applyProductProposals`, sebelum insert baris `price_tiers`/`alt_prices`,
+DELETE baris lama utk `product_unit_id IN (approvedUnitIds)` (unit id stabil,
+hanya tier id yg regenerasi) → replace penuh, owner cuma punya tier baru.
+Barcode SENGAJA tak di-clear (UNIQUE(barcode) sudah handle + jaga mekanisme
+RELEASED:). Aman thd gagal-di-tengah: seluruh `applyProductProposals` dalam
+satu `transaction()` (rollback total bila error). Test: `proposal_price_
+change_apply_test` (DB-tier 2-DB, pakai `applyProductProposals` + `mergeRows`
+sungguhan, revert-verified: tanpa fix owner dpt 2 tier). schemaVersion 16.
+
 _Update sesi 19 Juli 2026 (lanjutan, branch `claude/setup-dependencies-am31te`)
 — 2 penyesuaian: (A) hapus aksen warna kartu "Device Ini" di Pengaturan
 (user minta netral; Toko hijau & Perangkat teal tetap) — `daca3a6`. (B)

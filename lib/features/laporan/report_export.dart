@@ -525,6 +525,9 @@ class _RingkasanData {
 
 Future<_RingkasanData> _fetchRingkasan(
     AppDatabase db, DateTimeRange range) async {
+  // Perbaiki-sendiri ringkasan basi (transaksi hasil sync tak selalu merebuild
+  // cache) supaya ekspor cermin transaksi nyata — lihat rebuildStaleSummaries.
+  await db.rebuildStaleSummariesInRange(range.start, range.end);
   final summaries = await db.getDailySummaries(range.start, range.end);
   var revenue = 0, cogs = 0, txCount = 0;
   final byMethod = <String, int>{};

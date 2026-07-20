@@ -34,6 +34,29 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   hanya ada di layar, hilang saat dibagikan/dicetak).
 
 ### ✨ Fitur Baru
+- **Kartu baru "Selisih Kas Operasional" di Laporan Ringkasan** — Omzet
+  dikurangi Pengeluaran (tanpa memperhitungkan modal barang), sebagai
+  gambaran kas masuk vs kas keluar operasional, berdampingan dengan
+  Laba Bersih yang sudah ada.
+
+### 🛠️ Perbaikan
+- **"Catatan di Struk" (Informasi Toko) kini benar-benar tampil di struk**
+  — sebelumnya, teks yang Anda isi di sana (mis. "Terima kasih telah
+  berbelanja") tidak pernah muncul; struk selalu menampilkan "Terima
+  kasih!" bawaan. Sekarang berlaku di struk share, cetak, maupun nota
+  gabungan (fallback ke "Terima kasih!" bila belum diisi).
+- **Laporan Ringkasan kini cocok dengan transaksi sebenarnya setelah sync** —
+  sebelumnya, transaksi dari kasir/asisten yang sudah masuk lewat sinkronisasi
+  kadang tidak terhitung di Laporan Ringkasan (angka lebih kecil dari yang
+  seharusnya, walau transaksinya sudah sama di kedua HP). Sekarang laporan
+  otomatis membetulkan diri saat dibuka.
+- **Usulan ubah harga dari kasir/asisten kini benar-benar diterapkan** —
+  sebelumnya, saat owner menyetujui usulan perubahan harga, harga di HP
+  owner tidak ikut berubah dan harga di HP asisten malah balik ke harga
+  lama saat sinkronisasi. Sekarang harga baru diterapkan dengan benar di
+  kedua perangkat.
+
+### ✨ Fitur Baru
 - **Cari produk berikutnya lebih cepat** — saat Anda menyentuh kolom cari
   di kasir lagi sementara kata pencarian sebelumnya masih ada, seluruh kata
   otomatis tersorot. Tinggal ketik langsung untuk menggantinya (tak perlu

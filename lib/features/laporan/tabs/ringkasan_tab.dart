@@ -10,7 +10,11 @@ final _ringkasanTabProvider =
     FutureProvider.family<_RingkasanTabData, DateTimeRange>((ref, range) async {
   final db = ref.watch(databaseProvider);
   // Baca dari ringkasan harian ter-materialisasi (O(hari)) alih-alih memindai
-  // seluruh transaksi + item (O(transaksi)).
+  // seluruh transaksi + item (O(transaksi)). Perbaiki-sendiri dulu entri yang
+  // BASI di rentang ini — transaksi hasil sync/merge kadang tak ikut merebuild
+  // cache ini, bikin laporan lebih kecil dari data sebenarnya walau baris
+  // transaksi sudah sama antar-device.
+  await db.rebuildStaleSummariesInRange(range.start, range.end);
   final summaries = await db.getDailySummaries(range.start, range.end);
   final expenses =
       await db.getNetProfitExpenseTotal(range.start, range.end);
@@ -95,6 +99,20 @@ class RingkasanTab extends ConsumerWidget {
                   data.expenses > 0 ? scheme.error : scheme.onSurfaceVariant),
               _KpiItem('Laba Bersih', formatRupiah(data.netProfit),
                   data.netProfit >= 0 ? scheme.tertiary : scheme.error),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Selisih Kas Operasional = Omzet - Pengeluaran (TANPA kurangi
+          // HPP) — beda dari Laba Bersih, jadi disendirikan barisnya biar
+          // tak tertukar maknanya. Label eksplisit spy tak disalahartikan
+          // sbg laba sebenarnya.
+          _KpiRow(
+            bg: uangBg,
+            items: [
+              _KpiItem(
+                  'Selisih Kas Operasional',
+                  formatRupiah(data.cashDifference),
+                  data.cashDifference >= 0 ? scheme.tertiary : scheme.error),
             ],
           ),
           const SizedBox(height: 20),
@@ -360,4 +378,11 @@ class _RingkasanTabData {
 
   /// Laba Bersih = Laba Kotor − Pengeluaran.
   int get netProfit => profit - expenses;
+
+  /// Selisih Kas Operasional = Omzet − Pengeluaran (TANPA kurangi HPP).
+  /// Berbeda dari Laba Bersih (yang sudah menghitung modal barang terjual)
+  /// — metrik ini murni kas masuk (penjualan) dikurangi kas keluar
+  /// (pengeluaran operasional), berguna sbg gambaran arus kas sederhana
+  /// terlepas dari akurasi harga pokok yang ter-input.
+  int get cashDifference => revenue - expenses;
 }

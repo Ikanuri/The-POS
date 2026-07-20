@@ -2719,6 +2719,68 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Perbaiki-sendiri ringkasan harian yang BASI di rentang [from]..[to].
+  ///
+  /// Laporan Ringkasan membaca cache `daily_summaries` (cepat, O(hari)), yang
+  /// TIDAK ikut disinkron antar-device melainkan dihitung ulang lokal tiap
+  /// merge. Bila sebuah tanggal menerima transaksi lewat sync/merge tapi
+  /// entri ringkasannya TIDAK ikut ter-rebuild (mis. build lama tanpa
+  /// wiring, restore, atau jalur merge yang terlewat), angka laporan jadi
+  /// lebih kecil dari transaksi sebenarnya — walau baris transaksinya sudah
+  /// sama di kedua HP. Beda dari [backfillMissingSummaries] yang hanya
+  /// menambal tanggal yang BELUM punya entri, ini juga mendeteksi entri yang
+  /// JUMLAH/omzet-nya tak cocok dgn transaksi nyata lalu membangunnya ulang.
+  ///
+  /// Murah: 1 query agregat + rebuild HANYA tanggal yang tidak cocok
+  /// (umumnya nol). Dipanggil provider laporan sebelum membaca ringkasan,
+  /// jadi laporan selalu cermin transaksi nyata di device ini.
+  Future<void> rebuildStaleSummariesInRange(DateTime from, DateTime to) async {
+    final fromSec =
+        DateTime(from.year, from.month, from.day).millisecondsSinceEpoch ~/
+            1000;
+    final toSec =
+        DateTime(to.year, to.month, to.day, 23, 59, 59).millisecondsSinceEpoch ~/
+            1000;
+    // Jumlah & omzet transaksi valid AKTUAL per tanggal (lokal).
+    final actualRows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(created_at,'unixepoch','localtime')) AS d, "
+      "COUNT(*) AS c, COALESCE(SUM(total),0) AS s "
+      "FROM transactions WHERE status != 'void' "
+      "AND created_at >= ? AND created_at <= ? GROUP BY d",
+      variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
+      readsFrom: {transactions},
+    ).get();
+    final actual = <String, (int, int)>{
+      for (final r in actualRows)
+        (r.data['d'] as String): (
+          (r.data['c'] as int),
+          (r.data['s'] as num).round(),
+        ),
+    };
+
+    final fromKey = _dateKey(from);
+    final toKey = _dateKey(to);
+    final summaries = await (select(dailySummaries)
+          ..where((t) => t.date.isBetweenValues(fromKey, toKey)))
+        .get();
+    final cached = <String, (int, int)>{
+      for (final sm in summaries) sm.date: (sm.jumlahTransaksi, sm.omzet),
+    };
+
+    final toRebuild = <String>{};
+    // Tanggal berisi transaksi tapi entri hilang / jumlah / omzet beda.
+    actual.forEach((d, v) {
+      if (cached[d] != v) toRebuild.add(d);
+    });
+    // Tanggal beromzet-nol tapi masih punya entri ringkasan (phantom).
+    for (final d in cached.keys) {
+      if (!actual.containsKey(d)) toRebuild.add(d);
+    }
+    for (final d in toRebuild) {
+      await _rebuildDailySummaryFor(d);
+    }
+  }
+
   /// Ringkasan harian untuk rentang tanggal (inklusif). Sumber cepat untuk
   /// laporan — maksimum 1 baris per hari.
   Future<List<DailySummary>> getDailySummaries(
@@ -3230,6 +3292,25 @@ class AppDatabase extends _$AppDatabase {
       final approvedUnitIds = <String>{};
       for (final table in order) {
         final rows = proposals[table] ?? const [];
+        // Replace PENUH baris anak per satuan yang di-approve: hapus tier
+        // harga & harga-alternatif LAMA milik owner utk satuan itu SEBELUM
+        // menuliskan baris dari usulan. Tanpa ini, id tier yang diregenerasi
+        // tiap edit di form (produk_form_screen) menumpuk jadi tier duplikat
+        // `min_qty=1` di owner → harga owner "tak berubah" & saat sync balik
+        // ke asisten, tier lama ikut ter-dump lalu menimpa harga terbaru
+        // asisten. Satuan (product_unit_id) stabil, jadi cukup di-scope per
+        // unit. Barcode SENGAJA tidak di-clear di sini: UNIQUE(barcode) sudah
+        // menangani replace, dan mekanisme rilis barcode (RELEASED:) tak boleh
+        // terganggu. Aman thd gagal di tengah: SELURUH fungsi dalam satu
+        // transaction() — error apa pun me-rollback semuanya.
+        if ((table == 'price_tiers' || table == 'alt_prices') &&
+            approvedUnitIds.isNotEmpty) {
+          final ph = List.filled(approvedUnitIds.length, '?').join(', ');
+          await customStatement(
+            'DELETE FROM "$table" WHERE product_unit_id IN ($ph)',
+            approvedUnitIds.toList(),
+          );
+        }
         if (rows.isEmpty) continue;
         final localColumns = (await customSelect('PRAGMA table_info("$table")')
                 .get())

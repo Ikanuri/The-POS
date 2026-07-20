@@ -447,6 +447,7 @@ class PrinterService {
     String storeWhatsapp = '',
     String storeTelegram = '',
     String receiptHeader = '',
+    String receiptFooter = '',
     Map<String, String?> parentOf = const {},
   }) async {
     final mac = await getSavedMac();
@@ -470,6 +471,7 @@ class PrinterService {
       storeWhatsapp: storeWhatsapp,
       storeTelegram: storeTelegram,
       receiptHeader: receiptHeader,
+      receiptFooter: receiptFooter,
       strukNote: strukNote,
       parentOf: parentOf,
       settings: settings,
@@ -529,6 +531,7 @@ class PrinterService {
     String storeWhatsapp = '',
     String storeTelegram = '',
     String receiptHeader = '',
+    String receiptFooter = '',
     Map<String, String?> parentOf = const {},
     required PrinterSettings settings,
   }) async {
@@ -750,6 +753,12 @@ class PrinterService {
       out.addAll(gen.text(_toAscii(strukNote),
           styles: const PosStyles(align: PosAlign.center)));
     }
+    // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima kasih!" bila
+    // belum diisi user, sama seperti hint field-nya & struk in-app/share.
+    out.addAll(bodySep());
+    out.addAll(gen.text(
+        _toAscii(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!'),
+        styles: const PosStyles(align: PosAlign.center)));
 
     out.addAll(gen.feed(3));
     out.addAll(gen.cut());
@@ -836,6 +845,7 @@ class PrinterService {
     String storeWhatsapp = '',
     String storeTelegram = '',
     String receiptHeader = '',
+    String receiptFooter = '',
     Map<String, String?> parentOf = const {},
     DateTime? lastPaymentAt,
   }) async {
@@ -860,6 +870,7 @@ class PrinterService {
       storeWhatsapp: storeWhatsapp,
       storeTelegram: storeTelegram,
       receiptHeader: receiptHeader,
+      receiptFooter: receiptFooter,
       parentOf: parentOf,
       lastPaymentAt: lastPaymentAt,
       settings: settings,
@@ -890,6 +901,7 @@ class PrinterService {
     String storeWhatsapp = '',
     String storeTelegram = '',
     String receiptHeader = '',
+    String receiptFooter = '',
     Map<String, String?> parentOf = const {},
     DateTime? lastPaymentAt,
     required PrinterSettings settings,
@@ -1046,7 +1058,10 @@ class PrinterService {
     }
 
     out.addAll(gen.text(_sep(w)));
-    out.addAll(gen.text('Terima kasih!',
+    // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima kasih!" bila
+    // belum diisi user, sama seperti hint field-nya.
+    out.addAll(gen.text(
+        _toAscii(receiptFooter.isNotEmpty ? receiptFooter : 'Terima kasih!'),
         styles: const PosStyles(align: PosAlign.center)));
     out.addAll(gen.feed(3));
     out.addAll(gen.cut());
