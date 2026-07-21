@@ -746,7 +746,18 @@ class LanSyncService {
         }).toList();
         return MapEntry(k, rows);
       });
-      final proposedProducts = proposalRows['products'] ?? const [];
+      var proposedProducts = proposalRows['products'] ?? const [];
+      var filteredProposalRows = proposalRows;
+      if (proposedProducts.isNotEmpty) {
+        // Buang produk yang isinya SUDAH IDENTIK dgn data owner saat ini —
+        // laporan nyata user: produk yang flag `locally_modified` klien-nya
+        // macet true terus-menerus diusulkan ulang tiap sync walau tidak
+        // ada apa pun yang perlu diputuskan. Lihat dok
+        // `AppDatabase.filterUnchangedProposals`.
+        filteredProposalRows =
+            await _db!.filterUnchangedProposals(proposalRows);
+        proposedProducts = filteredProposalRows['products'] ?? const [];
+      }
       if (proposedProducts.isNotEmpty) {
         // Item 41 A.3 — sama seperti _pendingQueue: satu slot per IP.
         // dumpLocalProposals juga selalu paket penuh (semua produk ber-flag
@@ -756,9 +767,15 @@ class LanSyncService {
           id: _generateNonce(),
           fromIp: ip,
           arrivedAt: DateTime.now(),
-          rows: proposalRows,
+          rows: filteredProposalRows,
           productCount: proposedProducts.length,
         ));
+        onProposalsChanged?.call();
+      } else if (_pendingProposals.any((p) => p.fromIp == ip)) {
+        // Semua produk yang tadinya diusulkan device ini sekarang sudah
+        // identik dgn data owner — usulan lama (kalau ada) sudah basi juga,
+        // bersihkan supaya tidak nyangkut di antrian.
+        _pendingProposals.removeWhere((p) => p.fromIp == ip);
         onProposalsChanged?.call();
       }
 
