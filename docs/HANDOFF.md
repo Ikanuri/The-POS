@@ -4,6 +4,55 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 21 Juli 2026 (klarifikasi poin 1 sebelumnya, PR #35, commit
+`d281a28`, Task #8 di task manager) — user klarifikasi maksud "inline"
+poin 1 (SEBELUM sesi ini dianggap murni soal gaya kartu/margin/rounding)
+TERNYATA soal POSISI: `SyncStatusBanner` seharusnya muncul persis spt
+notifikasi inline LAIN yg sudah ada — DI BAWAH header/toolbar tiap tab
+(mis. banner hijau "Pesanan ditahan" yg tampil tepat di bawah toolbar
+Kasir), BUKAN mengambang di atas SELURUH shell (di atas AppBar/toolbar
+setiap layar) spt desain Item 21 lama. Screenshot user menunjukkan posisi
+persis yg dimaksud.
+
+**Fix**: `SyncStatusBanner` DIHAPUS dari `MainShell` (dulu satu instance
+global, ditaruh di `Column` SEBELUM `Expanded(child: widget.child)` —
+otomatis muncul di atas AppBar/toolbar SETIAP layar tab krn `widget.child`
+= seluruh layar tab termasuk AppBar-nya). Sekarang `const SyncStatusBanner()`
+dipasang LANGSUNG di 6 layar tab (`RingkasanScreen`/`KasirScreen`/
+`ProdukListScreen`/`PelangganListScreen`/`LaporanScreen`/`PengaturanScreen`),
+masing-masing dibungkus `Column([SyncStatusBanner, Expanded(child: <body
+lama>)])` TEPAT SETELAH `AppBar` (Kasir sedikit beda: disisipkan di
+`Column` yg sudah ada, sejajar `InlineBanner` lokal yg sudah ada persis di
+situ — bukan wrapper baru). Param `hideOnSyncScreen` DIHAPUS total (sudah
+tak relevan — `SyncScreen`, sub-halaman Pengaturan, SENGAJA tidak
+dipasangi banner ini sama sekali, jadi tak perlu logic sembunyikan lagi).
+
+**Trade-off SADAR, bukan oversight**: sub-halaman NESTED (mis. `/produk/
+kategori`, `/pengaturan/backup`, dll — sub-route di dalam `ShellRoute`)
+TIDAK ikut dipasangi `SyncStatusBanner` — kalau owner buka sub-halaman
+tsb, banner sync sementara tak terlihat sampai kembali ke salah satu dari
+6 layar tab utama. Ini penyempitan scope DISENGAJA drpd sebelumnya
+(dulu MainShell nampilkan banner di RUTE APAPUN dalam shell, termasuk
+sub-halaman) — memasang ke SETIAP sub-halaman (puluhan file) di luar
+scope permintaan user kali ini; kalau nanti dianggap regresi nyata,
+revisit dgn cakupan lebih luas.
+
+Test baru (revert-verified — stash 8 file produksi, `find.byType(
+SyncStatusBanner)` di 3 layar representatif [Kasir/Pengaturan/Ringkasan]
+semua `findsNothing` persis, restore hijau lagi):
+`test/sync_status_banner_placement_test.dart` — 3 test, tiap layar
+membuktikan posisi Y banner BERADA DI BAWAH toolbar/AppBar (bukan cuma
+keberadaannya) via `tester.getTopLeft`/`getBottomLeft`. Full `flutter
+test` **608 hijau, 0 gagal**, `flutter analyze` bersih.
+
+**Poin 1 & 2 dari update sebelumnya (gaya kartu tidak muncul + tidak
+hilang otomatis) MASIH BELUM DIKONFIRMASI user** — investigasi commit
+`6b4366d` sudah membuktikan kode-nya benar via render langsung; dugaan
+kuat user sempat pakai APK versi lama saat screenshot itu diambil.
+Reposisi di update ini TIDAK terkait — kalau nanti user lapor lagi
+gejala serupa SETELAH pasti pakai build terbaru (commit `d281a28`+),
+baru investigasi ulang dari nol.
+
 _Update sesi 21 Juli 2026 (follow-up 3 poin dari user pasca Task #6, PR #35,
 commit `eb7cc1b`, Task #7 di task manager) — user kirim 2 screenshot lapor
 banner sync MASIH tampil flush/full-bleed (bukan kartu rounded+margin) &

@@ -22,9 +22,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - Tombol baru **"Sync Ulang Penuh"** di layar Sync — kalau owner memang
   ingin perangkat lain mengirim ulang semua datanya dari awal.
 - **Notifikasi sync di tab manapun sekarang lebih rapi** — bentuknya jadi
-  kartu (sama seperti notifikasi lain di app) dan otomatis hilang begitu
-  tidak ada lagi yang perlu ditinjau (sebelumnya "Host aktif" bisa
-  menetap terus selama server sync menyala, walau semua sudah beres).
+  kartu (sama seperti notifikasi lain di app), muncul tepat di bawah
+  header/toolbar tiap tab (bukan mengambang di atas segalanya), dan
+  otomatis hilang begitu tidak ada lagi yang perlu ditinjau (sebelumnya
+  "Host aktif" bisa menetap terus selama server sync menyala, walau
+  semua sudah beres).
 - **Usulan harga/produk dari kasir/asisten tidak lagi menumpuk** di layar
   review kalau isinya sudah sama persis dengan data owner — sebelumnya
   produk yang sudah tidak ada bedanya bisa terus muncul lagi setiap sync.
