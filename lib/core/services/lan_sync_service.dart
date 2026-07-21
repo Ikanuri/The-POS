@@ -504,9 +504,19 @@ class LanSyncService {
     _failedAttempts.clear();
     _lockoutUntil.clear();
     _usedNonces.clear();
+    debugHostRunningOverride = false;
   }
 
-  static bool get isHostRunning => _server != null;
+  /// Item 21 — seam test-only: `testWidgets` + `HttpServer` sungguhan
+  /// terbukti bikin `AppDatabase.close()` HANG tanpa batas (lihat catatan
+  /// `sync_screen_timeout_ip_test.dart`/HANDOFF) — test widget yang cuma
+  /// perlu observasi `isHostRunning=true` (mis. provider/banner persisten)
+  /// pakai ini, BUKAN `startHost()` sungguhan. Selalu false di produksi.
+  @visibleForTesting
+  static bool debugHostRunningOverride = false;
+
+  static bool get isHostRunning =>
+      _server != null || debugHostRunningOverride;
 
   static Future<shelf.Response> _handleRequest(shelf.Request request) async {
     if (request.method != 'POST' || request.url.path != 'sync') {
