@@ -30,6 +30,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Usulan harga/produk dari kasir/asisten tidak lagi menumpuk** di layar
   review kalau isinya sudah sama persis dengan data owner — sebelumnya
   produk yang sudah tidak ada bedanya bisa terus muncul lagi setiap sync.
+- **Notifikasi sync dirapikan lagi** — celah kosong aneh di atas kartu
+  sudah hilang, dan di HP kasir/asisten, tampilan "menunggu persetujuan
+  owner..." tidak lagi berputar tanpa henti selamanya — sekarang
+  menampilkan konfirmasi singkat lalu hilang sendiri.
 
 ## 20 Juli 2026
 

@@ -4,6 +4,68 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 21 Juli 2026 (2 follow-up lagi pasca reposisi, PR #35, commit
+`c1ff649`, Task #9 di task manager) — user lapor 2 hal SETELAH reposisi
+Task #8: (1) masih ada celah kosong aneh di atas kartu banner (dibanding
+notifikasi inline lain) — user minta ukur jarak header→banner di
+notifikasi LAIN sbg referensi; (2) di HP KLIEN (kasir/asisten), banner
+selalu "infinite loading" (spinner "menunggu persetujuan owner…" TIDAK
+PERNAH berhenti) walau owner sudah membuat keputusan (approve/tolak).
+
+**Akar poin 1**: `SyncStatusBanner` MASIH dibungkus `SafeArea(bottom:false)`
+peninggalan desain LAMA (Task #4, saat widget ini dipasang SEKALI di
+`MainShell`, di ATAS AppBar mana pun — SafeArea WAJIB di situ krn area
+status bar belum dikonsumsi apa pun). Task #8 memindahkan widget ke BAWAH
+AppBar/toolbar tiap layar (yg SUDAH mengonsumsi area status bar), tapi
+LUPA melepas SafeArea lawasnya — jadinya inset GANDA (SafeArea top +
+Padding top 8px), persis celah aneh yg dilaporkan. **Fix**: SafeArea
+dihapus total, tersisa `Padding(fromLTRB(12,8,12,0))` — pola PERSIS sama
+dgn `InlineBanner` yg sudah ada (referensi user), jarak header→banner
+sekarang konsisten dgn notifikasi inline lain.
+
+**Akar poin 2** (bug lebih dalam, BUKAN sekadar UI): `ClientSyncPhase.
+waitingApproval` dihitung sbg `clientSyncing=true` (dipakai
+`SyncStatusBanner` utk nampilkan spinner). Tapi protokol sync itu
+CONNECTIONLESS (satu request-response HTTP, bukan koneksi persisten) —
+begitu klien terima respons dari host (yg terjadi SEGERA, host balas
+sinkron dlm satu handler), permintaan klien SECARA TEKNIS SUDAH SELESAI
+(host sudah simpan durable ke `sync_upload_queue`, lihat Item 17 Fase 2).
+"Menunggu persetujuan owner" sesudahnya adalah menunggu KEPUTUSAN MANUSIA
+di PERANGKAT LAIN — app klien TIDAK PUNYA kanal apa pun (push/polling)
+utk tahu KAPAN atau APAKAH keputusan itu terjadi, jadi spinner yg
+mengasumsikan "proses aktif, tunggu sebentar lagi" itu MENYESATKAN —
+sebenarnya bisa menunggu menit/jam/selamanya tanpa update apa pun.
+**Fix**: `waitingApproval` DIKELUARKAN dari `clientSyncing` (sekarang cuma
+`connecting`/`sending` — tahap network AKTIF sungguhan). Di
+`SyncStateNotifier.sync()`, begitu respons diterima, dipanggil
+`_showTransient('Terkirim — menunggu peninjauan owner', SyncBannerTone.
+sync)` (pola sekali-tampil yg sama dgn approve/tolak/reset di Task #6) —
+banner tampilkan konfirmasi singkat lalu hilang sendiri, TIDAK berputar
+selamanya. **BUKAN fitur "notifikasi real-time saat owner approve"** —
+itu butuh live-connection/polling, di luar scope perbaikan ini; yg
+diperbaiki murni "app tidak lagi BERBOHONG bahwa masih ada proses aktif".
+`clientResultMessage` (detail lengkap, dibaca `SyncScreen`) TIDAK
+disentuh — tetap jelaskan "menunggu persetujuan owner di perangkat host"
+apa adanya.
+
+Test baru (revert-verified — stash 2 file produksi, ketiga test baru
+gagal PERSIS spt diprediksi [SafeArea ditemukan sbg descendant;
+`clientSyncing`==true utk `waitingApproval`], restore hijau lagi):
+`test/sync_status_banner_gap_and_client_wait_test.dart` — (1) unit test
+langsung `SyncState.clientSyncing` (waitingApproval→false, sending→true),
+(2) widget test `find.descendant(of: SyncStatusBanner, matching: SafeArea)`
+harus `findsNothing`, (3) end-to-end HTTP sungguhan (`SyncStateNotifier.
+sync()` via port 127.0.0.1 asli, pola sama `lan_sync_upload_queue_test.
+dart`) — setelah sync sukses, `clientSyncing` false & `transientMessage`
+berisi "menunggu peninjauan owner". **Gotcha ketemu saat nulis test**:
+`find.ancestor(of:, matching:)` vs `find.descendant(of:, matching:)`
+ARAH-NYA TERBALIK dari intuisi pertama — `SafeArea` yg di-`return` dari
+`build()` sebuah widget adalah DESCENDANT elemen widget itu di tree,
+BUKAN ancestor (baru ketahuan krn assertion pertama lolos-diam2 di kode
+LAMA yg justru masih py bug, tanda pasti salah arah query — worth dicatat
+sbg gotcha CLAUDE.md kalau kejadian lagi). Full `flutter test` **611
+hijau, 0 gagal**, `flutter analyze` bersih.
+
 _Update sesi 21 Juli 2026 (klarifikasi poin 1 sebelumnya, PR #35, commit
 `d281a28`, Task #8 di task manager) — user klarifikasi maksud "inline"
 poin 1 (SEBELUM sesi ini dianggap murni soal gaya kartu/margin/rounding)
