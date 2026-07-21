@@ -44,55 +44,59 @@ class SyncStatusBanner extends ConsumerWidget {
     // sekali-tampil di depannya habis waktu.
     final showStrip = showOngoing && showTransient;
 
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showStrip)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Container(
-                  key: const Key('sync_ongoing_strip'),
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: AppTheme.riwayatFg(isDark).withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+    // TANPA SafeArea di sini — widget ini SEKARANG selalu dipasang DI BAWAH
+    // AppBar/toolbar layarnya masing-masing (bukan lagi di ATAS segalanya di
+    // MainShell), jadi area tidak-aman (status bar) sudah dikonsumsi duluan
+    // oleh AppBar/toolbar. Pola padding (12,8,12,0) meniru persis
+    // `InlineBanner` yang sudah ada supaya jarak dari header ke banner
+    // konsisten dgn notifikasi inline lain di app.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showStrip)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Container(
+                key: const Key('sync_ongoing_strip'),
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppTheme.riwayatFg(isDark).withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(999),
                 ),
               ),
-            if (showTransient)
-              _SyncNotifCard(
-                tone: sync.transientTone,
-                isDark: isDark,
-                icon: sync.transientTone == SyncBannerTone.success
-                    ? Icons.check_circle_rounded
-                    : Icons.info_rounded,
-                label: sync.transientMessage!,
-              )
-            else
-              _SyncNotifCard(
-                tone: SyncBannerTone.sync,
-                isDark: isDark,
-                icon: Icons.wifi_tethering_outlined,
-                label: _ongoingLabel(sync),
-                spinning: sync.clientSyncing,
-              ),
-          ],
-        ),
+            ),
+          if (showTransient)
+            _SyncNotifCard(
+              tone: sync.transientTone,
+              isDark: isDark,
+              icon: sync.transientTone == SyncBannerTone.success
+                  ? Icons.check_circle_rounded
+                  : Icons.info_rounded,
+              label: sync.transientMessage!,
+            )
+          else
+            _SyncNotifCard(
+              tone: SyncBannerTone.sync,
+              isDark: isDark,
+              icon: Icons.wifi_tethering_outlined,
+              label: _ongoingLabel(sync),
+              spinning: sync.clientSyncing,
+            ),
+        ],
       ),
     );
   }
 
   String _ongoingLabel(SyncState sync) {
+    // Tahap klien yg tersisa di sini HANYA connecting/sending (network
+    // aktif) — `waitingApproval` TIDAK LAGI masuk `clientSyncing` (lihat dok
+    // di `SyncState`), jadi tidak pernah sampai ke cabang ini lagi.
     if (sync.clientSyncing) {
       return switch (sync.clientPhase) {
         ClientSyncPhase.connecting => 'Sync: menyambung ke host…',
         ClientSyncPhase.sending => 'Sync: mengirim data…',
-        ClientSyncPhase.waitingApproval =>
-          'Sync: menunggu persetujuan owner…',
         _ => 'Sync berjalan…',
       };
     }

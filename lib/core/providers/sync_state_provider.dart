@@ -53,10 +53,18 @@ class SyncState {
   final String? transientMessage;
   final SyncBannerTone transientTone;
 
+  /// HANYA tahap network AKTIF (menyambung/mengirim) — `waitingApproval`
+  /// SENGAJA TIDAK termasuk (lihat dok panjang di `SyncStateNotifier.sync`):
+  /// begitu respons host diterima, permintaan klien SUDAH SELESAI secara
+  /// teknis (host sudah simpan durable di `sync_upload_queue`) — "menunggu
+  /// persetujuan owner" sesudahnya adalah menunggu KEPUTUSAN MANUSIA di
+  /// perangkat LAIN, sesuatu yang app ini TIDAK PUNYA kanal live utk
+  /// dipantau (protokol sync connectionless, bukan koneksi persisten).
+  /// Menganggapnya "masih syncing" bikin banner nampilkan spinner
+  /// SELAMANYA (laporan nyata user) walau tidak ada proses aktif apa pun.
   bool get clientSyncing =>
       clientPhase == ClientSyncPhase.connecting ||
-      clientPhase == ClientSyncPhase.sending ||
-      clientPhase == ClientSyncPhase.waitingApproval;
+      clientPhase == ClientSyncPhase.sending;
 
   /// true bila ADA proses yang MASIH berlangsung & layak dipantau (antrian
   /// menunggu, usulan menunggu, atau klien sedang proses) — SENGAJA TIDAK
@@ -268,6 +276,18 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
             ? 'Data terkirim, menunggu persetujuan owner di perangkat host.\n'
                 'Diterima dari host: ${result.received} baris.'
             : 'Selesai! Diterima: ${result.received} baris, Dikirim: ${result.sent} baris',
+      );
+      // Konfirmasi sekali-tampil di banner shell — permintaan klien SUDAH
+      // SELESAI di titik ini (lihat dok panjang `clientSyncing`), jadi
+      // banner TIDAK BOLEH terus nampilkan spinner "menunggu…" selamanya
+      // hanya krn keputusan owner belum ada & tidak ada kanal utk
+      // memantaunya live. Detail lengkap tetap ada di `clientResultMessage`
+      // (dibaca `SyncScreen`), transient ini cuma ringkasan sekilas.
+      _showTransient(
+        result.pendingApproval
+            ? 'Terkirim — menunggu peninjauan owner'
+            : 'Sync selesai — diterima ${result.received} baris',
+        result.pendingApproval ? SyncBannerTone.sync : SyncBannerTone.success,
       );
       return result;
     } catch (e) {
