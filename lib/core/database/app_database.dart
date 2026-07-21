@@ -3720,12 +3720,52 @@ class AppDatabase extends _$AppDatabase {
             .get())
         .map((r) => r.data['name'] as String)
         .toSet();
+
+    // Bug nyata dilaporkan user (audit "sync harga di tab produk, aman
+    // bolak-balik?"): kalau asisten edit harga (products.locallyModified
+    // =true, usulan belum di-review owner) lalu sync lagi utk hal LAIN
+    // sebelum owner sempat approve, editnya TERTIMPA BALIK (price_tiers)
+    // atau DUPLIKAT (alt_prices)/tertimpa (product_units) oleh data lama
+    // owner — akar: 4 tabel ini disinkron full-dump TANPA `updated_at`
+    // sama sekali (beda dari `products`), jadi last-write-wins di atas
+    // tidak berlaku, INSERT OR REPLACE/dedup-by-key selalu menang tanpa
+    // syarat. Fix: skip baris yang unit-nya milik produk yang MASIH
+    // `locally_modified=true` di device INI — biarkan edit lokal yang
+    // belum-di-approve tetap utuh sampai owner benar² approve/reject
+    // (flag baru bersih setelah baris resmi ditimpa push dari host, lihat
+    // dok `Products.locallyModified`). SATU query di awal (bukan per-baris)
+    // supaya biaya performa nyaris nol — 4 tabel ini bisa berisi ribuan
+    // baris per sync (full-dump tanpa filter).
+    const guardedUnitTables = {
+      'price_tiers',
+      'alt_prices',
+      'product_barcodes',
+    };
+    Set<String>? protectedUnitIds;
+    if (!isAppendOnly &&
+        (tableName == 'product_units' || guardedUnitTables.contains(tableName))) {
+      final protectedRows = await customSelect(
+        'SELECT pu.id AS unit_id FROM product_units pu '
+        'JOIN products p ON p.id = pu.product_id '
+        'WHERE p.locally_modified = 1',
+      ).get();
+      protectedUnitIds =
+          protectedRows.map((r) => r.data['unit_id'] as String).toSet();
+    }
+
     await transaction(() async {
       for (var row in rows) {
         if (row.isEmpty) continue;
         row = Map<String, Object?>.from(row)
           ..removeWhere((k, _) => !localColumns.contains(k));
         if (row.isEmpty) continue;
+
+        if (protectedUnitIds != null) {
+          final unitId = tableName == 'product_units'
+              ? row['id']
+              : row['product_unit_id'];
+          if (unitId is String && protectedUnitIds.contains(unitId)) continue;
+        }
 
         if (isAppendOnly) {
           // Append-only: skip if PK already exists.
