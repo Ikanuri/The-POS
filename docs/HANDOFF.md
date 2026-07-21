@@ -4,6 +4,73 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20-21 Juli 2026 (Task #3 — Item 17 Fase 2 dieksekusi &
+di-commit, branch `claude/owner-assistant-sync-history-30fuua`, commit
+`456bf45`, lanjutan langsung dari Task #4/#1/#2 di bawah — user konfirmasi
+"Jika aman, lanjut") — **SELESAI, tidak ada sisa lagi utk Item 17**:
+antrian approval sync sisi host dipindah dari in-memory (`_pendingQueue`,
+hilang total kalau app owner ditutup sebelum sempat approve) ke tabel DB
+baru `sync_upload_queue` (`lib/core/database/tables/sync_tables.dart`,
+`schemaVersion` **17→18**). Klien beralih dari SELALU full-dump sejak
+epoch ke watermark upload incremental per device (key setting terpisah
+`last_sync_upload_confirmed_at`, independen dari watermark download
+`last_sync_download_at` yg sudah ada — diverifikasi test eksplisit
+keduanya tidak saling bocor). Sync jadi makin ringan seiring waktu setelah
+owner approve data yg sama berulang kali.
+
+**Tolak (reject) sekarang PERMANEN** sesuai keputusan yg sudah disepakati
+sesi sebelumnya (lihat paragraf trade-off di bawah) — `LanSyncService.
+rejectSync` cuma hapus baris dari `sync_upload_queue`, TIDAK ada mekanisme
+apa pun yg bikin data itu otomatis terkirim ulang. 2 pengaman: (1)
+`SyncScreen._reject` sekarang WAJIB tampilkan `AlertDialog` konfirmasi
+eksplisit ("Tolak Data Sync?") sebelum eksekusi, (2) tombol baru "Sync
+Ulang Penuh" (`_syncUlangPenuh()`, ikon `Icons.restart_alt`) di kartu
+klien layar Sync — reset manual `last_sync_upload_confirmed_at` ke kosong
+(fallback epoch di `_loadUploadWatermark`) supaya klien kirim ulang SEMUA
+data dari awal, termasuk yg sebelumnya ditolak.
+
+**Environment gotcha berulang**: `build_runner` GAGAL LAGI meregenerasi
+`app_database.g.dart` (pola sama persis spt sesi-sesi lalu) — hand-patch
+manual 3 kelas (`$SyncUploadQueueTable`/`SyncUploadQueueData`/
+`SyncUploadQueueCompanion`, tiru struktur `$HeldOrdersTable` yg sudah
+ada), diverifikasi `flutter analyze` bersih + probe test throwaway
+(dihapus setelah lolos). Manager API boilerplate (`$AppDatabaseManager`)
+SENGAJA tidak di-hand-patch — dikonfirmasi tak dipakai di mana pun
+(`grep -rn "\.managers\."` nihil).
+
+**Migration test ripple**: 9 file `migration_v7..v17_test.dart` lama
+punya hardcode `expect(ver.data.values.first, 17)` yg jadi basi setelah
+bump ke 18 — fix di semua 9 file + `migration_v18_test.dart` baru (raw
+sqlite3 fixture v17 → buka via `AppDatabase` → assert tabel baru +
+version 18).
+
+**`testWidgets` + `HttpServer` asli TERBUKTI hang** (dikonfirmasi ulang
+sesi ini, bukan cuma di gotcha lama) — pakai seam `debugSetDb` (baru,
+`@visibleForTesting`, override `LanSyncService._db` langsung tanpa
+`startHost()`) dikombinasikan dgn `debugHostRunningOverride` yg sudah ada
+di `sync_screen_reject_confirm_test.dart`.
+
+**Test baru** (semua revert-verified — dibuktikan gagal dulu tanpa fix,
+baik full-revert maupun targeted-single-line-revert utk bagian yg terlalu
+besar utk full-revert praktis): `test/lan_sync_upload_queue_test.dart` (5
+test: antrian bertahan lintas "restart" host via file-backed db reopen,
+sync kedua kirim delta saja, reject permanen, Sync Ulang Penuh paksa
+full-dump lagi termasuk yg ditolak, watermark tidak maju kalau koneksi
+gagal), `test/migration_v18_test.dart`, `test/sync_screen_reject_confirm_
+test.dart` (2 test: dialog konfirmasi Tolak, tombol Sync Ulang Penuh).
+4 file test sync lama (`lan_sync_item41_test.dart`, `asisten_permission_
+sync_test.dart`, `lan_sync_transaction_items_repro_test.dart`,
+`lan_sync_watermark_test.dart`) diperbaiki utk API baru (`pendingQueue`
+sync getter → `await loadPendingQueue()`; loop cleanup manual di
+`tearDown` yg tadinya perlu utk queue in-memory global DIHAPUS — queue
+sekarang per-instance DB, tidak perlu dibersihkan manual, dan loop lama
+itu justru CRASH "Can't re-open a database after closing it" krn urutan
+`addTearDown` vs `tearDown` terbalik).
+
+Full `flutter test` **595 hijau, 0 gagal**, `flutter analyze` bersih.
+**Tidak ada sisa pekerjaan sync yg tercatat di task manager maupun
+PLAN.md** setelah sesi ini — Item 17 & Item 21 (Fase 1+2) SELESAI total.
+
 _Update sesi 20 Juli 2026 (audit sync + Item 21 Fase 1 + Task #1/#2
 dieksekusi, branch `claude/owner-assistant-sync-history-30fuua`, commit
 `a0b20e6` lalu `cab92dc`, lanjutan dari bugfix `1d47b2a` di atas) — user
@@ -101,16 +168,8 @@ Task #3" — lihat diskusi trade-off di atas):
 Full `flutter test` **587 hijau** setelah Task #1+#2, `flutter analyze`
 bersih.
 
-**Sisa utk sesi berikutnya, tercatat di task manager (BUKAN PLAN.md,
-instruksi eksplisit user)** — cek task manager, bukan cuma PLAN.md:
-- **Task #3**: Item 17 (Fase 2) — persist antrian sync host ke tabel DB
-  baru `sync_upload_queue` + watermark upload delta-only + tolak permanen
-  + tombol Sync Ulang Penuh. Dibangun DI ATAS Task #4 (Fase 1, sudah
-  selesai) — sekarang siap dikerjakan, **SENGAJA dipisah sesi/PR dari
-  Task #1** (walau sama-sama sentuh area `mergeRows`) krn ukuran &
-  risikonya jauh lebih besar (schemaVersion bump + protokol + test
-  round-trip HTTP asli) — lihat diskusi trade-off "risiko gabung 1+2+3"
-  di atas kalau perlu alasan lengkapnya.
+**Task #3 (Item 17 Fase 2) SUDAH SELESAI** — lihat entri paling atas file
+ini utk detail lengkap. Tidak ada sisa pekerjaan sync yg menggantung.
 
 _Update sesi 20 Juli 2026 (bugfix sync riwayat kosong + usulan harga
 berulang, branch `claude/owner-assistant-sync-history-30fuua`, commit

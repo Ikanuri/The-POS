@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-21
+
+- `456bf45` — feat: Item 17 Fase 2 — antrian approval sync sisi host dipindah dari in-memory ke tabel DB persisten `sync_upload_queue` (schemaVersion 17->18); klien beralih dari selalu full-dump sejak epoch ke watermark upload incremental per device (`last_sync_upload_confirmed_at`, terpisah dari watermark download); tolak (reject) sekarang PERMANEN dgn dialog konfirmasi wajib + tombol baru "Sync Ulang Penuh" sbg escape hatch manual reset watermark
+
 ## 2026-07-20
 
 - `cab92dc` — fix: `mergeRows` skip `price_tiers`/`product_units`/`alt_prices`/`product_barcodes` yang unit-nya milik produk masih `locally_modified=true` (usulan belum di-review owner) — 4 tabel ini disinkron full-dump tanpa `updated_at` sama sekali, jadi edit lokal asisten yang belum approved bisa tertimpa balik/terduplikasi oleh sync APA PUN yang lewat; sekalian rapikan alignment baris "Produk: N" di struk cetak thermal (gen.row 2-kolom, sejajar dgn "Pegawai:")

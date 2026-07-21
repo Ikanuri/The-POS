@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 21 Juli 2026
+
+### ✨ Fitur Baru
+- **Sync WiFi jadi makin ringan/cepat seiring waktu** — setelah data
+  disetujui, sync berikutnya cuma mengirim data BARU saja, tidak lagi
+  mengirim ulang semua data dari awal setiap kali.
+- **Antrian sync yang menunggu persetujuan tidak lagi hilang** kalau HP
+  owner ditutup/restart sebelum sempat ditinjau — sekarang tersimpan
+  aman, bisa dilanjutkan kapan saja.
+- Tombol **"Tolak"** di antrian sync sekarang minta **konfirmasi** dulu
+  (data yang ditolak tidak akan otomatis muncul lagi).
+- Tombol baru **"Sync Ulang Penuh"** di layar Sync — kalau owner memang
+  ingin perangkat lain mengirim ulang semua datanya dari awal.
+
 ## 20 Juli 2026
 
 ### ✨ Fitur Baru
