@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../shell/sync_status_banner.dart';
 
 final _pelangganQueryProvider = StateProvider<String>((ref) => '');
 
@@ -56,8 +57,8 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
       }
     }
     if (target < 0 || !_scrollCtrl.hasClients) return;
-    final offset = (target * _itemExtent)
-        .clamp(0.0, _scrollCtrl.position.maxScrollExtent);
+    final offset =
+        (target * _itemExtent).clamp(0.0, _scrollCtrl.position.maxScrollExtent);
     _scrollCtrl.jumpTo(offset);
   }
 
@@ -84,6 +85,7 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
       ),
       body: Column(
         children: [
+          const SyncStatusBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: TextField(
@@ -165,8 +167,7 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
                             setState(() => _activeLetter = letter);
                             _jumpToLetter(letter, customers);
                           },
-                          onEnd: () =>
-                              setState(() => _activeLetter = null),
+                          onEnd: () => setState(() => _activeLetter = null),
                         ),
                       ),
                     if (_activeLetter != null)
@@ -209,8 +210,33 @@ class _AlphabetIndex extends StatelessWidget {
   final VoidCallback onEnd;
 
   static const _letters = [
-    'A','B','C','D','E','F','G','H','I','J','K','L','M',
-    'N','O','P','Q','R','S','T','U','V','W','X','Y','Z','#',
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
+    'Q',
+    'R',
+    'S',
+    'T',
+    'U',
+    'V',
+    'W',
+    'X',
+    'Y',
+    'Z',
+    '#',
   ];
 
   void _handle(Offset localPos, BoxConstraints c) {
@@ -226,10 +252,8 @@ class _AlphabetIndex extends StatelessWidget {
       builder: (context, constraints) {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onVerticalDragStart: (d) =>
-              _handle(d.localPosition, constraints),
-          onVerticalDragUpdate: (d) =>
-              _handle(d.localPosition, constraints),
+          onVerticalDragStart: (d) => _handle(d.localPosition, constraints),
+          onVerticalDragUpdate: (d) => _handle(d.localPosition, constraints),
           onVerticalDragEnd: (_) => onEnd(),
           onTapDown: (d) => _handle(d.localPosition, constraints),
           onTapUp: (_) => onEnd(),
@@ -311,14 +335,12 @@ class _CustomerTile extends ConsumerWidget {
               color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700),
         ),
       ),
-      title: Text(customer.name,
-          maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(customer.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Row(
         children: [
           if (customer.phone != null)
             Text(customer.phone!,
-                style:
-                    TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
           if (customer.loyaltyPoints > 0) ...[
             const SizedBox(width: 8),
             Icon(Icons.star, size: 10, color: scheme.tertiary),

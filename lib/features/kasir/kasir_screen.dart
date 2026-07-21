@@ -24,6 +24,7 @@ import '../../core/widgets/item_count_badge.dart';
 import '../produk/catalog/catalog_models.dart';
 import '../produk/catalog/catalog_share.dart';
 import '../produk/catalog/catalog_store.dart';
+import '../shell/sync_status_banner.dart';
 import 'cart_meta_provider.dart';
 import 'cart_provider.dart';
 import 'widgets/add_control.dart';
@@ -1825,6 +1826,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                 },
                 child: Column(
                   children: [
+                    const SyncStatusBanner(),
                     InlineBanner(
                       message: _bannerMsg,
                       type: _bannerType,

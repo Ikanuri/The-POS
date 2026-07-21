@@ -7,6 +7,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/chart_utils.dart';
+import '../shell/sync_status_banner.dart';
 
 final _ringkasanProvider = FutureProvider<_RingkasanData>((ref) async {
   final db = ref.watch(databaseProvider);
@@ -14,8 +15,7 @@ final _ringkasanProvider = FutureProvider<_RingkasanData>((ref) async {
   final todayStart = DateTime(now.year, now.month, now.day);
   final todayEnd = todayStart.add(const Duration(days: 1));
   final weekStart = now.subtract(Duration(days: now.weekday - 1));
-  final weekStartDay =
-      DateTime(weekStart.year, weekStart.month, weekStart.day);
+  final weekStartDay = DateTime(weekStart.year, weekStart.month, weekStart.day);
   final monthStart = DateTime(now.year, now.month, 1);
 
   final todayTx = await (db.select(db.transactions)
@@ -102,7 +102,8 @@ class RingkasanScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(device.storeName.isNotEmpty ? device.storeName : 'Ringkasan'),
+        title:
+            Text(device.storeName.isNotEmpty ? device.storeName : 'Ringkasan'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_outlined),
@@ -110,14 +111,20 @@ class RingkasanScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(_ringkasanProvider),
-        child: dataAsync.when(
-          data: (data) => _RingkasanBody(data: data),
-          loading: () =>
-              const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
-        ),
+      body: Column(
+        children: [
+          const SyncStatusBanner(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => ref.invalidate(_ringkasanProvider),
+              child: dataAsync.when(
+                data: (data) => _RingkasanBody(data: data),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Error: $e')),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -182,8 +189,8 @@ class _RingkasanBody extends ConsumerWidget {
             Expanded(
                 child: _KpiCard(
               label: 'Rata-rata/Hari',
-              value: formatRupiah(data.monthRevenue ~/
-                  DateTime.now().day.clamp(1, 31)),
+              value: formatRupiah(
+                  data.monthRevenue ~/ DateTime.now().day.clamp(1, 31)),
               icon: Icons.trending_up_outlined,
               color: uangFg,
               bg: uangBg,
@@ -235,17 +242,16 @@ class _RingkasanBody extends ConsumerWidget {
                           fontSize: 13),
                     ),
                   ),
-                  title: Text(
-                      prod.name.isNotEmpty ? prod.name : prod.productId,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
+                  title: Text(prod.name.isNotEmpty ? prod.name : prod.productId,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                       '${prod.sold % 1 == 0 ? prod.sold.toInt() : prod.sold} terjual',
-                      style:
-                          TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant, fontSize: 11)),
                   trailing: Text(
                     formatRupiah(prod.revenue),
-                    style: TextStyle(color: produkFg, fontWeight: FontWeight.w600),
+                    style:
+                        TextStyle(color: produkFg, fontWeight: FontWeight.w600),
                   ),
                 );
               }).toList(),
@@ -296,16 +302,12 @@ class _KpiCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(value,
                 style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: color)),
+                    fontSize: 15, fontWeight: FontWeight.w700, color: color)),
             if (sub != null)
               Text(sub!,
                   style: TextStyle(
                       fontSize: 11,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant)),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
@@ -368,8 +370,7 @@ class _HourlyChart extends StatelessWidget {
               child: Text(
                 label,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 8, color: scheme.onSurfaceVariant),
+                style: TextStyle(fontSize: 8, color: scheme.onSurfaceVariant),
               ),
             );
           }).toList(),
@@ -485,8 +486,8 @@ class _StockQuickCheckCard extends ConsumerWidget {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () => context.push('/produk/cek-stok',
-                            extra: groupId),
+                        onPressed: () =>
+                            context.push('/produk/cek-stok', extra: groupId),
                         child: const Text('Lihat semua'),
                       ),
                     ),

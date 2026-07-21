@@ -5,29 +5,35 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/sync_state_provider.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Item 21 (Fase 1) — banner status sync di level shell, tampil di tab/
-/// halaman MANAPUN selama ADA yang layak dipantau (antrian menunggu, usulan
-/// menunggu, klien sedang proses, ATAU konfirmasi sekali-tampil habis
-/// approve/tolak/reset) — sebelumnya status ini cuma terlihat selagi persis
-/// di layar Sync WiFi, dan proses klien ikut "hilang dari pandangan" begitu
-/// owner/kasir pindah tab (walau prosesnya sendiri tetap jalan di
-/// background). Tap → lompat ke layar Sync.
+/// Item 21 (Fase 1) — banner status sync, tampil di tab MANAPUN selama ADA
+/// yang layak dipantau (antrian menunggu, usulan menunggu, klien sedang
+/// proses, ATAU konfirmasi sekali-tampil habis approve/tolak/reset) —
+/// sebelumnya status ini cuma terlihat selagi persis di layar Sync WiFi, dan
+/// proses klien ikut "hilang dari pandangan" begitu owner/kasir pindah tab
+/// (walau prosesnya sendiri tetap jalan di background). Tap → lompat ke
+/// layar Sync.
 ///
 /// Bentuk kartu notifikasi inline (bukan bar tipis permanen) — SENGAJA
 /// TIDAK lagi tampil hanya krn `hostRunning` semata (lihat dok
 /// `SyncState.hasOngoing`): host aktif tanpa antrian apa pun bukan sesuatu
 /// yang perlu terus dinotifikasi di tab lain, laporan nyata user.
+///
+/// Follow-up posisi (laporan nyata user "belum inline"): widget ini DULU
+/// dipasang sekali di `MainShell`, mengambang di ATAS setiap layar tab
+/// (termasuk di atas toolbar/AppBar masing-masing) — dianggap tidak
+/// "inline" dibanding notifikasi lain di app (mis. `InlineBanner` yg tampil
+/// DI BAWAH header/toolbar tiap layar). Sekarang dipasang LANGSUNG di tiap
+/// layar tab (Ringkasan/Kasir/Produk/Pelanggan/Laporan/Pengaturan), persis
+/// di bawah AppBar/toolbar masing-masing — sejajar dgn `InlineBanner` yg
+/// sudah ada di situ. `SyncScreen` (sub-halaman Pengaturan) SENGAJA tidak
+/// dipasangi (statusnya sudah tampil penuh di badan layarnya sendiri).
 class SyncStatusBanner extends ConsumerWidget {
-  const SyncStatusBanner({super.key, this.hideOnSyncScreen = false});
-
-  /// true bila layar saat ini SUDAH layar Sync sendiri — banner redundan
-  /// di situ (statusnya sudah tampil penuh di badan layar), jadi disembunyikan.
-  final bool hideOnSyncScreen;
+  const SyncStatusBanner({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sync = ref.watch(syncStateProvider);
-    if (hideOnSyncScreen || !sync.hasActivity) return const SizedBox.shrink();
+    if (!sync.hasActivity) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final showOngoing = sync.hasOngoing;

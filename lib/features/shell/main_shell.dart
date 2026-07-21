@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/license_provider.dart';
 import '../../core/services/backup_reminder.dart';
-import 'sync_status_banner.dart';
 
 class _TabItem {
   const _TabItem(this.path, this.label, this.icon, this.selectedIcon);
@@ -85,18 +84,16 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      body: Column(
-        children: [
-          // Item 21 — banner status sync persisten, tampil di tab MANAPUN
-          // (sebelumnya status ini hilang begitu owner/kasir pindah dari
-          // layar Sync WiFi, walau prosesnya sendiri tetap jalan). Redundan
-          // kalau lagi persis di layar Sync itu sendiri (sudah tampil penuh
-          // di badan layarnya).
-          SyncStatusBanner(
-              hideOnSyncScreen: location.startsWith('/pengaturan/sync')),
-          Expanded(child: widget.child),
-        ],
-      ),
+      // Item 21 (Fase 1) — status sync dulu tampil sbg banner tunggal di
+      // sini, di ATAS setiap layar tab (termasuk di atas toolbar/AppBar
+      // masing-masing). Follow-up user: posisinya harus "inline" spt
+      // notifikasi lain (di BAWAH header tiap tab, sejajar dgn `InlineBanner`
+      // yg sudah ada) — jadi `SyncStatusBanner` sekarang dipasang LANGSUNG di
+      // tiap layar tab (`RingkasanScreen`/`KasirScreen`/`ProdukListScreen`/
+      // `PelangganListScreen`/`LaporanScreen`/`PengaturanScreen`), bukan di
+      // sini lagi. `SyncScreen` sendiri (sub-halaman Pengaturan) TIDAK
+      // dipasangi (sudah tampil penuh di badan layarnya sendiri).
+      body: widget.child,
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(

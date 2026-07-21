@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../shell/sync_status_banner.dart';
 import 'report_export.dart';
 import 'tabs/ringkasan_tab.dart';
 import 'tabs/produk_tab.dart';
@@ -66,13 +67,11 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'pdf',
-                child: Text(
-                    'Export PDF — ${_tabName(_tabController.index)}'),
+                child: Text('Export PDF — ${_tabName(_tabController.index)}'),
               ),
               PopupMenuItem(
                 value: 'xlsx',
-                child: Text(
-                    'Export Excel — ${_tabName(_tabController.index)}'),
+                child: Text('Export Excel — ${_tabName(_tabController.index)}'),
               ),
             ],
           ),
@@ -91,16 +90,23 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          RingkasanTab(range: range),
-          ProdukTab(range: range),
-          PelangganTab(range: range),
-          TransaksiTab(range: range),
-          const HutangTab(),
-          const StokTab(),
-          PengeluaranTab(range: range),
+          const SyncStatusBanner(),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                RingkasanTab(range: range),
+                ProdukTab(range: range),
+                PelangganTab(range: range),
+                TransaksiTab(range: range),
+                const HutangTab(),
+                const StokTab(),
+                PengeluaranTab(range: range),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -129,8 +135,8 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
 
   Future<void> _export(DateTimeRange range, String format) async {
     if (!_canExportCurrentTab) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Tab Hutang tidak bisa diekspor.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tab Hutang tidak bisa diekspor.')));
       return;
     }
     final device = ref.read(deviceProvider);
