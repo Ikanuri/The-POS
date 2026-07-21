@@ -4,6 +4,95 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 21 Juli 2026 (follow-up 3 poin dari user pasca Task #6, PR #35,
+commit `eb7cc1b`, Task #7 di task manager) — user kirim 2 screenshot lapor
+banner sync MASIH tampil flush/full-bleed (bukan kartu rounded+margin) &
+MASIH tidak hilang otomatis (butuh kill app) — PERSIS gejala versi SEBELUM
+Task #6. **Investigasi**: rendering langsung `SyncStatusBanner` via
+`RepaintBoundary.toImage()` (lihat gotcha environment di bawah — proses
+`flutter_tester` HANG setelah PNG selesai ditulis, tapi file-nya sendiri
+sudah lengkap & valid, tinggal kill proses lalu baca file-nya) MEMBUKTIKAN
+kode commit `6b4366d` sudah benar (kartu rounded+margin+shadow, PNG
+disimpan sbg bukti lalu dihapus). Cross-check `mcp__github__actions_list`:
+build APK sukses terbaru utk branch ini persis di commit `eb7cc1b`/`c54e095`
+(selesai 2026-07-21T14:50:40Z) — **kesimpulan sementara: kemungkinan besar
+user sempat install APK versi SEBELUM `6b4366d` selesai di-build** (build
+APK perlu waktu, kalau diinstall terlalu cepat setelah push dapat artifact
+lama). **BELUM ada konfirmasi balik dari user** soal timing build ini —
+kalau sesi berikutnya user masih lapor gejala sama SETELAH pasti pakai
+build commit `eb7cc1b`+, baru investigasi ulang dari nol (jangan asumsikan
+lagi ini cuma soal build lama).
+
+**Poin ke-3 (SUDAH diinvestigasi & DIPERBAIKI, independen dari 1&2)**:
+usulan produk (Item 40) yang isinya SUDAH IDENTIK dgn data owner tetap
+terus muncul lagi & menumpuk di layar review, walau review screen sendiri
+sudah benar menampilkan "Tidak ada perubahan harga" utk baris itu (logika
+banding UI sudah benar — user pun bilang begitu — masalahnya baris itu
+TIDAK PERNAH disaring keluar dari daftar sama sekali). **Akar masalah**:
+`dumpLocalProposals()` klien mengirim SEMUA produk `locally_modified=1`
+tanpa syarat tiap sync; flag itu bisa "macet" true selamanya kalau klien
+sempat menyimpan ulang produk yg sama TANPA perubahan nilai (mis. buka+
+simpan form tanpa edit apa pun) — `updated_at` klien ikut maju & terus
+MENANG last-write-wins thd baris balikan resmi dari host (mekanisme reset
+flag YANG SUDAH ADA mengasumsikan baris klien SELALU "ditimpa push resmi
+host" — asumsi itu gagal persis di sini). **Fix**: method baru
+`AppDatabase.filterUnchangedProposals(rows)` — bandingkan payload usulan
+(nama/`product_group_id`/`is_active`/`marked_out_of_stock` di level
+produk; `unit_type_id`/`is_base_unit`/`ratio_to_base`/`is_non_stock`/
+`min_stock` di level satuan; ISI (bukan id, krn tier/alt-harga
+diregenerasi tiap simpan form — lihat dok `applyProductProposals`) tier
+harga/harga-alternatif/barcode per satuan) THD DATA LIVE HOST — dipanggil
+di `LanSyncService._handleRequest` SEBELUM produk masuk `_pendingProposals`.
+Produk baru (belum ada di host) SELALU lolos (tak ada pembanding). Kalau
+SEMUA produk dlm satu usulan ternyata identik, TIDAK ADA `PendingProductProposal`
+yg dibuat sama sekali (bukan cuma disaring kosong) — kalau device itu
+kebetulan masih py slot antrian LAMA (dari usulan sebelumnya yg sekarang
+basi), slot itu ikut dibersihkan.
+
+**Bug nyata ditemukan & diperbaiki SEBELUM sempat commit** (ketemu justru
+krn metodologi revert-verify wajib CLAUDE.md): implementasi awal
+`filterUnchangedProposals` bandingkan tier/altPrice/barcode via `Set<String>
+!= Set<String>`. **Dart `Set` (dan `List`) TIDAK meng-override `operator==`
+sbg pembanding ISI** — default-nya identity-based (spt `Object` biasa), jadi
+dua instance `Set` BEDA dgn isi PERSIS SAMA akan SELALU `!=` walau
+elemennya identik. Akibatnya SEMUA produk (termasuk yg benar-benar
+identik) selalu lolos sbg "changed". Ketahuan lewat test pertama
+(`filtered['products']` isinya produk yg SEHARUSNYA disaring) — didiagnosis
+dgn debug print manual (dihapus lagi setelah ketemu) yg membuktikan
+SEMUA field individual sudah cocok persis tapi perbandingan `Set` tetap
+`!=`. **Fix**: comparator diubah dari `Set<String>` ke STRING KANONIK
+(elemen di-`toSet()` dulu utk dedup, `toList()..sort()`, lalu `.join(',')`)
+— perbandingan `String != String` di Dart MEMANG value-based, jadi ini
+benar. Gotcha BARU utk CLAUDE.md (belum dipindah): **jangan pernah
+bandingkan `Set`/`List` langsung dgn `==`/`!=` di Dart tanpa `SetEquality`/
+`ListEquality` (`package:collection`) ATAU konversi ke representasi
+kanonik (string/sorted list) dulu — defaultnya SELALU identity-based,
+bukan isi, walau terasa intuitif kalau isinya "keliatan sama"**.
+
+**Environment gotcha baru**: `RepaintBoundary.toImage()` di `flutter test`
+sandbox ini TERBUKTI menulis file PNG-nya dgn BENAR ke disk (ukuran &
+konten valid) TAPI proses `flutter_tester` HANG setelah itu (tidak pernah
+mencapai baris `All tests passed!` / keluar sendiri) — cocok dgn catatan
+lama sesi 19 Juli soal RepaintBoundary hang saat preview ikon peach. FIX
+PRAKTIS: JANGAN tunggu proses selesai — cukup `ScheduleWakeup` singkat lalu
+cek file PNG-nya SUDAH ADA di path tujuan (`ls -la`), kalau sudah ada &
+ukurannya masuk akal, `pkill -9 -f flutter_tester` paksa lalu baca filenya
+langsung via `Read` tool (PNG valid meski proses belum "selesai" secara
+resmi) — jangan asumsikan test gagal/rusak hanya krn prosesnya masih
+hidup lama.
+
+Test baru (semua revert-verified — 2 lapis: unit `AppDatabase.
+filterUnchangedProposals` langsung, DAN end-to-end via `syncToHost`+
+`_handleRequest` protokol HTTP sungguhan port 127.0.0.1, pola sama spt
+`lan_sync_upload_queue_test.dart`): `test/proposal_unchanged_filter_test.dart`
+(5 test: produk baru selalu lolos, produk identik dibuang total,
+harga beda tetap lolos, campuran identik+beda hanya yg beda ikut, nama
+beda walau harga sama tetap lolos), `test/proposal_unchanged_end_to_end_test.dart`
+(2 test: `locally_modified=true` TAPI isi identik → `pendingProposals`
+kosong SAMA SEKALI setelah sync sungguhan; harga benar-benar beda →
+tetap masuk antrian). Full `flutter test` **605 hijau, 0 gagal**,
+`flutter analyze` bersih.
+
 _Update sesi 21 Juli 2026 (follow-up UX, PR #35, commit `6b4366d`, Task #6
 di task manager) — user minta 2 perbaikan `SyncStatusBanner`: (1) setelah
 approve/tolak, notif+state "menunggu" harus ikut hilang, bukan menetap
