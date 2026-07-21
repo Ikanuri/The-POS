@@ -61,6 +61,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   tidak lagi terus muncul ulang** di layar sync — sebelumnya usulan yang
   sudah diterapkan bisa terus muncul kembali setiap kali sync, seolah
   belum pernah disetujui.
+- **Perubahan harga/satuan dari HP asisten yang belum sempat disetujui
+  owner tidak lagi hilang diam-diam** — sebelumnya, kalau asisten sync
+  lagi untuk hal lain SEBELUM owner sempat meninjau usulan harganya,
+  perubahan itu bisa tertimpa balik oleh harga lama milik owner tanpa
+  pemberitahuan apa pun.
+- **Struk cetak: baris "Produk: [jumlah]" sekarang sejajar dengan baris
+  "Pegawai:"** di atasnya — sebelumnya nomornya menempel langsung setelah
+  label, tidak lurus dengan baris pegawai.
 
 ## 19 Juli 2026
 

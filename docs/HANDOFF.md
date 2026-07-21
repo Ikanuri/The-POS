@@ -4,21 +4,22 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 20 Juli 2026 (audit sync + Item 21 Fase 1, branch
-`claude/owner-assistant-sync-history-30fuua`, commit `a0b20e6`, lanjutan
-dari bugfix `1d47b2a` di atas) — user minta audit "sync harga di tab
-produk, apakah aman bolak-balik" → ketemu 3 bug SILENT-REVERT/DUPLIKAT
-NYATA yang BELUM diperbaiki (dikonfirmasi via test DB langsung, dicatat
-sbg **Task #1 di task manager, BUKAN PLAN.md** sesuai instruksi eksplisit
-user sesi ini — cek task manager di sesi depan, JANGAN cuma baca PLAN.md):
+_Update sesi 20 Juli 2026 (audit sync + Item 21 Fase 1 + Task #1/#2
+dieksekusi, branch `claude/owner-assistant-sync-history-30fuua`, commit
+`a0b20e6` lalu `cab92dc`, lanjutan dari bugfix `1d47b2a` di atas) — user
+minta audit "sync harga di tab produk, apakah aman bolak-balik" → ketemu
+3 bug SILENT-REVERT/DUPLIKAT NYATA (dikonfirmasi via test DB langsung):
 kalau asisten edit harga (`locally_modified=true`, usulan belum di-approve
 owner) lalu sync lagi utk hal LAIN sebelum owner sempat approve, editnya
 TERTIMPA BALIK ke data lama owner TANPA error — akar: `price_tiers`/
 `product_units`/`alt_prices`/`product_barcodes` disinkron full-dump TANPA
-watermark `updated_at` sama sekali (beda dari `products`). Fix yang
-disepakati (Set-based guard di `mergeRows`, biaya performa nyaris nol,
-SUDAH didiskusikan trade-off-nya dgn user) — **BELUM dieksekusi**, lihat
-Task #1.
+watermark `updated_at` sama sekali (beda dari `products`). Dicatat sbg
+**Task #1 di task manager (BUKAN PLAN.md, instruksi eksplisit user)**,
+didiskusikan trade-off performa-nya dgn user (Set-based guard, 1 query
+JOIN per panggilan `mergeRows`, bukan per-baris — biaya nyaris nol), lalu
+**SUDAH DIEKSEKUSI & di-commit** (`cab92dc`) — lihat detail fix di bawah
+("Update sesi 20 Juli 2026 (bugfix sync riwayat kosong...)" utk histori
+lengkap threadnya).
 
 Diskusi lanjutan soal sync makin berat (full-dump selalu dari epoch) →
 user tanya apakah ini "safety method" thd koneksi putus — jawaban:
@@ -80,21 +81,36 @@ ini, BUKAN `startHost()` beneran. Pola sama persis dgn
 true, Actual: false" → restore, hijau lagi). Full `flutter test` **583
 hijau**, `flutter analyze` bersih.
 
-**Belum dikerjakan sesi ini, tercatat di task manager (BUKAN PLAN.md,
-instruksi eksplisit user)** — cek task manager, bukan cuma PLAN.md, kalau
-lanjut sesi berikutnya:
-- **Task #1**: fix stale-overwrite `price_tiers`/`product_units`/
-  `alt_prices`/`product_barcodes` (detail lengkap di atas).
-- **Task #2**: rapikan alignment struk cetak "Pegawai:"/"Produk: N" tidak
-  sejajar (`printer_service.dart` `_buildBytes` baris ~697, fix: ganti
-  `bodyText('Produk: $productCount')` jadi `gen.row([...width 3/9...])`
-  sama pola dgn baris Pegawai di atasnya).
+**Task #1 & #2 SUDAH DIEKSEKUSI & di-commit sesi ini juga** (`cab92dc`,
+setelah user konfirmasi "boleh dikerjakan bareng, risikonya beda dari
+Task #3" — lihat diskusi trade-off di atas):
+- **Task #1**: `mergeRows` (`app_database.dart`) sekarang hitung 1 query
+  JOIN di awal (`product_units`↔`products` `WHERE locally_modified=1`) →
+  Set `protectedUnitIds`, skip baris `price_tiers`/`product_units`/
+  `alt_prices`/`product_barcodes` yang unit-nya ada di situ. Test:
+  `test/proposal_pending_stale_overwrite_test.dart` (4 test, revert-verified
+  — 3 gagal persis tanpa fix, 1 verifikasi produk NON-locally_modified
+  tetap dapat behavior last-write biasa).
+- **Task #2**: `printer_service.dart` baris ~701 (`_buildBytes`, struk
+  cetak tunggal) — `bodyText('Produk: $productCount')` diganti `gen.
+  row([PosColumn('Produk:', width:3), PosColumn(' $productCount', width:9)])`,
+  sama pola dgn baris Pegawai. TANPA test (private, tanpa seam byte-level
+  — pola sama spt keputusan sesi lalu utk `_buildBytes`, lihat catatan
+  Item 49 "Tambahan HH:MM" di CHANGELOG lama).
+
+Full `flutter test` **587 hijau** setelah Task #1+#2, `flutter analyze`
+bersih.
+
+**Sisa utk sesi berikutnya, tercatat di task manager (BUKAN PLAN.md,
+instruksi eksplisit user)** — cek task manager, bukan cuma PLAN.md:
 - **Task #3**: Item 17 (Fase 2) — persist antrian sync host ke tabel DB
   baru `sync_upload_queue` + watermark upload delta-only + tolak permanen
   + tombol Sync Ulang Penuh. Dibangun DI ATAS Task #4 (Fase 1, sudah
-  selesai) — sekarang siap dikerjakan. 1 schemaVersion bump (risiko
-  hand-patch `app_database.g.dart` spt biasa di environment ini), butuh
-  test round-trip HTTP asli.
+  selesai) — sekarang siap dikerjakan, **SENGAJA dipisah sesi/PR dari
+  Task #1** (walau sama-sama sentuh area `mergeRows`) krn ukuran &
+  risikonya jauh lebih besar (schemaVersion bump + protokol + test
+  round-trip HTTP asli) — lihat diskusi trade-off "risiko gabung 1+2+3"
+  di atas kalau perlu alasan lengkapnya.
 
 _Update sesi 20 Juli 2026 (bugfix sync riwayat kosong + usulan harga
 berulang, branch `claude/owner-assistant-sync-history-30fuua`, commit
