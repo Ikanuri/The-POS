@@ -10,6 +10,13 @@ import 'device_provider.dart';
 /// bukan streaming) — cukup tahapan kasar Menyambung→Mengirim→Menunggu.
 enum ClientSyncPhase { idle, connecting, sending, waitingApproval, done, error }
 
+/// Nuansa warna kartu notifikasi banner sync — `sync` (ungu, konsisten dgn
+/// warna domain "Sinkronisasi" di seluruh app) dipakai utk status
+/// berlangsung (antrian menunggu/klien sedang proses) MAUPUN konfirmasi
+/// netral (ditolak, Sync Ulang Penuh); `success` (hijau) KHUSUS konfirmasi
+/// approve berhasil.
+enum SyncBannerTone { sync, success }
+
 /// Snapshot state sync global — dulu tersebar sbg local `State` field di
 /// `SyncScreen` (`_hostRunning`, `_queue`, `_syncing`, dst), sekarang satu
 /// sumber kebenaran supaya bisa dibaca dari layar MANA PUN (banner
@@ -25,6 +32,8 @@ class SyncState {
     this.timeoutProfile = SyncTimeoutProfile.normal,
     this.clientPhase = ClientSyncPhase.idle,
     this.clientResultMessage,
+    this.transientMessage,
+    this.transientTone = SyncBannerTone.sync,
   });
 
   final bool hostRunning;
@@ -37,16 +46,31 @@ class SyncState {
   final ClientSyncPhase clientPhase;
   final String? clientResultMessage;
 
+  /// Pesan konfirmasi SEKALI-TAMPIL (mis. "Disetujui — N baris diterima")
+  /// yang otomatis hilang sendiri (lihat `SyncStateNotifier._showTransient`)
+  /// — BUKAN status berlangsung. Dipakai banner shell supaya event
+  /// approve/tolak/reset terasa "beres", bukan menetap selamanya.
+  final String? transientMessage;
+  final SyncBannerTone transientTone;
+
   bool get clientSyncing =>
       clientPhase == ClientSyncPhase.connecting ||
       clientPhase == ClientSyncPhase.sending ||
       clientPhase == ClientSyncPhase.waitingApproval;
 
-  /// true bila ADA proses/status yang layak ditampilkan sbg banner
-  /// persisten di shell (host aktif, antrian menunggu, atau klien sedang
-  /// jalan) — dipakai `main_shell.dart` memutuskan tampil/tidaknya banner.
-  bool get hasActivity =>
-      hostRunning || queue.isNotEmpty || proposals.isNotEmpty || clientSyncing;
+  /// true bila ADA proses yang MASIH berlangsung & layak dipantau (antrian
+  /// menunggu, usulan menunggu, atau klien sedang proses) — SENGAJA TIDAK
+  /// termasuk `hostRunning` semata: host aktif tanpa antrian apa pun bukan
+  /// sesuatu yang perlu dinotifikasi terus-menerus di tab lain (dulu bikin
+  /// banner "Host aktif" menetap selamanya selama host hidup, walau tidak
+  /// ada yang perlu ditinjau — laporan nyata user).
+  bool get hasOngoing =>
+      queue.isNotEmpty || proposals.isNotEmpty || clientSyncing;
+
+  /// true bila ADA sesuatu yang layak ditampilkan sbg banner shell (ongoing
+  /// ATAU konfirmasi sekali-tampil) — dipakai `main_shell.dart` memutuskan
+  /// tampil/tidaknya banner.
+  bool get hasActivity => hasOngoing || transientMessage != null;
 
   SyncState copyWith({
     bool? hostRunning,
@@ -58,6 +82,8 @@ class SyncState {
     SyncTimeoutProfile? timeoutProfile,
     ClientSyncPhase? clientPhase,
     Object? clientResultMessage = _sentinel,
+    Object? transientMessage = _sentinel,
+    SyncBannerTone? transientTone,
   }) {
     return SyncState(
       hostRunning: hostRunning ?? this.hostRunning,
@@ -71,6 +97,10 @@ class SyncState {
       clientResultMessage: identical(clientResultMessage, _sentinel)
           ? this.clientResultMessage
           : clientResultMessage as String?,
+      transientMessage: identical(transientMessage, _sentinel)
+          ? this.transientMessage
+          : transientMessage as String?,
+      transientTone: transientTone ?? this.transientTone,
     );
   }
 }
@@ -119,10 +149,27 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   }
 
   final Ref _ref;
+  Timer? _transientTimer;
+  bool _disposed = false;
 
   Future<void> _refreshQueue() async {
     final queue = await LanSyncService.loadPendingQueue();
     state = state.copyWith(queue: queue);
+  }
+
+  /// Tampilkan pesan konfirmasi sekali-tampil di banner shell, otomatis
+  /// hilang sendiri setelah [duration] — dipakai event selesai (approve/
+  /// tolak/reset), BUKAN status berlangsung (lihat dok `SyncState.
+  /// transientMessage`). Timer lama dibatalkan dulu supaya event beruntun
+  /// (mis. approve lalu langsung reset) tidak saling potong durasi tampil.
+  void _showTransient(String message, SyncBannerTone tone,
+      {Duration duration = const Duration(seconds: 4)}) {
+    _transientTimer?.cancel();
+    state = state.copyWith(transientMessage: message, transientTone: tone);
+    _transientTimer = Timer(duration, () {
+      if (_disposed) return;
+      state = state.copyWith(transientMessage: null);
+    });
   }
 
   Future<void> loadTimeoutProfile() async {
@@ -171,6 +218,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     final received =
         await LanSyncService.approveSync(itemId, allowedTables: allowedTables);
     await _refreshQueue();
+    _showTransient('Disetujui — $received baris diterima', SyncBannerTone.success);
     return received;
   }
 
@@ -179,13 +227,16 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   Future<void> rejectSync(String itemId) async {
     await LanSyncService.rejectSync(itemId);
     await _refreshQueue();
+    _showTransient('Data sync ditolak', SyncBannerTone.sync);
   }
 
   /// "Sync Ulang Penuh" — reset watermark upload klien ke epoch, escape
   /// hatch manual utk pemulihan kalau owner salah tolak atau curiga ada
   /// data yang belum pernah sampai ke host.
-  Future<void> resetUploadWatermark() =>
-      LanSyncService.resetUploadWatermark(_ref.read(databaseProvider));
+  Future<void> resetUploadWatermark() async {
+    await LanSyncService.resetUploadWatermark(_ref.read(databaseProvider));
+    _showTransient('Sync Ulang Penuh diaktifkan', SyncBannerTone.sync);
+  }
 
   Future<SyncResult> sync({
     required String ip,
@@ -230,6 +281,8 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
 
   @override
   void dispose() {
+    _disposed = true;
+    _transientTimer?.cancel();
     LanSyncService.onQueueChanged = null;
     LanSyncService.onProposalsChanged = null;
     super.dispose();

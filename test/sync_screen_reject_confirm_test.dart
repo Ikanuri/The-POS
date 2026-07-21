@@ -96,6 +96,11 @@ void main() {
         reason: 'setelah konfirmasi, item harus hilang dari antrian');
     expect(await db.listSyncUploadQueue(), isEmpty,
         reason: 'reject harus benar-benar menghapus baris dari DB (permanen)');
+
+    // Habiskan timer auto-dismiss konfirmasi sekali-tampil ("Data sync
+    // ditolak") dari `SyncStateNotifier._showTransient` — tanpa ini, test
+    // gagal "Timer is still pending" saat disposal (gotcha CLAUDE.md).
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets(
@@ -135,5 +140,9 @@ void main() {
     expect(watermark, isEmpty,
         reason: 'watermark upload harus direset (string kosong = fallback '
             'epoch di LanSyncService._loadUploadWatermark)');
+
+    // Habiskan timer auto-dismiss konfirmasi sekali-tampil ("Sync Ulang
+    // Penuh diaktifkan") — lihat catatan sama di test pertama.
+    await tester.pump(const Duration(seconds: 5));
   });
 }
