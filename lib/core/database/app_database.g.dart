@@ -10767,6 +10767,360 @@ class CashClosingsCompanion extends UpdateCompanion<CashClosing> {
   }
 }
 
+class $SyncUploadQueueTable extends SyncUploadQueue
+    with TableInfo<$SyncUploadQueueTable, SyncUploadQueueData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncUploadQueueTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _fromIpMeta =
+      const VerificationMeta('fromIp');
+  @override
+  late final GeneratedColumn<String> fromIp = GeneratedColumn<String>(
+      'from_ip', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _arrivedAtMeta =
+      const VerificationMeta('arrivedAt');
+  @override
+  late final GeneratedColumn<DateTime> arrivedAt = GeneratedColumn<DateTime>(
+      'arrived_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _tablesJsonMeta =
+      const VerificationMeta('tablesJson');
+  @override
+  late final GeneratedColumn<String> tablesJson = GeneratedColumn<String>(
+      'tables_json', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sinceMeta = const VerificationMeta('since');
+  @override
+  late final GeneratedColumn<DateTime> since = GeneratedColumn<DateTime>(
+      'since', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _tablesSummaryMeta =
+      const VerificationMeta('tablesSummary');
+  @override
+  late final GeneratedColumn<String> tablesSummary = GeneratedColumn<String>(
+      'tables_summary', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, fromIp, arrivedAt, tablesJson, since, tablesSummary];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_upload_queue';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<SyncUploadQueueData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('from_ip')) {
+      context.handle(_fromIpMeta,
+          fromIp.isAcceptableOrUnknown(data['from_ip']!, _fromIpMeta));
+    } else if (isInserting) {
+      context.missing(_fromIpMeta);
+    }
+    if (data.containsKey('arrived_at')) {
+      context.handle(_arrivedAtMeta,
+          arrivedAt.isAcceptableOrUnknown(data['arrived_at']!, _arrivedAtMeta));
+    }
+    if (data.containsKey('tables_json')) {
+      context.handle(
+          _tablesJsonMeta,
+          tablesJson.isAcceptableOrUnknown(
+              data['tables_json']!, _tablesJsonMeta));
+    } else if (isInserting) {
+      context.missing(_tablesJsonMeta);
+    }
+    if (data.containsKey('since')) {
+      context.handle(
+          _sinceMeta, since.isAcceptableOrUnknown(data['since']!, _sinceMeta));
+    } else if (isInserting) {
+      context.missing(_sinceMeta);
+    }
+    if (data.containsKey('tables_summary')) {
+      context.handle(
+          _tablesSummaryMeta,
+          tablesSummary.isAcceptableOrUnknown(
+              data['tables_summary']!, _tablesSummaryMeta));
+    } else if (isInserting) {
+      context.missing(_tablesSummaryMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SyncUploadQueueData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncUploadQueueData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      fromIp: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}from_ip'])!,
+      arrivedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}arrived_at'])!,
+      tablesJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tables_json'])!,
+      since: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}since'])!,
+      tablesSummary: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}tables_summary'])!,
+    );
+  }
+
+  @override
+  $SyncUploadQueueTable createAlias(String alias) {
+    return $SyncUploadQueueTable(attachedDatabase, alias);
+  }
+}
+
+class SyncUploadQueueData extends DataClass
+    implements Insertable<SyncUploadQueueData> {
+  final String id;
+  final String fromIp;
+  final DateTime arrivedAt;
+  final String tablesJson;
+  final DateTime since;
+  final String tablesSummary;
+  const SyncUploadQueueData(
+      {required this.id,
+      required this.fromIp,
+      required this.arrivedAt,
+      required this.tablesJson,
+      required this.since,
+      required this.tablesSummary});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['from_ip'] = Variable<String>(fromIp);
+    map['arrived_at'] = Variable<DateTime>(arrivedAt);
+    map['tables_json'] = Variable<String>(tablesJson);
+    map['since'] = Variable<DateTime>(since);
+    map['tables_summary'] = Variable<String>(tablesSummary);
+    return map;
+  }
+
+  SyncUploadQueueCompanion toCompanion(bool nullToAbsent) {
+    return SyncUploadQueueCompanion(
+      id: Value(id),
+      fromIp: Value(fromIp),
+      arrivedAt: Value(arrivedAt),
+      tablesJson: Value(tablesJson),
+      since: Value(since),
+      tablesSummary: Value(tablesSummary),
+    );
+  }
+
+  factory SyncUploadQueueData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncUploadQueueData(
+      id: serializer.fromJson<String>(json['id']),
+      fromIp: serializer.fromJson<String>(json['fromIp']),
+      arrivedAt: serializer.fromJson<DateTime>(json['arrivedAt']),
+      tablesJson: serializer.fromJson<String>(json['tablesJson']),
+      since: serializer.fromJson<DateTime>(json['since']),
+      tablesSummary: serializer.fromJson<String>(json['tablesSummary']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'fromIp': serializer.toJson<String>(fromIp),
+      'arrivedAt': serializer.toJson<DateTime>(arrivedAt),
+      'tablesJson': serializer.toJson<String>(tablesJson),
+      'since': serializer.toJson<DateTime>(since),
+      'tablesSummary': serializer.toJson<String>(tablesSummary),
+    };
+  }
+
+  SyncUploadQueueData copyWith(
+          {String? id,
+          String? fromIp,
+          DateTime? arrivedAt,
+          String? tablesJson,
+          DateTime? since,
+          String? tablesSummary}) =>
+      SyncUploadQueueData(
+        id: id ?? this.id,
+        fromIp: fromIp ?? this.fromIp,
+        arrivedAt: arrivedAt ?? this.arrivedAt,
+        tablesJson: tablesJson ?? this.tablesJson,
+        since: since ?? this.since,
+        tablesSummary: tablesSummary ?? this.tablesSummary,
+      );
+  SyncUploadQueueData copyWithCompanion(SyncUploadQueueCompanion data) {
+    return SyncUploadQueueData(
+      id: data.id.present ? data.id.value : this.id,
+      fromIp: data.fromIp.present ? data.fromIp.value : this.fromIp,
+      arrivedAt: data.arrivedAt.present ? data.arrivedAt.value : this.arrivedAt,
+      tablesJson:
+          data.tablesJson.present ? data.tablesJson.value : this.tablesJson,
+      since: data.since.present ? data.since.value : this.since,
+      tablesSummary: data.tablesSummary.present
+          ? data.tablesSummary.value
+          : this.tablesSummary,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncUploadQueueData(')
+          ..write('id: $id, ')
+          ..write('fromIp: $fromIp, ')
+          ..write('arrivedAt: $arrivedAt, ')
+          ..write('tablesJson: $tablesJson, ')
+          ..write('since: $since, ')
+          ..write('tablesSummary: $tablesSummary')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, fromIp, arrivedAt, tablesJson, since, tablesSummary);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncUploadQueueData &&
+          other.id == this.id &&
+          other.fromIp == this.fromIp &&
+          other.arrivedAt == this.arrivedAt &&
+          other.tablesJson == this.tablesJson &&
+          other.since == this.since &&
+          other.tablesSummary == this.tablesSummary);
+}
+
+class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
+  final Value<String> id;
+  final Value<String> fromIp;
+  final Value<DateTime> arrivedAt;
+  final Value<String> tablesJson;
+  final Value<DateTime> since;
+  final Value<String> tablesSummary;
+  final Value<int> rowid;
+  const SyncUploadQueueCompanion({
+    this.id = const Value.absent(),
+    this.fromIp = const Value.absent(),
+    this.arrivedAt = const Value.absent(),
+    this.tablesJson = const Value.absent(),
+    this.since = const Value.absent(),
+    this.tablesSummary = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncUploadQueueCompanion.insert({
+    required String id,
+    required String fromIp,
+    this.arrivedAt = const Value.absent(),
+    required String tablesJson,
+    required DateTime since,
+    required String tablesSummary,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        fromIp = Value(fromIp),
+        tablesJson = Value(tablesJson),
+        since = Value(since),
+        tablesSummary = Value(tablesSummary);
+  static Insertable<SyncUploadQueueData> custom({
+    Expression<String>? id,
+    Expression<String>? fromIp,
+    Expression<DateTime>? arrivedAt,
+    Expression<String>? tablesJson,
+    Expression<DateTime>? since,
+    Expression<String>? tablesSummary,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (fromIp != null) 'from_ip': fromIp,
+      if (arrivedAt != null) 'arrived_at': arrivedAt,
+      if (tablesJson != null) 'tables_json': tablesJson,
+      if (since != null) 'since': since,
+      if (tablesSummary != null) 'tables_summary': tablesSummary,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncUploadQueueCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? fromIp,
+      Value<DateTime>? arrivedAt,
+      Value<String>? tablesJson,
+      Value<DateTime>? since,
+      Value<String>? tablesSummary,
+      Value<int>? rowid}) {
+    return SyncUploadQueueCompanion(
+      id: id ?? this.id,
+      fromIp: fromIp ?? this.fromIp,
+      arrivedAt: arrivedAt ?? this.arrivedAt,
+      tablesJson: tablesJson ?? this.tablesJson,
+      since: since ?? this.since,
+      tablesSummary: tablesSummary ?? this.tablesSummary,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (fromIp.present) {
+      map['from_ip'] = Variable<String>(fromIp.value);
+    }
+    if (arrivedAt.present) {
+      map['arrived_at'] = Variable<DateTime>(arrivedAt.value);
+    }
+    if (tablesJson.present) {
+      map['tables_json'] = Variable<String>(tablesJson.value);
+    }
+    if (since.present) {
+      map['since'] = Variable<DateTime>(since.value);
+    }
+    if (tablesSummary.present) {
+      map['tables_summary'] = Variable<String>(tablesSummary.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncUploadQueueCompanion(')
+          ..write('id: $id, ')
+          ..write('fromIp: $fromIp, ')
+          ..write('arrivedAt: $arrivedAt, ')
+          ..write('tablesJson: $tablesJson, ')
+          ..write('since: $since, ')
+          ..write('tablesSummary: $tablesSummary, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -10802,6 +11156,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DailySummariesTable dailySummaries = $DailySummariesTable(this);
   late final $EmployeesTable employees = $EmployeesTable(this);
   late final $CashClosingsTable cashClosings = $CashClosingsTable(this);
+  late final $SyncUploadQueueTable syncUploadQueue =
+      $SyncUploadQueueTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10832,7 +11188,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         paymentMethods,
         dailySummaries,
         employees,
-        cashClosings
+        cashClosings,
+        syncUploadQueue
       ];
 }
 

@@ -4,6 +4,237 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20-21 Juli 2026 (Task #3 — Item 17 Fase 2 dieksekusi &
+di-commit, branch `claude/owner-assistant-sync-history-30fuua`, commit
+`456bf45`, lanjutan langsung dari Task #4/#1/#2 di bawah — user konfirmasi
+"Jika aman, lanjut") — **SELESAI, tidak ada sisa lagi utk Item 17**:
+antrian approval sync sisi host dipindah dari in-memory (`_pendingQueue`,
+hilang total kalau app owner ditutup sebelum sempat approve) ke tabel DB
+baru `sync_upload_queue` (`lib/core/database/tables/sync_tables.dart`,
+`schemaVersion` **17→18**). Klien beralih dari SELALU full-dump sejak
+epoch ke watermark upload incremental per device (key setting terpisah
+`last_sync_upload_confirmed_at`, independen dari watermark download
+`last_sync_download_at` yg sudah ada — diverifikasi test eksplisit
+keduanya tidak saling bocor). Sync jadi makin ringan seiring waktu setelah
+owner approve data yg sama berulang kali.
+
+**Tolak (reject) sekarang PERMANEN** sesuai keputusan yg sudah disepakati
+sesi sebelumnya (lihat paragraf trade-off di bawah) — `LanSyncService.
+rejectSync` cuma hapus baris dari `sync_upload_queue`, TIDAK ada mekanisme
+apa pun yg bikin data itu otomatis terkirim ulang. 2 pengaman: (1)
+`SyncScreen._reject` sekarang WAJIB tampilkan `AlertDialog` konfirmasi
+eksplisit ("Tolak Data Sync?") sebelum eksekusi, (2) tombol baru "Sync
+Ulang Penuh" (`_syncUlangPenuh()`, ikon `Icons.restart_alt`) di kartu
+klien layar Sync — reset manual `last_sync_upload_confirmed_at` ke kosong
+(fallback epoch di `_loadUploadWatermark`) supaya klien kirim ulang SEMUA
+data dari awal, termasuk yg sebelumnya ditolak.
+
+**Environment gotcha berulang**: `build_runner` GAGAL LAGI meregenerasi
+`app_database.g.dart` (pola sama persis spt sesi-sesi lalu) — hand-patch
+manual 3 kelas (`$SyncUploadQueueTable`/`SyncUploadQueueData`/
+`SyncUploadQueueCompanion`, tiru struktur `$HeldOrdersTable` yg sudah
+ada), diverifikasi `flutter analyze` bersih + probe test throwaway
+(dihapus setelah lolos). Manager API boilerplate (`$AppDatabaseManager`)
+SENGAJA tidak di-hand-patch — dikonfirmasi tak dipakai di mana pun
+(`grep -rn "\.managers\."` nihil).
+
+**Migration test ripple**: 9 file `migration_v7..v17_test.dart` lama
+punya hardcode `expect(ver.data.values.first, 17)` yg jadi basi setelah
+bump ke 18 — fix di semua 9 file + `migration_v18_test.dart` baru (raw
+sqlite3 fixture v17 → buka via `AppDatabase` → assert tabel baru +
+version 18).
+
+**`testWidgets` + `HttpServer` asli TERBUKTI hang** (dikonfirmasi ulang
+sesi ini, bukan cuma di gotcha lama) — pakai seam `debugSetDb` (baru,
+`@visibleForTesting`, override `LanSyncService._db` langsung tanpa
+`startHost()`) dikombinasikan dgn `debugHostRunningOverride` yg sudah ada
+di `sync_screen_reject_confirm_test.dart`.
+
+**Test baru** (semua revert-verified — dibuktikan gagal dulu tanpa fix,
+baik full-revert maupun targeted-single-line-revert utk bagian yg terlalu
+besar utk full-revert praktis): `test/lan_sync_upload_queue_test.dart` (5
+test: antrian bertahan lintas "restart" host via file-backed db reopen,
+sync kedua kirim delta saja, reject permanen, Sync Ulang Penuh paksa
+full-dump lagi termasuk yg ditolak, watermark tidak maju kalau koneksi
+gagal), `test/migration_v18_test.dart`, `test/sync_screen_reject_confirm_
+test.dart` (2 test: dialog konfirmasi Tolak, tombol Sync Ulang Penuh).
+4 file test sync lama (`lan_sync_item41_test.dart`, `asisten_permission_
+sync_test.dart`, `lan_sync_transaction_items_repro_test.dart`,
+`lan_sync_watermark_test.dart`) diperbaiki utk API baru (`pendingQueue`
+sync getter → `await loadPendingQueue()`; loop cleanup manual di
+`tearDown` yg tadinya perlu utk queue in-memory global DIHAPUS — queue
+sekarang per-instance DB, tidak perlu dibersihkan manual, dan loop lama
+itu justru CRASH "Can't re-open a database after closing it" krn urutan
+`addTearDown` vs `tearDown` terbalik).
+
+Full `flutter test` **595 hijau, 0 gagal**, `flutter analyze` bersih.
+**Tidak ada sisa pekerjaan sync yg tercatat di task manager maupun
+PLAN.md** setelah sesi ini — Item 17 & Item 21 (Fase 1+2) SELESAI total.
+
+_Update sesi 20 Juli 2026 (audit sync + Item 21 Fase 1 + Task #1/#2
+dieksekusi, branch `claude/owner-assistant-sync-history-30fuua`, commit
+`a0b20e6` lalu `cab92dc`, lanjutan dari bugfix `1d47b2a` di atas) — user
+minta audit "sync harga di tab produk, apakah aman bolak-balik" → ketemu
+3 bug SILENT-REVERT/DUPLIKAT NYATA (dikonfirmasi via test DB langsung):
+kalau asisten edit harga (`locally_modified=true`, usulan belum di-approve
+owner) lalu sync lagi utk hal LAIN sebelum owner sempat approve, editnya
+TERTIMPA BALIK ke data lama owner TANPA error — akar: `price_tiers`/
+`product_units`/`alt_prices`/`product_barcodes` disinkron full-dump TANPA
+watermark `updated_at` sama sekali (beda dari `products`). Dicatat sbg
+**Task #1 di task manager (BUKAN PLAN.md, instruksi eksplisit user)**,
+didiskusikan trade-off performa-nya dgn user (Set-based guard, 1 query
+JOIN per panggilan `mergeRows`, bukan per-baris — biaya nyaris nol), lalu
+**SUDAH DIEKSEKUSI & di-commit** (`cab92dc`) — lihat detail fix di bawah
+("Update sesi 20 Juli 2026 (bugfix sync riwayat kosong...)" utk histori
+lengkap threadnya).
+
+Diskusi lanjutan soal sync makin berat (full-dump selalu dari epoch) →
+user tanya apakah ini "safety method" thd koneksi putus — jawaban:
+**bukan**, transfer HTTP sudah atomik terlepas dari isi payload; alasan
+SEBENARNYA adalah antrian approval host (`_pendingQueue`) cuma di RAM
+(hilang kalau host restart sebelum approve), full-dump klien adalah
+jaring pengaman utk itu. Dirancang solusi (persist antrian ke DB +
+watermark upload delta-only) = **Task #3** di task manager, digabung
+rencana dgn **Item 21** (state sync global + lepas lifecycle host dari
+`SyncScreen`) sbg **Fase 1** krn saling melengkapi & sentuh file sama.
+**KEPUTUSAN PENTING yang disepakati** (jangan diubah tanpa diskusi ulang):
+tombol "Tolak" di antrian sync utk desain BARU ini akan jadi **PERMANEN**
+(bukan auto-retry spt sekarang) — dgn 2 pengaman: dialog konfirmasi
+eksplisit sebelum reject, + tombol baru "Sync Ulang Penuh" di Pengaturan
+sbg escape hatch manual. Alasan: mempertahankan manfaat performa penuh
+(opsi auto-retry butuh watermark terpisah per-kategori, jauh lebih
+kompleks & tetap menggerus performa tiap owner ragu²).
+
+**Item 21 Fase 1 SUDAH DIEKSEKUSI & di-commit sesi ini** (`a0b20e6`, Task
+#4 di task manager, status completed) — state sync (host running/IP/
+token, antrian pending, progres klien) dipindah dari local `State` field
+`_SyncScreenState` ke provider Riverpod global baru
+`lib/core/providers/sync_state_provider.dart` (`syncStateProvider`,
+`SyncStateNotifier`, `SyncState`, `ClientSyncPhase`). **Bug nyata
+diperbaiki**: `SyncScreen.dispose()` DULU selalu panggil
+`LanSyncService.stopHost()` tanpa syarat — begitu owner pindah tab,
+server host mati TOTAL, memutus sync yang sedang berlangsung/menunggu
+approval. Sekarang provider (non-`.autoDispose`, hidup sepanjang sesi
+app) yang pegang lifecycle host — `dispose()` widget TIDAK LAGI menyentuh
+`LanSyncService` sama sekali. Sekalian menutup P3 lama (PLAN.md Item 41
+E, "LanSyncService full-static callback tunggal 2 listener saling
+timpa") — sekarang HANYA `SyncStateNotifier` yang pernah mendaftar ke
+`onQueueChanged`/`onProposalsChanged`.
+
+**Banner status sync persisten baru**: `lib/features/shell/
+sync_status_banner.dart` (`SyncStatusBanner`), dipasang di
+`main_shell.dart` di ATAS `widget.child` (dalam `Column`+`Expanded`,
+bukan lagi `body: widget.child` polos) — tampil di tab MANAPUN selama ada
+aktivitas (`SyncState.hasActivity`: host aktif/antrian menunggu/klien
+sedang proses), disembunyikan kalau `location` persis di
+`/pengaturan/sync` (redundan, sudah full di badan layar itu). Tap →
+`context.push('/pengaturan/sync')`.
+
+**Environment gotcha BARU ditemukan sesi ini** (tambahan utk daftar
+gotcha CLAUDE.md — belum dipindah ke sana, cek kalau nulis test sync
+baru): `testWidgets` + `LanSyncService.startHost()` SUNGGUHAN (bind
+`HttpServer` real) = **HANG TOTAL** tanpa pesan error, bukan cuma lambat
+(beda dari gotcha lama yg sudah tercatat di `sync_screen_timeout_ip_test.
+dart` soal `AppDatabase.close()` hang — kali ini bahkan sebelum sampai ke
+situ, `flutter test` sendiri harus di-kill paksa via timeout). **Fix**:
+tambah seam test-only baru `LanSyncService.debugHostRunningOverride`
+(bool statis, `@visibleForTesting`, dampak nol di produksi — `isHostRunning`
+jadi `_server != null || debugHostRunningOverride`) — test widget yang
+cuma perlu `isHostRunning=true` (banner, provider lifecycle) pakai seam
+ini, BUKAN `startHost()` beneran. Pola sama persis dgn
+`debugAddProposal`/`debugClearProposals` yang sudah ada. Test baru:
+`test/sync_screen_host_lifecycle_test.dart` (revert-verified: reintroduce
+`stopHost()` di `dispose()` lama → test pertama gagal persis "Expected:
+true, Actual: false" → restore, hijau lagi). Full `flutter test` **583
+hijau**, `flutter analyze` bersih.
+
+**Task #1 & #2 SUDAH DIEKSEKUSI & di-commit sesi ini juga** (`cab92dc`,
+setelah user konfirmasi "boleh dikerjakan bareng, risikonya beda dari
+Task #3" — lihat diskusi trade-off di atas):
+- **Task #1**: `mergeRows` (`app_database.dart`) sekarang hitung 1 query
+  JOIN di awal (`product_units`↔`products` `WHERE locally_modified=1`) →
+  Set `protectedUnitIds`, skip baris `price_tiers`/`product_units`/
+  `alt_prices`/`product_barcodes` yang unit-nya ada di situ. Test:
+  `test/proposal_pending_stale_overwrite_test.dart` (4 test, revert-verified
+  — 3 gagal persis tanpa fix, 1 verifikasi produk NON-locally_modified
+  tetap dapat behavior last-write biasa).
+- **Task #2**: `printer_service.dart` baris ~701 (`_buildBytes`, struk
+  cetak tunggal) — `bodyText('Produk: $productCount')` diganti `gen.
+  row([PosColumn('Produk:', width:3), PosColumn(' $productCount', width:9)])`,
+  sama pola dgn baris Pegawai. TANPA test (private, tanpa seam byte-level
+  — pola sama spt keputusan sesi lalu utk `_buildBytes`, lihat catatan
+  Item 49 "Tambahan HH:MM" di CHANGELOG lama).
+
+Full `flutter test` **587 hijau** setelah Task #1+#2, `flutter analyze`
+bersih.
+
+**Task #3 (Item 17 Fase 2) SUDAH SELESAI** — lihat entri paling atas file
+ini utk detail lengkap. Tidak ada sisa pekerjaan sync yg menggantung.
+
+_Update sesi 20 Juli 2026 (bugfix sync riwayat kosong + usulan harga
+berulang, branch `claude/owner-assistant-sync-history-30fuua`, commit
+`1d47b2a`) — user lapor via screenshot: setelah sync antara owner &
+asisten, transaksi yang diterima di sisi OWNER tampil TANPA daftar
+barang sama sekali (struk cuma stempel Lunas/Tempo + Total + Riwayat
+Pembayaran — kartu daftar item kosong), padahal di sisi asisten (device
+asal transaksi) tampilannya normal. **Akar masalah** (dibuktikan via
+test `lan_sync_transaction_items_repro_test.dart`, PRAGMA foreign_keys
+ON spt production — test lain di suite ini pakai `NativeDatabase.
+memory()` polos TANPA FK on, jadi kelas bug ini bisa lolos dari test
+lama): `AppDatabase.mergeRows` (dipakai `approveSync` sisi host) tiap
+tabel append-only diproses dalam SATU `transaction()` yang membungkus
+SELURUH baris. SQLite `INSERT OR IGNORE` hanya menekan pelanggaran
+UNIQUE/PK — TIDAK menekan pelanggaran FOREIGN KEY. Kalau SATU baris
+`transaction_items`/`transaction_payments` di batch itu yatim (transaction_id
+tidak ada, mis. dari state korup/parsial di device pengirim), baris itu
+throw `SqliteException(787)` yang keluar dari callback `transaction()`
+→ Drift rollback SELURUH baris dalam panggilan `mergeRows` itu, bukan
+cuma baris yang salah — satu baris korup meracuni item transaksi LAIN
+yang valid dalam batch sync yang SAMA. Karena klien selalu full-dump
+(lihat catatan Item 17 di bawah), baris korup itu akan terus
+meracuni SETIAP sync berikutnya dari device itu selama baris itu masih
+ada di lokal — cocok persis dgn "SEMUA riwayat kosong" yang dilaporkan
+(header & pembayaran tetap normal krn diproses di `mergeRows` call
+TERPISAH/transaksi lain). **Fix**: bungkus insert per-baris dgn
+try/catch DI DALAM loop (bukan biarkan exception keluar ke callback
+`transaction()`) — satu baris gagal cuma di-skip & dicatat ke
+`CrashLogService`, baris lain dalam batch yang sama tetap ter-merge.
+Root cause pastinya baris yatim itu sendiri BELUM ditemukan (kemungkinan
+state lokal korup di salah satu device — tidak sempat diselidiki lebih
+jauh sesi ini), tapi fix ini membuat merge RESILIEN terhadap kelas bug
+itu apa pun sumbernya, konsisten dgn pola defensif yg sudah ada di
+`mergeRows` (filter kolom skema beda device biar 1 kolom baru tak
+gagalkan seluruh sync — comment lama di situ SUDAH mengantisipasi "1 hal
+kecil gagalkan semua", tinggal diperluas ke FK).
+
+**Fix kedua** (request user #4, terkait tapi kausa beda): usulan
+harga/produk (Item 40) yang SUDAH direview & diterapkan owner ("Terapkan")
+tetap terus muncul lagi di sync berikutnya. Akar: `applyProductProposals`
+menyalin baris `products` APA ADANYA dari payload usulan klien, termasuk
+`updated_at` LAMA (waktu klien mengedit, jauh sebelum owner approve).
+`dumpSince` (host→klien, arah TURUN) memfilter tabel `products` dgn
+`WHERE updated_at >= since` — begitu watermark download klien maju
+melewati timestamp lama itu (WAJAR terjadi di sync-sync berikutnya),
+baris hasil approve TIDAK PERNAH lagi ikut terkirim balik ke klien,
+sehingga `products.locally_modified` di device klien TIDAK PERNAH
+ke-reset ke false (dok kolom di `product_tables.dart` mengasumsikan baris
+SELALU "ditimpa oleh push resmi dari host" — asumsi itu gagal persis di
+sini krn watermark). **Fix**: `applyProductProposals` sekarang mencap
+`updated_at` ke `DateTime.now()` (unix detik, format sama dgn `dumpSince`)
+saat menulis baris `products`, BUKAN mempertahankan timestamp lama usulan
+— baris pasti lolos filter watermark pada sync berikutnya & benar-benar
+sampai balik ke klien.
+
+Test baru (revert-verified, keduanya): `lan_sync_transaction_items_repro_test.dart`
+(2 test: alur normal end-to-end via `syncToHost`+`approveSync` port
+127.0.0.1 asli — MASIH lolos tanpa fix krn skenario simpel tidak
+menyentuh baris yatim; test kedua LANGSUNG uji `mergeRows` dgn 1 baris
+valid + 1 baris yatim dalam batch yang sama — GAGAL tanpa fix persis
+`SqliteException(787)`, item valid ikut hilang), `proposal_apply_updated_at_test.dart`
+(assert `updated_at` dicap ke sekarang + `dumpSince` dgn watermark di
+ANTARA edit-lama dan approve-baru tetap menyertakan baris). Full
+`flutter test` **580 hijau**, `flutter analyze` bersih.
+
 _Update sesi 20 Juli 2026 (bugfix pasca-49b, branch
 `claude/onboarding-setup-9bsu52`, commit `cec17f5`, PR #33) — user lapor
 via screenshot: nota lunas dibayar 4x cicilan tunai (50.000+50.000+

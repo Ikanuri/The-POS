@@ -8,6 +8,7 @@ import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'package:sqlite3/open.dart';
 import 'package:uuid/uuid.dart';
 
+import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
 import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
@@ -19,6 +20,7 @@ import 'tables/product_tables.dart';
 import 'tables/settings_tables.dart';
 import 'tables/summary_tables.dart';
 import 'tables/supplier_tables.dart';
+import 'tables/sync_tables.dart';
 import 'tables/transaction_tables.dart';
 
 part 'app_database.g.dart';
@@ -93,6 +95,7 @@ const kAsistenPermissionKeys = <String>[
   DailySummaries,
   Employees,
   CashClosings,
+  SyncUploadQueue,
 ])
 /// Baris hasil [AppDatabase.watchStockOverview] — Item 30 ("Cek Stok").
 /// [unitId] = id satuan DASAR produk ini (dipakai Item 36 stock opname utk
@@ -145,7 +148,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -268,6 +271,12 @@ class AppDatabase extends _$AppDatabase {
             // Item 49g — retur nota LUNAS tanpa nota baru: baris item retur
             // (qty negatif) ditandai returnedAt, pola sama dgn addedAt.
             await m.addColumn(transactionItems, transactionItems.returnedAt);
+          }
+          if (from < 18) {
+            // Item 17 Fase 2 — antrian approval sync sisi host, PERSISTEN
+            // (dulu murni in-memory `_pendingQueue` di LanSyncService, hilang
+            // total kalau app di-restart sebelum owner sempat approve).
+            await m.createTable(syncUploadQueue);
           }
         },
         beforeOpen: (details) async {
@@ -3316,6 +3325,48 @@ class AppDatabase extends _$AppDatabase {
       (update(heldOrders)..where((t) => t.id.equals(id)))
           .write(HeldOrdersCompanion(cartJson: Value(cartJson)));
 
+  // ───────────────────────── Sync upload queue (Item 17 Fase 2) ─────────
+
+  /// Antrian approval sync sisi HOST, sekarang PERSISTEN — dulu
+  /// `_pendingQueue` di `LanSyncService` cuma hidup di RAM, hilang total
+  /// kalau app owner di-restart sebelum sempat approve. "1 slot per IP"
+  /// dipertahankan (hapus entri lama dari IP yang sama SEBELUM insert baru,
+  /// dalam satu transaksi) — aman krn klien selalu kirim data superset dari
+  /// upload sebelumnya (lihat dok watermark upload di lan_sync_service.dart).
+  Future<void> enqueueSyncUpload({
+    required String id,
+    required String fromIp,
+    required String tablesJson,
+    required DateTime since,
+    required String tablesSummary,
+  }) =>
+      transaction(() async {
+        await (delete(syncUploadQueue)..where((t) => t.fromIp.equals(fromIp)))
+            .go();
+        await into(syncUploadQueue).insert(SyncUploadQueueCompanion.insert(
+          id: id,
+          fromIp: fromIp,
+          tablesJson: tablesJson,
+          since: since,
+          tablesSummary: tablesSummary,
+        ));
+      });
+
+  Future<List<SyncUploadQueueData>> listSyncUploadQueue() =>
+      (select(syncUploadQueue)
+            ..orderBy([(t) => OrderingTerm.asc(t.arrivedAt)]))
+          .get();
+
+  Future<SyncUploadQueueData?> getSyncUploadQueueItem(String id) =>
+      (select(syncUploadQueue)..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+
+  /// Dipanggil setelah approve ATAU reject — baik disetujui maupun ditolak,
+  /// item ini selesai diproses & tidak perlu tersimpan lagi (lihat dok
+  /// "tolak = permanen" di lan_sync_service.dart).
+  Future<void> deleteSyncUploadQueueItem(String id) =>
+      (delete(syncUploadQueue)..where((t) => t.id.equals(id))).go();
+
   // ───────────────────────── Backup / Restore ─────────────────────────
 
   static const _allTables = [
@@ -3621,6 +3672,23 @@ class AppDatabase extends _$AppDatabase {
           if (cleaned.isEmpty) continue;
           if (table == 'products') {
             cleaned['locally_modified'] = 0;
+            // Bug nyata dilaporkan user: usulan harga yang SUDAH diterapkan
+            // owner tetap muncul lagi terus-menerus di sync berikutnya.
+            // Akar masalah: baris ini disalin APA ADANYA dari usulan klien,
+            // termasuk `updated_at` LAMA (waktu klien mengedit, BUKAN waktu
+            // owner menerapkan). `dumpSince` (host→klien) memfilter master
+            // data produk dgn `WHERE updated_at >= since` — begitu watermark
+            // klien maju melewati timestamp lama itu (sync-sync berikutnya),
+            // baris hasil approve ini TIDAK PERNAH lagi ikut terkirim balik
+            // ke klien, jadi `locally_modified` di device klien TIDAK PERNAH
+            // ke-reset ke false (lihat dok kolom di product_tables.dart yang
+            // mengasumsikan baris SELALU "ditimpa oleh push resmi dari host"
+            // — asumsi itu gagal persis di sini). Fix: cap `updated_at` ke
+            // SAAT INI supaya baris yang baru di-approve ini pasti lolos
+            // filter watermark pada sync berikutnya & benar-benar sampai
+            // balik ke klien (unix detik, format sama seperti dumpSince).
+            cleaned['updated_at'] =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
           }
           final cols = cleaned.keys.map((k) => '"$k"').join(', ');
           final placeholders = cleaned.values.map((_) => '?').join(', ');
@@ -3702,12 +3770,52 @@ class AppDatabase extends _$AppDatabase {
             .get())
         .map((r) => r.data['name'] as String)
         .toSet();
+
+    // Bug nyata dilaporkan user (audit "sync harga di tab produk, aman
+    // bolak-balik?"): kalau asisten edit harga (products.locallyModified
+    // =true, usulan belum di-review owner) lalu sync lagi utk hal LAIN
+    // sebelum owner sempat approve, editnya TERTIMPA BALIK (price_tiers)
+    // atau DUPLIKAT (alt_prices)/tertimpa (product_units) oleh data lama
+    // owner — akar: 4 tabel ini disinkron full-dump TANPA `updated_at`
+    // sama sekali (beda dari `products`), jadi last-write-wins di atas
+    // tidak berlaku, INSERT OR REPLACE/dedup-by-key selalu menang tanpa
+    // syarat. Fix: skip baris yang unit-nya milik produk yang MASIH
+    // `locally_modified=true` di device INI — biarkan edit lokal yang
+    // belum-di-approve tetap utuh sampai owner benar² approve/reject
+    // (flag baru bersih setelah baris resmi ditimpa push dari host, lihat
+    // dok `Products.locallyModified`). SATU query di awal (bukan per-baris)
+    // supaya biaya performa nyaris nol — 4 tabel ini bisa berisi ribuan
+    // baris per sync (full-dump tanpa filter).
+    const guardedUnitTables = {
+      'price_tiers',
+      'alt_prices',
+      'product_barcodes',
+    };
+    Set<String>? protectedUnitIds;
+    if (!isAppendOnly &&
+        (tableName == 'product_units' || guardedUnitTables.contains(tableName))) {
+      final protectedRows = await customSelect(
+        'SELECT pu.id AS unit_id FROM product_units pu '
+        'JOIN products p ON p.id = pu.product_id '
+        'WHERE p.locally_modified = 1',
+      ).get();
+      protectedUnitIds =
+          protectedRows.map((r) => r.data['unit_id'] as String).toSet();
+    }
+
     await transaction(() async {
       for (var row in rows) {
         if (row.isEmpty) continue;
         row = Map<String, Object?>.from(row)
           ..removeWhere((k, _) => !localColumns.contains(k));
         if (row.isEmpty) continue;
+
+        if (protectedUnitIds != null) {
+          final unitId = tableName == 'product_units'
+              ? row['id']
+              : row['product_unit_id'];
+          if (unitId is String && protectedUnitIds.contains(unitId)) continue;
+        }
 
         if (isAppendOnly) {
           // Append-only: skip if PK already exists.
@@ -3796,11 +3904,30 @@ class AppDatabase extends _$AppDatabase {
         final placeholders = row.values.map((_) => '?').join(', ');
         final variables = _rowToVars(row);
         final mode = isAppendOnly ? 'INSERT OR IGNORE' : 'INSERT OR REPLACE';
-        final inserted = await customInsert(
-          '$mode INTO "$tableName" ($cols) VALUES ($placeholders)',
-          variables: variables,
-        );
-        if (inserted > 0) count++;
+        // Bug nyata dilaporkan user: struk yang diterima lewat sync tampil
+        // TANPA daftar item sama sekali (header & pembayaran normal). Akar
+        // masalah: `INSERT OR IGNORE` HANYA menekan pelanggaran UNIQUE/PK —
+        // pelanggaran FOREIGN KEY (mis. baris `transaction_items` yatim,
+        // transaction_id-nya tidak ada di device pengirim maupun penerima)
+        // TETAP throw, dan exception itu keluar dari callback `transaction()`
+        // di atas → Drift rollback SELURUH baris dalam SATU panggilan
+        // `mergeRows` ini (bukan cuma baris yang salah) — satu baris korup
+        // milik SATU transaksi meracuni item transaksi LAIN yang valid dalam
+        // batch sync yang sama, konsisten dgn tiap sync berikutnya (klien
+        // selalu full-dump) selama baris korup itu masih ada di device
+        // pengirim. Tangkap per-baris di sini supaya SATU baris gagal cuma
+        // di-skip (dicatat ke CrashLogService utk diagnosis), baris lain
+        // dalam batch yang sama tetap ter-merge.
+        try {
+          final inserted = await customInsert(
+            '$mode INTO "$tableName" ($cols) VALUES ($placeholders)',
+            variables: variables,
+          );
+          if (inserted > 0) count++;
+        } catch (e, st) {
+          await CrashLogService.record(e, st,
+              context: 'app_database_merge_rows_row table=$tableName');
+        }
       }
     });
     return count;

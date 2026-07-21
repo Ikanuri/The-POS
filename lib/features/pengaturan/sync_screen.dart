@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/sync_state_provider.dart';
 import '../../core/services/lan_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/qr_sync_widgets.dart';
@@ -15,97 +16,50 @@ class SyncScreen extends ConsumerStatefulWidget {
   ConsumerState<SyncScreen> createState() => _SyncScreenState();
 }
 
+/// Item 21 (Fase 1) — layar ini TIDAK LAGI memiliki state sync (host
+/// running/antrian/progres klien semua sekarang di `syncStateProvider`,
+/// hidup sepanjang sesi app). Layar ini murni "viewer/controller": baca
+/// state via `ref.watch(syncStateProvider)`, panggil method notifier utk
+/// aksi. `dispose()` TIDAK LAGI mematikan host — beda dari perilaku lama
+/// yang mematikan server total begitu owner pindah tab.
 class _SyncScreenState extends ConsumerState<SyncScreen>
     with InlineBannerStateMixin<SyncScreen> {
-  // Host state
-  bool _hostRunning = false;
-  String _hostIp = '';
-  String _hostToken = '';
-  bool _refreshingIp = false;
-  List<PendingSyncItem> _queue = [];
-  // Item 40 — antrian usulan harga/produk, TERPISAH dari _queue.
-  List<PendingProductProposal> _proposals = [];
-
-  // Client state
   final _ipCtrl = TextEditingController();
   final _tokenCtrl = TextEditingController();
-  bool _syncing = false;
-  String? _syncResult;
-  SyncTimeoutProfile _timeoutProfile = SyncTimeoutProfile.normal;
 
   @override
   void initState() {
     super.initState();
-    // Listen for queue changes while screen is open.
-    LanSyncService.onQueueChanged = () {
-      if (mounted) setState(() => _queue = LanSyncService.pendingQueue.toList());
-    };
-    LanSyncService.onProposalsChanged = () {
-      if (mounted) {
-        setState(() => _proposals = LanSyncService.pendingProposals.toList());
-      }
-    };
-    _proposals = LanSyncService.pendingProposals.toList();
-    _loadTimeoutProfile();
-  }
-
-  Future<void> _loadTimeoutProfile() async {
-    final db = ref.read(databaseProvider);
-    final profile = await SyncTimeoutProfile.load(db);
-    if (mounted) setState(() => _timeoutProfile = profile);
-  }
-
-  Future<void> _refreshIp() async {
-    setState(() => _refreshingIp = true);
-    try {
-      final ip = await LanSyncService.refreshHostIp();
-      if (!mounted) return;
-      final changed = ip != _hostIp;
-      setState(() => _hostIp = ip);
-      showSuccess(changed
-          ? 'IP diperbarui: $ip — bagikan ulang QR ke kasir'
-          : 'IP masih sama: $ip');
-    } catch (e) {
-      if (mounted) showError('Gagal refresh IP: $e');
-    } finally {
-      if (mounted) setState(() => _refreshingIp = false);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(syncStateProvider.notifier).loadTimeoutProfile();
+    });
   }
 
   @override
   void dispose() {
-    LanSyncService.onQueueChanged = null;
-    LanSyncService.onProposalsChanged = null;
-    LanSyncService.stopHost();
     _ipCtrl.dispose();
     _tokenCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _toggleHost() async {
-    if (_hostRunning) {
-      await LanSyncService.stopHost();
-      setState(() {
-        _hostRunning = false;
-        _hostIp = '';
-        _hostToken = '';
-        _queue = [];
-      });
-      return;
-    }
+  Future<void> _refreshIp() async {
+    final notifier = ref.read(syncStateProvider.notifier);
+    final oldIp = ref.read(syncStateProvider).hostIp;
     try {
-      final device = ref.read(deviceProvider);
-      final db = ref.read(databaseProvider);
-      final (ip, token) = await LanSyncService.startHost(
-        db: db,
-        storeKey: device.storeKey!,
-      );
-      setState(() {
-        _hostRunning = true;
-        _hostIp = ip;
-        _hostToken = token;
-        _queue = LanSyncService.pendingQueue.toList();
-      });
+      await notifier.refreshIp();
+      if (!mounted) return;
+      final newIp = ref.read(syncStateProvider).hostIp;
+      showSuccess(newIp != oldIp
+          ? 'IP diperbarui: $newIp — bagikan ulang QR ke kasir'
+          : 'IP masih sama: $newIp');
+    } catch (e) {
+      if (mounted) showError('Gagal refresh IP: $e');
+    }
+  }
+
+  Future<void> _toggleHost() async {
+    try {
+      await ref.read(syncStateProvider.notifier).toggleHost();
     } catch (e) {
       if (!mounted) return;
       showError('Gagal start server: $e');
@@ -120,9 +74,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
       if (count > 0) available[label] = (tables: tables, count: count);
     });
 
+    final notifier = ref.read(syncStateProvider.notifier);
     if (available.isEmpty) {
       // Tidak ada data append-only untuk diterima → buang dari antrian.
-      LanSyncService.rejectSync(item.id);
+      notifier.rejectSync(item.id);
       if (mounted) showSuccess('Tidak ada data baru untuk diterima');
       return;
     }
@@ -171,23 +126,84 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
       if (selected[label] == true) allowed.addAll(v.tables);
     });
     if (allowed.isEmpty) {
-      LanSyncService.rejectSync(item.id);
+      notifier.rejectSync(item.id);
       if (mounted) showSuccess('Tidak ada kategori dipilih — sync dilewati');
       return;
     }
 
     try {
       final received =
-          await LanSyncService.approveSync(item.id, allowedTables: allowed);
+          await notifier.approveSync(item.id, allowedTables: allowed);
       if (mounted) showSuccess('Sync disetujui · $received baris diterima');
     } catch (e) {
       if (mounted) showError('Gagal merge: $e');
     }
   }
 
-  void _reject(PendingSyncItem item) {
-    LanSyncService.rejectSync(item.id);
+  /// Item 17 Fase 2 — "Tolak" sekarang PERMANEN (data tidak lagi otomatis
+  /// kirim ulang lewat full-dump seperti dulu — lihat dok `LanSyncService.
+  /// rejectSync`), jadi WAJIB minta konfirmasi eksplisit sebelum dieksekusi.
+  Future<void> _reject(PendingSyncItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tolak Data Sync?'),
+        content: Text(
+          'Data dari ${item.fromIp} (${item.tablesSummary}) tidak akan '
+          'otomatis diminta lagi setelah ditolak. Kalau berubah pikiran, '
+          'gunakan "Sync Ulang Penuh" di perangkat pengirim untuk '
+          'mengirimkannya lagi.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal')),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Tolak'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(syncStateProvider.notifier).rejectSync(item.id);
     if (mounted) showSuccess('Sync dari ${item.fromIp} ditolak');
+  }
+
+  /// "Sync Ulang Penuh" — escape hatch manual: reset watermark upload
+  /// perangkat INI (klien) supaya sync berikutnya kirim ulang semua data
+  /// sejak awal, bukan cuma delta. Dipakai kalau owner salah tolak (lihat
+  /// dialog konfirmasi di atas) atau curiga ada data yang belum sampai.
+  Future<void> _syncUlangPenuh() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sync Ulang Penuh?'),
+        content: const Text(
+          'Perangkat ini akan mengirim SEMUA riwayat transaksi/stok dari '
+          'awal lagi di sync berikutnya (bukan cuma data baru). Gunakan '
+          'kalau curiga ada data yang belum pernah sampai ke host, atau '
+          'setelah salah menolak antrian sync.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Ya, Reset')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(syncStateProvider.notifier).resetUploadWatermark();
+    if (mounted) {
+      showSuccess('Sync berikutnya akan mengirim semua data dari awal');
+    }
   }
 
   void _copy(String value, String label) {
@@ -202,33 +218,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
       showError('Masukkan IP dan Token host');
       return;
     }
-    setState(() {
-      _syncing = true;
-      _syncResult = null;
-    });
     try {
-      final device = ref.read(deviceProvider);
-      final db = ref.read(databaseProvider);
-      final result = await LanSyncService.syncToHost(
-        db: db,
-        storeKey: device.storeKey!,
-        hostIp: ip,
-        syncToken: token,
-        connectTimeout: _timeoutProfile.connectTimeout,
-        responseTimeout: _timeoutProfile.responseTimeout,
-      );
-      if (!mounted) return;
-      setState(() {
-        _syncResult = result.pendingApproval
-            ? 'Data terkirim, menunggu persetujuan owner di perangkat host.\n'
-                'Diterima dari host: ${result.received} baris.'
-            : 'Selesai! Diterima: ${result.received} baris, Dikirim: ${result.sent} baris';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _syncResult = 'Gagal: $e');
-    } finally {
-      if (mounted) setState(() => _syncing = false);
+      await ref.read(syncStateProvider.notifier).sync(ip: ip, token: token);
+    } catch (_) {
+      // Pesan error sudah ditulis notifier ke state.clientResultMessage —
+      // di sini cukup tangkap supaya tidak jadi unhandled exception.
     }
   }
 
@@ -236,6 +230,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final device = ref.watch(deviceProvider);
+    final sync = ref.watch(syncStateProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sync WiFi')),
@@ -274,7 +269,14 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                       'perlu terhubung ke jaringan WiFi yang sama.',
                       style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
                     ),
-                    if (_hostRunning) ...[
+                    // Item 21 — host sekarang BERTAHAN lintas tab (tidak lagi
+                    // mati begitu layar ini ditinggalkan), jadi peringatan
+                    // "layar harus tetap menyala" ini sudah tidak berlaku
+                    // sepenuhnya — TETAP ditampilkan krn OS masih bisa
+                    // mematikan koneksi latar belakang saat app di-minimize/
+                    // layar dikunci (di luar kendali app), bukan lagi krn
+                    // navigasi tab di DALAM app.
+                    if (sync.hostRunning) ...[
                       const SizedBox(height: 6),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,10 +286,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              'Biarkan layar HP ini menyala & aplikasi tetap '
-                              'di depan selama menunggu kasir sync — sebagian '
-                              'HP mematikan koneksi latar belakang otomatis '
-                              'kalau layar dikunci/app di-minimize.',
+                              'Boleh pindah tab lain sambil menunggu — server '
+                              'tetap jalan. Hindari mengunci layar/menutup '
+                              'app sepenuhnya, sebagian HP mematikan koneksi '
+                              'latar belakang otomatis.',
                               style: TextStyle(
                                   fontSize: 11.5,
                                   color: scheme.onSurfaceVariant),
@@ -297,18 +299,18 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                       ),
                     ],
                     const SizedBox(height: 12),
-                    if (_hostRunning) ...[
+                    if (sync.hostRunning) ...[
                       _InfoRow(
                         label: 'IP',
-                        value: '$_hostIp:8625',
-                        onCopy: () => _copy('$_hostIp:8625', 'IP'),
+                        value: '${sync.hostIp}:8625',
+                        onCopy: () => _copy('${sync.hostIp}:8625', 'IP'),
                       ),
                       const SizedBox(height: 6),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
-                          onPressed: _refreshingIp ? null : _refreshIp,
-                          icon: _refreshingIp
+                          onPressed: sync.refreshingIp ? null : _refreshIp,
+                          icon: sync.refreshingIp
                               ? const SizedBox(
                                   width: 14,
                                   height: 14,
@@ -327,14 +329,14 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                       const SizedBox(height: 6),
                       _InfoRow(
                         label: 'Token',
-                        value: _hostToken,
-                        onCopy: () => _copy(_hostToken, 'Token'),
+                        value: sync.hostToken,
+                        onCopy: () => _copy(sync.hostToken, 'Token'),
                       ),
                       const SizedBox(height: 12),
                       Center(
                         child: QrSyncDisplay(data: {
-                          'ip': '$_hostIp:8625',
-                          'key': _hostToken,
+                          'ip': '${sync.hostIp}:8625',
+                          'key': sync.hostToken,
                         }),
                       ),
                       const SizedBox(height: 12),
@@ -355,16 +357,16 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
             const SizedBox(height: 12),
 
             // B-4: Antrian persetujuan sync dari perangkat kasir.
-            if (_queue.isNotEmpty) ...[
+            if (sync.queue.isNotEmpty) ...[
               Row(children: [
                 Icon(Icons.pending_actions_outlined,
                     color: scheme.tertiary, size: 18),
                 const SizedBox(width: 6),
-                Text('Menunggu Persetujuan (${_queue.length})',
+                Text('Menunggu Persetujuan (${sync.queue.length})',
                     style: Theme.of(context).textTheme.titleSmall),
               ]),
               const SizedBox(height: 6),
-              ..._queue.map((item) {
+              ...sync.queue.map((item) {
                 final mins = DateTime.now()
                     .difference(item.arrivedAt)
                     .inMinutes;
@@ -437,16 +439,16 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
             // Item 40 — antrian usulan harga/produk, TERPISAH dari antrian
             // data transaksi/stok di atas (independen, bisa ditinjau kapan
             // saja tanpa perlu setuju/tolak data append-only dulu).
-            if (_proposals.isNotEmpty) ...[
+            if (sync.proposals.isNotEmpty) ...[
               Row(children: [
                 Icon(Icons.storefront_outlined,
                     color: scheme.tertiary, size: 18),
                 const SizedBox(width: 6),
-                Text('Usulan Harga/Produk (${_proposals.length})',
+                Text('Usulan Harga/Produk (${sync.proposals.length})',
                     style: Theme.of(context).textTheme.titleSmall),
               ]),
               const SizedBox(height: 6),
-              ..._proposals.map((p) {
+              ...sync.proposals.map((p) {
                 final mins =
                     DateTime.now().difference(p.arrivedAt).inMinutes;
                 return Card(
@@ -532,7 +534,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                   ),
                   const SizedBox(height: 4),
                   DropdownButtonFormField<SyncTimeoutProfile>(
-                    value: _timeoutProfile,
+                    value: sync.timeoutProfile,
                     decoration: const InputDecoration(
                       labelText: 'Batas Waktu Tunggu (Timeout)',
                       isDense: true,
@@ -544,11 +546,9 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                                   style: const TextStyle(fontSize: 13)),
                             ))
                         .toList(),
-                    onChanged: (p) async {
+                    onChanged: (p) {
                       if (p == null) return;
-                      setState(() => _timeoutProfile = p);
-                      await SyncTimeoutProfile.save(
-                          ref.read(databaseProvider), p);
+                      ref.read(syncStateProvider.notifier).setTimeoutProfile(p);
                     },
                   ),
                   const SizedBox(height: 4),
@@ -559,7 +559,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                     style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
-                  if (_syncing)
+                  if (sync.clientSyncing)
                     const Row(children: [
                       SizedBox(
                           width: 20,
@@ -574,27 +574,41 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                       icon: const Icon(Icons.sync),
                       label: const Text('Sync Sekarang'),
                     ),
-                  if (_syncResult != null) ...[
+                  if (sync.clientResultMessage != null) ...[
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: _syncResult!.startsWith('Gagal')
+                        color: sync.clientResultMessage!.startsWith('Gagal')
                             ? scheme.errorContainer
                             : scheme.primaryContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        _syncResult!,
+                        sync.clientResultMessage!,
                         style: TextStyle(
                           fontSize: 13,
-                          color: _syncResult!.startsWith('Gagal')
+                          color: sync.clientResultMessage!.startsWith('Gagal')
                               ? scheme.onErrorContainer
                               : scheme.onPrimaryContainer,
                         ),
                       ),
                     ),
                   ],
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: sync.clientSyncing ? null : _syncUlangPenuh,
+                      icon: const Icon(Icons.restart_alt, size: 16),
+                      label: const Text('Sync Ulang Penuh',
+                          style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    ),
+                  ),
                 ],
               ),
             ),

@@ -87,7 +87,7 @@ void main() {
     expect(pay.amount, 10000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 17);
+    expect(ver.data.values.first, 18);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

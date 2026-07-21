@@ -693,8 +693,16 @@ class PrinterService {
     }
 
     // ── Jumlah produk ─────────────────────────────────────────────────────
+    // Bug nyata dilaporkan user (foto struk cetak): baris ini dulu pakai
+    // bodyText polos (teks 1 baris, angka nempel langsung setelah label)
+    // — TIDAK sejajar dgn baris "Pegawai:" di atasnya yang pakai gen.row
+    // 2-kolom (width 3+9). Samakan pola kolomnya supaya kedua value
+    // sejajar di posisi yang sama.
     if (settings.showProductCount) {
-      out.addAll(bodyText('Produk: $productCount'));
+      out.addAll(gen.row([
+        PosColumn(text: 'Produk:', width: 3),
+        PosColumn(text: ' $productCount', width: 9),
+      ]));
     }
     if (empName.isNotEmpty || settings.showProductCount) {
       out.addAll(bodySep());

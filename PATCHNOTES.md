@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 21 Juli 2026
+
+### ✨ Fitur Baru
+- **Sync WiFi jadi makin ringan/cepat seiring waktu** — setelah data
+  disetujui, sync berikutnya cuma mengirim data BARU saja, tidak lagi
+  mengirim ulang semua data dari awal setiap kali.
+- **Antrian sync yang menunggu persetujuan tidak lagi hilang** kalau HP
+  owner ditutup/restart sebelum sempat ditinjau — sekarang tersimpan
+  aman, bisa dilanjutkan kapan saja.
+- Tombol **"Tolak"** di antrian sync sekarang minta **konfirmasi** dulu
+  (data yang ditolak tidak akan otomatis muncul lagi).
+- Tombol baru **"Sync Ulang Penuh"** di layar Sync — kalau owner memang
+  ingin perangkat lain mengirim ulang semua datanya dari awal.
+
 ## 20 Juli 2026
 
 ### ✨ Fitur Baru
@@ -18,6 +32,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   diretur ditandai dengan pembatas "Retur HH:MM" di daftar barang, dan
   ringkasan struk menampilkan Total awal, jumlah Retur, Total akhir, serta
   Refund yang diberikan.
+- **Sync WiFi: owner sekarang bisa pindah ke tab lain tanpa memutus proses
+  sync** — sebelumnya, keluar dari layar Sync WiFi (mis. buka tab Kasir
+  sebentar) langsung mematikan server, memutus koneksi kasir/asisten yang
+  sedang mengirim data. Sekarang server tetap jalan di latar belakang, dan
+  ada banner status kecil yang muncul di tab manapun selagi ada sync
+  berjalan atau antrian menunggu persetujuan — tap untuk kembali ke layar
+  Sync.
 
 ### 🎨 Penyempurnaan Tampilan
 - **Tombol "000" di keypad pembayaran dipindah ke baris bawah**, sejajar
@@ -44,6 +65,24 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   menampilkan angka yang sama persis dengan "Total" (bukan jumlah uang
   yang sebenarnya diterima), sehingga tidak nyambung dengan baris
   Kembalian di bawahnya.
+- **Sinkronisasi antar-HP (owner & asisten/kasir): transaksi yang diterima
+  lewat sync kini selalu tampil lengkap dengan daftar barangnya** —
+  sebelumnya, satu transaksi bermasalah bisa membuat daftar barang
+  transaksi LAIN yang dikirim di waktu bersamaan ikut hilang di struk
+  (hanya nomor nota, total, dan riwayat pembayaran yang tampil, daftar
+  barang kosong).
+- **Usulan perubahan harga dari HP asisten yang sudah disetujui owner
+  tidak lagi terus muncul ulang** di layar sync — sebelumnya usulan yang
+  sudah diterapkan bisa terus muncul kembali setiap kali sync, seolah
+  belum pernah disetujui.
+- **Perubahan harga/satuan dari HP asisten yang belum sempat disetujui
+  owner tidak lagi hilang diam-diam** — sebelumnya, kalau asisten sync
+  lagi untuk hal lain SEBELUM owner sempat meninjau usulan harganya,
+  perubahan itu bisa tertimpa balik oleh harga lama milik owner tanpa
+  pemberitahuan apa pun.
+- **Struk cetak: baris "Produk: [jumlah]" sekarang sejajar dengan baris
+  "Pegawai:"** di atasnya — sebelumnya nomornya menempel langsung setelah
+  label, tidak lurus dengan baris pegawai.
 
 ## 19 Juli 2026
 
