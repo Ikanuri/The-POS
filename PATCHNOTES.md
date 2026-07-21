@@ -18,6 +18,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   diretur ditandai dengan pembatas "Retur HH:MM" di daftar barang, dan
   ringkasan struk menampilkan Total awal, jumlah Retur, Total akhir, serta
   Refund yang diberikan.
+- **Sync WiFi: owner sekarang bisa pindah ke tab lain tanpa memutus proses
+  sync** — sebelumnya, keluar dari layar Sync WiFi (mis. buka tab Kasir
+  sebentar) langsung mematikan server, memutus koneksi kasir/asisten yang
+  sedang mengirim data. Sekarang server tetap jalan di latar belakang, dan
+  ada banner status kecil yang muncul di tab manapun selagi ada sync
+  berjalan atau antrian menunggu persetujuan — tap untuk kembali ke layar
+  Sync.
 
 ### 🎨 Penyempurnaan Tampilan
 - **Tombol "000" di keypad pembayaran dipindah ke baris bawah**, sejajar

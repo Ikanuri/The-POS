@@ -4,6 +4,98 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Juli 2026 (audit sync + Item 21 Fase 1, branch
+`claude/owner-assistant-sync-history-30fuua`, commit `a0b20e6`, lanjutan
+dari bugfix `1d47b2a` di atas) — user minta audit "sync harga di tab
+produk, apakah aman bolak-balik" → ketemu 3 bug SILENT-REVERT/DUPLIKAT
+NYATA yang BELUM diperbaiki (dikonfirmasi via test DB langsung, dicatat
+sbg **Task #1 di task manager, BUKAN PLAN.md** sesuai instruksi eksplisit
+user sesi ini — cek task manager di sesi depan, JANGAN cuma baca PLAN.md):
+kalau asisten edit harga (`locally_modified=true`, usulan belum di-approve
+owner) lalu sync lagi utk hal LAIN sebelum owner sempat approve, editnya
+TERTIMPA BALIK ke data lama owner TANPA error — akar: `price_tiers`/
+`product_units`/`alt_prices`/`product_barcodes` disinkron full-dump TANPA
+watermark `updated_at` sama sekali (beda dari `products`). Fix yang
+disepakati (Set-based guard di `mergeRows`, biaya performa nyaris nol,
+SUDAH didiskusikan trade-off-nya dgn user) — **BELUM dieksekusi**, lihat
+Task #1.
+
+Diskusi lanjutan soal sync makin berat (full-dump selalu dari epoch) →
+user tanya apakah ini "safety method" thd koneksi putus — jawaban:
+**bukan**, transfer HTTP sudah atomik terlepas dari isi payload; alasan
+SEBENARNYA adalah antrian approval host (`_pendingQueue`) cuma di RAM
+(hilang kalau host restart sebelum approve), full-dump klien adalah
+jaring pengaman utk itu. Dirancang solusi (persist antrian ke DB +
+watermark upload delta-only) = **Task #3** di task manager, digabung
+rencana dgn **Item 21** (state sync global + lepas lifecycle host dari
+`SyncScreen`) sbg **Fase 1** krn saling melengkapi & sentuh file sama.
+**KEPUTUSAN PENTING yang disepakati** (jangan diubah tanpa diskusi ulang):
+tombol "Tolak" di antrian sync utk desain BARU ini akan jadi **PERMANEN**
+(bukan auto-retry spt sekarang) — dgn 2 pengaman: dialog konfirmasi
+eksplisit sebelum reject, + tombol baru "Sync Ulang Penuh" di Pengaturan
+sbg escape hatch manual. Alasan: mempertahankan manfaat performa penuh
+(opsi auto-retry butuh watermark terpisah per-kategori, jauh lebih
+kompleks & tetap menggerus performa tiap owner ragu²).
+
+**Item 21 Fase 1 SUDAH DIEKSEKUSI & di-commit sesi ini** (`a0b20e6`, Task
+#4 di task manager, status completed) — state sync (host running/IP/
+token, antrian pending, progres klien) dipindah dari local `State` field
+`_SyncScreenState` ke provider Riverpod global baru
+`lib/core/providers/sync_state_provider.dart` (`syncStateProvider`,
+`SyncStateNotifier`, `SyncState`, `ClientSyncPhase`). **Bug nyata
+diperbaiki**: `SyncScreen.dispose()` DULU selalu panggil
+`LanSyncService.stopHost()` tanpa syarat — begitu owner pindah tab,
+server host mati TOTAL, memutus sync yang sedang berlangsung/menunggu
+approval. Sekarang provider (non-`.autoDispose`, hidup sepanjang sesi
+app) yang pegang lifecycle host — `dispose()` widget TIDAK LAGI menyentuh
+`LanSyncService` sama sekali. Sekalian menutup P3 lama (PLAN.md Item 41
+E, "LanSyncService full-static callback tunggal 2 listener saling
+timpa") — sekarang HANYA `SyncStateNotifier` yang pernah mendaftar ke
+`onQueueChanged`/`onProposalsChanged`.
+
+**Banner status sync persisten baru**: `lib/features/shell/
+sync_status_banner.dart` (`SyncStatusBanner`), dipasang di
+`main_shell.dart` di ATAS `widget.child` (dalam `Column`+`Expanded`,
+bukan lagi `body: widget.child` polos) — tampil di tab MANAPUN selama ada
+aktivitas (`SyncState.hasActivity`: host aktif/antrian menunggu/klien
+sedang proses), disembunyikan kalau `location` persis di
+`/pengaturan/sync` (redundan, sudah full di badan layar itu). Tap →
+`context.push('/pengaturan/sync')`.
+
+**Environment gotcha BARU ditemukan sesi ini** (tambahan utk daftar
+gotcha CLAUDE.md — belum dipindah ke sana, cek kalau nulis test sync
+baru): `testWidgets` + `LanSyncService.startHost()` SUNGGUHAN (bind
+`HttpServer` real) = **HANG TOTAL** tanpa pesan error, bukan cuma lambat
+(beda dari gotcha lama yg sudah tercatat di `sync_screen_timeout_ip_test.
+dart` soal `AppDatabase.close()` hang — kali ini bahkan sebelum sampai ke
+situ, `flutter test` sendiri harus di-kill paksa via timeout). **Fix**:
+tambah seam test-only baru `LanSyncService.debugHostRunningOverride`
+(bool statis, `@visibleForTesting`, dampak nol di produksi — `isHostRunning`
+jadi `_server != null || debugHostRunningOverride`) — test widget yang
+cuma perlu `isHostRunning=true` (banner, provider lifecycle) pakai seam
+ini, BUKAN `startHost()` beneran. Pola sama persis dgn
+`debugAddProposal`/`debugClearProposals` yang sudah ada. Test baru:
+`test/sync_screen_host_lifecycle_test.dart` (revert-verified: reintroduce
+`stopHost()` di `dispose()` lama → test pertama gagal persis "Expected:
+true, Actual: false" → restore, hijau lagi). Full `flutter test` **583
+hijau**, `flutter analyze` bersih.
+
+**Belum dikerjakan sesi ini, tercatat di task manager (BUKAN PLAN.md,
+instruksi eksplisit user)** — cek task manager, bukan cuma PLAN.md, kalau
+lanjut sesi berikutnya:
+- **Task #1**: fix stale-overwrite `price_tiers`/`product_units`/
+  `alt_prices`/`product_barcodes` (detail lengkap di atas).
+- **Task #2**: rapikan alignment struk cetak "Pegawai:"/"Produk: N" tidak
+  sejajar (`printer_service.dart` `_buildBytes` baris ~697, fix: ganti
+  `bodyText('Produk: $productCount')` jadi `gen.row([...width 3/9...])`
+  sama pola dgn baris Pegawai di atasnya).
+- **Task #3**: Item 17 (Fase 2) — persist antrian sync host ke tabel DB
+  baru `sync_upload_queue` + watermark upload delta-only + tolak permanen
+  + tombol Sync Ulang Penuh. Dibangun DI ATAS Task #4 (Fase 1, sudah
+  selesai) — sekarang siap dikerjakan. 1 schemaVersion bump (risiko
+  hand-patch `app_database.g.dart` spt biasa di environment ini), butuh
+  test round-trip HTTP asli.
+
 _Update sesi 20 Juli 2026 (bugfix sync riwayat kosong + usulan harga
 berulang, branch `claude/owner-assistant-sync-history-30fuua`, commit
 `1d47b2a`) — user lapor via screenshot: setelah sync antara owner &
