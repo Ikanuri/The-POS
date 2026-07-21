@@ -133,6 +133,16 @@ class LanSyncService {
   @visibleForTesting
   static void debugSetDb(AppDatabase db) => _db = db;
 
+  /// Pasang referensi DB SEGERA saat app hidup (dipanggil `SyncStateNotifier`
+  /// saat dibuat) — TANPA ini, `_db` tetap `null` sampai owner tap "Mulai
+  /// Sebagai Host" secara eksplisit, sehingga antrian `sync_upload_queue`
+  /// (yang sebenarnya SUDAH persisten & selamat dari app di-force-stop/clear
+  /// RAM) tampak "hilang" di layar Sync sampai host direstart manual — bug
+  /// nyata dilaporkan user, produk akhir Item 17 Fase 2 seharusnya membuat
+  /// antrian itu terasa TIDAK hilang sama sekali. Aman dipanggil berkali-kali
+  /// (idempotent); `startHost()` menimpa dgn instance yang sama.
+  static void attachDb(AppDatabase db) => _db = db;
+
   // Simple per-IP brute-force protection: 5 failures → 5-min lockout.
   static final _failedAttempts = <String, int>{};
   static final _lockoutUntil = <String, DateTime>{};

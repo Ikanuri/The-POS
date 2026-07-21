@@ -105,23 +105,22 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
       state =
           state.copyWith(proposals: LanSyncService.pendingProposals.toList());
     };
+    // Pasang `_db` SEGERA (bukan menunggu owner tap "Mulai Sebagai Host") —
+    // antrian `sync_upload_queue` adalah data DB persisten, independen dari
+    // socket host sedang jalan atau tidak. Tanpa ini, antrian tampak
+    // "hilang" di layar Sync setelah app di-force-stop/clear RAM sampai host
+    // direstart manual, walau baris DB-nya sendiri selamat — bug nyata
+    // dilaporkan user.
+    LanSyncService.attachDb(_ref.read(databaseProvider));
     // Item 17 Fase 2 — antrian sekarang di DB (async), tidak bisa dibaca
     // langsung di initializer `super(...)` di atas spt versi lama (`List`
-    // in-memory sinkron) — muat begitu notifier ini hidup. Bisa saja host
-    // sudah aktif & py antrian SEBELUM provider ini dibangun (mis. widget
-    // baru pertama kali baca provider setelah host sempat jalan lebih
-    // dulu), jadi tetap perlu di-refresh di sini, bukan cuma andalkan
-    // callback yang hanya menangkap perubahan SETELAHNYA.
+    // in-memory sinkron) — muat begitu notifier ini hidup.
     unawaited(_refreshQueue());
   }
 
   final Ref _ref;
 
   Future<void> _refreshQueue() async {
-    if (!LanSyncService.isHostRunning) {
-      state = state.copyWith(queue: const []);
-      return;
-    }
     final queue = await LanSyncService.loadPendingQueue();
     state = state.copyWith(queue: queue);
   }
@@ -151,11 +150,12 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   Future<void> toggleHost() async {
     if (state.hostRunning) {
       await LanSyncService.stopHost();
+      // Antrian TIDAK ikut dikosongkan — persisten di DB, independen dari
+      // socket host sedang jalan atau tidak (lihat dok `attachDb`).
       state = state.copyWith(
         hostRunning: false,
         hostIp: '',
         hostToken: '',
-        queue: const [],
       );
       return;
     }
