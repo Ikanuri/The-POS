@@ -4,6 +4,80 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 21 Juli 2026 (follow-up UX, PR #35, commit `6b4366d`, Task #6
+di task manager) — user minta 2 perbaikan `SyncStatusBanner`: (1) setelah
+approve/tolak, notif+state "menunggu" harus ikut hilang, bukan menetap
+selamanya sbg "Host aktif · [] menunggu persetujuan"; (2) ubah jadi kartu
+notifikasi inline (sama gaya dgn `InlineBanner` yang sudah dipakai di
+layar lain), dan kalau ada notifikasi lain muncul BERSAMAAN dgn antrian
+lain yang masih menunggu, antrian lama itu jangan hilang — tumpuk di
+belakang, "tidak persis 1:1". Diminta suggest mockup dulu utk poin 2 —
+dibuat mockup HTML interaktif (Artifact, font Hanken Grotesk/Newsreader
+di-embed base64, 3 varian tumpukan: Depth Peek/Corner Badge/Compact
+Strip, toggle terang/gelap + simulasi "setelah disetujui" & "notif lain
+masuk"). User pilih **Compact Strip** (antrian lama menciut jadi garis
+aksen tipis di atas kartu baru).
+
+**Akar masalah poin 1**: `SyncState.hasActivity` lama = `hostRunning ||
+queue.isNotEmpty || proposals.isNotEmpty || clientSyncing` — `hostRunning`
+SENDIRIAN sudah cukup bikin banner tampil, jadi begitu owner nyalakan
+host, banner MENETAP di semua tab sampai host dimatikan manual, walau
+antrian sudah kosong. **Fix**: `hasActivity` sekarang HANYA
+`hasOngoing` (queue/proposals/clientSyncing — TANPA `hostRunning`
+telanjang) `|| transientMessage != null`. `SyncState.transientMessage`/
+`transientTone` (enum `SyncBannerTone { sync, success }`) baru + method
+`SyncStateNotifier._showTransient(msg, tone, {duration: 4s})` (Timer
+auto-clear, `_disposed` guard) dipanggil di `approveSync` (hijau,
+"Disetujui — N baris diterima"), `rejectSync` (ungu, "Data sync
+ditolak"), `resetUploadWatermark` (ungu, "Sync Ulang Penuh diaktifkan") —
+begitu timer habis DAN tidak ada antrian lain, banner benar-benar
+`SizedBox.shrink()`, bukan cuma ganti teks.
+
+**Poin 2** — `SyncStatusBanner` dirombak total gayanya: dulu `Material`+
+`Row` sederhana (bar tipis translucent), sekarang `_SyncNotifCard` privat
+meniru struktur `InlineBanner` PERSIS (accent bar kiri 3px, ikon, teks,
+elevation 3, warna dari `AppTheme.riwayatFg/Bg`(ungu, dipakai jg utk
+konfirmasi netral)/`changeFg/Bg`(hijau, KHUSUS approve-sukses)). Tumpukan
+Compact Strip: kalau `hasOngoing && transientMessage != null` bersamaan
+(mis. baru approve SATU item tapi device LAIN masih antre), render
+`Container` tinggi 5px (key `sync_ongoing_strip`, warna
+`riwayatFg.withOpacity(.5)`, rounded pill) DI ATAS kartu konfirmasi —
+BUKAN Stack absolut-position (dihindari sengaja, risiko overflow di layar
+sempit sesuai gotcha `OutlinedButton`/dialog lama di CLAUDE.md), cukup
+`Column` biasa dgn gap kecil. Begitu kartu konfirmasi habis waktu & masih
+ada antrian lain, strip otomatis "mengembang" balik jadi kartu ongoing
+penuh (state re-render, bukan animasi eksplisit — cukup krn
+`AnimatedSize`/rebuild Riverpod).
+
+**Test regresi disesuaikan**: `test/sync_screen_host_lifecycle_test.dart`
+test ke-2 ("banner tampil selama host aktif") direvisi total — sejak fix
+ini, host aktif TANPA apa pun yang menunggu TIDAK LAGI menampilkan
+banner sama sekali (disengaja), jadi test sekarang isi 1 usulan produk
+dulu via `debugAddProposal` supaya representatif thd perilaku baru.
+`test/sync_screen_reject_confirm_test.dart` (2 test lama, approve/reject
+via `SyncScreen` sungguhan) butuh tambahan `await tester.pump(const
+Duration(seconds: 5))` di akhir tiap test — TANPA ini gagal "A Timer is
+still pending even after the widget tree was disposed" (Timer baru dari
+`_showTransient` belum sempat habis saat test selesai) — gotcha baru,
+mirip pola `InlineBanner` yang sudah ada (`chip_and_banner_color_test.dart`
+sudah lama pakai pola drain yang sama).
+
+**Test baru** (revert-verified — stash `sync_state_provider.dart`+
+`sync_status_banner.dart`, 2 test baru gagal PERSIS `Found 0 widgets with
+text containing Data sync ditolak`, restore hijau lagi):
+`test/sync_status_banner_stack_test.dart` — (1) tolak 1 item TANPA
+antrian lain → konfirmasi tampil sebentar lalu BENAR-BENAR hilang
+(`find.byIcon(Icons.chevron_right)` nihil, bukan cuma teks ganti), (2)
+tolak 1 dari 2 item antrian → strip (`key: sync_ongoing_strip`) muncul
+selama konfirmasi tampil, lalu setelah konfirmasi habis waktu, item
+kedua kembali tampil PENUH (bukan ikut hilang).
+
+Full `flutter test` **592 hijau, 1 gagal** (`stock_opname_screen_test.dart`
+— DIKONFIRMASI ULANG flaky pra-ada & tak terkait sesi ini, lolos sendirian
+saat diisolasi; pola sama persis spt sudah tercatat berkali-kali di histori
+sesi-sesi sebelumnya di bawah — JANGAN dianggap regresi), `flutter analyze`
+bersih.
+
 _Update sesi 21 Juli 2026 (follow-up fix, PR #35, commit `d691e49`) — user
 uji manual poin 1 dari panduan test manual (force-stop app → antrian masih
 ada) & lapor: "ketika clear cache RAM, proses sync hilang". Ternyata Task

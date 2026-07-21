@@ -21,6 +21,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (data yang ditolak tidak akan otomatis muncul lagi).
 - Tombol baru **"Sync Ulang Penuh"** di layar Sync — kalau owner memang
   ingin perangkat lain mengirim ulang semua datanya dari awal.
+- **Notifikasi sync di tab manapun sekarang lebih rapi** — bentuknya jadi
+  kartu (sama seperti notifikasi lain di app) dan otomatis hilang begitu
+  tidak ada lagi yang perlu ditinjau (sebelumnya "Host aktif" bisa
+  menetap terus selama server sync menyala, walau semua sudah beres).
 
 ## 20 Juli 2026
 
