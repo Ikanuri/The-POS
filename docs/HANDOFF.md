@@ -4,6 +4,31 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 21 Juli 2026 (follow-up fix, PR #35, commit `d691e49`) — user
+uji manual poin 1 dari panduan test manual (force-stop app → antrian masih
+ada) & lapor: "ketika clear cache RAM, proses sync hilang". Ternyata Task
+#3 di bawah BELUM sepenuhnya menutup celah ini — layer DB sudah benar
+persisten (dibuktikan test), tapi layer PROVIDER masih bocor: `LanSyncService.
+_db` itu static field di RAM (reset null saat proses app di-kill), dan
+`SyncStateNotifier._refreshQueue()` versi lama sengaja mengosongkan
+`state.queue` kalau `!isHostRunning` — jadi begitu app dibuka ulang,
+SEBELUM owner sempat tap "Mulai Sebagai Host" lagi, antrian tampak kosong
+di layar Sync walau baris DB-nya sendiri aman. **Fix**: `LanSyncService.
+attachDb(db)` (method produksi baru, bukan `@visibleForTesting`) dipanggil
+segera di constructor `SyncStateNotifier` (bukan menunggu `startHost()`);
+`_refreshQueue()` tidak lagi digating `isHostRunning` — selalu load dari
+DB; `toggleHost()` saat stop TIDAK LAGI mengosongkan `queue` (data
+persisten, independen status socket). Kartu antrian di `sync_screen.dart`
+sendiri sudah lama tidak digating `hostRunning` (cuma `queue.isNotEmpty`),
+jadi fix ini murni di provider. Test baru (revert-verified — stash file
+provider saja, test gagal PERSIS `Expected: length 1, Actual: []`, restore
+hijau lagi): `test/sync_queue_survives_app_restart_test.dart` — simulasi
+"app restart" SUNGGUHAN (file-backed DB ditutup+dibuka ulang + `ProviderContainer`
+BARU dari nol) TANPA pernah panggil `startHost()`/`debugHostRunningOverride`
+sama sekali, supaya benar-benar menyerupai "app baru dibuka, host belum
+direstart owner". Full `flutter test` **596 hijau** (naik dari 595 krn
+test baru), `flutter analyze` bersih.
+
 _Update sesi 20-21 Juli 2026 (Task #3 — Item 17 Fase 2 dieksekusi &
 di-commit, branch `claude/owner-assistant-sync-history-30fuua`, commit
 `456bf45`, lanjutan langsung dari Task #4/#1/#2 di bawah — user konfirmasi

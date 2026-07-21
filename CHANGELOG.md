@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-07-21
 
+- `d691e49` — fix: antrian sync tampak hilang di layar Sync setelah app di-force-stop/clear RAM — `LanSyncService._db` (static, RAM) reset null saat proses mati & `SyncStateNotifier._refreshQueue()` mengosongkan antrian kalau host belum direstart owner; `LanSyncService.attachDb()` sekarang dipanggil segera saat provider dibuat (bukan cuma via `startHost()`), antrian selalu dimuat dari DB terlepas status host, tidak lagi dikosongkan saat host di-stop
 - `456bf45` — feat: Item 17 Fase 2 — antrian approval sync sisi host dipindah dari in-memory ke tabel DB persisten `sync_upload_queue` (schemaVersion 17->18); klien beralih dari selalu full-dump sejak epoch ke watermark upload incremental per device (`last_sync_upload_confirmed_at`, terpisah dari watermark download); tolak (reject) sekarang PERMANEN dgn dialog konfirmasi wajib + tombol baru "Sync Ulang Penuh" sbg escape hatch manual reset watermark
 
 ## 2026-07-20
