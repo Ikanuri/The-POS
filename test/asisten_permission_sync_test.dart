@@ -40,9 +40,6 @@ void main() {
 
   tearDown(() async {
     await LanSyncService.stopHost();
-    for (final item in LanSyncService.pendingQueue.toList()) {
-      LanSyncService.rejectSync(item.id);
-    }
   });
 
   test(

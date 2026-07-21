@@ -140,9 +140,70 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
     }
   }
 
-  void _reject(PendingSyncItem item) {
-    ref.read(syncStateProvider.notifier).rejectSync(item.id);
+  /// Item 17 Fase 2 — "Tolak" sekarang PERMANEN (data tidak lagi otomatis
+  /// kirim ulang lewat full-dump seperti dulu — lihat dok `LanSyncService.
+  /// rejectSync`), jadi WAJIB minta konfirmasi eksplisit sebelum dieksekusi.
+  Future<void> _reject(PendingSyncItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tolak Data Sync?'),
+        content: Text(
+          'Data dari ${item.fromIp} (${item.tablesSummary}) tidak akan '
+          'otomatis diminta lagi setelah ditolak. Kalau berubah pikiran, '
+          'gunakan "Sync Ulang Penuh" di perangkat pengirim untuk '
+          'mengirimkannya lagi.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal')),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Tolak'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(syncStateProvider.notifier).rejectSync(item.id);
     if (mounted) showSuccess('Sync dari ${item.fromIp} ditolak');
+  }
+
+  /// "Sync Ulang Penuh" — escape hatch manual: reset watermark upload
+  /// perangkat INI (klien) supaya sync berikutnya kirim ulang semua data
+  /// sejak awal, bukan cuma delta. Dipakai kalau owner salah tolak (lihat
+  /// dialog konfirmasi di atas) atau curiga ada data yang belum sampai.
+  Future<void> _syncUlangPenuh() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sync Ulang Penuh?'),
+        content: const Text(
+          'Perangkat ini akan mengirim SEMUA riwayat transaksi/stok dari '
+          'awal lagi di sync berikutnya (bukan cuma data baru). Gunakan '
+          'kalau curiga ada data yang belum pernah sampai ke host, atau '
+          'setelah salah menolak antrian sync.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Ya, Reset')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(syncStateProvider.notifier).resetUploadWatermark();
+    if (mounted) {
+      showSuccess('Sync berikutnya akan mengirim semua data dari awal');
+    }
   }
 
   void _copy(String value, String label) {
@@ -534,6 +595,20 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                       ),
                     ),
                   ],
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: sync.clientSyncing ? null : _syncUlangPenuh,
+                      icon: const Icon(Icons.restart_alt, size: 16),
+                      label: const Text('Sync Ulang Penuh',
+                          style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    ),
+                  ),
                 ],
               ),
             ),

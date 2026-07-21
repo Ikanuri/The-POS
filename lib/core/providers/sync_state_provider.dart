@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/lan_sync_service.dart';
@@ -92,24 +94,37 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   SyncStateNotifier(this._ref)
       : super(SyncState(
           hostRunning: LanSyncService.isHostRunning,
-          // Provider bisa dibangun SETELAH antrian sudah terisi (mis. host
-          // sempat jalan sebelum layar Sync pernah dibuka, atau seam test
-          // `debugAddProposal` dipanggil sebelum widget di-pump) — baca
-          // snapshot TERKINI di sini, jangan andalkan callback saja (yang
-          // hanya menangkap perubahan SETELAH notifier ini ada).
-          queue: LanSyncService.pendingQueue.toList(),
+          // Item 40 (usulan produk) TETAP in-memory (di luar scope Item 17
+          // Fase 2 — hanya antrian data append-only yang dipersist).
           proposals: LanSyncService.pendingProposals.toList(),
         )) {
     LanSyncService.onQueueChanged = () {
-      state = state.copyWith(queue: LanSyncService.pendingQueue.toList());
+      unawaited(_refreshQueue());
     };
     LanSyncService.onProposalsChanged = () {
       state =
           state.copyWith(proposals: LanSyncService.pendingProposals.toList());
     };
+    // Item 17 Fase 2 — antrian sekarang di DB (async), tidak bisa dibaca
+    // langsung di initializer `super(...)` di atas spt versi lama (`List`
+    // in-memory sinkron) — muat begitu notifier ini hidup. Bisa saja host
+    // sudah aktif & py antrian SEBELUM provider ini dibangun (mis. widget
+    // baru pertama kali baca provider setelah host sempat jalan lebih
+    // dulu), jadi tetap perlu di-refresh di sini, bukan cuma andalkan
+    // callback yang hanya menangkap perubahan SETELAHNYA.
+    unawaited(_refreshQueue());
   }
 
   final Ref _ref;
+
+  Future<void> _refreshQueue() async {
+    if (!LanSyncService.isHostRunning) {
+      state = state.copyWith(queue: const []);
+      return;
+    }
+    final queue = await LanSyncService.loadPendingQueue();
+    state = state.copyWith(queue: queue);
+  }
 
   Future<void> loadTimeoutProfile() async {
     final db = _ref.read(databaseProvider);
@@ -148,18 +163,29 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     final db = _ref.read(databaseProvider);
     final (ip, token) =
         await LanSyncService.startHost(db: db, storeKey: device.storeKey!);
-    state = state.copyWith(
-      hostRunning: true,
-      hostIp: ip,
-      hostToken: token,
-      queue: LanSyncService.pendingQueue.toList(),
-    );
+    state = state.copyWith(hostRunning: true, hostIp: ip, hostToken: token);
+    await _refreshQueue();
   }
 
-  Future<int> approveSync(String itemId, {Set<String>? allowedTables}) =>
-      LanSyncService.approveSync(itemId, allowedTables: allowedTables);
+  Future<int> approveSync(String itemId, {Set<String>? allowedTables}) async {
+    final received =
+        await LanSyncService.approveSync(itemId, allowedTables: allowedTables);
+    await _refreshQueue();
+    return received;
+  }
 
-  void rejectSync(String itemId) => LanSyncService.rejectSync(itemId);
+  /// Item 17 Fase 2 — PERMANEN (lihat dok `LanSyncService.rejectSync`). UI
+  /// pemanggil WAJIB sudah minta konfirmasi eksplisit sebelum ini.
+  Future<void> rejectSync(String itemId) async {
+    await LanSyncService.rejectSync(itemId);
+    await _refreshQueue();
+  }
+
+  /// "Sync Ulang Penuh" — reset watermark upload klien ke epoch, escape
+  /// hatch manual utk pemulihan kalau owner salah tolak atau curiga ada
+  /// data yang belum pernah sampai ke host.
+  Future<void> resetUploadWatermark() =>
+      LanSyncService.resetUploadWatermark(_ref.read(databaseProvider));
 
   Future<SyncResult> sync({
     required String ip,

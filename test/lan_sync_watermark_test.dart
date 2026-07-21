@@ -32,11 +32,17 @@ Future<T> _withRealHttp<T>(Future<T> Function() body) => HttpOverrides.runZoned(
       }),
     );
 
-/// Membuktikan incremental-sync watermark (arah host→klien): sync tidak lagi
-/// selalu dump SELURUH riwayat toko — memakai watermark tersimpan dari sync
-/// sukses terakhir. Arah klien→host SENGAJA tetap full-dump (lihat komentar
-/// di lan_sync_service.dart soal risiko antrian approval yang cuma di
-/// memori) — dibuktikan juga TIDAK berubah oleh watermark ini.
+/// Membuktikan incremental-sync watermark ARAH DOWNLOAD (host→klien): sync
+/// tidak lagi selalu dump SELURUH riwayat toko — memakai watermark
+/// tersimpan dari sync sukses terakhir. Test kedua membuktikan watermark
+/// DOWNLOAD ini terisolasi dari watermark UPLOAD (klien→host, key TERPISAH
+/// `last_sync_upload_confirmed_at` — Item 17 Fase 2, lihat
+/// `lan_sync_service.dart`) — keduanya independen, tidak boleh saling
+/// bocor. Skenario test kedua kebetulan tidak menyentuh watermark upload
+/// sama sekali (defaultnya epoch), jadi hasilnya sama seperti sebelum Item
+/// 17 (full-dump) — TAPI alasannya sekarang beda: bukan lagi "arah upload
+/// SENGAJA selalu full-dump", melainkan "watermark upload klien ini
+/// kebetulan belum pernah maju".
 ///
 /// Test menyambung host & klien sungguhan lewat 127.0.0.1 (server asli via
 /// shelf, bukan mock) — [LanSyncService] pakai static state, jadi WAJIB
@@ -61,9 +67,6 @@ void main() {
     // dimaksudkan bertahan lintas restart host di app sungguhan) — tapi utk
     // isolasi antar-test di sini, kosongkan manual supaya test berikutnya
     // tidak mewarisi antrian dari test ini.
-    for (final item in LanSyncService.pendingQueue.toList()) {
-      LanSyncService.rejectSync(item.id);
-    }
   });
 
   test(
@@ -167,10 +170,10 @@ void main() {
         ));
 
     // Data klien masuk antrian approval host (bukan auto-merge) — cek isinya.
-    expect(LanSyncService.pendingQueue, hasLength(1));
-    final queuedTxIds = LanSyncService.pendingQueue.single.tables['transactions']
-            ?.map((r) => r['id']) ??
-        const [];
+    final queue = await LanSyncService.loadPendingQueue();
+    expect(queue, hasLength(1));
+    final queuedTxIds =
+        queue.single.tables['transactions']?.map((r) => r['id']) ?? const [];
     expect(queuedTxIds, contains('tx-lama-klien'),
         reason: 'arah upload harus tetap full-dump, TIDAK boleh ikut '
             'terpotong oleh watermark download');

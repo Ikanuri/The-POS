@@ -125,19 +125,53 @@ class LanSyncService {
   static String? _storeKey;
   static AppDatabase? _db;
 
+  /// Seam test-only: isi `_db` tanpa `startHost()` sungguhan (bind
+  /// `HttpServer` asli terbukti bikin `testWidgets` hang — lihat dok
+  /// `debugHostRunningOverride`). Dipakai bersama seam itu utk test widget
+  /// yang perlu antrian `sync_upload_queue` terisi (mis. tombol Tolak/
+  /// Setuju), tanpa pernah menyentuh socket sungguhan.
+  @visibleForTesting
+  static void debugSetDb(AppDatabase db) => _db = db;
+
   // Simple per-IP brute-force protection: 5 failures → 5-min lockout.
   static final _failedAttempts = <String, int>{};
   static final _lockoutUntil = <String, DateTime>{};
   static const _kMaxFailures = 5;
   static const _kLockoutDuration = Duration(minutes: 5);
 
-  // B-4: Antrian sync menunggu persetujuan owner.
-  static final _pendingQueue = <PendingSyncItem>[];
-  // Callback dipanggil saat antrian berubah (UI bisa listen).
+  // Callback dipanggil saat antrian berubah (UI bisa listen & re-query).
   static void Function()? onQueueChanged;
 
-  static List<PendingSyncItem> get pendingQueue =>
-      List.unmodifiable(_pendingQueue);
+  /// Item 17 Fase 2 — antrian approval sync sisi host, sekarang PERSISTEN
+  /// (baca dari `sync_upload_queue`, bukan `List` di memori lagi — lihat
+  /// dok `AppDatabase.enqueueSyncUpload`). ASYNC krn butuh query DB;
+  /// pemanggil (mis. provider UI) harus re-query lewat ini tiap
+  /// [onQueueChanged] terpicu, bukan cache List seperti pola lama.
+  static Future<List<PendingSyncItem>> loadPendingQueue() async {
+    // Device yang belum pernah jadi host (murni klien) tidak punya `_db`
+    // host — aman balikkan kosong, bukan crash null-check.
+    if (_db == null) return const [];
+    final rows = await _db!.listSyncUploadQueue();
+    return rows.map(_pendingSyncItemFromRow).toList();
+  }
+
+  static PendingSyncItem _pendingSyncItemFromRow(SyncUploadQueueData row) {
+    final rawTables = jsonDecode(row.tablesJson) as Map<String, dynamic>;
+    final tables = rawTables.map((k, v) {
+      final rows = (v as List).cast<Map<String, dynamic>>().map((r) {
+        return r.map<String, Object?>((rk, rv) => MapEntry(rk, rv));
+      }).toList();
+      return MapEntry(k, rows);
+    });
+    return PendingSyncItem(
+      id: row.id,
+      fromIp: row.fromIp,
+      arrivedAt: row.arrivedAt,
+      tables: tables,
+      since: row.since,
+      tablesSummary: row.tablesSummary,
+    );
+  }
 
   // Item 40 — antrian usulan harga/produk (terpisah dari _pendingQueue).
   static final _pendingProposals = <PendingProductProposal>[];
@@ -425,10 +459,9 @@ class LanSyncService {
   /// append-only diterima. Master data dari klien tidak pernah di-merge.
   static Future<int> approveSync(String itemId,
       {Set<String>? allowedTables}) async {
-    final idx = _pendingQueue.indexWhere((i) => i.id == itemId);
-    if (idx < 0) return 0;
-    final item = _pendingQueue.removeAt(idx);
-    onQueueChanged?.call();
+    final row = await _db!.getSyncUploadQueueItem(itemId);
+    if (row == null) return 0;
+    final item = _pendingSyncItemFromRow(row);
 
     // Saring data dari tahun yang sudah ditutup-buku SEBELUM merge — lihat
     // dok [filterArchivedRows].
@@ -458,6 +491,11 @@ class LanSyncService {
     // baris "terbaru" milik device lain menimpa pandangan saldo host
     // secara diam-diam (lihat rebuildStockAfterForUnits).
     await _db!.rebuildStockAfterForUnits(touchedStockUnitIds);
+    // Item 17 Fase 2 — item ini SUDAH resmi diproses, hapus dari antrian
+    // durable (bukan cuma dari tampilan) supaya tidak pernah diproses ulang
+    // walau host restart.
+    await _db!.deleteSyncUploadQueueItem(itemId);
+    onQueueChanged?.call();
     return received;
   }
 
@@ -491,9 +529,17 @@ class LanSyncService {
     }
   }
 
-  /// Tolak item antrian tanpa merge.
-  static void rejectSync(String itemId) {
-    _pendingQueue.removeWhere((i) => i.id == itemId);
+  /// Tolak item antrian tanpa merge. Item 17 Fase 2 — KEPUTUSAN DESAIN:
+  /// tolak sekarang PERMANEN (dulu klien selalu full-dump sejak epoch, jadi
+  /// data yang ditolak otomatis "muncul lagi" di sync berikutnya — dengan
+  /// watermark upload delta-only, itu tidak lagi terjadi: sekali data
+  /// sampai & tersimpan durable di sini, urusan klien SELESAI terlepas dari
+  /// keputusan owner). UI WAJIB minta konfirmasi eksplisit sebelum memanggil
+  /// ini (lihat `sync_screen.dart`) — tidak ada jalan otomatis utk
+  /// memunculkannya lagi, HANYA lewat "Sync Ulang Penuh" (`resetUploadWatermark`)
+  /// di sisi klien.
+  static Future<void> rejectSync(String itemId) async {
+    await _db!.deleteSyncUploadQueueItem(itemId);
     onQueueChanged?.call();
   }
 
@@ -658,22 +704,26 @@ class LanSyncService {
       }
       final summary = parts.isEmpty ? 'tidak ada data baru' : parts.join(', ');
 
-      // Item 41 A.3 — satu slot antrian per IP klien: klien yang nge-sync
-      // berulang sebelum owner sempat approve TIDAK menumpuk banyak salinan
-      // full-dump di RAM host (payload 50 MB x N = OOM nyata di HP 1-2 GB).
-      // AMAN menimpa item lama karena upload klien SELALU full-dump sejak
-      // epoch (lihat catatan _kDownloadWatermarkKey) — item terbaru pasti
-      // superset dari item lama yang dibuang.
-      _pendingQueue.removeWhere((i) => i.fromIp == ip);
+      // Item 17 Fase 2 — simpan DURABLE ke DB SEBELUM host membalas ke
+      // klien di bawah. Urutan ini KRUSIAL: respons 200 ber-HMAC yang
+      // klien terima adalah SATU-SATUNYA sinyal "aman majukan watermark
+      // upload" (lihat dok `_kUploadWatermarkKey` di `syncToHost`) — kalau
+      // insert ini gagal/exception, klien tidak akan pernah menerima
+      // respons sukses, jadi watermark-nya TIDAK maju & akan otomatis
+      // kirim ulang di percobaan berikutnya (aman, tidak ada data hilang).
+      // "1 slot per IP" (Item 41 A.3, cegah RAM menumpuk saat klien
+      // nge-sync berulang sebelum owner approve) dipertahankan di dalam
+      // `enqueueSyncUpload` (delete+insert 1 transaksi) — AMAN menimpa item
+      // lama krn payload klien per-sync selalu superset dari watermark
+      // upload klien saat itu.
       final itemId = _generateNonce();
-      _pendingQueue.add(PendingSyncItem(
+      await _db!.enqueueSyncUpload(
         id: itemId,
         fromIp: ip,
-        arrivedAt: DateTime.now(),
-        tables: tables,
+        tablesJson: jsonEncode(tables),
         since: since,
         tablesSummary: summary,
-      ));
+      );
       onQueueChanged?.call();
 
       // Item 40 — usulan harga/produk, antrian TERPISAH dari _pendingQueue
@@ -784,17 +834,6 @@ class LanSyncService {
 
   /// Key `app_settings` untuk watermark "sampai kapan data HOST terakhir kali
   /// berhasil diterima & di-merge ke DB lokal". HANYA untuk arah host→klien.
-  ///
-  /// Arah klien→host (`outDump` di bawah) SENGAJA TETAP full-dump setiap
-  /// sync, tidak dioptimasi lewat watermark ini. Alasannya: data yang
-  /// diunggah klien masuk `_pendingQueue` di host — antrian itu HANYA
-  /// tersimpan di memori (bukan di database), jadi hilang total kalau host
-  /// di-restart sebelum owner sempat approve. Kalau watermark upload
-  /// dimajukan begitu saja setelah "terkirim", data yang kebetulan hilang
-  /// dari antrian itu tidak akan pernah terkirim ulang — bisa hilang
-  /// permanen. Watermark download DI SINI aman dimajukan karena data hasil
-  /// merge dari host langsung tersimpan permanen di DB lokal saat itu juga
-  /// (tidak lewat antrian approval apa pun).
   static const _kDownloadWatermarkKey = 'last_sync_download_at';
 
   static Future<DateTime?> _loadDownloadWatermark(AppDatabase db) async {
@@ -807,6 +846,36 @@ class LanSyncService {
   // pada zona waktu berbeda (mis. user pindah zona / ganti setelan jam).
   static Future<void> _saveDownloadWatermark(AppDatabase db, DateTime at) =>
       db.setSetting(_kDownloadWatermarkKey, at.toUtc().toIso8601String());
+
+  /// Item 17 Fase 2 — watermark arah klien→host (dulu SENGAJA selalu
+  /// epoch/full-dump, lihat histori di commit sebelumnya: alasannya waktu
+  /// itu antrian approval host cuma di RAM, jadi data yang "hilang" dari
+  /// antrian sebelum owner approve tidak akan pernah terkirim ulang kalau
+  /// watermark dimajukan begitu saja). Sekarang AMAN dimajukan karena
+  /// `_handleRequest` di sisi host menyimpan upload ke `sync_upload_queue`
+  /// (tabel DB, bukan RAM) SEBELUM membalas — respons 200 ber-HMAC yang
+  /// berhasil diverifikasi klien di sini SUDAH cukup jadi bukti "host sudah
+  /// simpan durable", terlepas dari kapan/apakah owner nanti approve/tolak.
+  static const _kUploadWatermarkKey = 'last_sync_upload_confirmed_at';
+
+  static Future<DateTime?> _loadUploadWatermark(AppDatabase db) async {
+    final raw = await db.getSetting(_kUploadWatermarkKey);
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  static Future<void> _saveUploadWatermark(AppDatabase db, DateTime at) =>
+      db.setSetting(_kUploadWatermarkKey, at.toUtc().toIso8601String());
+
+  /// "Sync Ulang Penuh" — escape hatch manual (Pengaturan) utk memaksa
+  /// upload full-dump lagi sejak epoch di sync berikutnya. Dipakai kalau
+  /// owner salah tolak (tolak sekarang PERMANEN, lihat dok [rejectSync])
+  /// atau curiga ada data yang tidak pernah sampai ke host.
+  static Future<void> resetUploadWatermark(AppDatabase db) =>
+      // String kosong (bukan hapus baris) — `_loadUploadWatermark` sudah
+      // menangani ini via `DateTime.tryParse('')` → null → fallback epoch,
+      // tanpa perlu method delete-setting baru.
+      db.setSetting(_kUploadWatermarkKey, '');
 
   static Future<SyncResult> syncToHost({
     required AppDatabase db,
@@ -844,13 +913,18 @@ class LanSyncService {
         DateTime.fromMillisecondsSinceEpoch(0);
     final downloadSyncStartedAt = DateTime.now().toUtc();
 
+    // Item 17 Fase 2 — watermark upload (dicatat SEBELUM outDump disusun,
+    // pola sama dgn downloadSyncStartedAt: data lokal yang berubah SELAMA
+    // sync ini berlangsung tidak boleh "terlewat" di sync berikutnya).
+    final uploadSince = await _loadUploadWatermark(db) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    final uploadSyncStartedAt = DateTime.now().toUtc();
+
     // Klien (perangkat bawahan) hanya mengirim data append-only ke atas.
     // Master data (produk, harga, izin) tidak diunggah agar tidak menimpa
     // data owner — master data mengalir satu arah dari host ke bawah.
-    // SENGAJA selalu epoch (bukan watermark) — lihat catatan di
-    // _kDownloadWatermarkKey soal kenapa arah upload tidak dioptimasi.
-    final outDump = await db.dumpSince(DateTime.fromMillisecondsSinceEpoch(0),
-        includeMasterData: false);
+    final outDump =
+        await db.dumpSince(uploadSince, includeMasterData: false);
     // Item 40 — usulan harga/produk (device non-owner) SELALU ikut terkirim
     // apa adanya (bukan lewat jalur merge master data biasa) — owner review
     // manual lewat antrian TERPISAH (lihat PendingProductProposal). Kosong
@@ -1016,6 +1090,14 @@ class LanSyncService {
       // berikutnya otomatis retry dari titik lama (aman, cuma kirim/terima
       // agak lebih banyak, bukan kehilangan data).
       await _saveDownloadWatermark(db, downloadSyncStartedAt);
+      // Item 17 Fase 2 — watermark upload HANYA dimajukan setelah sampai
+      // titik ini: respons 200 sudah diterima & lolos verifikasi HMAC (baris
+      // di atas), yang textbook artinya host SUDAH menyimpan upload kita
+      // secara durable SEBELUM membalas (lihat urutan di `_handleRequest`).
+      // Kalau proses network gagal SEBELUM sini (timeout/socket/HMAC
+      // mismatch), watermark TIDAK maju → sync berikutnya kirim ulang delta
+      // yang sama, aman (dedup PK di sisi host).
+      await _saveUploadWatermark(db, uploadSyncStartedAt);
 
       final sent = outDump.values.fold<int>(0, (s, r) => s + r.length);
       final isPending = respPayload['status'] == 'pending_approval';

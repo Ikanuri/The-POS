@@ -68,9 +68,6 @@ void main() {
 
   tearDown(() async {
     await LanSyncService.stopHost();
-    for (final item in LanSyncService.pendingQueue.toList()) {
-      LanSyncService.rejectSync(item.id);
-    }
     PathProviderPlatform.instance = originalPathProvider;
     tempDir.deleteSync(recursive: true);
   });
@@ -144,7 +141,7 @@ void main() {
     // saldo host juga 6 — TANPA rebuild akan menelan stock_after=3 klien.
     expect(await hostDb.currentStock('u1'), 8,
         reason: 'sebelum approve, saldo host belum berubah');
-    final pending = LanSyncService.pendingQueue.single;
+    final pending = (await LanSyncService.loadPendingQueue()).single;
     await LanSyncService.approveSync(pending.id);
     expect(await hostDb.currentStock('u1'), 6,
         reason: 'saldo host harus gabungan kronologis (10-2-2), bukan '
@@ -177,7 +174,7 @@ void main() {
           ));
     }
 
-    expect(LanSyncService.pendingQueue.length, 1,
+    expect((await LanSyncService.loadPendingQueue()).length, 1,
         reason: '3x sync dari IP yang sama harus menyisakan 1 item antrian '
             '(payload full-dump 50 MB x N = OOM di HP RAM kecil)');
   });

@@ -65,9 +65,6 @@ void main() {
 
   tearDown(() async {
     await LanSyncService.stopHost();
-    for (final item in LanSyncService.pendingQueue.toList()) {
-      LanSyncService.rejectSync(item.id);
-    }
     PathProviderPlatform.instance = originalPathProvider;
     tempDir.deleteSync(recursive: true);
   });
@@ -123,7 +120,7 @@ void main() {
           syncToken: token,
         ));
 
-    final pending = LanSyncService.pendingQueue.single;
+    final pending = (await LanSyncService.loadPendingQueue()).single;
     await LanSyncService.approveSync(pending.id);
 
     final hostTx = await (hostDb.select(hostDb.transactions)

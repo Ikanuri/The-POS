@@ -20,6 +20,7 @@ import 'tables/product_tables.dart';
 import 'tables/settings_tables.dart';
 import 'tables/summary_tables.dart';
 import 'tables/supplier_tables.dart';
+import 'tables/sync_tables.dart';
 import 'tables/transaction_tables.dart';
 
 part 'app_database.g.dart';
@@ -94,6 +95,7 @@ const kAsistenPermissionKeys = <String>[
   DailySummaries,
   Employees,
   CashClosings,
+  SyncUploadQueue,
 ])
 /// Baris hasil [AppDatabase.watchStockOverview] — Item 30 ("Cek Stok").
 /// [unitId] = id satuan DASAR produk ini (dipakai Item 36 stock opname utk
@@ -146,7 +148,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -269,6 +271,12 @@ class AppDatabase extends _$AppDatabase {
             // Item 49g — retur nota LUNAS tanpa nota baru: baris item retur
             // (qty negatif) ditandai returnedAt, pola sama dgn addedAt.
             await m.addColumn(transactionItems, transactionItems.returnedAt);
+          }
+          if (from < 18) {
+            // Item 17 Fase 2 — antrian approval sync sisi host, PERSISTEN
+            // (dulu murni in-memory `_pendingQueue` di LanSyncService, hilang
+            // total kalau app di-restart sebelum owner sempat approve).
+            await m.createTable(syncUploadQueue);
           }
         },
         beforeOpen: (details) async {
@@ -3316,6 +3324,48 @@ class AppDatabase extends _$AppDatabase {
   Future<void> updateHeldOrder(String id, String cartJson) =>
       (update(heldOrders)..where((t) => t.id.equals(id)))
           .write(HeldOrdersCompanion(cartJson: Value(cartJson)));
+
+  // ───────────────────────── Sync upload queue (Item 17 Fase 2) ─────────
+
+  /// Antrian approval sync sisi HOST, sekarang PERSISTEN — dulu
+  /// `_pendingQueue` di `LanSyncService` cuma hidup di RAM, hilang total
+  /// kalau app owner di-restart sebelum sempat approve. "1 slot per IP"
+  /// dipertahankan (hapus entri lama dari IP yang sama SEBELUM insert baru,
+  /// dalam satu transaksi) — aman krn klien selalu kirim data superset dari
+  /// upload sebelumnya (lihat dok watermark upload di lan_sync_service.dart).
+  Future<void> enqueueSyncUpload({
+    required String id,
+    required String fromIp,
+    required String tablesJson,
+    required DateTime since,
+    required String tablesSummary,
+  }) =>
+      transaction(() async {
+        await (delete(syncUploadQueue)..where((t) => t.fromIp.equals(fromIp)))
+            .go();
+        await into(syncUploadQueue).insert(SyncUploadQueueCompanion.insert(
+          id: id,
+          fromIp: fromIp,
+          tablesJson: tablesJson,
+          since: since,
+          tablesSummary: tablesSummary,
+        ));
+      });
+
+  Future<List<SyncUploadQueueData>> listSyncUploadQueue() =>
+      (select(syncUploadQueue)
+            ..orderBy([(t) => OrderingTerm.asc(t.arrivedAt)]))
+          .get();
+
+  Future<SyncUploadQueueData?> getSyncUploadQueueItem(String id) =>
+      (select(syncUploadQueue)..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+
+  /// Dipanggil setelah approve ATAU reject — baik disetujui maupun ditolak,
+  /// item ini selesai diproses & tidak perlu tersimpan lagi (lihat dok
+  /// "tolak = permanen" di lan_sync_service.dart).
+  Future<void> deleteSyncUploadQueueItem(String id) =>
+      (delete(syncUploadQueue)..where((t) => t.id.equals(id))).go();
 
   // ───────────────────────── Backup / Restore ─────────────────────────
 
