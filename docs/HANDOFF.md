@@ -4,6 +4,64 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (follow-up 2 penyesuaian fitur barcode, PR #35,
+commit `005c68b`, Task #13 di task manager — SELESAI, lanjutan langsung
+dari Task #11/#12 di bawah) — user koreksi 2 hal setelah fitur Generate
+Barcode + Cetak Label selesai: (1) "generate barcode" yang dimaksud
+BUKAN di layar Barcode/label terpisah, tapi LANGSUNG di field input
+Barcode pada form Edit Produk (per satuan) — supaya owner bisa isi
+barcode tanpa keluar dari form yang sedang dikerjakan; (2) font nama
+produk di label cetak kurang besar — diminta dibuat mendekati (sedikit
+lebih kecil dari) ukuran baris "Total" di struk cetak.
+
+**Fix #1**: tombol "Generate Barcode" DIHAPUS TOTAL dari `barcode_screen.
+dart` (termasuk method `_generateBarcode`, import `internal_barcode.dart`/
+`uuid`/`Value` yg jadi tak terpakai) — layar itu sekarang MURNI utk cetak
+label satuan yang SUDAH punya barcode; satuan kosong cuma tampil teks
+info "Belum ada barcode... isi/generate lewat field Barcode di form Edit
+Produk", tanpa tombol aksi apa pun. Tombol Generate yang BARU ditaruh di
+`_UnitCard` (`produk_form_screen.dart`, kartu satuan form) — `suffixIcon`
+field Barcode diubah dari 1 `IconButton` (Scan) jadi `Row` 2 ikon
+(Generate + Scan berdampingan). Param baru `onGenerateBarcode: Future<
+String> Function()?` di-inject dari parent `_ProdukFormScreenState`
+(pola SAMA persis dgn `loadStock` yang sudah ada — `_UnitCard` sendiri
+TETAP `StatefulWidget` biasa tanpa Riverpod, callback yang bawa akses
+`ref.read(databaseProvider)` dari parent) memanggil `generateInternalBarcode`
+yang SAMA (tidak ada logic baru, cuma pindah lokasi pemanggilan UI).
+
+**Fix #2**: `PrinterService._buildLabelBytes` — nama produk sekarang
+`PosStyles(bold: true, height: PosTextSize.size2)` (tinggi 2x, LEBAR
+tetap normal) — dipilih SENGAJA beda dari baris Total struk yang pakai
+`height+width` 2x SEKALIGUS (`wideNominal()`), krn user eksplisit minta
+"agak kecil sedikit" dari itu. Lebar TETAP normal (bukan 2x) supaya nama
+produk panjang (mis. "Kanji Suji 25 kg") tidak makin gampang overflow —
+lebar 2x akan memotong budget karakter jadi cuma ~16 char di kertas
+58mm. **BELUM bisa diverifikasi visual di printer fisik** (sama
+keterbatasan spt catatan Task #11 sebelumnya) — kalau user coba cetak &
+masih terasa kurang besar, opsi lanjut: naikkan ke `height: size3` (3x)
+tetap tanpa lebar 2x, ATAU baru pertimbangkan lebar 2x kalau nama produk
+di toko itu rata-rata pendek.
+
+**Bug regresi ketemu & diperbaiki dari perubahan Fix #1** (WAJIB full-suite
+run yang menemukannya, bukan cuma file baru — persis alasan CLAUDE.md
+mewajibkan full run): `test/produk_form_barcode_nav_test.dart` (test
+Task #12, dibuat SEBELUM Fix #1) asersi terakhirnya `find.text('Generate
+Barcode')` di dalam `BarcodeScreen` — begitu tombol itu dihapus dari
+layar itu, assertion itu otomatis basi & gagal. Diperbaiki: ganti jadi
+cek teks info arahan yang baru.
+
+**Test baru/diperbarui** (semua revert-verified): `test/barcode_screen_
+generate_test.dart` ditulis ULANG total (skenario tombol Generate lama
+dihapus, sekarang 2 test: satuan kosong cuma info-teks tanpa tombol aksi;
+satuan yg SUDAH py barcode — di-seed langsung ke DB, BUKAN via UI lagi —
+tampilkan tombol Cetak Label & alur cetak-tanpa-printer sama spt
+sebelumnya), `test/produk_form_barcode_generate_test.dart` (baru — tap
+tombol Generate di field form → `TextFormField.controller.text` terisi
+kode EAN-13 prefix 29, dicari via `find.ancestor(of: find.byTooltip(...),
+matching: find.byType(TextFormField))` krn `TextFormField` tidak expose
+`decoration` sbg field publik, cuma `controller`). Full `flutter test`
+**627 hijau, 0 gagal**, `flutter analyze` bersih.
+
 _Update sesi 22 Juli 2026 (fitur baru: generator barcode + cetak label,
 PR #35, commit `c818324`, Task #11 di task manager — SELESAI) — lanjutan
 diskusi perbandingan barcode induk-cabang (lihat entri di bawah): user
