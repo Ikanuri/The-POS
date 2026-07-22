@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-22
+
+- `2472533` — feat: redesain sinkron harga induk-cabang (Item 50) — fuzzy-matching (Levenshtein) dihapus total dari `PriceMatchService` (terbukti dari data nyata 2 toko menyebabkan tabrakan false-positive pada produk varian ukuran/nama mirip, akar penyebab "harga oscillating"); algoritma baru 4 tingkat murni deterministik (barcode > kode_produk unik-2-sisi dgn override konflik-barcode-resmi > nama+satuan persis kandidat tunggal/ganda); mekanisme lock-in: begitu owner konfirmasi pasangan Tingkat 2/3/4, barcode katalog ditulis sbg alias permanen non-primary ke `product_unit` lokal shg sync berikutnya utk produk sama langsung Tingkat 1, tidak pernah ditinjau ulang; tambah ekspor/impor katalog harga terenkripsi (`.berkahpos` magic BPRC1) di `DbExportService`/`price_sync_screen.dart` utk toko yg tidak selalu satu WiFi, cara simpan/bagikan sama persis fitur Backup (`saveOrShareExport`), sengaja dipisah dari `decrypt()`/`restore()` generik krn shape payload beda
+
 ## 2026-07-21
 
 - `c1ff649` — fix: `SyncStatusBanner` masih dibungkus `SafeArea(bottom:false)` peninggalan desain lama (dulu di atas MainShell) — sekarang selalu di bawah AppBar/toolbar shg jadi inset ganda (celah kosong aneh), dihapus; `ClientSyncPhase.waitingApproval` dikeluarkan dari `clientSyncing` — protokol sync connectionless, klien TIDAK PUNYA kanal utk tahu kapan/apakah owner memutuskan, jadi banner klien nampilkan spinner "menunggu persetujuan owner..." SELAMANYA walau permintaan sudah selesai teknis; diganti konfirmasi sekali-tampil "Terkirim — menunggu peninjauan owner"

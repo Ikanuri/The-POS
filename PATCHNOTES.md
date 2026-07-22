@@ -8,6 +8,29 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 22 Juli 2026
+
+### ✨ Fitur Baru
+- **Sinkron Harga makin akurat, tidak ada lagi harga yang "berubah
+  sendiri" walau sudah dicocokkan sebelumnya.** Setelah owner
+  mencocokkan sebuah produk (misalnya lewat nama), aplikasi sekarang
+  MENGINGAT pasangan itu secara permanen — sinkron berikutnya untuk
+  produk yang sama langsung otomatis lewat barcode, tidak perlu
+  ditinjau ulang lagi.
+- Tab peninjauan produk mirip diganti jadi **"Perlu Ditinjau"**, dan
+  ada tombol baru **"Terima Semua Kandidat Tunggal"** untuk konfirmasi
+  cepat sekaligus.
+- **Ekspor/Impor Katalog Harga (file terenkripsi)** di layar Sinkron
+  Harga — untuk toko cabang yang tidak selalu satu WiFi dengan toko
+  induk. Cara simpan/bagikannya sama seperti fitur Backup (bisa
+  langsung share atau simpan ke perangkat).
+
+### 🛠️ Perbaikan
+- Pencocokan produk "mirip nama" (fuzzy) yang kadang salah cocokkan
+  produk berbeda varian (misalnya ukuran berbeda) sudah dihapus —
+  sekarang hanya mencocokkan barcode, kode produk, atau nama+satuan
+  yang benar-benar persis, sisanya diminta konfirmasi manual owner.
+
 ## 21 Juli 2026
 
 ### ✨ Fitur Baru

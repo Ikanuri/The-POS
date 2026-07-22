@@ -4,6 +4,103 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (redesain sinkron harga induk-cabang, PR #35,
+commit `2472533`, Task #10 di task manager — SELESAI) — user (bukan bug
+report kali ini, diskusi arsitektur) melaporkan sinkron harga WiFi antar
+2 TOKO INDEPENDEN (toko induk = rujukan harga, toko cabang = kloning awal
+dari induk) sering hasilkan harga yang oscillating/salah, walau sudah
+"dikonfirmasi benar" sebelumnya. User upload 2 CSV nyata (induk 2746 baris,
+cabang 2775 baris) utk dianalisis.
+
+**Diagnosis** (dari data nyata, bukan dugaan): fallback fuzzy-matching
+(Levenshtein jarak nama produk) di `PriceMatchService` LAMA adalah akar
+masalahnya — terbukti salah-cocokkan produk VARIAN UKURAN/NAMA MIRIP (mis.
+"cup pop ice uk 12/14/16/18" saling tertukar). SKU/kode_produk toko induk
+juga tak bisa dipakai murni sbg identitas (banyak dipakai utk singkatan
+ketik, mis. "grm2 pak" utk Garam 2000/pak — bukan identitas produk).
+**Keputusan bersama user**: HAPUS fuzzy total dari pengambilan keputusan
+OTOMATIS, ganti algoritma 4-tingkat murni deterministik + mekanisme
+"lineage lock-in" (root fix): begitu owner KONFIRMASI sebuah pasangan
+Tingkat 2/3/4 (SKU-lineage / nama+satuan persis), barcode katalog masuk
+ditulis sbg ALIAS PERMANEN (non-primary, tak menimpa barcode asli) ke
+`product_unit` lokal — sync BERIKUTNYA utk produk yg SAMA langsung lompat
+Tingkat 1 (barcode), TIDAK PERNAH ditinjau ulang lagi. Ini yg menutup akar
+"harga berubah sendiri padahal sudah fixed" (dulu: setiap sync menebak
+dari nol, tanpa ingatan sama sekali).
+
+**Proposal user yang DITOLAK setelah didiskusikan** (dicatat supaya tidak
+diusulkan ulang tanpa alasan baru): section "tren harga" + hidden
+sync-button di katalog HTML publik — DIBATALKAN, alasan: halaman katalog
+itu PUBLIK TANPA AUTENTIKASI, bocorkan seluruh harga jual+modal ke siapa
+pun yg buka link WhatsApp, berpotensi jadi bahan protes pelanggan
+("kenapa harga situ beda"), dan tak praktis utk volume ribuan produk lewat
+copy-paste kode. User setuju: "transparansi tidak terlalu berguna dan
+malah berpotensi menimbulkan protes."
+
+**Alternatif yang DITERIMA & diimplementasikan**: ekspor/impor katalog
+harga TERENKRIPSI (`.berkahpos`, magic byte baru `BPRC1`) — reuse format
+`.berkahpos` yg sudah ada (bukan format baru dari nol, user: "toh nama
+file bisa diubah/template beda ketika download atau share"), cara
+simpan/bagikan PERSIS sama dgn fitur Backup (`saveOrShareExport` —
+share langsung atau simpan lokal, user minta eksplisit). **Sengaja
+dipisah** dari `DbExportService.decrypt()`/`restore()` generik (shape
+payload beda: `{items: [...]}` vs `{tables: {...}}`) utk hindari
+salah-parse berbahaya kalau user keliru pilih file. Ditanya juga apakah
+perlu incremental/watermark spt Item 17 — dihitung katalog ~2.700 produk
+cuma ~68 KB terenkripsi (JSON 625 KB → gzip 50 KB → +35% overhead
+AES/base64), JAUH dari masalah performa Item 17 lama (yg sebenarnya
+disebabkan O(n²) fuzzy matching, bukan ukuran payload) — disimpulkan
+BELUM perlu incremental sekarang, desain deferred dicatat di PLAN.md
+Item 50 (JANGAN dikerjakan kecuali diminta lagi).
+
+**Implementasi** (`lib/core/services/price_match_service.dart` ditulis
+ulang total): `MatchType{barcode,sku}` (fuzzy dihapus dari enum),
+`AmbiguousReason{nameUniqueCandidate,nameMultipleCandidates,kodeConflict}`
+baru, `AmbiguousItem` sekarang bawa `List<AmbiguousCandidate>` (bukan 1
+kandidat tunggal). Tingkat 2 (SKU) diperkeras: kode_produk harus UNIK di
+KEDUA sisi (katalog masuk & DB lokal) + override "konflik barcode resmi"
+(heuristik 13-digit numerik, BUKAN validasi checksum GS1 — cuma korelasi
+empiris dari data nyata) yg mundur ke tinjauan manual kalau kedua sisi
+sudah punya barcode ASLI berbeda (bukan self-invented). `price_preview_
+screen.dart`: tab "Mirip" → **"Perlu Ditinjau"**, tombol bulk baru
+"Terima Semua Kandidat Tunggal", method `_linkBarcode` (write-back
+lock-in) dipanggil setelah update harga baik jalur matched maupun
+ambiguous-confirmed. `db_export_service.dart`: `exportPriceCatalog`/
+`decryptPriceCatalog` (BPRC1). `price_sync_screen.dart`: card baru "File
+Katalog Harga (Terenkripsi)" dgn 2 tombol Ekspor/Impor, method
+`_exportPriceFile`/`_importPriceFile` (password dialog mirror
+`backup_screen.dart` persis).
+
+**Gotcha baru ditemukan saat nulis test** (worth diingat lagi kalau
+kejadian serupa): `pumpAndSettle()` HANG kalau dipanggil SEBELUM sebuah
+`showDialog()` yg diawait di dalam handler async ditutup — selama dialog
+itu nunggu, tombol yg memicunya (`_apply()`) masih `_busy=true`
+(`CircularProgressIndicator` beranimasi tanpa henti → `pumpAndSettle()`
+tak pernah "settle"). Fix: `tester.pump()` polos berkali² sampai dialog
+tampil, tap utk tutup, BARU `pumpAndSettle()` aman dipanggil. Lihat
+`test/price_preview_link_persist_test.dart` utk contoh lengkap.
+
+**Test baru** (12 test di 3 file baru + 1 file lama diperbaiki, semua
+revert-verified sesuai metodologi wajib CLAUDE.md — neutering
+`conflict`/`uniqueInCatalog`/pemanggilan `_linkBarcode` masing² dibuktikan
+gagal dgn pesan yg masuk akal sebelum direstore): `test/price_match_
+lineage_test.dart` (6 test — SKU-lineage lolos meski barcode lama beda,
+konflik barcode-resmi ganda mundur ke manual, kode_produk non-unik tak
+auto-match, nama+satuan persis kandidat tunggal/ganda, near-name TIDAK
+menghasilkan kandidat sama sekali — bukti fuzzy benar² hilang),
+`test/price_preview_link_persist_test.dart` (bukti utama: konfirmasi →
+barcode tertaut permanen → sync berikutnya produk sama langsung Tingkat 1,
+tak perlu ditinjau lagi), `test/price_catalog_file_export_test.dart` (3
+test — round-trip export→decrypt sama persis, password salah ditolak,
+file format lain/backup biasa ditolak). Full `flutter test` **621 hijau,
+0 gagal**, `flutter analyze` bersih.
+
+**Tidak ada sisa pekerjaan sync-harga yg tercatat di task manager maupun
+PLAN.md** setelah sesi ini — Task #10 SELESAI total, tinggal item lain
+di PLAN.md (Item 50 deferred, opsional, eksplisit "jangan dikerjakan
+kecuali diminta lagi") dan merge PR #35 ke main (diminta user, dieksekusi
+langsung setelah entri HANDOFF ini)._
+
 _Update sesi 21 Juli 2026 (2 follow-up lagi pasca reposisi, PR #35, commit
 `c1ff649`, Task #9 di task manager) — user lapor 2 hal SETELAH reposisi
 Task #8: (1) masih ada celah kosong aneh di atas kartu banner (dibanding
