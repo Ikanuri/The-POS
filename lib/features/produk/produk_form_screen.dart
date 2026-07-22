@@ -556,6 +556,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
               : 'Tambah Produk'),
           actions: [
+            if (_isEdit)
+              IconButton(
+                icon: const Icon(Icons.qr_code_2_outlined),
+                tooltip: 'Barcode & Cetak Label',
+                onPressed: () =>
+                    context.push('/produk/$_productId/barcode'),
+              ),
             if (_isEdit && !_readOnly)
               IconButton(
                 icon: const Icon(Icons.delete_outline),
