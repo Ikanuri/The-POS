@@ -424,6 +424,62 @@ dipakai cabang, sebelum data berubah lagi). TIDAK dikerjakan sekarang —
 catat di sini murni supaya tidak perlu didesain ulang dari nol kalau
 suatu saat dibutuhkan.
 
+## Item 51 — Usulan section baru CLAUDE.md: "Disiplin Rilis Profesional" (22 Juli, BELUM diputuskan — nunggu keputusan final user soal isi & pemangkasan)
+
+**Konteks:** user usul menambahkan section checklist baru ke `CLAUDE.md`,
+ditaruh SETELAH "Metode Test Sebelum Rilis" dan SEBELUM "Perencanaan —
+PLAN.md", isinya 9 poin disiplin rilis (klasifikasi risiko A/B/C,
+test skenario negatif, cari pola serupa lintas `lib/`, estimasi dampak
+performa, acceptance check sudut pandang toko, dokumentasi risiko
+tertunda, review mandiri skeptis utk perubahan finansial/keamanan,
+commit kecil per sub-item yang bisa di-bisect, pertimbangan device lama
+saat migrasi schema). Diminta opini dulu SEBELUM eksekusi (belum
+ditulis ke CLAUDE.md).
+
+**Opini yang sudah diberikan (ringkasan, detail lengkap ada di riwayat
+percakapan sesi ini):**
+- **Paling kuat/berbasis-bukti nyata proyek ini** (rekomendasi: pertahankan
+  apa adanya): poin migrasi schema device lama (cocok dgn insiden nyata
+  "migration test ripple" tiap `schemaVersion` naik, lihat HANDOFF.md),
+  estimasi dampak performa utk operasi yang tumbuh (persis pola yang
+  dipakai Item 50 di atas), cari pola serupa lintas file (cocok dgn
+  duplikasi 4 renderer struk in-app/share/print/merged yang berulang
+  kali jadi sumber bug parsial-fix), wajib test skenario negatif (sudah
+  jadi praktik nyata sesi-sesi terakhir, tinggal diformalkan), review
+  mandiri skeptis utk perubahan Kategori A/B (melengkapi revert-verify,
+  bukan menduplikasi — menangkap hal yang test coverage sendiri bisa
+  lewatkan spt try/catch kosong/default `??` tanpa alasan).
+- **Berguna tapi lebih lunak/rawan jadi formalitas kosong** (rekomendasi:
+  pertahankan tapi persingkat drastis): klasifikasi risiko A/B/C sebelum
+  coding, acceptance check "sudut pandang pemilik toko".
+- **Redundan, sebaiknya DIHAPUS/dipersingkat jadi 1 baris silang-rujuk**:
+  poin "dokumentasi risiko yang sengaja ditunda" — isinya sudah persis
+  sama dengan konvensi PLAN.md yang sudah dijelaskan di section
+  "Perencanaan — PLAN.md" beberapa baris setelahnya di CLAUDE.md.
+- **Paling rawan tidak realistis dalam praktik** (perlu kesadaran aktif
+  tiap sesi, bukan cuma tertulis, biar benar-benar ditegakkan): poin
+  commit kecil per sub-item yang bisa di-bisect — sesi ini SENDIRI belum
+  konsisten menjalankannya (redesain price-match Item 50/Task #10 masuk
+  1 commit besar, bukan dipecah per sub-item: engine matching, UI
+  preview, fitur ekspor file, test — padahal masing² relatif independen).
+
+**Kekhawatiran token/kepadatan file**: `CLAUDE.md` dibaca otomatis SETIAP
+sesi dan filenya sendiri eksplisit minta tetap ringkas. Draft usulan user
+~90 baris/9 subsection dgn banyak elaborasi & contoh — kalau ditambahkan
+utuh, menambah kira² 35-40% ke ukuran file yang sekarang. Saran yang
+sudah disampaikan: persingkat jadi checklist padat (judul poin + 1 baris
+alasan, tanpa elaborasi panjang), ATAU ikuti pola proyek ini sendiri
+(CHANGELOG/PATCHNOTES/HANDOFF/PLAN sudah terpisah per keperluan) — taruh
+versi lengkap di file terpisah (mis. `docs/RELEASE_CHECKLIST.md`) dan
+cukup 2-3 baris pointer di CLAUDE.md.
+
+**Belum ada keputusan final dari user** soal: (1) tetap tambahkan section
+penuh apa adanya, (2) pangkas sesuai saran di atas, atau (3) pisah ke
+file terpisah dgn pointer singkat. **Jangan eksekusi/tulis ke CLAUDE.md
+sampai user memutuskan salah satu opsi ini secara eksplisit.**
+
+---
+
 **Item lain yang masih terbuka:**
 1. **Item 47** (pengeluaran tidak ikut ekspor PDF/Excel Laporan) & **Item
    48** (avatar produk kasir jadi soft/pastel) — user setuju, siap
@@ -444,3 +500,6 @@ suatu saat dibutuhkan.
    di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
    keputusan desain user), C.2 (gabung Item 17+21), uji printer device
    fisik Android ≤11, dan daftar P3 — detail di Item 41 di atas.
+8. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
+   — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
+   file terpisah). Detail opini di Item 51 di atas.
