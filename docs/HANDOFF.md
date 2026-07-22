@@ -4,6 +4,103 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (fitur baru: generator barcode + cetak label,
+PR #35, commit `ee31f04`, Task #11 di task manager — SELESAI) — lanjutan
+diskusi perbandingan barcode induk-cabang (lihat entri di bawah): user
+minta 2 fitur baru — (1) generator barcode utk kolom barcode kosong,
+gampang dibaca scanner & tidak bentrok dgn barcode yg sudah ada, (2) opsi
+cetak label per satuan/varian (nama + satuan/varian + harga + barcode),
+berguna utk pelabelan produk non-barcode spt Telur/Kg (user kirim
+screenshot mockup label sbg referensi, dgn 2 penyesuaian: nama produk
+bold, satuan+varian di baris kedua format `[qty] - [nama_varian]`).
+
+**Klarifikasi via `AskUserQuestion` sebelum eksekusi** (2 titik keputusan):
+(1) target cetak = **printer thermal 58/80mm yang SUDAH terintegrasi**
+(bukan printer label Bluetooth terpisah, bukan generate PDF/gambar) — ini
+kabar baik krn `esc_pos_utils_plus` (dependency yg sudah dipakai
+`printer_service.dart` utk struk) TERNYATA sudah punya command barcode
+EAN-13 NATIVE (`Generator.barcode(Barcode.ean13(...))`) — printer sendiri
+yg menggambar barcode-nya, TIDAK perlu render gambar/`RepaintBoundary.
+toImage()` spt pola capture chart yg sudah ada; (2) tombol "Generate
+Barcode" & "Cetak Label" jadi **2 aksi terpisah** (bukan 1 tombol
+gabungan) di layar Barcode produk.
+
+**Format barcode generator**: EAN-13 dgn prefix **`29`** (2 digit) —
+dipilih krn GS1 (badan standar barcode dunia) SECARA RESMI mereservasi
+prefix `20`-`29` khusus "Restricted Circulation Number" (pemakaian
+internal toko) — kode dgn prefix ini DIJAMIN tidak akan pernah dipakai
+produk manufaktur resmi di mana pun, beda dari kode 8-digit "asal tempel
+angka" yg selama ini dipakai toko (analisis nyata: perbandingan CSV
+induk-cabang kemarin nemuin banyak barcode 8-digit yg beririsan/mirip
+format walau produk beda — lihat entri sesi sebelumnya). Tetap format
+EAN-13 STANDAR (13 digit + checksum mod-10 valid) supaya scanner/kamera
+app ini (`mobile_scanner` + HID) baca tanpa perubahan apa pun, dan
+otomatis lolos heuristik "barcode resmi 13-digit numerik" yg baru
+diimplementasikan di `PriceMatchService` (Task #10). Uniqueness dicek
+LANGSUNG ke `product_barcodes` sebelum dipakai (jaminan DB-level, bukan
+cuma probabilistik) — `generateInternalBarcode(db, {Random? random})` di
+`lib/core/utils/internal_barcode.dart`, param `random` inject-able KHUSUS
+utk test deterministik (produksi selalu `Random()` non-seeded).
+
+**Cetak label**: `PrinterService.printProductLabel()` (baru,
+`printer_service.dart`) — reuse koneksi Bluetooth + `PrinterSettings`
+(paperSize 58/80mm) yg sudah ada, method baru `_buildLabelBytes()` bikin
+ESC/POS bytes: nama produk (bold) → `[qty] - [nama_varian]` (bold, lebih
+kecil) → harga (`Rp ${_fmtNum(...)}`, pola SAMA persis dgn struk — BUKAN
+`formatRupiah()` yg pakai nbsp U+00A0, printer wajib ASCII) → barcode
+EAN-13 native (`textPos: BarcodeText.below`, angka otomatis tercetak di
+bawah barcode oleh printer sendiri) — atau fallback teks polos kalau
+barcode BUKAN 12/13 digit numerik (mis. barcode lama non-standar), supaya
+tidak `throw` dari constructor `Barcode.ean13`. Baris harga KEDUA (yg ada
+di screenshot mockup user, format aneh "183500:Rp 183,500") SENGAJA
+DI-SKIP — user bilang use-case-nya "masih belum ketemu", jangan
+diimplementasikan sampai diminta lagi dgn kejelasan lebih.
+
+**UI** (`barcode_screen.dart`, dirombak total dari versi lama yg cuma
+nampilkan barcode yg SUDAH ada): sekarang iterasi SEMUA `ProductUnit`
+(termasuk yg belum punya barcode sama sekali) — satuan kosong dapat kartu
+dgn tombol "Generate Barcode" (isi `product_barcodes` dgn
+`isPrimary: barcodes.isEmpty`, `isGenerated: true` — kolom `is_generated`
+SUDAH ADA di skema dari awal tapi belum pernah dipakai di kode manapun
+sampai fitur ini); satuan yg SUDAH punya barcode (asli atau ter-generate)
+dapat tombol "Cetak Label" independen per barcode entry.
+
+**Bug nyata ditemukan & diperbaiki via revert-verify** (persis gotcha yg
+SUDAH tercatat di CLAUDE.md, bukan gotcha baru — tapi kejadian LAGI):
+tombol `FilledButton.tonalIcon` "Generate Barcode" ditaruh dlm `Row`
+bersama `Expanded(Text(...))` TANPA override `minimumSize` — `AppTheme`
+default `minimumSize` LEBAR PENUH utk `FilledButton`, overflow "infinite
+width" `BoxConstraints` di widget test (surface 430px). Fix:
+`FilledButton.styleFrom(minimumSize: const Size(0, 40))`. Revert-verify
+konfirmasi test widget GAGAL persis dgn pesan RenderFlex/BoxConstraints
+tanpa fix ini, hijau lagi setelah restore.
+
+**Gotcha baru ditemukan saat nulis test widget** (worth dicatat kalau
+kejadian lagi, mirip tapi BEDA dari gotcha `pumpAndSettle()`+dialog yg
+sudah tercatat): `ScaffoldMessenger` cuma tampilkan **SATU SnackBar
+sekaligus** — kalau ada SnackBar LAMA yg masih tampil (mis. "Barcode
+dibuat: ..." dari aksi sebelumnya) saat `showSnackBar()` baru dipanggil,
+SnackBar baru itu CUMA DI-QUEUE (tidak langsung render), bikin assertion
+`find.textContaining(...)` gagal-diam walau kodenya benar. Fix di test:
+drain SnackBar lama dulu (`tester.pump(Duration(seconds: 5))` lalu
+`pumpAndSettle()`) SEBELUM memicu aksi yg menampilkan SnackBar berikutnya
+yg mau diperiksa.
+
+**Test baru** (revert-verified — stash `barcode_screen.dart`, test widget
+GAGAL persis spt dijelaskan, restore hijau lagi): `test/internal_barcode_
+test.dart` (2 test — format EAN-13+checksum valid, collision-avoidance
+via `Random(seed)` inject utk determinisme: candidate pertama SENGAJA
+dibuat sudah "terpakai" di DB, verifikasi fungsi lanjut ke candidate
+berikutnya BUKAN mengembalikan yg bentrok), `test/barcode_screen_generate_
+test.dart` (2 test widget — tombol Generate muncul utk satuan kosong lalu
+barcode benar tersimpan ke DB setelah tap; tap Cetak Label tanpa printer
+diatur menampilkan pesan error, tidak crash). Full `flutter test` **625
+hijau, 0 gagal**, `flutter analyze` bersih. **BELUM bisa diuji cetak
+FISIK** (butuh printer thermal asli terhubung Bluetooth — sama
+keterbatasan spt gotcha Item 32 scanner eksternal & Item 41 D.1 printer
+Android lama, WAJIB user coba langsung di device asli sebelum dianggap
+benar-benar berfungsi).
+
 _Update sesi 22 Juli 2026 (redesain sinkron harga induk-cabang, PR #35,
 commit `2472533`, Task #10 di task manager — SELESAI) — user (bukan bug
 report kali ini, diskusi arsitektur) melaporkan sinkron harga WiFi antar

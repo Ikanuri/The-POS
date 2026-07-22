@@ -24,6 +24,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Harga — untuk toko cabang yang tidak selalu satu WiFi dengan toko
   induk. Cara simpan/bagikannya sama seperti fitur Backup (bisa
   langsung share atau simpan ke perangkat).
+- **Generate Barcode & Cetak Label** di layar Barcode produk — produk
+  yang belum punya barcode sama sekali (misalnya Telur/Kg yang dijual
+  tanpa kemasan) sekarang bisa dibuatkan barcode otomatis, lalu
+  langsung dicetak jadi label (nama, satuan, harga, barcode) lewat
+  printer thermal yang sudah terpasang di toko — tidak perlu alat
+  tambahan.
 
 ### 🛠️ Perbaikan
 - Pencocokan produk "mirip nama" (fuzzy) yang kadang salah cocokkan
