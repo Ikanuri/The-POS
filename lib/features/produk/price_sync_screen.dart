@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/services/db_export_service.dart';
 import '../../core/services/price_match_service.dart';
 import '../../core/services/price_sync_service.dart';
+import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/qr_sync_widgets.dart';
 
@@ -177,6 +179,155 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
     } catch (e) {
       if (!mounted) return;
       showError('Gagal ekspor: $e');
+    }
+  }
+
+  /// Item 50 (task manager 21 Juli) — ekspor katalog harga TERENKRIPSI
+  /// (`.berkahpos`, magic BPRC1), utk toko cabang yang tidak selalu satu
+  /// WiFi dgn induk. Cara simpan/bagikan PERSIS sama dgn fitur Backup
+  /// (`saveOrShareExport` — pilih share langsung atau simpan ke perangkat).
+  Future<void> _exportPriceFile() async {
+    final pwCtrl = TextEditingController();
+    String? pwError;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Password Katalog Harga'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                  'Masukkan password untuk mengenkripsi file katalog harga '
+                  '(berisi harga modal — jaga kerahasiaannya).'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pwCtrl,
+                autofocus: true,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  helperText: 'Minimal 8 karakter',
+                  errorText: pwError,
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                if (pwCtrl.text.trim().length < 8) {
+                  setDialogState(
+                      () => pwError = 'Password minimal 8 karakter');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Lanjutkan'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    final password = pwCtrl.text.trim();
+    if (!mounted) return;
+
+    try {
+      final db = ref.read(databaseProvider);
+      final bytes = await DbExportService.exportPriceCatalog(
+        db: db,
+        password: password,
+      );
+      final now = DateTime.now();
+      String p(int n) => n.toString().padLeft(2, '0');
+      final fname =
+          'katalog_harga_${now.year}${p(now.month)}${p(now.day)}.berkahpos';
+      if (!mounted) return;
+      final done = await saveOrShareExport(
+        context: context,
+        bytes: bytes,
+        fileName: fname,
+        shareText: 'Katalog harga toko',
+      );
+      if (!done || !mounted) return;
+      showSuccess('Katalog harga diekspor');
+    } catch (e) {
+      if (!mounted) return;
+      showError('Gagal ekspor: $e');
+    }
+  }
+
+  Future<void> _importPriceFile() async {
+    final result =
+        await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+    if (result == null || result.files.single.bytes == null) return;
+    final fileBytes = result.files.single.bytes!;
+
+    final pwCtrl = TextEditingController();
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Password Katalog Harga'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Masukkan password file katalog harga.',
+                style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pwCtrl,
+              autofocus: true,
+              obscureText: true,
+              decoration:
+                  const InputDecoration(labelText: 'Password', isDense: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+            onPressed: () {
+              if (pwCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Buka'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final password = pwCtrl.text.trim();
+    if (!mounted) return;
+
+    try {
+      final catalog = await DbExportService.decryptPriceCatalog(
+        fileBytes: fileBytes,
+        password: password,
+      );
+      if (catalog.isEmpty) {
+        if (!mounted) return;
+        showError('Tidak ada data produk dalam file');
+        return;
+      }
+      final db = ref.read(databaseProvider);
+      final matchResult = await PriceMatchService.match(
+          db: db, catalog: catalog, barcodeOnly: _barcodeOnly);
+      if (!mounted) return;
+      context.push('/produk/sinkron-harga/preview', extra: matchResult);
+    } on BackupException catch (e) {
+      if (!mounted) return;
+      showError(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      showError('Gagal buka file: $e');
     }
   }
 
@@ -465,6 +616,45 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
                           onPressed: _exportCsv,
                           icon: const Icon(Icons.download_outlined),
                           label: const Text('Export ke CSV'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── File terenkripsi card (Item 50) ──
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Icon(Icons.lock_outlined, color: scheme.primary),
+                          const SizedBox(width: 8),
+                          Text('File Katalog Harga (Terenkripsi)',
+                              style: Theme.of(context).textTheme.titleMedium),
+                        ]),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Untuk toko yang tidak selalu satu WiFi. Ekspor '
+                          'katalog harga ke file terenkripsi, lalu bagikan '
+                          'atau simpan seperti fitur Backup.',
+                          style: TextStyle(
+                              fontSize: 13, color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _exportPriceFile,
+                          icon: const Icon(Icons.upload_file_outlined),
+                          label: const Text('Ekspor Katalog Harga'),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: _importPriceFile,
+                          icon: const Icon(Icons.file_open_outlined),
+                          label: const Text('Impor File Katalog Harga'),
                         ),
                       ],
                     ),

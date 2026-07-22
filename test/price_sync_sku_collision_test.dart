@@ -99,10 +99,13 @@ void main() {
     expect(wrong, isEmpty,
         reason: 'SKU non-unik tidak boleh auto-match ke produk pertama');
 
-    // Fuzzy nama menyelamatkan ke produk yang BENAR (masuk tab "Mirip",
-    // butuh konfirmasi manual — bukan auto-apply).
+    // Pencocokan nama-persis menyelamatkan ke produk yang BENAR (masuk tab
+    // "Perlu Ditinjau", butuh konfirmasi manual — bukan auto-apply).
     expect(result.matched, isEmpty);
-    expect(result.ambiguous.map((a) => a.localProductName),
+    expect(
+        result.ambiguous
+            .expand((a) => a.candidates)
+            .map((c) => c.productName),
         contains('Adem Sari Cingku'));
   });
 

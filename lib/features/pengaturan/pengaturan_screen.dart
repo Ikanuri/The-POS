@@ -13,6 +13,7 @@ import '../../core/providers/theme_provider.dart';
 import '../../core/services/license_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../shell/sync_status_banner.dart';
 
 const _thousandsFmt = ThousandsSeparatorFormatter();
 
@@ -69,8 +70,10 @@ class PengaturanScreen extends ConsumerWidget {
     final tokoBg = AppTheme.changeBg(isDark); // Toko → hijau (usaha)
     final perangkatBg = AppTheme.tealBg(isDark); // Perangkat → teal (hardware)
     final syncBg = AppTheme.riwayatBg(isDark); // Sinkronisasi → ungu
-    final expBg = AppTheme.stockWarnBg(isDark); // Eksperimental → amber (hati-hati)
-    final dataMgmtBg = AppTheme.debtBg(isDark); // Manajemen Data → merah (berisiko tinggi)
+    final expBg =
+        AppTheme.stockWarnBg(isDark); // Eksperimental → amber (hati-hati)
+    final dataMgmtBg =
+        AppTheme.debtBg(isDark); // Manajemen Data → merah (berisiko tinggi)
 
     // Item 24d — label "Pegawai" KOSMETIK saja. Nilai internal deviceRole
     // TETAP 'kasir' (lihat catatan di kKasirPermissionKeys/PLAN.md) — jangan
@@ -84,310 +87,329 @@ class PengaturanScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pengaturan')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          const _SectionHeader('Device Ini'),
-          Card(
-            child: Column(
+          const SyncStatusBanner(),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: scheme.primary.withOpacity(0.14),
-                    child: Text(
-                      device.deviceCode.isEmpty ? '?' : device.deviceCode,
-                      style: TextStyle(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                const _SectionHeader('Device Ini'),
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: scheme.primary.withOpacity(0.14),
+                          child: Text(
+                            device.deviceCode.isEmpty ? '?' : device.deviceCode,
+                            style: TextStyle(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        title: Text(device.deviceName),
+                        subtitle: Text(
+                            '${roleLabel(device.deviceRole)} · ${device.storeName}'),
                       ),
+                      // Item 14 — sisa waktu lisensi, unit menyesuaikan (hari →
+                      // jam → menit). Tidak tampil sama sekali kalau gerbang
+                      // lisensi nonaktif (kill-switch) atau belum pernah aktivasi.
+                      if (LicenseService.isConfigured)
+                        Builder(builder: (context) {
+                          final license = ref.watch(licenseProvider);
+                          final status = license.licenseStatusLabel;
+                          if (status == null) return const SizedBox.shrink();
+                          return ListTile(
+                            leading: const Icon(Icons.verified_user_outlined),
+                            title: const Text('Lisensi'),
+                            subtitle: Text(status),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const _SectionHeader('Toko'),
+                Card(
+                  color: tokoBg,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.store_outlined),
+                        title: const Text('Informasi Toko'),
+                        subtitle:
+                            const Text('Nama, alamat, telepon, catatan struk'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/pengaturan/toko'),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.payments_outlined),
+                        title: const Text('Metode Pembayaran'),
+                        subtitle: const Text('QRIS, transfer bank, e-wallet'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/pengaturan/metode-bayar'),
+                      ),
+                      Builder(builder: (context) {
+                        final canExpense =
+                            ref.watch(_canInputExpenseProvider).valueOrNull ??
+                                false;
+                        if (!canExpense) return const SizedBox.shrink();
+                        return ListTile(
+                          leading: const Icon(Icons.money_off_outlined),
+                          title: const Text('Pengeluaran'),
+                          subtitle: const Text(
+                              'Catat biaya operasional & kas keluar'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/pengeluaran'),
+                        );
+                      }),
+                      ListTile(
+                        leading: const Icon(Icons.badge_outlined),
+                        title: const Text('Pegawai Toko'),
+                        subtitle:
+                            const Text('Dicatat di tiap nota (yang melayani)'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/pengaturan/pegawai'),
+                      ),
+                      if (device.isOwner) ...[
+                        Builder(builder: (context) {
+                          final show =
+                              ref.watch(_showEmployeeProvider).valueOrNull ??
+                                  true;
+                          return SwitchListTile(
+                            secondary: const Icon(Icons.receipt_long_outlined),
+                            title: const Text('Pegawai di Struk'),
+                            subtitle: const Text(
+                                'Tampilkan nama pegawai di struk share & cetak'),
+                            value: show,
+                            onChanged: (v) async {
+                              final db = ref.read(databaseProvider);
+                              await db.setSetting(
+                                  'receipt_show_employee', v ? '1' : '0');
+                              ref.invalidate(_showEmployeeProvider);
+                            },
+                          );
+                        }),
+                        Builder(builder: (context) {
+                          final allow = ref
+                                  .watch(_allowNegativeStockProvider)
+                                  .valueOrNull ??
+                              false;
+                          return SwitchListTile(
+                            secondary: const Icon(Icons.inventory_2_outlined),
+                            title: const Text('Izinkan Stok Minus'),
+                            subtitle: const Text(
+                                'Pegawai bisa jual meski stok 0 (pre-order) — owner selalu bisa terlepas dari ini'),
+                            value: allow,
+                            onChanged: (v) async {
+                              final db = ref.read(databaseProvider);
+                              await db.setSetting(
+                                  'allow_negative_stock', v ? '1' : '0');
+                              ref.invalidate(_allowNegativeStockProvider);
+                            },
+                          );
+                        }),
+                      ],
+                      if (device.isOwner) ...[
+                        ListTile(
+                          leading: const Icon(Icons.tune_outlined),
+                          title: const Text('Izin Pegawai'),
+                          subtitle:
+                              const Text('Override harga, input stok, dll'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/izin-kasir'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.badge_outlined),
+                          title: const Text('Izin Asisten'),
+                          subtitle: const Text('Izinkan stok minus, dll'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/izin-asisten'),
+                        ),
+                        Builder(builder: (context) {
+                          final rule =
+                              ref.watch(loyaltyRuleProvider).valueOrNull;
+                          final subtitle = rule == null || rule.threshold <= 0
+                              ? 'Nonaktif — ketuk untuk mengatur'
+                              : 'Setiap belanja ${formatRupiah(rule.threshold)} '
+                                  '→ ${rule.pointsPer} poin';
+                          return ListTile(
+                            leading: const Icon(Icons.stars_outlined),
+                            title: const Text('Poin Loyalitas'),
+                            subtitle: Text(subtitle),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _showLoyaltyDialog(context, ref),
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const _SectionHeader('Sinkronisasi'),
+                Card(
+                  color: syncBg,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.wifi_outlined),
+                        title: const Text('Sync WiFi'),
+                        subtitle: const Text(
+                            'Sinkronisasi antar HP via jaringan lokal'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/pengaturan/sync'),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.save_alt_outlined),
+                        title: const Text('Backup & Restore'),
+                        subtitle: const Text('File terenkripsi .berkahpos'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/pengaturan/backup'),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.swap_horiz_outlined),
+                        title: const Text('Alihkan Owner'),
+                        subtitle: const Text(
+                            'Pindahkan seluruh data & identitas toko ke device lain'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/pengaturan/alih-owner'),
+                      ),
+                      if (device.isOwner) ...[
+                        ListTile(
+                          leading: const Icon(Icons.upload_file_outlined),
+                          title: const Text('Import Produk CSV'),
+                          subtitle:
+                              const Text('Impor daftar produk dari file CSV'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/import-csv'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.download_outlined),
+                          title: const Text('Export Produk CSV'),
+                          subtitle:
+                              const Text('Ekspor seluruh produk aktif ke CSV'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _exportProductsCsv(context, ref),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.storefront_outlined),
+                          title: const Text('Katalog Pesanan'),
+                          subtitle: const Text(
+                              'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () =>
+                              context.push('/pengaturan/katalog-pesanan'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.qr_code_2_outlined),
+                          title: const Text('Pair Device Baru'),
+                          subtitle:
+                              const Text('Tambah HP kasir / asisten via QR'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/pair'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (device.isOwner) ...[
+                  const SizedBox(height: 8),
+                  const _SectionHeader('Eksperimental'),
+                  Card(
+                    color: expBg,
+                    child: ListTile(
+                      leading: const Icon(Icons.science_outlined),
+                      title: const Text('Import dari Griyo POS'),
+                      subtitle: const Text(
+                          'Migrasi data produk dari file export Griyo POS'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/pengaturan/import-griyo'),
                     ),
                   ),
-                  title: Text(device.deviceName),
-                  subtitle: Text(
-                      '${roleLabel(device.deviceRole)} · ${device.storeName}'),
-                ),
-                // Item 14 — sisa waktu lisensi, unit menyesuaikan (hari →
-                // jam → menit). Tidak tampil sama sekali kalau gerbang
-                // lisensi nonaktif (kill-switch) atau belum pernah aktivasi.
-                if (LicenseService.isConfigured)
-                  Builder(builder: (context) {
-                    final license = ref.watch(licenseProvider);
-                    final status = license.licenseStatusLabel;
-                    if (status == null) return const SizedBox.shrink();
-                    return ListTile(
-                      leading: const Icon(Icons.verified_user_outlined),
-                      title: const Text('Lisensi'),
-                      subtitle: Text(status),
-                    );
-                  }),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const _SectionHeader('Toko'),
-          Card(
-            color: tokoBg,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.store_outlined),
-                  title: const Text('Informasi Toko'),
-                  subtitle: const Text('Nama, alamat, telepon, catatan struk'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/pengaturan/toko'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.payments_outlined),
-                  title: const Text('Metode Pembayaran'),
-                  subtitle: const Text('QRIS, transfer bank, e-wallet'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/pengaturan/metode-bayar'),
-                ),
-                Builder(builder: (context) {
-                  final canExpense =
-                      ref.watch(_canInputExpenseProvider).valueOrNull ?? false;
-                  if (!canExpense) return const SizedBox.shrink();
-                  return ListTile(
-                    leading: const Icon(Icons.money_off_outlined),
-                    title: const Text('Pengeluaran'),
-                    subtitle: const Text('Catat biaya operasional & kas keluar'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/pengeluaran'),
-                  );
-                }),
-                ListTile(
-                  leading: const Icon(Icons.badge_outlined),
-                  title: const Text('Pegawai Toko'),
-                  subtitle: const Text('Dicatat di tiap nota (yang melayani)'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/pengaturan/pegawai'),
-                ),
-                if (device.isOwner) ...[
-                  Builder(builder: (context) {
-                    final show =
-                        ref.watch(_showEmployeeProvider).valueOrNull ?? true;
-                    return SwitchListTile(
-                      secondary: const Icon(Icons.receipt_long_outlined),
-                      title: const Text('Pegawai di Struk'),
-                      subtitle: const Text(
-                          'Tampilkan nama pegawai di struk share & cetak'),
-                      value: show,
-                      onChanged: (v) async {
-                        final db = ref.read(databaseProvider);
-                        await db.setSetting(
-                            'receipt_show_employee', v ? '1' : '0');
-                        ref.invalidate(_showEmployeeProvider);
-                      },
-                    );
-                  }),
-                  Builder(builder: (context) {
-                    final allow =
-                        ref.watch(_allowNegativeStockProvider).valueOrNull ??
-                            false;
-                    return SwitchListTile(
-                      secondary: const Icon(Icons.inventory_2_outlined),
-                      title: const Text('Izinkan Stok Minus'),
-                      subtitle: const Text(
-                          'Pegawai bisa jual meski stok 0 (pre-order) — owner selalu bisa terlepas dari ini'),
-                      value: allow,
-                      onChanged: (v) async {
-                        final db = ref.read(databaseProvider);
-                        await db.setSetting(
-                            'allow_negative_stock', v ? '1' : '0');
-                        ref.invalidate(_allowNegativeStockProvider);
-                      },
-                    );
-                  }),
                 ],
                 if (device.isOwner) ...[
-                  ListTile(
-                    leading: const Icon(Icons.tune_outlined),
-                    title: const Text('Izin Pegawai'),
-                    subtitle: const Text('Override harga, input stok, dll'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/izin-kasir'),
+                  const SizedBox(height: 8),
+                  const _SectionHeader('Manajemen Data'),
+                  Card(
+                    color: dataMgmtBg,
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.point_of_sale_outlined),
+                          title: const Text('Tutup Kasir'),
+                          subtitle: const Text(
+                              'Rekap kas harian: sistem vs uang fisik'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/tutup-kasir'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.archive_outlined),
+                          title: const Text('Tutup Buku'),
+                          subtitle: const Text('Arsipkan transaksi tahun lalu'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/tutup-buku'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.folder_zip_outlined),
+                          title: const Text('Buka Arsip'),
+                          subtitle: const Text(
+                              'Lihat laporan tahun yang sudah diarsipkan'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/arsip'),
+                        ),
+                      ],
+                    ),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.badge_outlined),
-                    title: const Text('Izin Asisten'),
-                    subtitle: const Text('Izinkan stok minus, dll'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/izin-asisten'),
-                  ),
-                  Builder(builder: (context) {
-                    final rule = ref.watch(loyaltyRuleProvider).valueOrNull;
-                    final subtitle = rule == null || rule.threshold <= 0
-                        ? 'Nonaktif — ketuk untuk mengatur'
-                        : 'Setiap belanja ${formatRupiah(rule.threshold)} '
-                            '→ ${rule.pointsPer} poin';
-                    return ListTile(
-                      leading: const Icon(Icons.stars_outlined),
-                      title: const Text('Poin Loyalitas'),
-                      subtitle: Text(subtitle),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _showLoyaltyDialog(context, ref),
-                    );
-                  }),
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const _SectionHeader('Sinkronisasi'),
-          Card(
-            color: syncBg,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.wifi_outlined),
-                  title: const Text('Sync WiFi'),
-                  subtitle:
-                      const Text('Sinkronisasi antar HP via jaringan lokal'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/pengaturan/sync'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.save_alt_outlined),
-                  title: const Text('Backup & Restore'),
-                  subtitle: const Text('File terenkripsi .berkahpos'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/pengaturan/backup'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.swap_horiz_outlined),
-                  title: const Text('Alihkan Owner'),
-                  subtitle: const Text(
-                      'Pindahkan seluruh data & identitas toko ke device lain'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/pengaturan/alih-owner'),
-                ),
-                if (device.isOwner) ...[
-                  ListTile(
-                    leading: const Icon(Icons.upload_file_outlined),
-                    title: const Text('Import Produk CSV'),
-                    subtitle: const Text('Impor daftar produk dari file CSV'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/import-csv'),
+                const SizedBox(height: 8),
+                const _SectionHeader('Perangkat'),
+                Card(
+                  color: perangkatBg,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.print_outlined),
+                        title: const Text('Printer Bluetooth'),
+                        subtitle: const Text('Pilih printer & test cetak'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/pengaturan/printer'),
+                      ),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.dark_mode_outlined),
+                        title: const Text('Mode Gelap'),
+                        value: themeMode == ThemeMode.dark,
+                        onChanged: (_) =>
+                            ref.read(themeModeProvider.notifier).toggle(),
+                      ),
+                      Builder(builder: (context) {
+                        final scale = ref.watch(fontScaleProvider);
+                        return ListTile(
+                          leading: const Icon(Icons.text_fields_outlined),
+                          title: const Text('Ukuran Teks'),
+                          subtitle: Text(scale.label),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _showFontScaleDialog(context, ref),
+                        );
+                      }),
+                    ],
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.download_outlined),
-                    title: const Text('Export Produk CSV'),
-                    subtitle: const Text('Ekspor seluruh produk aktif ke CSV'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _exportProductsCsv(context, ref),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.storefront_outlined),
-                    title: const Text('Katalog Pesanan'),
+                ),
+                const SizedBox(height: 8),
+                const _SectionHeader('Diagnostik'),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Log Error Terakhir'),
                     subtitle: const Text(
-                        'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
+                        'Catatan error yang tertangkap otomatis, bisa dibagikan ke developer'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/katalog-pesanan'),
+                    onTap: () => context.push('/pengaturan/log-error'),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.qr_code_2_outlined),
-                    title: const Text('Pair Device Baru'),
-                    subtitle: const Text('Tambah HP kasir / asisten via QR'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/pair'),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (device.isOwner) ...[
-            const SizedBox(height: 8),
-            const _SectionHeader('Eksperimental'),
-            Card(
-              color: expBg,
-              child: ListTile(
-                leading: const Icon(Icons.science_outlined),
-                title: const Text('Import dari Griyo POS'),
-                subtitle: const Text(
-                    'Migrasi data produk dari file export Griyo POS'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/pengaturan/import-griyo'),
-              ),
-            ),
-          ],
-          if (device.isOwner) ...[
-            const SizedBox(height: 8),
-            const _SectionHeader('Manajemen Data'),
-            Card(
-              color: dataMgmtBg,
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.point_of_sale_outlined),
-                    title: const Text('Tutup Kasir'),
-                    subtitle:
-                        const Text('Rekap kas harian: sistem vs uang fisik'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/tutup-kasir'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.archive_outlined),
-                    title: const Text('Tutup Buku'),
-                    subtitle: const Text('Arsipkan transaksi tahun lalu'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/tutup-buku'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.folder_zip_outlined),
-                    title: const Text('Buka Arsip'),
-                    subtitle:
-                        const Text('Lihat laporan tahun yang sudah diarsipkan'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/pengaturan/arsip'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-          const _SectionHeader('Perangkat'),
-          Card(
-            color: perangkatBg,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.print_outlined),
-                  title: const Text('Printer Bluetooth'),
-                  subtitle: const Text('Pilih printer & test cetak'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/pengaturan/printer'),
                 ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.dark_mode_outlined),
-                  title: const Text('Mode Gelap'),
-                  value: themeMode == ThemeMode.dark,
-                  onChanged: (_) =>
-                      ref.read(themeModeProvider.notifier).toggle(),
-                ),
-                Builder(builder: (context) {
-                  final scale = ref.watch(fontScaleProvider);
-                  return ListTile(
-                    leading: const Icon(Icons.text_fields_outlined),
-                    title: const Text('Ukuran Teks'),
-                    subtitle: Text(scale.label),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _showFontScaleDialog(context, ref),
-                  );
-                }),
               ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const _SectionHeader('Diagnostik'),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.bug_report_outlined),
-              title: const Text('Log Error Terakhir'),
-              subtitle: const Text(
-                  'Catatan error yang tertangkap otomatis, bisa dibagikan ke developer'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/pengaturan/log-error'),
             ),
           ),
         ],

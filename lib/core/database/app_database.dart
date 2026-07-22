@@ -3703,6 +3703,175 @@ class AppDatabase extends _$AppDatabase {
     return count;
   }
 
+  /// Buang produk dari usulan [rows] (payload `dumpLocalProposals` dari
+  /// klien) yang isinya SUDAH IDENTIK dgn data owner saat ini di HOST ini
+  /// (nama, satuan, tier harga, harga alternatif, barcode) — dipanggil host
+  /// SEBELUM produk itu masuk antrian `_pendingProposals`. Tanpa filter ini,
+  /// produk yang flag `locally_modified` klien-nya "macet" true (mis. form
+  /// disimpan ulang tanpa perubahan nilai apa pun, `updated_at` klien ikut
+  /// maju & terus "menang" last-write-wins thd baris balikan resmi dari
+  /// host — lihat dok kolom `locallyModified`) akan terus-menerus diusulkan
+  /// ulang ke owner SETIAP sync, menumpuk di layar review walau tidak ada
+  /// apa pun yang perlu diputuskan — laporan nyata user. Produk BARU (belum
+  /// ada di DB owner) SELALU lolos filter (tidak ada pembanding).
+  ///
+  /// Perbandingan tier/harga-alternatif/barcode pakai SET isi (bukan id) —
+  /// id tier/alt-harga diregenerasi tiap simpan form produk (lihat dok
+  /// `applyProductProposals`), jadi id TIDAK bisa dipakai sbg pembanding.
+  Future<Map<String, List<Map<String, Object?>>>> filterUnchangedProposals(
+      Map<String, List<Map<String, Object?>>> rows) async {
+    final productRows = rows['products'] ?? const [];
+    if (productRows.isEmpty) return rows;
+
+    final unitRows = rows['product_units'] ?? const [];
+    final tierRows = rows['price_tiers'] ?? const [];
+    final altRows = rows['alt_prices'] ?? const [];
+    final barcodeRows = rows['product_barcodes'] ?? const [];
+
+    final unitsByProduct = <String, List<Map<String, Object?>>>{};
+    for (final u in unitRows) {
+      unitsByProduct.putIfAbsent(u['product_id'] as String, () => []).add(u);
+    }
+    final tiersByUnit = <String, List<Map<String, Object?>>>{};
+    for (final t in tierRows) {
+      tiersByUnit.putIfAbsent(t['product_unit_id'] as String, () => []).add(t);
+    }
+    final altsByUnit = <String, List<Map<String, Object?>>>{};
+    for (final a in altRows) {
+      altsByUnit.putIfAbsent(a['product_unit_id'] as String, () => []).add(a);
+    }
+    final barcodesByUnit = <String, List<Map<String, Object?>>>{};
+    for (final b in barcodeRows) {
+      barcodesByUnit
+          .putIfAbsent(b['product_unit_id'] as String, () => [])
+          .add(b);
+    }
+
+    String productSig(Map<String, Object?> p) => '${p['name']}'
+        '|${p['product_group_id']}|${p['is_active']}|${p['marked_out_of_stock']}';
+    String unitSig(Map<String, Object?> u) => '${u['unit_type_id']}'
+        '|${u['is_base_unit']}|${u['ratio_to_base']}|${u['is_non_stock']}'
+        '|${u['min_stock']}';
+    // Dart `Set`/`List` TIDAK overload `==` sbg pembanding ISI (identity-based
+    // spt `Object` default) — dua instance beda dgn isi identik akan SELALU
+    // `!=`. Bandingkan sbg STRING kanonik (elemen di-sort dulu, urutan
+    // himpunan asal tak relevan di sini) supaya `!=` sungguhan bandingkan isi.
+    String tierSigs(List<Map<String, Object?>> tiers) => (tiers
+            .map((t) => '${t['min_qty']}|${t['price']}|${t['cost_price']}')
+            .toSet()
+            .toList()
+          ..sort())
+        .join(',');
+    String altSigs(List<Map<String, Object?>> alts) => (alts
+            .map((a) => '${a['label']}|${a['price']}')
+            .toSet()
+            .toList()
+          ..sort())
+        .join(',');
+    String barcodeSigs(List<Map<String, Object?>> codes) => (codes
+            .map((b) => '${b['barcode']}')
+            .toSet()
+            .toList()
+          ..sort())
+        .join(',');
+
+    final changedProductIds = <String>{};
+    for (final p in productRows) {
+      final id = p['id'] as String;
+      final existingRows = await customSelect(
+        'SELECT * FROM "products" WHERE id = ?',
+        variables: [Variable.withString(id)],
+      ).get();
+      if (existingRows.isEmpty) {
+        changedProductIds.add(id); // Produk baru — tidak ada pembanding.
+        continue;
+      }
+      if (productSig(existingRows.single.data) != productSig(p)) {
+        changedProductIds.add(id);
+        continue;
+      }
+
+      final proposedUnits = unitsByProduct[id] ?? const [];
+      final existingUnitRows = await customSelect(
+        'SELECT * FROM "product_units" WHERE product_id = ?',
+        variables: [Variable.withString(id)],
+      ).get();
+      final existingUnitById = {
+        for (final r in existingUnitRows) r.data['id'] as String: r.data,
+      };
+
+      var changed = proposedUnits.length != existingUnitRows.length;
+      for (final u in proposedUnits) {
+        if (changed) break;
+        final uid = u['id'] as String;
+        final existingUnit = existingUnitById[uid];
+        if (existingUnit == null || unitSig(existingUnit) != unitSig(u)) {
+          changed = true;
+          break;
+        }
+        final existingTierRows = await customSelect(
+          'SELECT * FROM "price_tiers" WHERE product_unit_id = ?',
+          variables: [Variable.withString(uid)],
+        ).get();
+        if (tierSigs(existingTierRows.map((r) => r.data).toList()) !=
+            tierSigs(tiersByUnit[uid] ?? const [])) {
+          changed = true;
+          break;
+        }
+        final existingAltRows = await customSelect(
+          'SELECT * FROM "alt_prices" WHERE product_unit_id = ?',
+          variables: [Variable.withString(uid)],
+        ).get();
+        if (altSigs(existingAltRows.map((r) => r.data).toList()) !=
+            altSigs(altsByUnit[uid] ?? const [])) {
+          changed = true;
+          break;
+        }
+        final existingBarcodeRows = await customSelect(
+          'SELECT * FROM "product_barcodes" WHERE product_unit_id = ?',
+          variables: [Variable.withString(uid)],
+        ).get();
+        if (barcodeSigs(existingBarcodeRows.map((r) => r.data).toList()) !=
+            barcodeSigs(barcodesByUnit[uid] ?? const [])) {
+          changed = true;
+          break;
+        }
+      }
+      if (changed) changedProductIds.add(id);
+    }
+
+    if (changedProductIds.length == productRows.length) return rows;
+
+    final keptUnitIds = <String>{};
+    for (final u in unitRows) {
+      if (changedProductIds.contains(u['product_id'])) {
+        keptUnitIds.add(u['id'] as String);
+      }
+    }
+    return {
+      'products': [
+        for (final p in productRows)
+          if (changedProductIds.contains(p['id'])) p,
+      ],
+      'product_units': [
+        for (final u in unitRows)
+          if (keptUnitIds.contains(u['id'])) u,
+      ],
+      'price_tiers': [
+        for (final t in tierRows)
+          if (keptUnitIds.contains(t['product_unit_id'])) t,
+      ],
+      'alt_prices': [
+        for (final a in altRows)
+          if (keptUnitIds.contains(a['product_unit_id'])) a,
+      ],
+      'product_barcodes': [
+        for (final b in barcodeRows)
+          if (keptUnitIds.contains(b['product_unit_id'])) b,
+      ],
+    };
+  }
+
   /// Item 41 A.1 — hitung ulang rantai `stock_after` per satuan (dasar)
   /// secara kronologis dari `qty_change`. WAJIB dipanggil setelah merge
   /// `stock_ledger` dari device lain (sync LAN, kedua arah): baris kiriman

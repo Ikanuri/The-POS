@@ -4,12 +4,14 @@ import 'dart:typed_data';
 
 import '../database/app_database.dart';
 import 'crypto_service.dart';
+import 'price_sync_service.dart';
 
 /// Format file .berkahpos:
 ///   "BPOS1" (5 bytes) + IV (16) + AES-256-CBC(gzip(JSON))           ← toko v1
 ///   "BPOSP" (5 bytes) + IV (16) + ...                                ← portable v1 (salt hardcoded)
 ///   "BPOP2" (5 bytes) + salt (16) + IV (16) + ...                   ← portable v2 (salt acak)
 ///   "BPOT1" (5 bytes) + salt (16) + IV (16) + ...                   ← Alihkan Owner (Item 27)
+///   "BPRC1" (5 bytes) + salt (16) + IV (16) + ...                   ← Katalog Harga (Item 50)
 ///
 /// Key BPOS1: PBKDF2(storeKey+password, storeUuid)
 /// Key BPOSP: PBKDF2(password, 'the-pos-portable-v1')          ← insecure, backward compat only
@@ -22,6 +24,12 @@ import 'crypto_service.dart';
 ///   identitas device saat cuma mau restore data biasa. Lihat PLAN/HANDOFF
 ///   Item 27 "Alihkan Owner" utk alasan lengkap kenapa ini dipisah dari
 ///   backup default.
+/// Key BPRC1: sama pola dgn BPOP2 (salt unik per file) — TAPI SENGAJA
+///   dipisah total dari `decrypt()`/`restore()` (jalur restore-seluruh-DB).
+///   Isinya cuma daftar `PriceCatalogItem` (sinkron harga induk→cabang,
+///   dibahas & disepakati 21 Juli — lihat task manager), BUKAN dump tabel
+///   DB — mencampur keduanya berisiko `restore()` dipanggil dgn payload yg
+///   salah bentuk. Lihat `exportPriceCatalog`/`decryptPriceCatalog`.
 class DbExportService {
   DbExportService._();
 
@@ -29,6 +37,7 @@ class DbExportService {
   static const _magicPortable = [0x42, 0x50, 0x4F, 0x53, 0x50]; // "BPOSP"
   static const _magicPortableV2 = [0x42, 0x50, 0x4F, 0x50, 0x32]; // "BPOP2"
   static const _magicOwnerTransfer = [0x42, 0x50, 0x4F, 0x54, 0x31]; // "BPOT1"
+  static const _magicPriceCatalog = [0x42, 0x50, 0x52, 0x43, 0x31]; // "BPRC1"
 
   // Catatan: export format BPOS1 (kunci diikat ke storeKey toko asal) sudah
   // dihapus — restore lintas-device MUSTAHIL dengan format itu (storeKey
@@ -83,6 +92,65 @@ class DbExportService {
     final encrypted = CryptoService.encryptBytes(compressed, key, iv);
     return Uint8List.fromList(
         [..._magicOwnerTransfer, ...salt, ...iv, ...encrypted]);
+  }
+
+  /// Ekspor katalog harga (BPRC1) — utk toko cabang yang tidak selalu satu
+  /// WiFi dgn toko induk saat mau sinkron (Item 50, task manager 21 Juli).
+  /// Isinya SELALU full-dump (bukan incremental — lihat PLAN.md Item 50 utk
+  /// alasan lengkap kenapa itu belum perlu: katalog ~2.700 produk cuma ~68 KB
+  /// terenkripsi, jauh dari batas ukuran file share apa pun).
+  static Future<Uint8List> exportPriceCatalog({
+    required AppDatabase db,
+    required String password,
+  }) async {
+    final catalog = await PriceSyncService.buildCatalog(db);
+    final payload = <String, dynamic>{
+      'exportedAt': DateTime.now().toIso8601String(),
+      'items': catalog.map((c) => c.toJson()).toList(),
+    };
+    final jsonBytes = utf8.encode(jsonEncode(payload));
+    final compressed = GZipCodec().encode(jsonBytes);
+    final salt = CryptoService.randomIV();
+    final key = CryptoService.derivePortableKeyV2(password, salt);
+    final iv = CryptoService.randomIV();
+    final encrypted = CryptoService.encryptBytes(compressed, key, iv);
+    return Uint8List.fromList(
+        [..._magicPriceCatalog, ...salt, ...iv, ...encrypted]);
+  }
+
+  /// Decrypt file katalog harga (BPRC1). Throws [BackupException] bila file
+  /// bukan format ini/rusak/password salah — pesan SENGAJA beda dari
+  /// [decrypt] biasa (sebut "katalog harga", bukan "backup") supaya user
+  /// tidak bingung kalau salah pilih file.
+  static Future<List<PriceCatalogItem>> decryptPriceCatalog({
+    required Uint8List fileBytes,
+    required String password,
+  }) async {
+    if (fileBytes.length < 5 + 16 + 16) {
+      throw BackupException('File terlalu kecil atau rusak');
+    }
+    final magic = fileBytes.sublist(0, 5);
+    if (!_listEquals(magic, Uint8List.fromList(_magicPriceCatalog))) {
+      throw BackupException('Bukan file katalog harga (.berkahpos) yang valid');
+    }
+    final salt = fileBytes.sublist(5, 21);
+    final iv = fileBytes.sublist(21, 37);
+    final cipherBytes = fileBytes.sublist(37);
+    final key = CryptoService.derivePortableKeyV2(password, salt);
+
+    late Map<String, dynamic> payload;
+    try {
+      final compressed = CryptoService.decryptBytes(
+          Uint8List.fromList(cipherBytes), key, Uint8List.fromList(iv));
+      final jsonBytes = GZipCodec().decode(compressed);
+      payload = jsonDecode(utf8.decode(jsonBytes)) as Map<String, dynamic>;
+    } catch (_) {
+      throw BackupException('Password salah atau file rusak');
+    }
+    final items = payload['items'] as List;
+    return items
+        .map((e) => PriceCatalogItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Decrypt dan parse file. Throws [BackupException] jika invalid.

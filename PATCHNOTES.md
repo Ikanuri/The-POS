@@ -8,6 +8,29 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 22 Juli 2026
+
+### ✨ Fitur Baru
+- **Sinkron Harga makin akurat, tidak ada lagi harga yang "berubah
+  sendiri" walau sudah dicocokkan sebelumnya.** Setelah owner
+  mencocokkan sebuah produk (misalnya lewat nama), aplikasi sekarang
+  MENGINGAT pasangan itu secara permanen — sinkron berikutnya untuk
+  produk yang sama langsung otomatis lewat barcode, tidak perlu
+  ditinjau ulang lagi.
+- Tab peninjauan produk mirip diganti jadi **"Perlu Ditinjau"**, dan
+  ada tombol baru **"Terima Semua Kandidat Tunggal"** untuk konfirmasi
+  cepat sekaligus.
+- **Ekspor/Impor Katalog Harga (file terenkripsi)** di layar Sinkron
+  Harga — untuk toko cabang yang tidak selalu satu WiFi dengan toko
+  induk. Cara simpan/bagikannya sama seperti fitur Backup (bisa
+  langsung share atau simpan ke perangkat).
+
+### 🛠️ Perbaikan
+- Pencocokan produk "mirip nama" (fuzzy) yang kadang salah cocokkan
+  produk berbeda varian (misalnya ukuran berbeda) sudah dihapus —
+  sekarang hanya mencocokkan barcode, kode produk, atau nama+satuan
+  yang benar-benar persis, sisanya diminta konfirmasi manual owner.
+
 ## 21 Juli 2026
 
 ### ✨ Fitur Baru
@@ -21,6 +44,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (data yang ditolak tidak akan otomatis muncul lagi).
 - Tombol baru **"Sync Ulang Penuh"** di layar Sync — kalau owner memang
   ingin perangkat lain mengirim ulang semua datanya dari awal.
+- **Notifikasi sync di tab manapun sekarang lebih rapi** — bentuknya jadi
+  kartu (sama seperti notifikasi lain di app), muncul tepat di bawah
+  header/toolbar tiap tab (bukan mengambang di atas segalanya), dan
+  otomatis hilang begitu tidak ada lagi yang perlu ditinjau (sebelumnya
+  "Host aktif" bisa menetap terus selama server sync menyala, walau
+  semua sudah beres).
+- **Usulan harga/produk dari kasir/asisten tidak lagi menumpuk** di layar
+  review kalau isinya sudah sama persis dengan data owner — sebelumnya
+  produk yang sudah tidak ada bedanya bisa terus muncul lagi setiap sync.
+- **Notifikasi sync dirapikan lagi** — celah kosong aneh di atas kartu
+  sudah hilang, dan di HP kasir/asisten, tampilan "menunggu persetujuan
+  owner..." tidak lagi berputar tanpa henti selamanya — sekarang
+  menampilkan konfirmasi singkat lalu hilang sendiri.
 
 ## 20 Juli 2026
 

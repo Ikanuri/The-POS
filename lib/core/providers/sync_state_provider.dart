@@ -10,6 +10,13 @@ import 'device_provider.dart';
 /// bukan streaming) — cukup tahapan kasar Menyambung→Mengirim→Menunggu.
 enum ClientSyncPhase { idle, connecting, sending, waitingApproval, done, error }
 
+/// Nuansa warna kartu notifikasi banner sync — `sync` (ungu, konsisten dgn
+/// warna domain "Sinkronisasi" di seluruh app) dipakai utk status
+/// berlangsung (antrian menunggu/klien sedang proses) MAUPUN konfirmasi
+/// netral (ditolak, Sync Ulang Penuh); `success` (hijau) KHUSUS konfirmasi
+/// approve berhasil.
+enum SyncBannerTone { sync, success }
+
 /// Snapshot state sync global — dulu tersebar sbg local `State` field di
 /// `SyncScreen` (`_hostRunning`, `_queue`, `_syncing`, dst), sekarang satu
 /// sumber kebenaran supaya bisa dibaca dari layar MANA PUN (banner
@@ -25,6 +32,8 @@ class SyncState {
     this.timeoutProfile = SyncTimeoutProfile.normal,
     this.clientPhase = ClientSyncPhase.idle,
     this.clientResultMessage,
+    this.transientMessage,
+    this.transientTone = SyncBannerTone.sync,
   });
 
   final bool hostRunning;
@@ -37,16 +46,39 @@ class SyncState {
   final ClientSyncPhase clientPhase;
   final String? clientResultMessage;
 
+  /// Pesan konfirmasi SEKALI-TAMPIL (mis. "Disetujui — N baris diterima")
+  /// yang otomatis hilang sendiri (lihat `SyncStateNotifier._showTransient`)
+  /// — BUKAN status berlangsung. Dipakai banner shell supaya event
+  /// approve/tolak/reset terasa "beres", bukan menetap selamanya.
+  final String? transientMessage;
+  final SyncBannerTone transientTone;
+
+  /// HANYA tahap network AKTIF (menyambung/mengirim) — `waitingApproval`
+  /// SENGAJA TIDAK termasuk (lihat dok panjang di `SyncStateNotifier.sync`):
+  /// begitu respons host diterima, permintaan klien SUDAH SELESAI secara
+  /// teknis (host sudah simpan durable di `sync_upload_queue`) — "menunggu
+  /// persetujuan owner" sesudahnya adalah menunggu KEPUTUSAN MANUSIA di
+  /// perangkat LAIN, sesuatu yang app ini TIDAK PUNYA kanal live utk
+  /// dipantau (protokol sync connectionless, bukan koneksi persisten).
+  /// Menganggapnya "masih syncing" bikin banner nampilkan spinner
+  /// SELAMANYA (laporan nyata user) walau tidak ada proses aktif apa pun.
   bool get clientSyncing =>
       clientPhase == ClientSyncPhase.connecting ||
-      clientPhase == ClientSyncPhase.sending ||
-      clientPhase == ClientSyncPhase.waitingApproval;
+      clientPhase == ClientSyncPhase.sending;
 
-  /// true bila ADA proses/status yang layak ditampilkan sbg banner
-  /// persisten di shell (host aktif, antrian menunggu, atau klien sedang
-  /// jalan) — dipakai `main_shell.dart` memutuskan tampil/tidaknya banner.
-  bool get hasActivity =>
-      hostRunning || queue.isNotEmpty || proposals.isNotEmpty || clientSyncing;
+  /// true bila ADA proses yang MASIH berlangsung & layak dipantau (antrian
+  /// menunggu, usulan menunggu, atau klien sedang proses) — SENGAJA TIDAK
+  /// termasuk `hostRunning` semata: host aktif tanpa antrian apa pun bukan
+  /// sesuatu yang perlu dinotifikasi terus-menerus di tab lain (dulu bikin
+  /// banner "Host aktif" menetap selamanya selama host hidup, walau tidak
+  /// ada yang perlu ditinjau — laporan nyata user).
+  bool get hasOngoing =>
+      queue.isNotEmpty || proposals.isNotEmpty || clientSyncing;
+
+  /// true bila ADA sesuatu yang layak ditampilkan sbg banner shell (ongoing
+  /// ATAU konfirmasi sekali-tampil) — dipakai `main_shell.dart` memutuskan
+  /// tampil/tidaknya banner.
+  bool get hasActivity => hasOngoing || transientMessage != null;
 
   SyncState copyWith({
     bool? hostRunning,
@@ -58,6 +90,8 @@ class SyncState {
     SyncTimeoutProfile? timeoutProfile,
     ClientSyncPhase? clientPhase,
     Object? clientResultMessage = _sentinel,
+    Object? transientMessage = _sentinel,
+    SyncBannerTone? transientTone,
   }) {
     return SyncState(
       hostRunning: hostRunning ?? this.hostRunning,
@@ -71,6 +105,10 @@ class SyncState {
       clientResultMessage: identical(clientResultMessage, _sentinel)
           ? this.clientResultMessage
           : clientResultMessage as String?,
+      transientMessage: identical(transientMessage, _sentinel)
+          ? this.transientMessage
+          : transientMessage as String?,
+      transientTone: transientTone ?? this.transientTone,
     );
   }
 }
@@ -105,25 +143,41 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
       state =
           state.copyWith(proposals: LanSyncService.pendingProposals.toList());
     };
+    // Pasang `_db` SEGERA (bukan menunggu owner tap "Mulai Sebagai Host") —
+    // antrian `sync_upload_queue` adalah data DB persisten, independen dari
+    // socket host sedang jalan atau tidak. Tanpa ini, antrian tampak
+    // "hilang" di layar Sync setelah app di-force-stop/clear RAM sampai host
+    // direstart manual, walau baris DB-nya sendiri selamat — bug nyata
+    // dilaporkan user.
+    LanSyncService.attachDb(_ref.read(databaseProvider));
     // Item 17 Fase 2 — antrian sekarang di DB (async), tidak bisa dibaca
     // langsung di initializer `super(...)` di atas spt versi lama (`List`
-    // in-memory sinkron) — muat begitu notifier ini hidup. Bisa saja host
-    // sudah aktif & py antrian SEBELUM provider ini dibangun (mis. widget
-    // baru pertama kali baca provider setelah host sempat jalan lebih
-    // dulu), jadi tetap perlu di-refresh di sini, bukan cuma andalkan
-    // callback yang hanya menangkap perubahan SETELAHNYA.
+    // in-memory sinkron) — muat begitu notifier ini hidup.
     unawaited(_refreshQueue());
   }
 
   final Ref _ref;
+  Timer? _transientTimer;
+  bool _disposed = false;
 
   Future<void> _refreshQueue() async {
-    if (!LanSyncService.isHostRunning) {
-      state = state.copyWith(queue: const []);
-      return;
-    }
     final queue = await LanSyncService.loadPendingQueue();
     state = state.copyWith(queue: queue);
+  }
+
+  /// Tampilkan pesan konfirmasi sekali-tampil di banner shell, otomatis
+  /// hilang sendiri setelah [duration] — dipakai event selesai (approve/
+  /// tolak/reset), BUKAN status berlangsung (lihat dok `SyncState.
+  /// transientMessage`). Timer lama dibatalkan dulu supaya event beruntun
+  /// (mis. approve lalu langsung reset) tidak saling potong durasi tampil.
+  void _showTransient(String message, SyncBannerTone tone,
+      {Duration duration = const Duration(seconds: 4)}) {
+    _transientTimer?.cancel();
+    state = state.copyWith(transientMessage: message, transientTone: tone);
+    _transientTimer = Timer(duration, () {
+      if (_disposed) return;
+      state = state.copyWith(transientMessage: null);
+    });
   }
 
   Future<void> loadTimeoutProfile() async {
@@ -151,11 +205,12 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   Future<void> toggleHost() async {
     if (state.hostRunning) {
       await LanSyncService.stopHost();
+      // Antrian TIDAK ikut dikosongkan — persisten di DB, independen dari
+      // socket host sedang jalan atau tidak (lihat dok `attachDb`).
       state = state.copyWith(
         hostRunning: false,
         hostIp: '',
         hostToken: '',
-        queue: const [],
       );
       return;
     }
@@ -171,6 +226,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     final received =
         await LanSyncService.approveSync(itemId, allowedTables: allowedTables);
     await _refreshQueue();
+    _showTransient('Disetujui — $received baris diterima', SyncBannerTone.success);
     return received;
   }
 
@@ -179,13 +235,16 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   Future<void> rejectSync(String itemId) async {
     await LanSyncService.rejectSync(itemId);
     await _refreshQueue();
+    _showTransient('Data sync ditolak', SyncBannerTone.sync);
   }
 
   /// "Sync Ulang Penuh" — reset watermark upload klien ke epoch, escape
   /// hatch manual utk pemulihan kalau owner salah tolak atau curiga ada
   /// data yang belum pernah sampai ke host.
-  Future<void> resetUploadWatermark() =>
-      LanSyncService.resetUploadWatermark(_ref.read(databaseProvider));
+  Future<void> resetUploadWatermark() async {
+    await LanSyncService.resetUploadWatermark(_ref.read(databaseProvider));
+    _showTransient('Sync Ulang Penuh diaktifkan', SyncBannerTone.sync);
+  }
 
   Future<SyncResult> sync({
     required String ip,
@@ -218,6 +277,18 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
                 'Diterima dari host: ${result.received} baris.'
             : 'Selesai! Diterima: ${result.received} baris, Dikirim: ${result.sent} baris',
       );
+      // Konfirmasi sekali-tampil di banner shell — permintaan klien SUDAH
+      // SELESAI di titik ini (lihat dok panjang `clientSyncing`), jadi
+      // banner TIDAK BOLEH terus nampilkan spinner "menunggu…" selamanya
+      // hanya krn keputusan owner belum ada & tidak ada kanal utk
+      // memantaunya live. Detail lengkap tetap ada di `clientResultMessage`
+      // (dibaca `SyncScreen`), transient ini cuma ringkasan sekilas.
+      _showTransient(
+        result.pendingApproval
+            ? 'Terkirim — menunggu peninjauan owner'
+            : 'Sync selesai — diterima ${result.received} baris',
+        result.pendingApproval ? SyncBannerTone.sync : SyncBannerTone.success,
+      );
       return result;
     } catch (e) {
       state = state.copyWith(
@@ -230,6 +301,8 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
 
   @override
   void dispose() {
+    _disposed = true;
+    _transientTimer?.cancel();
     LanSyncService.onQueueChanged = null;
     LanSyncService.onProposalsChanged = null;
     super.dispose();

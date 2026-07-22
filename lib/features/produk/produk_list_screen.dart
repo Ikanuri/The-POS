@@ -6,11 +6,13 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../shell/sync_status_banner.dart';
 
 final _searchQueryProvider = StateProvider<String>((ref) => '');
 final _selectedGroupProvider = StateProvider<int?>((ref) => null);
 
-final _productsStreamProvider = StreamProvider.family<List<Product>, (String, int?)>(
+final _productsStreamProvider =
+    StreamProvider.family<List<Product>, (String, int?)>(
   (ref, args) {
     final db = ref.watch(databaseProvider);
     return db.watchProducts(query: args.$1, groupId: args.$2);
@@ -70,8 +72,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
     final device = ref.watch(deviceProvider);
     final query = ref.watch(_searchQueryProvider);
     final groupId = ref.watch(_selectedGroupProvider);
-    final productsAsync =
-        ref.watch(_productsStreamProvider((query, groupId)));
+    final productsAsync = ref.watch(_productsStreamProvider((query, groupId)));
     final groupsAsync = ref.watch(_groupsProvider);
     final lowStockFilter = ref.watch(_lowStockFilterProvider);
     final lowStockCount = ref.watch(_lowStockCountProvider).valueOrNull ?? 0;
@@ -121,6 +122,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
       ),
       body: Column(
         children: [
+          const SyncStatusBanner(),
           inlineBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -131,9 +133,8 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                 suffixIcon: query.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () => ref
-                            .read(_searchQueryProvider.notifier)
-                            .state = '',
+                        onPressed: () =>
+                            ref.read(_searchQueryProvider.notifier).state = '',
                       )
                     : null,
                 contentPadding:
@@ -152,7 +153,8 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                 height: 40,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   children: [
                     if (lowStockCount > 0)
                       Padding(
@@ -196,9 +198,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
             child: productsAsync.when(
               data: (allProds) {
                 final prods = lowStockFilter
-                    ? allProds
-                        .where((p) => lowStockIds.contains(p.id))
-                        .toList()
+                    ? allProds.where((p) => lowStockIds.contains(p.id)).toList()
                     : allProds;
                 if (prods.isEmpty) {
                   return Center(
@@ -212,9 +212,10 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                           query.isEmpty
                               ? 'Belum ada produk'
                               : 'Produk tidak ditemukan',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                         ),
                         if (canEdit && query.isEmpty) ...[
                           const SizedBox(height: 16),
@@ -231,7 +232,8 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                 return ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: prods.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, indent: 60),
+                  separatorBuilder: (_, __) =>
+                      const Divider(height: 1, indent: 60),
                   itemBuilder: (context, i) => _ProductTile(
                     product: prods[i],
                     canEdit: canEdit,
@@ -240,8 +242,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                   ),
                 );
               },
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
@@ -376,7 +377,8 @@ class _ProductTile extends ConsumerWidget {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         color: scheme.errorContainer,
-        child: Icon(Icons.visibility_off_outlined, color: scheme.onErrorContainer),
+        child:
+            Icon(Icons.visibility_off_outlined, color: scheme.onErrorContainer),
       ),
       child: tile,
     );

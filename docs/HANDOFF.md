@@ -4,6 +4,402 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (redesain sinkron harga induk-cabang, PR #35,
+commit `2472533`, Task #10 di task manager — SELESAI) — user (bukan bug
+report kali ini, diskusi arsitektur) melaporkan sinkron harga WiFi antar
+2 TOKO INDEPENDEN (toko induk = rujukan harga, toko cabang = kloning awal
+dari induk) sering hasilkan harga yang oscillating/salah, walau sudah
+"dikonfirmasi benar" sebelumnya. User upload 2 CSV nyata (induk 2746 baris,
+cabang 2775 baris) utk dianalisis.
+
+**Diagnosis** (dari data nyata, bukan dugaan): fallback fuzzy-matching
+(Levenshtein jarak nama produk) di `PriceMatchService` LAMA adalah akar
+masalahnya — terbukti salah-cocokkan produk VARIAN UKURAN/NAMA MIRIP (mis.
+"cup pop ice uk 12/14/16/18" saling tertukar). SKU/kode_produk toko induk
+juga tak bisa dipakai murni sbg identitas (banyak dipakai utk singkatan
+ketik, mis. "grm2 pak" utk Garam 2000/pak — bukan identitas produk).
+**Keputusan bersama user**: HAPUS fuzzy total dari pengambilan keputusan
+OTOMATIS, ganti algoritma 4-tingkat murni deterministik + mekanisme
+"lineage lock-in" (root fix): begitu owner KONFIRMASI sebuah pasangan
+Tingkat 2/3/4 (SKU-lineage / nama+satuan persis), barcode katalog masuk
+ditulis sbg ALIAS PERMANEN (non-primary, tak menimpa barcode asli) ke
+`product_unit` lokal — sync BERIKUTNYA utk produk yg SAMA langsung lompat
+Tingkat 1 (barcode), TIDAK PERNAH ditinjau ulang lagi. Ini yg menutup akar
+"harga berubah sendiri padahal sudah fixed" (dulu: setiap sync menebak
+dari nol, tanpa ingatan sama sekali).
+
+**Proposal user yang DITOLAK setelah didiskusikan** (dicatat supaya tidak
+diusulkan ulang tanpa alasan baru): section "tren harga" + hidden
+sync-button di katalog HTML publik — DIBATALKAN, alasan: halaman katalog
+itu PUBLIK TANPA AUTENTIKASI, bocorkan seluruh harga jual+modal ke siapa
+pun yg buka link WhatsApp, berpotensi jadi bahan protes pelanggan
+("kenapa harga situ beda"), dan tak praktis utk volume ribuan produk lewat
+copy-paste kode. User setuju: "transparansi tidak terlalu berguna dan
+malah berpotensi menimbulkan protes."
+
+**Alternatif yang DITERIMA & diimplementasikan**: ekspor/impor katalog
+harga TERENKRIPSI (`.berkahpos`, magic byte baru `BPRC1`) — reuse format
+`.berkahpos` yg sudah ada (bukan format baru dari nol, user: "toh nama
+file bisa diubah/template beda ketika download atau share"), cara
+simpan/bagikan PERSIS sama dgn fitur Backup (`saveOrShareExport` —
+share langsung atau simpan lokal, user minta eksplisit). **Sengaja
+dipisah** dari `DbExportService.decrypt()`/`restore()` generik (shape
+payload beda: `{items: [...]}` vs `{tables: {...}}`) utk hindari
+salah-parse berbahaya kalau user keliru pilih file. Ditanya juga apakah
+perlu incremental/watermark spt Item 17 — dihitung katalog ~2.700 produk
+cuma ~68 KB terenkripsi (JSON 625 KB → gzip 50 KB → +35% overhead
+AES/base64), JAUH dari masalah performa Item 17 lama (yg sebenarnya
+disebabkan O(n²) fuzzy matching, bukan ukuran payload) — disimpulkan
+BELUM perlu incremental sekarang, desain deferred dicatat di PLAN.md
+Item 50 (JANGAN dikerjakan kecuali diminta lagi).
+
+**Implementasi** (`lib/core/services/price_match_service.dart` ditulis
+ulang total): `MatchType{barcode,sku}` (fuzzy dihapus dari enum),
+`AmbiguousReason{nameUniqueCandidate,nameMultipleCandidates,kodeConflict}`
+baru, `AmbiguousItem` sekarang bawa `List<AmbiguousCandidate>` (bukan 1
+kandidat tunggal). Tingkat 2 (SKU) diperkeras: kode_produk harus UNIK di
+KEDUA sisi (katalog masuk & DB lokal) + override "konflik barcode resmi"
+(heuristik 13-digit numerik, BUKAN validasi checksum GS1 — cuma korelasi
+empiris dari data nyata) yg mundur ke tinjauan manual kalau kedua sisi
+sudah punya barcode ASLI berbeda (bukan self-invented). `price_preview_
+screen.dart`: tab "Mirip" → **"Perlu Ditinjau"**, tombol bulk baru
+"Terima Semua Kandidat Tunggal", method `_linkBarcode` (write-back
+lock-in) dipanggil setelah update harga baik jalur matched maupun
+ambiguous-confirmed. `db_export_service.dart`: `exportPriceCatalog`/
+`decryptPriceCatalog` (BPRC1). `price_sync_screen.dart`: card baru "File
+Katalog Harga (Terenkripsi)" dgn 2 tombol Ekspor/Impor, method
+`_exportPriceFile`/`_importPriceFile` (password dialog mirror
+`backup_screen.dart` persis).
+
+**Gotcha baru ditemukan saat nulis test** (worth diingat lagi kalau
+kejadian serupa): `pumpAndSettle()` HANG kalau dipanggil SEBELUM sebuah
+`showDialog()` yg diawait di dalam handler async ditutup — selama dialog
+itu nunggu, tombol yg memicunya (`_apply()`) masih `_busy=true`
+(`CircularProgressIndicator` beranimasi tanpa henti → `pumpAndSettle()`
+tak pernah "settle"). Fix: `tester.pump()` polos berkali² sampai dialog
+tampil, tap utk tutup, BARU `pumpAndSettle()` aman dipanggil. Lihat
+`test/price_preview_link_persist_test.dart` utk contoh lengkap.
+
+**Test baru** (12 test di 3 file baru + 1 file lama diperbaiki, semua
+revert-verified sesuai metodologi wajib CLAUDE.md — neutering
+`conflict`/`uniqueInCatalog`/pemanggilan `_linkBarcode` masing² dibuktikan
+gagal dgn pesan yg masuk akal sebelum direstore): `test/price_match_
+lineage_test.dart` (6 test — SKU-lineage lolos meski barcode lama beda,
+konflik barcode-resmi ganda mundur ke manual, kode_produk non-unik tak
+auto-match, nama+satuan persis kandidat tunggal/ganda, near-name TIDAK
+menghasilkan kandidat sama sekali — bukti fuzzy benar² hilang),
+`test/price_preview_link_persist_test.dart` (bukti utama: konfirmasi →
+barcode tertaut permanen → sync berikutnya produk sama langsung Tingkat 1,
+tak perlu ditinjau lagi), `test/price_catalog_file_export_test.dart` (3
+test — round-trip export→decrypt sama persis, password salah ditolak,
+file format lain/backup biasa ditolak). Full `flutter test` **621 hijau,
+0 gagal**, `flutter analyze` bersih.
+
+**Tidak ada sisa pekerjaan sync-harga yg tercatat di task manager maupun
+PLAN.md** setelah sesi ini — Task #10 SELESAI total, tinggal item lain
+di PLAN.md (Item 50 deferred, opsional, eksplisit "jangan dikerjakan
+kecuali diminta lagi") dan merge PR #35 ke main (diminta user, dieksekusi
+langsung setelah entri HANDOFF ini)._
+
+_Update sesi 21 Juli 2026 (2 follow-up lagi pasca reposisi, PR #35, commit
+`c1ff649`, Task #9 di task manager) — user lapor 2 hal SETELAH reposisi
+Task #8: (1) masih ada celah kosong aneh di atas kartu banner (dibanding
+notifikasi inline lain) — user minta ukur jarak header→banner di
+notifikasi LAIN sbg referensi; (2) di HP KLIEN (kasir/asisten), banner
+selalu "infinite loading" (spinner "menunggu persetujuan owner…" TIDAK
+PERNAH berhenti) walau owner sudah membuat keputusan (approve/tolak).
+
+**Akar poin 1**: `SyncStatusBanner` MASIH dibungkus `SafeArea(bottom:false)`
+peninggalan desain LAMA (Task #4, saat widget ini dipasang SEKALI di
+`MainShell`, di ATAS AppBar mana pun — SafeArea WAJIB di situ krn area
+status bar belum dikonsumsi apa pun). Task #8 memindahkan widget ke BAWAH
+AppBar/toolbar tiap layar (yg SUDAH mengonsumsi area status bar), tapi
+LUPA melepas SafeArea lawasnya — jadinya inset GANDA (SafeArea top +
+Padding top 8px), persis celah aneh yg dilaporkan. **Fix**: SafeArea
+dihapus total, tersisa `Padding(fromLTRB(12,8,12,0))` — pola PERSIS sama
+dgn `InlineBanner` yg sudah ada (referensi user), jarak header→banner
+sekarang konsisten dgn notifikasi inline lain.
+
+**Akar poin 2** (bug lebih dalam, BUKAN sekadar UI): `ClientSyncPhase.
+waitingApproval` dihitung sbg `clientSyncing=true` (dipakai
+`SyncStatusBanner` utk nampilkan spinner). Tapi protokol sync itu
+CONNECTIONLESS (satu request-response HTTP, bukan koneksi persisten) —
+begitu klien terima respons dari host (yg terjadi SEGERA, host balas
+sinkron dlm satu handler), permintaan klien SECARA TEKNIS SUDAH SELESAI
+(host sudah simpan durable ke `sync_upload_queue`, lihat Item 17 Fase 2).
+"Menunggu persetujuan owner" sesudahnya adalah menunggu KEPUTUSAN MANUSIA
+di PERANGKAT LAIN — app klien TIDAK PUNYA kanal apa pun (push/polling)
+utk tahu KAPAN atau APAKAH keputusan itu terjadi, jadi spinner yg
+mengasumsikan "proses aktif, tunggu sebentar lagi" itu MENYESATKAN —
+sebenarnya bisa menunggu menit/jam/selamanya tanpa update apa pun.
+**Fix**: `waitingApproval` DIKELUARKAN dari `clientSyncing` (sekarang cuma
+`connecting`/`sending` — tahap network AKTIF sungguhan). Di
+`SyncStateNotifier.sync()`, begitu respons diterima, dipanggil
+`_showTransient('Terkirim — menunggu peninjauan owner', SyncBannerTone.
+sync)` (pola sekali-tampil yg sama dgn approve/tolak/reset di Task #6) —
+banner tampilkan konfirmasi singkat lalu hilang sendiri, TIDAK berputar
+selamanya. **BUKAN fitur "notifikasi real-time saat owner approve"** —
+itu butuh live-connection/polling, di luar scope perbaikan ini; yg
+diperbaiki murni "app tidak lagi BERBOHONG bahwa masih ada proses aktif".
+`clientResultMessage` (detail lengkap, dibaca `SyncScreen`) TIDAK
+disentuh — tetap jelaskan "menunggu persetujuan owner di perangkat host"
+apa adanya.
+
+Test baru (revert-verified — stash 2 file produksi, ketiga test baru
+gagal PERSIS spt diprediksi [SafeArea ditemukan sbg descendant;
+`clientSyncing`==true utk `waitingApproval`], restore hijau lagi):
+`test/sync_status_banner_gap_and_client_wait_test.dart` — (1) unit test
+langsung `SyncState.clientSyncing` (waitingApproval→false, sending→true),
+(2) widget test `find.descendant(of: SyncStatusBanner, matching: SafeArea)`
+harus `findsNothing`, (3) end-to-end HTTP sungguhan (`SyncStateNotifier.
+sync()` via port 127.0.0.1 asli, pola sama `lan_sync_upload_queue_test.
+dart`) — setelah sync sukses, `clientSyncing` false & `transientMessage`
+berisi "menunggu peninjauan owner". **Gotcha ketemu saat nulis test**:
+`find.ancestor(of:, matching:)` vs `find.descendant(of:, matching:)`
+ARAH-NYA TERBALIK dari intuisi pertama — `SafeArea` yg di-`return` dari
+`build()` sebuah widget adalah DESCENDANT elemen widget itu di tree,
+BUKAN ancestor (baru ketahuan krn assertion pertama lolos-diam2 di kode
+LAMA yg justru masih py bug, tanda pasti salah arah query — worth dicatat
+sbg gotcha CLAUDE.md kalau kejadian lagi). Full `flutter test` **611
+hijau, 0 gagal**, `flutter analyze` bersih.
+
+_Update sesi 21 Juli 2026 (klarifikasi poin 1 sebelumnya, PR #35, commit
+`d281a28`, Task #8 di task manager) — user klarifikasi maksud "inline"
+poin 1 (SEBELUM sesi ini dianggap murni soal gaya kartu/margin/rounding)
+TERNYATA soal POSISI: `SyncStatusBanner` seharusnya muncul persis spt
+notifikasi inline LAIN yg sudah ada — DI BAWAH header/toolbar tiap tab
+(mis. banner hijau "Pesanan ditahan" yg tampil tepat di bawah toolbar
+Kasir), BUKAN mengambang di atas SELURUH shell (di atas AppBar/toolbar
+setiap layar) spt desain Item 21 lama. Screenshot user menunjukkan posisi
+persis yg dimaksud.
+
+**Fix**: `SyncStatusBanner` DIHAPUS dari `MainShell` (dulu satu instance
+global, ditaruh di `Column` SEBELUM `Expanded(child: widget.child)` —
+otomatis muncul di atas AppBar/toolbar SETIAP layar tab krn `widget.child`
+= seluruh layar tab termasuk AppBar-nya). Sekarang `const SyncStatusBanner()`
+dipasang LANGSUNG di 6 layar tab (`RingkasanScreen`/`KasirScreen`/
+`ProdukListScreen`/`PelangganListScreen`/`LaporanScreen`/`PengaturanScreen`),
+masing-masing dibungkus `Column([SyncStatusBanner, Expanded(child: <body
+lama>)])` TEPAT SETELAH `AppBar` (Kasir sedikit beda: disisipkan di
+`Column` yg sudah ada, sejajar `InlineBanner` lokal yg sudah ada persis di
+situ — bukan wrapper baru). Param `hideOnSyncScreen` DIHAPUS total (sudah
+tak relevan — `SyncScreen`, sub-halaman Pengaturan, SENGAJA tidak
+dipasangi banner ini sama sekali, jadi tak perlu logic sembunyikan lagi).
+
+**Trade-off SADAR, bukan oversight**: sub-halaman NESTED (mis. `/produk/
+kategori`, `/pengaturan/backup`, dll — sub-route di dalam `ShellRoute`)
+TIDAK ikut dipasangi `SyncStatusBanner` — kalau owner buka sub-halaman
+tsb, banner sync sementara tak terlihat sampai kembali ke salah satu dari
+6 layar tab utama. Ini penyempitan scope DISENGAJA drpd sebelumnya
+(dulu MainShell nampilkan banner di RUTE APAPUN dalam shell, termasuk
+sub-halaman) — memasang ke SETIAP sub-halaman (puluhan file) di luar
+scope permintaan user kali ini; kalau nanti dianggap regresi nyata,
+revisit dgn cakupan lebih luas.
+
+Test baru (revert-verified — stash 8 file produksi, `find.byType(
+SyncStatusBanner)` di 3 layar representatif [Kasir/Pengaturan/Ringkasan]
+semua `findsNothing` persis, restore hijau lagi):
+`test/sync_status_banner_placement_test.dart` — 3 test, tiap layar
+membuktikan posisi Y banner BERADA DI BAWAH toolbar/AppBar (bukan cuma
+keberadaannya) via `tester.getTopLeft`/`getBottomLeft`. Full `flutter
+test` **608 hijau, 0 gagal**, `flutter analyze` bersih.
+
+**Poin 1 & 2 dari update sebelumnya (gaya kartu tidak muncul + tidak
+hilang otomatis) MASIH BELUM DIKONFIRMASI user** — investigasi commit
+`6b4366d` sudah membuktikan kode-nya benar via render langsung; dugaan
+kuat user sempat pakai APK versi lama saat screenshot itu diambil.
+Reposisi di update ini TIDAK terkait — kalau nanti user lapor lagi
+gejala serupa SETELAH pasti pakai build terbaru (commit `d281a28`+),
+baru investigasi ulang dari nol.
+
+_Update sesi 21 Juli 2026 (follow-up 3 poin dari user pasca Task #6, PR #35,
+commit `eb7cc1b`, Task #7 di task manager) — user kirim 2 screenshot lapor
+banner sync MASIH tampil flush/full-bleed (bukan kartu rounded+margin) &
+MASIH tidak hilang otomatis (butuh kill app) — PERSIS gejala versi SEBELUM
+Task #6. **Investigasi**: rendering langsung `SyncStatusBanner` via
+`RepaintBoundary.toImage()` (lihat gotcha environment di bawah — proses
+`flutter_tester` HANG setelah PNG selesai ditulis, tapi file-nya sendiri
+sudah lengkap & valid, tinggal kill proses lalu baca file-nya) MEMBUKTIKAN
+kode commit `6b4366d` sudah benar (kartu rounded+margin+shadow, PNG
+disimpan sbg bukti lalu dihapus). Cross-check `mcp__github__actions_list`:
+build APK sukses terbaru utk branch ini persis di commit `eb7cc1b`/`c54e095`
+(selesai 2026-07-21T14:50:40Z) — **kesimpulan sementara: kemungkinan besar
+user sempat install APK versi SEBELUM `6b4366d` selesai di-build** (build
+APK perlu waktu, kalau diinstall terlalu cepat setelah push dapat artifact
+lama). **BELUM ada konfirmasi balik dari user** soal timing build ini —
+kalau sesi berikutnya user masih lapor gejala sama SETELAH pasti pakai
+build commit `eb7cc1b`+, baru investigasi ulang dari nol (jangan asumsikan
+lagi ini cuma soal build lama).
+
+**Poin ke-3 (SUDAH diinvestigasi & DIPERBAIKI, independen dari 1&2)**:
+usulan produk (Item 40) yang isinya SUDAH IDENTIK dgn data owner tetap
+terus muncul lagi & menumpuk di layar review, walau review screen sendiri
+sudah benar menampilkan "Tidak ada perubahan harga" utk baris itu (logika
+banding UI sudah benar — user pun bilang begitu — masalahnya baris itu
+TIDAK PERNAH disaring keluar dari daftar sama sekali). **Akar masalah**:
+`dumpLocalProposals()` klien mengirim SEMUA produk `locally_modified=1`
+tanpa syarat tiap sync; flag itu bisa "macet" true selamanya kalau klien
+sempat menyimpan ulang produk yg sama TANPA perubahan nilai (mis. buka+
+simpan form tanpa edit apa pun) — `updated_at` klien ikut maju & terus
+MENANG last-write-wins thd baris balikan resmi dari host (mekanisme reset
+flag YANG SUDAH ADA mengasumsikan baris klien SELALU "ditimpa push resmi
+host" — asumsi itu gagal persis di sini). **Fix**: method baru
+`AppDatabase.filterUnchangedProposals(rows)` — bandingkan payload usulan
+(nama/`product_group_id`/`is_active`/`marked_out_of_stock` di level
+produk; `unit_type_id`/`is_base_unit`/`ratio_to_base`/`is_non_stock`/
+`min_stock` di level satuan; ISI (bukan id, krn tier/alt-harga
+diregenerasi tiap simpan form — lihat dok `applyProductProposals`) tier
+harga/harga-alternatif/barcode per satuan) THD DATA LIVE HOST — dipanggil
+di `LanSyncService._handleRequest` SEBELUM produk masuk `_pendingProposals`.
+Produk baru (belum ada di host) SELALU lolos (tak ada pembanding). Kalau
+SEMUA produk dlm satu usulan ternyata identik, TIDAK ADA `PendingProductProposal`
+yg dibuat sama sekali (bukan cuma disaring kosong) — kalau device itu
+kebetulan masih py slot antrian LAMA (dari usulan sebelumnya yg sekarang
+basi), slot itu ikut dibersihkan.
+
+**Bug nyata ditemukan & diperbaiki SEBELUM sempat commit** (ketemu justru
+krn metodologi revert-verify wajib CLAUDE.md): implementasi awal
+`filterUnchangedProposals` bandingkan tier/altPrice/barcode via `Set<String>
+!= Set<String>`. **Dart `Set` (dan `List`) TIDAK meng-override `operator==`
+sbg pembanding ISI** — default-nya identity-based (spt `Object` biasa), jadi
+dua instance `Set` BEDA dgn isi PERSIS SAMA akan SELALU `!=` walau
+elemennya identik. Akibatnya SEMUA produk (termasuk yg benar-benar
+identik) selalu lolos sbg "changed". Ketahuan lewat test pertama
+(`filtered['products']` isinya produk yg SEHARUSNYA disaring) — didiagnosis
+dgn debug print manual (dihapus lagi setelah ketemu) yg membuktikan
+SEMUA field individual sudah cocok persis tapi perbandingan `Set` tetap
+`!=`. **Fix**: comparator diubah dari `Set<String>` ke STRING KANONIK
+(elemen di-`toSet()` dulu utk dedup, `toList()..sort()`, lalu `.join(',')`)
+— perbandingan `String != String` di Dart MEMANG value-based, jadi ini
+benar. Gotcha BARU utk CLAUDE.md (belum dipindah): **jangan pernah
+bandingkan `Set`/`List` langsung dgn `==`/`!=` di Dart tanpa `SetEquality`/
+`ListEquality` (`package:collection`) ATAU konversi ke representasi
+kanonik (string/sorted list) dulu — defaultnya SELALU identity-based,
+bukan isi, walau terasa intuitif kalau isinya "keliatan sama"**.
+
+**Environment gotcha baru**: `RepaintBoundary.toImage()` di `flutter test`
+sandbox ini TERBUKTI menulis file PNG-nya dgn BENAR ke disk (ukuran &
+konten valid) TAPI proses `flutter_tester` HANG setelah itu (tidak pernah
+mencapai baris `All tests passed!` / keluar sendiri) — cocok dgn catatan
+lama sesi 19 Juli soal RepaintBoundary hang saat preview ikon peach. FIX
+PRAKTIS: JANGAN tunggu proses selesai — cukup `ScheduleWakeup` singkat lalu
+cek file PNG-nya SUDAH ADA di path tujuan (`ls -la`), kalau sudah ada &
+ukurannya masuk akal, `pkill -9 -f flutter_tester` paksa lalu baca filenya
+langsung via `Read` tool (PNG valid meski proses belum "selesai" secara
+resmi) — jangan asumsikan test gagal/rusak hanya krn prosesnya masih
+hidup lama.
+
+Test baru (semua revert-verified — 2 lapis: unit `AppDatabase.
+filterUnchangedProposals` langsung, DAN end-to-end via `syncToHost`+
+`_handleRequest` protokol HTTP sungguhan port 127.0.0.1, pola sama spt
+`lan_sync_upload_queue_test.dart`): `test/proposal_unchanged_filter_test.dart`
+(5 test: produk baru selalu lolos, produk identik dibuang total,
+harga beda tetap lolos, campuran identik+beda hanya yg beda ikut, nama
+beda walau harga sama tetap lolos), `test/proposal_unchanged_end_to_end_test.dart`
+(2 test: `locally_modified=true` TAPI isi identik → `pendingProposals`
+kosong SAMA SEKALI setelah sync sungguhan; harga benar-benar beda →
+tetap masuk antrian). Full `flutter test` **605 hijau, 0 gagal**,
+`flutter analyze` bersih.
+
+_Update sesi 21 Juli 2026 (follow-up UX, PR #35, commit `6b4366d`, Task #6
+di task manager) — user minta 2 perbaikan `SyncStatusBanner`: (1) setelah
+approve/tolak, notif+state "menunggu" harus ikut hilang, bukan menetap
+selamanya sbg "Host aktif · [] menunggu persetujuan"; (2) ubah jadi kartu
+notifikasi inline (sama gaya dgn `InlineBanner` yang sudah dipakai di
+layar lain), dan kalau ada notifikasi lain muncul BERSAMAAN dgn antrian
+lain yang masih menunggu, antrian lama itu jangan hilang — tumpuk di
+belakang, "tidak persis 1:1". Diminta suggest mockup dulu utk poin 2 —
+dibuat mockup HTML interaktif (Artifact, font Hanken Grotesk/Newsreader
+di-embed base64, 3 varian tumpukan: Depth Peek/Corner Badge/Compact
+Strip, toggle terang/gelap + simulasi "setelah disetujui" & "notif lain
+masuk"). User pilih **Compact Strip** (antrian lama menciut jadi garis
+aksen tipis di atas kartu baru).
+
+**Akar masalah poin 1**: `SyncState.hasActivity` lama = `hostRunning ||
+queue.isNotEmpty || proposals.isNotEmpty || clientSyncing` — `hostRunning`
+SENDIRIAN sudah cukup bikin banner tampil, jadi begitu owner nyalakan
+host, banner MENETAP di semua tab sampai host dimatikan manual, walau
+antrian sudah kosong. **Fix**: `hasActivity` sekarang HANYA
+`hasOngoing` (queue/proposals/clientSyncing — TANPA `hostRunning`
+telanjang) `|| transientMessage != null`. `SyncState.transientMessage`/
+`transientTone` (enum `SyncBannerTone { sync, success }`) baru + method
+`SyncStateNotifier._showTransient(msg, tone, {duration: 4s})` (Timer
+auto-clear, `_disposed` guard) dipanggil di `approveSync` (hijau,
+"Disetujui — N baris diterima"), `rejectSync` (ungu, "Data sync
+ditolak"), `resetUploadWatermark` (ungu, "Sync Ulang Penuh diaktifkan") —
+begitu timer habis DAN tidak ada antrian lain, banner benar-benar
+`SizedBox.shrink()`, bukan cuma ganti teks.
+
+**Poin 2** — `SyncStatusBanner` dirombak total gayanya: dulu `Material`+
+`Row` sederhana (bar tipis translucent), sekarang `_SyncNotifCard` privat
+meniru struktur `InlineBanner` PERSIS (accent bar kiri 3px, ikon, teks,
+elevation 3, warna dari `AppTheme.riwayatFg/Bg`(ungu, dipakai jg utk
+konfirmasi netral)/`changeFg/Bg`(hijau, KHUSUS approve-sukses)). Tumpukan
+Compact Strip: kalau `hasOngoing && transientMessage != null` bersamaan
+(mis. baru approve SATU item tapi device LAIN masih antre), render
+`Container` tinggi 5px (key `sync_ongoing_strip`, warna
+`riwayatFg.withOpacity(.5)`, rounded pill) DI ATAS kartu konfirmasi —
+BUKAN Stack absolut-position (dihindari sengaja, risiko overflow di layar
+sempit sesuai gotcha `OutlinedButton`/dialog lama di CLAUDE.md), cukup
+`Column` biasa dgn gap kecil. Begitu kartu konfirmasi habis waktu & masih
+ada antrian lain, strip otomatis "mengembang" balik jadi kartu ongoing
+penuh (state re-render, bukan animasi eksplisit — cukup krn
+`AnimatedSize`/rebuild Riverpod).
+
+**Test regresi disesuaikan**: `test/sync_screen_host_lifecycle_test.dart`
+test ke-2 ("banner tampil selama host aktif") direvisi total — sejak fix
+ini, host aktif TANPA apa pun yang menunggu TIDAK LAGI menampilkan
+banner sama sekali (disengaja), jadi test sekarang isi 1 usulan produk
+dulu via `debugAddProposal` supaya representatif thd perilaku baru.
+`test/sync_screen_reject_confirm_test.dart` (2 test lama, approve/reject
+via `SyncScreen` sungguhan) butuh tambahan `await tester.pump(const
+Duration(seconds: 5))` di akhir tiap test — TANPA ini gagal "A Timer is
+still pending even after the widget tree was disposed" (Timer baru dari
+`_showTransient` belum sempat habis saat test selesai) — gotcha baru,
+mirip pola `InlineBanner` yang sudah ada (`chip_and_banner_color_test.dart`
+sudah lama pakai pola drain yang sama).
+
+**Test baru** (revert-verified — stash `sync_state_provider.dart`+
+`sync_status_banner.dart`, 2 test baru gagal PERSIS `Found 0 widgets with
+text containing Data sync ditolak`, restore hijau lagi):
+`test/sync_status_banner_stack_test.dart` — (1) tolak 1 item TANPA
+antrian lain → konfirmasi tampil sebentar lalu BENAR-BENAR hilang
+(`find.byIcon(Icons.chevron_right)` nihil, bukan cuma teks ganti), (2)
+tolak 1 dari 2 item antrian → strip (`key: sync_ongoing_strip`) muncul
+selama konfirmasi tampil, lalu setelah konfirmasi habis waktu, item
+kedua kembali tampil PENUH (bukan ikut hilang).
+
+Full `flutter test` **592 hijau, 1 gagal** (`stock_opname_screen_test.dart`
+— DIKONFIRMASI ULANG flaky pra-ada & tak terkait sesi ini, lolos sendirian
+saat diisolasi; pola sama persis spt sudah tercatat berkali-kali di histori
+sesi-sesi sebelumnya di bawah — JANGAN dianggap regresi), `flutter analyze`
+bersih.
+
+_Update sesi 21 Juli 2026 (follow-up fix, PR #35, commit `d691e49`) — user
+uji manual poin 1 dari panduan test manual (force-stop app → antrian masih
+ada) & lapor: "ketika clear cache RAM, proses sync hilang". Ternyata Task
+#3 di bawah BELUM sepenuhnya menutup celah ini — layer DB sudah benar
+persisten (dibuktikan test), tapi layer PROVIDER masih bocor: `LanSyncService.
+_db` itu static field di RAM (reset null saat proses app di-kill), dan
+`SyncStateNotifier._refreshQueue()` versi lama sengaja mengosongkan
+`state.queue` kalau `!isHostRunning` — jadi begitu app dibuka ulang,
+SEBELUM owner sempat tap "Mulai Sebagai Host" lagi, antrian tampak kosong
+di layar Sync walau baris DB-nya sendiri aman. **Fix**: `LanSyncService.
+attachDb(db)` (method produksi baru, bukan `@visibleForTesting`) dipanggil
+segera di constructor `SyncStateNotifier` (bukan menunggu `startHost()`);
+`_refreshQueue()` tidak lagi digating `isHostRunning` — selalu load dari
+DB; `toggleHost()` saat stop TIDAK LAGI mengosongkan `queue` (data
+persisten, independen status socket). Kartu antrian di `sync_screen.dart`
+sendiri sudah lama tidak digating `hostRunning` (cuma `queue.isNotEmpty`),
+jadi fix ini murni di provider. Test baru (revert-verified — stash file
+provider saja, test gagal PERSIS `Expected: length 1, Actual: []`, restore
+hijau lagi): `test/sync_queue_survives_app_restart_test.dart` — simulasi
+"app restart" SUNGGUHAN (file-backed DB ditutup+dibuka ulang + `ProviderContainer`
+BARU dari nol) TANPA pernah panggil `startHost()`/`debugHostRunningOverride`
+sama sekali, supaya benar-benar menyerupai "app baru dibuka, host belum
+direstart owner". Full `flutter test` **596 hijau** (naik dari 595 krn
+test baru), `flutter analyze` bersih.
+
 _Update sesi 20-21 Juli 2026 (Task #3 — Item 17 Fase 2 dieksekusi &
 di-commit, branch `claude/owner-assistant-sync-history-30fuua`, commit
 `456bf45`, lanjutan langsung dari Task #4/#1/#2 di bawah — user konfirmasi

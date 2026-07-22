@@ -82,11 +82,24 @@ void main() {
 
   testWidgets(
       'SyncStatusBanner tampil di widget tree LAIN (bukan SyncScreen) '
-      'selama host aktif', (tester) async {
+      'selama ADA yang menunggu ditinjau (usulan/antrian) — bukan cuma krn '
+      'host aktif semata', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
     LanSyncService.debugHostRunningOverride = true;
+    // Sengaja isi usulan (bukan cuma nyalakan host) — sejak fix laporan
+    // user "banner Host aktif menetap selamanya", host aktif TANPA apa pun
+    // yang menunggu SEKARANG TIDAK menampilkan banner (lihat dok
+    // `SyncState.hasOngoing`), jadi test ini butuh sesuatu yang benar-benar
+    // "ongoing" supaya representatif.
+    LanSyncService.debugAddProposal(PendingProductProposal(
+      id: 'p1',
+      fromIp: '192.168.1.50',
+      arrivedAt: DateTime.now(),
+      rows: const {},
+      productCount: 2,
+    ));
 
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
@@ -106,7 +119,7 @@ void main() {
 
     expect(find.textContaining('Host aktif'), findsOneWidget,
         reason: 'banner status sync harus tampil di layar manapun selama '
-            'host aktif, bukan cuma persis di SyncScreen');
+            'ada yang menunggu ditinjau, bukan cuma persis di SyncScreen');
   });
 
   testWidgets(

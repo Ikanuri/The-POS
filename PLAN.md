@@ -398,6 +398,32 @@ detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
 dari plan. Kalau nanti user mau lanjut migrasi data lama, mulai analisis
 dari nol (riwayat teknis lama sudah dibuang dari plan ini).
 
+**Item 50 (opsional, DEFERRED — jangan dikerjakan kecuali diminta lagi):
+ekspor katalog harga "hanya yang berubah sejak ekspor terakhir"**, untuk
+fitur ekspor file harga induk→cabang (format `.berkahpos` baru, magic
+`BPRC1`, dibahas & disepakati sesi 21 Juli — lihat task manager utk status
+eksekusi). `PriceSyncService._buildCatalog()` saat ini SELALU full-dump
+tanpa filter `updated_at` sama sekali. Dihitung: full-dump ~2.775 produk
+≈ 68 KB setelah gzip+enkripsi (JSON mentah 625 KB → gzip 50 KB → +35%
+overhead AES/base64) — **kecil & TIDAK membengkak seiring waktu** (beda
+dari riwayat transaksi yg jadi alasan Item 17/21 mendesak), jadi
+watermark incremental **TIDAK diperlukan sekarang**. Waktu proses yang
+selama ini terasa berat sebenarnya dari O(n²) fuzzy-matching (~7,3 juta
+perbandingan Levenshtein utk 2.775×2.775 produk), BUKAN dari ukuran
+transfer — sudah otomatis hilang begitu mesin fuzzy diganti pencocokan
+barcode terindeks (Item 50 induk, sinkron harga tanpa fuzzy).
+
+Kalau nanti katalog membesar signifikan (mis. 10.000+ produk) atau owner
+minta hemat kuota lebih jauh: pola yang SAMA PERSIS dengan "Sync Ulang
+Penuh" (Item 17 Fase 2, `LanSyncService.resetUploadWatermark`) bisa
+dipakai di sini — simpan watermark "kapan terakhir ekspor katalog
+harga berhasil" di `app_settings`, `_buildCatalog` filter
+`updated_at >= since`, tombol "Ekspor Ulang Penuh" sbg escape hatch
+manual (jaga-jaga kalau file ekspor sebelumnya hilang/tidak sempat
+dipakai cabang, sebelum data berubah lagi). TIDAK dikerjakan sekarang —
+catat di sini murni supaya tidak perlu didesain ulang dari nol kalau
+suatu saat dibutuhkan.
+
 **Item lain yang masih terbuka:**
 1. **Item 47** (pengeluaran tidak ikut ekspor PDF/Excel Laporan) & **Item
    48** (avatar produk kasir jadi soft/pastel) — user setuju, siap
