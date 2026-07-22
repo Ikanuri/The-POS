@@ -5,7 +5,7 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencermin
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 22 Juli 2026 (fitur baru: generator barcode + cetak label,
-PR #35, commit `ee31f04`, Task #11 di task manager — SELESAI) — lanjutan
+PR #35, commit `c818324`, Task #11 di task manager — SELESAI) — lanjutan
 diskusi perbandingan barcode induk-cabang (lihat entri di bawah): user
 minta 2 fitur baru — (1) generator barcode utk kolom barcode kosong,
 gampang dibaca scanner & tidak bentrok dgn barcode yg sudah ada, (2) opsi
