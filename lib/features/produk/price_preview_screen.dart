@@ -45,6 +45,30 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
   int get _ambiguousLink =>
       _ambiguous.where((a) => a.action == _AmbAction.link).length;
 
+  /// Barcode katalog (kalau ada) ditulis sbg alias PERMANEN ke produk lokal
+  /// yang baru dikonfirmasi — TANPA menimpa barcode asli yang sudah ada
+  /// (ditambah sbg baris non-primary). Inilah yang membuat sinkron
+  /// BERIKUTNYA untuk produk ini langsung cocok via barcode (Tingkat 1),
+  /// tidak pernah perlu ditinjau ulang lagi.
+  Future<void> _linkBarcode(
+      AppDatabase db, String unitId, String? barcode, List<String> log) async {
+    if (barcode == null || barcode.isEmpty) return;
+    final existing = await db.lookupBarcode(barcode);
+    if (existing != null) {
+      log.add('  [LINK-BARCODE] "$barcode" sudah terdaftar (unit='
+          '${_short(existing.productUnitId)}) → dilewati, tidak ditimpa');
+      return;
+    }
+    await db.into(db.productBarcodes).insert(ProductBarcodesCompanion.insert(
+          id: const Uuid().v4(),
+          productUnitId: unitId,
+          barcode: barcode,
+          isPrimary: const Value(false),
+        ));
+    log.add('  [LINK-BARCODE] "$barcode" ditautkan permanen ke unit='
+        '${_short(unitId)} (alias, bukan primary)');
+  }
+
   Future<void> _apply() async {
     final db = ref.read(databaseProvider);
     setState(() => _busy = true);
@@ -84,6 +108,11 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
         await (db.update(db.products)
               ..where((t) => t.id.equals(m.localProductId)))
             .write(ProductsCompanion(updatedAt: Value(DateTime.now())));
+        // Tingkat 2 (SKU/kode lama) → tautkan barcode katalog permanen
+        // supaya sinkron berikutnya lompat ke Tingkat 1 (barcode), tidak
+        // pernah perlu SKU lagi. Tingkat 1 (barcode) sudah identik, tidak
+        // perlu apa-apa (linkBarcode null).
+        await _linkBarcode(db, m.localProductUnitId, m.linkBarcode, _applyLog);
         updated++;
       }
 
@@ -100,13 +129,19 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
       for (final a in _ambiguous) {
         final c = a.item.catalogItem;
         if (a.action == _AmbAction.link) {
-          _applyLog.add('[LINK] "${a.item.localProductName}" ← '
+          final candidate = a.item.candidates[a.selectedCandidateIndex];
+          _applyLog.add('[LINK] "${candidate.productName}" ← '
               '"${c.productName}" price=${c.price}');
           await _upsertBaseTier(
-              db, a.item.localProductUnitId, c.price, c.costPrice, _applyLog);
+              db, candidate.productUnitId, c.price, c.costPrice, _applyLog);
           await (db.update(db.products)
-                ..where((t) => t.id.equals(a.item.localProductId)))
+                ..where((t) => t.id.equals(candidate.productId)))
               .write(ProductsCompanion(updatedAt: Value(DateTime.now())));
+          // Konfirmasi manual = identitas dianggap PASTI oleh owner — tautkan
+          // barcode katalog permanen (kalau ada) persis seperti Tingkat 2,
+          // supaya produk ini juga lompat ke Tingkat 1 di sinkron berikutnya.
+          await _linkBarcode(
+              db, candidate.productUnitId, c.barcode, _applyLog);
           linked++;
         } else if (a.action == _AmbAction.addNew) {
           _applyLog.add('[ADD-NEW] "${c.productName}" price=${c.price}');
@@ -353,7 +388,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
             tabs: [
               Tab(text: 'Cocok (${_matched.length})'),
               Tab(text: 'Baru (${_notFound.length})'),
-              Tab(text: 'Mirip (${_ambiguous.length})'),
+              Tab(text: 'Perlu Ditinjau (${_ambiguous.length})'),
             ],
           ),
         ),
@@ -490,19 +525,61 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
 
   Widget _buildAmbiguousTab(ColorScheme scheme) {
     if (_ambiguous.isEmpty) {
-      return const Center(child: Text('Tidak ada produk ambigu'));
+      return const Center(child: Text('Tidak ada yang perlu ditinjau'));
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: _ambiguous.length,
-      itemBuilder: (context, i) {
-        final a = _ambiguous[i];
-        return _AmbiguousTile(
-          item: a,
-          onChanged: (action) => setState(() => a.action = action),
-        );
-      },
+    // Kandidat tunggal (nama+satuan cocok persis, cuma 1 kemungkinan) —
+    // ini yang layak ditawarkan "terima semua sekali klik", beda dari
+    // kandidat ganda/anomali barcode yang WAJIB dipilih/diperiksa manual.
+    final singleCandidateCount = _ambiguous
+        .where((a) =>
+            a.item.reason == AmbiguousReason.nameUniqueCandidate &&
+            a.action != _AmbAction.link)
+        .length;
+
+    return Column(
+      children: [
+        if (singleCandidateCount > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$singleCandidateCount usulan dgn 1 kandidat (nama+satuan '
+                    'cocok persis)',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() {
+                    for (final a in _ambiguous) {
+                      if (a.item.reason == AmbiguousReason.nameUniqueCandidate) {
+                        a.action = _AmbAction.link;
+                      }
+                    }
+                  }),
+                  child: const Text('Terima Semua Kandidat Tunggal'),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: _ambiguous.length,
+            itemBuilder: (context, i) {
+              final a = _ambiguous[i];
+              return _AmbiguousTile(
+                item: a,
+                onChanged: (action) => setState(() => a.action = action),
+                onCandidateChanged: (idx) =>
+                    setState(() => a.selectedCandidateIndex = idx),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -551,6 +628,12 @@ class _AmbiguousAction {
   _AmbiguousAction({required this.item});
   final AmbiguousItem item;
   _AmbAction action = _AmbAction.skip;
+
+  /// Indeks kandidat yang dipilih di `item.candidates` — dipakai saat
+  /// `action == link`. Default 0 (satu-satunya kandidat, atau kandidat
+  /// pertama dari beberapa — user WAJIB ganti manual kalau bukan yang
+  /// pertama yang benar, tidak ada tebakan otomatis mana yang "terbaik").
+  int selectedCandidateIndex = 0;
 }
 
 // ── Tiles ──
@@ -565,8 +648,7 @@ class _MatchedTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final matchLabel = switch (item.matchType) {
       MatchType.barcode => 'Barcode',
-      MatchType.sku => 'SKU',
-      MatchType.fuzzy => 'Nama',
+      MatchType.sku => 'Kode Lama (SKU)',
     };
 
     return CheckboxListTile(
@@ -679,15 +761,36 @@ class _NotFoundTile extends StatelessWidget {
 }
 
 class _AmbiguousTile extends StatelessWidget {
-  const _AmbiguousTile({required this.item, required this.onChanged});
+  const _AmbiguousTile({
+    required this.item,
+    required this.onChanged,
+    required this.onCandidateChanged,
+  });
   final _AmbiguousAction item;
   final ValueChanged<_AmbAction> onChanged;
+  final ValueChanged<int> onCandidateChanged;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final a = item.item;
-    final pct = (a.similarity * 100).round();
+    final single = a.candidates.length == 1;
+    final selected = a.candidates[item.selectedCandidateIndex];
+
+    final (String reasonLabel, IconData reasonIcon) = switch (a.reason) {
+      AmbiguousReason.nameUniqueCandidate => (
+          'Nama+satuan cocok persis (1 kandidat)',
+          Icons.check_circle_outline
+        ),
+      AmbiguousReason.nameMultipleCandidates => (
+          'Nama cocok ke ${a.candidates.length} produk — pilih yang benar',
+          Icons.help_outline
+        ),
+      AmbiguousReason.kodeConflict => (
+          'Kode lama sama, TAPI barcode berbeda — periksa manual',
+          Icons.warning_amber_outlined
+        ),
+    };
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -698,7 +801,7 @@ class _AmbiguousTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Icon(Icons.help_outline, size: 16, color: scheme.tertiary),
+              Icon(reasonIcon, size: 16, color: scheme.tertiary),
               const SizedBox(width: 6),
               Expanded(
                 child: Text('"${a.catalogItem.productName}" dari sumber',
@@ -706,33 +809,56 @@ class _AmbiguousTile extends StatelessWidget {
                         fontWeight: FontWeight.w600, fontSize: 13)),
               ),
             ]),
+            const SizedBox(height: 2),
+            Text(reasonLabel,
+                style: TextStyle(fontSize: 11, color: scheme.tertiary)),
             const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Mirip dengan: "${a.localProductName}"',
-                          style: const TextStyle(fontSize: 12)),
-                      Text('Kemiripan: $pct%',
-                          style: TextStyle(
-                              fontSize: 11, color: scheme.onSurfaceVariant)),
-                      if (a.catalogItem.price != a.localPrice)
-                        Text(
-                            'Harga: Rp ${_fmt(a.localPrice)} → Rp ${_fmt(a.catalogItem.price)}',
-                            style: TextStyle(
-                                fontSize: 12, color: scheme.primary)),
-                    ],
-                  ),
+            if (single)
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ]),
-            ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Kandidat: "${selected.productName}"',
+                        style: const TextStyle(fontSize: 12)),
+                    if (a.catalogItem.price != selected.price)
+                      Text(
+                          'Harga: Rp ${_fmt(selected.price)} → Rp ${_fmt(a.catalogItem.price)}',
+                          style:
+                              TextStyle(fontSize: 12, color: scheme.primary)),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < a.candidates.length; i++)
+                      RadioListTile<int>(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: i,
+                        groupValue: item.selectedCandidateIndex,
+                        onChanged: (v) => onCandidateChanged(v!),
+                        title: Text(a.candidates[i].productName,
+                            style: const TextStyle(fontSize: 12)),
+                        subtitle: Text(
+                            'Rp ${_fmt(a.candidates[i].price)} → Rp ${_fmt(a.catalogItem.price)}',
+                            style: TextStyle(
+                                fontSize: 11, color: scheme.onSurfaceVariant)),
+                      ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
