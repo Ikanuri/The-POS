@@ -2,13 +2,11 @@ import 'package:barcode_widget/barcode_widget.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/internal_barcode.dart';
 
 class BarcodeScreen extends ConsumerStatefulWidget {
   const BarcodeScreen({super.key, required this.productId});
@@ -71,33 +69,6 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
     }
   }
 
-  Future<void> _generateBarcode(_UnitEntry entry) async {
-    setState(() => _busyUnitIds.add(entry.productUnitId));
-    try {
-      final db = ref.read(databaseProvider);
-      final code = await generateInternalBarcode(db);
-      await db.into(db.productBarcodes).insert(ProductBarcodesCompanion.insert(
-            id: const Uuid().v4(),
-            productUnitId: entry.productUnitId,
-            barcode: code,
-            isPrimary: Value(entry.barcodes.isEmpty),
-            isGenerated: const Value(true),
-          ));
-      await _load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Barcode dibuat: $code')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Gagal generate: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _busyUnitIds.remove(entry.productUnitId));
-    }
-  }
-
   Future<void> _printLabel(_UnitEntry entry, String barcode) async {
     setState(() => _busyUnitIds.add(entry.productUnitId));
     try {
@@ -149,7 +120,6 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
                       .map((e) => _UnitCard(
                             entry: e,
                             busy: _busyUnitIds.contains(e.productUnitId),
-                            onGenerate: () => _generateBarcode(e),
                             onPrint: (bc) => _printLabel(e, bc),
                           ))
                       .toList(),
@@ -183,12 +153,10 @@ class _UnitCard extends StatelessWidget {
   const _UnitCard({
     required this.entry,
     required this.busy,
-    required this.onGenerate,
     required this.onPrint,
   });
   final _UnitEntry entry;
   final bool busy;
-  final VoidCallback onGenerate;
   final ValueChanged<String> onPrint;
 
   @override
@@ -213,29 +181,11 @@ class _UnitCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             if (entry.barcodes.isEmpty)
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Belum ada barcode untuk satuan ini.',
-                      style: TextStyle(
-                          fontSize: 12, color: scheme.onSurfaceVariant),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.tonalIcon(
-                    onPressed: busy ? null : onGenerate,
-                    icon: busy
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.qr_code_2_outlined, size: 18),
-                    label: const Text('Generate Barcode'),
-                    style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 40)),
-                  ),
-                ],
+              Text(
+                'Belum ada barcode untuk satuan ini — isi/generate lewat '
+                'field Barcode di form Edit Produk.',
+                style:
+                    TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               )
             else
               ...entry.barcodes.map((bc) => Padding(

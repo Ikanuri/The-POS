@@ -6,10 +6,11 @@ import 'package:the_pos/features/produk/barcode_screen.dart';
 
 import 'helpers/pump_app.dart';
 
-/// Fitur "Generate Barcode" + "Cetak Label" di layar Barcode produk —
-/// satuan yang belum punya barcode sama sekali menampilkan tombol
-/// "Generate Barcode"; setelah digenerate, kartu berubah menampilkan
-/// barcode baru + tombol "Cetak Label".
+/// Layar Barcode produk — Item 51 (22 Juli): "Generate Barcode" DIPINDAH
+/// ke field Barcode di form Edit Produk (bukan lagi di layar ini, lihat
+/// `produk_form_barcode_generate_test.dart`). Layar ini sekarang murni
+/// utk mencetak label satuan yang SUDAH punya barcode (asli maupun hasil
+/// generate) — satuan kosong cuma tampil pesan info, tanpa tombol aksi.
 void main() {
   late AppDatabase db;
 
@@ -34,42 +35,35 @@ void main() {
   tearDown(() => db.close());
 
   testWidgets(
-      'satuan tanpa barcode menampilkan tombol Generate; setelah tap, '
-      'barcode baru tersimpan & tombol Cetak Label muncul', (tester) async {
+      'satuan tanpa barcode menampilkan pesan info, TANPA tombol Generate '
+      '(sudah dipindah ke form Edit Produk)', (tester) async {
     await pumpWithFakeApp(tester,
         db: db, child: const BarcodeScreen(productId: 'p1'));
 
-    expect(find.text('Belum ada barcode untuk satuan ini.'), findsOneWidget);
-    expect(find.text('Generate Barcode'), findsOneWidget);
+    expect(
+        find.textContaining('Belum ada barcode untuk satuan ini'),
+        findsOneWidget);
+    expect(find.text('Generate Barcode'), findsNothing);
     expect(find.text('Cetak Label'), findsNothing);
-
-    await tester.tap(find.text('Generate Barcode'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Belum ada barcode untuk satuan ini.'), findsNothing);
-    expect(find.text('Cetak Label'), findsOneWidget);
-
-    final barcodes = await db.getProductBarcodes('u1');
-    expect(barcodes, hasLength(1));
-    expect(barcodes.single.barcode.startsWith('29'), isTrue);
-    expect(barcodes.single.isPrimary, isTrue);
-    expect(barcodes.single.isGenerated, isTrue);
   });
 
   testWidgets(
-      'tap Cetak Label tanpa printer diatur menampilkan pesan error, '
-      'tidak crash', (tester) async {
+      'satuan yang SUDAH punya barcode menampilkan tombol Cetak Label; '
+      'tap tanpa printer diatur menampilkan pesan error, tidak crash',
+      (tester) async {
+    await db.into(db.productBarcodes).insert(ProductBarcodesCompanion.insert(
+          id: 'b1',
+          productUnitId: 'u1',
+          barcode: '2900000000015',
+          isPrimary: const Value(true),
+          isGenerated: const Value(true),
+        ));
+
     await pumpWithFakeApp(tester,
         db: db, child: const BarcodeScreen(productId: 'p1'));
-    await tester.tap(find.text('Generate Barcode'));
-    await tester.pumpAndSettle();
 
-    // Drain SnackBar "Barcode dibuat: ..." dari langkah Generate — kalau
-    // masih tampil, SnackBar berikutnya (Cetak Label) cuma DI-QUEUE oleh
-    // ScaffoldMessenger (satu SnackBar tampil sekaligus), tidak langsung
-    // dirender, sehingga assertion di bawah gagal-diam.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
+    expect(find.text('2900000000015'), findsOneWidget);
+    expect(find.text('Cetak Label'), findsOneWidget);
 
     await tester.tap(find.text('Cetak Label'));
     await tester.pumpAndSettle();

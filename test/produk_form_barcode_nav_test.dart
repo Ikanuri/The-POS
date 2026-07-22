@@ -81,8 +81,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // BarcodeScreen sungguhan terbuka — appbar-nya nampilkan nama produk,
-    // dan (krn u1 belum punya barcode) tombol Generate Barcode tampil.
-    expect(find.text('Generate Barcode'), findsOneWidget);
+    // dan (krn u1 belum punya barcode — Generate sekarang di form Edit
+    // Produk, bukan lagi di layar ini) muncul pesan info arahan.
+    expect(find.text('Mie Sedap'), findsWidgets);
+    expect(
+        find.textContaining('Belum ada barcode untuk satuan ini'),
+        findsOneWidget);
 
     // Drain drift StreamProvider (mis. watchLowStockCount() dipakai layar
     // shell/produk) — tanpa ini test bisa HANG "Timer is still pending"

@@ -961,8 +961,11 @@ class PrinterService {
     final gen = Generator(paperSize, profile);
     final out = <int>[];
 
+    // Nama produk: agak besar (spt baris Total di struk, tapi sedikit lebih
+    // kecil — height 2x tanpa lebar 2x, bukan double keduanya spt Total).
     out.addAll(gen.text(_toAscii(productName),
-        styles: const PosStyles(bold: true, align: PosAlign.center)));
+        styles: const PosStyles(
+            bold: true, align: PosAlign.center, height: PosTextSize.size2)));
 
     final line2 =
         variantLabel.isEmpty ? unitQty : '$unitQty - ${_toAscii(variantLabel)}';
