@@ -8,11 +8,11 @@ import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/kasir_screen.dart';
 
-/// Item 24b — sheet "Verifikasi Pesanan": tap kartu antrian handoff pegawai
-/// (awaitingPayment) buka sheet checklist dulu (pegawai bacakan barang,
-/// owner centang) sebelum lanjut ke keranjang untuk bayar. Pesanan ditahan
-/// BIASA (bukan handoff) tetap langsung resume seperti sebelumnya — tanpa
-/// sheet verifikasi, karena tidak ada yang perlu diverifikasi.
+/// Permintaan user — sheet "Verifikasi Pesanan" (Item 24b, centang barang
+/// sebelum lanjut bayar) DIHAPUS: tap kartu antrian handoff pegawai via QR
+/// sekarang langsung resume ke keranjang aktif, sama seperti pesanan
+/// ditahan biasa — pengirim sudah menyusun barangnya sendiri, tidak perlu
+/// dicek ulang lagi oleh penerima.
 void main() {
   Future<AppDatabase> seedProduct() async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -64,8 +64,8 @@ void main() {
   }
 
   testWidgets(
-      'tap kartu antrian handoff (awaitingPayment) → buka sheet '
-      'Verifikasi Pesanan, BUKAN langsung resume ke keranjang',
+      'tap kartu antrian handoff (awaitingPayment) → langsung resume ke '
+      'keranjang aktif, TANPA sheet verifikasi/centang apa pun',
       (tester) async {
     final db = await seedProduct();
     addTearDown(() async => db.close());
@@ -84,91 +84,20 @@ void main() {
     await tester.tap(find.text('Budi'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Verifikasi Pesanan · Budi'), findsOneWidget);
-    expect(find.text('Sedap Goreng'), findsWidgets);
-    // Keranjang belum berubah — antrian belum di-resume.
+    expect(find.textContaining('Verifikasi Pesanan'), findsNothing,
+        reason: 'sheet centang sudah dihapus');
+    expect(find.byType(Checkbox), findsNothing);
     final rows = await db.select(db.heldOrders).get();
-    expect(rows, hasLength(1), reason: 'belum di-resume, masih di antrian');
+    expect(rows, isEmpty,
+        reason: 'langsung di-resume ke keranjang aktif, tanpa langkah antara');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
 
   testWidgets(
-      'centang item di sheet verifikasi tersimpan permanen ke held_orders '
-      '(bertahan walau sheet ditutup tanpa "Lanjut")', (tester) async {
-    final db = await seedProduct();
-    addTearDown(() async => db.close());
-    await db.holdOrder(
-      id: 'h1',
-      label: 'Budi',
-      cartJson:
-          '{"items":[{"productId":"p1","productUnitId":"u1","productName":'
-          '"Sedap Goreng","unitName":"Pcs","qty":2,"price":2500,'
-          '"originalPrice":2500,"costPrice":0}],"meta":{},'
-          '"awaitingPayment":true}',
-    );
-
-    await pumpKasir(tester, db);
-    await openAntrianPanel(tester);
-    await tester.tap(find.text('Budi'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(Checkbox));
-    await tester.pumpAndSettle();
-
-    final rows = await db.select(db.heldOrders).get();
-    expect(rows.single.cartJson, contains('"checked":[true]'),
-        reason: 'centangan harus langsung ditulis ke DB, bukan cuma state widget');
-
-    // Tutup sheet TANPA tekan "Lanjut" (drag/back) — buka lagi, centangan
-    // harus masih ada (bukti persisted, bukan cuma state sheet lama).
-    Navigator.of(tester.element(find.byType(Checkbox))).pop();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Budi'));
-    await tester.pumpAndSettle();
-
-    final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
-    expect(checkbox.value, isTrue);
-
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 10));
-  });
-
-  testWidgets(
-      'tombol "Lanjut ke Keranjang" menutup sheet, hapus dari antrian, '
-      'isi keranjang aktif dengan barangnya', (tester) async {
-    final db = await seedProduct();
-    addTearDown(() async => db.close());
-    await db.holdOrder(
-      id: 'h1',
-      label: 'Budi',
-      cartJson:
-          '{"items":[{"productId":"p1","productUnitId":"u1","productName":'
-          '"Sedap Goreng","unitName":"Pcs","qty":2,"price":2500,'
-          '"originalPrice":2500,"costPrice":0}],"meta":{},'
-          '"awaitingPayment":true}',
-    );
-
-    await pumpKasir(tester, db);
-    await openAntrianPanel(tester);
-    await tester.tap(find.text('Budi'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.textContaining('Lanjut ke Keranjang'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Verifikasi Pesanan · Budi'), findsNothing);
-    final rows = await db.select(db.heldOrders).get();
-    expect(rows, isEmpty, reason: 'antrian sudah di-resume ke keranjang aktif');
-
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 10));
-  });
-
-  testWidgets(
-      'pesanan ditahan BIASA (bukan handoff pegawai) tap langsung resume, '
-      'TANPA sheet verifikasi', (tester) async {
+      'pesanan ditahan BIASA (bukan handoff pegawai) juga tap langsung '
+      'resume', (tester) async {
     final db = await seedProduct();
     addTearDown(() async => db.close());
     await db.holdOrder(
@@ -186,7 +115,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Verifikasi Pesanan'), findsNothing,
-        reason: 'pesanan ditahan biasa tidak perlu diverifikasi');
+        reason: 'pesanan ditahan biasa tidak pernah punya sheet verifikasi');
     final rows = await db.select(db.heldOrders).get();
     expect(rows, isEmpty, reason: 'langsung resume seperti perilaku sebelumnya');
 
