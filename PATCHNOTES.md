@@ -32,6 +32,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   yang ditransfer sudah punya pelanggan terpilih (bukan "Umum"), perangkat
   penerima otomatis mengenali pelanggan yang sama (kalau datanya sudah
   tersinkron), jadi tidak perlu pilih ulang manual.
+- **Buka pesanan hasil transfer QR jadi lebih cepat** — sebelumnya harus
+  centang satu-satu tiap barang dulu sebelum bisa lanjut ke keranjang;
+  sekarang ketuk kartu pesanan langsung masuk ke keranjang, tanpa langkah
+  centang lagi.
 
 - **Satu produk sekarang bisa ada di lebih dari satu kategori.** Di layar
   Kelola Kategori, ketuk nama kategori untuk membuka daftar produk — centang
