@@ -85,6 +85,7 @@ const kAsistenPermissionKeys = <String>[
   TransactionItems,
   TransactionPayments,
   HeldOrders,
+  ReservedOrderNumbers,
   StockLedger,
   Expenses,
   LoyaltyPointLedger,
@@ -149,7 +150,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -285,6 +286,12 @@ class AppDatabase extends _$AppDatabase {
             // di tab Kasir (drag reorder).
             await m.addColumn(productGroups, productGroups.sortOrder);
             await m.createTable(productGroupTags);
+          }
+          if (from < 20) {
+            // Item 55 — reservasi nomor nota lebih awal (sejak keranjang
+            // diisi/ditahan), supaya bisa tampil stabil & ikut ter-transfer
+            // via QR (Item 56).
+            await m.createTable(reservedOrderNumbers);
           }
         },
         beforeOpen: (details) async {
@@ -646,18 +653,65 @@ class AppDatabase extends _$AppDatabase {
   /// Nomor nota harian yang dijamin unik. Penjualan dan retur berbagi ruang
   /// penghitung yang sama, sehingga menghitung jumlah transaksi hari ini +1
   /// mentah bisa bertabrakan. Method ini mencari sequence bebas berikutnya
-  /// dengan memeriksa localId yang sudah ada.
+  /// dengan memeriksa localId yang sudah ada. Item 55 — juga menghindari
+  /// nomor yang sedang DIRESERVASI (`reserved_order_numbers`, mis. keranjang
+  /// lain yang belum checkout) supaya tidak bentrok begitu keranjang itu
+  /// akhirnya dibayar. Dipakai sbg FALLBACK saat checkout tanpa
+  /// `CartMeta.reservedLocalId` (seharusnya jarang terjadi di alur normal —
+  /// lihat `reserveLocalId`, dipanggil lebih awal saat keranjang mulai
+  /// diisi/ditahan).
   Future<String> generateUniqueLocalId(String deviceCode,
       [DateTime? at]) async {
-    final now = at ?? DateTime.now();
-    final datePart = '${now.year}'
-        '${now.month.toString().padLeft(2, '0')}'
-        '${now.day.toString().padLeft(2, '0')}';
-    final prefix = '$deviceCode-$datePart-';
-    final existing = await (select(transactions)
+    final prefix = _localIdPrefix(deviceCode, at ?? DateTime.now());
+    final used = await _usedLocalIdsWithPrefix(prefix);
+    return _nextFreeLocalId(prefix, used);
+  }
+
+  /// Item 55 — reserve nomor nota LEBIH AWAL (sebelum ada baris `transactions`
+  /// sungguhan), sejak keranjang mulai diisi atau ditahan — supaya nomor
+  /// "urutan pelanggan yang harus dilayani" tampil stabil di cart bar & kartu
+  /// pesanan tertahan, dan ikut terbawa utuh saat transfer via QR (Item 56).
+  /// Nomor dicatat ke `reserved_order_numbers` (bukan `transactions`) supaya
+  /// reservasi keranjang LAIN yang juga belum checkout tidak kebentur nomor
+  /// yang sama. Lepaskan dengan [releaseLocalId] setelah dikonsumsi jadi
+  /// transaksi sungguhan, atau saat keranjang dibatalkan.
+  Future<String> reserveLocalId(String deviceCode, [DateTime? at]) async {
+    final prefix = _localIdPrefix(deviceCode, at ?? DateTime.now());
+    final used = await _usedLocalIdsWithPrefix(prefix);
+    final candidate = _nextFreeLocalId(prefix, used);
+    await into(reservedOrderNumbers)
+        .insert(ReservedOrderNumbersCompanion.insert(localId: candidate));
+    return candidate;
+  }
+
+  /// Lepaskan reservasi [localId] — dipanggil setelah nomor dikonsumsi jadi
+  /// `transactions.local_id` sungguhan, atau saat keranjang yang mereservasi
+  /// dibatalkan/dikosongkan tanpa checkout.
+  Future<void> releaseLocalId(String localId) =>
+      (delete(reservedOrderNumbers)..where((t) => t.localId.equals(localId)))
+          .go();
+
+  String _localIdPrefix(String deviceCode, DateTime at) {
+    final datePart = '${at.year}'
+        '${at.month.toString().padLeft(2, '0')}'
+        '${at.day.toString().padLeft(2, '0')}';
+    return '$deviceCode-$datePart-';
+  }
+
+  Future<Set<String>> _usedLocalIdsWithPrefix(String prefix) async {
+    final existingTx = await (select(transactions)
           ..where((t) => t.localId.like('$prefix%')))
         .get();
-    final used = existing.map((t) => t.localId).toSet();
+    final existingReserved = await (select(reservedOrderNumbers)
+          ..where((t) => t.localId.like('$prefix%')))
+        .get();
+    return {
+      ...existingTx.map((t) => t.localId),
+      ...existingReserved.map((r) => r.localId),
+    };
+  }
+
+  String _nextFreeLocalId(String prefix, Set<String> used) {
     var seq = used.length + 1;
     var candidate = '$prefix${seq.toString().padLeft(4, '0')}';
     while (used.contains(candidate)) {

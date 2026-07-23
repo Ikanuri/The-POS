@@ -6368,6 +6368,205 @@ class HeldOrdersCompanion extends UpdateCompanion<HeldOrder> {
   }
 }
 
+class $ReservedOrderNumbersTable extends ReservedOrderNumbers
+    with TableInfo<$ReservedOrderNumbersTable, ReservedOrderNumber> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReservedOrderNumbersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localIdMeta =
+      const VerificationMeta('localId');
+  @override
+  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
+      'local_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [localId, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'reserved_order_numbers';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<ReservedOrderNumber> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_id')) {
+      context.handle(_localIdMeta,
+          localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta));
+    } else if (isInserting) {
+      context.missing(_localIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localId};
+  @override
+  ReservedOrderNumber map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReservedOrderNumber(
+      localId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}local_id'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $ReservedOrderNumbersTable createAlias(String alias) {
+    return $ReservedOrderNumbersTable(attachedDatabase, alias);
+  }
+}
+
+class ReservedOrderNumber extends DataClass
+    implements Insertable<ReservedOrderNumber> {
+  final String localId;
+  final DateTime createdAt;
+  const ReservedOrderNumber(
+      {required this.localId, required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_id'] = Variable<String>(localId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ReservedOrderNumbersCompanion toCompanion(bool nullToAbsent) {
+    return ReservedOrderNumbersCompanion(
+      localId: Value(localId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ReservedOrderNumber.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReservedOrderNumber(
+      localId: serializer.fromJson<String>(json['localId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localId': serializer.toJson<String>(localId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ReservedOrderNumber copyWith({String? localId, DateTime? createdAt}) =>
+      ReservedOrderNumber(
+        localId: localId ?? this.localId,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  ReservedOrderNumber copyWithCompanion(ReservedOrderNumbersCompanion data) {
+    return ReservedOrderNumber(
+      localId: data.localId.present ? data.localId.value : this.localId,
+      createdAt:
+          data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReservedOrderNumber(')
+          ..write('localId: $localId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(localId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReservedOrderNumber &&
+          other.localId == this.localId &&
+          other.createdAt == this.createdAt);
+}
+
+class ReservedOrderNumbersCompanion
+    extends UpdateCompanion<ReservedOrderNumber> {
+  final Value<String> localId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const ReservedOrderNumbersCompanion({
+    this.localId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReservedOrderNumbersCompanion.insert({
+    required String localId,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : localId = Value(localId);
+  static Insertable<ReservedOrderNumber> custom({
+    Expression<String>? localId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localId != null) 'local_id': localId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReservedOrderNumbersCompanion copyWith(
+      {Value<String>? localId,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return ReservedOrderNumbersCompanion(
+      localId: localId ?? this.localId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localId.present) {
+      map['local_id'] = Variable<String>(localId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReservedOrderNumbersCompanion(')
+          ..write('localId: $localId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $StockLedgerTable extends StockLedger
     with TableInfo<$StockLedgerTable, StockLedgerData> {
   @override
@@ -11426,6 +11625,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TransactionPaymentsTable transactionPayments =
       $TransactionPaymentsTable(this);
   late final $HeldOrdersTable heldOrders = $HeldOrdersTable(this);
+  late final $ReservedOrderNumbersTable reservedOrderNumbers =
+      $ReservedOrderNumbersTable(this);
   late final $StockLedgerTable stockLedger = $StockLedgerTable(this);
   late final $ExpensesTable expenses = $ExpensesTable(this);
   late final $LoyaltyPointLedgerTable loyaltyPointLedger =
@@ -11462,6 +11663,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         transactionItems,
         transactionPayments,
         heldOrders,
+        reservedOrderNumbers,
         stockLedger,
         expenses,
         loyaltyPointLedger,

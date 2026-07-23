@@ -85,7 +85,7 @@ void main() {
     // menambah alt_prices, change_taken & sort_order, tapi test ini fokus
     // ke migrasi 6->7).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 19);
+    expect(ver.data.values.first, 20);
 
     // Data lama tetap utuh setelah migrasi.
     final pay = await db.customSelect(

@@ -11,17 +11,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
+import '../handoff_gate_provider.dart';
 import 'add_control.dart';
-
-/// Item 24d — true bila device INI perlu digerbang: role Pegawai
-/// (`deviceRole == 'kasir'`) TANPA izin `terima_pembayaran`. Owner/Asisten
-/// TIDAK PERNAH digerbang (selalu bisa Bayar langsung).
-final _needsHandoffGateProvider = FutureProvider.autoDispose<bool>((ref) async {
-  final device = ref.watch(deviceProvider);
-  if (device.deviceRole != 'kasir') return false;
-  final db = ref.watch(databaseProvider);
-  return !(await db.isPermissionEnabled('terima_pembayaran'));
-});
 
 class CartSheet extends ConsumerStatefulWidget {
   const CartSheet({
@@ -59,11 +50,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     });
   }
 
-  /// Item 24d — pegawai tanpa izin `terima_pembayaran`: tombol "Bayar"
-  /// beralih jadi QR berisi keranjang (format `#PSN:` + baris `Pegawai:`),
-  /// sepenuhnya offline. Owner/asisten scan QR ini lewat scanner kasir yang
-  /// sudah ada — hasilnya masuk ANTRIAN (`held_orders` awaitingPayment),
-  /// BUKAN langsung ke keranjang aktif mereka (lihat PLAN.md Item 24d).
+  /// Item 24d/56 — transfer keranjang lewat QR, sepenuhnya offline. Dua
+  /// pemicu berbeda pakai method yang SAMA persis: (1) pegawai TANPA izin
+  /// `terima_pembayaran` — tombol Bayar utama otomatis beralih jadi ini
+  /// (lihat `needsGate` di [build]); (2) owner/asisten/pegawai BERIZIN —
+  /// tombol ikon Transfer terpisah (Item 56), utk melempar transaksi ke
+  /// device lain (mis. sedang tidak bisa proses, minta owner/asisten lain
+  /// lanjutkan). Penerima scan QR ini lewat scanner kasir yang sudah ada
+  /// — hasilnya masuk ANTRIAN (`held_orders` awaitingPayment) di device
+  /// PENERIMA, BUKAN langsung ke keranjang aktif mereka (lihat PLAN.md
+  /// Item 24d) — lihat `_handleOrderCode` di kasir_screen.dart.
   Future<void> _showHandoffQr(
     BuildContext context,
     WidgetRef ref,
@@ -77,24 +73,43 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       items: cart,
       employeeName: employeeName,
       customerName: meta.hasCustomer ? meta.customerName : null,
+      // Item 4/57 — bawa customerId supaya penerima auto-resolve pelanggan
+      // (tidak perlu ubah dari "Umum" lalu pilih manual lagi).
+      customerId: meta.customerId,
+      // Item 55/56 — nomor nota yang SUDAH direservasi di device INI ikut
+      // dibawa utuh, supaya "urutan pelanggan yang harus dilayani" tetap
+      // sama di penerima (bukan reservasi baru).
+      reservedLocalId: meta.reservedLocalId,
     );
+    final needsGate = ref.read(needsPaymentGateProvider).valueOrNull ?? false;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetCtx) => _HandoffQrSheet(
+        // Judul beda konteks: pegawai TANPA izin SELALU melempar ke
+        // owner/asisten (satu arah pasti); transfer bebas (Item 56) bisa
+        // ke device manapun, judul generik.
+        title: needsGate ? 'Kirim ke Owner/Asisten' : 'Transfer Transaksi',
         qrText: qrText,
         itemCount: cart.where((c) => !c.isVariant).length,
         total: cart.fold<int>(0, (s, c) => s + (c.price * c.qty).round()),
         // QR (bukan network) adalah SATU-SATUNYA jalur transport — antrian
-        // `held_orders` ditulis di device OWNER saat MEREKA scan QR ini
+        // `held_orders` ditulis di device PENERIMA saat MEREKA scan QR ini
         // (lihat `_handleOrderCode` di kasir_screen.dart), BUKAN di device
-        // pegawai sendiri. Di sisi pegawai, "selesai" cuma berarti
-        // membersihkan keranjang lokal (dianggap sudah terkirim/diserahkan).
-        // Cuma tutup sheet QR-nya sendiri (bukan CartSheet di baliknya
-        // sekalian) — dua pop beruntun di frame yang sama pernah bikin
-        // animasi Navigator macet tak pernah selesai di widget test.
+        // pengirim sendiri. Di sisi pengirim, "selesai" cuma berarti
+        // membersihkan keranjang lokal (dianggap sudah terkirim/diserahkan)
+        // — termasuk melepas reservasi nomor nota (Item 55), krn nomor itu
+        // sekarang jadi tanggung jawab device penerima. Cuma tutup sheet
+        // QR-nya sendiri (bukan CartSheet di baliknya sekalian) — dua pop
+        // beruntun di frame yang sama pernah bikin animasi Navigator macet
+        // tak pernah selesai di widget test.
         onDone: () async {
+          if (meta.reservedLocalId != null) {
+            await ref
+                .read(databaseProvider)
+                .releaseLocalId(meta.reservedLocalId!);
+          }
           ref.read(cartProvider(widget.cartId).notifier).clear();
           ref.read(cartMetaProvider(widget.cartId).notifier).clear();
           if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
@@ -103,16 +118,52 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     );
   }
 
+  /// Item 56 — Kosongkan keranjang (ikon tempat sampah, dialog konfirmasi
+  /// tetap ada) — juga melepas reservasi nomor nota (Item 55) supaya
+  /// nomor itu tidak "hangus" selamanya kalau keranjang dibatalkan.
+  Future<void> _confirmClear(BuildContext ctx, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (dCtx) => AlertDialog(
+        title: const Text('Kosongkan Keranjang?'),
+        content: const Text('Semua item akan dihapus dari keranjang.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dCtx).pop(false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.of(dCtx).pop(true),
+              child: const Text('Kosongkan')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final meta = ref.read(cartMetaProvider(widget.cartId));
+    if (meta.reservedLocalId != null) {
+      await ref.read(databaseProvider).releaseLocalId(meta.reservedLocalId!);
+    }
+    ref.read(cartProvider(widget.cartId).notifier).clear();
+    ref.read(cartMetaProvider(widget.cartId).notifier).clear();
+    if (ctx.mounted) Navigator.of(ctx).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider(widget.cartId));
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
+    final meta = ref.watch(cartMetaProvider(widget.cartId));
     final scheme = Theme.of(context).colorScheme;
     final total = notifier.totalAmount;
     // Item 24d — gerbang HANYA untuk transaksi nyata (kasir utama & Tambah
     // Belanjaan), TIDAK untuk mode Katalog (bukan transaksi sungguhan).
     final needsGate = widget.cartId != kCatalogCartId &&
-        (ref.watch(_needsHandoffGateProvider).valueOrNull ?? false);
+        (ref.watch(needsPaymentGateProvider).valueOrNull ?? false);
+    // Item 56 — tombol Transfer QR: owner/asisten/pegawai BERIZIN (`!
+    // needsGate`) bisa transfer transaksi ke device lain (mis. lempar ke
+    // owner/asisten lain yg sedang tidak sibuk). Pegawai TANPA izin sudah
+    // punya jalur sendiri (tombol Bayar utama otomatis jadi "Kirim ke
+    // Owner/Asisten" — lihat di bawah), tidak perlu tombol tambahan.
+    final canTransfer = widget.cartId != kCatalogCartId && !needsGate;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -129,137 +180,130 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         }
         _prevCount = cart.length;
         return Column(
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: scheme.outlineVariant,
-              borderRadius: BorderRadius.circular(2),
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Text('Keranjang',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
-                TextButton(
-                  onPressed: cart.isEmpty
-                      ? null
-                      : () async {
-                          final ok = await showDialog<bool>(
-                            context: ctx,
-                            builder: (dCtx) => AlertDialog(
-                              title: const Text('Kosongkan Keranjang?'),
-                              content: const Text(
-                                  'Semua item akan dihapus dari keranjang.'),
-                              actions: [
-                                TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(dCtx).pop(false),
-                                    child: const Text('Batal')),
-                                FilledButton(
-                                    onPressed: () =>
-                                        Navigator.of(dCtx).pop(true),
-                                    child: const Text('Kosongkan')),
-                              ],
-                            ),
-                          );
-                          if (ok == true) {
-                            notifier.clear();
-                            ref
-                                .read(cartMetaProvider(widget.cartId).notifier)
-                                .clear();
-                            if (ctx.mounted) Navigator.of(ctx).pop();
-                          }
-                        },
-                  child: const Text('Kosongkan'),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: cart.isEmpty
-                ? Center(
-                    child: Text(
-                      'Keranjang kosong',
-                      style: TextStyle(
-                          fontSize: 15, color: scheme.onSurfaceVariant),
-                    ),
-                  )
-                : Builder(builder: (_) {
-                    final ordered = orderCartItems(cart);
-                    return StepperActiveScope(
-                      child: ListView.separated(
-                        controller: scrollCtrl,
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: ordered.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(height: 1, indent: 56),
-                        itemBuilder: (ctx2, i) {
-                          final item = ordered[i];
-                          final effQty = notifier.effectiveQtyFor(item);
-                          return _CartItemTile(
-                            index: i,
-                            item: item,
-                            isVariant: item.isVariant,
-                            effectiveQty: effQty,
-                            cartId: widget.cartId,
-                          );
-                        },
-                      ),
-                    );
-                  }),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-                16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),
-            child: Row(
-              children: [
-                // Badge jumlah item — gaya sama dgn cart bar kasir, supaya
-                // representasi "jumlah barang" konsisten di seluruh alur.
-                ItemCountBadge(
-                    count: cart.where((c) => !c.isVariant).length),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Total',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            )),
-                    Text(
-                      formatRupiah(total),
-                      style: AppTheme.numStyle(context,
-                          size: 22, weight: FontWeight.w700, color: scheme.primary),
-                    ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text('Keranjang',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  if (meta.displayOrderNumber != null) ...[
+                    const SizedBox(width: 8),
+                    Text('#${meta.displayOrderNumber}',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurfaceVariant)),
                   ],
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: cart.isEmpty
-                        ? null
-                        : needsGate
-                            ? () => _showHandoffQr(context, ref, cart)
-                            : () {
-                                Navigator.of(ctx).pop();
-                                context.push(widget.payRoute);
-                              },
-                    child: Text(needsGate ? 'Kirim ke Owner/Asisten' : 'Bayar'),
+                  const Spacer(),
+                  if (canTransfer)
+                    IconButton(
+                      tooltip: 'Transfer via QR',
+                      onPressed: cart.isEmpty
+                          ? null
+                          : () => _showHandoffQr(ctx, ref, cart),
+                      icon: const _QrTransferIcon(),
+                    ),
+                  IconButton(
+                    tooltip: 'Kosongkan',
+                    onPressed:
+                        cart.isEmpty ? null : () => _confirmClear(ctx, ref),
+                    icon: Icon(Icons.delete_outline, color: scheme.error),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      );
+            const Divider(height: 1),
+            Expanded(
+              child: cart.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Keranjang kosong',
+                        style: TextStyle(
+                            fontSize: 15, color: scheme.onSurfaceVariant),
+                      ),
+                    )
+                  : Builder(builder: (_) {
+                      final ordered = orderCartItems(cart);
+                      return StepperActiveScope(
+                        child: ListView.separated(
+                          controller: scrollCtrl,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: ordered.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1, indent: 56),
+                          itemBuilder: (ctx2, i) {
+                            final item = ordered[i];
+                            final effQty = notifier.effectiveQtyFor(item);
+                            return _CartItemTile(
+                              index: i,
+                              item: item,
+                              isVariant: item.isVariant,
+                              effectiveQty: effQty,
+                              cartId: widget.cartId,
+                            );
+                          },
+                        ),
+                      );
+                    }),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),
+              child: Row(
+                children: [
+                  // Badge jumlah item — gaya sama dgn cart bar kasir, supaya
+                  // representasi "jumlah barang" konsisten di seluruh alur.
+                  ItemCountBadge(count: cart.where((c) => !c.isVariant).length),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Total',
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  )),
+                      Text(
+                        formatRupiah(total),
+                        style: AppTheme.numStyle(context,
+                            size: 22,
+                            weight: FontWeight.w700,
+                            color: scheme.primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: cart.isEmpty
+                          ? null
+                          : needsGate
+                              ? () => _showHandoffQr(context, ref, cart)
+                              : () {
+                                  Navigator.of(ctx).pop();
+                                  context.push(widget.payRoute);
+                                },
+                      child:
+                          Text(needsGate ? 'Kirim ke Owner/Asisten' : 'Bayar'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -378,8 +422,7 @@ class _CartItemTile extends ConsumerWidget {
                   decoration: BoxDecoration(
                     border: Border(
                         left: BorderSide(
-                            width: 3,
-                            color: scheme.tertiary.withOpacity(0.5))),
+                            width: 3, color: scheme.tertiary.withOpacity(0.5))),
                     color: scheme.tertiary.withOpacity(0.06),
                     borderRadius: const BorderRadius.horizontal(
                         right: Radius.circular(4)),
@@ -444,12 +487,14 @@ class _CartItemTile extends ConsumerWidget {
 /// ditunjukkan ulang kalau scan pertama gagal).
 class _HandoffQrSheet extends StatelessWidget {
   const _HandoffQrSheet({
+    required this.title,
     required this.qrText,
     required this.itemCount,
     required this.total,
     required this.onDone,
   });
 
+  final String title;
   final String qrText;
   final int itemCount;
   final int total;
@@ -464,8 +509,7 @@ class _HandoffQrSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Kirim ke Owner/Asisten',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
               '$itemCount item · ${formatRupiah(total)}',
@@ -517,6 +561,33 @@ class _HandoffQrSheet extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Item 56 — ikon tombol Transfer: `qr_code_2` + panah kecil di pojok,
+/// filosofi "kode QR yang dikirim/diteruskan" (bukan cuma ditampilkan).
+class _QrTransferIcon extends StatelessWidget {
+  const _QrTransferIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.qr_code_2, size: 22, color: scheme.primary),
+          Positioned(
+            bottom: -3,
+            right: -3,
+            child: Icon(Icons.arrow_forward_rounded,
+                size: 12, color: scheme.primary),
+          ),
+        ],
       ),
     );
   }

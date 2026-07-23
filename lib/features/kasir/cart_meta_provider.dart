@@ -16,6 +16,7 @@ class CartMeta {
     this.customerName,
     this.employeeId,
     this.employeeName,
+    this.reservedLocalId,
   });
 
   final String? customerId;
@@ -23,22 +24,43 @@ class CartMeta {
   final String? employeeId;
   final String? employeeName;
 
+  /// Item 55 — nomor nota (`local_id`) di-reserve LEBIH AWAL, sejak
+  /// keranjang mulai diisi/ditahan (bukan cuma saat checkout) — supaya
+  /// nomor "urutan pelanggan yang harus dilayani" tampil stabil di cart bar
+  /// & kartu pesanan tertahan, dan ikut terbawa utuh saat transfer via QR
+  /// (Item 56). Diisi lewat `AppDatabase.reserveLocalId`; saat checkout
+  /// SUNGGUHAN, dipakai LANGSUNG sbg `local_id` transaksi (bukan generate
+  /// baru) — lihat `payment_screen.dart`.
+  final String? reservedLocalId;
+
   bool get isEmpty =>
       customerId == null &&
       customerName == null &&
       employeeId == null &&
-      employeeName == null;
+      employeeName == null &&
+      reservedLocalId == null;
 
   bool get hasCustomer =>
       (customerName != null && customerName!.isNotEmpty);
   bool get hasEmployee =>
       (employeeName != null && employeeName!.isNotEmpty);
 
+  /// Segmen terakhir `local_id` (mis. "K1-20260723-0017" → "17") untuk
+  /// ditampilkan ringkas sbg "#17" — lihat dok `reservedLocalId`.
+  String? get displayOrderNumber {
+    final id = reservedLocalId;
+    if (id == null) return null;
+    final seg = id.split('-').last;
+    final n = int.tryParse(seg);
+    return n == null ? seg : n.toString();
+  }
+
   CartMeta copyWith({
     Object? customerId = _unset,
     Object? customerName = _unset,
     Object? employeeId = _unset,
     Object? employeeName = _unset,
+    Object? reservedLocalId = _unset,
   }) =>
       CartMeta(
         customerId: identical(customerId, _unset)
@@ -53,6 +75,9 @@ class CartMeta {
         employeeName: identical(employeeName, _unset)
             ? this.employeeName
             : employeeName as String?,
+        reservedLocalId: identical(reservedLocalId, _unset)
+            ? this.reservedLocalId
+            : reservedLocalId as String?,
       );
 
   static const Object _unset = Object();
@@ -62,6 +87,7 @@ class CartMeta {
         'customerName': customerName,
         'employeeId': employeeId,
         'employeeName': employeeName,
+        'reservedLocalId': reservedLocalId,
       };
 
   factory CartMeta.fromJson(Map<String, dynamic> json) => CartMeta(
@@ -69,6 +95,7 @@ class CartMeta {
         customerName: json['customerName'] as String?,
         employeeId: json['employeeId'] as String?,
         employeeName: json['employeeName'] as String?,
+        reservedLocalId: json['reservedLocalId'] as String?,
       );
 }
 
@@ -133,6 +160,32 @@ class CartMetaNotifier extends StateNotifier<CartMeta> {
 
   void replaceAll(CartMeta meta) {
     state = meta;
+  }
+
+  /// Item 55/56 — set nomor nota LANGSUNG (dari transfer QR, bukan hasil
+  /// reservasi lokal) — lihat dok `CartMeta.reservedLocalId`.
+  void setReservedLocalId(String? id) {
+    state = state.copyWith(reservedLocalId: id);
+  }
+
+  bool _reserving = false;
+
+  /// Item 55 — reserve nomor nota SEKALI saat keranjang pertama kali terisi
+  /// (no-op kalau sudah punya, atau sedang dalam proses reserve — dipanggil
+  /// berulang tiap build widget cart bar, guard `_reserving` mencegah
+  /// panggilan DB dobel sebelum yang pertama selesai).
+  Future<void> ensureReservedLocalId(
+      Future<String> Function() reserve) async {
+    if (state.reservedLocalId != null || _reserving) return;
+    _reserving = true;
+    try {
+      final id = await reserve();
+      if (mounted && state.reservedLocalId == null) {
+        state = state.copyWith(reservedLocalId: id);
+      }
+    } finally {
+      _reserving = false;
+    }
   }
 
   void clear() {

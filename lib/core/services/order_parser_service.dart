@@ -23,10 +23,28 @@ class OrderParserService {
   // PELANGGAN biasa (yang tidak punya baris ini).
   static final RegExp _employeeLine =
       RegExp(r'^Pegawai:\s*(.+)$', multiLine: true);
+  // Item 57 — id pelanggan terdaftar (Item 4), supaya penerima transfer
+  // TIDAK perlu ubah "Umum" lalu pilih manual lagi — auto-resolve kalau id
+  // ini sudah tersync lokal (fallback ke `Nama:` polos kalau belum/tidak
+  // ditemukan, lihat [parse]).
+  static final RegExp _customerIdLine =
+      RegExp(r'^PelangganId:\s*(.+)$', multiLine: true);
+  // Item 55/56 — nomor nota yang SUDAH direservasi pengirim (stabil, "urutan
+  // pelanggan yang harus dilayani") — ikut terbawa utuh ke penerima transfer,
+  // BUKAN nomor baru. Beda dari kode #PSN: handoff pegawai lama yang tidak
+  // membawa ini (fallback: penerima reservasi baru sendiri).
+  static final RegExp _notaLine = RegExp(r'^Nota:\s*(.+)$', multiLine: true);
 
   /// Marker baris meta yang HARUS berada di awal baris agar regex `^...`
   /// di atas mengenalinya (lihat [_normalizeMetaLineBreaks]).
-  static const _metaMarkers = ['Pegawai:', 'Nama:', 'HP:', 'Catatan:'];
+  static const _metaMarkers = [
+    'Pegawai:',
+    'Nama:',
+    'HP:',
+    'Catatan:',
+    'PelangganId:',
+    'Nota:',
+  ];
 
   /// Sisipkan newline di depan marker meta (`Pegawai:`/`Nama:`/dst) bila
   /// "menempel" ke teks sebelumnya TANPA baris baru — kejadian nyata di
@@ -180,32 +198,59 @@ class OrderParserService {
     final phone = _phoneLine.firstMatch(text)?.group(1)?.trim();
     final note = _noteLine.firstMatch(text)?.group(1)?.trim();
     final employeeName = _employeeLine.firstMatch(text)?.group(1)?.trim();
+    final notaId = _notaLine.firstMatch(text)?.group(1)?.trim();
+
+    // Item 4/57 — id pelanggan HANYA dipakai kalau benar-benar tersync
+    // lokal di device penerima (mis. beda toko yg jarang sync, atau
+    // pelanggan baru dibuat di pengirim) — kalau tidak ketemu, diam-diam
+    // fallback ke nama saja (perilaku lama), BUKAN error.
+    final rawCustomerId = _customerIdLine.firstMatch(text)?.group(1)?.trim();
+    String? resolvedCustomerId;
+    if (rawCustomerId != null && rawCustomerId.isNotEmpty) {
+      final exists = await (db.select(db.customers)
+            ..where((t) => t.id.equals(rawCustomerId)))
+          .getSingleOrNull();
+      if (exists != null) resolvedCustomerId = rawCustomerId;
+    }
 
     return ParsedOrder(
       items: items,
       notFound: notFound,
+      customerId: resolvedCustomerId,
       customerName: (name == null || name.isEmpty || name == '-') ? null : name,
       customerPhone:
           (phone == null || phone.isEmpty || phone == '-') ? null : phone,
       note: (note == null || note.isEmpty) ? null : note,
       employeeName:
           (employeeName == null || employeeName.isEmpty) ? null : employeeName,
+      reservedLocalId:
+          (notaId == null || notaId.isEmpty) ? null : notaId,
       hasMachineCode: true,
     );
   }
 
-  /// Item 24d — encode keranjang pegawai jadi teks kode mesin `#PSN:` siap
-  /// di-QR-kan, format SAMA dengan yang dihasilkan katalog HTML
-  /// (`OrderPageService` JS `buildOrderText()`) supaya bisa dibaca [parse]
-  /// yang sama. Baris `Pegawai: <nama>` jadi pembeda dari pesanan
-  /// pelanggan biasa (lihat [ParsedOrder.employeeName]). `customerName`
-  /// (bila pegawai sudah pilih pelanggan di keranjangnya) ikut sbg baris
-  /// `Nama:` yang SUDAH ADA parser-nya (dipakai jg oleh alur Tempel
-  /// Pesanan) — supaya atribusi pelanggan tidak hilang saat handoff.
+  /// Item 24d/56 — encode keranjang jadi teks kode mesin `#PSN:` siap
+  /// di-QR-kan (transfer transaksi lintas device — owner/asisten/pegawai
+  /// berizin, bukan cuma handoff pegawai lagi), format SAMA dengan yang
+  /// dihasilkan katalog HTML (`OrderPageService` JS `buildOrderText()`)
+  /// supaya bisa dibaca [parse] yang sama. Baris `Pegawai: <nama>` (nama
+  /// PENGIRIM — device manapun, bukan cuma role pegawai — lihat
+  /// pemanggil `cart_sheet.dart`) jadi pembeda dari pesanan pelanggan
+  /// biasa (lihat [ParsedOrder.employeeName]).
+  ///
+  /// `customerName`+[customerId] (Item 4) ikut dibawa supaya penerima
+  /// TIDAK perlu ubah dari "Umum" lalu pilih manual lagi — [customerId]
+  /// di-auto-resolve di sisi penerima kalau pelanggannya sudah tersync
+  /// lokal (lihat [parse]), fallback ke `customerName` polos kalau belum.
+  /// [reservedLocalId] (Item 55) membawa nomor nota yang SUDAH direservasi
+  /// pengirim, supaya "urutan pelanggan yang harus dilayani" tetap SAMA
+  /// di penerima (bukan reservasi baru).
   static String encodeHandoff({
     required List<CartItem> items,
     required String employeeName,
     String? customerName,
+    String? customerId,
+    String? reservedLocalId,
   }) {
     final codeParts = items.map((c) {
       final note = c.itemNote?.trim();
@@ -219,6 +264,12 @@ class OrderParserService {
     final name = customerName?.trim();
     if (name != null && name.isNotEmpty) {
       buf.write('\nNama: $name');
+    }
+    if (customerId != null && customerId.isNotEmpty) {
+      buf.write('\nPelangganId: $customerId');
+    }
+    if (reservedLocalId != null && reservedLocalId.isNotEmpty) {
+      buf.write('\nNota: $reservedLocalId');
     }
     return buf.toString();
   }
@@ -279,10 +330,12 @@ class ParsedOrder {
   const ParsedOrder({
     required this.items,
     required this.notFound,
+    this.customerId,
     required this.customerName,
     required this.customerPhone,
     required this.note,
     required this.employeeName,
+    this.reservedLocalId,
     required this.hasMachineCode,
   });
 
@@ -294,15 +347,26 @@ class ParsedOrder {
   /// baris lain yang valid.
   final List<String> notFound;
 
+  /// Item 4/57 — id pelanggan terdaftar, SUDAH divalidasi ada di DB lokal
+  /// device ini saat parsing (lihat [OrderParserService.parse]) — null
+  /// kalau tidak ada di teks ATAU belum tersync lokal (fallback ke
+  /// [customerName] polos).
+  final String? customerId;
   final String? customerName;
   final String? customerPhone;
   final String? note;
 
-  /// Item 24d — TERISI hanya untuk kode handoff dari PEGAWAI (baris
-  /// `Pegawai: <nama>`), null untuk pesanan pelanggan biasa. Pembeda alur:
-  /// terisi → masuk antrian `held_orders` (awaitingPayment); null → alur
-  /// "Tempel Pesanan" pelanggan yang sudah ada (langsung ke keranjang).
+  /// Item 24d — TERISI hanya untuk kode handoff/transfer (baris
+  /// `Pegawai: <nama>` — berisi nama PENGIRIM, device manapun), null untuk
+  /// pesanan pelanggan biasa. Pembeda alur: terisi → masuk antrian
+  /// `held_orders` (awaitingPayment); null → alur "Tempel Pesanan"
+  /// pelanggan yang sudah ada (langsung ke keranjang).
   final String? employeeName;
+
+  /// Item 55/56 — nomor nota yang SUDAH direservasi pengirim, ikut terbawa
+  /// utuh (lihat dok `CartMeta.reservedLocalId`) — null kalau kode lama/tak
+  /// ada (penerima reservasi baru sendiri).
+  final String? reservedLocalId;
 
   /// false bila teks yang ditempel sama sekali tidak mengandung kode mesin
   /// (`#PSN:...`) — dipakai UI untuk pesan error yang jelas, beda dari

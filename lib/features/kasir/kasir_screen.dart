@@ -27,6 +27,7 @@ import '../produk/catalog/catalog_store.dart';
 import '../shell/sync_status_banner.dart';
 import 'cart_meta_provider.dart';
 import 'cart_provider.dart';
+import 'handoff_gate_provider.dart';
 import 'widgets/add_control.dart';
 import 'widgets/cart_meta_pickers.dart';
 import 'widgets/cart_sheet.dart';
@@ -323,8 +324,8 @@ class _ScanShutterButton extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white,
-                border: Border.all(
-                    color: Colors.white.withOpacity(0.35), width: 4),
+                border:
+                    Border.all(color: Colors.white.withOpacity(0.35), width: 4),
                 boxShadow: [
                   BoxShadow(
                       color: Colors.black.withOpacity(0.35),
@@ -965,7 +966,6 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         return true;
       }
 
-
       if (code.length >= _kMinBarcodeLen) {
         _handleBarcode(code, fromExternal: true);
         return true;
@@ -1288,17 +1288,23 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
 
     final employeeName = parsed.employeeName;
     if (employeeName != null) {
-      // Item 24d/24b susulan — pelanggan (bila pegawai sempat memilih di
-      // keranjangnya) ikut lewat baris "Nama:" yang sama dgn Tempel Pesanan
-      // (lihat `encodeHandoff`). Ini ad-hoc (customerId TIDAK di-resolve —
-      // sama seperti alur Tempel Pesanan biasa), murni nama tampilan.
-      // `label` kartu antrian jadi nama PELANGGAN (bukan pegawai lagi —
-      // pegawai pengirim ditampilkan lewat tab terpisah di `_HeldCard`,
-      // lihat `employeeName` di payload).
+      // Item 24d/24b susulan — pelanggan (bila pegawai/owner/asisten
+      // pengirim sempat memilih di keranjangnya) ikut lewat baris "Nama:"
+      // yang sama dgn Tempel Pesanan (lihat `encodeHandoff`). Item 4/57 —
+      // `customerId` (kalau ada & tervalidasi ada lokal, lihat
+      // `OrderParserService.parse`) ikut disertakan supaya penerima TIDAK
+      // perlu ubah dari "Umum" lalu pilih manual lagi. `label` kartu
+      // antrian jadi nama PELANGGAN (bukan nama pengirim — pengirim
+      // ditampilkan lewat tab terpisah di `_HeldCard`, lihat `employeeName`
+      // di payload).
       final customerName = parsed.customerName;
       final meta = (customerName != null && customerName.isNotEmpty)
-          ? CartMeta(customerName: customerName)
-          : const CartMeta();
+          ? CartMeta(
+              customerId: parsed.customerId,
+              customerName: customerName,
+              reservedLocalId: parsed.reservedLocalId,
+            )
+          : CartMeta(reservedLocalId: parsed.reservedLocalId);
       final payload = jsonEncode({
         'items': parsed.items.map((i) => i.toCartItem().toJson()).toList(),
         'meta': meta.toJson(),
@@ -1314,8 +1320,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       );
       if (!mounted) return;
       if (_scannerOpen) _closeScanner();
-      _showBanner('Pesanan dari $employeeName masuk antrian',
-          InlineBannerType.success);
+      _showBanner(
+          'Pesanan dari $employeeName masuk antrian', InlineBannerType.success);
       return;
     }
 
@@ -1650,7 +1656,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
             ),
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1708,8 +1715,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                         onTap: () {
                           const options = [3, 5, 10];
                           final i = options.indexOf(_toastDurationSeconds);
-                          _setToastDuration(
-                              options[(i + 1) % options.length]);
+                          _setToastDuration(options[(i + 1) % options.length]);
                         },
                       ),
                     ],
@@ -1735,6 +1741,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
 
     final cart = ref.watch(cartProvider(_cartId));
     final cartNotifier = ref.read(cartProvider(_cartId).notifier);
+    // Item 55 — nomor nota (di-reserve `_CartMetaTab`) ditampilkan di cart
+    // bar; watch (bukan read) supaya bar ikut update begitu reservasi
+    // selesai async tanpa perlu rebuild dari trigger lain.
+    final cartMeta = ref.watch(cartMetaProvider(_cartId));
     final query = ref.watch(_kasirSearchProvider(_cartId));
     final isGrid = ref.watch(kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
@@ -1862,48 +1872,65 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                     Expanded(
                       child: StepperActiveScope(
                         child: productsAsync.when(
-                        data: (prods) {
-                          if (prods.isEmpty) {
-                            return Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 56,
-                                    height: 56,
-                                    decoration: BoxDecoration(
-                                      color: cs.surfaceContainerLowest,
-                                      borderRadius: BorderRadius.circular(14),
+                          data: (prods) {
+                            if (prods.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        color: cs.surfaceContainerLowest,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Icon(Icons.inventory_2_outlined,
+                                          color: cs.onSurfaceVariant, size: 26),
                                     ),
-                                    child: Icon(Icons.inventory_2_outlined,
-                                        color: cs.onSurfaceVariant, size: 26),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    query.isEmpty
-                                        ? 'Belum ada produk'
-                                        : 'Produk tidak ditemukan',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: cs.onSurfaceVariant,
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      query.isEmpty
+                                          ? 'Belum ada produk'
+                                          : 'Produk tidak ditemukan',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: cs.onSurfaceVariant,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                          if (isGrid) {
-                            return GridView.builder(
-                              padding: const EdgeInsets.all(12),
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 180,
-                                mainAxisExtent: 138,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                              ),
+                                  ],
+                                ),
+                              );
+                            }
+                            if (isGrid) {
+                              return GridView.builder(
+                                padding: const EdgeInsets.all(12),
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 180,
+                                  mainAxisExtent: 138,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                ),
+                                itemCount: prods.length,
+                                itemBuilder: (_, i) => _ProductCard(
+                                  product: prods[i],
+                                  cartId: _cartId,
+                                  onTapBody: () => _openEntry(prods[i]),
+                                  onQuickAdd: _quickAdd,
+                                  onOpenEntry: () => _openEntry(prods[i]),
+                                  onBeforeTap: _markSkipSearchCollapse,
+                                ),
+                              );
+                            }
+                            return ListView.separated(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
                               itemCount: prods.length,
-                              itemBuilder: (_, i) => _ProductCard(
+                              separatorBuilder: (_, __) => Divider(
+                                  height: 1,
+                                  indent: 62,
+                                  color: cs.outlineVariant),
+                              itemBuilder: (_, i) => _ProductListTile(
                                 product: prods[i],
                                 cartId: _cartId,
                                 onTapBody: () => _openEntry(prods[i]),
@@ -1912,28 +1939,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                 onBeforeTap: _markSkipSearchCollapse,
                               ),
                             );
-                          }
-                          return ListView.separated(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            itemCount: prods.length,
-                            separatorBuilder: (_, __) => Divider(
-                                height: 1,
-                                indent: 62,
-                                color: cs.outlineVariant),
-                            itemBuilder: (_, i) => _ProductListTile(
-                              product: prods[i],
-                              cartId: _cartId,
-                              onTapBody: () => _openEntry(prods[i]),
-                              onQuickAdd: _quickAdd,
-                              onOpenEntry: () => _openEntry(prods[i]),
-                              onBeforeTap: _markSkipSearchCollapse,
-                            ),
-                          );
-                        },
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (e, _) => Center(child: Text('Error: $e')),
-                      ),
+                          },
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (e, _) => Center(child: Text('Error: $e')),
+                        ),
                       ),
                     ),
                   ],
@@ -1964,6 +1974,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                         child: _CartMetaTab(
                           cartId: _cartId,
                           onHold: _holdCurrent,
+                          // `_isAddMode` sudah dipastikan false oleh guard
+                          // `if (!_isAddMode)` di atas — rute bayar SELALU
+                          // `/kasir/bayar` di sini (mode tambah belanjaan
+                          // punya rute sendiri & TIDAK menampilkan tab ini).
+                          onBayar: () => context.push('/kasir/bayar'),
                         ),
                       ),
                     // Geser ke atas untuk membuka sheet keranjang.
@@ -1985,6 +2000,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             : cartNotifier
                                 .effectiveQtyFor(cartNotifier.lastTouchedItem!),
                         showSwipeHint: _swipeHintVisible,
+                        orderNumber:
+                            _isAddMode ? null : cartMeta.displayOrderNumber,
                       ),
                     ),
                   ],
@@ -3031,10 +3048,17 @@ class _CartBar extends StatelessWidget {
     this.lastItem,
     this.lastEffQty = 0,
     this.showSwipeHint = false,
+    this.orderNumber,
   });
 
   final int total;
   final int count;
+
+  /// Item 55 — segmen terakhir nomor nota (mis. "17"), null selama belum
+  /// direservasi (keranjang baru saja mulai diisi) atau mode tambah
+  /// belanjaan (memakai nomor nota transaksi ASLI, ditampilkan di struk,
+  /// bukan di sini).
+  final String? orderNumber;
 
   /// Produk terakhir yang ditambahkan/disentuh — ditampilkan ringkas di bawah
   /// total. null bila tidak relevan (mis. mode tambah belanjaan).
@@ -3070,75 +3094,90 @@ class _CartBar extends StatelessWidget {
         ),
       ),
       padding: EdgeInsets.fromLTRB(14, 12, 14, 12 + bottomPad),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          // Total diperbesar & di-center, dengan badge jumlah item di kiri.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
+          Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ItemCountBadge(count: count),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+              // Total diperbesar & di-center, dengan badge jumlah item di kiri.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    'Total',
+                  ItemCountBadge(count: count),
+                  const SizedBox(width: 10),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        formatRupiah(total),
+                        style: AppTheme.numStyle(context,
+                            size: 23, weight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (lastParts != null) ...[
+                const SizedBox(height: 5),
+                Text.rich(
+                  TextSpan(
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: cs.onSurfaceVariant,
                     ),
+                    children: [
+                      TextSpan(text: lastParts.prefix),
+                      TextSpan(
+                        text: lastParts.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextSpan(text: lastParts.suffix),
+                    ],
                   ),
-                  Text(
-                    formatRupiah(total),
-                    style: AppTheme.numStyle(context,
-                        size: 23, weight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          if (lastParts != null) ...[
-            const SizedBox(height: 5),
-            Text.rich(
-              TextSpan(
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant,
-                ),
-                children: [
-                  TextSpan(text: lastParts.prefix),
-                  TextSpan(
-                    text: lastParts.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  TextSpan(text: lastParts.suffix),
-                ],
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          if (showSwipeHint) ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.keyboard_arrow_up_rounded,
-                    size: 14, color: cs.onSurfaceVariant.withOpacity(0.5)),
-                const SizedBox(width: 3),
-                Text(
-                  'Geser ke atas untuk lihat keranjang',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant.withOpacity(0.5)),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
+              if (showSwipeHint) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.keyboard_arrow_up_rounded,
+                        size: 14, color: cs.onSurfaceVariant.withOpacity(0.5)),
+                    const SizedBox(width: 3),
+                    Text(
+                      'Geser ke atas untuk lihat keranjang',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant.withOpacity(0.5)),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+          if (orderNumber != null)
+            Positioned(
+              top: -2,
+              right: 0,
+              child: Text('#$orderNumber',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurfaceVariant)),
             ),
-          ],
         ],
       ),
     );
@@ -3381,10 +3420,25 @@ class _CatalogItemsSheet extends ConsumerWidget {
 /// Tab berbentuk trapesium (seperti label folder) yang menempel di atas cart
 /// bar. Berisi chip pelanggan, chip pegawai, dan tombol tahan pesanan.
 class _CartMetaTab extends ConsumerWidget {
-  const _CartMetaTab({required this.cartId, required this.onHold});
+  const _CartMetaTab(
+      {required this.cartId, required this.onHold, required this.onBayar});
 
   final String cartId;
   final VoidCallback onHold;
+  final VoidCallback onBayar;
+
+  /// Item 55 — reserve nomor nota SEKALI begitu tab ini pertama kali
+  /// terlihat dgn keranjang berisi (tab cuma dirender saat cart non-kosong,
+  /// lihat `bottomNavigationBar: cart.isEmpty ? null : ...` di parent).
+  /// `ensureReservedLocalId` sendiri no-op kalau sudah punya nomor/sedang
+  /// reserve, aman dipanggil ulang tiap build.
+  void _ensureReserved(WidgetRef ref) {
+    final device = ref.read(deviceProvider);
+    final db = ref.read(databaseProvider);
+    ref
+        .read(cartMetaProvider(cartId).notifier)
+        .ensureReservedLocalId(() => db.reserveLocalId(device.deviceCode));
+  }
 
   Future<void> _pickCustomer(BuildContext context, WidgetRef ref) async {
     final meta = ref.read(cartMetaProvider(cartId));
@@ -3407,6 +3461,12 @@ class _CartMetaTab extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final meta = ref.watch(cartMetaProvider(cartId));
     final notifier = ref.read(cartMetaProvider(cartId).notifier);
+    // Item 56 — pegawai TANPA izin `terima_pembayaran` tidak dapat segmen
+    // Bayar sama sekali (tombol utamanya di cart sheet sudah jadi "Kirim ke
+    // Owner/Asisten" — lihat cart_sheet.dart). Owner/asisten/pegawai
+    // berizin selalu dapat.
+    final needsGate = ref.watch(needsPaymentGateProvider).valueOrNull ?? false;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureReserved(ref));
     const slant = 14.0;
 
     return Transform.translate(
@@ -3463,6 +3523,37 @@ class _CartMetaTab extends ConsumerWidget {
                   ),
                 ),
               ),
+              // Item 56 — segmen "Bayar" terracotta, menempel setelah Tahan
+              // (Varian A) — tap langsung ke layar bayar (`/kasir/bayar`),
+              // TANPA lewat sheet keranjang dulu (checkout cepat).
+              if (!needsGate) ...[
+                const SizedBox(width: 4),
+                InkWell(
+                  onTap: onBayar,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.payments_outlined,
+                            size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text('Bayar',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -3747,15 +3838,34 @@ class _HeldCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              order.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                // Item 55 — nomor nota (di-reserve sejak keranjang diisi/
+                // ditahan), sama dgn yg tampil di cart bar.
+                if (parsed.meta.displayOrderNumber != null) ...[
+                  const SizedBox(width: 4),
+                  Text('#${parsed.meta.displayOrderNumber}',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurfaceVariant)),
+                ],
+              ],
             ),
             const SizedBox(height: 2),
             Text(
-              isHandoff ? '$itemCount item · siap dibayarkan' : '$itemCount item · $time',
+              isHandoff
+                  ? '$itemCount item · siap dibayarkan'
+                  : '$itemCount item · $time',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
