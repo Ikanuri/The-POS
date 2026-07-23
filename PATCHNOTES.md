@@ -11,6 +11,28 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 23 Juli 2026
 
 ### ✨ Fitur Baru
+- **Tombol Bayar baru di keranjang (cart bar)** — sekarang ada tombol "Bayar"
+  warna terracotta di samping tombol "Tahan", langsung membuka layar
+  Pembayaran (tidak perlu buka keranjang dulu). Tombol ini hanya muncul
+  untuk owner, asisten, dan pegawai yang memang diberi izin menerima
+  pembayaran.
+- **Transfer transaksi lewat QR, kini bebas dipakai owner/asisten/pegawai
+  berizin** — bukan cuma pegawai tanpa izin menerima pembayaran. Di
+  keranjang, ada ikon baru (QR + panah) di sebelah tombol kosongkan untuk
+  mengirim seluruh isi keranjang ke perangkat lain lewat QR — berguna kalau
+  satu kasir belum bisa memproses transaksi dan perlu melempar ke kasir
+  lain. Tombol "Kosongkan" sekarang berbentuk ikon tempat sampah (konfirmasi
+  tetap ada sebelum benar-benar mengosongkan).
+- **Nomor nota (mis. #17) sekarang tampil dari awal** — begitu barang
+  pertama masuk keranjang, nomor notanya langsung ditetapkan dan tampil di
+  cart bar serta di kartu pesanan yang ditahan. Nomor ini tidak berubah-ubah
+  lagi sampai transaksi selesai, termasuk kalau transaksinya ditransfer ke
+  perangkat lain lewat QR.
+- **Transfer QR sekarang ikut membawa data pelanggan** — kalau transaksi
+  yang ditransfer sudah punya pelanggan terpilih (bukan "Umum"), perangkat
+  penerima otomatis mengenali pelanggan yang sama (kalau datanya sudah
+  tersinkron), jadi tidak perlu pilih ulang manual.
+
 - **Satu produk sekarang bisa ada di lebih dari satu kategori.** Di layar
   Kelola Kategori, ketuk nama kategori untuk membuka daftar produk — centang
   produk yang mau dimasukkan ke kategori itu, langsung tersimpan seketika
@@ -22,6 +44,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   bilah pencarian — ketuk untuk memfilter produk sesuai kategori itu, ketuk
   lagi untuk menampilkan semua produk kembali. Urutan tombol kategori bisa
   diatur sendiri: tekan agak lama lalu geser ke posisi yang diinginkan.
+
+### 🛠️ Perbaikan
+- Sheet "Tempel Pesanan" di Kasir — tombol konfirmasinya sempat tertutup
+  keyboard saat mengetik, sekarang selalu terlihat penuh.
 
 ---
 
