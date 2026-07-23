@@ -486,6 +486,61 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 
 ---
 
+## Item 52 — Bulk assign produk ke kategori (23 Juli, BELUM didesain detail — user tandai "luput dari rencana")
+
+**Konteks & klarifikasi penting**: BUKAN "Tambah Massal" kategori yang
+SUDAH ADA di `product_group_screen.dart` (tombol ikon `playlist_add` di
+AppBar, buka dialog textarea "satu kategori per baris" → panggil
+`db.addProductGroups(names)`) — itu fitur bikin BANYAK NAMA kategori
+baru sekaligus, sudah selesai & tidak berubah. Yang dimaksud user beda
+arah total: **assign BANYAK PRODUK ke SATU kategori sekaligus.**
+
+**Alur yang diminta**: dari layar Kelola Kategori, **tap** sebuah
+kategori (BUKAN long-press — long-press SUDAH dipakai utk masuk mode
+pilih-kategori-utk-hapus, `_enterSelection`/`_toggleSelected` di
+`product_group_screen.dart` baris ~24-47) → buka layar/sheet pemilihan
+PRODUK dengan multi-select (checklist, bisa pilih lebih dari 1) → produk
+yang dicentang di-assign `product_group_id` = kategori yang tadi
+ditap, disimpan sekaligus.
+
+**Konfirmasi gap nyata (dicek di kode)**: assignment kategori SAAT INI
+cuma bisa satu-satu, lewat `DropdownButtonFormField<int?>` di form Edit
+Produk (`produk_form_screen.dart` baris ~664-692, field "Kategori") —
+tidak ada jalur bulk-assign produk→kategori di mana pun. `product_group_
+screen.dart`'s `onTap` utk item kategori (baris ~313-314) saat ini CUMA
+aktif dalam `_selectionMode` (toggle select-utk-hapus) — di luar itu,
+tap kategori TIDAK melakukan apa-apa.
+
+**Yang perlu didesain/diputuskan sebelum implementasi (belum ditanya
+user)**:
+1. **Komponen picker produk multi-select BELUM ADA** di app ini sama
+   sekali (tidak ada widget serupa yg bisa langsung dipakai ulang) — perlu
+   dibangun baru: search bar + checklist, kemungkinan mirip pola
+   selection-mode `product_group_screen.dart` tapi utk daftar produk
+   (yang jumlahnya bisa ribuan — WAJIB ada search/filter, jangan daftar
+   polos tanpa filter kayak dialog "Tambah Massal" kategori).
+2. **Produk yang SUDAH punya kategori lain** — apakah ikut ditampilkan di
+   picker (lalu kategorinya DITIMPA kalau dicentang), atau picker cuma
+   tampilkan produk "Tanpa Kategori"? Perlu keputusan UX eksplisit dari
+   user, bukan diasumsikan.
+3. **DB method baru dibutuhkan**: sesuatu spt `assignProductsToGroup(List<
+   String> productIds, int groupId)` (batch UPDATE `products.product_
+   group_id`, 1 query bukan loop per-produk) — belum ada sama sekali.
+   **Ingat gotcha CLAUDE.md**: kalau nanti fungsi ini ditulis via raw SQL
+   (`customUpdate`), WAJIB sertakan param `updates: {products}` (baru saja
+   jadi sumber bug 2x sesi ini) DAN cap ulang `updated_at` tiap baris yang
+   di-assign (supaya perubahan kategori ikut ke klien lain saat sync,
+   pelajaran yang sama dari bug `deactivateProduct`).
+4. Entry point: apakah HANYA dari layar Kelola Kategori (tap kategori →
+   picker), atau juga sebaliknya (dari daftar produk, pilih banyak
+   produk → assign ke kategori)? User cuma sebut arah pertama.
+
+**Belum ada implementasi apa pun** — dicatat murni supaya tidak hilang
+dari rencana (permintaan eksplisit user), tunggu klarifikasi poin 2 & 4
+di atas sebelum mulai desain UI/DB.
+
+---
+
 **Item lain yang masih terbuka:**
 1. **Item 47** (pengeluaran tidak ikut ekspor PDF/Excel Laporan) & **Item
    48** (avatar produk kasir jadi soft/pastel) — user setuju, siap
@@ -509,3 +564,6 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 8. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
+9. **Item 52** (bulk assign produk ke kategori) — belum didesain detail,
+   tunggu klarifikasi UX (produk yg sudah py kategori lain ikut
+   ditawarkan? entry point cuma dari layar Kategori?). Detail di atas.
