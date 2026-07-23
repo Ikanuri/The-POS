@@ -1288,6 +1288,24 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Item 52 — bulk assign banyak produk ke satu kategori sekaligus (dari
+  /// layar Kelola Kategori: tap kategori → pilih produk). Produk yang
+  /// SUDAH punya kategori lain BOLEH ikut dipilih & ditimpa (keputusan
+  /// user eksplisit, bukan dibatasi ke "Tanpa Kategori" saja). `updatedAt`
+  /// WAJIB dicap ulang — pola sama spt `deactivateProduct` (lihat gotcha
+  /// CLAUDE.md) — supaya perpindahan kategori ikut tersinkron ke klien
+  /// lain, bukan cuma diam di DB lokal.
+  Future<void> assignProductsToGroup(
+      List<String> productIds, int groupId) async {
+    if (productIds.isEmpty) return;
+    await (update(products)..where((t) => t.id.isIn(productIds))).write(
+      ProductsCompanion(
+        productGroupId: Value(groupId),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   Future<int> countProductsInGroup(int groupId) async {
     final row = await customSelect(
       'SELECT COUNT(*) as cnt FROM products '

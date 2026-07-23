@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
@@ -199,6 +200,18 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
     if (mounted) showSuccess('Nama diperbarui');
   }
 
+  /// Item 52 — tap kategori (di luar mode pilih-utk-hapus) buka layar
+  /// pilih produk multi-select, produk terpilih ditugaskan ke kategori ini.
+  Future<void> _openAssignProducts(ProductGroup group) async {
+    final assigned = await context.push<int>(
+      '/produk/kategori/${group.id}/pilih-produk',
+      extra: group.name ?? '',
+    );
+    if (assigned != null && assigned > 0 && mounted) {
+      showSuccess('$assigned produk dipindahkan ke "${group.name}"');
+    }
+  }
+
   Future<void> _confirmDelete(ProductGroup group) async {
     final db = ref.read(databaseProvider);
     final count = await db.countProductsInGroup(group.id);
@@ -310,8 +323,9 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
                       onLongPress: _selectionMode
                           ? null
                           : () => _enterSelection(g.id),
-                      onTap:
-                          _selectionMode ? () => _toggleSelected(g.id) : null,
+                      onTap: _selectionMode
+                          ? () => _toggleSelected(g.id)
+                          : () => _openAssignProducts(g),
                       leading: _selectionMode
                           ? Checkbox(
                               value: selected,

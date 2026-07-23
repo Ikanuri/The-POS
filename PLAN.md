@@ -486,6 +486,21 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 
 ---
 
+**Item 53 (ditemukan tak sengaja, BUKAN diminta user, belum dikerjakan)**:
+`deleteProductGroup` (`app_database.dart`, dipakai hapus kategori) men-set
+`products.product_group_id = null` via typed update TAPI TIDAK mencap
+ulang `updated_at` — pola bug SAMA PERSIS yang baru diperbaiki 2x sesi 22
+Juli (`deactivateProduct`, `applyProductProposals`, lihat gotcha
+CLAUDE.md). Efeknya: kalau kategori dihapus di owner, produk yang jadi
+"Tanpa Kategori" mungkin TIDAK PERNAH ikut terkirim ke klien yang
+watermark-nya sudah lewat dari edit terakhir produk itu. Belum
+dikonfirmasi via test (baru ketemu baca kode saat implementasi Item 52),
+belum ada laporan user — dicatat murni supaya tidak hilang, fix-nya
+identik pola Item 14 (`ProductsCompanion(productGroupId: Value(null),
+updatedAt: Value(DateTime.now()))`).
+
+---
+
 **Item lain yang masih terbuka:**
 1. **Item 47** (pengeluaran tidak ikut ekspor PDF/Excel Laporan) & **Item
    48** (avatar produk kasir jadi soft/pastel) — user setuju, siap
@@ -509,3 +524,5 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 8. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
+9. **Item 53** (`deleteProductGroup` tidak mencap ulang `updated_at`) —
+   ditemukan tak sengaja, belum dikerjakan. Detail di atas.

@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-23
+
+- `1ce4ef1` — feat: bulk assign produk ke kategori (Item 52) — dari layar Kelola Kategori, tap kategori (di luar mode pilih-utk-hapus) buka `CategoryAssignProductsScreen` baru: cari & pilih banyak produk sekaligus, Terapkan menugaskan semuanya ke kategori itu; produk yang sudah punya kategori lain tetap muncul & boleh ditimpa (keputusan eksplisit user); DB: `assignProductsToGroup` (typed update massal + cap ulang `updated_at`, pola sama spt `deactivateProduct`); route baru `/produk/kategori/:id/pilih-produk`; test baru `category_assign_products_test.dart` (DB-tier) & `category_assign_products_nav_test.dart` (end-to-end via routerProvider asli), keduanya revert-verified
+
 ## 2026-07-22
 
 - `4aea663` — fix: `mergeRows` (jalur sync) menulis via raw `customInsert`/`customStatement` TANPA param `updates:` — Drift tidak tahu tabel `products`/dll berubah, jadi `StreamProvider`/`.watch()` (`watchProducts()` di `produk_list_screen.dart` & katalog `kasir_screen.dart`) tidak auto-refresh, data DB klien sudah benar tapi UI terlihat "tidak berubah" sampai dipaksa reload manual; pola bug & fix ini sudah ada & terdokumentasi di `restoreFromDump` (param `updates:`), cuma belum pernah diterapkan ke `mergeRows`; fix: resolve `TableInfo` dari nama tabel string, thread `updates: {table}` ke INSERT utama & DELETE dedup `price_tiers`; test baru `product_deactivate_sync_reactive_test.dart` mendengarkan `watchProducts()` STREAM LIVE (bukan one-shot spt test sebelumnya, yang tidak menangkap kelas bug ini)

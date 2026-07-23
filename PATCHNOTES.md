@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 23 Juli 2026
+
+### ✨ Fitur Baru
+- **Pindah banyak produk sekaligus ke satu kategori.** Di layar Kelola
+  Kategori, sekarang tinggal ketuk nama kategorinya untuk membuka daftar
+  produk — centang produk yang mau dipindahkan (boleh lebih dari satu
+  sekaligus, termasuk produk yang sebelumnya sudah punya kategori lain),
+  lalu ketuk "Terapkan". Tidak perlu lagi buka form tiap produk satu-satu.
+
+---
+
 ## 22 Juli 2026
 
 ### ✨ Fitur Baru
