@@ -1376,9 +1376,23 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Nonaktifkan produk (soft-delete — TIDAK PERNAH ada hard-delete utk
+  /// produk di app ini). `updatedAt` WAJIB dicap ulang: `dumpSince` (host→
+  /// klien) memfilter tabel `products` dgn `WHERE updated_at >= since` —
+  /// tanpa ini, baris yang `updated_at`-nya sudah lama (dari kapan produk
+  /// itu terakhir diedit) TIDAK PERNAH lagi ikut terkirim ke klien yang
+  /// watermark-nya sudah lewat dari situ, sehingga nonaktif produk di owner
+  /// tidak PERNAH sampai ke klien (produk "hantu" tetap muncul selamanya
+  /// di HP kasir/asisten). Pola sama persis dgn `deleteVariant` (yang sudah
+  /// benar) dan akar masalah yang sama dgn bug `applyProductProposals` —
+  /// lihat `proposal_apply_updated_at_test.dart`.
   Future<void> deactivateProduct(String productId) => transaction(() async {
-        await (update(products)..where((t) => t.id.equals(productId)))
-            .write(const ProductsCompanion(isActive: Value(false)));
+        await (update(products)..where((t) => t.id.equals(productId))).write(
+          ProductsCompanion(
+            isActive: const Value(false),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
         await _releaseBarcodesForProduct(productId);
       });
 
