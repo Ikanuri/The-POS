@@ -32,6 +32,7 @@ import '../../features/produk/cek_stok_screen.dart';
 import '../../features/produk/stock_opname_screen.dart';
 import '../../features/produk/price_preview_screen.dart';
 import '../../features/produk/price_sync_screen.dart';
+import '../../features/produk/category_assign_products_screen.dart';
 import '../../features/produk/product_group_screen.dart';
 import '../../features/produk/catalog/catalog_list_screen.dart';
 import '../../features/produk/produk_form_screen.dart';
@@ -148,6 +149,15 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'kategori',
                 builder: (_, __) => const ProductGroupScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id/pilih-produk',
+                    builder: (_, state) => CategoryAssignProductsScreen(
+                      groupId: int.parse(state.pathParameters['id']!),
+                      groupName: state.extra as String? ?? '',
+                    ),
+                  ),
+                ],
               ),
               GoRoute(
                 path: 'katalog',
