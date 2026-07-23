@@ -10,6 +10,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/product_providers.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/utils/internal_barcode.dart';
 import '../../core/widgets/inline_banner.dart';
 
 /// Buka dialog scanner kamera untuk mengisi field barcode secara otomatis.
@@ -556,6 +557,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
               : 'Tambah Produk'),
           actions: [
+            if (_isEdit)
+              IconButton(
+                icon: const Icon(Icons.qr_code_2_outlined),
+                tooltip: 'Barcode & Cetak Label',
+                onPressed: () =>
+                    context.push('/produk/$_productId/barcode'),
+              ),
             if (_isEdit && !_readOnly)
               IconButton(
                 icon: const Icon(Icons.delete_outline),
@@ -757,6 +765,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                 onAdjustStock: () =>
                                     _adjustStockDialog(unitId, unitLabel),
                                 autofocusFirstField: unitId == _justAddedUnitId,
+                                onGenerateBarcode: _readOnly
+                                    ? null
+                                    : () => generateInternalBarcode(
+                                        ref.read(databaseProvider)),
                                 onChanged: _readOnly
                                     ? (_) {}
                                     : (updated) {
@@ -1314,6 +1326,7 @@ class _UnitCard extends StatefulWidget {
     this.loadStock,
     this.onAdjustStock,
     this.autofocusFirstField = false,
+    this.onGenerateBarcode,
   });
 
   final _UnitEntry entry;
@@ -1323,6 +1336,10 @@ class _UnitCard extends StatefulWidget {
   final bool readOnly;
   final ValueChanged<_UnitEntry> onChanged;
   final VoidCallback onRemove;
+
+  /// Item 51 — generate barcode internal (EAN-13 prefix 29) langsung dari
+  /// field input, tanpa perlu ke layar Barcode terpisah.
+  final Future<String> Function()? onGenerateBarcode;
 
   /// Tampilkan baris stok (hanya untuk satuan yang sudah tersimpan).
   final bool showStock;
@@ -1707,18 +1724,40 @@ class _UnitCardState extends State<_UnitCard> {
                       isDense: true,
                       suffixIcon: widget.readOnly
                           ? null
-                          : IconButton(
-                              icon: const Icon(Icons.qr_code_scanner, size: 18),
-                              visualDensity: VisualDensity.compact,
-                              tooltip: 'Scan barcode',
-                              onPressed: () async {
-                                final bc = await _scanBarcodeDialog(context);
-                                if (bc != null && mounted) {
-                                  _barcodeCtrl.text = bc;
-                                  widget.onChanged(
-                                      widget.entry.copyWith(barcode: bc));
-                                }
-                              },
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.onGenerateBarcode != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.qr_code_2_outlined,
+                                        size: 18),
+                                    visualDensity: VisualDensity.compact,
+                                    tooltip: 'Generate barcode',
+                                    onPressed: () async {
+                                      final bc =
+                                          await widget.onGenerateBarcode!();
+                                      if (mounted) {
+                                        _barcodeCtrl.text = bc;
+                                        widget.onChanged(widget.entry
+                                            .copyWith(barcode: bc));
+                                      }
+                                    },
+                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.qr_code_scanner,
+                                      size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  tooltip: 'Scan barcode',
+                                  onPressed: () async {
+                                    final bc = await _scanBarcodeDialog(context);
+                                    if (bc != null && mounted) {
+                                      _barcodeCtrl.text = bc;
+                                      widget.onChanged(
+                                          widget.entry.copyWith(barcode: bc));
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                     ),
                     onChanged: widget.readOnly

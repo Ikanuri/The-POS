@@ -24,12 +24,28 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Harga — untuk toko cabang yang tidak selalu satu WiFi dengan toko
   induk. Cara simpan/bagikannya sama seperti fitur Backup (bisa
   langsung share atau simpan ke perangkat).
+- **Generate Barcode & Cetak Label** — produk yang belum punya barcode
+  sama sekali (misalnya Telur/Kg yang dijual tanpa kemasan) sekarang
+  bisa dibuatkan barcode otomatis langsung dari field Barcode di form
+  Edit Produk (tombol di sebelah tombol Scan), lalu dicetak jadi label
+  (nama, satuan, harga, barcode) dari layar Barcode produk lewat
+  printer thermal yang sudah terpasang di toko — tidak perlu alat
+  tambahan.
 
 ### 🛠️ Perbaikan
 - Pencocokan produk "mirip nama" (fuzzy) yang kadang salah cocokkan
   produk berbeda varian (misalnya ukuran berbeda) sudah dihapus —
   sekarang hanya mencocokkan barcode, kode produk, atau nama+satuan
   yang benar-benar persis, sisanya diminta konfirmasi manual owner.
+- **Produk yang dinonaktifkan owner sekarang benar-benar ikut hilang
+  dari HP kasir/asisten setelah sync** — sebelumnya produk yang sudah
+  dinonaktifkan (mis. sudah tidak dijual lagi) bisa tetap muncul
+  selamanya di perangkat lain walau sudah tidak aktif di perangkat
+  owner.
+- **Cetak label sekarang selalu tampilkan kode batang**, apa pun format
+  barcode produknya — sebelumnya barcode yang bukan format standar
+  13-digit (banyak dipakai utk produk non-barcode resmi spt Telur/Kg)
+  bisa gagal tampilkan kode batang sama sekali di label cetak.
 
 ## 21 Juli 2026
 

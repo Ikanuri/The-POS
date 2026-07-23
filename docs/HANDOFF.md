@@ -4,6 +4,313 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (bugfix KEDUA/akar sebenarnya: UI klien tidak
+auto-refresh setelah sync, PR #35, commit `4aea663`, Task #16 di task
+manager — SELESAI) — user lapor lanjutan setelah fix Task #14 (cap ulang
+`updated_at` di `deactivateProduct`): "Produk di sisi client tetap tidak
+terhapus." Fix Task #14 SUDAH BENAR & tetap perlu (data di DB klien
+memang jadi benar `isActive=false` setelah sync — dibuktikan test
+`product_deactivate_sync_test.dart` yg pakai `searchProducts()` one-shot),
+TAPI ada bug KEDUA yang independen: `mergeRows` (dipakai jalur sync
+KLIEN menerima data dari host) menulis via raw SQL `customInsert`/
+`customStatement` TANPA parameter `updates:` — Drift TIDAK TAHU tabel
+`products` (atau tabel master lain) berubah, sehingga `StreamProvider`/
+`.watch()` yang SEDANG BERJALAN (`watchProducts()`, dipakai
+`produk_list_screen.dart` DAN katalog `kasir_screen.dart`) TIDAK
+auto-refresh — data SUDAH benar di DB, tapi UI klien tetap terlihat
+"tidak berubah" sampai dipaksa reload manual (restart app, dll). Persis
+gejala yang dilaporkan user.
+
+**Pola bug & fix-nya SUDAH ADA & terdokumentasi** di `restoreFromDump`
+(param `updates:` Drift, ditambahkan sesi jauh sebelumnya utk kasus
+restore backup) — cuma belum pernah diterapkan ke `mergeRows` (jalur
+sync, path kode BERBEDA dari restore backup meski konsepnya identik).
+Ini contoh nyata lain dari pola "pola serupa lintas file" yang dibahas
+di diskusi Disiplin Rilis Profesional — kalau nanti ada laporan mirip
+utk tabel LAIN yang di-`mergeRows` (customers, price_tiers, dll), curigai
+dulu titik yang sama sebelum investigasi dari nol (walau fix sesi ini
+SUDAH mencakup SEMUA tabel yang lewat `mergeRows`, bukan cuma `products`
+— perbaikannya generik, resolve `TableInfo` dari nama tabel string).
+
+**Fix**: `mergeRows` sekarang resolve `TableInfo` dari nama tabel string
+(`{for (final t in allTables) t.entityName: t}[tableName]`), thread
+`updates: {table}` ke 2 titik tulis: INSERT OR REPLACE/IGNORE utama, dan
+DELETE dedup `price_tiers` (dikonversi dari `customStatement` — TIDAK
+mendukung param `updates:` — ke `customUpdate` dgn `updateKind: UpdateKind.
+delete`, pola sama persis `restoreFromDump`).
+
+**Test baru & KENAPA test lama tidak menangkap bug ini**: `product_
+deactivate_sync_test.dart` (Task #14) pakai `searchProducts()` — Future
+ONE-SHOT yang SELALU query ulang dari DB fresh, jadi TIDAK PERNAH bisa
+mendeteksi bug reaktivitas-stream apa pun (query baru otomatis dapat
+data benar terlepas dari apakah Drift "tahu" ada perubahan atau tidak).
+Test baru `product_deactivate_sync_reactive_test.dart` genuinely
+mendengarkan `db.watchProducts()` (Stream LIVE, persis yang dipakai
+screen sungguhan) via `.listen()`, hitung jumlah emission SEBELUM &
+SESUDAH `mergeRows`, assert bertambah (stream benar² re-emit sendiri)
+DAN assert produk hilang dari emission terbaru. Revert-verify: hapus
+param `updates:` dari INSERT utama → gagal persis `Expected: a value
+greater than <1>, Actual: <1>` (stream TIDAK re-emit sama sekali) →
+restore, hijau lagi. **Pelajaran metodologi**: kalau bug soal
+"UI tidak update setelah operasi background/sync", WAJIB test level
+STREAM/reactive langsung, bukan cuma one-shot query — one-shot query
+API yang sama bisa 100% benar sementara reactive layer di atasnya tetap
+rusak, dua lapis yang harus dites terpisah.
+
+Full `flutter test` **629 test, 1 gagal (stock_opname_screen_test.dart,
+pra-ada & tak terkait, dikonfirmasi ulang persis pola sesi sebelumnya)**,
+`flutter analyze` bersih.
+
+_Update sesi 22 Juli 2026 (bugfix: label cetak tidak tampilkan kode
+batang, PR #35, commit `e66cfd2`, Task #15 di task manager — SELESAI) —
+user coba cetak label produk barcode `33669342` (8 digit — sama persis
+barcode "Telur/Kg" yg muncul di analisis perbandingan induk-cabang
+sesi sebelumnya) & lapor kode batangnya tidak muncul. **Akar masalah**:
+`PrinterService._buildLabelBytes` (fitur Cetak Label, Task #11) cuma
+menggambar barcode grafis via command EAN-13 native printer kalau
+barcode PERSIS 12/13 digit numerik — apa pun format lain (termasuk 8-
+digit "asal tempel angka" yg justru MAYORITAS di toko ini, bukan kasus
+langka) jatuh ke fallback teks polos TANPA grafis kode batang sama
+sekali, cuma angkanya dicetak sbg teks. **Fix**: tambah fallback
+`Barcode.code128('{B$barcode'.split(''))` (CODE128 subset B, dukung
+numerik/alfanumerik panjang berapa pun, prefix `{B` sesuai spek
+`esc_pos_utils_plus`) utk barcode non-EAN13 — barcode kosong (belum
+ada) TETAP fallback teks polos (guard `barcode.isNotEmpty`, bukan crash).
+
+**Verifikasi**: smoke test throwaway (dibuat, dijalankan via `flutter
+test`, lalu DIHAPUS setelah lolos — pola yg sudah dipakai sesi² lalu utk
+probe test) membuktikan `Barcode.code128` tidak `throw` utk barcode
+8-digit yg dilaporkan user. TIDAK ada test persisten baru ditambahkan
+utk fungsi ini — `_buildLabelBytes` private, tanpa seam byte-level utk
+introspeksi tipe barcode yg dipilih tanpa decode binary ESC/POS penuh,
+konsisten dgn keputusan sesi² sebelumnya utk builder ESC/POS lain (mis.
+`_buildBytes` struk) yg juga TANPA test byte-level krn alasan sama.
+**BELUM bisa diverifikasi visual di printer fisik** (sama keterbatasan
+Task #11) — kalau dicoba & CODE128-nya ternyata tidak terbaca scanner
+tertentu (beberapa printer/scanner lawas kadang cuma dukung EAN/UPC,
+bukan CODE128), kabari — opsi lanjut: cek dukungan CODE128 di model
+printer spesifik user, atau pertimbangkan symbology lain (Code39) sbg
+fallback kedua.
+
+Full `flutter test` **629 hijau, 0 gagal**, `flutter analyze` bersih.
+
+_Update sesi 22 Juli 2026 (bugfix: produk nonaktif tidak sampai ke klien
+saat sync, PR #35, commit `7f20d38`, Task #14 di task manager — SELESAI)
+— user tanya: "kalau owner nonaktifkan produk, apakah ikut hilang di
+klien saat sync? Kalau tidak, buatkan seperti itu." **Jawaban: app ini
+tidak punya hard-delete produk sama sekali** — "menghapus" SELALU berarti
+soft-delete via `isActive=false` (tombol "Nonaktifkan"), dan protokol
+sync `products` SUDAH dirancang utk kasus ini persis (delta incremental
+via watermark `updated_at` + last-write-wins di `mergeRows`, semua query
+daftar produk klien — `searchProducts`/`watchProducts`/dll — sudah
+filter `isActive=true`). **TAPI ketemu bug nyata** saat verifikasi: fungsi
+`deactivateProduct` TIDAK PERNAH mencap ulang `updated_at` saat men-set
+`isActive=false` (beda dari `deleteVariant` yang sudah benar) — karena
+`dumpSince` (host→klien) filter tabel `products` dgn `WHERE updated_at
+>= since`, baris yang `updated_at`-nya basi (dari kapan produk itu
+TERAKHIR DIEDIT, bukan kapan dinonaktifkan) TIDAK PERNAH lagi ikut
+terkirim ke klien yang watermark download-nya sudah lewat dari situ —
+nonaktifnya produk di owner tidak pernah sampai ke HP kasir/asisten,
+produk jadi "hantu" yang tetap muncul selamanya di sana. **Akar masalah
+identik** dgn bug `applyProductProposals` yang sudah pernah diperbaiki
+sesi sebelumnya (lihat `proposal_apply_updated_at_test.dart`) — pola
+bug yang sama muncul lagi di lokasi berbeda, persis skenario yang
+dibahas di diskusi "Disiplin Rilis Profesional" (poin 1: cari pola
+serupa lintas file sebelum menutup bug) sesi sebelumnya.
+
+**Fix**: `deactivateProduct` sekarang mencap `updatedAt: Value(DateTime.
+now())`, sama persis pola yang sudah benar di `deleteVariant`. Perubahan
+1 baris + 1 field tambahan di companion write, TIDAK ada perubahan
+skema/protokol sync sama sekali — desain sync yang sudah ada MEMANG
+cukup, cuma implementasinya bocor di 1 titik ini.
+
+**Catatan A.10 di PLAN.md/HANDOFF lama** ("master data tanpa tombstone —
+penghapusan produk/tier/pelanggan di owner tidak pernah menghapus di
+klien") SEBAGIAN terjawab oleh temuan ini — utk PRODUK, ternyata bukan
+soal desain tombstone yang belum ada, tapi bug implementasi sempit yang
+sudah diperbaiki. Belum diverifikasi apakah pola bug SAMA (lupa cap
+`updated_at` saat soft-delete) juga ada di `customers` (pelanggan, tabel
+lain yang jg pakai watermark `updated_at` incremental) — kalau ada
+laporan "pelanggan yang dihapus owner masih muncul di klien", cek dulu
+`deactivateCustomer`-style function di `app_database.dart` sebelum
+investigasi dari nol.
+
+**Test baru** (revert-verify: kedua test dibuktikan gagal PERSIS sesuai
+skenario tanpa fix — `Expected: true, Actual: false` utk cap waktu,
+produk hilang dari dump kedua & tetap muncul di daftar aktif klien —
+lalu hijau lagi setelah fix): `test/product_deactivate_sync_test.dart`
+— (1) unit-level: `updated_at` dicap ke saat nonaktifkan & baris tetap
+ikut `dumpSince` berikutnya meski watermark sudah lewat dari edit lama;
+(2) end-to-end SUNGGUHAN 2 instance `AppDatabase` (host+klien terpisah)
+lewat `dumpSince`+`mergeRows` langsung (bukan simulasi payload manual)
+— produk benar² hilang dari `searchProducts()` klien setelah sync kedua.
+
+**Full-suite run menemukan 1 kegagalan tak terkait** (`stock_opname_
+screen_test.dart`, assertion `Expected: 7, Actual: 10.0` di baris 71) —
+**dikonfirmasi ulang PRA-ADA & tak terkait sesi ini** via `git stash`
+fix ini lalu re-run di tree bersih: GAGAL IDENTIK tanpa fix sama sekali
+di tree — bukti pasti bukan regresi dari perubahan sesi ini (metodologi
+lebih ketat dari sekadar "run terisolasi hijau" yg dipakai sesi² lalu
+utk kelas flaky yang sama; kali ini malah gagal konsisten baik
+sendirian maupun full-suite, bukan cuma "kadang gagal di full-suite").
+Full `flutter test` **627 test, 1 gagal (pra-ada, dikonfirmasi)**,
+`flutter analyze` bersih.
+
+_Update sesi 22 Juli 2026 (follow-up 2 penyesuaian fitur barcode, PR #35,
+commit `005c68b`, Task #13 di task manager — SELESAI, lanjutan langsung
+dari Task #11/#12 di bawah) — user koreksi 2 hal setelah fitur Generate
+Barcode + Cetak Label selesai: (1) "generate barcode" yang dimaksud
+BUKAN di layar Barcode/label terpisah, tapi LANGSUNG di field input
+Barcode pada form Edit Produk (per satuan) — supaya owner bisa isi
+barcode tanpa keluar dari form yang sedang dikerjakan; (2) font nama
+produk di label cetak kurang besar — diminta dibuat mendekati (sedikit
+lebih kecil dari) ukuran baris "Total" di struk cetak.
+
+**Fix #1**: tombol "Generate Barcode" DIHAPUS TOTAL dari `barcode_screen.
+dart` (termasuk method `_generateBarcode`, import `internal_barcode.dart`/
+`uuid`/`Value` yg jadi tak terpakai) — layar itu sekarang MURNI utk cetak
+label satuan yang SUDAH punya barcode; satuan kosong cuma tampil teks
+info "Belum ada barcode... isi/generate lewat field Barcode di form Edit
+Produk", tanpa tombol aksi apa pun. Tombol Generate yang BARU ditaruh di
+`_UnitCard` (`produk_form_screen.dart`, kartu satuan form) — `suffixIcon`
+field Barcode diubah dari 1 `IconButton` (Scan) jadi `Row` 2 ikon
+(Generate + Scan berdampingan). Param baru `onGenerateBarcode: Future<
+String> Function()?` di-inject dari parent `_ProdukFormScreenState`
+(pola SAMA persis dgn `loadStock` yang sudah ada — `_UnitCard` sendiri
+TETAP `StatefulWidget` biasa tanpa Riverpod, callback yang bawa akses
+`ref.read(databaseProvider)` dari parent) memanggil `generateInternalBarcode`
+yang SAMA (tidak ada logic baru, cuma pindah lokasi pemanggilan UI).
+
+**Fix #2**: `PrinterService._buildLabelBytes` — nama produk sekarang
+`PosStyles(bold: true, height: PosTextSize.size2)` (tinggi 2x, LEBAR
+tetap normal) — dipilih SENGAJA beda dari baris Total struk yang pakai
+`height+width` 2x SEKALIGUS (`wideNominal()`), krn user eksplisit minta
+"agak kecil sedikit" dari itu. Lebar TETAP normal (bukan 2x) supaya nama
+produk panjang (mis. "Kanji Suji 25 kg") tidak makin gampang overflow —
+lebar 2x akan memotong budget karakter jadi cuma ~16 char di kertas
+58mm. **BELUM bisa diverifikasi visual di printer fisik** (sama
+keterbatasan spt catatan Task #11 sebelumnya) — kalau user coba cetak &
+masih terasa kurang besar, opsi lanjut: naikkan ke `height: size3` (3x)
+tetap tanpa lebar 2x, ATAU baru pertimbangkan lebar 2x kalau nama produk
+di toko itu rata-rata pendek.
+
+**Bug regresi ketemu & diperbaiki dari perubahan Fix #1** (WAJIB full-suite
+run yang menemukannya, bukan cuma file baru — persis alasan CLAUDE.md
+mewajibkan full run): `test/produk_form_barcode_nav_test.dart` (test
+Task #12, dibuat SEBELUM Fix #1) asersi terakhirnya `find.text('Generate
+Barcode')` di dalam `BarcodeScreen` — begitu tombol itu dihapus dari
+layar itu, assertion itu otomatis basi & gagal. Diperbaiki: ganti jadi
+cek teks info arahan yang baru.
+
+**Test baru/diperbarui** (semua revert-verified): `test/barcode_screen_
+generate_test.dart` ditulis ULANG total (skenario tombol Generate lama
+dihapus, sekarang 2 test: satuan kosong cuma info-teks tanpa tombol aksi;
+satuan yg SUDAH py barcode — di-seed langsung ke DB, BUKAN via UI lagi —
+tampilkan tombol Cetak Label & alur cetak-tanpa-printer sama spt
+sebelumnya), `test/produk_form_barcode_generate_test.dart` (baru — tap
+tombol Generate di field form → `TextFormField.controller.text` terisi
+kode EAN-13 prefix 29, dicari via `find.ancestor(of: find.byTooltip(...),
+matching: find.byType(TextFormField))` krn `TextFormField` tidak expose
+`decoration` sbg field publik, cuma `controller`). Full `flutter test`
+**627 hijau, 0 gagal**, `flutter analyze` bersih.
+
+_Update sesi 22 Juli 2026 (fitur baru: generator barcode + cetak label,
+PR #35, commit `c818324`, Task #11 di task manager — SELESAI) — lanjutan
+diskusi perbandingan barcode induk-cabang (lihat entri di bawah): user
+minta 2 fitur baru — (1) generator barcode utk kolom barcode kosong,
+gampang dibaca scanner & tidak bentrok dgn barcode yg sudah ada, (2) opsi
+cetak label per satuan/varian (nama + satuan/varian + harga + barcode),
+berguna utk pelabelan produk non-barcode spt Telur/Kg (user kirim
+screenshot mockup label sbg referensi, dgn 2 penyesuaian: nama produk
+bold, satuan+varian di baris kedua format `[qty] - [nama_varian]`).
+
+**Klarifikasi via `AskUserQuestion` sebelum eksekusi** (2 titik keputusan):
+(1) target cetak = **printer thermal 58/80mm yang SUDAH terintegrasi**
+(bukan printer label Bluetooth terpisah, bukan generate PDF/gambar) — ini
+kabar baik krn `esc_pos_utils_plus` (dependency yg sudah dipakai
+`printer_service.dart` utk struk) TERNYATA sudah punya command barcode
+EAN-13 NATIVE (`Generator.barcode(Barcode.ean13(...))`) — printer sendiri
+yg menggambar barcode-nya, TIDAK perlu render gambar/`RepaintBoundary.
+toImage()` spt pola capture chart yg sudah ada; (2) tombol "Generate
+Barcode" & "Cetak Label" jadi **2 aksi terpisah** (bukan 1 tombol
+gabungan) di layar Barcode produk.
+
+**Format barcode generator**: EAN-13 dgn prefix **`29`** (2 digit) —
+dipilih krn GS1 (badan standar barcode dunia) SECARA RESMI mereservasi
+prefix `20`-`29` khusus "Restricted Circulation Number" (pemakaian
+internal toko) — kode dgn prefix ini DIJAMIN tidak akan pernah dipakai
+produk manufaktur resmi di mana pun, beda dari kode 8-digit "asal tempel
+angka" yg selama ini dipakai toko (analisis nyata: perbandingan CSV
+induk-cabang kemarin nemuin banyak barcode 8-digit yg beririsan/mirip
+format walau produk beda — lihat entri sesi sebelumnya). Tetap format
+EAN-13 STANDAR (13 digit + checksum mod-10 valid) supaya scanner/kamera
+app ini (`mobile_scanner` + HID) baca tanpa perubahan apa pun, dan
+otomatis lolos heuristik "barcode resmi 13-digit numerik" yg baru
+diimplementasikan di `PriceMatchService` (Task #10). Uniqueness dicek
+LANGSUNG ke `product_barcodes` sebelum dipakai (jaminan DB-level, bukan
+cuma probabilistik) — `generateInternalBarcode(db, {Random? random})` di
+`lib/core/utils/internal_barcode.dart`, param `random` inject-able KHUSUS
+utk test deterministik (produksi selalu `Random()` non-seeded).
+
+**Cetak label**: `PrinterService.printProductLabel()` (baru,
+`printer_service.dart`) — reuse koneksi Bluetooth + `PrinterSettings`
+(paperSize 58/80mm) yg sudah ada, method baru `_buildLabelBytes()` bikin
+ESC/POS bytes: nama produk (bold) → `[qty] - [nama_varian]` (bold, lebih
+kecil) → harga (`Rp ${_fmtNum(...)}`, pola SAMA persis dgn struk — BUKAN
+`formatRupiah()` yg pakai nbsp U+00A0, printer wajib ASCII) → barcode
+EAN-13 native (`textPos: BarcodeText.below`, angka otomatis tercetak di
+bawah barcode oleh printer sendiri) — atau fallback teks polos kalau
+barcode BUKAN 12/13 digit numerik (mis. barcode lama non-standar), supaya
+tidak `throw` dari constructor `Barcode.ean13`. Baris harga KEDUA (yg ada
+di screenshot mockup user, format aneh "183500:Rp 183,500") SENGAJA
+DI-SKIP — user bilang use-case-nya "masih belum ketemu", jangan
+diimplementasikan sampai diminta lagi dgn kejelasan lebih.
+
+**UI** (`barcode_screen.dart`, dirombak total dari versi lama yg cuma
+nampilkan barcode yg SUDAH ada): sekarang iterasi SEMUA `ProductUnit`
+(termasuk yg belum punya barcode sama sekali) — satuan kosong dapat kartu
+dgn tombol "Generate Barcode" (isi `product_barcodes` dgn
+`isPrimary: barcodes.isEmpty`, `isGenerated: true` — kolom `is_generated`
+SUDAH ADA di skema dari awal tapi belum pernah dipakai di kode manapun
+sampai fitur ini); satuan yg SUDAH punya barcode (asli atau ter-generate)
+dapat tombol "Cetak Label" independen per barcode entry.
+
+**Bug nyata ditemukan & diperbaiki via revert-verify** (persis gotcha yg
+SUDAH tercatat di CLAUDE.md, bukan gotcha baru — tapi kejadian LAGI):
+tombol `FilledButton.tonalIcon` "Generate Barcode" ditaruh dlm `Row`
+bersama `Expanded(Text(...))` TANPA override `minimumSize` — `AppTheme`
+default `minimumSize` LEBAR PENUH utk `FilledButton`, overflow "infinite
+width" `BoxConstraints` di widget test (surface 430px). Fix:
+`FilledButton.styleFrom(minimumSize: const Size(0, 40))`. Revert-verify
+konfirmasi test widget GAGAL persis dgn pesan RenderFlex/BoxConstraints
+tanpa fix ini, hijau lagi setelah restore.
+
+**Gotcha baru ditemukan saat nulis test widget** (worth dicatat kalau
+kejadian lagi, mirip tapi BEDA dari gotcha `pumpAndSettle()`+dialog yg
+sudah tercatat): `ScaffoldMessenger` cuma tampilkan **SATU SnackBar
+sekaligus** — kalau ada SnackBar LAMA yg masih tampil (mis. "Barcode
+dibuat: ..." dari aksi sebelumnya) saat `showSnackBar()` baru dipanggil,
+SnackBar baru itu CUMA DI-QUEUE (tidak langsung render), bikin assertion
+`find.textContaining(...)` gagal-diam walau kodenya benar. Fix di test:
+drain SnackBar lama dulu (`tester.pump(Duration(seconds: 5))` lalu
+`pumpAndSettle()`) SEBELUM memicu aksi yg menampilkan SnackBar berikutnya
+yg mau diperiksa.
+
+**Test baru** (revert-verified — stash `barcode_screen.dart`, test widget
+GAGAL persis spt dijelaskan, restore hijau lagi): `test/internal_barcode_
+test.dart` (2 test — format EAN-13+checksum valid, collision-avoidance
+via `Random(seed)` inject utk determinisme: candidate pertama SENGAJA
+dibuat sudah "terpakai" di DB, verifikasi fungsi lanjut ke candidate
+berikutnya BUKAN mengembalikan yg bentrok), `test/barcode_screen_generate_
+test.dart` (2 test widget — tombol Generate muncul utk satuan kosong lalu
+barcode benar tersimpan ke DB setelah tap; tap Cetak Label tanpa printer
+diatur menampilkan pesan error, tidak crash). Full `flutter test` **625
+hijau, 0 gagal**, `flutter analyze` bersih. **BELUM bisa diuji cetak
+FISIK** (butuh printer thermal asli terhubung Bluetooth — sama
+keterbatasan spt gotcha Item 32 scanner eksternal & Item 41 D.1 printer
+Android lama, WAJIB user coba langsung di device asli sebelum dianggap
+benar-benar berfungsi).
+
 _Update sesi 22 Juli 2026 (redesain sinkron harga induk-cabang, PR #35,
 commit `2472533`, Task #10 di task manager — SELESAI) — user (bukan bug
 report kali ini, diskusi arsitektur) melaporkan sinkron harga WiFi antar

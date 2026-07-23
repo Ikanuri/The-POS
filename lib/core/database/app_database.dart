@@ -1376,9 +1376,23 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Nonaktifkan produk (soft-delete — TIDAK PERNAH ada hard-delete utk
+  /// produk di app ini). `updatedAt` WAJIB dicap ulang: `dumpSince` (host→
+  /// klien) memfilter tabel `products` dgn `WHERE updated_at >= since` —
+  /// tanpa ini, baris yang `updated_at`-nya sudah lama (dari kapan produk
+  /// itu terakhir diedit) TIDAK PERNAH lagi ikut terkirim ke klien yang
+  /// watermark-nya sudah lewat dari situ, sehingga nonaktif produk di owner
+  /// tidak PERNAH sampai ke klien (produk "hantu" tetap muncul selamanya
+  /// di HP kasir/asisten). Pola sama persis dgn `deleteVariant` (yang sudah
+  /// benar) dan akar masalah yang sama dgn bug `applyProductProposals` —
+  /// lihat `proposal_apply_updated_at_test.dart`.
   Future<void> deactivateProduct(String productId) => transaction(() async {
-        await (update(products)..where((t) => t.id.equals(productId)))
-            .write(const ProductsCompanion(isActive: Value(false)));
+        await (update(products)..where((t) => t.id.equals(productId))).write(
+          ProductsCompanion(
+            isActive: const Value(false),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
         await _releaseBarcodesForProduct(productId);
       });
 
@@ -3926,6 +3940,15 @@ class AppDatabase extends _$AppDatabase {
     if (!RegExp(r'^[a-z_][a-z0-9_]*$').hasMatch(tableName)) {
       throw ArgumentError('Nama tabel sync tidak valid: $tableName');
     }
+    // customStatement/customInsert lewat raw SQL tidak diketahui Drift tabel
+    // mana yang berubah, jadi StreamProvider (mis. daftar produk/pelanggan)
+    // yang bergantung pada .watch() TIDAK auto-refresh walau data sungguhan
+    // sudah berubah lewat sync — data DI DB sudah benar (mis. produk yang
+    // dinonaktifkan owner), tapi UI klien tetap terlihat "tidak berubah"
+    // sampai dipaksa reload manual (restart app dll). Param `updates:`
+    // memberi tahu Drift tabel yang terpengaruh — pola sama spt
+    // `restoreFromDump`, ketinggalan dipasang di sini sebelumnya.
+    final table = {for (final t in allTables) t.entityName: t}[tableName];
     var count = 0;
     // Perangkat berbeda (owner/kasir) bisa update app tidak serentak — dump
     // dari pengirim yang schemanya lebih baru bisa membawa kolom yang belum
@@ -4060,9 +4083,11 @@ class AppDatabase extends _$AppDatabase {
                 ],
               ).get();
               for (final e in existing) {
-                await customStatement(
+                await customUpdate(
                   'DELETE FROM price_tiers WHERE id = ?',
-                  [e.data['id']!],
+                  variables: [Variable<Object>(e.data['id']!)],
+                  updates: {priceTiers},
+                  updateKind: UpdateKind.delete,
                 );
               }
             }
@@ -4091,6 +4116,7 @@ class AppDatabase extends _$AppDatabase {
           final inserted = await customInsert(
             '$mode INTO "$tableName" ($cols) VALUES ($placeholders)',
             variables: variables,
+            updates: table == null ? null : {table},
           );
           if (inserted > 0) count++;
         } catch (e, st) {

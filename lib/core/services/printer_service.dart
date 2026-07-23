@@ -907,6 +907,101 @@ class PrinterService {
     }
   }
 
+  // ── Print label produk (barcode) ───────────────────────────────────────────
+
+  /// Cetak label 1 satuan/varian produk (nama, satuan+varian, harga,
+  /// barcode) ke printer thermal yang sudah tersambung — reuse printer
+  /// struk 58/80mm yang sama, TANPA hardware/dependency baru. Barcode
+  /// digambar via command EAN-13 native printer (`Generator.barcode`),
+  /// bukan raster gambar — lebih ringan & tajam drpd capture widget.
+  static Future<bool> printProductLabel({
+    required String productName,
+    required String unitQty,
+    required String variantLabel,
+    required int price,
+    required String barcode,
+  }) async {
+    final mac = await getSavedMac();
+    if (mac == null || mac.isEmpty) return false;
+
+    final connected = await connect(mac);
+    if (!connected) return false;
+
+    final settings = await loadSettings();
+    final bytes = await _buildLabelBytes(
+      productName: productName,
+      unitQty: unitQty,
+      variantLabel: variantLabel,
+      price: price,
+      barcode: barcode,
+      settings: settings,
+    );
+
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>(
+        'write', {'bytes': bytes},
+      ).timeout(const Duration(seconds: 10), onTimeout: () => null);
+      return res?['ok'] as bool? ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<Uint8List> _buildLabelBytes({
+    required String productName,
+    required String unitQty,
+    required String variantLabel,
+    required int price,
+    required String barcode,
+    required PrinterSettings settings,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final paperSize =
+        settings.paperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
+    final gen = Generator(paperSize, profile);
+    final out = <int>[];
+
+    // Nama produk: agak besar (spt baris Total di struk, tapi sedikit lebih
+    // kecil — height 2x tanpa lebar 2x, bukan double keduanya spt Total).
+    out.addAll(gen.text(_toAscii(productName),
+        styles: const PosStyles(
+            bold: true, align: PosAlign.center, height: PosTextSize.size2)));
+
+    final line2 =
+        variantLabel.isEmpty ? unitQty : '$unitQty - ${_toAscii(variantLabel)}';
+    out.addAll(gen.text(line2,
+        styles: const PosStyles(bold: true, align: PosAlign.center)));
+
+    out.addAll(gen.text('Rp ${_fmtNum(price)}',
+        styles: const PosStyles(bold: true, align: PosAlign.center)));
+
+    // EAN-13 butuh persis 12/13 digit numerik — banyak barcode toko ini
+    // BUKAN format itu (mis. kode 8-digit "asal tempel angka" yg dulu
+    // dipakai produk non-barcode resmi, lihat analisis perbandingan
+    // induk-cabang — ini kasus UMUM, bukan langka). Sebelumnya barcode
+    // spt itu jatuh ke teks polos TANPA kode batang sama sekali (bug
+    // dilaporkan user: barcode 8-digit "tidak muncul"/tidak bisa
+    // dicetak). Fallback ke CODE128 (dukung numerik/alfanumerik panjang
+    // apa pun) supaya SELALU ada kode batang yg bisa discan, apa pun
+    // format barcode-nya.
+    final digits = barcode.split('').map(int.tryParse).toList();
+    if ((barcode.length == 12 || barcode.length == 13) &&
+        digits.every((d) => d != null)) {
+      out.addAll(gen.barcode(Barcode.ean13(digits.cast<int>()),
+          height: 80, textPos: BarcodeText.below));
+    } else if (barcode.isNotEmpty) {
+      out.addAll(gen.barcode(Barcode.code128('{B$barcode'.split('')),
+          height: 80, textPos: BarcodeText.below));
+    } else {
+      out.addAll(gen.text(barcode,
+          styles: const PosStyles(align: PosAlign.center)));
+    }
+
+    out.addAll(gen.feed(2));
+    out.addAll(gen.cut());
+    return Uint8List.fromList(out);
+  }
+
   // ── Print struk gabungan (gabung nota) ────────────────────────────────────
 
   /// Cetak struk gabungan beberapa nota: header toko sekali, item per-nota
