@@ -56,7 +56,7 @@ DICORET user** (18 Juli, "coret: 4, 3c, 5") — dihapus dari plan._
 
 ---
 
-## Item 54 — Kategori multi-tag + qty/harga di layar assign + chip kategori reorderable di Kasir (23 Juli, BELUM dieksekusi — arah didiskusikan & disetujui user via 3 pertanyaan, siap didetailkan lebih lanjut sebelum coding)
+## Item 54 — Kategori multi-tag + qty/harga di layar assign + chip kategori reorderable di Kasir (23 Juli, BELUM dieksekusi — SEMUA keputusan arah SUDAH final, siap eksekusi)
 
 **Konteks:** kelanjutan dari Item 52 (bulk assign produk ke kategori, SELESAI
 kemarin) — user minta 2 penyempurnaan tambahan yang TERNYATA berbenturan
@@ -129,17 +129,36 @@ kecil di tab Kasir, bisa hold-and-reorder.
   rebuild, filter tap chip benar), reaktivitas `.watch()` kalau ada raw
   SQL baru yg menyentuh tabel yg di-`.watch()`.
 
-**Belum diputuskan/dirinci** (perlu dibahas sebelum atau selama coding):
-- Nama tabel/kolom pasti + posisi tepat migrasi (`schemaVersion` saat ini
-  perlu dicek ulang, CLAUDE.md ringkasan bilang 9 tapi sudah dikonfirmasi
-  basi di Item 41 D.4 — real value ada di `app_database.dart`).
-- Apakah kategori TAMBAHAN ikut ditampilkan di katalog cetak/HTML
-  (`catalog_paper.dart` dkk) atau HANYA kategori utama yg tampil di sana
-  (produk tidak duplikat di 2 bagian katalog) — belum ditanyakan ke user,
-  perlu klarifikasi terpisah krn beda topik dari 3 pertanyaan di atas.
-- Apakah tap-filter chip di Kasir bersifat single-select (1 kategori
-  aktif) atau multi-select (beberapa kategori sekaligus, union produk) —
-  belum ditanyakan.
+**2 keputusan susulan (final, dikonfirmasi user):**
+
+4. **Katalog cetak/HTML TIDAK terpengaruh** — kategori tambahan (tag) SAMA
+   SEKALI tidak ikut memengaruhi `catalog_paper.dart`/katalog HTML/PDF-Excel
+   manapun yang mengelompokkan per kategori. Pengelompokan katalog TETAP
+   murni berdasarkan `productGroupId` (kategori utama) seperti sekarang —
+   tidak ada produk yg duplikat tampil di 2 bagian katalog akibat tag
+   tambahan. Konsekuensi bagus: `catalog_paper.dart`/`catalog_share.dart`/
+   `catalog_store.dart`/`csv_import_service.dart`/report ekspor manapun
+   yang baca `productGroupId` **TIDAK PERLU DISENTUH SAMA SEKALI** — scope
+   perubahan murni: 1 tabel baru + layar assign + chip Kasir.
+5. **Filter chip Kasir — single-select**: tap 1 chip = aktifkan filter
+   kategori itu (union kategori utama + tag tambahan produk yg match),
+   tap chip lain = ganti aktif (bukan menambah), tap chip yg sama lagi/opsi
+   "Semua" = matikan filter. Alasan dipilih (vs multi-select): app kasir
+   grosir ini pola pemakaiannya cari-cepat 1 konteks kategori pada satu
+   waktu (mirip filter periode Laporan yg sudah single-select), lebih
+   murah dibangun & diuji, query filter cuma 1 kategori (tidak perlu
+   `WHERE groupId IN (...)` gabungan). Bisa di-upgrade ke multi-select
+   belakangan tanpa ubah skema data kalau ternyata kurang kalau nanti user
+   minta.
+
+**Ringkasan scope final** (siap eksekusi, tidak ada lagi keputusan
+menggantung): 1 tabel baru `product_group_tags` (kategori tambahan,
+sync sendiri) + 1 kolom baru `sortOrder` di `ProductGroups` (urutan chip)
++ rombak `category_assign_products_screen.dart` jadi live-toggle dgn
+qty/harga + keterangan "juga ada di kategori lain" + chip kategori
+single-select+reorderable baru di `kasir_screen.dart` (di atas
+`SyncStatusBanner`/`InlineBanner` yg direposisi ke bawah row chip).
+Katalog cetak/HTML, avatar warna, CSV import — TIDAK disentuh.
 
 ---
 
