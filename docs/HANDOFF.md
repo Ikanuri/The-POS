@@ -4,6 +4,68 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (bugfix: produk nonaktif tidak sampai ke klien
+saat sync, PR #35, commit `7f20d38`, Task #14 di task manager — SELESAI)
+— user tanya: "kalau owner nonaktifkan produk, apakah ikut hilang di
+klien saat sync? Kalau tidak, buatkan seperti itu." **Jawaban: app ini
+tidak punya hard-delete produk sama sekali** — "menghapus" SELALU berarti
+soft-delete via `isActive=false` (tombol "Nonaktifkan"), dan protokol
+sync `products` SUDAH dirancang utk kasus ini persis (delta incremental
+via watermark `updated_at` + last-write-wins di `mergeRows`, semua query
+daftar produk klien — `searchProducts`/`watchProducts`/dll — sudah
+filter `isActive=true`). **TAPI ketemu bug nyata** saat verifikasi: fungsi
+`deactivateProduct` TIDAK PERNAH mencap ulang `updated_at` saat men-set
+`isActive=false` (beda dari `deleteVariant` yang sudah benar) — karena
+`dumpSince` (host→klien) filter tabel `products` dgn `WHERE updated_at
+>= since`, baris yang `updated_at`-nya basi (dari kapan produk itu
+TERAKHIR DIEDIT, bukan kapan dinonaktifkan) TIDAK PERNAH lagi ikut
+terkirim ke klien yang watermark download-nya sudah lewat dari situ —
+nonaktifnya produk di owner tidak pernah sampai ke HP kasir/asisten,
+produk jadi "hantu" yang tetap muncul selamanya di sana. **Akar masalah
+identik** dgn bug `applyProductProposals` yang sudah pernah diperbaiki
+sesi sebelumnya (lihat `proposal_apply_updated_at_test.dart`) — pola
+bug yang sama muncul lagi di lokasi berbeda, persis skenario yang
+dibahas di diskusi "Disiplin Rilis Profesional" (poin 1: cari pola
+serupa lintas file sebelum menutup bug) sesi sebelumnya.
+
+**Fix**: `deactivateProduct` sekarang mencap `updatedAt: Value(DateTime.
+now())`, sama persis pola yang sudah benar di `deleteVariant`. Perubahan
+1 baris + 1 field tambahan di companion write, TIDAK ada perubahan
+skema/protokol sync sama sekali — desain sync yang sudah ada MEMANG
+cukup, cuma implementasinya bocor di 1 titik ini.
+
+**Catatan A.10 di PLAN.md/HANDOFF lama** ("master data tanpa tombstone —
+penghapusan produk/tier/pelanggan di owner tidak pernah menghapus di
+klien") SEBAGIAN terjawab oleh temuan ini — utk PRODUK, ternyata bukan
+soal desain tombstone yang belum ada, tapi bug implementasi sempit yang
+sudah diperbaiki. Belum diverifikasi apakah pola bug SAMA (lupa cap
+`updated_at` saat soft-delete) juga ada di `customers` (pelanggan, tabel
+lain yang jg pakai watermark `updated_at` incremental) — kalau ada
+laporan "pelanggan yang dihapus owner masih muncul di klien", cek dulu
+`deactivateCustomer`-style function di `app_database.dart` sebelum
+investigasi dari nol.
+
+**Test baru** (revert-verify: kedua test dibuktikan gagal PERSIS sesuai
+skenario tanpa fix — `Expected: true, Actual: false` utk cap waktu,
+produk hilang dari dump kedua & tetap muncul di daftar aktif klien —
+lalu hijau lagi setelah fix): `test/product_deactivate_sync_test.dart`
+— (1) unit-level: `updated_at` dicap ke saat nonaktifkan & baris tetap
+ikut `dumpSince` berikutnya meski watermark sudah lewat dari edit lama;
+(2) end-to-end SUNGGUHAN 2 instance `AppDatabase` (host+klien terpisah)
+lewat `dumpSince`+`mergeRows` langsung (bukan simulasi payload manual)
+— produk benar² hilang dari `searchProducts()` klien setelah sync kedua.
+
+**Full-suite run menemukan 1 kegagalan tak terkait** (`stock_opname_
+screen_test.dart`, assertion `Expected: 7, Actual: 10.0` di baris 71) —
+**dikonfirmasi ulang PRA-ADA & tak terkait sesi ini** via `git stash`
+fix ini lalu re-run di tree bersih: GAGAL IDENTIK tanpa fix sama sekali
+di tree — bukti pasti bukan regresi dari perubahan sesi ini (metodologi
+lebih ketat dari sekadar "run terisolasi hijau" yg dipakai sesi² lalu
+utk kelas flaky yang sama; kali ini malah gagal konsisten baik
+sendirian maupun full-suite, bukan cuma "kadang gagal di full-suite").
+Full `flutter test` **627 test, 1 gagal (pra-ada, dikonfirmasi)**,
+`flutter analyze` bersih.
+
 _Update sesi 22 Juli 2026 (follow-up 2 penyesuaian fitur barcode, PR #35,
 commit `005c68b`, Task #13 di task manager — SELESAI, lanjutan langsung
 dari Task #11/#12 di bawah) — user koreksi 2 hal setelah fitur Generate

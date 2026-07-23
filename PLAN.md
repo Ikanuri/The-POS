@@ -349,9 +349,15 @@ Di bawah ini HANYA yang masih menggantung.
 2. **A.9 `beforeOpen` unitTypes pakai `insertOrReplace`** padahal
    komentar bilang insertOrIgnore — bom waktu kalau kelak ada UI edit
    satuan; samakan dgn `_seedDefaults`.
-3. **A.10 master data tanpa tombstone** — penghapusan produk/tier/
-   pelanggan di owner tidak pernah menghapus di klien (data hantu).
-   Butuh keputusan desain: soft-delete tersinkron vs tabel tombstone.
+3. **A.10 master data tanpa tombstone** — **SEBAGIAN SUDAH TERJAWAB (22
+   Juli)**: utk PRODUK, desain soft-delete tersinkron SUDAH ADA & SUDAH
+   CUKUP (tidak perlu tabel tombstone) — masalahnya murni bug implementasi
+   sempit (`deactivateProduct` lupa cap ulang `updated_at`), SUDAH
+   diperbaiki (lihat CHANGELOG `7f20d38`). **Belum diverifikasi**: apakah
+   pola bug yang SAMA (lupa cap `updated_at` saat soft-delete) juga ada di
+   `customers`/tier harga — cek dulu fungsi soft-delete pelanggan di
+   `app_database.dart` sebelum investigasi dari nol kalau ada laporan
+   "pelanggan yang dihapus owner masih muncul di klien".
 4. **A.11 `mergeRows` menghitung "diterima N" dari return `customInsert`**
    — INSERT OR IGNORE yang ter-skip bisa tetap terhitung (kosmetik,
    menyesatkan saat debug sync).

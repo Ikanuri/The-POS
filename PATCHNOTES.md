@@ -37,6 +37,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   produk berbeda varian (misalnya ukuran berbeda) sudah dihapus —
   sekarang hanya mencocokkan barcode, kode produk, atau nama+satuan
   yang benar-benar persis, sisanya diminta konfirmasi manual owner.
+- **Produk yang dinonaktifkan owner sekarang benar-benar ikut hilang
+  dari HP kasir/asisten setelah sync** — sebelumnya produk yang sudah
+  dinonaktifkan (mis. sudah tidak dijual lagi) bisa tetap muncul
+  selamanya di perangkat lain walau sudah tidak aktif di perangkat
+  owner.
 
 ## 21 Juli 2026
 
