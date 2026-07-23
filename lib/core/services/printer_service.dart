@@ -975,13 +975,22 @@ class PrinterService {
     out.addAll(gen.text('Rp ${_fmtNum(price)}',
         styles: const PosStyles(bold: true, align: PosAlign.center)));
 
-    // EAN-13 butuh persis 12/13 digit numerik — barcode non-standar (mis.
-    // hasil scan lama yg bukan 13 digit) tidak digambar sbg barcode grafis,
-    // cukup dicetak sbg teks polos supaya tidak throw.
+    // EAN-13 butuh persis 12/13 digit numerik — banyak barcode toko ini
+    // BUKAN format itu (mis. kode 8-digit "asal tempel angka" yg dulu
+    // dipakai produk non-barcode resmi, lihat analisis perbandingan
+    // induk-cabang — ini kasus UMUM, bukan langka). Sebelumnya barcode
+    // spt itu jatuh ke teks polos TANPA kode batang sama sekali (bug
+    // dilaporkan user: barcode 8-digit "tidak muncul"/tidak bisa
+    // dicetak). Fallback ke CODE128 (dukung numerik/alfanumerik panjang
+    // apa pun) supaya SELALU ada kode batang yg bisa discan, apa pun
+    // format barcode-nya.
     final digits = barcode.split('').map(int.tryParse).toList();
     if ((barcode.length == 12 || barcode.length == 13) &&
         digits.every((d) => d != null)) {
       out.addAll(gen.barcode(Barcode.ean13(digits.cast<int>()),
+          height: 80, textPos: BarcodeText.below));
+    } else if (barcode.isNotEmpty) {
+      out.addAll(gen.barcode(Barcode.code128('{B$barcode'.split('')),
           height: 80, textPos: BarcodeText.below));
     } else {
       out.addAll(gen.text(barcode,
