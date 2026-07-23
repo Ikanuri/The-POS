@@ -58,6 +58,27 @@ lib/
   = gerbang nonaktif total (kill-switch aman, jangan hapus guard ini).
   Alat generator kode aktivasi = `scripts/license-generator.html` (offline,
   Web Crypto API, TIDAK disentuh dari app).
+- **Sinkron harga antar toko independen** (`PriceMatchService`, beda dari
+  sync owner↔kasir satu-toko) — fuzzy-matching (Levenshtein) SENGAJA
+  dihapus total, terbukti dari data nyata (perbandingan barcode toko
+  induk-cabang) salah-cocokkan produk beda varian/ukuran. JANGAN
+  tambahkan fuzzy lagi tanpa justifikasi baru. Algoritma: barcode persis
+  > `kode_produk` unik di KEDUA sisi (dgn override kalau kedua sisi
+  punya barcode "resmi" 13-digit berbeda → jatuh ke manual) > nama+satuan
+  PERSIS (bukan mirip). Begitu owner konfirmasi pasangan Tingkat 2-4,
+  barcode katalog masuk ditulis sbg alias permanen (`product_barcodes`,
+  `isPrimary=false`, tidak menimpa barcode asli) ke `product_unit` lokal
+  — sync produk yang SAMA berikutnya langsung lompat ke Tingkat 1, tidak
+  pernah ditinjau ulang lagi (ini yang menutup bug "harga berubah
+  sendiri padahal sudah fixed").
+- **Barcode toko real BANYAK yang BUKAN format resmi 12/13-digit EAN** —
+  kode 8-digit "asal tempel angka" itu MAYORITAS di data toko nyata,
+  bukan kasus langka. Kode yang menangani barcode (cetak label,
+  pencocokan sync, generator) WAJIB anggap non-13-digit sbg kasus UTAMA:
+  cetak label pakai fallback CODE128 kalau bukan EAN-13 valid
+  (`printer_service.dart`), generator barcode baru (`internal_barcode.
+  dart`) pakai prefix GS1 `29` (reserved "in-store use", EAN-13 valid,
+  tidak pernah bentrok barcode manufaktur resmi).
 
 ## Konvensi Kode
 
@@ -116,6 +137,28 @@ lib/
   setMockMethodCallHandler(SystemChannels.platform, (call) async {...})`
   yang menangani `'Clipboard.setData'`/`'Clipboard.getData'` sendiri
   (simpan ke variabel lokal) — lihat `test/kasir_handoff_qr_test.dart`.
+- **Soft-delete/ubah master-data (products/customers) WAJIB cap ulang
+  `updated_at: Value(DateTime.now())` eksplisit** — kolom ini TIDAK
+  auto-touch saat update (`withDefault` cuma berlaku saat insert).
+  `dumpSince` (sync host→klien) filter `WHERE updated_at >= since`; lupa
+  cap ulang berarti baris itu TIDAK PERNAH lagi terkirim ke klien yang
+  watermark-nya sudah lewat dari edit terakhir — perubahan (mis. produk
+  dinonaktifkan) diam-diam TIDAK PERNAH sampai ke perangkat lain, walau
+  datanya sendiri sudah benar di DB lokal. Sudah kejadian 2x di fungsi
+  berbeda (`applyProductProposals`, `deactivateProduct`) — cek pola ini
+  DULU di fungsi mutasi master-data BARU sebelum dianggap "pasti benar".
+- **`customInsert`/`customStatement`/`customUpdate` (raw SQL, dipakai
+  luas di `mergeRows`/`restoreFromDump`) TIDAK memberi tahu Drift tabel
+  mana yang berubah KECUALI param `updates: {table}` disertakan** — tanpa
+  itu, `StreamProvider`/`.watch()` (mis. `watchProducts()`) TIDAK
+  auto-refresh walau data DB sudah benar; UI klien terlihat "tidak
+  berubah" sampai dipaksa reload manual (restart app). WAJIB sertakan
+  `updates:` di SETIAP raw-SQL write baru yang menyentuh tabel yang
+  mungkin sedang di-`.watch()` layar manapun. Test level DB/one-shot
+  query TIDAK menangkap kelas bug ini (query baru selalu dapat data
+  fresh) — WAJIB test yang benar² `.listen()` ke stream live kalau mau
+  membuktikan reaktivitas (lihat `product_deactivate_sync_reactive_test.
+  dart`).
 
 ## Perintah
 
