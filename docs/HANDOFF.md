@@ -4,6 +4,63 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (bugfix KEDUA/akar sebenarnya: UI klien tidak
+auto-refresh setelah sync, PR #35, commit `4aea663`, Task #16 di task
+manager — SELESAI) — user lapor lanjutan setelah fix Task #14 (cap ulang
+`updated_at` di `deactivateProduct`): "Produk di sisi client tetap tidak
+terhapus." Fix Task #14 SUDAH BENAR & tetap perlu (data di DB klien
+memang jadi benar `isActive=false` setelah sync — dibuktikan test
+`product_deactivate_sync_test.dart` yg pakai `searchProducts()` one-shot),
+TAPI ada bug KEDUA yang independen: `mergeRows` (dipakai jalur sync
+KLIEN menerima data dari host) menulis via raw SQL `customInsert`/
+`customStatement` TANPA parameter `updates:` — Drift TIDAK TAHU tabel
+`products` (atau tabel master lain) berubah, sehingga `StreamProvider`/
+`.watch()` yang SEDANG BERJALAN (`watchProducts()`, dipakai
+`produk_list_screen.dart` DAN katalog `kasir_screen.dart`) TIDAK
+auto-refresh — data SUDAH benar di DB, tapi UI klien tetap terlihat
+"tidak berubah" sampai dipaksa reload manual (restart app, dll). Persis
+gejala yang dilaporkan user.
+
+**Pola bug & fix-nya SUDAH ADA & terdokumentasi** di `restoreFromDump`
+(param `updates:` Drift, ditambahkan sesi jauh sebelumnya utk kasus
+restore backup) — cuma belum pernah diterapkan ke `mergeRows` (jalur
+sync, path kode BERBEDA dari restore backup meski konsepnya identik).
+Ini contoh nyata lain dari pola "pola serupa lintas file" yang dibahas
+di diskusi Disiplin Rilis Profesional — kalau nanti ada laporan mirip
+utk tabel LAIN yang di-`mergeRows` (customers, price_tiers, dll), curigai
+dulu titik yang sama sebelum investigasi dari nol (walau fix sesi ini
+SUDAH mencakup SEMUA tabel yang lewat `mergeRows`, bukan cuma `products`
+— perbaikannya generik, resolve `TableInfo` dari nama tabel string).
+
+**Fix**: `mergeRows` sekarang resolve `TableInfo` dari nama tabel string
+(`{for (final t in allTables) t.entityName: t}[tableName]`), thread
+`updates: {table}` ke 2 titik tulis: INSERT OR REPLACE/IGNORE utama, dan
+DELETE dedup `price_tiers` (dikonversi dari `customStatement` — TIDAK
+mendukung param `updates:` — ke `customUpdate` dgn `updateKind: UpdateKind.
+delete`, pola sama persis `restoreFromDump`).
+
+**Test baru & KENAPA test lama tidak menangkap bug ini**: `product_
+deactivate_sync_test.dart` (Task #14) pakai `searchProducts()` — Future
+ONE-SHOT yang SELALU query ulang dari DB fresh, jadi TIDAK PERNAH bisa
+mendeteksi bug reaktivitas-stream apa pun (query baru otomatis dapat
+data benar terlepas dari apakah Drift "tahu" ada perubahan atau tidak).
+Test baru `product_deactivate_sync_reactive_test.dart` genuinely
+mendengarkan `db.watchProducts()` (Stream LIVE, persis yang dipakai
+screen sungguhan) via `.listen()`, hitung jumlah emission SEBELUM &
+SESUDAH `mergeRows`, assert bertambah (stream benar² re-emit sendiri)
+DAN assert produk hilang dari emission terbaru. Revert-verify: hapus
+param `updates:` dari INSERT utama → gagal persis `Expected: a value
+greater than <1>, Actual: <1>` (stream TIDAK re-emit sama sekali) →
+restore, hijau lagi. **Pelajaran metodologi**: kalau bug soal
+"UI tidak update setelah operasi background/sync", WAJIB test level
+STREAM/reactive langsung, bukan cuma one-shot query — one-shot query
+API yang sama bisa 100% benar sementara reactive layer di atasnya tetap
+rusak, dua lapis yang harus dites terpisah.
+
+Full `flutter test` **629 test, 1 gagal (stock_opname_screen_test.dart,
+pra-ada & tak terkait, dikonfirmasi ulang persis pola sesi sebelumnya)**,
+`flutter analyze` bersih.
+
 _Update sesi 22 Juli 2026 (bugfix: label cetak tidak tampilkan kode
 batang, PR #35, commit `e66cfd2`, Task #15 di task manager — SELESAI) —
 user coba cetak label produk barcode `33669342` (8 digit — sama persis
