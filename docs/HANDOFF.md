@@ -4,6 +4,154 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Juli 2026 (fitur baru: kategori multi-tag + chip kategori di
+Kasir, Item 54, commit `4e0fbf3` — SELESAI, lanjutan langsung dari Item 52 di
+bawah) — user minta 2 penyempurnaan yang ternyata BERBENTURAN desain dgn
+Item 52: (1) produk yang di-assign ke kategori baru harus TETAP di kategori
+lama juga (Item 52 MENIMPA `productGroupId`, model lama cuma 1 kategori/
+produk); (2) kategori tampil sbg tombol kecil di tab Kasir, hold-and-reorder.
+3 keputusan arah diambil via `AskUserQuestion` SEBELUM eksekusi (dicatat
+lengkap di riwayat PLAN.md Item 54 yang sudah dihapus setelah selesai): (a)
+model **"kategori utama + tag tambahan"**, BUKAN rombak total many-to-many —
+`Products.productGroupId` tetap jadi kategori utama, tabel BARU
+`product_group_tags` (PK komposit productId+groupId) khusus tag tambahan;
+(b) granularitas **level produk saja** (bukan per satuan/varian — field
+satuan/varian yg diminta user cuma utk TAMPILAN qty/harga, bukan assignment
+granular); (c) notif inline Kasir = **reposisi** `SyncStatusBanner`/
+`InlineBanner` yg SUDAH ADA (bukan notif baru). 2 keputusan susulan: katalog
+cetak/HTML **TIDAK disentuh** (kategori tambahan tak memengaruhi
+`catalog_paper.dart` dkk sama sekali — pengelompokan tetap murni kategori
+utama), filter chip Kasir **single-select** (bukan multi-select — alasan:
+pola pemakaian kasir grosir cari-cepat 1 konteks, lebih murah dibangun,
+gampang di-upgrade nanti kalau perlu).
+
+**Implementasi DB** (`app_database.dart`, `schemaVersion` 18->19):
+`AppDatabase.setProductGroupMembership(productId, groupId, member)` —
+live-toggle: `member=true` & produk belum punya kategori utama → jadi
+kategori utama; sudah punya kategori utama LAIN → jadi tag tambahan
+(`product_group_tags`, kategori utama lama TAK disentuh); `member=false` →
+lepas dari `productGroupId` (cap ulang `updatedAt`) ATAU hapus baris tag,
+tergantung mana yang cocok. `getProductGroupTagsFor(productIds)` (batch,
+hindari N+1) utk "juga ada di kategori lain". `watchProductsForKasir
+({query, groupId})` — versi union (`productGroupId == groupId OR ada baris
+product_group_tags`) dari `watchProducts()` yg SUDAH ADA, dipakai KHUSUS tab
+Kasir; filter kategori tab Produk (`produk_list_screen.dart`) SENGAJA
+DIBIARKAN primary-only (di luar scope, tidak diubah). `watchProductGroupsForKasir()`
+(order by `sortOrder` lalu nama) + `reorderProductGroups(orderedIds)` (tulis
+`sortOrder` = index) utk chip Kasir. `addProductGroup` diperbaiki: kategori
+baru sekarang selalu dpt `sortOrder` = MAX+1 (paling akhir), bukan default 0
+yg akan melompat ke depan begitu kategori lain pernah di-reorder manual.
+
+**Sync**: `product_group_tags` masuk daftar `masterData` di `dumpSince`
+(full-dump tiap kali, sama pola `customer_groups` — tabel kecil, TIDAK perlu
+watermark incremental, lihat keputusan Item 50 sesi lalu) + masuk
+`clientMergeableTables` di `lan_sync_service.dart`. **Detail penting**:
+`mergeRows` utk tabel ini dapat langkah CLEANUP KHUSUS (baru, di akhir
+transaksi per-tabel) — hapus baris lokal klien yang TIDAK ADA lagi di
+payload host, KARENA tabel ini full-dump (payload = kebenaran LENGKAP saat
+itu) dan untag adalah aksi sehari-hari (beda dari tabel master lain yang
+isinya cuma bertambah/berganti, jarang "hilang baris"). Tanpa cleanup ini,
+tag yang di-untag owner akan MENETAP selamanya di klien.
+
+**Opportunistic fix — Item 53 ikut ditutup** (bug lama, sudah tercatat di
+PLAN.md, disentuh ulang krn fungsi yang sama): `deleteProductGroup` sekarang
+mencap ulang `updatedAt` (pola gotcha `deactivateProduct` yg sudah
+terdokumentasi CLAUDE.md) DAN membersihkan baris `product_group_tags` milik
+kategori yang dihapus — tanpa ini, id kategori yang di-reuse lewat slot
+kosong `addProductGroup` (legacy id 3-20) bisa bikin tag lama "hidup lagi"
+nempel ke kategori baru yang sama sekali tidak berhubungan.
+
+**UI**: `category_assign_products_screen.dart` (dari Item 52) DIROMBAK
+TOTAL dari checkbox+tombol "Terapkan" (batch-apply, overwrite) jadi
+live-toggle murni — tiap centang langsung panggil `setProductGroupMembership`
+saat itu juga, tanpa tombol massal. Subtitle tiap baris produk: harga+stok
+satuan dasar (reuse `getBaseUnitPrices()`/`getBaseUnitRealStock()` yang
+SUDAH ADA, TIDAK perlu query baru — kebetulan pas agregat, hindari N+1) +
+"Juga ada di: X, Y" kalau member kategori lain (union `productGroupId` +
+`getProductGroupTagsFor`). `kasir_screen.dart`: widget baru
+`_KasirCategoryChipRow` (`ReorderableListView` horizontal,
+`ReorderableDelayedDragStartListener` per chip — SENGAJA delayed/hold,
+bukan drag-langsung, supaya tap singkat biasa tetap kena `FilterChip.
+onSelected` tanpa "dicuri" gestur drag) disisipkan tepat di bawah
+`_KasirTopbar`, DI ATAS `SyncStatusBanner`/`InlineBanner` yang sudah ada di
+situ (tidak perlu pindah posisi banner — chip yang disisipkan DI ATASNYA,
+efeknya sama: banner otomatis "di bawah row chip").
+
+**Gotcha environment BARU ditemukan sesi ini (penting utk sesi berikutnya)**:
+Flutter SDK **TIDAK ter-install** di environment remote/sandbox ini secara
+default (`/opt/flutter` tidak ada) — di-install manual dari
+`storage.googleapis.com` (tarball `flutter_linux_3.24.5-stable.tar.xz`, versi
+SAMA persis dgn pin CI) ke `/tmp/flutter` (sesi-scoped, TIDAK persisten,
+perlu install ulang tiap sesi baru kalau butuh `flutter analyze`/`test`).
+**Bug environment lebih serius**: `dart run build_runner build` di sandbox
+ini GAGAL TOTAL menghasilkan `app_database.g.dart` (proses lapor "Succeeded"
+tanpa error/warning APA PUN, tapi file `.g.dart` tidak pernah ditulis —
+dikonfirmasi bukan soal kode: file ASLI yg belum disentuh pun gagal
+di-generate ulang di sandbox ini) — root cause TIDAK ditemukan meski sudah
+dicoba: ulimit file descriptor, isolasi builder via `--build-filter`,
+verbose logging (tidak ada SEVERE/WARNING sama sekali), tes probe drift
+minimal (BERHASIL — jadi drift_dev sendiri jalan normal, masalah spesifik ke
+file besar `app_database.dart` 4000+ baris/32 tabel di sandbox ini). **Fix
+praktis yang dipakai**: restore `app_database.g.dart` LAMA dari git HEAD lalu
+**tulis tangan** penambahan generated code (kolom `sortOrder` di
+`$ProductGroupsTable`/`ProductGroup`/`ProductGroupsCompanion` + tabel baru
+lengkap `$ProductGroupTagsTable`/`ProductGroupTag`/`ProductGroupTagsCompanion`)
+dgn meniru PERSIS pola generated code utk kolom/tabel analog yang sudah ada
+(`AltPrices.sortOrder` utk kolom int-withDefault, `CustomerGroupPrices` utk
+tabel dgn FK+composite constraint) — TIDAK menyentuh boilerplate "Manager
+API" (`$$XxxTableManager` dkk, 218 match tapi TIDAK DIPAKAI di mana pun oleh
+kode app ini, dikonfirmasi via grep) krn murni dead-code kalau tak lengkap.
+`flutter analyze` bersih SETELAH patch manual ini (bukti kuat tulisan tangan
+sudah benar structurally) — **kalau sesi depan perlu ubah skema lagi &
+`build_runner` masih gagal sama di environment ini, pola INI (restore dari
+git + patch manual meniru tabel analog) adalah jalan pintas yg TERBUKTI
+jalan, coba itu dulu sebelum debug environment dari nol lagi**.
+
+**Regresi ditemukan & diperbaiki SEBELUM sempat lolos (full-suite run yang
+menemukannya, persis alasan CLAUDE.md mewajibkan full run)**: 9 file
+`test/migration_v7_test.dart` s/d `migration_v18_test.dart` (fixture raw-SQL
+manual yg mensimulasikan device versi lama) SEMUA gagal karena migrasi
+`from < 19` baru (addColumn `sortOrder` ke `product_groups`) dijalankan
+tanpa syarat thd fixture yang TIDAK menyertakan tabel `product_groups` sama
+sekali (fixture-fixture itu cuma bikin tabel yang relevan ke migrasi yang
+sedang dites, pola yang sudah ada sejak awal). Fix: tambah
+`CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);` ke tiap
+fixture (pola sama persis dgn komentar yg sudah ada di file2 itu, mis.
+"product_units diperlukan agar migrasi v11 tak gagal") + update ekspektasi
+versi akhir dari 18 ke 19 di semua 9 file.
+
+**Test baru** (semua revert-verified — assign screen & sync & reorder DB-tier
++ 1 widget test chip Kasir): `category_assign_products_test.dart` (ditulis
+ulang total — live-toggle utama/tag, union count, DAN pembuktian fix Item 53
+sekalian), `category_assign_products_nav_test.dart` (end-to-end router asli,
+live-toggle tanpa tombol batch), `product_group_tags_sync_test.dart` (2
+instance `AppDatabase` host+klien nyata via `dumpSince`/`mergeRows` — tag
+baru ikut sync, tag yang di-untag ikut kehapus di klien), `product_group_reorder_test.dart`
+(urutan default alfabetis tie-break, `reorderProductGroups` mengubah urutan,
+stream reaktif re-emit, kategori baru selalu di akhir), `kasir_category_chip_test.dart`
+(widget test via `pumpWithFakeApp` — union filter kategori utama+tag, toggle
+on/off chip yg sama).
+
+**BELUM terverifikasi sepenuhnya saat entri ini ditulis**: full `flutter
+test` (700+ file) belum selesai jalan bersih tanpa gangguan sampai akhir sesi
+— run pertama & kedua TERCEMAR proses `flutter_tester`/`frontend_server_aot`
+zombie yg tak sengaja tertinggal dari eksperimen debugging build_runner
+sebelumnya (RAM sempat termakan >15GB oleh 1 proses compiler doang, bikin
+test lain macet/lambat) — sudah di-`pkill` bersih & run ketiga dimulai
+sebelum sesi ini menulis entri, **cek hasil run ketiga sebelum menganggap
+tidak ada regresi lain** (di luar 9 file migration yang SUDAH dikonfirmasi
+fix). Semua file test yang LANGSUNG relevan ke fitur Item 54 (5 file baru +
+2 file assign yang ditulis ulang) sudah dijalankan terisolasi & hijau semua
+dgn revert-verify individual — risiko tersisa murni di test LAIN yang tak
+terkait tapi mungkin kena efek samping tak terduga dari perubahan
+`schemaVersion`/`allTables`/dumpSince.
+
+**Tidak ada perubahan** (sengaja, sesuai keputusan): `catalog_paper.dart`,
+`catalog_share.dart`, `catalog_store.dart`, `csv_import_service.dart`,
+avatar warna produk, `produk_list_screen.dart` filter kategori (tetap
+primary-only) — SEMUA tidak disentuh sama sekali, sesuai keputusan susulan
+user.
+
 _Update sesi 23 Juli 2026 (fitur baru: bulk assign produk ke kategori,
 Item 52, commit `1ce4ef1`, Task #17 di task manager — SELESAI, PR
 menyusul) — user minta fitur yang luput dari rencana sebelumnya: dari

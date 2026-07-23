@@ -11,11 +11,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 23 Juli 2026
 
 ### ✨ Fitur Baru
-- **Pindah banyak produk sekaligus ke satu kategori.** Di layar Kelola
-  Kategori, sekarang tinggal ketuk nama kategorinya untuk membuka daftar
-  produk — centang produk yang mau dipindahkan (boleh lebih dari satu
-  sekaligus, termasuk produk yang sebelumnya sudah punya kategori lain),
-  lalu ketuk "Terapkan". Tidak perlu lagi buka form tiap produk satu-satu.
+- **Satu produk sekarang bisa ada di lebih dari satu kategori.** Di layar
+  Kelola Kategori, ketuk nama kategori untuk membuka daftar produk — centang
+  produk yang mau dimasukkan ke kategori itu, langsung tersimpan seketika
+  (tidak perlu tombol "Terapkan" lagi). Uncentang untuk mengeluarkan produk
+  dari kategori itu saja — kategori lain yang sudah dipunyai produk tersebut
+  TETAP ada, tidak ikut hilang. Daftar produk juga menampilkan harga & stok,
+  serta keterangan "Juga ada di: ..." kalau produk sudah ada di kategori lain.
+- **Kategori sekarang muncul juga di layar Kasir.** Tombol kecil di bawah
+  bilah pencarian — ketuk untuk memfilter produk sesuai kategori itu, ketuk
+  lagi untuk menampilkan semua produk kembali. Urutan tombol kategori bisa
+  diatur sendiri: tekan agak lama lalu geser ke posisi yang diinginkan.
 
 ---
 

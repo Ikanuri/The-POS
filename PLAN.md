@@ -56,112 +56,6 @@ DICORET user** (18 Juli, "coret: 4, 3c, 5") — dihapus dari plan._
 
 ---
 
-## Item 54 — Kategori multi-tag + qty/harga di layar assign + chip kategori reorderable di Kasir (23 Juli, BELUM dieksekusi — SEMUA keputusan arah SUDAH final, siap eksekusi)
-
-**Konteks:** kelanjutan dari Item 52 (bulk assign produk ke kategori, SELESAI
-kemarin) — user minta 2 penyempurnaan tambahan yang TERNYATA berbenturan
-desain dgn Item 52: (1) produk yang di-assign ke kategori baru harus TETAP
-ada di kategori lama juga (Item 52 saat ini MENIMPA `productGroupId`, model
-data sekarang cuma 1 kategori/produk — kolom `Products.productGroupId`
-nullable TUNGGAL, bukan many-to-many); (2) kategori juga tampil sbg tombol
-kecil di tab Kasir, bisa hold-and-reorder.
-
-**3 keputusan arah sudah diambil user (lewat `AskUserQuestion`):**
-
-1. **Model data — "kategori utama + tag tambahan"** (BUKAN rombak total ke
-   many-to-many murni): `Products.productGroupId` yang sudah ada
-   dipertahankan sbg "kategori utama" — semua konsumen lama (katalog cetak
-   `catalog_paper.dart` yang mengelompokkan per kategori, avatar warna, CSV
-   import) TIDAK perlu disentuh. Tabel BARU (mis. `product_group_tags`:
-   `id`, `productId`, `groupId`, `createdAt`) khusus utk kategori TAMBAHAN
-   di luar kategori utama. Centang di layar assign = union dari
-   `(productGroupId == kategori ini) OR (ada baris di product_group_tags)`.
-   Uncentang kategori UTAMA → set `productGroupId = null` (+ WAJIB cap ulang
-   `updatedAt`, sekalian menutup **Item 53** yg sudah tercatat — bug lama
-   `deleteProductGroup` tak cap ulang `updated_at` beda kasus tapi pola sama,
-   fungsi baru ini WAJIB tidak mengulang pola itu). Uncentang kategori
-   TAMBAHAN → hapus baris dari `product_group_tags`.
-2. **Granularitas — level produk saja** (BUKAN per satuan/varian): centang
-   kategori berlaku utk SELURUH produk (semua satuan/varian ikut). Field
-   "pilih satuan dan varian" yang diminta user di layar assign HANYA utk
-   TAMPILAN qty & harga (menunjukkan stok/harga per satuan biar owner tahu
-   produk apa yg dipilih), BUKAN assignment granular per satuan. Ini
-   menyederhanakan drastis — kartu produk kasir/katalog tidak perlu logic
-   baru "relevan di kategori X kalau ADA satuan yg di-tag".
-3. **Notif inline di tab Kasir — REPOSISI banner yang SUDAH ADA** (BUKAN
-   notif baru): `SyncStatusBanner`/`InlineBanner` yang sekarang sudah
-   tampil di `kasir_screen.dart` (di bawah AppBar, lihat Task #7/#8/#9 sesi
-   21 Juli) dipindah posisinya jadi tepat DI BAWAH row chip kategori baru
-   (bukan di bawah AppBar langsung lagi). Tidak ada jenis notifikasi baru
-   yang perlu dibuat.
-
-**Implementasi yang perlu dirinci (belum coding):**
-- **Migrasi schema baru** (`schemaVersion` naik dari kondisi terkini):
-  tabel `product_group_tags` (kategori tambahan) + kolom `sortOrder`
-  integer di `ProductGroups` (urutan tampilan chip Kasir, belum ada sama
-  sekali — urutan sekarang cuma `id`).
-- **Sync**: `product_group_tags` tabel BARU perlu jalur sync sendiri
-  (`dumpSince`/`mergeRows`, WAJIB `updates:` param spt gotcha CLAUDE.md
-  raw-SQL) — tidak otomatis ikut gratis dari kolom `products.productGroupId`
-  yang sudah disinkron sbg bagian baris `products`.
-- **Layar assign (`category_assign_products_screen.dart`, dari Item 52)**:
-  ganti dari checkbox+tombol "Terapkan" (batch-apply, overwrite) jadi
-  **live-toggle** — centang langsung insert/delete baris
-  `product_group_tags` (atau set `productGroupId` kalau kategori ini jadi
-  kategori utama produk itu) SAAT itu juga, tanpa tombol "Terapkan" massal
-  lagi (beda paradigma dari Item 52). Tampilkan qty (stok) & harga per
-  produk (agregat, hindari N+1 — pola sama `getReportTotals`). Kalau
-  produk/satuan sudah ada di kategori LAIN (bukan kategori yg lagi dibuka),
-  tampilkan keterangan "juga ada di kategori: X, Y" (list, bukan cuma 1
-  nama spt Item 52 — sekarang bisa lebih dari satu kategori tambahan).
-- **Chip kategori di tab Kasir**: row horizontal kecil tepat di bawah
-  AppBar/toolbar Kasir, DI ATAS `SyncStatusBanner`/`InlineBanner` yang
-  direposisi (lihat poin 3). Hold-and-reorder via `ReorderableListView`
-  horizontal (`scrollDirection: Axis.horizontal`) — sudah ada preseden
-  reorder vertikal di `produk_form_screen.dart`, tinggal adaptasi arah;
-  urutan baru ditulis ke `sortOrder` tiap kategori. Tap chip = filter
-  produk yg tampil di kasir sesuai kategori itu (kategori utama ATAU tag
-  tambahan — union yg sama spt di layar assign).
-- **Test wajib** (ikuti Metode Test CLAUDE.md, revert-verify tiap kelas):
-  DB-tier utk `product_group_tags` CRUD + union kategori utama/tambahan,
-  widget test layar assign (live-toggle, tampilan qty/harga, keterangan
-  "juga ada di"), widget test chip Kasir (reorder tersimpan lintas
-  rebuild, filter tap chip benar), reaktivitas `.watch()` kalau ada raw
-  SQL baru yg menyentuh tabel yg di-`.watch()`.
-
-**2 keputusan susulan (final, dikonfirmasi user):**
-
-4. **Katalog cetak/HTML TIDAK terpengaruh** — kategori tambahan (tag) SAMA
-   SEKALI tidak ikut memengaruhi `catalog_paper.dart`/katalog HTML/PDF-Excel
-   manapun yang mengelompokkan per kategori. Pengelompokan katalog TETAP
-   murni berdasarkan `productGroupId` (kategori utama) seperti sekarang —
-   tidak ada produk yg duplikat tampil di 2 bagian katalog akibat tag
-   tambahan. Konsekuensi bagus: `catalog_paper.dart`/`catalog_share.dart`/
-   `catalog_store.dart`/`csv_import_service.dart`/report ekspor manapun
-   yang baca `productGroupId` **TIDAK PERLU DISENTUH SAMA SEKALI** — scope
-   perubahan murni: 1 tabel baru + layar assign + chip Kasir.
-5. **Filter chip Kasir — single-select**: tap 1 chip = aktifkan filter
-   kategori itu (union kategori utama + tag tambahan produk yg match),
-   tap chip lain = ganti aktif (bukan menambah), tap chip yg sama lagi/opsi
-   "Semua" = matikan filter. Alasan dipilih (vs multi-select): app kasir
-   grosir ini pola pemakaiannya cari-cepat 1 konteks kategori pada satu
-   waktu (mirip filter periode Laporan yg sudah single-select), lebih
-   murah dibangun & diuji, query filter cuma 1 kategori (tidak perlu
-   `WHERE groupId IN (...)` gabungan). Bisa di-upgrade ke multi-select
-   belakangan tanpa ubah skema data kalau ternyata kurang kalau nanti user
-   minta.
-
-**Ringkasan scope final** (siap eksekusi, tidak ada lagi keputusan
-menggantung): 1 tabel baru `product_group_tags` (kategori tambahan,
-sync sendiri) + 1 kolom baru `sortOrder` di `ProductGroups` (urutan chip)
-+ rombak `category_assign_products_screen.dart` jadi live-toggle dgn
-qty/harga + keterangan "juga ada di kategori lain" + chip kategori
-single-select+reorderable baru di `kasir_screen.dart` (di atas
-`SyncStatusBanner`/`InlineBanner` yg direposisi ke bawah row chip).
-Katalog cetak/HTML, avatar warna, CSV import — TIDAK disentuh.
-
----
-
 ## Item 47 — Pengeluaran tidak ikut ke ekspor laporan PDF/Excel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
 
 **Root cause dikonfirmasi**: `report_export.dart` (ekspor PDF/Excel tab
@@ -592,21 +486,6 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 
 ---
 
-**Item 53 (ditemukan tak sengaja, BUKAN diminta user, belum dikerjakan)**:
-`deleteProductGroup` (`app_database.dart`, dipakai hapus kategori) men-set
-`products.product_group_id = null` via typed update TAPI TIDAK mencap
-ulang `updated_at` — pola bug SAMA PERSIS yang baru diperbaiki 2x sesi 22
-Juli (`deactivateProduct`, `applyProductProposals`, lihat gotcha
-CLAUDE.md). Efeknya: kalau kategori dihapus di owner, produk yang jadi
-"Tanpa Kategori" mungkin TIDAK PERNAH ikut terkirim ke klien yang
-watermark-nya sudah lewat dari edit terakhir produk itu. Belum
-dikonfirmasi via test (baru ketemu baca kode saat implementasi Item 52),
-belum ada laporan user — dicatat murni supaya tidak hilang, fix-nya
-identik pola Item 14 (`ProductsCompanion(productGroupId: Value(null),
-updatedAt: Value(DateTime.now()))`).
-
----
-
 **Item lain yang masih terbuka:**
 1. **Item 47** (pengeluaran tidak ikut ekspor PDF/Excel Laporan) & **Item
    48** (avatar produk kasir jadi soft/pastel) — user setuju, siap
@@ -630,5 +509,3 @@ updatedAt: Value(DateTime.now()))`).
 8. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
-9. **Item 53** (`deleteProductGroup` tidak mencap ulang `updated_at`) —
-   ditemukan tak sengaja, belum dikerjakan. Detail di atas.
