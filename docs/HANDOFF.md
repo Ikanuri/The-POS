@@ -4,6 +4,57 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Juli 2026 (fitur baru: bulk assign produk ke kategori,
+Item 52, commit `1ce4ef1`, Task #17 di task manager — SELESAI, PR
+menyusul) — user minta fitur yang luput dari rencana sebelumnya: dari
+layar Kelola Kategori, tap sebuah kategori sekarang buka layar pilih
+produk multi-select, produk terpilih ditugaskan ke kategori itu sekaligus
+(bukan "Tambah Massal" yang sudah ada — itu bikin banyak NAMA kategori
+sekaligus, beda kebutuhan). Diklarifikasi via 2 pertanyaan ke user
+sebelum eksekusi: (1) produk yang SUDAH punya kategori lain BOLEH ikut
+dipilih & ditimpa (bukan dibatasi ke "Tanpa Kategori" saja); (2) entry
+point CUMA dari layar Kategori (tap nama kategori), tidak ada alur
+kebalikannya.
+
+**Implementasi**: `AppDatabase.assignProductsToGroup(productIds, groupId)`
+baru (`app_database.dart`) — typed `update(products)...write(...)` massal
++ WAJIB cap ulang `updatedAt: Value(DateTime.now())` (pola sama persis
+gotcha `deactivateProduct`/`applyProductProposals` yang baru
+didokumentasikan di CLAUDE.md sesi sebelumnya — langsung kepakai lagi di
+sini, bukti dokumentasi itu berguna). Layar baru
+`CategoryAssignProductsScreen` (`lib/features/produk/`) pakai
+`db.searchProducts('')` sbg sumber data (list SEMUA produk aktif kalau
+query kosong), checkbox multi-select, tombol "Terapkan ke N Produk" di
+`bottomNavigationBar`. Route nested baru
+`/produk/kategori/:id/pilih-produk` (pola sama `/produk/:id/barcode`),
+`groupName` dioper via `extra` sbg `String` polos. `product_group_screen.
+dart`: `onTap` kategori (di luar mode pilih-utk-hapus, yg pakai
+long-press) sebelumnya `null` (tidak ngapa-ngapain) → sekarang
+`_openAssignProducts(g)`, hasil `context.push<int>(...)` (jumlah produk
+ter-assign) dipakai tampilkan banner sukses.
+
+**Test**: `category_assign_products_test.dart` (DB-tier, 4 test:
+assign-banyak-sekaligus termasuk yg sudah py kategori lain/ditimpa,
+produk-tak-terpilih-tak-berubah, `updated_at` dicap ulang + tetap ikut
+`dumpSince` berikutnya, list-kosong-no-op) & `category_assign_products_
+nav_test.dart` (end-to-end via `routerProvider` ASLI, bukan simulasi:
+tap kategori → layar pilih produk kebuka → pilih produk → Terapkan →
+kembali ke Kelola Kategori dgn banner "N produk dipindahkan" → verifikasi
+langsung ke DB). Keduanya revert-verified (cabut fix → test gagal dgn
+pesan masuk akal → restore → hijau lagi). `flutter analyze` bersih,
+`flutter test` 635/635 hijau (naik dari 629 — 6 test baru feature ini +
+supporting).
+
+**Ditemukan tak sengaja (BUKAN diminta, belum dikerjakan)**: saat baca
+kode di sekitar fitur ini, ketahuan `deleteProductGroup` (dipakai hapus
+kategori) PUNYA BUG SAMA — set `product_group_id = null` tapi TIDAK cap
+ulang `updated_at`, jadi produk yang jadi "Tanpa Kategori" gara-gara
+kategorinya dihapus mungkin tidak pernah ikut sync ke klien lain. Dicatat
+sbg **Item 53** di PLAN.md (fix identik pola Item 14), TIDAK difix
+sekarang supaya scope tetap sesuai yang diminta user — kalau ada laporan
+user terkait ("produk kok masih ada kategorinya di HP lain padahal sudah
+dihapus"), cek Item 53 ini duluan.
+
 _Update sesi 22 Juli 2026 (bugfix KEDUA/akar sebenarnya: UI klien tidak
 auto-refresh setelah sync, PR #35, commit `4aea663`, Task #16 di task
 manager — SELESAI) — user lapor lanjutan setelah fix Task #14 (cap ulang
