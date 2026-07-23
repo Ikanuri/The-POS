@@ -46,6 +46,8 @@ void main() {
     expect(preCols, isNot(contains('returned_at')),
         reason: 'prakondisi: DB v16 belum punya kolom returned_at');
     v16.execute('PRAGMA user_version = 16;');
+    // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
+    v16.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     v16.dispose();
 
     // ── 2. Buka via AppDatabase (schemaVersion 17) → onUpgrade(16,17) jalan.
@@ -60,7 +62,7 @@ void main() {
     expect(item.subtotal, 10000);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 18);
+    expect(ver.data.values.first, 19);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

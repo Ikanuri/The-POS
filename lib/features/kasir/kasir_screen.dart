@@ -535,10 +535,18 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
 }
 
 final _kasirProductsProvider =
-    StreamProvider.family<List<Product>, String>((ref, query) {
+    StreamProvider.family<List<Product>, (String, int?)>((ref, args) {
   final db = ref.watch(databaseProvider);
-  return db.watchProducts(query: query);
+  return db.watchProductsForKasir(query: args.$1, groupId: args.$2);
 });
+
+/// Item 54 — chip kategori tab Kasir: kategori terurut `sortOrder` (drag
+/// reorder) + kategori yang sedang difilter (single-select, null = "Semua").
+final _kasirGroupsProvider =
+    StreamProvider.autoDispose<List<ProductGroup>>((ref) {
+  return ref.watch(databaseProvider).watchProductGroupsForKasir();
+});
+final _kasirSelectedGroupProvider = StateProvider<int?>((ref) => null);
 
 /// Detail katalog per produk: harga satuan dasar + jumlah satuan.
 class CatalogDetail {
@@ -566,7 +574,7 @@ final _catalogDetailProvider =
   final db = ref.watch(databaseProvider);
   // Watch product list (name/group changes) AND explicit update counter
   // (price/barcode changes don't touch the products table).
-  ref.watch(_kasirProductsProvider(''));
+  ref.watch(_kasirProductsProvider(('', null)));
   ref.watch(productUpdateCountProvider);
   final units = await db.getProductUnits(productId);
   if (units.isEmpty) {
@@ -1730,7 +1738,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final query = ref.watch(_kasirSearchProvider(_cartId));
     final isGrid = ref.watch(kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
-    final productsAsync = ref.watch(_kasirProductsProvider(query));
+    final selectedGroup = ref.watch(_kasirSelectedGroupProvider);
+    final productsAsync =
+        ref.watch(_kasirProductsProvider((query, selectedGroup)));
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -1786,6 +1796,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
             // Mode katalog: sembunyikan Antrian & Riwayat agar tak ambigu.
             showQueueAndHistory: !_isCatalogMode,
           ),
+          const _KasirCategoryChipRow(),
           Expanded(
             // Tap atau scroll di mana pun di bawah topbar keluar dari state
             // input pencarian (fokus hilang → kolom shrink lewat listener di
@@ -2079,6 +2090,66 @@ const _kSearchAnimCurve = Curves.easeOutCubic;
 /// sebagai jarak field cari↔tombol scan saat collapsed, supaya "rapi"
 /// (jaraknya konsisten, bukan menimpa tombol scan).
 const _kTbGap = 4.0;
+
+/// Item 54 — chip kategori tab Kasir: tombol kecil di bawah topbar, tap
+/// untuk filter (single-select — union kategori utama + tag tambahan,
+/// lihat [AppDatabase.watchProductsForKasir]), hold+drag untuk reorder
+/// (tersimpan ke `sortOrder` via [AppDatabase.reorderProductGroups]).
+/// Kosong total (tidak ada kategori bernama) → tidak render apa pun.
+class _KasirCategoryChipRow extends ConsumerWidget {
+  const _KasirCategoryChipRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groupsAsync = ref.watch(_kasirGroupsProvider);
+    final groups = groupsAsync.valueOrNull ?? const <ProductGroup>[];
+    if (groups.isEmpty) return const SizedBox.shrink();
+    final selected = ref.watch(_kasirSelectedGroupProvider);
+    final scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      height: 40,
+      child: ReorderableListView(
+        scrollDirection: Axis.horizontal,
+        buildDefaultDragHandles: false,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        onReorder: (oldIndex, newIndex) {
+          final ids = groups.map((g) => g.id).toList();
+          if (newIndex > oldIndex) newIndex--;
+          final moved = ids.removeAt(oldIndex);
+          ids.insert(newIndex, moved);
+          ref.read(databaseProvider).reorderProductGroups(ids);
+        },
+        children: [
+          for (var i = 0; i < groups.length; i++)
+            // Delayed (hold-then-drag), bukan drag-langsung — supaya tap
+            // singkat biasa tetap terdeteksi FilterChip.onSelected (drag
+            // langsung akan "mencuri" gestur tap chip).
+            ReorderableDelayedDragStartListener(
+              key: ValueKey(groups[i].id),
+              index: i,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: FilterChip(
+                  label: Text(groups[i].name!,
+                      style: const TextStyle(fontSize: 12)),
+                  selected: selected == groups[i].id,
+                  onSelected: (_) => ref
+                      .read(_kasirSelectedGroupProvider.notifier)
+                      .state = selected == groups[i].id ? null : groups[i].id,
+                  visualDensity: VisualDensity.compact,
+                  selectedColor: scheme.primaryContainer,
+                  checkmarkColor: scheme.onPrimaryContainer,
+                  side: BorderSide.none,
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 class _KasirTopbar extends StatefulWidget {
   const _KasirTopbar({

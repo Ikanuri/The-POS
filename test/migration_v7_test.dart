@@ -61,6 +61,8 @@ void main() {
         .toSet();
     expect(preIdx, isNot(contains('idx_tp_transaction')),
         reason: 'prakondisi: DB v6 belum punya indeks pembayaran');
+    // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
+    v6.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     v6.dispose();
 
     // ── 2. Buka via AppDatabase (schemaVersion 7) → onUpgrade(6,7) berjalan.
@@ -83,7 +85,7 @@ void main() {
     // menambah alt_prices, change_taken & sort_order, tapi test ini fokus
     // ke migrasi 6->7).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 18);
+    expect(ver.data.values.first, 19);
 
     // Data lama tetap utuh setelah migrasi.
     final pay = await db.customSelect(

@@ -72,6 +72,7 @@ const kAsistenPermissionKeys = <String>[
   AppSettings,
   Products,
   ProductGroups,
+  ProductGroupTags,
   UnitTypes,
   ProductUnits,
   ProductBarcodes,
@@ -148,7 +149,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -277,6 +278,13 @@ class AppDatabase extends _$AppDatabase {
             // (dulu murni in-memory `_pendingQueue` di LanSyncService, hilang
             // total kalau app di-restart sebelum owner sempat approve).
             await m.createTable(syncUploadQueue);
+          }
+          if (from < 19) {
+            // Item 54 — kategori tambahan (many-to-many) di luar kategori
+            // utama `Products.productGroupId`, + urutan tampil chip kategori
+            // di tab Kasir (drag reorder).
+            await m.addColumn(productGroups, productGroups.sortOrder);
+            await m.createTable(productGroupTags);
           }
         },
         beforeOpen: (details) async {
@@ -992,6 +1000,37 @@ class AppDatabase extends _$AppDatabase {
     return q.watch();
   }
 
+  /// Item 54 — versi [watchProducts] untuk chip kategori tab Kasir: filter
+  /// [groupId] mencakup UNION kategori utama (`productGroupId`) ATAU
+  /// kategori tambahan (`product_group_tags`) — beda dari [watchProducts]
+  /// yang dipakai filter kategori di tab Produk (`produk_list_screen.dart`),
+  /// SENGAJA tetap primary-only di sana (di luar scope Item 54, tidak
+  /// disentuh). Tanpa `groupId`, perilaku identik [watchProducts].
+  Stream<List<Product>> watchProductsForKasir(
+      {String query = '', int? groupId}) {
+    if (groupId == null) return watchProducts(query: query);
+    final q = select(products).join([
+      leftOuterJoin(
+        productGroupTags,
+        productGroupTags.productId.equalsExp(products.id) &
+            productGroupTags.groupId.equals(groupId),
+      ),
+    ])
+      ..where(products.isActive.equals(true))
+      ..where(products.parentProductId.isNull())
+      ..where(products.productGroupId.equals(groupId) |
+          productGroupTags.groupId.equals(groupId));
+    if (query.isNotEmpty) {
+      final ql = query.toLowerCase();
+      q.where(products.name.lower().contains(ql) |
+          products.kodeProduk.lower().contains(ql));
+    }
+    q.orderBy([OrderingTerm.asc(products.name)]);
+    return q
+        .watch()
+        .map((rows) => rows.map((r) => r.readTable(products)).toList());
+  }
+
   /// Harga dasar (tier minQty=1) tiap produk pada satuan DASARnya — dipakai
   /// tab Produk utk tampilkan harga di bawah nama tanpa N+1 query per baris.
   Future<Map<String, int>> getBaseUnitPrices() async {
@@ -1216,6 +1255,31 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(t) => OrderingTerm.asc(t.name)]))
       .get();
 
+  /// Item 54 — kategori terurut `sortOrder` (tie-break nama) untuk chip
+  /// kategori tab Kasir, reaktif terhadap hasil drag-reorder
+  /// ([reorderProductGroups]) TANPA perlu tutup-buka layar.
+  Stream<List<ProductGroup>> watchProductGroupsForKasir() => (select(
+          productGroups)
+        ..where((t) => t.name.isNotNull())
+        ..orderBy([
+          (t) => OrderingTerm.asc(t.sortOrder),
+          (t) => OrderingTerm.asc(t.name),
+        ]))
+      .watch();
+
+  /// Item 54 — simpan urutan baru chip kategori Kasir setelah drag-reorder.
+  /// [orderedIds] adalah urutan tampil BARU secara utuh (index 0 = paling
+  /// kiri) — sortOrder ditulis sbg index-nya, dibungkus 1 transaksi.
+  Future<void> reorderProductGroups(List<int> orderedIds) async {
+    await transaction(() async {
+      for (var i = 0; i < orderedIds.length; i++) {
+        await (update(productGroups)
+              ..where((t) => t.id.equals(orderedIds[i])))
+            .write(ProductGroupsCompanion(sortOrder: Value(i)));
+      }
+    });
+  }
+
   /// Peta id produk → nama kategori untuk sekumpulan id (dipakai katalog untuk
   /// mengelompokkan produk per kategori). Hanya satu query untuk produk + grup.
   Future<Map<String, String>> getCategoryNamesForProducts(
@@ -1234,20 +1298,29 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> addProductGroup(String name) async {
+    // Item 54 — kategori baru selalu ditaruh PALING AKHIR urutan chip Kasir
+    // (bukan 0) — begitu kategori lain sudah pernah di-reorder manual,
+    // default 0 akan melompat kategori baru ke paling depan tanpa alasan.
+    final maxOrderRow = await customSelect(
+            'SELECT MAX(sort_order) as mx FROM product_groups')
+        .getSingleOrNull();
+    final nextOrder = (maxOrderRow?.data['mx'] as int? ?? -1) + 1;
+
     final emptySlot = await (select(productGroups)
           ..where((t) => t.name.isNull())
           ..limit(1))
         .getSingleOrNull();
     if (emptySlot != null) {
       await (update(productGroups)..where((t) => t.id.equals(emptySlot.id)))
-          .write(ProductGroupsCompanion(name: Value(name)));
+          .write(ProductGroupsCompanion(
+              name: Value(name), sortOrder: Value(nextOrder)));
     } else {
       final rows =
           await customSelect('SELECT MAX(id) as mx FROM product_groups')
               .getSingleOrNull();
       final nextId = (rows?.data['mx'] as int? ?? 20) + 1;
-      await into(productGroups).insert(
-          ProductGroupsCompanion.insert(id: Value(nextId), name: Value(name)));
+      await into(productGroups).insert(ProductGroupsCompanion.insert(
+          id: Value(nextId), name: Value(name), sortOrder: Value(nextOrder)));
     }
   }
 
@@ -1271,11 +1344,28 @@ class AppDatabase extends _$AppDatabase {
       (update(productGroups)..where((t) => t.id.equals(id)))
           .write(ProductGroupsCompanion(name: Value(newName)));
 
+  /// Item 53 — `updatedAt` WAJIB dicap ulang di sini (pola sama spt gotcha
+  /// `deactivateProduct`/`applyProductProposals` yang sudah tercatat
+  /// CLAUDE.md) supaya produk yang jadi "Tanpa Kategori" gara-gara
+  /// kategorinya dihapus ikut tersinkron ke klien lain, bukan cuma diam
+  /// di DB lokal. Tag kategori TAMBAHAN (`product_group_tags`) milik
+  /// kategori ini juga WAJIB dihapus di sini — kalau tidak, id kategori
+  /// (nama-nya di-null-kan tapi barisnya tetap ada utk dipakai ulang lewat
+  /// slot kosong `addProductGroup`) bisa "hidup lagi" nempel ke kategori
+  /// BARU yang kebetulan dapat id yang sama, produk lama tiba-tiba tampil
+  /// tertag ke kategori yang sama sekali tidak berhubungan.
   Future<void> deleteProductGroup(int id) async {
-    await (update(products)..where((t) => t.productGroupId.equals(id)))
-        .write(const ProductsCompanion(productGroupId: Value(null)));
-    await (update(productGroups)..where((t) => t.id.equals(id)))
-        .write(const ProductGroupsCompanion(name: Value(null)));
+    await transaction(() async {
+      await (update(products)..where((t) => t.productGroupId.equals(id)))
+          .write(ProductsCompanion(
+        productGroupId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      ));
+      await (delete(productGroupTags)..where((t) => t.groupId.equals(id)))
+          .go();
+      await (update(productGroups)..where((t) => t.id.equals(id)))
+          .write(const ProductGroupsCompanion(name: Value(null)));
+    });
   }
 
   /// Hapus banyak kategori sekaligus — produk yg memakainya jadi tanpa
@@ -1288,29 +1378,81 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Item 52 — bulk assign banyak produk ke satu kategori sekaligus (dari
-  /// layar Kelola Kategori: tap kategori → pilih produk). Produk yang
-  /// SUDAH punya kategori lain BOLEH ikut dipilih & ditimpa (keputusan
-  /// user eksplisit, bukan dibatasi ke "Tanpa Kategori" saja). `updatedAt`
-  /// WAJIB dicap ulang — pola sama spt `deactivateProduct` (lihat gotcha
-  /// CLAUDE.md) — supaya perpindahan kategori ikut tersinkron ke klien
-  /// lain, bukan cuma diam di DB lokal.
-  Future<void> assignProductsToGroup(
-      List<String> productIds, int groupId) async {
-    if (productIds.isEmpty) return;
-    await (update(products)..where((t) => t.id.isIn(productIds))).write(
-      ProductsCompanion(
-        productGroupId: Value(groupId),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+  /// Item 54 — live-toggle centang produk di layar assign kategori
+  /// (menggantikan `assignProductsToGroup` Item 52 yang batch-overwrite —
+  /// dihapus krn kontradiktif dgn keputusan baru "kategori lama tetap
+  /// dipertahankan"). [member]=true: kalau produk BELUM punya kategori
+  /// utama, kategori ini jadi kategori UTAMA-nya; kalau SUDAH punya
+  /// kategori utama LAIN, kategori ini jadi TAG TAMBAHAN (`product_group_
+  /// tags`) — kategori utama lama tidak tersentuh. [member]=false:
+  /// lepaskan dari kategori ini, entah itu kategori utama (→ null,
+  /// `updatedAt` dicap ulang spt gotcha `deactivateProduct`) atau tag
+  /// tambahan (→ hapus baris `product_group_tags`).
+  Future<void> setProductGroupMembership(
+      String productId, int groupId, bool member) async {
+    final product = await getProductById(productId);
+    if (product == null) return;
+    await transaction(() async {
+      if (member) {
+        if (product.productGroupId == null) {
+          await (update(products)..where((t) => t.id.equals(productId)))
+              .write(ProductsCompanion(
+            productGroupId: Value(groupId),
+            updatedAt: Value(DateTime.now()),
+          ));
+        } else if (product.productGroupId != groupId) {
+          await into(productGroupTags).insertOnConflictUpdate(
+            ProductGroupTagsCompanion.insert(
+                productId: productId, groupId: groupId),
+          );
+        }
+        // else: kategori ini SUDAH jadi kategori utama produk — no-op.
+      } else {
+        if (product.productGroupId == groupId) {
+          await (update(products)..where((t) => t.id.equals(productId)))
+              .write(ProductsCompanion(
+            productGroupId: const Value(null),
+            updatedAt: Value(DateTime.now()),
+          ));
+        } else {
+          await (delete(productGroupTags)
+                ..where((t) =>
+                    t.productId.equals(productId) & t.groupId.equals(groupId)))
+              .go();
+        }
+      }
+    });
   }
 
+  /// Peta productId → set id kategori TAMBAHAN (tag) untuk sekumpulan produk
+  /// — satu query, hindari N+1 (dipakai layar assign kategori utk tampilkan
+  /// "juga ada di kategori lain"). Kategori UTAMA (`productGroupId`) TIDAK
+  /// ikut di sini — pemanggil sudah punya itu langsung dari baris `Product`.
+  Future<Map<String, Set<int>>> getProductGroupTagsFor(
+      List<String> productIds) async {
+    if (productIds.isEmpty) return {};
+    final rows = await (select(productGroupTags)
+          ..where((t) => t.productId.isIn(productIds)))
+        .get();
+    final map = <String, Set<int>>{};
+    for (final r in rows) {
+      map.putIfAbsent(r.productId, () => {}).add(r.groupId);
+    }
+    return map;
+  }
+
+  /// Dihitung dari UNION kategori utama + tag tambahan (Item 54) — dipakai
+  /// peringatan "N produk menggunakan kategori ini" sebelum hapus kategori.
   Future<int> countProductsInGroup(int groupId) async {
     final row = await customSelect(
-      'SELECT COUNT(*) as cnt FROM products '
-      'WHERE product_group_id = ? AND is_active = 1',
-      variables: [Variable.withInt(groupId)],
+      'SELECT COUNT(DISTINCT p.id) as cnt FROM products p '
+      'LEFT JOIN product_group_tags t ON t.product_id = p.id AND t.group_id = ? '
+      'WHERE p.is_active = 1 AND (p.product_group_id = ? OR t.group_id = ?)',
+      variables: [
+        Variable.withInt(groupId),
+        Variable.withInt(groupId),
+        Variable.withInt(groupId)
+      ],
     ).getSingleOrNull();
     return row?.data['cnt'] as int? ?? 0;
   }
@@ -3518,6 +3660,7 @@ class AppDatabase extends _$AppDatabase {
       'price_tiers',
       'alt_prices',
       'product_barcodes',
+      'product_group_tags',
       'customers',
       'customer_groups',
       'customer_group_prices',
@@ -4140,6 +4283,36 @@ class AppDatabase extends _$AppDatabase {
         } catch (e, st) {
           await CrashLogService.record(e, st,
               context: 'app_database_merge_rows_row table=$tableName');
+        }
+      }
+
+      // Item 54 — `product_group_tags` SELALU dikirim full-dump (lihat
+      // `dumpSince`, sama seperti `customer_groups`), beda dari tabel
+      // master lain yang cuma bertambah/berganti isi (tidak pernah benar²
+      // hilang barisnya). Untag kategori (hapus baris) adalah aksi
+      // sehari-hari di sini — tanpa cleanup ini, baris yang sudah di-untag
+      // di owner akan MENETAP SELAMANYA di klien (INSERT OR REPLACE saja
+      // tidak pernah menghapus baris yang tidak lagi ada di payload).
+      // Payload yang diterima = kebenaran LENGKAP saat ini, jadi aman
+      // hapus semua baris lokal yang TIDAK ada di dalamnya.
+      if (!isAppendOnly && tableName == 'product_group_tags') {
+        final incomingKeys = rows
+            .map((r) => '${r['product_id']}|${r['group_id']}')
+            .toSet();
+        final existing = await customSelect(
+          'SELECT product_id, group_id FROM product_group_tags',
+        ).get();
+        for (final e in existing) {
+          final pid = e.data['product_id'];
+          final gid = e.data['group_id'];
+          if (!incomingKeys.contains('$pid|$gid')) {
+            await customUpdate(
+              'DELETE FROM product_group_tags WHERE product_id = ? AND group_id = ?',
+              variables: [Variable<Object>(pid!), Variable<Object>(gid!)],
+              updates: {productGroupTags},
+              updateKind: UpdateKind.delete,
+            );
+          }
         }
       }
     });

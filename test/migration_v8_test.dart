@@ -59,6 +59,8 @@ void main() {
     expect(preTables, isNot(contains('alt_prices')),
         reason: 'prakondisi: DB v7 belum punya tabel alt_prices');
     v7.execute('PRAGMA user_version = 7;');
+    // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
+    v7.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     v7.dispose();
 
     // ── 2. Buka via AppDatabase (schemaVersion 8) → onUpgrade(7,8) berjalan.
@@ -92,7 +94,7 @@ void main() {
     // Versi schema benar-benar naik ke skema terkini (10 — migrasi lanjutan
     // menambah change_taken & sort_order, tapi test ini fokus ke migrasi 7->8).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 18);
+    expect(ver.data.values.first, 19);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

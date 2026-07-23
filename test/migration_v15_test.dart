@@ -67,6 +67,8 @@ void main() {
     expect(prePayCols, isNot(contains('voided')),
         reason: 'prakondisi: DB v14 belum punya kolom voided');
     v14.execute('PRAGMA user_version = 14;');
+    // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
+    v14.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     v14.dispose();
 
     // ── 2. Buka via AppDatabase (schemaVersion 15) → onUpgrade(14,15) jalan.
@@ -87,7 +89,7 @@ void main() {
     expect(pay.amount, 10000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 18);
+    expect(ver.data.values.first, 19);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

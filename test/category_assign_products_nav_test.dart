@@ -9,14 +9,14 @@ import 'package:the_pos/core/providers/license_provider.dart';
 import 'package:the_pos/core/router/app_router.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 
-/// Item 52 — end-to-end: dari layar Kelola Kategori, tap kategori (BUKAN
+/// Item 54 — end-to-end: dari layar Kelola Kategori, tap kategori (BUKAN
 /// long-press, yang sudah dipakai mode pilih-utk-hapus) membuka layar
-/// pilih produk; pilih produk lalu Terapkan benar-benar meng-assign
-/// product_group_id di DB & tampilkan konfirmasi jumlah produk.
+/// pilih produk; centang produk LANGSUNG tersimpan hidup ke DB (live-toggle,
+/// tanpa tombol "Terapkan" batch spt Item 52 lama).
 void main() {
   testWidgets(
-      'tap kategori -> pilih produk -> Terapkan -> produk ter-assign & '
-      'konfirmasi tampil', (tester) async {
+      'tap kategori -> centang produk -> langsung ter-assign ke DB '
+      '(live-toggle)', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());
 
@@ -78,24 +78,23 @@ void main() {
     await tester.tap(find.text('Minuman'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pilih Produk — Minuman'), findsOneWidget);
+    expect(find.text('Produk — Minuman'), findsOneWidget);
     expect(find.text('Teh Botol'), findsOneWidget);
 
+    // Centang produk -> live-toggle, tanpa tombol Terapkan.
     await tester.tap(find.text('Teh Botol'));
-    await tester.pump();
-
-    expect(find.text('1 produk dipilih'), findsOneWidget);
-
-    await tester.tap(find.text('Terapkan ke 1 Produk'));
     await tester.pumpAndSettle();
-
-    // Kembali ke layar Kelola Kategori dengan banner konfirmasi.
-    expect(find.text('Kelola Kategori'), findsOneWidget);
-    expect(find.textContaining('1 produk dipindahkan ke "Minuman"'),
-        findsOneWidget);
 
     final p1 = await (db.select(db.products)..where((t) => t.id.equals('p1')))
         .getSingle();
     expect(p1.productGroupId, 1);
+
+    // Uncentang -> lepas lagi dari DB juga (langsung, tanpa navigasi balik).
+    await tester.tap(find.text('Teh Botol'));
+    await tester.pumpAndSettle();
+
+    final p1After = await (db.select(db.products)..where((t) => t.id.equals('p1')))
+        .getSingle();
+    expect(p1After.productGroupId, isNull);
   });
 }

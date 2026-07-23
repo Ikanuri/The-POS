@@ -38,9 +38,28 @@ class Products extends Table {
 class ProductGroups extends Table {
   IntColumn get id => integer()();
   TextColumn get name => text().nullable()();
+  /// Item 54 — urutan tampil chip kategori di tab Kasir (drag reorder).
+  /// Semua baris lama default 0 setelah migrasi (belum pernah diurutkan
+  /// manual) — tie-break sekunder ke `name` menjaga urutan tetap stabil
+  /// sampai user benar-benar drag salah satu chip.
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// Item 54 — kategori TAMBAHAN di luar kategori utama (`Products.
+/// productGroupId`). Satu produk boleh punya banyak baris di sini (satu per
+/// kategori tambahan), TANPA menimpa kategori utamanya. Keberadaan baris di
+/// sini = produk tsb "juga" ada di kategori itu. PK komposit — dijamin tidak
+/// ada baris duplikat utk pasangan (productId, groupId) yang sama.
+class ProductGroupTags extends Table {
+  TextColumn get productId => text().references(Products, #id)();
+  IntColumn get groupId => integer().references(ProductGroups, #id)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {productId, groupId};
 }
 
 /// Satuan legacy (ID 1–25): Kg, Pcs, Pak, Bal, Sak, Slop, Biji, Dos, dll.

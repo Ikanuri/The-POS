@@ -56,6 +56,8 @@ void main() {
     expect(preCols, isNot(contains('sort_order')),
         reason: 'prakondisi: DB v9 belum punya kolom sort_order');
     v9.execute('PRAGMA user_version = 9;');
+    // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
+    v9.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     v9.dispose();
 
     // ── 2. Buka via AppDatabase (schemaVersion 10) → onUpgrade(9,10) jalan.
@@ -80,7 +82,7 @@ void main() {
     expect(updated.sortOrder, 5);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 18);
+    expect(ver.data.values.first, 19);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

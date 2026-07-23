@@ -795,8 +795,16 @@ class $ProductGroupsTable extends ProductGroups
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
       'name', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _sortOrderMeta =
+      const VerificationMeta('sortOrder');
   @override
-  List<GeneratedColumn> get $columns => [id, name];
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+      'sort_order', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  @override
+  List<GeneratedColumn> get $columns => [id, name, sortOrder];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -814,6 +822,10 @@ class $ProductGroupsTable extends ProductGroups
       context.handle(
           _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
     }
+    if (data.containsKey('sort_order')) {
+      context.handle(_sortOrderMeta,
+          sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
+    }
     return context;
   }
 
@@ -827,6 +839,8 @@ class $ProductGroupsTable extends ProductGroups
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name']),
+      sortOrder: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sort_order'])!,
     );
   }
 
@@ -839,7 +853,8 @@ class $ProductGroupsTable extends ProductGroups
 class ProductGroup extends DataClass implements Insertable<ProductGroup> {
   final int id;
   final String? name;
-  const ProductGroup({required this.id, this.name});
+  final int sortOrder;
+  const ProductGroup({required this.id, this.name, required this.sortOrder});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -847,6 +862,7 @@ class ProductGroup extends DataClass implements Insertable<ProductGroup> {
     if (!nullToAbsent || name != null) {
       map['name'] = Variable<String>(name);
     }
+    map['sort_order'] = Variable<int>(sortOrder);
     return map;
   }
 
@@ -854,6 +870,7 @@ class ProductGroup extends DataClass implements Insertable<ProductGroup> {
     return ProductGroupsCompanion(
       id: Value(id),
       name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      sortOrder: Value(sortOrder),
     );
   }
 
@@ -863,6 +880,7 @@ class ProductGroup extends DataClass implements Insertable<ProductGroup> {
     return ProductGroup(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String?>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
     );
   }
   @override
@@ -871,19 +889,25 @@ class ProductGroup extends DataClass implements Insertable<ProductGroup> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String?>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
     };
   }
 
   ProductGroup copyWith(
-          {int? id, Value<String?> name = const Value.absent()}) =>
+          {int? id,
+          Value<String?> name = const Value.absent(),
+          int? sortOrder}) =>
       ProductGroup(
         id: id ?? this.id,
         name: name.present ? name.value : this.name,
+        sortOrder: sortOrder ?? this.sortOrder,
       );
   ProductGroup copyWithCompanion(ProductGroupsCompanion data) {
     return ProductGroup(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      sortOrder:
+          data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
     );
   }
 
@@ -891,44 +915,55 @@ class ProductGroup extends DataClass implements Insertable<ProductGroup> {
   String toString() {
     return (StringBuffer('ProductGroup(')
           ..write('id: $id, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name);
+  int get hashCode => Object.hash(id, name, sortOrder);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is ProductGroup && other.id == this.id && other.name == this.name);
+      (other is ProductGroup &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder);
 }
 
 class ProductGroupsCompanion extends UpdateCompanion<ProductGroup> {
   final Value<int> id;
   final Value<String?> name;
+  final Value<int> sortOrder;
   const ProductGroupsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
   });
   ProductGroupsCompanion.insert({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
   });
   static Insertable<ProductGroup> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<int>? sortOrder,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
     });
   }
 
-  ProductGroupsCompanion copyWith({Value<int>? id, Value<String?>? name}) {
+  ProductGroupsCompanion copyWith(
+      {Value<int>? id, Value<String?>? name, Value<int>? sortOrder}) {
     return ProductGroupsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
     );
   }
 
@@ -941,6 +976,9 @@ class ProductGroupsCompanion extends UpdateCompanion<ProductGroup> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
     return map;
   }
 
@@ -948,7 +986,250 @@ class ProductGroupsCompanion extends UpdateCompanion<ProductGroup> {
   String toString() {
     return (StringBuffer('ProductGroupsCompanion(')
           ..write('id: $id, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ProductGroupTagsTable extends ProductGroupTags
+    with TableInfo<$ProductGroupTagsTable, ProductGroupTag> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductGroupTagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES products (id)'));
+  static const VerificationMeta _groupIdMeta =
+      const VerificationMeta('groupId');
+  @override
+  late final GeneratedColumn<int> groupId = GeneratedColumn<int>(
+      'group_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES product_groups (id)'));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [productId, groupId, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_group_tags';
+  @override
+  VerificationContext validateIntegrity(Insertable<ProductGroupTag> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('product_id')) {
+      context.handle(
+          _productIdMeta,
+          productId.isAcceptableOrUnknown(
+              data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(_groupIdMeta,
+          groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta));
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {productId, groupId};
+  @override
+  ProductGroupTag map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductGroupTag(
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_id'])!,
+      groupId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}group_id'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $ProductGroupTagsTable createAlias(String alias) {
+    return $ProductGroupTagsTable(attachedDatabase, alias);
+  }
+}
+
+class ProductGroupTag extends DataClass
+    implements Insertable<ProductGroupTag> {
+  final String productId;
+  final int groupId;
+  final DateTime createdAt;
+  const ProductGroupTag(
+      {required this.productId,
+      required this.groupId,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['product_id'] = Variable<String>(productId);
+    map['group_id'] = Variable<int>(groupId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ProductGroupTagsCompanion toCompanion(bool nullToAbsent) {
+    return ProductGroupTagsCompanion(
+      productId: Value(productId),
+      groupId: Value(groupId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ProductGroupTag.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductGroupTag(
+      productId: serializer.fromJson<String>(json['productId']),
+      groupId: serializer.fromJson<int>(json['groupId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'productId': serializer.toJson<String>(productId),
+      'groupId': serializer.toJson<int>(groupId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ProductGroupTag copyWith(
+          {String? productId, int? groupId, DateTime? createdAt}) =>
+      ProductGroupTag(
+        productId: productId ?? this.productId,
+        groupId: groupId ?? this.groupId,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  ProductGroupTag copyWithCompanion(ProductGroupTagsCompanion data) {
+    return ProductGroupTag(
+      productId: data.productId.present ? data.productId.value : this.productId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductGroupTag(')
+          ..write('productId: $productId, ')
+          ..write('groupId: $groupId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(productId, groupId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductGroupTag &&
+          other.productId == this.productId &&
+          other.groupId == this.groupId &&
+          other.createdAt == this.createdAt);
+}
+
+class ProductGroupTagsCompanion extends UpdateCompanion<ProductGroupTag> {
+  final Value<String> productId;
+  final Value<int> groupId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const ProductGroupTagsCompanion({
+    this.productId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProductGroupTagsCompanion.insert({
+    required String productId,
+    required int groupId,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : productId = Value(productId),
+        groupId = Value(groupId);
+  static Insertable<ProductGroupTag> custom({
+    Expression<String>? productId,
+    Expression<int>? groupId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (productId != null) 'product_id': productId,
+      if (groupId != null) 'group_id': groupId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProductGroupTagsCompanion copyWith(
+      {Value<String>? productId,
+      Value<int>? groupId,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return ProductGroupTagsCompanion(
+      productId: productId ?? this.productId,
+      groupId: groupId ?? this.groupId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<int>(groupId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductGroupTagsCompanion(')
+          ..write('productId: $productId, ')
+          ..write('groupId: $groupId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -11127,6 +11408,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $ProductsTable products = $ProductsTable(this);
   late final $ProductGroupsTable productGroups = $ProductGroupsTable(this);
+  late final $ProductGroupTagsTable productGroupTags =
+      $ProductGroupTagsTable(this);
   late final $UnitTypesTable unitTypes = $UnitTypesTable(this);
   late final $ProductUnitsTable productUnits = $ProductUnitsTable(this);
   late final $ProductBarcodesTable productBarcodes =
@@ -11166,6 +11449,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         appSettings,
         products,
         productGroups,
+        productGroupTags,
         unitTypes,
         productUnits,
         productBarcodes,
