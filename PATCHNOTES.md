@@ -42,6 +42,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dinonaktifkan (mis. sudah tidak dijual lagi) bisa tetap muncul
   selamanya di perangkat lain walau sudah tidak aktif di perangkat
   owner.
+- **Cetak label sekarang selalu tampilkan kode batang**, apa pun format
+  barcode produknya — sebelumnya barcode yang bukan format standar
+  13-digit (banyak dipakai utk produk non-barcode resmi spt Telur/Kg)
+  bisa gagal tampilkan kode batang sama sekali di label cetak.
 
 ## 21 Juli 2026
 

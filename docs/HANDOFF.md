@@ -4,6 +4,39 @@
 Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu mencerminkan
 keadaan sekarang. Histori panjang ada di [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Juli 2026 (bugfix: label cetak tidak tampilkan kode
+batang, PR #35, commit `e66cfd2`, Task #15 di task manager — SELESAI) —
+user coba cetak label produk barcode `33669342` (8 digit — sama persis
+barcode "Telur/Kg" yg muncul di analisis perbandingan induk-cabang
+sesi sebelumnya) & lapor kode batangnya tidak muncul. **Akar masalah**:
+`PrinterService._buildLabelBytes` (fitur Cetak Label, Task #11) cuma
+menggambar barcode grafis via command EAN-13 native printer kalau
+barcode PERSIS 12/13 digit numerik — apa pun format lain (termasuk 8-
+digit "asal tempel angka" yg justru MAYORITAS di toko ini, bukan kasus
+langka) jatuh ke fallback teks polos TANPA grafis kode batang sama
+sekali, cuma angkanya dicetak sbg teks. **Fix**: tambah fallback
+`Barcode.code128('{B$barcode'.split(''))` (CODE128 subset B, dukung
+numerik/alfanumerik panjang berapa pun, prefix `{B` sesuai spek
+`esc_pos_utils_plus`) utk barcode non-EAN13 — barcode kosong (belum
+ada) TETAP fallback teks polos (guard `barcode.isNotEmpty`, bukan crash).
+
+**Verifikasi**: smoke test throwaway (dibuat, dijalankan via `flutter
+test`, lalu DIHAPUS setelah lolos — pola yg sudah dipakai sesi² lalu utk
+probe test) membuktikan `Barcode.code128` tidak `throw` utk barcode
+8-digit yg dilaporkan user. TIDAK ada test persisten baru ditambahkan
+utk fungsi ini — `_buildLabelBytes` private, tanpa seam byte-level utk
+introspeksi tipe barcode yg dipilih tanpa decode binary ESC/POS penuh,
+konsisten dgn keputusan sesi² sebelumnya utk builder ESC/POS lain (mis.
+`_buildBytes` struk) yg juga TANPA test byte-level krn alasan sama.
+**BELUM bisa diverifikasi visual di printer fisik** (sama keterbatasan
+Task #11) — kalau dicoba & CODE128-nya ternyata tidak terbaca scanner
+tertentu (beberapa printer/scanner lawas kadang cuma dukung EAN/UPC,
+bukan CODE128), kabari — opsi lanjut: cek dukungan CODE128 di model
+printer spesifik user, atau pertimbangkan symbology lain (Code39) sbg
+fallback kedua.
+
+Full `flutter test` **629 hijau, 0 gagal**, `flutter analyze` bersih.
+
 _Update sesi 22 Juli 2026 (bugfix: produk nonaktif tidak sampai ke klien
 saat sync, PR #35, commit `7f20d38`, Task #14 di task manager — SELESAI)
 — user tanya: "kalau owner nonaktifkan produk, apakah ikut hilang di
