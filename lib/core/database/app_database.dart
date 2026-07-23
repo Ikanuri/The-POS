@@ -3940,6 +3940,15 @@ class AppDatabase extends _$AppDatabase {
     if (!RegExp(r'^[a-z_][a-z0-9_]*$').hasMatch(tableName)) {
       throw ArgumentError('Nama tabel sync tidak valid: $tableName');
     }
+    // customStatement/customInsert lewat raw SQL tidak diketahui Drift tabel
+    // mana yang berubah, jadi StreamProvider (mis. daftar produk/pelanggan)
+    // yang bergantung pada .watch() TIDAK auto-refresh walau data sungguhan
+    // sudah berubah lewat sync — data DI DB sudah benar (mis. produk yang
+    // dinonaktifkan owner), tapi UI klien tetap terlihat "tidak berubah"
+    // sampai dipaksa reload manual (restart app dll). Param `updates:`
+    // memberi tahu Drift tabel yang terpengaruh — pola sama spt
+    // `restoreFromDump`, ketinggalan dipasang di sini sebelumnya.
+    final table = {for (final t in allTables) t.entityName: t}[tableName];
     var count = 0;
     // Perangkat berbeda (owner/kasir) bisa update app tidak serentak — dump
     // dari pengirim yang schemanya lebih baru bisa membawa kolom yang belum
@@ -4074,9 +4083,11 @@ class AppDatabase extends _$AppDatabase {
                 ],
               ).get();
               for (final e in existing) {
-                await customStatement(
+                await customUpdate(
                   'DELETE FROM price_tiers WHERE id = ?',
-                  [e.data['id']!],
+                  variables: [Variable<Object>(e.data['id']!)],
+                  updates: {priceTiers},
+                  updateKind: UpdateKind.delete,
                 );
               }
             }
@@ -4105,6 +4116,7 @@ class AppDatabase extends _$AppDatabase {
           final inserted = await customInsert(
             '$mode INTO "$tableName" ($cols) VALUES ($placeholders)',
             variables: variables,
+            updates: table == null ? null : {table},
           );
           if (inserted > 0) count++;
         } catch (e, st) {
