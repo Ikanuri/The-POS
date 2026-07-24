@@ -3597,10 +3597,28 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Backup / Restore ─────────────────────────
 
+  // Bug nyata dilaporkan user: restore gagal total dgn "FOREIGN KEY
+  // constraint failed ... DELETE FROM product_groups" utk toko mana pun yg
+  // pernah pakai kategori-tambahan (Item 54). Akar masalah: `product_groups`
+  // (skema Drift, `@DriftDatabase` di atas) ditambah setelahnya TAPI daftar
+  // ini (dipakai backup DAN restore) lupa diperbarui — baris lama di
+  // `product_group_tags` tidak pernah ikut dihapus di awal restore krn
+  // tabelnya tidak ada di daftar ini, jadi masih menunjuk ke `product_groups`
+  // lama saat `DELETE FROM "product_groups"` dijalankan → SQLite menolak.
+  // Sekalian dampak lain yg SAMA (tapi diam-diam, tanpa error krn tabelnya
+  // sendiri tanpa FK): `reserved_order_numbers` (Item 55) juga tidak pernah
+  // ikut ter-backup/restore. `product_group_tags` WAJIB disebut SETELAH
+  // `products` & `product_groups` (FK ke keduanya) — urutan list ini dipakai
+  // apa adanya utk INSERT (parent dulu) & REVERSED utk DELETE (anak dulu).
+  // `sync_upload_queue` SENGAJA TIDAK dimasukkan — itu antrian approval host
+  // yang sifatnya transient/proses-saat-ini, bukan data bisnis; me-restore
+  // antrian lama dari backup lama tidak masuk akal (bisa duplikat/konflik
+  // dgn antrian yg sedang berjalan).
   static const _allTables = [
     'app_settings',
     'products',
     'product_groups',
+    'product_group_tags',
     'unit_types',
     'product_units',
     'product_barcodes',
@@ -3613,6 +3631,7 @@ class AppDatabase extends _$AppDatabase {
     'transaction_items',
     'transaction_payments',
     'held_orders',
+    'reserved_order_numbers',
     'stock_ledger',
     'expenses',
     'loyalty_point_ledger',

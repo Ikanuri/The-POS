@@ -105,13 +105,22 @@ class PendingProductProposal {
   PendingProductProposal({
     required this.id,
     required this.fromIp,
+    String? slotKey,
     required this.arrivedAt,
     required this.rows,
     required this.productCount,
-  });
+  }) : slotKey = slotKey ?? fromIp;
 
   final String id;
   final String fromIp;
+
+  /// Kunci "satu slot per pengirim" (lihat dok di `_handleRequest` soal
+  /// bug nyata: usulan device A hilang tanpa jejak saat device B sync dari
+  /// alamat IP yang SAMA sebelum owner sempat meninjau — DHCP lease pendek
+  /// di hotspot HP umum di toko kecil). Diisi `deviceCode` device pengirim
+  /// bila dikirim (klien versi baru); fallback ke [fromIp] utk klien lama
+  /// yang belum kirim `deviceCode` di payload sync.
+  final String slotKey;
   final DateTime arrivedAt;
   final Map<String, List<Map<String, Object?>>> rows;
   final int productCount;
@@ -738,7 +747,15 @@ class LanSyncService {
       onQueueChanged?.call();
 
       // Item 40 — usulan harga/produk, antrian TERPISAH dari _pendingQueue
-      // (lihat dok PendingProductProposal soal alasan dipisah).
+      // (lihat dok PendingProductProposal soal alasan dipisah). `slotKey`
+      // preferensi `deviceCode` (dikirim klien versi baru, lihat
+      // `syncToHost`) drpd `ip` mentah — bug nyata: 2 device BEDA yang
+      // kebetulan dpt IP sama dari hotspot HP (pool DHCP kecil, umum di
+      // toko kecil) saling menimpa usulan satu sama lain di `ip` sbg kunci.
+      final rawDeviceCode = payload['deviceCode'] as String?;
+      final slotKey = (rawDeviceCode != null && rawDeviceCode.isNotEmpty)
+          ? rawDeviceCode
+          : ip;
       final rawProposals =
           payload['proposals'] as Map<String, dynamic>? ?? {};
       final proposalRows = rawProposals.map((k, v) {
@@ -760,23 +777,27 @@ class LanSyncService {
         proposedProducts = filteredProposalRows['products'] ?? const [];
       }
       if (proposedProducts.isNotEmpty) {
-        // Item 41 A.3 — sama seperti _pendingQueue: satu slot per IP.
-        // dumpLocalProposals juga selalu paket penuh (semua produk ber-flag
-        // locallyModified), jadi usulan terbaru superset dari yang lama.
-        _pendingProposals.removeWhere((p) => p.fromIp == ip);
+        // Item 41 A.3 — satu slot per PENGIRIM (`slotKey`, bukan `ip` mentah
+        // lagi — lihat dok di atas). dumpLocalProposals juga selalu paket
+        // penuh (semua produk ber-flag locallyModified), jadi usulan
+        // terbaru DARI DEVICE YANG SAMA superset dari yang lama — aman
+        // ditimpa. Device LAIN tidak akan pernah berbagi `slotKey` yang
+        // sama selama masing-masing device sudah kirim `deviceCode`-nya.
+        _pendingProposals.removeWhere((p) => p.slotKey == slotKey);
         _pendingProposals.add(PendingProductProposal(
           id: _generateNonce(),
           fromIp: ip,
+          slotKey: slotKey,
           arrivedAt: DateTime.now(),
           rows: filteredProposalRows,
           productCount: proposedProducts.length,
         ));
         onProposalsChanged?.call();
-      } else if (_pendingProposals.any((p) => p.fromIp == ip)) {
+      } else if (_pendingProposals.any((p) => p.slotKey == slotKey)) {
         // Semua produk yang tadinya diusulkan device ini sekarang sudah
         // identik dgn data owner — usulan lama (kalau ada) sudah basi juga,
         // bersihkan supaya tidak nyangkut di antrian.
-        _pendingProposals.removeWhere((p) => p.fromIp == ip);
+        _pendingProposals.removeWhere((p) => p.slotKey == slotKey);
         onProposalsChanged?.call();
       }
 
@@ -911,6 +932,14 @@ class LanSyncService {
     required String storeKey,
     required String hostIp,
     required String syncToken,
+    // Identitas pengirim (mis. 'K1', 'K2') — dipakai host sbg kunci "satu
+    // slot per pengirim" di antrian usulan produk (lihat dok `slotKey` di
+    // `PendingProductProposal`), MENGGANTIKAN alamat IP mentah yang bisa
+    // tidak sengaja sama antar device beda (hotspot HP, DHCP lease pendek —
+    // bug nyata: usulan device A hilang tertimpa device B). Opsional supaya
+    // tidak memaksa update semua caller/test sekaligus — null berarti host
+    // fallback ke IP (perilaku lama).
+    String? deviceCode,
     DateTime? since,
     // Dapat dipersingkat di test (mis. simulasi host yang tidak pernah
     // membalas) tanpa memperlambat suite dgn menunggu timeout produksi.
@@ -964,6 +993,8 @@ class LanSyncService {
       'since': downloadSince.toUtc().toIso8601String(),
       'tables': outDump,
       'proposals': proposals,
+      if (deviceCode != null && deviceCode.isNotEmpty)
+        'deviceCode': deviceCode,
     };
     final payloadJson = jsonEncode(payload);
     final encrypted =

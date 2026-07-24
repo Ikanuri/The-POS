@@ -265,6 +265,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
         storeKey: device.storeKey!,
         hostIp: ip,
         syncToken: token,
+        deviceCode: device.deviceCode,
         connectTimeout: state.timeoutProfile.connectTimeout,
         responseTimeout: state.timeoutProfile.responseTimeout,
       );
