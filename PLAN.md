@@ -339,6 +339,17 @@ Di bawah ini HANYA yang masih menggantung.
    ACCESS_FINE_LOCATION sengaja TIDAK diminta karena app hanya membaca
    bonded list, bukan discovery scan). Verifikasi di HP Android ≤11
    sungguhan bahwa daftar printer tetap muncul.
+4. **[P2] `sync_upload_queue` (antrian sync transaksi/dll, BEDA dari
+   antrian usulan produk yang sudah diperbaiki 24 Juli) masih dikunci
+   per-IP mentah** (`enqueueSyncUpload`/`AppDatabase.dart`) — bug yang
+   SAMA (device beda kebetulan IP sama dari hotspot HP kecil bisa saling
+   menimpa antrian) berpotensi terjadi di sini juga, belum diverifikasi/
+   diperbaiki krn butuh migrasi skema (`sync_upload_queue` tabel
+   persisten, beda dari `_pendingProposals` yang murni in-memory) di
+   sandbox yang codegen Drift-nya rusak (lihat gotcha `app_database.g.dart`
+   di CLAUDE.md). Fix-nya sama: tambah kolom `device_code`, kunci slot
+   preferensi itu drpd `from_ip` (pola sama persis spt
+   `PendingProductProposal.slotKey`).
 
 ### Sisa [P3]
 

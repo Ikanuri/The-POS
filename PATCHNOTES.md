@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 24 Juli 2026
+
+### 🛠️ Perbaikan
+- **Restore backup yang selalu gagal dengan pesan error** ("FOREIGN KEY
+  constraint failed") sudah diperbaiki — sebelumnya toko yang pernah
+  memakai fitur kategori-tambahan (satu produk masuk lebih dari satu
+  kategori) tidak bisa restore backup APAPUN sama sekali. Sekalian
+  kategori-tambahan dan reservasi nomor nota sekarang benar-benar ikut
+  tersimpan di file backup (sebelumnya diam-diam terlewat).
+- **Produk baru yang diusulkan asisten/pegawai kadang hilang begitu saja
+  dari daftar tinjauan owner** setelah sync — sekarang tidak lagi. Bug ini
+  muncul kalau ada dua HP kasir/asisten berbeda yang kebetulan tersambung
+  dari alamat jaringan yang sama (biasa terjadi di hotspot HP).
+
 ## 23 Juli 2026
 
 ### ✨ Fitur Baru

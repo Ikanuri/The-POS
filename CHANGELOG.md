@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-24
+
+- `d4b17b9` — fix: restore backup gagal total dgn "FOREIGN KEY constraint failed ... DELETE FROM product_groups" (kode 787) utk toko mana pun yg pernah pakai kategori-tambahan (Item 54) — akar masalah: `_allTables` (dipakai `dumpAllTables`/`restoreFromDump`, `app_database.dart`) tidak pernah diperbarui saat `product_group_tags` & `reserved_order_numbers` ditambah ke skema, jadi baris lama `product_group_tags` tidak pernah ikut dihapus di awal restore & masih menunjuk ke `product_groups` lama saat `DELETE FROM "product_groups"` dijalankan; sekalian dampak diam-diam: kedua tabel itu tidak pernah ikut ter-backup sama sekali. Fix: tambahkan keduanya ke `_allTables` (posisi sesuai dependensi FK). Sekalian fix bug terpisah dilaporkan user: produk baru yang diusulkan asisten via sync LAN kadang hilang dari antrian owner tanpa jejak (bahkan tanpa owner pindah layar) — `_pendingProposals` dikunci "satu slot per alamat IP", 2 device BEDA yang kebetulan tersambung dari IP sama (lazim di hotspot HP, pool DHCP kecil) saling menimpa slot sebelum owner sempat meninjau; fix: kunci slot sekarang preferensi `deviceCode` (dikirim klien via `syncToHost`) drpd IP mentah. Test baru `backup_restore_bug_test.dart` (kasus `product_group_tags`) & `proposal_device_slot_key_test.dart` (2 device beda IP sama vs device sama sync ulang) — revert-verified
+
 ## 2026-07-23
 
 - `22601be` — fix: sheet "Verifikasi Pesanan" (Item 24b, centang tiap barang sebelum lanjut bayar) dihapus dari alur transfer transaksi via QR — tap kartu antrian handoff pegawai (`awaitingPayment`) sekarang langsung resume ke keranjang aktif, persis sama seperti pesanan ditahan biasa (permintaan user: penerima tidak perlu mengecek ulang barang yang sudah disusun pengirim); `_VerifyOrderSheet`, `_toggle`, dan field `checked` di payload `held_orders` dihapus sebagai dead code; `kasir_verify_order_test.dart` & satu test terkait di `kasir_scan_order_code_test.dart` disesuaikan/dihapus
