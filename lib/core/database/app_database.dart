@@ -1785,9 +1785,19 @@ class AppDatabase extends _$AppDatabase {
 
   /// Item 25a — tandai/lepas tanda "stok habis" manual (lihat komentar
   /// kolom `markedOutOfStock` di product_tables.dart).
+  ///
+  /// `updated_at` WAJIB dicap ulang eksplisit — kelas bug yang SAMA PERSIS
+  /// dgn `deactivateProduct`/`applyProductProposals` (lihat dok panjang di
+  /// keduanya): tanpa ini, `dumpSince` (host→klien, filter `WHERE
+  /// updated_at >= since`) tidak akan pernah lagi menyertakan baris ini
+  /// begitu watermark klien sudah lewat dari kapan produk itu TERAKHIR
+  /// DIEDIT (bukan kapan ditandai habis) — tanda "stok habis" yang di-toggle
+  /// owner di host tidak pernah sampai ke klien.
   Future<void> setMarkedOutOfStock(String productId, bool value) =>
       (update(products)..where((t) => t.id.equals(productId))).write(
-          ProductsCompanion(markedOutOfStock: Value(value)));
+          ProductsCompanion(
+              markedOutOfStock: Value(value),
+              updatedAt: Value(DateTime.now())));
 
   // ───────────────────────── Transaction save ─────────────────────────
 
