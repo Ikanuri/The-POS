@@ -281,9 +281,68 @@ memang tidak menguji beda popup-vs-chip).
 - `setMarkedOutOfStock` tidak mencap `updated_at` — kelas bug tercatat 2x
   di CLAUDE.md, ditemukan sambil jalan giliran sebelumnya, BELUM disentuh.
 
+## `setMarkedOutOfStock` updated_at: host→klien FIXED, client→host BELUM (butuh keputusan)
+
+User setuju menutup celah, lalu tanya sendiri hal yang tepat: "bagaimana
+jika dari client ke host?" — investigasi menemukan itu BUKAN cuma bug
+watermark yang sama, tapi celah arsitektur terpisah & lebih dalam.
+
+**Host→klien: FIXED** (`1dfd159`). Pola identik `deactivateProduct`/
+`applyProductProposals` — `updated_at` sekarang dicap ulang di
+`setMarkedOutOfStock`. Test `marked_out_of_stock_sync_test.dart`.
+
+**Client→host: TIDAK sekadar bug, TIDAK dikerjakan — perlu keputusan
+desain user.** Ditelusuri sampai akar:
+1. `syncToHost` (`lan_sync_service.dart`) mengirim
+   `db.dumpSince(uploadSince, includeMasterData: false)` — SENGAJA
+   (`products` = master data, cuma boleh mengalir SATU ARAH host→bawah,
+   supaya harga/nama dari device asisten/kasir tidak menimpa data owner).
+2. Jalur PENGECUALIAN yang sudah ada utk perubahan master-data dari device
+   non-owner = "usulan produk" (Item 40): `markProductLocallyModified` men-
+   set `products.locally_modified=1`, lalu `dumpLocalProposals` mengambil
+   SEMUA kolom produk itu (termasuk `markedOutOfStock`, krn `SELECT *`) &
+   mengirimkannya sbg usulan TERPISAH yg wajib direview manual owner
+   (`_pendingProposals`/`sync_upload_queue`).
+3. TAPI: `setMarkedOutOfStock` (dipanggil dari `_toggleOutOfStock` di
+   `item_entry_sheet.dart` & `_toggle` di `cek_stok_screen.dart`) TIDAK
+   PERNAH memanggil `markProductLocallyModified` — beda dgn jalur edit
+   form produk penuh (`produk_form_screen.dart`, 3 titik panggil). Jadi
+   toggle "stok habis" oleh kasir/asisten TIDAK PERNAH ditandai
+   `locally_modified`, TIDAK PERNAH masuk `dumpLocalProposals`, TIDAK
+   PERNAH sampai ke host — bahkan lewat jalur review sekalipun. Ini
+   berlaku SEJAK fitur Item 25a dibuat, bukan regresi baru.
+
+**Kenapa ini keputusan desain, bukan "tinggal tambah 1 baris"**: kolom
+`markedOutOfStock` SENGAJA didesain "akses cepat, bukan izin ter-audit —
+semua role bisa toggle" (lihat komentar Item 25a). Kalau toggle kasir
+dipaksa lewat jalur `markProductLocallyModified` yg sama dgn edit
+harga/nama, itu akan MASUK antrian review owner yg sama — bertentangan
+dgn maksud "akses cepat" (toggle jadi tertunda sampai owner sempat
+approve, bukan instan). Perlu user putuskan salah satu:
+  (a) **Biarkan lokal-per-device** (status quo) — toggle kasir cuma
+      berlaku di device itu sendiri, tidak pernah menyebar ke host/device
+      lain. Konsisten dgn "bukan izin ter-audit", tapi kasir A menandai
+      habis tidak akan terlihat kasir B/owner sampai owner sendiri yg
+      menandainya di host.
+  (b) **Jalur upload instan terpisah** (BUKAN via `dumpLocalProposals`/
+      review) — `markedOutOfStock` dikirim client→host tanpa antrian
+      approval (risikonya rendah, cuma boolean, beda dari harga/nama),
+      host langsung apply + cap `updated_at` sendiri, lalu ikut tersebar
+      ke device LAIN di sync host→bawah berikutnya. Butuh field/endpoint
+      baru di payload sync (`lan_sync_service.dart`) — bukan reuse
+      `dumpLocalProposals` yg maknanya "usulan perlu approval".
+  (c) **Ikut jalur usulan Item 40 apa adanya** — panggil
+      `markProductLocallyModified` di `setMarkedOutOfStock` juga. Paling
+      murah implementasinya, tapi mengubah semantik fitur ("akses cepat")
+      jadi "tertunda sampai owner approve" — kemungkinan besar BUKAN yg
+      diinginkan user, tercantum di sini supaya opsinya lengkap.
+Belum ditanyakan ke user secara eksplisit lewat AskUserQuestion pada
+giliran ini — sesi berikutnya harus menawarkan pilihan di atas SEBELUM
+menyentuh kode lagi di area ini.
+
 ## Status test suite
 
-`flutter test` PENUH: **713 test, SEMUA hijau** (run terakhir exit 0,
+`flutter test` PENUH: **715 test, SEMUA hijau** (run terakhir exit 0,
 flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
