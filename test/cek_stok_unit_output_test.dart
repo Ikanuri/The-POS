@@ -96,4 +96,36 @@ void main() {
 
     await db.close();
   });
+
+  testWidgets(
+      'produk berjenjang yang SUDAH tercentang SEBELUM layar dibuka tetap '
+      'dapat pemilih satuan & teks per-satuan (dulu tidak, krn satuan hanya '
+      'dimuat saat checkbox ditekan)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await addTieredProduct(db, 'Indomie', stockBase: 25, ratioDus: 10);
+    // Ditandai habis dari SESI SEBELUMNYA — layar dibuka dgn kondisi ini,
+    // tanpa user menekan checkbox apa pun (persis laporan user: produk
+    // tercentang tapi "satuan tidak ada").
+    await db.setMarkedOutOfStock('p-Indomie', true);
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue,
+        reason: 'prasyarat: produk memang sudah tercentang dari DB');
+    expect(find.byType(DropdownButton<int>), findsOneWidget,
+        reason: 'pemilih satuan harus ikut muncul untuk produk yang sudah '
+            'tercentang sejak layar dibuka');
+
+    // Teks order juga harus sudah per-satuan, bukan "- Indomie" polos.
+    final dropdown =
+        tester.widget<DropdownButton<int>>(find.byType(DropdownButton<int>));
+    final dusIdx = dropdown.items!
+        .indexWhere((item) => (item.child as Text).data == 'Dus');
+    dropdown.onChanged!(dusIdx);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2.5 Dus Indomie'), findsWidgets);
+
+    await db.close();
+  });
 }

@@ -650,7 +650,7 @@ class AppDatabase extends _$AppDatabase {
       // Saldo non-base dari entry terakhir (dalam satuan non-base).
       final lastRow = await customSelect(
         'SELECT stock_after FROM stock_ledger '
-        'WHERE product_unit_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        'WHERE product_unit_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
         variables: [Variable.withString(unitId)],
       ).getSingleOrNull();
       if (lastRow == null) continue;
@@ -675,7 +675,7 @@ class AppDatabase extends _$AppDatabase {
       // Saldo dasar saat ini.
       final baseLastRow = await customSelect(
         'SELECT stock_after FROM stock_ledger '
-        'WHERE product_unit_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        'WHERE product_unit_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
         variables: [Variable.withString(baseUnitId)],
       ).getSingleOrNull();
       final currentBase = baseLastRow != null
@@ -797,7 +797,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT pu.product_id AS pid, p.name AS name, pu.min_stock AS min_stock,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
-                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+                  ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id
       WHERE pu.is_base_unit = 1 AND pu.min_stock IS NOT NULL AND p.is_active = 1
@@ -840,7 +840,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT pu.product_id AS pid,
         (SELECT sl.stock_after FROM stock_ledger sl
          WHERE sl.product_unit_id = pu.id
-         ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1) AS stock
+         ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1) AS stock
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id
       WHERE pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1
@@ -871,7 +871,7 @@ class AppDatabase extends _$AppDatabase {
         p.marked_out_of_stock AS marked_out_of_stock,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
-                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+                  ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id
       WHERE $where
@@ -1010,7 +1010,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT p.id AS pid, p.name AS name, p.product_group_id AS group_id,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
-                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock,
+                  ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock,
         COALESCE(pt.cost_price, 0) AS cost_price
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id

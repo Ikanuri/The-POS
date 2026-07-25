@@ -43,6 +43,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   tersorot, jadi mengetik langsung menggantinya.
 - **Kotak "Poin Loyalitas" pelanggan baru tidak lagi berisi "0"** yang
   harus dihapus dulu sebelum bisa diisi.
+- **Pemilih satuan di Cek Stok kini juga muncul untuk produk yang sudah
+  ditandai habis sebelumnya.** Dulu pemilih satuan hanya muncul kalau
+  produknya baru saja dicentang di sesi itu — produk yang sudah tercentang
+  dari sebelumnya tampil tanpa pilihan satuan, dan teks Order Restock-nya
+  turun jadi "- Nama Produk" polos tanpa jumlah & satuan.
+- **Angka stok tidak bisa lagi berbeda antar layar.** Untuk produk yang
+  punya dua perubahan stok di detik yang sama, layar Cek Stok / Stock
+  Opname / laporan inventori bisa menampilkan angka lama sementara
+  perhitungan internal memakai angka terbaru. Sekarang semuanya konsisten.
 - **Layar "Hitung Fisik" (Stock Opname) jauh lebih cepat terbuka** untuk
   toko dengan banyak produk — dulu menunggu memuat data satuan produk satu
   per satu sebelum daftarnya muncul.

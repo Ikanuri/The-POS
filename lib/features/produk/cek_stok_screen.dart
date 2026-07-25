@@ -61,25 +61,49 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     if (value) await _ensureUnitsLoaded(productId);
   }
 
-  Future<void> _ensureUnitsLoaded(String productId) async {
-    if (_unitsByProduct.containsKey(productId)) return;
-    final db = ref.read(databaseProvider);
-    final units = await db.getProductUnits(productId);
-    if (units.length <= 1) {
-      _unitsByProduct[productId] = const [];
-      return;
+  Future<void> _ensureUnitsLoaded(String productId) =>
+      _loadUnitsFor([productId]);
+
+  /// Muat satuan untuk sekumpulan produk sekaligus (satu query batch).
+  /// Produk yang sudah pernah dimuat dilewati — nilai `const []` juga
+  /// dianggap "sudah dimuat" (artinya: produk bersatuan tunggal, memang
+  /// tidak dapat pemilih satuan), supaya tidak di-query berulang kali.
+  Future<void> _loadUnitsFor(List<String> productIds) async {
+    final missing = [
+      for (final id in productIds)
+        if (!_unitsByProduct.containsKey(id)) id,
+    ];
+    if (missing.isEmpty) return;
+    final byProduct =
+        await ref.read(databaseProvider).getUnitsWithTypeNamesFor(missing);
+    for (final id in missing) {
+      final units = byProduct[id] ?? const [];
+      if (units.length <= 1) {
+        _unitsByProduct[id] = const [];
+        continue;
+      }
+      final choices = [
+        for (final u in units) _UnitChoice(unit: u.unit, unitName: u.unitName),
+      ];
+      _unitsByProduct[id] = choices;
+      final baseIdx = choices.indexWhere((c) => c.unit.isBaseUnit);
+      _selectedUnitIdx[id] = baseIdx < 0 ? 0 : baseIdx;
     }
-    final choices = <_UnitChoice>[];
-    for (final u in units) {
-      final unitType = await (db.select(db.unitTypes)
-            ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
-          .getSingleOrNull();
-      choices.add(_UnitChoice(unit: u, unitName: unitType?.name ?? 'Satuan'));
-    }
-    _unitsByProduct[productId] = choices;
-    final baseIdx = choices.indexWhere((c) => c.unit.isBaseUnit);
-    _selectedUnitIdx[productId] = baseIdx < 0 ? 0 : baseIdx;
     if (mounted) setState(() {});
+  }
+
+  /// Produk yang SUDAH ditandai habis SEBELUM layar ini dibuka tidak pernah
+  /// lewat [_toggle], jadi satuannya dulu tidak pernah dimuat sama sekali —
+  /// pemilih satuan tidak muncul & teks order-nya jatuh ke "- {nama}" polos,
+  /// walaupun produknya berjenjang (dilaporkan user 25 Juli: produk
+  /// tercentang tapi "satuan tidak ada"). Dipanggil tiap kali daftar datang;
+  /// satu query batch untuk semua yang tercentang, bukan per produk.
+  void _ensureUnitsForChecked(List<StockOverviewRow> rows) {
+    final checked = [
+      for (final r in rows)
+        if (r.markedOutOfStock) r.productId,
+    ];
+    if (checked.isNotEmpty) _loadUnitsFor(checked);
   }
 
   void _copyOrderText(String text) {
@@ -97,6 +121,15 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     final groupId = ref.watch(_cekStokGroupProvider);
     final groupsAsync = ref.watch(_cekStokGroupsProvider);
     final rowsAsync = ref.watch(_cekStokOverviewProvider(groupId));
+
+    // Dibaca dari nilai yang sudah di-watch (BUKAN `ref.listen`, yang di
+    // `WidgetRef` tidak punya `fireImmediately`) supaya emisi PERTAMA —
+    // yang justru berisi produk tercentang dari sesi sebelumnya — ikut
+    // tertangani. Aman dipanggil tiap build: [_loadUnitsFor] keluar
+    // seketika kalau tidak ada yang perlu dimuat, dan `setState`-nya baru
+    // terjadi setelah await (bukan di tengah build).
+    final loadedRows = rowsAsync.valueOrNull;
+    if (loadedRows != null) _ensureUnitsForChecked(loadedRows);
 
     return Scaffold(
       appBar: AppBar(
