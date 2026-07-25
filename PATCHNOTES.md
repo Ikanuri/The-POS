@@ -11,6 +11,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 25 Juli 2026
 
 ### ✨ Fitur Baru
+- **Menu baru "Cek Duplikat Data"** (Pengaturan > Diagnostik, khusus owner) —
+  memeriksa apakah ada produk yang barcode/harga-nya ke-dobel (misalnya 2
+  barcode "Primer" sekaligus), yang bisa terjadi kalau HP pernah restore
+  backup dari HP lain yang datanya sempat kurang rapi. Kalau ketemu, tinggal
+  ketuk produknya untuk membuka Edit Produk lalu simpan ulang — otomatis
+  rapi jadi satu.
 - **Nama produk panjang di keranjang tidak lagi terpotong** — sekarang
   boleh tampil sampai 2 baris.
 - **Stock Opname bisa dihitung pakai satuan yang lebih nyaman** — produk

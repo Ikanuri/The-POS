@@ -5,10 +5,52 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 25 Juli 2026 — commit `6455b9a` (SELESAI, terverifikasi):
+_Update sesi 25 Juli 2026 — commit `1176d97` (SELESAI, terverifikasi):
 lanjutan sesi yang sama, dipicu pertanyaan user "dari host ke client,
 perubahan apa saja yang diterapkan?" lalu laporan bug nyata "kenapa barcode
-yang diedit di host tidak ikut berubah di client setelah sync?"._
+yang diedit di host tidak ikut berubah di client setelah sync?", lalu
+temuan LIVE user sendiri: produk "Amplop" punya 2 barcode Primer di device
+HOST-nya sendiri._
+
+## Layar Cek Duplikat Data (Pengaturan > Diagnostik) — susulan temuan Amplop
+
+User cek sendiri produk "Amplop" di device HOST-nya (screenshot) — 2
+barcode berlabel "Primer" sekaligus, padahal form Edit Produk cuma py 1
+field Barcode. Awalnya kukira bug orphan-cleanup di atas (client-side), tapi
+user klarifikasi: **ini di device HOST**, bukan klien — jadi bug sync di
+atas tidak relevan langsung (host tidak pernah `mergeRows` data
+`product_barcodes` masuk dari mana pun, tabel ini SATU ARAH host→bawah).
+
+Ditelusuri lebih lanjut, user konfirmasi: **host pernah restore backup FULL
+dari device client** (dulu krn ada produk yang tidak muncul). Itu akar
+masalahnya — `restoreFromDump` (`app_database.dart`) DELETE seluruh tabel
+lalu `INSERT OR REPLACE` verbatim dari isi file backup, TANPA cek invarian
+apa pun ("1 barcode Primer per satuan", dst). Device client itu sudah kena
+duplikat (dari bug orphan-cleanup di atas, SEBELUM fix-nya ada), jadi
+restore membawa duplikatnya mentah² ke host.
+
+**Fitur baru**: `AppDatabase.findMasterDataDuplicates()` — scan
+`product_barcodes`/`price_tiers`/`alt_prices` (3 tabel yang SAMA-SAMA
+rentan krn full-dump tanpa `updated_at`) cari unit dgn >1 baris yg
+seharusnya unik (>1 `isPrimary=true`, min_qty dobel, label Harga Lain
+dobel). Layar baru `DuplicateDataScreen` (`/pengaturan/duplikat-data`,
+owner-only, di section Diagnostik) melaporkan produk yg kena + tautan ke
+Edit Produk masing².
+
+**Keputusan desain penting**: TIDAK auto-delete. Tabel-tabel ini tak punya
+kolom waktu, jadi tidak ada cara algoritmik menentukan baris mana yang
+"benar" (mis. barcode mana yg labelnya sudah tercetak & dipakai kasir) —
+kalau auto-pilih salah, bisa membuang barcode yang justru masih dipakai.
+Owner yg tinjau manual & tekan "Simpan Produk" — `saveProduct` sudah
+otomatis delete-semua-primer-lama-lalu-insert-satu-baru, jadi resave polos
+(tanpa ubah apa pun) sudah cukup merapikan.
+
+**Belum dikerjakan / menggantung**: user belum menjalankan/cek layar ini
+di device asli utk tahu berapa banyak produk lain yg kena (screenshot
+Amplop cuma 1 sample yg kebetulan ketemu manual). `restoreFromDump` sendiri
+juga BELUM diperbaiki utk MENCEGAH duplikat masuk lagi di masa depan (mis.
+dedup saat restore) — scope sesi ini murni deteksi+laporan, bukan
+pencegahan di titik masuknya data.
 
 ## Fix: barcode/tier grosir/Harga Lain lama tidak terhapus di klien (25 Juli)
 
@@ -394,7 +436,7 @@ vs `Color(0xffebe8e0)` (netral) saat bug direproduksi.
 
 ## Status test suite
 
-`flutter test` PENUH: **719 test, SEMUA hijau** (run terakhir exit 0,
+`flutter test` PENUH: **726 test, SEMUA hijau** (run terakhir exit 0,
 flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
