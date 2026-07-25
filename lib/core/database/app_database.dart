@@ -4564,6 +4564,42 @@ class AppDatabase extends _$AppDatabase {
           }
         }
       }
+
+      // Bug nyata dilaporkan user: owner edit barcode produk -> setelah sync
+      // ke klien, barcode LAMA masih ada (bisa di-scan) BERDAMPINGAN dgn yg
+      // baru. Akar: `saveProduct` HAPUS baris lama + INSERT baris baru (id
+      // UUID baru) saat barcode diedit, bukan update in-place — dan tabel ini
+      // (sama seperti price_tiers/alt_prices) SELALU full-dump tanpa
+      // `updated_at` (lihat `dumpSince`), jadi `INSERT OR REPLACE` di atas
+      // tidak pernah menghapus baris yang sudah tak ada di payload. Payload
+      // full-dump = kebenaran LENGKAP host saat ini, jadi aman hapus baris
+      // lokal yang id-nya tak ada di dalamnya — KECUALI baris milik unit yang
+      // sedang diproteksi (`protectedUnitIds`, usulan lokal blm di-approve),
+      // supaya edit lokal yang belum di-review owner tidak ikut kehapus.
+      const orphanCleanupTables = {'product_barcodes', 'price_tiers', 'alt_prices'};
+      if (!isAppendOnly && orphanCleanupTables.contains(tableName)) {
+        final incomingIds =
+            rows.map((r) => r['id']).whereType<String>().toSet();
+        final existing = await customSelect(
+          'SELECT id, product_unit_id FROM "$tableName"',
+        ).get();
+        for (final e in existing) {
+          final id = e.data['id'] as String?;
+          if (id == null || incomingIds.contains(id)) continue;
+          final unitId = e.data['product_unit_id'] as String?;
+          if (protectedUnitIds != null &&
+              unitId != null &&
+              protectedUnitIds.contains(unitId)) {
+            continue;
+          }
+          await customUpdate(
+            'DELETE FROM "$tableName" WHERE id = ?',
+            variables: [Variable<Object>(id)],
+            updates: {table!},
+            updateKind: UpdateKind.delete,
+          );
+        }
+      }
     });
     return count;
   }
