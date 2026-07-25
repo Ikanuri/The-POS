@@ -36,6 +36,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   perubahan stok yang terjadi sangat berdekatan (misalnya atur stok awal
   langsung disusul stock opname) — sekarang selalu menampilkan angka
   hasil perubahan terakhir.
+- **Salah angka saat "Sesuaikan" stok sudah tidak mungkin lagi** — dulu
+  angka stok lama di kotak "Stok baru" tidak tersorot, jadi kalau langsung
+  diketik tanpa menghapusnya dulu, angkanya menempel di belakang yang lama
+  (stok 5, ketik 12, tersimpan jadi 512). Sekarang angka lamanya otomatis
+  tersorot, jadi mengetik langsung menggantinya.
+- **Kotak "Poin Loyalitas" pelanggan baru tidak lagi berisi "0"** yang
+  harus dihapus dulu sebelum bisa diisi.
+- **Layar "Hitung Fisik" (Stock Opname) jauh lebih cepat terbuka** untuk
+  toko dengan banyak produk — dulu menunggu memuat data satuan produk satu
+  per satu sebelum daftarnya muncul.
 
 ## 24 Juli 2026
 

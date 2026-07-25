@@ -1315,6 +1315,48 @@ class AppDatabase extends _$AppDatabase {
   Future<List<ProductUnit>> getProductUnits(String productId) =>
       (select(productUnits)..where((t) => t.productId.equals(productId))).get();
 
+  /// Satuan + nama tipe satuannya untuk BANYAK produk sekaligus, satu query
+  /// JOIN. Untuk layar yang butuh pemilih satuan seluruh daftar sekaligus
+  /// (Stock Opname): `getProductUnits` per produk lalu `unit_types` per
+  /// satuan = N+1 BERLAPIS — 1000 produk berjenjang jadi 3000 round-trip
+  /// (~440ms di SQLite memori x86; jauh lebih lambat di HP kelas bawah krn
+  /// SQLCipher mendekripsi tiap page + I/O file), dan layarnya menunggu
+  /// SELURUH loop selesai di balik spinner.
+  ///
+  /// `coalesce(unit_type_id, 1)` MEMPERTAHANKAN perilaku lama `u.unitTypeId
+  /// ?? 1` apa adanya (satuan tanpa tipe jatuh ke unit type id 1 = 'Kg') —
+  /// sengaja tidak "dirapikan" di sini supaya refactor ini murni soal
+  /// jumlah query, tidak mengubah nama satuan yang tampil.
+  ///
+  /// Urutan per produk mengikuti `rowid` (urutan insert) — sama dengan yang
+  /// SELAMA INI dihasilkan `getProductUnits` (tanpa `orderBy`, jadi urutan
+  /// scan alami), dibuat eksplisit karena indeks pilihan dropdown &
+  /// `indexWhere(isBaseUnit)` bergantung padanya.
+  Future<Map<String, List<({ProductUnit unit, String unitName})>>>
+      getUnitsWithTypeNamesFor(List<String> productIds) async {
+    if (productIds.isEmpty) return {};
+    final query = select(productUnits).join([
+      leftOuterJoin(
+        unitTypes,
+        unitTypes.id.equalsExp(
+            coalesce([productUnits.unitTypeId, const Constant(1)])),
+      ),
+    ])
+      ..where(productUnits.productId.isIn(productIds))
+      ..orderBy([
+        OrderingTerm(
+            expression: const CustomExpression<int>('product_units.rowid')),
+      ]);
+    final rows = await query.get();
+    final map = <String, List<({ProductUnit unit, String unitName})>>{};
+    for (final row in rows) {
+      final unit = row.readTable(productUnits);
+      final name = row.readTableOrNull(unitTypes)?.name ?? 'Satuan';
+      (map[unit.productId] ??= []).add((unit: unit, unitName: name));
+    }
+    return map;
+  }
+
   Future<List<ProductBarcode>> getProductBarcodes(String productUnitId) =>
       (select(productBarcodes)
             ..where((t) => t.productUnitId.equals(productUnitId)))
