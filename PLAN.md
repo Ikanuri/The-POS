@@ -351,13 +351,12 @@ Di bawah ini HANYA yang masih menggantung.
     package `http`/cronet akan mendadak gagal tanpa NSC exception).
 11. **D.3 Java 8 tanpa core library desugaring** — potensi build gagal
     saat upgrade plugin.
-12. **D.4 CLAUDE.md basi** — tertulis `schemaVersion = 9`, kode 16.
-13. **D.5 terkunci di Flutter 3.24.5 (pin CI)** — di 3.44.6 stable gagal
+12. **D.5 terkunci di Flutter 3.24.5 (pin CI)** — di 3.44.6 stable gagal
     kompilasi: 1 error `CardTheme`→`CardThemeData` (`app_theme.dart:175`)
     + 53 deprecation (`withOpacity`, `DropdownButtonFormField.value`,
     `onReorder`). Rencanakan sesi upgrade SDK khusus (fix serentak +
     full test + uji APK device fisik).
-14. **E — clean code**: pecah bertahap file raksasa (`kasir_screen.dart`
+13. **E — clean code**: pecah bertahap file raksasa (`kasir_screen.dart`
     3.7k, `app_database.dart` 3.4k, `receipt_screen.dart` 2.7k);
     `LanSyncService` full-static callback tunggal (2 listener saling
     timpa); loop mati `lastQtyIdx` di `discount_allocation.dart`;
