@@ -26,7 +26,13 @@ class _PelangganFormScreenState
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
-  final _pointsCtrl = TextEditingController(text: '0');
+  /// Dibiarkan KOSONG, bukan diisi '0' — nol di sini cuma nilai default, dan
+  /// field yang sudah berisi "0" memaksa user menghapusnya dulu sebelum
+  /// mengetik (kalau tidak, angkanya menempel di belakang nol). Kosong sudah
+  /// aman: jalur simpan memakai `int.tryParse(...) ?? 0`. Pola ini sama dgn
+  /// field angka lain di app (mis. `thresholdCtrl` di Pengaturan &
+  /// `debt_payment_dialog`) yang juga kosong saat nilainya nol.
+  final _pointsCtrl = TextEditingController();
   bool _isLoading = false;
   bool _isEdit = false;
   String? _customerId;
@@ -56,7 +62,8 @@ class _PelangganFormScreenState
         _nameCtrl.text = c.name;
         _phoneCtrl.text = c.phone ?? '';
         _addressCtrl.text = c.address ?? '';
-        _pointsCtrl.text = c.loyaltyPoints.toString();
+        _pointsCtrl.text =
+            c.loyaltyPoints == 0 ? '' : c.loyaltyPoints.toString();
         setState(() {
           _existing = c;
           _groups = groups;

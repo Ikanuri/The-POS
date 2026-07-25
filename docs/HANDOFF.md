@@ -42,12 +42,51 @@ ternyata TERBUKTI berdampak nyata._
 sengaja dibalik leksikografis supaya bug ke-trigger PASTI, bukan
 untung-untungan UUID acak).
 
+## Audit pra-rilis 2.2.0 (25 Juli) — hasil & 2 fix susulan
+
+Diminta user sebelum memutuskan tag resmi. **Verifikasi bersih**: 677 test
+hijau, analyze 0 issue, APK build hijau di CI (`e796189`), rantai migrasi
+v1→v21 konsisten (tiap `addColumn` yg tabelnya pernah di-`createTable`
+lebih awal SUDAH ber-guard), bug kelas `_allTables` TIDAK terulang
+(`sync_upload_queue` satu-satunya yg dikecualikan & itu benar: tanpa FK +
+antrian transien), tak ada pola crash di kode baru, tak ada TODO/`print`
+bocor.
+
+**2 temuan, keduanya sudah diperbaiki** (lihat CHANGELOG utk detail):
+1. `_loadUnits()` Stock Opname N+1 berlapis + memblokir seluruh layar di
+   balik spinner → satu query JOIN (`getUnitsWithTypeNamesFor`). Diukur:
+   1000 produk = 3000 query/441ms → 1 query/7ms.
+2. Dialog "Sesuaikan Stok" `autofocus` + field terisi = ketikan MENEMPEL
+   (stok 5 + ketik "12" → tersimpan 512, bahaya data nyata, bukan cuma
+   merepotkan) → select-all. Plus field Poin pelanggan berhenti prefill '0'.
+
+**Dua sisa risiko yang tak bisa ditutup test otomatis SUDAH DITUTUP user
+(25 Juli)**: scanner HID (Item 32) & printer thermal Bluetooth Android ≤11
+(Item 41/D.1) dilaporkan user "sudah ditest dan baik baik saja" di device
+asli — kedua item itu DIHAPUS dari PLAN.md. Jadi tidak ada lagi verifikasi
+manual yang menggantung untuk rilis 2.2.0. Catatan konteks: surface rilis
+ini tetap besar (157 commit sejak 2.1.1).
+
 ## Status test suite
 
-`flutter test` PENUH: **677 test, semua hijau** (0 gagal). Flake lama
-`stock_opname_unit_conversion_test.dart`/`cek_stok_unit_output_test.dart`
-dikonfirmasi HILANG — 3x run batch berulang (10 file yang biasa
-reproduce flake) semua bersih. `flutter analyze` bersih (0 issue).
+`flutter test` PENUH: **681 test, 679 hijau**. `flutter analyze` bersih
+(0 issue).
+
+2 kegagalan sisa = **flake port, BUKAN regresi**: `lan_sync_item41_test.
+dart` gagal dgn `SocketException: Address already in use, port = 8625`.
+**8625 itu port sync TETAP milik app** (`lan_sync_service.dart`), dan 4
+file test real-HTTP memperebutkannya saat `flutter test` menjalankan file
+secara paralel: `lan_sync_item41_test.dart`, `lan_sync_slow_transfer_test.
+dart`, `lan_sync_timeout_test.dart`, `proposal_unchanged_end_to_end_test.
+dart`. Lolos bersih 2/2 saat dijalankan sendiri — sudah diverifikasi, dan
+kelas flake yg sama sudah tercatat sejak sesi 24 Juli (dulu muncul di
+`proposal_unchanged_end_to_end_test.dart`). Kalau mau benar-benar
+dihilangkan: port harus bisa disuntik per-test (bukan konstanta), itu
+perubahan pada kode produksi jadi ditahan dulu.
+
+Flake lama `stock_opname_unit_conversion_test.dart`/`cek_stok_unit_output_
+test.dart` (akar masalahnya Item 38) dikonfirmasi HILANG — 3x run batch
+berulang semua bersih.
 
 ## Yang menggantung / belum sempat
 

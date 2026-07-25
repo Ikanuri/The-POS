@@ -176,16 +176,18 @@ class _OpnameCountScreenState extends ConsumerState<_OpnameCountScreen> {
 
   Future<void> _loadUnits() async {
     final db = ref.read(databaseProvider);
+    // SATU query JOIN untuk seluruh daftar — dulu `getProductUnits` per
+    // produk + `unit_types` per satuan (N+1 berlapis), padahal layar ini
+    // menahan SEMUA baris di balik spinner sampai loopnya habis: katalog
+    // grosir ribuan produk = ribuan round-trip sebelum apa pun tampil.
+    final unitsByProduct =
+        await db.getUnitsWithTypeNamesFor([for (final r in widget.rows) r.productId]);
     for (final r in widget.rows) {
-      final units = await db.getProductUnits(r.productId);
+      final units = unitsByProduct[r.productId] ?? const [];
       if (units.length <= 1) continue;
-      final choices = <_UnitChoice>[];
-      for (final u in units) {
-        final unitType = await (db.select(db.unitTypes)
-              ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
-            .getSingleOrNull();
-        choices.add(_UnitChoice(unit: u, unitName: unitType?.name ?? 'Satuan'));
-      }
+      final choices = [
+        for (final u in units) _UnitChoice(unit: u.unit, unitName: u.unitName),
+      ];
       _unitsByProduct[r.productId] = choices;
       _selectedUnitIdx[r.productId] =
           choices.indexWhere((c) => c.unit.isBaseUnit).clamp(0, choices.length - 1);

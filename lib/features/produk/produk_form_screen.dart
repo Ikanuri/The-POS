@@ -252,6 +252,15 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
     String fmt(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
     final qtyCtrl = TextEditingController(text: fmt(current));
+    // Field ini `autofocus` DAN sudah terisi stok sekarang, jadi begitu dialog
+    // terbuka cursor berada di UJUNG angka itu — mengetik langsung MENEMPEL,
+    // bukan mengganti (stok 5, ketik "12" -> "512" -> stok jadi 512; kalau
+    // stok 0 jadi "012"). Angka lamanya harus dihapus manual dulu, padahal
+    // "Stok saat ini" sudah tertulis di atas field. Select-all seluruh angka
+    // (pola sama dgn dialog Ubah Nama Kategori) supaya ketik = ganti, tapi
+    // nilai lamanya tetap kelihatan & bisa dipertahankan/dikoreksi.
+    qtyCtrl.selection =
+        TextSelection(baseOffset: 0, extentOffset: qtyCtrl.text.length);
     final noteCtrl = TextEditingController();
 
     final confirmed = await showDialog<bool>(
