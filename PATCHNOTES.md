@@ -48,6 +48,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   mengetik/menempel langsung di kotak teksnya; centang, jumlah, dan satuan
   di daftar atas ikut menyesuaikan. Menghapus satu baris juga otomatis
   membatalkan centang produknya.
+- **Kasir: "Harga Lain" langsung tampil sebagai pilihan, tidak perlu buka
+  menu dulu.** Sebelumnya harga grosir/harga alternatif satuan disembunyikan
+  di balik satu tombol "Harga lain (N)" — sekarang setiap opsi (harga
+  dasar, tier grosir, harga alternatif) langsung tampil sebagai kotak
+  pilihan sendiri-sendiri, sebaris dengan "Pilih satuan" di atasnya. Tinggal
+  ketuk salah satu, tanpa buka apa pun dulu.
 
 ### 🛠️ Perbaikan
 - **Kategori produk (buat/ganti nama/hapus/urutkan) sekarang benar-benar

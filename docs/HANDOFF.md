@@ -247,20 +247,43 @@ kategori di baris atas (nama kategori yg sama) — `find.text(nama)` ambigu
 antara keduanya. Chip toggle dikasih `Key(ValueKey('outcat-$id'))` eksplisit
 supaya bisa dibedakan baik oleh test maupun (potensial) automation lain.
 
+## Item 19 REVISI (25 Juli) — "Harga Lain" jadi chip, bukan popup menu
+
+User klarifikasi Q3 lewat screenshot kedua: maksudnya BUKAN minta balik ke
+chip menumpuk lama (yg Item 19/`9af9cb6` sengaja hindari) — tapi tiap opsi
+harga (Harga dasar + tier grosir + Harga Lain) tampil sbg CHIP SENDIRI
+langsung kelihatan semua, persis pola "Pilih satuan" di atasnya. Widget
+`_PriceChip` (sudah ada, dipakai satuan) DIPAKAI ULANG apa adanya utk ini —
+bukan komponen baru.
+
+`_buildPriceMenuButton`/`PopupMenuButton<int>`/`_selectedPriceLabel`
+dihapus total. Baris baru "Pilih harga" (judul sama gaya dgn "Pilih
+satuan") — horizontal scroll berisi SEMUA `_priceOptions()` (termasuk
+"Harga dasar" pertama, konsisten dgn popup lama yg juga selalu
+menyertakannya sbg opsi pertama), hanya muncul kalau ada >1 opsi (satuan
+tanpa tier/Harga Lain tidak dapat baris ini sama sekali — tidak ada
+gunanya menampilkan satu chip doang). Posisi: baris tersendiri selebar
+penuh SETELAH baris Qty & Harga, SEBELUM Catatan item — bukan lagi
+mepet di kolom Harga (kolom itu cuma setengah lebar layar, sempit utk N
+chip).
+
+Test lama `item_entry_price_menu_test.dart` (mengunci tombol "Harga lain
+(N)" + popup) DITULIS ULANG total (bukan cuma disesuaikan) — sekarang
+memverifikasi chip langsung terlihat tanpa buka apa pun, ketuk chip
+mengisi field, chip "Harga dasar" bisa dipakai balik, dan baris "Pilih
+harga" tidak muncul sama sekali kalau cuma 1 opsi. Revert-verified vs git
+HEAD: 2/3 gagal di versi lama (test "tanpa Harga Lain" tetap lolos krn
+memang tidak menguji beda popup-vs-chip).
+
 **Belum dikerjakan / masih menggantung dari giliran ini**:
-- Q3 user (kenapa "Harga Lain" di modal tambah-item kasir masih berformat
-  dropdown/menu) — BELUM dijawab/dikerjakan, ditanyakan balik ke user krn
-  ambigu (Item 19, `9af9cb6`, SENGAJA mengubah dari chip menumpuk KE
-  dropdown/menu — arah kebalikan dari yg tampak diminta user sekarang;
-  perlu klarifikasi sebelum ubah, supaya tidak bolak-balik).
-- Header tanggal di teks output spt acuan (`── Hari ini ──`) — masih
-  ditunda dari giliran sebelumnya.
+- Header tanggal di teks output Cek Stok spt acuan (`── Hari ini ──`) —
+  masih ditunda dari giliran sebelumnya.
 - `setMarkedOutOfStock` tidak mencap `updated_at` — kelas bug tercatat 2x
   di CLAUDE.md, ditemukan sambil jalan giliran sebelumnya, BELUM disentuh.
 
 ## Status test suite
 
-`flutter test` PENUH: **712 test, SEMUA hijau** (run terakhir exit 0,
+`flutter test` PENUH: **713 test, SEMUA hijau** (run terakhir exit 0,
 flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run

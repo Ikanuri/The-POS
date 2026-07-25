@@ -290,66 +290,12 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     ];
   }
 
-  /// Label opsi harga yang lagi aktif — null kalau masih harga dasar
-  /// (tombol tampil generik "Harga lain (N)") ATAU harga hasil ketik manual
-  /// yang tak cocok opsi manapun. Begitu user pilih tier grosir/Harga Lain
-  /// (mis. "Eceran"), tombol ikut menampilkan nama opsi itu, bukan cuma
-  /// hitungan jumlah opsi statis.
-  String? get _selectedPriceLabel {
-    if (!_priceOverridden) return null;
-    return _priceOptions().where((o) => o.price == _price).firstOrNull?.label;
-  }
-
-  Widget _buildPriceMenuButton(ColorScheme scheme) {
-    final opts = _priceOptions();
-    final activeLabel = _selectedPriceLabel;
-    return PopupMenuButton<int>(
-      tooltip: 'Harga lain',
-      onSelected: (i) => _applyTierPrice(opts[i].price),
-      itemBuilder: (_) => [
-        for (var i = 0; i < opts.length; i++)
-          PopupMenuItem<int>(
-            value: i,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(child: Text(opts[i].label)),
-                const SizedBox(width: 16),
-                Text(formatRupiah(opts[i].price),
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: scheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.sell_outlined,
-                size: 13, color: scheme.onSecondaryContainer),
-            const SizedBox(width: 4),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 120),
-              child: Text(
-                activeLabel ?? 'Harga lain (${opts.length - 1})',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.onSecondaryContainer),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Redesain 25 Juli (usulan user, dari screenshot): dulu satu ikon
+  // "Harga lain (N)" yang buka popup menu — sekarang setiap opsi harga
+  // (harga dasar + tier grosir + Harga Lain) langsung tampil sbg chip
+  // sendiri-sendiri, persis pola "Pilih satuan" di atasnya (`_PriceChip`
+  // yang sama, dipakai ulang). Tidak perlu buka apa pun dulu utk melihat
+  // opsinya — semua harga & labelnya langsung kelihatan sekaligus.
 
   void _setQty(double q) {
     setState(() {
@@ -726,21 +672,47 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                   setState(() {});
                                 },
                               ),
-                              // Item 19: dropdown tier grosir + Harga Lain
-                              // milik satuan terpilih, menempel di bawah field.
-                              if (_priceOptions().length > 1) ...[
-                                const SizedBox(height: 6),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: _buildPriceMenuButton(scheme),
-                                ),
-                              ],
                             ],
                           ),
                         ),
                       ],
                     ),
                   ),
+
+                  // ── Pilih harga (chip) — tier grosir & Harga Lain milik
+                  // satuan terpilih, SATU CHIP PER OPSI (termasuk "Harga
+                  // dasar" utk kembali cepat), bukan lagi satu ikon yang
+                  // buka popup menu. Pola & widget SAMA dgn "Pilih satuan"
+                  // di atas (`_PriceChip`) — usulan user: opsi harga
+                  // sebanyak apa pun langsung kelihatan semua sekaligus.
+                  if (_priceOptions().length > 1) ...[
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('Pilih harga',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurfaceVariant)),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 64,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          for (final o in _priceOptions())
+                            _PriceChip(
+                              label: o.label,
+                              price: o.price,
+                              selected: _price == o.price,
+                              onTap: () => _applyTierPrice(o.price),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   // ── Catatan item ──────────────────────────────────────
                   const SizedBox(height: 14),
