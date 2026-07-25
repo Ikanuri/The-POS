@@ -168,10 +168,32 @@ device lain lewat `dumpSince`), ditemukan sambil jalan, sengaja TIDAK
 disentuh; (3) pertanyaan qty utk stok minus & stok minus itu sendiri —
 user menahan keputusannya.
 
+## Filter status centang di Cek Stok (usulan user, 25 Juli)
+
+Chip `Semua / Dicentang / Belum`, TEGAK LURUS dgn filter kategori (dipakai
+bersamaan). Dua hal penting kalau menyentuh ini lagi:
+
+1. **Filter status HANYA menyaring daftar yang tampil, TIDAK teks order.**
+   `_lastRows` (dipakai `_syncOrderText` & parser dua-arah) sengaja diisi
+   nilai stream MENTAH, penyaringan dilakukan lokal di dalam `data:` builder.
+   Kalau teks ikut disaring, memilih "Belum" bikin teksnya kosong dan parser
+   dua-arah akan MEMBATALKAN SEMUA centang yang sudah dikumpulkan user. Ada
+   test khusus utk properti ini ("PENTING: pindah ke filter Belum ...").
+2. **Barisnya `Row` + `Expanded`, BUKAN ListView horizontal** seperti baris
+   kategori. Versi ListView-nya terukur: dgn label berangka
+   ("Tercentang (1)") chip terakhir terdorong sampai R520 di layar 430px —
+   ~90px di luar layar, hit test MELESET, opsinya seakan tidak ada. Setelah
+   label dipendekkan masih 3,75px lewat di 360px. Karena opsinya tetap 3,
+   membaginya rata membuat ketiganya pasti muat di lebar apa pun. Hitungan
+   angka dipindah ke judul panel teks ("Teks Order Restock — N produk"),
+   tempat yang lebih berguna & tidak memakan lebar chip.
+   Test 360px (`getRect(...).right <= 360` + tap yang harus benar² mengenai)
+   menjaga ini — test tanpa surface sempit TIDAK menangkapnya.
+
 ## Status test suite
 
-`flutter test` PENUH: **699 test, 698 hijau** (1 gagal = flake port di
-bawah, lolos bersih terisolasi). `flutter analyze` bersih (0 issue).
+`flutter test` PENUH: **704 test, SEMUA hijau** (run terakhir exit 0,
+flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
 terakhir bersih): `SocketException: Address already in use, port = 8625`. **8625 itu port sync TETAP milik app**

@@ -35,6 +35,16 @@ final _cekStokOverviewProvider =
   return ref.watch(databaseProvider).watchStockOverview(groupId: groupId);
 });
 
+/// Filter status centang (usulan user) — TEGAK LURUS dgn filter kategori:
+/// keduanya bisa dipakai bersamaan (mis. kategori Sembako + hanya yang
+/// belum dicentang). Sengaja hanya menyaring DAFTAR yang tampil, TIDAK teks
+/// order: kalau teks ikut disaring, memilih "Belum" bikin teksnya kosong dan
+/// parser dua-arah akan membatalkan SEMUA centang yang sudah dikumpulkan.
+enum _StockFilter { all, checked, unchecked }
+
+final _cekStokFilterProvider =
+    StateProvider<_StockFilter>((ref) => _StockFilter.all);
+
 class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   // Item 4 (revisi 25 Juli, setelah user membandingkan dgn HTML acuannya) —
   // baris "Order Restock" adalah JUMLAH YANG MAU DIORDER, diisi owner, BUKAN
@@ -227,6 +237,7 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   @override
   Widget build(BuildContext context) {
     final groupId = ref.watch(_cekStokGroupProvider);
+    final statusFilter = ref.watch(_cekStokFilterProvider);
     final groupsAsync = ref.watch(_cekStokGroupsProvider);
     final rowsAsync = ref.watch(_cekStokOverviewProvider(groupId));
 
@@ -293,13 +304,71 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
             loading: () => const SizedBox(height: 44),
             error: (_, __) => const SizedBox(height: 44),
           ),
+          // Filter status centang — berlaku bersamaan dgn filter kategori di
+          // atas ("Sembako" + "Belum" = produk Sembako yang belum dicentang).
+          //
+          // `Row` + `Expanded`, BUKAN ListView horizontal seperti baris
+          // kategori: jumlah opsinya tetap 3, jadi membaginya rata membuat
+          // ketiganya PASTI muat di lebar apa pun. Versi ListView-nya
+          // terukur mendorong chip terakhir ~90px ke luar layar 430px
+          // (dgn label berangka) dan masih 3,75px lewat di 360px walau
+          // labelnya sudah dipendekkan — chip di luar layar tidak bisa
+          // diketuk sama sekali, jadi opsinya seakan tidak ada.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                for (final f in _StockFilter.values)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: _GroupChip(
+                        // Label pendek tanpa angka: hitungan yang berguna
+                        // (berapa produk masuk order) ada di judul panel teks.
+                        label: switch (f) {
+                          _StockFilter.all => 'Semua',
+                          _StockFilter.checked => 'Dicentang',
+                          _StockFilter.unchecked => 'Belum',
+                        },
+                        selected: statusFilter == f,
+                        onTap: () =>
+                            ref.read(_cekStokFilterProvider.notifier).state = f,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           const Divider(height: 1),
           Expanded(
             child: rowsAsync.when(
-              data: (rows) {
-                if (rows.isEmpty) {
+              data: (allRows) {
+                if (allRows.isEmpty) {
                   return const Center(
                       child: Text('Tidak ada produk berstok di kategori ini'));
+                }
+                final rows = switch (statusFilter) {
+                  _StockFilter.all => allRows,
+                  _StockFilter.checked =>
+                    allRows.where((r) => r.markedOutOfStock).toList(),
+                  _StockFilter.unchecked =>
+                    allRows.where((r) => !r.markedOutOfStock).toList(),
+                };
+                if (rows.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        statusFilter == _StockFilter.checked
+                            ? 'Belum ada produk yang dicentang di sini.'
+                            : 'Semua produk di sini sudah dicentang.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  );
                 }
                 return ListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -328,6 +397,7 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
               final checked = rows.where((r) => r.markedOutOfStock).toList();
               if (checked.isEmpty) return const SizedBox.shrink();
               return _OrderTextPanel(
+                itemCount: checked.length,
                 controller: _orderCtrl,
                 focusNode: _orderFocus,
                 onChanged: (_) => _onOrderTextChanged(),
@@ -487,7 +557,11 @@ class _GroupChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
+        label: Text(label,
+          style: const TextStyle(fontSize: 12),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center),
         selected: selected,
         onSelected: (_) => onTap(),
         visualDensity: VisualDensity.compact,
@@ -672,12 +746,14 @@ class _QtyBtn extends StatelessWidget {
 
 class _OrderTextPanel extends StatelessWidget {
   const _OrderTextPanel({
+    required this.itemCount,
     required this.controller,
     required this.focusNode,
     required this.onChanged,
     required this.onCopy,
     required this.onShare,
   });
+  final int itemCount;
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
@@ -698,7 +774,11 @@ class _OrderTextPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Teks Order Restock',
+            // Hitungan ditaruh di sini, bukan di chip filter: di chip,
+            // labelnya jadi terlalu lebar & opsi ketiga terdorong ke luar
+            // layar. Di sini justru angka yang paling berguna — berapa
+            // produk yang akan ikut terkirim ke supplier.
+            Text('Teks Order Restock — $itemCount produk',
                 style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 6),
             // Bisa diedit langsung & dua arah (spt acuan): menyunting baris

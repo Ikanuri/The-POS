@@ -261,4 +261,156 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
     await db.close();
   });
+
+  // ─────────────── filter status centang (usulan user) ───────────────
+
+  testWidgets(
+      'chip filter Semua/Tercentang/Belum tampil dgn jumlahnya & menyaring '
+      'daftar', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await addProduct(db, 'Warkop', stock: -86, checked: true);
+    await addProduct(db, 'Lpg', stock: -86);
+    await addProduct(db, 'Raptor', stock: -81);
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Semua'), findsWidgets);
+    expect(find.text('Dicentang'), findsOneWidget);
+    expect(find.text('Belum'), findsOneWidget);
+
+    // Default: semua tampil.
+    expect(find.text('Warkop'), findsOneWidget);
+    expect(find.text('Lpg'), findsOneWidget);
+
+    await tester.tap(find.text('Dicentang'));
+    await tester.pumpAndSettle();
+    expect(find.text('Warkop'), findsOneWidget);
+    expect(find.text('Lpg'), findsNothing, reason: 'yang belum dicentang harus disembunyikan');
+
+    await tester.tap(find.text('Belum'));
+    await tester.pumpAndSettle();
+    expect(find.text('Warkop'), findsNothing);
+    expect(find.text('Lpg'), findsOneWidget);
+    expect(find.text('Raptor'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets(
+      'PENTING: pindah ke filter "Belum" TIDAK mengosongkan teks order & '
+      'TIDAK membatalkan centang yang sudah ada', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await addProduct(db, 'Warkop', stock: -86, checked: true);
+    await addProduct(db, 'Lpg', stock: -86);
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
+    await tester.pumpAndSettle();
+    expect(orderText(tester), contains('1 Pcs Warkop'));
+
+    // Filter "Belum" menyembunyikan Warkop dari daftar. Kalau teks order ikut
+    // tersaring, parser dua-arah akan melihat teks tanpa Warkop dan
+    // MEMBATALKAN centangnya — justru menghancurkan kerja user.
+    await tester.tap(find.text('Belum'));
+    // Lewati ambang debounce parser (600ms) dgn selisih aman.
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pumpAndSettle();
+
+    expect(orderText(tester), contains('1 Pcs Warkop'),
+        reason: 'teks order tidak boleh terpengaruh filter status');
+    final warkop = await (db.select(db.products)
+          ..where((t) => t.id.equals('p-Warkop')))
+        .getSingle();
+    expect(warkop.markedOutOfStock, isTrue,
+        reason: 'centang TIDAK boleh hilang hanya karena difilter dari tampilan');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets('filter status jalan bersamaan dgn filter kategori',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.into(db.productGroups).insert(ProductGroupsCompanion.insert(
+        id: const Value(1), name: const Value('Sembako')));
+    await addProduct(db, 'Beras', stock: -15, checked: true);
+    await addProduct(db, 'GulaPutih', stock: -99);
+    await addProduct(db, 'Lpg', stock: -86, checked: true);
+    // Beras & GulaPutih masuk Sembako; Lpg di luar kategori.
+    await (db.update(db.products)..where((t) => t.id.equals('p-Beras')))
+        .write(const ProductsCompanion(productGroupId: Value(1)));
+    await (db.update(db.products)..where((t) => t.id.equals('p-GulaPutih')))
+        .write(const ProductsCompanion(productGroupId: Value(1)));
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sembako'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lpg'), findsNothing, reason: 'di luar kategori');
+    expect(find.textContaining('produk'), findsWidgets,
+        reason: 'judul panel memuat hitungan produk yang ikut order');
+
+    await tester.tap(find.text('Dicentang'));
+    await tester.pumpAndSettle();
+    expect(find.text('Beras'), findsOneWidget);
+    expect(find.text('GulaPutih'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets('filter tanpa hasil menampilkan pesan, bukan layar kosong',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await addProduct(db, 'Lpg', stock: -86);
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Dicentang'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Belum ada produk yang dicentang'),
+        findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets(
+      'ketiga chip filter MUAT & bisa diketuk di layar sempit 360px — versi '
+      'berlabel angka ("Tercentang (1)") dulu terdorong ~90px ke luar layar '
+      'sehingga opsi ketiga tidak bisa ditekan sama sekali', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await addProduct(db, 'Warkop', stock: -86, checked: true);
+    await addProduct(db, 'Lpg', stock: -86);
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen(),
+        surfaceSize: const Size(360, 800));
+    await tester.pumpAndSettle();
+
+    for (final label in ['Dicentang', 'Belum']) {
+      final r = tester.getRect(find.text(label));
+      expect(r.right, lessThanOrEqualTo(360),
+          reason: 'chip "$label" harus utuh di dalam layar, tidak terdorong '
+              'ke luar (kanannya di ${r.right})');
+    }
+
+    // Benar-benar bisa ditekan: `warnIfMissed` akan mengeluh ke konsol kalau
+    // hit test meleset, dan asserting hasilnya di bawah membuktikan tapnya
+    // memang mengenai chip (bukan cuma widget-nya ada di tree).
+    await tester.tap(find.text('Belum'));
+    await tester.pumpAndSettle();
+    expect(find.text('Warkop'), findsNothing,
+        reason: 'filter benar-benar aktif setelah chip ditekan');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
 }

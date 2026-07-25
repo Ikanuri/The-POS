@@ -25,6 +25,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   produk itu (Pcs/Dus) maupun dari daftar satuan umum, jadi produk
   bersatuan tunggal pun tetap bisa diorder dalam satuan lain. Teks yang
   dikirim ke supplier jadi berbentuk "10 Dus Indomie".
+- **Filter Semua / Dicentang / Belum di Cek Stok.** Berlaku bersamaan dengan
+  filter kategori, jadi bisa misalnya melihat hanya produk Sembako yang belum
+  dicentang. Judul panel juga menunjukkan berapa produk yang akan ikut
+  terkirim ke supplier.
 - **Teks Order Restock sekarang bisa diedit langsung, dua arah.** Anda bisa
   mengetik/menempel langsung di kotak teksnya; centang, jumlah, dan satuan
   di daftar atas ikut menyesuaikan. Menghapus satu baris juga otomatis
