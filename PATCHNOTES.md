@@ -29,6 +29,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   filter kategori, jadi bisa misalnya melihat hanya produk Sembako yang belum
   dicentang. Judul panel juga menunjukkan berapa produk yang akan ikut
   terkirim ke supplier.
+- **Kecualikan kategori tertentu dari teks Order Restock.** Kalau ada
+  kategori yang memang dipesan lewat cara lain (misalnya LPG), sekarang bisa
+  ditandai "dikecualikan" — produknya tetap boleh dicentang & tampil di
+  daftar seperti biasa, cuma tidak ikut ditulis ke teks yang dikirim ke
+  supplier. Chip ini muncul di atas kotak teks kalau tokonya punya 2
+  kategori atau lebih.
+- **Tampilan baris jumlah order di Cek Stok dirombak** — kotak −/+/satuan
+  sekarang jadi satu jalur menyatu yang serasi dengan tampilan field lain
+  di aplikasi, dan angkanya pakai gaya angka yang sama dengan nominal Rupiah
+  di seluruh aplikasi.
+- **Warna kartu produk tercentang di Cek Stok tidak lagi ikut warna
+  kritis/aman stoknya** — dulu produk berstok kritis yang dicentang jadi
+  merah tebal (dua arti berbeda numpuk jadi satu warna, membingungkan).
+  Sekarang produk tercentang selalu warna oranye netral, dan warna
+  kritis/menipis/aman tetap cuma di angka badge stoknya.
 - **Teks Order Restock sekarang bisa diedit langsung, dua arah.** Anda bisa
   mengetik/menempel langsung di kotak teksnya; centang, jumlah, dan satuan
   di daftar atas ikut menyesuaikan. Menghapus satu baris juga otomatis

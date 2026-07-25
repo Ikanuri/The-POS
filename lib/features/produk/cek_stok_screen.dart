@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +45,45 @@ enum _StockFilter { all, checked, unchecked }
 
 final _cekStokFilterProvider =
     StateProvider<_StockFilter>((ref) => _StockFilter.all);
+
+/// Kategori yang DIKECUALIKAN dari teks output (usulan user 25 Juli,
+/// meniru `skCatExcluded`/`sk-outcat-bar` di HTML acuan) — produk kategori
+/// itu TETAP boleh dicentang & tampil di daftar seperti biasa, HANYA tidak
+/// ikut ditulis ke teks "Order Restock". Dipakai utk kategori yang memang
+/// tidak pernah dipesan lewat teks ini (mis. LPG dipesan lewat jalur lain).
+///
+/// Disimpan sbg blob JSON id kategori di tabel settings — pola yang sama
+/// dgn `saved_catalogs` (lihat CLAUDE.md): tanpa migrasi skema.
+const _kExcludedGroupsSettingKey = 'cek_stok_excluded_output_groups';
+
+class _ExcludedGroupsNotifier extends StateNotifier<Set<int>> {
+  _ExcludedGroupsNotifier(this._db) : super(const {}) {
+    _load();
+  }
+  final AppDatabase _db;
+
+  Future<void> _load() async {
+    final raw = await _db.getSetting(_kExcludedGroupsSettingKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      state = (jsonDecode(raw) as List).map((e) => e as int).toSet();
+    } catch (_) {
+      // Data lama/rusak — abaikan, jangan sampai layar gagal terbuka.
+    }
+  }
+
+  Future<void> toggle(int groupId) async {
+    final next = Set<int>.from(state);
+    if (!next.remove(groupId)) next.add(groupId);
+    state = next;
+    await _db.setSetting(
+        _kExcludedGroupsSettingKey, jsonEncode(next.toList()));
+  }
+}
+
+final _cekStokExcludedGroupsProvider =
+    StateNotifierProvider<_ExcludedGroupsNotifier, Set<int>>(
+        (ref) => _ExcludedGroupsNotifier(ref.watch(databaseProvider)));
 
 class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   // Item 4 (revisi 25 Juli, setelah user membandingkan dgn HTML acuannya) —
@@ -238,8 +278,13 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   Widget build(BuildContext context) {
     final groupId = ref.watch(_cekStokGroupProvider);
     final statusFilter = ref.watch(_cekStokFilterProvider);
+    final excludedGroups = ref.watch(_cekStokExcludedGroupsProvider);
     final groupsAsync = ref.watch(_cekStokGroupsProvider);
     final rowsAsync = ref.watch(_cekStokOverviewProvider(groupId));
+    _lastExcluded = excludedGroups;
+    final namedGroups =
+        groupsAsync.valueOrNull?.where((g) => g.name != null).toList() ??
+            const <ProductGroup>[];
 
     // Dibaca dari nilai yang sudah di-watch (BUKAN `ref.listen`, yang di
     // `WidgetRef` tidak punya `fireImmediately`) supaya emisi PERTAMA —
@@ -394,10 +439,24 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
           ),
           rowsAsync.maybeWhen(
             data: (rows) {
-              final checked = rows.where((r) => r.markedOutOfStock).toList();
-              if (checked.isEmpty) return const SizedBox.shrink();
+              // Visibilitas panel pakai centang MENTAH (bukan yg sudah
+              // disaring kategori) — kalau tidak, produk yang SEMUA
+              // kategorinya kebetulan dikecualikan bikin panel (dan tombol
+              // sertakan/kecualikan di dalamnya) hilang total, user jadi
+              // tidak bisa menyertakan kategorinya balik.
+              final rawChecked =
+                  rows.where((r) => r.markedOutOfStock).toList();
+              if (rawChecked.isEmpty) return const SizedBox.shrink();
+              final visibleChecked = rawChecked
+                  .where((r) => !_isExcludedFromOutput(r))
+                  .toList();
               return _OrderTextPanel(
-                itemCount: checked.length,
+                itemCount: visibleChecked.length,
+                namedGroups: namedGroups,
+                excludedGroupIds: excludedGroups,
+                onToggleGroup: (id) => ref
+                    .read(_cekStokExcludedGroupsProvider.notifier)
+                    .toggle(id),
                 controller: _orderCtrl,
                 focusNode: _orderFocus,
                 onChanged: (_) => _onOrderTextChanged(),
@@ -447,7 +506,9 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     if (!force && _orderFocus.hasFocus) return;
     final rows = _lastRows;
     if (rows == null) return;
-    final checked = rows.where((r) => r.markedOutOfStock).toList();
+    final checked = rows
+        .where((r) => r.markedOutOfStock && !_isExcludedFromOutput(r))
+        .toList();
     final text = checked.isEmpty ? '' : _buildOrderText(checked);
     if (_orderCtrl.text == text) return;
     _suppressSync = true;
@@ -458,6 +519,14 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   /// Baris terakhir yang diterima dari stream — dipakai [_syncOrderText] &
   /// parser (keduanya berjalan di luar `build`).
   List<StockOverviewRow>? _lastRows;
+
+  /// Kategori yang dikecualikan dari output — disalin dari provider tiap
+  /// `build` (sama pola dgn [_lastRows]) supaya [_syncOrderText] &
+  /// [_applyOrderText] (jalan di luar `build`) bisa memakainya.
+  Set<int> _lastExcluded = const {};
+
+  bool _isExcludedFromOutput(StockOverviewRow r) =>
+      r.groupId != null && _lastExcluded.contains(r.groupId);
 
   void _onOrderTextChanged() {
     if (_suppressSync) return;
@@ -484,6 +553,12 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
 
     var changed = false;
     for (final r in rows) {
+      // Kategori dikecualikan: baris ini TIDAK PERNAH muncul di teks, jadi
+      // parser tidak boleh menyentuh centangnya sama sekali — kalau tidak,
+      // produk ini akan ke-uncheck begitu saja krn "tidak ada di teks",
+      // padahal memang sengaja disembunyikan dari teks (pola sama dgn
+      // `if (skCatExcluded(cat)) return;` di acuan).
+      if (_isExcludedFromOutput(r)) continue;
       final hit = parsed[_norm(r.name)];
       if (hit != null) {
         if (!r.markedOutOfStock) {
@@ -601,8 +676,12 @@ class _StockRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
     final checked = row.markedOutOfStock;
 
+    // Badge stok TETAP semantik keparahan (merah kritis/amber menipis/hijau
+    // aman) — tidak berubah. Yang berubah: keadaan "terpilih" (di bawah)
+    // TIDAK LAGI meminjam warna ini.
     final Color badgeFg;
     final Color badgeBg;
     if (row.stock <= 0) {
@@ -619,12 +698,24 @@ class _StockRow extends StatelessWidget {
     final stockLabel =
         row.stock % 1 == 0 ? row.stock.toInt().toString() : row.stock.toString();
 
+    // Redesain 25 Juli (mockup, Opsi A dipilih user): dulu baris tercentang
+    // memakai `badgeBg`/`badgeFg` — warna KEPARAHAN STOK — utk menandai
+    // "terpilih". Efeknya produk kritis (merah) yang dicentang jadi
+    // merah-di-atas-merah, dua makna berbeda berbagi satu warna. Sekarang
+    // "terpilih" SELALU accent terracotta, badge stok tetap independen.
+    final cardColor =
+        Theme.of(context).cardTheme.color ?? scheme.surface;
+    final selBg = Color.alphaBlend(
+        AppTheme.accent.withOpacity(isDark ? 0.16 : 0.07), cardColor);
+    final selBorder = AppTheme.accent.withOpacity(isDark ? 0.55 : 0.45);
+
     return Card(
+      key: ValueKey('stock-row-${row.productId}'),
       margin: const EdgeInsets.only(bottom: 6),
-      color: checked ? badgeBg.withOpacity(0.3) : null,
+      color: checked ? selBg : null,
       shape: checked
           ? RoundedRectangleBorder(
-              side: BorderSide(color: badgeFg, width: 1),
+              side: BorderSide(color: selBorder, width: 1),
               borderRadius: BorderRadius.circular(12),
             )
           : null,
@@ -636,66 +727,24 @@ class _StockRow extends StatelessWidget {
           row.name,
           style: TextStyle(
             fontSize: 13,
+            fontWeight: FontWeight.w600,
             decoration: checked ? TextDecoration.lineThrough : null,
+            color: checked ? scheme.onSurfaceVariant : null,
           ),
         ),
-        // Baris qty order, meniru acuan: [−] [angka] [+] [satuan ▾].
-        // Angkanya diketuk utk mengetik lewat dialog. Muncul untuk SETIAP
-        // produk tercentang (bukan hanya produk berjenjang).
+        // Baris qty order Opsi A — satu jalur menyatu ber-latar token
+        // `field` aplikasi. Muncul untuk SETIAP produk tercentang.
         subtitle: (checked && unitOptions != null && unitOptions!.isNotEmpty)
             ? Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Row(
-                  children: [
-                    _QtyBtn(
-                        icon: Icons.remove_rounded,
-                        onTap: () => onQtyDelta?.call(-1)),
-                    // Lebar tetap supaya tombol +/- tidak bergeser saat
-                    // angkanya berubah panjang.
-                    SizedBox(
-                      width: 52,
-                      child: InkWell(
-                        onTap: onQtyTap,
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Text(
-                            fmtQty(qty),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ),
-                    ),
-                    _QtyBtn(
-                        icon: Icons.add_rounded,
-                        onTap: () => onQtyDelta?.call(1)),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: DropdownButton<String>(
-                        value: unitOptions!.contains(selectedUnit)
-                            ? selectedUnit
-                            : unitOptions!.first,
-                        isDense: true,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        // Warna dari tema — hardcode `Colors.black87` dulu
-                        // membuatnya nyaris tak terbaca di mode gelap.
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                        items: [
-                          for (final u in unitOptions!)
-                            DropdownMenuItem(value: u, child: Text(u)),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) onUnitChanged?.call(v);
-                        },
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.only(top: 8),
+                child: _QtyUnitStepper(
+                  qty: qty,
+                  fmtQty: fmtQty,
+                  unitOptions: unitOptions!,
+                  selectedUnit: selectedUnit,
+                  onQtyDelta: (d) => onQtyDelta?.call(d),
+                  onQtyTap: () => onQtyTap?.call(),
+                  onUnitChanged: (u) => onUnitChanged?.call(u),
                 ),
               )
             : null,
@@ -705,23 +754,142 @@ class _StockRow extends StatelessWidget {
             color: badgeBg,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            stockLabel,
-            style: TextStyle(
-                color: badgeFg, fontWeight: FontWeight.w700, fontSize: 15),
-          ),
+          // Newsreader + tabular figures — token numerik WAJIB aplikasi
+          // (`AppTheme.numStyle`) yang sebelumnya diabaikan di layar ini.
+          child: Text(stockLabel,
+              style: AppTheme.numStyle(context,
+                  size: 15, weight: FontWeight.w700, color: badgeFg)),
         ),
       ),
     );
   }
 }
 
-/// Tombol kecil −/+ untuk qty order. Sengaja bukan `OutlinedButton`/
-/// `FilledButton`: keduanya default `minimumSize` lebar-penuh di `AppTheme`
-/// dan akan mendesak dropdown satuan keluar layar di HP sempit.
-class _QtyBtn extends StatelessWidget {
-  const _QtyBtn({required this.icon, required this.onTap});
+/// Stepper jumlah order — Opsi A dari mockup desain (dipilih user 25 Juli):
+/// −, angka, +, dan satuan duduk dalam SATU jalur ber-latar token `field`
+/// aplikasi (permukaan masukan cekung, dipakai semua `TextField`), dipisah
+/// garis 1px per segmen — dibaca sbg satu kontrol, bukan 3 tombol lepas.
+/// Paling hemat lebar di antara 3 opsi mockup, penting krn baris ini harus
+/// muat bersama checkbox + nama + badge stok di HP 360px.
+class _QtyUnitStepper extends StatelessWidget {
+  const _QtyUnitStepper({
+    required this.qty,
+    required this.fmtQty,
+    required this.unitOptions,
+    required this.selectedUnit,
+    required this.onQtyDelta,
+    required this.onQtyTap,
+    required this.onUnitChanged,
+  });
+
+  final double qty;
+  final String Function(double) fmtQty;
+  final List<String> unitOptions;
+  final String? selectedUnit;
+  final ValueChanged<double> onQtyDelta;
+  final VoidCallback onQtyTap;
+  final ValueChanged<String> onUnitChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final line = scheme.outlineVariant;
+    // `inputDecorationTheme.fillColor` PERSIS token `field` aplikasi (dipakai
+    // semua TextField) — bukan warna baru, sengaja diambil dari tema supaya
+    // otomatis benar di kedua mode tanpa kode terpisah.
+    final fieldColor =
+        Theme.of(context).inputDecorationTheme.fillColor ?? scheme.surface;
+    // Minus MEMBEKU di qty<=1 (lihat `_adjustQty`) — dulu tombolnya tetap
+    // tampak aktif walau ditekan tidak berefek. Sekarang diredupkan.
+    final canDecrement = qty > 1;
+    final unit =
+        unitOptions.contains(selectedUnit) ? selectedUnit! : unitOptions.first;
+
+    Widget divider() => Container(width: 1, height: 22, color: line);
+
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: fieldColor,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StepGlyph(
+            // `onTap` SELALU non-null, walau `!canDecrement` — `_adjustQty`
+            // di pemanggil sudah membekukan qty<=1 (no-op). `onTap: null`
+            // sempat dipakai di sini & ternyata BUG NYATA: `InkWell` dgn
+            // `onTap: null` tidak menyerap gesture-nya, jadi tap MENEMBUS
+            // ke `CheckboxListTile` pembungkus & MEMBATALKAN CENTANG
+            // seluruh baris — ketahuan lewat test (ikon minus "hilang" di
+            // iterasi ke-3 krn baris jadi tak-tercentang). Absorpsi tap
+            // (onTap non-null yg jadi no-op) WAJIB dipertahankan.
+            icon: Icons.remove_rounded,
+            enabled: canDecrement,
+            onTap: () => onQtyDelta(-1),
+          ),
+          divider(),
+          InkWell(
+            onTap: onQtyTap,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              alignment: Alignment.center,
+              child: Text(fmtQty(qty),
+                  style: AppTheme.numStyle(context, size: 15)),
+            ),
+          ),
+          divider(),
+          _StepGlyph(
+            icon: Icons.add_rounded,
+            enabled: true,
+            onTap: () => onQtyDelta(1),
+          ),
+          divider(),
+          PopupMenuButton<String>(
+            tooltip: 'Ganti satuan',
+            onSelected: onUnitChanged,
+            itemBuilder: (_) => [
+              for (final u in unitOptions)
+                PopupMenuItem(value: u, child: Text(u)),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(unit,
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.accent)),
+                  const SizedBox(width: 3),
+                  Icon(Icons.arrow_drop_down_rounded,
+                      size: 16, color: AppTheme.accent.withOpacity(.75)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepGlyph extends StatelessWidget {
+  const _StepGlyph(
+      {required this.icon, required this.enabled, required this.onTap});
   final IconData icon;
+  final bool enabled;
+
+  /// SENGAJA tidak nullable — [enabled] cuma boleh mempengaruhi TAMPILAN
+  /// (redup), bukan `onTap`. `InkWell(onTap: null)` tidak menyerap gesture,
+  /// jadi tap-nya menembus ke `CheckboxListTile` pembungkus & membatalkan
+  /// centang baris — kelas bug nyata yg ketahuan lewat test, bukan cuma
+  /// hipotetis. Pemanggil yg "menonaktifkan" harus tetap memberi callback
+  /// (no-op di sisi logika), bukan `null`.
   final VoidCallback onTap;
 
   @override
@@ -729,16 +897,12 @@ class _QtyBtn extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        width: 30,
-        height: 28,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border.all(color: scheme.outlineVariant),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Icon(icon, size: 16, color: scheme.onSurface),
+      child: SizedBox(
+        width: 32,
+        height: 34,
+        child: Icon(icon,
+            size: 16,
+            color: scheme.onSurfaceVariant.withOpacity(enabled ? 1 : .38)),
       ),
     );
   }
@@ -747,6 +911,9 @@ class _QtyBtn extends StatelessWidget {
 class _OrderTextPanel extends StatelessWidget {
   const _OrderTextPanel({
     required this.itemCount,
+    required this.namedGroups,
+    required this.excludedGroupIds,
+    required this.onToggleGroup,
     required this.controller,
     required this.focusNode,
     required this.onChanged,
@@ -754,6 +921,13 @@ class _OrderTextPanel extends StatelessWidget {
     required this.onShare,
   });
   final int itemCount;
+
+  /// Kategori (bernama) yang ada di toko — dipakai merender chip
+  /// sertakan/kecualikan. Cuma ditampilkan kalau ≥2 kategori (satu kategori
+  /// tak ada gunanya dikecualikan — sama spt acuan `skState.cats.length<2`).
+  final List<ProductGroup> namedGroups;
+  final Set<int> excludedGroupIds;
+  final ValueChanged<int> onToggleGroup;
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
@@ -780,6 +954,14 @@ class _OrderTextPanel extends StatelessWidget {
             // produk yang akan ikut terkirim ke supplier.
             Text('Teks Order Restock — $itemCount produk',
                 style: Theme.of(context).textTheme.titleSmall),
+            if (namedGroups.length >= 2) ...[
+              const SizedBox(height: 6),
+              _OutputCategoryToggleRow(
+                namedGroups: namedGroups,
+                excludedGroupIds: excludedGroupIds,
+                onToggle: onToggleGroup,
+              ),
+            ],
             const SizedBox(height: 6),
             // Bisa diedit langsung & dua arah (spt acuan): menyunting baris
             // di sini ikut mengubah centang, jumlah, dan satuan di daftar
@@ -820,6 +1002,99 @@ class _OrderTextPanel extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip sertakan/kecualikan kategori dari teks output — meniru
+/// `sk-outcat-bar`/`skRenderOutCats` di HTML acuan user persis: satu chip
+/// per kategori (✓ = ikut, ✕ = dikecualikan), plus hint jumlah yang
+/// dikecualikan (centangnya sendiri TETAP aman, cuma tidak ikut teks).
+class _OutputCategoryToggleRow extends StatelessWidget {
+  const _OutputCategoryToggleRow({
+    required this.namedGroups,
+    required this.excludedGroupIds,
+    required this.onToggle,
+  });
+  final List<ProductGroup> namedGroups;
+  final Set<int> excludedGroupIds;
+  final ValueChanged<int> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final nExcluded =
+        namedGroups.where((g) => excludedGroupIds.contains(g.id)).length;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (final g in namedGroups)
+          _OutCatChip(
+            // Key eksplisit — label chip ini SAMA dengan label chip filter
+            // kategori di baris atas (nama kategori yang sama), jadi
+            // `find.text(nama)` ambigu antara keduanya; Key membedakannya
+            // tanpa bergantung urutan/posisi widget.
+            key: ValueKey('outcat-${g.id}'),
+            label: g.name!,
+            excluded: excludedGroupIds.contains(g.id),
+            onTap: () => onToggle(g.id),
+          ),
+        if (nExcluded > 0)
+          Text(
+            '$nExcluded kategori dikecualikan dari output (centangnya tetap aman)',
+            style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+          ),
+      ],
+    );
+  }
+}
+
+class _OutCatChip extends StatelessWidget {
+  const _OutCatChip(
+      {super.key,
+      required this.label,
+      required this.excluded,
+      required this.onTap});
+  final String label;
+  final bool excluded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final fg = excluded ? scheme.onSurfaceVariant : AppTheme.accent;
+    return Tooltip(
+      message: excluded
+          ? 'Dikecualikan dari output — ketuk untuk sertakan'
+          : 'Ikut di output — ketuk untuk kecualikan',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: excluded ? scheme.outlineVariant : fg),
+            color: excluded
+                ? null
+                : AppTheme.accent.withOpacity(
+                    Theme.of(context).brightness == Brightness.dark
+                        ? 0.16
+                        : 0.08),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(excluded ? Icons.close_rounded : Icons.check_rounded,
+                  size: 12, color: fg),
+              const SizedBox(width: 3),
+              Text(label, style: TextStyle(fontSize: 11, color: fg)),
+            ],
+          ),
         ),
       ),
     );

@@ -67,7 +67,7 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
 
-    expect(find.byType(DropdownButton<String>), findsOneWidget,
+    expect(find.byType(PopupMenuButton<String>), findsOneWidget,
         reason: 'produk 1 satuan pun harus dapat pemilih satuan (spt acuan)');
     expect(orderText(tester), 'Order Restock:\n1 Pcs Warkop',
         reason: 'qty awal 1 & satuan selalu ikut; stok -86 TIDAK boleh jadi '
@@ -149,13 +149,21 @@ void main() {
     await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
     await tester.pumpAndSettle();
 
-    final dd = tester
-        .widget<DropdownButton<String>>(find.byType(DropdownButton<String>));
-    expect(dd.items!.map((e) => (e.child as Text).data).take(2).toList(),
-        ['Pcs', 'Dus'],
+    // Satuan aktif ('Pcs', satuan dasar) tampil sbg label segmen — ketuk
+    // utk membuka menu pilihan (PopupMenuButton, bukan DropdownButton lagi
+    // sejak redesain Opsi A 25 Juli).
+    await tester.tap(find.text('Pcs'));
+    await tester.pumpAndSettle();
+
+    final items = tester
+        .widgetList<PopupMenuItem<String>>(find.byType(PopupMenuItem<String>))
+        .map((e) => (e.child as Text).data)
+        .take(2)
+        .toList();
+    expect(items, ['Pcs', 'Dus'],
         reason: 'satuan milik produk didahulukan (dasar dulu), baru umum');
 
-    dd.onChanged!('Dus');
+    await tester.tap(find.text('Dus').last);
     await tester.pumpAndSettle();
     expect(orderText(tester), contains('1 Dus Indomie'),
         reason: 'ganti satuan tidak boleh mengubah angka order');
@@ -253,7 +261,7 @@ void main() {
 
     expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue,
         reason: 'prasyarat: tercentang dari DB, bukan hasil tap di test ini');
-    expect(find.byType(DropdownButton<String>), findsOneWidget);
+    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
     expect(orderText(tester), contains('1 Pcs GajahBaru'));
 
@@ -408,6 +416,85 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Warkop'), findsNothing,
         reason: 'filter benar-benar aktif setelah chip ditekan');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  // ─────────── redesain stepper Opsi A (mockup, dipilih user 25 Juli) ───────────
+
+  testWidgets(
+      'REGRESI: menekan tombol minus yang sudah beku (qty=1) TIDAK '
+      'membatalkan centang baris. Ditemukan lewat test ini sendiri: '
+      'InkWell(onTap: null) tidak menyerap gesture, tap menembus ke '
+      'CheckboxListTile pembungkus & meng-uncheck seluruh baris',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await addProduct(db, 'Warkop', stock: -86, checked: true);
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
+    await tester.pumpAndSettle();
+
+    // qty sudah 1 (default) — minus seharusnya sudah beku dari awal.
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue);
+
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byIcon(Icons.remove_rounded).first);
+      await tester.pumpAndSettle();
+    }
+
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue,
+        reason: 'menekan minus yang beku berkali-kali TIDAK boleh '
+            'membatalkan centang produknya');
+    expect(orderText(tester), contains('1 Pcs Warkop'));
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets(
+      'keadaan "terpilih" SELALU accent, TIDAK LAGI meminjam warna '
+      'keparahan stok — baris kritis (stok minus) & baris aman (stok sehat) '
+      'yang sama-sama tercentang harus punya warna kartu IDENTIK',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    // Kritis: stok minus (dulu -> merah/debtBg saat tercentang).
+    await addProduct(db, 'Kritis', stock: -50, checked: true);
+    // Aman: stok positif sehat, tanpa minStock (dulu -> hijau/changeBg saat
+    // tercentang).
+    await addProduct(db, 'Aman', stock: 100, checked: true);
+
+    await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
+    await tester.pumpAndSettle();
+
+    final cardKritis = tester.widget<Card>(
+        find.byKey(const ValueKey('stock-row-p-Kritis')));
+    final cardAman =
+        tester.widget<Card>(find.byKey(const ValueKey('stock-row-p-Aman')));
+
+    expect(cardKritis.color, cardAman.color,
+        reason: 'warna latar kartu terpilih harus SAMA persis, tidak boleh '
+            'ikut warna keparahan stok (merah vs hijau)');
+    final shapeKritis = cardKritis.shape as RoundedRectangleBorder;
+    final shapeAman = cardAman.shape as RoundedRectangleBorder;
+    expect(shapeKritis.side.color, shapeAman.side.color,
+        reason: 'warna border kartu terpilih juga harus sama');
+
+    // Badge stok sendiri TETAP semantik (beda warna) — cuma highlight
+    // barisnya yang berubah jadi netral-accent.
+    final badgeKritis = tester.widget<Text>(find.descendant(
+      of: find.byKey(const ValueKey('stock-row-p-Kritis')),
+      matching: find.text('-50'),
+    ));
+    final badgeAman = tester.widget<Text>(find.descendant(
+      of: find.byKey(const ValueKey('stock-row-p-Aman')),
+      matching: find.text('100'),
+    ));
+    expect(badgeKritis.style?.color, isNot(badgeAman.style?.color),
+        reason: 'badge stok tetap harus beda warna (kritis vs aman) — yang '
+            'berubah cuma highlight baris, bukan makna badge');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

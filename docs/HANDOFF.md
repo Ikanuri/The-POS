@@ -190,9 +190,77 @@ bersamaan). Dua hal penting kalau menyentuh ini lagi:
    Test 360px (`getRect(...).right <= 360` + tap yang harus benar² mengenai)
    menjaga ini — test tanpa surface sempit TIDAK menangkapnya.
 
+## Redesain stepper Cek Stok (Opsi A) + kecualikan kategori dari output (25 Juli)
+
+User pilih **Opsi A** dari 3 mockup (artifact terpisah, disusun dari token
+`app_theme.dart` — lihat pesan sebelumnya). Sekaligus 2 permintaan susulan.
+
+**Opsi A diimplementasikan** (`_QtyUnitStepper`/`_StepGlyph` baru): satu
+jalur ber-latar `Theme.of(context).inputDecorationTheme.fillColor` (token
+`field` app, otomatis benar di 2 mode tanpa warna baru), qty pakai
+`AppTheme.numStyle` (Newsreader + tabular figures — token numerik WAJIB
+app yg dulu diabaikan di layar ini), satuan jadi `PopupMenuButton<String>`
+(bukan `DropdownButton` lagi).
+
+**Sekalian diperbaiki** (bagian dari rekomendasi mockup, berlaku lepas dari
+opsi mana pun yg dipilih): kartu produk TERCENTANG dulu memakai
+`badgeBg`/`badgeFg` — warna KEPARAHAN STOK — utk menandai "terpilih", jadi
+produk kritis (merah) yg dicentang jadi merah-di-atas-merah. Sekarang
+terpilih SELALU accent terracotta (`Color.alphaBlend` di atas warna
+kartu), badge stok tetap independen/semantik.
+
+**BUG NYATA ditemukan & diperbaiki SAAT implementasi Opsi A** (bukan di
+produksi, ketahuan sebelum sempat commit — tapi WAJIB diingat kalau
+menyentuh stepper serupa lagi): tombol minus yg "dinonaktifkan" (qty<=1)
+sempat diberi `onTap: null` (utk meniru "beku" spt di mockup). Ternyata
+`InkWell(onTap: null)` TIDAK menyerap gesture-nya — tap MENEMBUS ke
+`CheckboxListTile` pembungkus & MEMBATALKAN CENTANG seluruh baris. Ketahuan
+dari test sendiri (icon "hilang" di iterasi ke-3 test tekan-minus-berkali,
+krn baris jadi ter-uncheck). Fix: `onTap` `_StepGlyph` dibuat NON-nullable
+selamanya (`required this.onTap`, bukan `this.onTap`) — `enabled` HANYA
+boleh mempengaruhi opacity tampilan, pemanggil yg "menonaktifkan" tetap
+wajib kasih callback (no-op dari sisi logika `_adjustQty` yg sudah membekukan
+qty<=1), bukan `null`. Test regresi
+`REGRESI: menekan tombol minus...` mengunci ini; revert-verified dgn
+sengaja mereproduksi bug (StateError: Bad state: No element saat loop tap,
+krn baris hilang di tengah jalan).
+
+**Fitur baru: kecualikan kategori dari teks output** (usulan user, "seperti
+HTML" — meniru `skCatExcluded`/`sk-outcat-bar`/`skRenderOutCats` di acuan
+persis). Chip ✓/✕ per kategori muncul di atas kotak teks (HANYA kalau ≥2
+kategori bernama, sama spt acuan `cats.length<2`), disimpan sbg blob JSON
+id kategori di app_settings key `cek_stok_excluded_output_groups` (pola
+sama `saved_catalogs`, TANPA migrasi). Produk kategori dikecualikan TETAP
+boleh dicentang & tampil normal — HANYA tidak ikut ke teks maupun ke parser
+dua-arah (baris kategori dikecualikan di-`continue` penuh, centangnya tidak
+pernah disentuh parser).
+
+**Keputusan desain penting**: visibilitas PANEL (bukan chip toggle-nya)
+memakai centang MENTAH (`markedOutOfStock` saja), BUKAN yg sudah disaring
+kategori — kalau tidak, produk yg SEMUA kategorinya kebetulan dikecualikan
+bikin panel (dan chip sertakan-baliknya) hilang total, user kejebak tanpa
+jalan mengembalikan. Ada test khusus utk properti ini ("PENTING: semua
+kategori tercentang kebetulan dikecualikan").
+
+**Catatan test**: label chip toggle SAMA PERSIS dgn label chip filter
+kategori di baris atas (nama kategori yg sama) — `find.text(nama)` ambigu
+antara keduanya. Chip toggle dikasih `Key(ValueKey('outcat-$id'))` eksplisit
+supaya bisa dibedakan baik oleh test maupun (potensial) automation lain.
+
+**Belum dikerjakan / masih menggantung dari giliran ini**:
+- Q3 user (kenapa "Harga Lain" di modal tambah-item kasir masih berformat
+  dropdown/menu) — BELUM dijawab/dikerjakan, ditanyakan balik ke user krn
+  ambigu (Item 19, `9af9cb6`, SENGAJA mengubah dari chip menumpuk KE
+  dropdown/menu — arah kebalikan dari yg tampak diminta user sekarang;
+  perlu klarifikasi sebelum ubah, supaya tidak bolak-balik).
+- Header tanggal di teks output spt acuan (`── Hari ini ──`) — masih
+  ditunda dari giliran sebelumnya.
+- `setMarkedOutOfStock` tidak mencap `updated_at` — kelas bug tercatat 2x
+  di CLAUDE.md, ditemukan sambil jalan giliran sebelumnya, BELUM disentuh.
+
 ## Status test suite
 
-`flutter test` PENUH: **704 test, SEMUA hijau** (run terakhir exit 0,
+`flutter test` PENUH: **712 test, SEMUA hijau** (run terakhir exit 0,
 flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
