@@ -3729,6 +3729,18 @@ class AppDatabase extends _$AppDatabase {
     ];
     const masterData = [
       'products',
+      // Bug nyata dilaporkan user: kategori (create/rename/delete/reorder
+      // KATEGORI ITU SENDIRI, beda dari penugasan produk ke kategori yang
+      // sudah benar via `products.productGroupId`/`product_group_tags`)
+      // tidak pernah tersinkron ke klien sama sekali — `product_groups`
+      // lupa dimasukkan ke daftar ini sejak awal. Full-dump tiap sync
+      // (tidak ada kolom `updated_at` di tabel ini) sudah AMAN krn baris
+      // kategori tidak pernah benar² dihapus — `deleteProductGroup`
+      // menombstone `name=null` (slot id dipakai ulang), bukan DELETE baris,
+      // jadi INSERT OR REPLACE polos (tanpa cleanup orphan spt
+      // `product_group_tags`) sudah cukup merefleksikan state kategori host
+      // ke klien apa adanya.
+      'product_groups',
       'product_units',
       'price_tiers',
       'alt_prices',

@@ -251,6 +251,7 @@ class LanSyncService {
   static const clientMergeableTables = {
     ...appendOnlyTables,
     'products',
+    'product_groups',
     'product_units',
     'price_tiers',
     'alt_prices',

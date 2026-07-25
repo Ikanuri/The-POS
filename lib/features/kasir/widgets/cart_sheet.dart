@@ -372,8 +372,13 @@ class _CartItemTile extends ConsumerWidget {
                     size: 15, color: scheme.onSurfaceVariant),
               ),
             Expanded(
+              // Permintaan user — nama produk panjang dulu terpotong 1 baris
+              // (ellipsis); sekarang auto-tumbuh sampai 2 baris. `ListTile`
+              // menyesuaikan tinggi baris ke title/subtitle-nya sendiri,
+              // leading/trailing (checkbox, stepper, harga) tetap fixed-size
+              // & otomatis center-vertikal — tidak perlu restrukturisasi.
               child: Text(item.productName,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       fontSize: isVariant ? 15 : 17,
