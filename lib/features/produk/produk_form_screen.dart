@@ -101,12 +101,22 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
+  String? _bannerLinkText;
+  VoidCallback? _bannerOnLinkTap;
 
+  /// [linkText] + [onLinkTap] opsional: potongan pesan yang di-highlight &
+  /// bisa diketuk (mis. nama produk yang barcode-nya bentrok → buka produk
+  /// itu). Selalu di-set ulang tiap panggilan, termasuk ke null, supaya
+  /// tautan dari pesan SEBELUMNYA tidak menempel di pesan berikutnya.
   void _showBanner(String msg,
-      [InlineBannerType type = InlineBannerType.error]) {
+      [InlineBannerType type = InlineBannerType.error,
+      String? linkText,
+      VoidCallback? onLinkTap]) {
     setState(() {
       _bannerMsg = msg;
       _bannerType = type;
+      _bannerLinkText = linkText;
+      _bannerOnLinkTap = onLinkTap;
     });
   }
 
@@ -491,7 +501,24 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       // tampilkan apa adanya (jangan dibungkus "Error: ..."). Seluruh
       // transaksi saveProduct sudah ter-rollback — tidak ada produk
       // setengah tersimpan, dan barcode produk lain TIDAK tersentuh.
-      if (mounted) _showBanner(e.toString());
+      //
+      // Nama produknya dijadikan tautan: ketuk → buka produk itu (di-PUSH
+      // di atas form ini, jadi isian form yang belum tersimpan TETAP utuh
+      // saat kembali). Alur yang dituju: ketuk nama → bebaskan/ganti
+      // barcode di produk itu → kembali → simpan lagi.
+      if (mounted) {
+        _showBanner(
+          e.toString(),
+          InlineBannerType.error,
+          e.productName,
+          () {
+            // Tutup banner dulu: kalau user membebaskan barcode di produk
+            // tujuan lalu kembali, pesan lama sudah tidak berlaku.
+            setState(() => _bannerMsg = null);
+            context.push('/produk/${e.productId}');
+          },
+        );
+      }
       return false;
     } catch (e) {
       if (mounted) _showBanner('Error: $e');
@@ -595,6 +622,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   InlineBanner(
                     message: _bannerMsg,
                     type: _bannerType,
+                    linkText: _bannerLinkText,
+                    onLinkTap: _bannerOnLinkTap,
                     onDismiss: () => setState(() => _bannerMsg = null),
                   ),
                   Expanded(

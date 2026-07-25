@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
@@ -49,12 +50,26 @@ class InlineBanner extends StatefulWidget {
     this.type = InlineBannerType.info,
     this.duration = const Duration(seconds: 4),
     required this.onDismiss,
+    this.linkText,
+    this.onLinkTap,
   });
 
   final String? message;
   final InlineBannerType type;
   final Duration duration;
   final VoidCallback onDismiss;
+
+  /// Potongan teks di dalam [message] yang dijadikan tautan (di-highlight &
+  /// bisa diketuk). Harus PERSIS muncul di [message]; kalau tidak ditemukan,
+  /// banner tetap tampil sebagai teks biasa (tidak pernah gagal/kosong).
+  /// Butuh [onLinkTap] juga — salah satu saja tidak mengaktifkan tautan.
+  final String? linkText;
+
+  /// Aksi saat [linkText] diketuk. Selama ini di-set, banner TIDAK
+  /// auto-dismiss: 4 detik jelas tidak cukup untuk membaca lalu mengetuk,
+  /// dan banner yang hilang sendiri membuat aksinya tidak mungkin diraih.
+  /// User menutupnya lewat ✕ (atau otomatis tergantikan pesan berikutnya).
+  final VoidCallback? onLinkTap;
 
   @override
   State<InlineBanner> createState() => _InlineBannerState();
@@ -63,14 +78,22 @@ class InlineBanner extends StatefulWidget {
 class _InlineBannerState extends State<InlineBanner> {
   Timer? _timer;
 
+  /// Satu recognizer dipakai ulang (`onTap`-nya yang diganti tiap build) —
+  /// bikin baru di build akan bocor karena tidak pernah di-dispose.
+  final _linkRecognizer = TapGestureRecognizer();
+
   @override
   void didUpdateWidget(InlineBanner old) {
     super.didUpdateWidget(old);
     if (widget.message != null && widget.message != old.message) {
       _timer?.cancel();
-      _timer = Timer(widget.duration, () {
-        if (mounted) widget.onDismiss();
-      });
+      // Banner yang punya aksi tidak boleh hilang sendiri (lihat dok
+      // [InlineBanner.onLinkTap]).
+      if (widget.onLinkTap == null) {
+        _timer = Timer(widget.duration, () {
+          if (mounted) widget.onDismiss();
+        });
+      }
     } else if (widget.message == null) {
       _timer?.cancel();
     }
@@ -79,7 +102,42 @@ class _InlineBannerState extends State<InlineBanner> {
   @override
   void dispose() {
     _timer?.cancel();
+    _linkRecognizer.dispose();
     super.dispose();
+  }
+
+  /// Teks pesan — biasa, atau dengan satu potongan yang di-highlight & bisa
+  /// diketuk kalau [InlineBanner.linkText] + [InlineBanner.onLinkTap] di-set.
+  Widget _messageText(String msg, Color fg, Color accent) {
+    final style = TextStyle(
+      color: fg,
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      height: 1.4,
+    );
+    final link = widget.linkText;
+    final onTap = widget.onLinkTap;
+    if (link == null || link.isEmpty || onTap == null) {
+      return Text(msg, style: style);
+    }
+    final at = msg.indexOf(link);
+    if (at < 0) return Text(msg, style: style);
+
+    _linkRecognizer.onTap = onTap;
+    return Text.rich(TextSpan(style: style, children: [
+      TextSpan(text: msg.substring(0, at)),
+      TextSpan(
+        text: link,
+        style: TextStyle(
+          color: accent,
+          fontWeight: FontWeight.w800,
+          decoration: TextDecoration.underline,
+          decorationColor: accent,
+        ),
+        recognizer: _linkRecognizer,
+      ),
+      TextSpan(text: msg.substring(at + link.length)),
+    ]));
   }
 
   @override
@@ -160,17 +218,7 @@ class _InlineBannerState extends State<InlineBanner> {
                       ),
                       Icon(ico, size: 18, color: accent),
                       const SizedBox(width: 9),
-                      Expanded(
-                        child: Text(
-                          msg,
-                          style: TextStyle(
-                            color: fg,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
+                      Expanded(child: _messageText(msg, fg, accent)),
                       const SizedBox(width: 4),
                       GestureDetector(
                         onTap: widget.onDismiss,

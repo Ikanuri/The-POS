@@ -52,8 +52,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   DIAMBIL dari produk yang lama. Akibatnya produk lama tidak bisa di-scan
   lagi, dan men-scan kode tersebut di kasir menagih produk yang SALAH,
   tanpa ada tanda apa pun. Sekarang penyimpanan ditolak dengan pesan yang
-  menyebutkan produk mana yang sudah memakai barcode itu. Barcode dari
-  produk yang sudah dinonaktifkan tetap boleh dipakai ulang seperti biasa.
+  menyebutkan produk mana yang sudah memakai barcode itu. **Nama produk di
+  pesan itu bisa langsung diketuk** untuk membuka produk tersebut — jadi
+  kalau memang barcode-nya mau dipindahkan, tinggal ketuk namanya, hapus
+  barcode di sana, lalu kembali dan simpan (isian yang sedang diketik tidak
+  hilang). Barcode dari produk yang sudah dinonaktifkan tetap boleh dipakai
+  ulang seperti biasa.
 
 ## 24 Juli 2026
 

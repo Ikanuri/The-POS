@@ -87,19 +87,40 @@ nilainya jadi `RELEASED:...`), (b) barcode dipegang produk ITU SENDIRI sbg
 alias `isPrimary=false` dari sinkron harga antar toko (lihat CLAUDE.md) lalu
 dipromosikan jadi barcode utama, (c) simpan-ulang produk yang sama.
 
-Jalur lain sudah diperiksa & TIDAK punya bug ini: `updateVariant` pakai
-update/insert tanpa pre-delete (menabrak UNIQUE = gagal keras, tanpa
-kehilangan data), sinkron LAN tidak lewat `saveProduct`, dan impor CSV
-sudah punya try/catch per baris shg baris bentrok kini dilaporkan sbg baris
-gagal (membaik, tidak perlu diubah).
+Jalur lain sudah diperiksa & TIDAK punya bug ini: `updateVariant` &
+`createVariant` pakai update/insert tanpa pre-delete (menabrak UNIQUE =
+gagal keras, tanpa kehilangan data), sinkron LAN tidak lewat `saveProduct`,
+dan impor CSV sudah punya try/catch per baris shg baris bentrok kini
+dilaporkan sbg baris gagal (membaik, tidak perlu diubah).
+
+**Susulan atas usulan user: nama produk di banner bisa diketuk.**
+`InlineBanner` dapat 2 param opsional baru `linkText`/`onLinkTap` —
+potongan pesan yang cocok dirender jadi `TextSpan` ber-`TapGestureRecognizer`
+(highlight accent + bold + underline). Tiga hal yang perlu diingat kalau
+menyentuh ini lagi: (1) selama `onLinkTap` di-set, banner **tidak
+auto-dismiss** — 4 detik tidak cukup utk membaca lalu mengetuk, banner yg
+hilang sendiri bikin aksinya mustahil diraih; (2) recognizer-nya SATU objek
+yg `onTap`-nya diganti tiap build & di-dispose di `dispose()` (bikin baru
+di build = bocor); (3) kalau `linkText` tidak ditemukan di `message`,
+otomatis jatuh ke teks biasa — tidak pernah kosong/error. `productId`
+ditambahkan ke `BarcodeConflictException` supaya UI bisa `context.push`.
+Navigasinya PUSH di atas form, jadi isian yang belum tersimpan tetap utuh
+saat kembali (alur yang dituju: ketuk → bebaskan barcode di produk itu →
+kembali → simpan).
+
+**Pelajaran test (dari revert-verify)**: test auto-dismiss versi pertama
+LOLOS walau fitur dimatikan — `message`-nya sama di kedua `pumpWidget`,
+padahal timer hanya di-arm saat `message` BERUBAH di `didUpdateWidget`.
+Kalau menulis test banner: WAJIB pump `null` dulu lalu pesan non-null.
 
 ## Status test suite
 
-`flutter test` PENUH: **688 test, 686 hijau**. `flutter analyze` bersih
-(0 issue).
+`flutter test` PENUH: **693 test, SEMUA hijau** (run terakhir 0 gagal —
+flake port di bawah tidak muncul; memang tergantung undian, bukan berarti
+sudah hilang). `flutter analyze` bersih (0 issue).
 
-2 kegagalan sisa = **flake port, BUKAN regresi**: `SocketException: Address
-already in use, port = 8625`. **8625 itu port sync TETAP milik app**
+Flake port yang masih mengintai (muncul/tidak tergantung undian; run
+terakhir bersih): `SocketException: Address already in use, port = 8625`. **8625 itu port sync TETAP milik app**
 (`lan_sync_service.dart`), dan 4 file test real-HTTP memperebutkannya saat
 `flutter test` menjalankan file secara paralel: `lan_sync_item41_test.dart`,
 `lan_sync_slow_transfer_test.dart`, `lan_sync_timeout_test.dart`,

@@ -146,9 +146,17 @@ typedef InventoryRow = ({
 /// constraint failed". Satu barcode WAJIB memetakan ke tepat satu produk:
 /// kalau tidak, scan di kasir jadi ambigu & bisa menagih barang yang salah.
 class BarcodeConflictException implements Exception {
-  BarcodeConflictException({required this.barcode, required this.productName});
+  BarcodeConflictException({
+    required this.barcode,
+    required this.productName,
+    required this.productId,
+  });
   final String barcode;
   final String productName;
+
+  /// Supaya UI bisa menawarkan "buka produk itu" langsung dari pesan error —
+  /// owner tidak perlu mencarinya manual utk membebaskan barcode-nya.
+  final String productId;
   @override
   String toString() =>
       'Barcode "$barcode" sudah dipakai produk "$productName". Gunakan '
@@ -1742,7 +1750,11 @@ class AppDatabase extends _$AppDatabase {
           ..where((t) => t.id.equals(holderUnit.productId)))
         .getSingleOrNull();
     if (other != null && other.isActive) {
-      throw BarcodeConflictException(barcode: barcode, productName: other.name);
+      throw BarcodeConflictException(
+        barcode: barcode,
+        productName: other.name,
+        productId: other.id,
+      );
     }
     // Pemegangnya produk tidak aktif yang barcode-nya belum pernah dilepas
     // (data lama, sebelum mekanisme RELEASED ada). Lepas dgn cara yang sama
