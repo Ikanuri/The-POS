@@ -28,6 +28,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   tersinkron ke HP kasir/asisten** — sebelumnya kategori baru yang dibuat
   owner tidak pernah sampai ke perangkat lain, meski produk yang
   ditugaskan ke kategori itu sudah tersinkron duluan.
+- **Sinkronisasi data 2 device yang kebetulan berbagi alamat IP (mis.
+  hotspot HP) sekarang tidak lagi saling menimpa** — sebelumnya kalau 2
+  HP berbeda tersambung dari IP yang sama, sinkronisasi salah satu bisa
+  hilang tergantikan yang lain.
+- **Stok kadang tampil tidak update ke angka terbaru** kalau ada 2
+  perubahan stok yang terjadi sangat berdekatan (misalnya atur stok awal
+  langsung disusul stock opname) — sekarang selalu menampilkan angka
+  hasil perubahan terakhir.
 
 ## 24 Juli 2026
 

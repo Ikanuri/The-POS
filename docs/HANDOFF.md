@@ -5,65 +5,54 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 25 Juli 2026 — commit `ed6ff36` (SELESAI, terverifikasi): 4
-permintaan user (1 fix tampilan + 2 fitur satuan berjenjang + 1 bug sync
-yang ditemukan saat investigasi). Lanjutan dari sesi 24 Juli (restore FK +
-usulan produk hilang, `d4b17b9`/`1a1224f`) yang sudah selesai sebelumnya._
+_Update sesi 25 Juli 2026 — commit `d7b8851` (SELESAI, terverifikasi):
+lanjutan langsung dari commit `ed6ff36` sesi yang sama (4 permintaan user +
+fix sync kategori). Item ini menutup 2 hal: bug `sync_upload_queue` yang
+tadinya ditunda krn butuh migrasi skema, dan Item 38 di PLAN.md yang
+ternyata TERBUKTI berdampak nyata._
 
 ## Yang baru dikerjakan sesi ini
 
-1. **Nama produk 2 baris di keranjang** (`cart_sheet.dart`) — dulu
-   `maxLines: 1` + ellipsis, sekarang `maxLines: 2`. Perubahan isolasi,
-   `ListTile` otomatis menyesuaikan tinggi tanpa restrukturisasi
-   leading/trailing (checkbox, stepper, harga tetap fixed-size).
-2. **Stock Opname input per satuan berjenjang** (`stock_opname_screen.dart`)
-   — produk dgn >1 satuan (mis. Pcs/Dus) dapat `DropdownButton` pemilih
-   satuan per baris (HANYA produk berjenjang — keputusan eksplisit user,
-   produk 1-satuan tidak berubah tampilannya). Qty yang diketik dikonversi
-   ke satuan dasar via `ratio_to_base` SEBELUM masuk `_OpnameEntry.counted`
-   (dipakai utk diff & `commitOpname` — fungsi itu sendiri TIDAK diubah).
-   Layar review menampilkan "diketik: X {satuan}" di samping hasil
-   konversi, supaya user tahu apa yg sebenarnya diketik.
-3. **Cek Stok pilih satuan per-produk utk output** (`cek_stok_screen.dart`)
-   — produk berjenjang yg dicentang (utk restock) dapat `DropdownButton`
-   pemilih satuan (dimuat malas — baru query `getProductUnits` saat
-   dicentang, bukan semua produk sekaligus). `_buildOrderText` (fitur
-   "Order Restock" yg SUDAH ADA sebelumnya, dulu cuma `- {nama}` polos)
-   diperluas jadi `"{qty} {satuan} {nama}"` (qty = stok terkini dikonversi
-   ke satuan terpilih) — keputusan eksplisit user: perluas fitur lama,
-   bukan bikin output terpisah.
-4. **Fix bug sync kategori produk** (`app_database.dart`/
-   `lan_sync_service.dart`) — ditemukan saat investigasi pertanyaan user
-   "apakah kategori ikut sync?". `product_groups` (tabel kategori ITU
-   SENDIRI — create/rename/delete/reorder, BEDA dari penugasan produk ke
-   kategori yg sudah benar) lupa dimasukkan ke `dumpSince`'s `masterData`
-   list & `clientMergeableTables` SEJAK AWAL fitur kategori dibuat. Fix:
-   tambahkan ke kedua list. Full-dump tiap sync aman (tabel ini tidak
-   punya `updated_at`) krn `deleteProductGroup` menombstone `name=null`
-   (bukan DELETE baris sungguhan, slot id dipakai ulang) — jadi
-   INSERT OR REPLACE polos sudah cukup, tidak perlu cleanup orphan spt
-   `product_group_tags`.
+1. **Fix `sync_upload_queue` per-IP collision** (sama persis dgn bug
+   `_pendingProposals` yang sudah diperbaiki commit `d4b17b9`) — kolom baru
+   `SyncUploadQueue.deviceCode` (nullable, migrasi v20->v21, guard
+   `from >= 18` krn `createTable` di step v18 sudah pakai definisi tabel
+   TERKINI shg addColumn lagi akan gagal "duplicate column" utk upgrade
+   yang lewat kedua step di satu chain). `enqueueSyncUpload` sekarang kunci
+   slot "1 per pengirim" pakai `deviceCode` (fallback `fromIp` utk klien
+   lama yg belum kirim). `lan_sync_service.dart`: parsing `rawDeviceCode`
+   dipindah lebih awal, dipakai ulang utk kedua antrian (proposal + upload
+   queue) — tidak lagi diparse 2x.
+2. **Fix Item 38 (PLAN.md) — `_rawBaseStock` tie-break tidak kronologis**
+   — ditemukan TAK SENGAJA lewat investigasi flake test Stock Opname
+   (`stock_opname_unit_conversion_test.dart` gagal ~1-in-5 di full-suite,
+   TIDAK reproducible isolasi). Sempat salah duga akar masalah popup
+   `DropdownButton` timing (rewrite ke `onChanged` langsung TIDAK
+   menghilangkan flake) — debug print `stock_ledger` row content
+   membuktikan WRITE benar, READ salah → `ORDER BY created_at DESC, id
+   DESC`: `created_at` presisi detik, `id` UUID acak, 2 tulis stok di
+   detik sama bisa salah pilih baris lama. Fix: tie-break kedua pakai
+   `rowid` SQLite built-in (monoton sesuai insert, tanpa migrasi).
+   **Sudah dibuktikan berdampak nyata** (bukan cuma teoretis spt status
+   PLAN.md sebelumnya) — item ini SUDAH DIHAPUS dari PLAN.md.
 
-**Test baru** (semua revert-verified): `cart_item_name_two_lines_test.dart`,
-`stock_opname_unit_conversion_test.dart`, `cek_stok_unit_output_test.dart`,
-`product_group_sync_test.dart` (real HTTP round-trip, pola sama spt
-`proposal_unchanged_end_to_end_test.dart`).
+**Test baru** (semua revert-verified): `migration_v21_test.dart`,
+`sync_upload_queue_device_slot_key_test.dart` (real HTTP round-trip),
+`stock_ledger_tiebreak_test.dart` (deterministic DB-level, id string
+sengaja dibalik leksikografis supaya bug ke-trigger PASTI, bukan
+untung-untungan UUID acak).
 
 ## Status test suite
 
-`flutter test` PENUH sukses jalan sampai selesai di commit ini: hanya
-kegagalan pra-ada yang SUDAH dikenal (`proposal_unchanged_end_to_end_test.
-dart` — "port already in use" krn port sync tetap yang dipakai bareng test
-lain saat suite penuh jalan konkuren; lulus bersih saat dijalankan sendiri,
-sudah didokumentasikan sejak sesi 24 Juli). `flutter analyze` bersih
-(0 issue).
+`flutter test` PENUH: **677 test, semua hijau** (0 gagal). Flake lama
+`stock_opname_unit_conversion_test.dart`/`cek_stok_unit_output_test.dart`
+dikonfirmasi HILANG — 3x run batch berulang (10 file yang biasa
+reproduce flake) semua bersih. `flutter analyze` bersih (0 issue).
 
 ## Yang menggantung / belum sempat
 
-- **PLAN.md item lama** (dicatat sesi 24 Juli, masih berlaku): `sync_
-  upload_queue` (antrian sync transaksi, BEDA dari antrian usulan produk
-  yang sudah diperbaiki) masih dikunci per-IP mentah — bug potensial yang
-  SAMA, belum diperbaiki krn butuh migrasi skema (tambah kolom
-  `device_code`) di sandbox yang codegen Drift-nya rusak.
-- Tidak ada lagi. Semua pekerjaan sesi ini sudah di-commit & push ke
-  `claude/kategori-produk-qty-harga-mqjh21`.
+- Tidak ada item baru dari sesi ini. Semua pekerjaan sudah di-commit &
+  push ke `claude/kategori-produk-qty-harga-mqjh21`.
+- Item lama yang masih terbuka: lihat `PLAN.md` (Item 17+21 sync ditunda
+  sesi fokus, Item 23 sisa, Item 28 konsep, Item 32 tunggu konfirmasi user
+  device fisik, Item 41 sisa P3, Item 51 tunggu keputusan user).
