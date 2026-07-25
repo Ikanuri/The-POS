@@ -18,10 +18,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   langsung dalam satuan besarnya (misalnya "10 dus"), otomatis dikonversi
   ke satuan dasar. Produk dengan satu satuan saja tidak berubah sama
   sekali.
-- **Cek Stok: pilih satuan tampilan untuk daftar Order Restock** — produk
-  berjenjang yang dicentang untuk restock sekarang bisa ditampilkan dalam
-  satuan pilihan (misalnya "2 dus" alih-alih "20 pcs") di teks yang
-  disalin/dikirim ke supplier.
+- **Cek Stok: tentukan sendiri jumlah & satuan yang mau diorder.** Setiap
+  produk yang dicentang kini punya baris `[−] [jumlah] [+] [satuan]` —
+  jumlahnya mulai dari 1, bisa dinaikkan/diturunkan, atau **diketuk untuk
+  mengetik angkanya langsung**. Satuannya bisa dipilih dari satuan milik
+  produk itu (Pcs/Dus) maupun dari daftar satuan umum, jadi produk
+  bersatuan tunggal pun tetap bisa diorder dalam satuan lain. Teks yang
+  dikirim ke supplier jadi berbentuk "10 Dus Indomie".
+- **Teks Order Restock sekarang bisa diedit langsung, dua arah.** Anda bisa
+  mengetik/menempel langsung di kotak teksnya; centang, jumlah, dan satuan
+  di daftar atas ikut menyesuaikan. Menghapus satu baris juga otomatis
+  membatalkan centang produknya.
 
 ### 🛠️ Perbaikan
 - **Kategori produk (buat/ganti nama/hapus/urutkan) sekarang benar-benar
@@ -43,11 +50,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   tersorot, jadi mengetik langsung menggantinya.
 - **Kotak "Poin Loyalitas" pelanggan baru tidak lagi berisi "0"** yang
   harus dihapus dulu sebelum bisa diisi.
-- **Pemilih satuan di Cek Stok kini juga muncul untuk produk yang sudah
-  ditandai habis sebelumnya.** Dulu pemilih satuan hanya muncul kalau
-  produknya baru saja dicentang di sesi itu — produk yang sudah tercentang
-  dari sebelumnya tampil tanpa pilihan satuan, dan teks Order Restock-nya
-  turun jadi "- Nama Produk" polos tanpa jumlah & satuan.
+- **Jumlah di Order Restock tidak lagi diambil dari angka stok.** Dulu
+  jumlahnya adalah stok saat ini, sehingga produk berstok minus keluar
+  sebagai "-104 Pres Lawet Ijo" — dan angkanya sama sekali tidak bisa
+  diubah. Sekarang jumlahnya Anda tentukan sendiri.
+- **Pemilih satuan & jumlah di Cek Stok kini juga muncul untuk produk yang
+  sudah ditandai habis sebelumnya.** Dulu hanya muncul kalau produknya baru
+  dicentang di sesi itu; produk yang sudah tercentang dari sebelumnya tampil
+  tanpa satuan dan teksnya turun jadi "- Nama Produk" polos.
+- **Nama satuan di Cek Stok terbaca jelas di mode gelap** (dulu warnanya
+  dipaksa hitam sehingga nyaris tidak terlihat).
 - **Angka stok tidak bisa lagi berbeda antar layar.** Untuk produk yang
   punya dua perubahan stok di detik yang sama, layar Cek Stok / Stock
   Opname / laporan inventori bisa menampilkan angka lama sementara

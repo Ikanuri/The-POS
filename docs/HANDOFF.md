@@ -113,11 +113,65 @@ LOLOS walau fitur dimatikan — `message`-nya sama di kedua `pumpWidget`,
 padahal timer hanya di-arm saat `message` BERUBAH di `didUpdateWidget`.
 Kalau menulis test banner: WAJIB pump `null` dulu lalu pesan non-null.
 
+## Item 4 DIROMBAK (25 Juli) — order restock: qty diisi owner, teks dua arah
+
+User membandingkan hasil kerja dgn HTML acuan yang dia kirim & menemukan
+versi pertama Item 4 SALAH SECARA KONSEP. Kutipan keluhannya: "bagaimana
+teks order akan bisa berubah sesuai jumlah orderan jika kita tidak bisa set
+angkanya? lagipula, designnya tidak sama persis dengan html yang saya
+kirim."
+
+**Yang salah di versi pertama**: qty di teks order diambil dari STOK lalu
+dibagi rasio, dan tidak bisa di-set sama sekali. Di data nyata user (stok
+semua minus) hasilnya `-104 Pres Lawet Ijo` / `0 Pres Lawet Ijo`. Plus
+produk bersatuan tunggal jatuh ke `- Nama` polos tanpa qty/satuan.
+
+**Hasil pembacaan HTML acuan** (`05a57790-index.html`, fitur "Order ke
+Karyawan"), untuk rujukan kalau menyentuh ini lagi:
+- Tiap kartu: `[−] [qty] [+] [satuan ▾]`. Angka diketuk → modal papan-angka
+  (`openCalc`). Tombol −/+ ada tekan-tahan; minus MEMBEKU di 1, tidak
+  pernah desimal (`skAdjustQty`).
+- qty awal **1**, BUKAN dari stok. Satuan default `dus`.
+- Output `<textarea>` **editable dua arah** (`skOnOutputChange`): tiap baris
+  di-parse jadi centang + qty + satuan; `skParseLine` = `{qty} {satuan}
+  {nama}`, kalau depannya bukan angka+satuan dikenal maka SELURUH baris
+  dianggap nama (qty 1).
+- Satuan dari daftar tetap 13 nama (`SK_UNITS`): dus, slp, biji, kg, btl,
+  sak, lusin, pak, bal, ret, rek, kas, ikt.
+- Output dikelompokkan per tanggal dgn header `── Hari ini ──` — **BELUM**
+  ditiru, sengaja (butuh menyimpan kapan produk dicentang).
+
+**Keputusan user utk versi baru**: (a) satuan = satuan milik produk DULU
+lalu daftar umum dari tabel `unit_types` (bukan 13 nama hardcode acuan —
+supaya tetap nyambung ke master data app); (b) qty awal selalu 1 spt acuan;
+(c) textarea dua arah PENUH.
+
+**Catatan implementasi**: parser di-debounce 600ms — tiap baris yang cocok
+berarti tulis `markedOutOfStock` ke DB & tiap tulis memicu stream emit
+ulang, tanpa debounce satu ketikan = beberapa tulis DB + rebuild yang
+berebut dgn ketikan user. `_syncOrderText` tidak menimpa textarea selama
+fokus ada di situ (kecuali `force` saat fokus dilepas, utk merapikan bentuk
+kanonik). `_suppressSync` memutus loop tulis-baca. Konversi rasio TIDAK
+dipakai lagi di layar ini — qty adalah angka order apa adanya dalam satuan
+terpilih, jadi `_UnitChoice`/`ratioToBase` dihapus dari sini.
+
+**Test lama `cek_stok_unit_output_test.dart` DIHAPUS** — 2 dari 3 test-nya
+mengunci desain yang user batalkan (produk 1 satuan TIDAK dapat pemilih
+satuan; qty dari stok). Diganti `cek_stok_order_qty_test.dart` (7 kasus).
+Revert-verify dilakukan dgn menjalankan test baru melawan versi file dari
+git HEAD: 7/7 gagal di versi lama, 7/7 lolos di versi baru.
+
+**Belum dikerjakan / menggantung dari sesi ini**: (1) header tanggal di
+output spt acuan; (2) `setMarkedOutOfStock` TIDAK mencap `updated_at` —
+kelas bug yang CLAUDE.md sudah catat 2x (perubahan tidak pernah sampai ke
+device lain lewat `dumpSince`), ditemukan sambil jalan, sengaja TIDAK
+disentuh; (3) pertanyaan qty utk stok minus & stok minus itu sendiri —
+user menahan keputusannya.
+
 ## Status test suite
 
-`flutter test` PENUH: **693 test, SEMUA hijau** (run terakhir 0 gagal —
-flake port di bawah tidak muncul; memang tergantung undian, bukan berarti
-sudah hilang). `flutter analyze` bersih (0 issue).
+`flutter test` PENUH: **699 test, 698 hijau** (1 gagal = flake port di
+bawah, lolos bersih terisolasi). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
 terakhir bersih): `SocketException: Address already in use, port = 8625`. **8625 itu port sync TETAP milik app**

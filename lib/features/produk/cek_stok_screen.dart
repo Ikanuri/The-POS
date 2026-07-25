@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,13 +36,34 @@ final _cekStokOverviewProvider =
 });
 
 class _CekStokScreenState extends ConsumerState<CekStokScreen> {
-  // Item 4 (usulan user) — pilih satuan PER PRODUK utk teks Order Restock:
-  // produk berjenjang (>1 satuan) boleh ditampilkan dlm satuan yg lebih
-  // nyata (mis. "2 dus" drpd "20 pcs"). Dimuat malas (baru saat produk
-  // dicentang), bukan semua produk sekaligus — hemat query utk kategori
-  // besar yg mayoritas tidak dicentang.
-  final Map<String, List<_UnitChoice>> _unitsByProduct = {};
-  final Map<String, int> _selectedUnitIdx = {};
+  // Item 4 (revisi 25 Juli, setelah user membandingkan dgn HTML acuannya) —
+  // baris "Order Restock" adalah JUMLAH YANG MAU DIORDER, diisi owner, BUKAN
+  // stok saat ini dikonversi. Versi pertama memakai stok → hasilnya tidak
+  // masuk akal utk order (stok -104 jadi "-104 Pres Lawet Ijo") dan angkanya
+  // sama sekali tidak bisa diubah. Sekarang meniru acuan: tiap produk
+  // tercentang dapat baris `[−] [qty] [+] [satuan ▾]`, qty awal 1, ketuk
+  // angkanya utk mengetik lewat dialog, dan teks order-nya bisa diedit
+  // langsung (dua arah).
+
+  /// Pilihan satuan per produk: satuan milik produk itu DULU (paling
+  /// relevan), lalu sisa nama satuan umum dari tabel `unit_types` — supaya
+  /// produk bersatuan tunggal pun tetap bisa diorder dlm satuan lain
+  /// (keputusan user: "satuan produk + daftar umum").
+  final Map<String, List<String>> _unitOptions = {};
+  final Map<String, String> _selectedUnit = {};
+  final Map<String, double> _orderQty = {};
+
+  /// Nama satuan umum (seluruh `unit_types`), dimuat sekali.
+  List<String> _genericUnits = const [];
+
+  /// Teks order yang bisa diedit user + sinkronisasi dua arah.
+  final _orderCtrl = TextEditingController();
+  final _orderFocus = FocusNode();
+  Timer? _parseDebounce;
+
+  /// Menahan regenerasi teks saat kita sendiri yang baru menulisnya (dan
+  /// sebaliknya) — tanpa ini, tulis-baca saling memicu tanpa henti.
+  bool _suppressSync = false;
 
   @override
   void initState() {
@@ -53,6 +75,24 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
             widget.initialGroupId;
       });
     }
+    _orderFocus.addListener(() {
+      // Begitu user selesai menyunting, rapikan teksnya kembali ke bentuk
+      // kanonik hasil state (mis. baris tanpa qty jadi "1 <satuan> <nama>").
+      if (!_orderFocus.hasFocus) _syncOrderText(force: true);
+    });
+    ref.read(databaseProvider).getAllUnitTypes().then((types) {
+      if (!mounted) return;
+      setState(() => _genericUnits =
+          types.map((t) => t.name).where((n) => n.isNotEmpty).toList());
+    });
+  }
+
+  @override
+  void dispose() {
+    _parseDebounce?.cancel();
+    _orderCtrl.dispose();
+    _orderFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _toggle(String productId, bool value) async {
@@ -64,32 +104,100 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   Future<void> _ensureUnitsLoaded(String productId) =>
       _loadUnitsFor([productId]);
 
-  /// Muat satuan untuk sekumpulan produk sekaligus (satu query batch).
-  /// Produk yang sudah pernah dimuat dilewati — nilai `const []` juga
-  /// dianggap "sudah dimuat" (artinya: produk bersatuan tunggal, memang
-  /// tidak dapat pemilih satuan), supaya tidak di-query berulang kali.
+  /// Muat pilihan satuan untuk sekumpulan produk sekaligus (satu query
+  /// batch). Produk yang sudah pernah dimuat dilewati.
+  ///
+  /// Daftarnya = satuan MILIK produk itu dulu (urut satuan dasar lebih
+  /// dahulu, karena itu default & paling sering benar), lalu nama satuan
+  /// umum lain dari `unit_types` yang belum tercakup. Jadi produk bersatuan
+  /// tunggal pun tetap dapat pemilih satuan — di acuan user setiap item
+  /// tercentang SELALU punya qty & satuan, tidak pernah "- Nama" polos.
   Future<void> _loadUnitsFor(List<String> productIds) async {
     final missing = [
       for (final id in productIds)
-        if (!_unitsByProduct.containsKey(id)) id,
+        if (!_unitOptions.containsKey(id)) id,
     ];
     if (missing.isEmpty) return;
     final byProduct =
         await ref.read(databaseProvider).getUnitsWithTypeNamesFor(missing);
     for (final id in missing) {
       final units = byProduct[id] ?? const [];
-      if (units.length <= 1) {
-        _unitsByProduct[id] = const [];
-        continue;
+      final own = <String>[];
+      // Satuan dasar didahulukan, sisanya mengikuti urutan aslinya.
+      for (final u in units.where((u) => u.unit.isBaseUnit)) {
+        own.add(u.unitName);
       }
-      final choices = [
-        for (final u in units) _UnitChoice(unit: u.unit, unitName: u.unitName),
+      for (final u in units.where((u) => !u.unit.isBaseUnit)) {
+        if (!own.contains(u.unitName)) own.add(u.unitName);
+      }
+      final options = [
+        ...own,
+        for (final g in _genericUnits)
+          if (!own.contains(g)) g,
       ];
-      _unitsByProduct[id] = choices;
-      final baseIdx = choices.indexWhere((c) => c.unit.isBaseUnit);
-      _selectedUnitIdx[id] = baseIdx < 0 ? 0 : baseIdx;
+      _unitOptions[id] = options.isEmpty ? const ['Pcs'] : options;
+      _selectedUnit[id] ??= _unitOptions[id]!.first;
+      _orderQty[id] ??= 1;
     }
     if (mounted) setState(() {});
+  }
+
+  // ── qty order (meniru acuan: awal 1, +/- , ketuk angka utk mengetik) ──
+
+  void _adjustQty(String productId, double delta) {
+    final cur = _orderQty[productId] ?? 1;
+    // Minus MEMBEKU di 1 — di acuan qty tidak pernah turun ke bawah 1 atau
+    // jadi desimal lewat tombol.
+    if (delta < 0 && cur <= 1) return;
+    final next = cur + delta;
+    setState(() => _orderQty[productId] = next < 1 ? 1 : next);
+    _syncOrderText();
+  }
+
+  Future<void> _promptQty(String productId, String productName) async {
+    final unit = _selectedUnit[productId] ?? '';
+    final ctrl = TextEditingController(text: _fmtQty(_orderQty[productId] ?? 1));
+    // Select-all supaya ketikan MENGGANTI angka lama, bukan menempel di
+    // belakangnya (pelajaran dari dialog "Sesuaikan Stok").
+    ctrl.selection =
+        TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(productName, style: const TextStyle(fontSize: 16)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Jumlah order',
+            suffixText: unit,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onSubmitted: (v) => Navigator.pop(
+              ctx, double.tryParse(v.trim().replaceAll(',', '.'))),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+                ctx,
+                double.tryParse(ctrl.text.trim().replaceAll(',', '.'))),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result <= 0) return;
+    setState(() => _orderQty[productId] = result);
+    _syncOrderText();
+  }
+
+  void _setUnit(String productId, String unitName) {
+    setState(() => _selectedUnit[productId] = unitName);
+    _syncOrderText();
   }
 
   /// Produk yang SUDAH ditandai habis SEBELUM layar ini dibuka tidak pernah
@@ -129,7 +237,15 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     // seketika kalau tidak ada yang perlu dimuat, dan `setState`-nya baru
     // terjadi setelah await (bukan di tengah build).
     final loadedRows = rowsAsync.valueOrNull;
-    if (loadedRows != null) _ensureUnitsForChecked(loadedRows);
+    if (loadedRows != null) {
+      _lastRows = loadedRows;
+      _ensureUnitsForChecked(loadedRows);
+      // Teks disusun ulang setelah frame — `_syncOrderText` menulis ke
+      // controller, dan itu tidak boleh dilakukan di tengah build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncOrderText();
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -191,10 +307,14 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
                   itemBuilder: (context, i) => _StockRow(
                     row: rows[i],
                     onToggle: (v) => _toggle(rows[i].productId, v),
-                    unitChoices: _unitsByProduct[rows[i].productId],
-                    selectedUnitIdx: _selectedUnitIdx[rows[i].productId] ?? 0,
-                    onUnitChanged: (idx) => setState(
-                        () => _selectedUnitIdx[rows[i].productId] = idx),
+                    unitOptions: _unitOptions[rows[i].productId],
+                    selectedUnit: _selectedUnit[rows[i].productId],
+                    qty: _orderQty[rows[i].productId] ?? 1,
+                    fmtQty: _fmtQty,
+                    onQtyDelta: (d) => _adjustQty(rows[i].productId, d),
+                    onQtyTap: () =>
+                        _promptQty(rows[i].productId, rows[i].name),
+                    onUnitChanged: (u) => _setUnit(rows[i].productId, u),
                   ),
                 );
               },
@@ -207,11 +327,12 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
             data: (rows) {
               final checked = rows.where((r) => r.markedOutOfStock).toList();
               if (checked.isEmpty) return const SizedBox.shrink();
-              final text = _buildOrderText(checked);
               return _OrderTextPanel(
-                text: text,
-                onCopy: () => _copyOrderText(text),
-                onShare: () => _shareOrderText(text),
+                controller: _orderCtrl,
+                focusNode: _orderFocus,
+                onChanged: (_) => _onOrderTextChanged(),
+                onCopy: () => _copyOrderText(_orderCtrl.text.trim()),
+                onShare: () => _shareOrderText(_orderCtrl.text.trim()),
               );
             },
             orElse: () => const SizedBox.shrink(),
@@ -226,30 +347,133 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   // berjenjang & sudah dipilih satuannya; selain itu tetap "- {nama}"
   // polos spt sebelumnya (tidak ada qty krn stok satuan tunggal biasanya
   // sudah jelas dari angka di badge kartu produknya sendiri).
+  /// Satu baris per produk tercentang, SELALU `{qty} {satuan} {nama}` —
+  /// tidak ada lagi cabang "- {nama}" polos (di acuan user tidak pernah ada
+  /// bentuk itu). Qty di sini JUMLAH ORDER milik owner, bukan stok.
   String _buildOrderText(List<StockOverviewRow> checked) {
     final buf = StringBuffer('Order Restock:\n');
     for (final r in checked) {
-      final choices = _unitsByProduct[r.productId];
-      if (choices != null && choices.isNotEmpty) {
-        final idx = _selectedUnitIdx[r.productId] ?? 0;
-        final chosen = choices[idx];
-        final qty = r.stock / chosen.unit.ratioToBase;
-        buf.writeln('${_fmtQty(qty)} ${chosen.unitName} ${r.name}');
+      final qty = _orderQty[r.productId] ?? 1;
+      final unit = _selectedUnit[r.productId];
+      if (unit == null || unit.isEmpty) {
+        // Satuan belum selesai dimuat — jangan tampilkan baris setengah jadi.
+        buf.writeln('${_fmtQty(qty)} ${r.name}');
       } else {
-        buf.writeln('- ${r.name}');
+        buf.writeln('${_fmtQty(qty)} $unit ${r.name}');
       }
     }
     return buf.toString().trim();
   }
 
   String _fmtQty(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
+
+  // ─────────── sinkronisasi dua arah teks order ⇄ daftar produk ───────────
+
+  /// Tulis ulang teks dari state. Tidak dilakukan saat user sedang mengetik
+  /// (fokus di textarea) supaya kursor & ketikannya tidak dirampas — kecuali
+  /// [force] (dipakai saat fokus baru dilepas, utk merapikan bentuknya).
+  void _syncOrderText({bool force = false}) {
+    if (_suppressSync) return;
+    if (!force && _orderFocus.hasFocus) return;
+    final rows = _lastRows;
+    if (rows == null) return;
+    final checked = rows.where((r) => r.markedOutOfStock).toList();
+    final text = checked.isEmpty ? '' : _buildOrderText(checked);
+    if (_orderCtrl.text == text) return;
+    _suppressSync = true;
+    _orderCtrl.text = text;
+    _suppressSync = false;
+  }
+
+  /// Baris terakhir yang diterima dari stream — dipakai [_syncOrderText] &
+  /// parser (keduanya berjalan di luar `build`).
+  List<StockOverviewRow>? _lastRows;
+
+  void _onOrderTextChanged() {
+    if (_suppressSync) return;
+    // Di-debounce: tiap baris yang cocok berarti tulis `markedOutOfStock` ke
+    // DB, dan tiap tulis memicu stream ini emit ulang. Tanpa debounce, satu
+    // ketikan = beberapa tulis DB + rebuild yang berebut dgn ketikan user.
+    _parseDebounce?.cancel();
+    _parseDebounce = Timer(const Duration(milliseconds: 600), _applyOrderText);
+  }
+
+  /// Parse teks yang diedit user → centang, qty, & satuan ikut berubah
+  /// (pola sama dgn `skOnOutputChange` di acuan). Baris yang produknya tidak
+  /// ada di daftar diabaikan; produk yang barisnya DIHAPUS ikut di-uncheck.
+  Future<void> _applyOrderText() async {
+    final rows = _lastRows;
+    if (rows == null || !mounted) return;
+    final db = ref.read(databaseProvider);
+
+    final parsed = <String, ({double qty, String? unit})>{};
+    for (final line in _orderCtrl.text.split('\n')) {
+      final p = _parseOrderLine(line);
+      if (p != null) parsed[_norm(p.name)] = (qty: p.qty, unit: p.unit);
+    }
+
+    var changed = false;
+    for (final r in rows) {
+      final hit = parsed[_norm(r.name)];
+      if (hit != null) {
+        if (!r.markedOutOfStock) {
+          await db.setMarkedOutOfStock(r.productId, true);
+          await _ensureUnitsLoaded(r.productId);
+          changed = true;
+        }
+        if (_orderQty[r.productId] != hit.qty) {
+          _orderQty[r.productId] = hit.qty;
+          changed = true;
+        }
+        final u = hit.unit;
+        if (u != null && _selectedUnit[r.productId] != u) {
+          // Satuan yang diketik user diterima walau belum ada di daftar
+          // pilihan — jangan memaksa dia memakai nama yang kita kenal saja.
+          final opts = _unitOptions[r.productId];
+          if (opts != null && !opts.contains(u)) {
+            _unitOptions[r.productId] = [u, ...opts];
+          }
+          _selectedUnit[r.productId] = u;
+          changed = true;
+        }
+      } else if (r.markedOutOfStock) {
+        await db.setMarkedOutOfStock(r.productId, false);
+        changed = true;
+      }
+    }
+    if (changed && mounted) setState(() {});
+  }
+
+  /// `{qty} {satuan} {nama}` — kalau bagian depannya bukan angka + satuan
+  /// yang dikenal, seluruh baris dianggap NAMA (qty 1), persis
+  /// `skParseLine` di acuan. Baris "Order Restock:" (judul) diabaikan.
+  ({double qty, String? unit, String name})? _parseOrderLine(String line) {
+    final t = line.trim();
+    if (t.isEmpty) return null;
+    if (t.endsWith(':')) return null; // judul
+    final parts = t.split(RegExp(r'\s+'));
+    if (parts.length >= 3) {
+      final q = double.tryParse(parts[0].replaceAll(',', '.'));
+      if (q != null && q > 0 && _isKnownUnit(parts[1])) {
+        return (qty: q, unit: parts[1], name: parts.sublist(2).join(' '));
+      }
+    }
+    // Bentuk lama "- Nama" tetap dimengerti supaya teks yang sudah pernah
+    // disalin user masih bisa ditempel balik.
+    final name = t.startsWith('- ') ? t.substring(2).trim() : t;
+    return (qty: 1, unit: null, name: name);
+  }
+
+  bool _isKnownUnit(String s) {
+    final n = _norm(s);
+    if (_genericUnits.any((g) => _norm(g) == n)) return true;
+    return _unitOptions.values
+        .any((opts) => opts.any((o) => _norm(o) == n));
+  }
+
+  String _norm(String s) => s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 }
 
-class _UnitChoice {
-  _UnitChoice({required this.unit, required this.unitName});
-  final ProductUnit unit;
-  final String unitName;
-}
 
 class _GroupChip extends StatelessWidget {
   const _GroupChip(
@@ -276,18 +500,29 @@ class _StockRow extends StatelessWidget {
   const _StockRow({
     required this.row,
     required this.onToggle,
-    this.unitChoices,
-    this.selectedUnitIdx = 0,
+    required this.qty,
+    required this.fmtQty,
+    this.unitOptions,
+    this.selectedUnit,
+    this.onQtyDelta,
+    this.onQtyTap,
     this.onUnitChanged,
   });
   final StockOverviewRow row;
   final ValueChanged<bool> onToggle;
 
-  /// Item 4 (usulan user) — non-null & non-empty HANYA utk produk
-  /// berjenjang (>1 satuan); null selama belum dicentang (dimuat malas).
-  final List<_UnitChoice>? unitChoices;
-  final int selectedUnitIdx;
-  final ValueChanged<int>? onUnitChanged;
+  /// Jumlah yang mau DIORDER (bukan stok). Awal 1, seperti acuan.
+  final double qty;
+  final String Function(double) fmtQty;
+
+  /// Pilihan satuan produk ini — null selama belum dimuat (lazy, baru saat
+  /// produk dicentang). Setiap produk tercentang PASTI dapat satuan; tidak
+  /// ada lagi kasus "tanpa satuan" seperti versi pertama.
+  final List<String>? unitOptions;
+  final String? selectedUnit;
+  final ValueChanged<double>? onQtyDelta;
+  final VoidCallback? onQtyTap;
+  final ValueChanged<String>? onUnitChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -330,28 +565,61 @@ class _StockRow extends StatelessWidget {
             decoration: checked ? TextDecoration.lineThrough : null,
           ),
         ),
-        subtitle: (checked && unitChoices != null && unitChoices!.isNotEmpty)
+        // Baris qty order, meniru acuan: [−] [angka] [+] [satuan ▾].
+        // Angkanya diketuk utk mengetik lewat dialog. Muncul untuk SETIAP
+        // produk tercentang (bukan hanya produk berjenjang).
+        subtitle: (checked && unitOptions != null && unitOptions!.isNotEmpty)
             ? Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: 6),
                 child: Row(
                   children: [
-                    Text('Tampilkan sbg: ',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                    DropdownButton<int>(
-                      value: selectedUnitIdx,
-                      isDense: true,
-                      underline: const SizedBox.shrink(),
-                      style: const TextStyle(fontSize: 11, color: Colors.black87),
-                      items: [
-                        for (var j = 0; j < unitChoices!.length; j++)
-                          DropdownMenuItem(
-                            value: j,
-                            child: Text(unitChoices![j].unitName),
+                    _QtyBtn(
+                        icon: Icons.remove_rounded,
+                        onTap: () => onQtyDelta?.call(-1)),
+                    // Lebar tetap supaya tombol +/- tidak bergeser saat
+                    // angkanya berubah panjang.
+                    SizedBox(
+                      width: 52,
+                      child: InkWell(
+                        onTap: onQtyTap,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            fmtQty(qty),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w700),
                           ),
-                      ],
-                      onChanged: (v) => onUnitChanged?.call(v ?? 0),
+                        ),
+                      ),
+                    ),
+                    _QtyBtn(
+                        icon: Icons.add_rounded,
+                        onTap: () => onQtyDelta?.call(1)),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: DropdownButton<String>(
+                        value: unitOptions!.contains(selectedUnit)
+                            ? selectedUnit
+                            : unitOptions!.first,
+                        isDense: true,
+                        isExpanded: true,
+                        underline: const SizedBox.shrink(),
+                        // Warna dari tema — hardcode `Colors.black87` dulu
+                        // membuatnya nyaris tak terbaca di mode gelap.
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        items: [
+                          for (final u in unitOptions!)
+                            DropdownMenuItem(value: u, child: Text(u)),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) onUnitChanged?.call(v);
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -374,10 +642,45 @@ class _StockRow extends StatelessWidget {
   }
 }
 
+/// Tombol kecil −/+ untuk qty order. Sengaja bukan `OutlinedButton`/
+/// `FilledButton`: keduanya default `minimumSize` lebar-penuh di `AppTheme`
+/// dan akan mendesak dropdown satuan keluar layar di HP sempit.
+class _QtyBtn extends StatelessWidget {
+  const _QtyBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 30,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(icon, size: 16, color: scheme.onSurface),
+      ),
+    );
+  }
+}
+
 class _OrderTextPanel extends StatelessWidget {
-  const _OrderTextPanel(
-      {required this.text, required this.onCopy, required this.onShare});
-  final String text;
+  const _OrderTextPanel({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onCopy,
+    required this.onShare,
+  });
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
   final VoidCallback onCopy;
   final VoidCallback onShare;
 
@@ -398,10 +701,22 @@ class _OrderTextPanel extends StatelessWidget {
             Text('Teks Order Restock',
                 style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 100),
-              child: SingleChildScrollView(
-                child: Text(text, style: const TextStyle(fontSize: 12)),
+            // Bisa diedit langsung & dua arah (spt acuan): menyunting baris
+            // di sini ikut mengubah centang, jumlah, dan satuan di daftar
+            // atas — termasuk menghapus baris = produknya ter-uncheck.
+            TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              maxLines: 5,
+              minLines: 3,
+              style: const TextStyle(fontSize: 12),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                hintText: 'Item tercentang muncul di sini — bisa diedit '
+                    'langsung, dua arah',
+                hintStyle: TextStyle(fontSize: 11),
               ),
             ),
             const SizedBox(height: 8),
