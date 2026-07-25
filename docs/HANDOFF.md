@@ -5,13 +5,44 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 25 Juli 2026 — commit `d7b8851` (SELESAI, terverifikasi):
-lanjutan langsung dari commit `ed6ff36` sesi yang sama (4 permintaan user +
-fix sync kategori). Item ini menutup 2 hal: bug `sync_upload_queue` yang
-tadinya ditunda krn butuh migrasi skema, dan Item 38 di PLAN.md yang
-ternyata TERBUKTI berdampak nyata._
+_Update sesi 25 Juli 2026 — commit `6455b9a` (SELESAI, terverifikasi):
+lanjutan sesi yang sama, dipicu pertanyaan user "dari host ke client,
+perubahan apa saja yang diterapkan?" lalu laporan bug nyata "kenapa barcode
+yang diedit di host tidak ikut berubah di client setelah sync?"._
 
-## Yang baru dikerjakan sesi ini
+## Fix: barcode/tier grosir/Harga Lain lama tidak terhapus di klien (25 Juli)
+
+User laporan: owner edit barcode produk di host → setelah sync ke client,
+barcode LAMA masih ada (bisa di-scan) BERDAMPINGAN dgn yg baru. Diprobe
+langsung (bukan cuma baca kode) sebelum menyimpulkan.
+
+**Akar masalah**: `saveProduct` HAPUS baris lama + INSERT baris baru (id
+UUID baru) saat barcode/tier/Harga Lain diedit — bukan update in-place.
+`product_barcodes`/`price_tiers`/`alt_prices` SELALU full-dump tanpa
+`updated_at` (lihat `dumpSince`), jadi `INSERT OR REPLACE` di `mergeRows`
+tidak PERNAH menghapus baris lokal yg sudah tak ada di payload. Persis pola
+bug yg SUDAH pernah terjadi & diperbaiki di `product_group_tags` (ada
+sweep-nya) — luput ditutup di 3 tabel ini.
+
+**Fix**: sweep orphan-cleanup yg sama diterapkan ke ketiga tabel — hapus
+baris lokal yg id-nya TIDAK ada di payload full-dump (payload full-dump =
+kebenaran LENGKAP host saat ini, jadi aman dihapus), KECUALI baris milik
+unit yg `protectedUnitIds` (locally_modified=1, usulan blm di-approve
+owner — guard yg sudah ada dari fix Item 41 sebelumnya, dipakai ulang).
+
+**SENGAJA belum disentuh**: `product_units` sendiri (satuan yg di-hard-
+delete) punya kerentanan SAMA, tapi lebih riskan — anak-anaknya
+(price_tiers/alt_prices/product_barcodes/customer_group_prices) referensi
+FK RESTRICT (default Drift) ke `product_units(id)`, jadi orphan unit tidak
+bisa dihapus polos tanpa urutan hapus anak-dulu yg lebih hati-hati. Belum
+diminta user — kalau muncul lagi sbg bug nyata, ini akar masalahnya.
+
+Test baru `orphan_master_data_sync_test.dart` (3 kasus: barcode diganti,
+tier dihapus tanpa pengganti, guard proteksi usulan tidak ikut kehapus) —
+revert-verified (2 dari 3 gagal sensible saat fix dicabut, kasus proteksi
+tetap lolos krn tidak butuh cleanup utk lolos).
+
+## Yang dikerjakan sesi sebelumnya (masih relevan sbg konteks)
 
 1. **Fix `sync_upload_queue` per-IP collision** (sama persis dgn bug
    `_pendingProposals` yang sudah diperbaiki commit `d4b17b9`) — kolom baru
@@ -363,7 +394,7 @@ vs `Color(0xffebe8e0)` (netral) saat bug direproduksi.
 
 ## Status test suite
 
-`flutter test` PENUH: **716 test, SEMUA hijau** (run terakhir exit 0,
+`flutter test` PENUH: **719 test, SEMUA hijau** (run terakhir exit 0,
 flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run

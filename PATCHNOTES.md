@@ -56,6 +56,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   ketuk salah satu, tanpa buka apa pun dulu.
 
 ### 🛠️ Perbaikan
+- **Barcode/tier grosir/Harga Lain yang diganti owner sekarang benar-benar
+  hilang dari HP kasir/asisten setelah sinkronisasi.** Dulu kalau owner
+  mengedit barcode (atau tier harga grosir/Harga Lain) sebuah produk,
+  nilai LAMA-nya tetap tersimpan di HP kasir/asisten setelah sync —
+  barcode lama masih bisa di-scan, dan hasilnya bisa keliru. Sekarang
+  nilai lama ikut terhapus begitu ada penggantinya di owner.
 - **Memilih "Harga Lain" tidak lagi mematikan tanda satuan yang aktif.**
   Sebelumnya begitu Anda memilih harga alternatif/grosir, kotak satuan yang
   sedang dipakai jadi terlihat "tidak terpilih" — padahal satuannya sendiri
