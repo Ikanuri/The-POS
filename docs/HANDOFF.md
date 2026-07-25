@@ -67,22 +67,49 @@ asli — kedua item itu DIHAPUS dari PLAN.md. Jadi tidak ada lagi verifikasi
 manual yang menggantung untuk rilis 2.2.0. Catatan konteks: surface rilis
 ini tetap besar (157 commit sejak 2.1.1).
 
+## Bug barcode ganda (dilaporkan user 25 Juli, SESUDAH merge a08af7a)
+
+User: "membuat dua produk dengan barcode yang sama, dan itu lolos".
+Diprobe langsung: yang terjadi lebih buruk dari sekadar lolos — produk
+kedua **MENCURI** barcode dari yang pertama (probe: A punya 0 barcode, B
+punya 1, `lookupBarcode` -> B), tanpa error apa pun. Produk lama jadi tak
+bisa di-scan & scan kode itu menagih produk SALAH di kasir.
+
+Akar masalah: `saveProduct` menjalankan `DELETE ... WHERE barcode = value`
+polos semata-mata untuk menghindari `UNIQUE(barcode)`. Fix: helper baru
+`_claimBarcodeFor` — bentrok lintas-produk yg pemegangnya masih AKTIF
+dilempar sbg `BarcodeConflictException` (transaksi rollback total, barcode
+produk lain TIDAK tersentuh, pesan menyebut nama produk pemegangnya).
+
+**Kasus sah yang SENGAJA tetap jalan** (ada test-nya masing²): (a) produk
+pemegang sudah dinonaktifkan (`_releaseBarcodesForProduct` sudah me-rename
+nilainya jadi `RELEASED:...`), (b) barcode dipegang produk ITU SENDIRI sbg
+alias `isPrimary=false` dari sinkron harga antar toko (lihat CLAUDE.md) lalu
+dipromosikan jadi barcode utama, (c) simpan-ulang produk yang sama.
+
+Jalur lain sudah diperiksa & TIDAK punya bug ini: `updateVariant` pakai
+update/insert tanpa pre-delete (menabrak UNIQUE = gagal keras, tanpa
+kehilangan data), sinkron LAN tidak lewat `saveProduct`, dan impor CSV
+sudah punya try/catch per baris shg baris bentrok kini dilaporkan sbg baris
+gagal (membaik, tidak perlu diubah).
+
 ## Status test suite
 
-`flutter test` PENUH: **681 test, 679 hijau**. `flutter analyze` bersih
+`flutter test` PENUH: **688 test, 686 hijau**. `flutter analyze` bersih
 (0 issue).
 
-2 kegagalan sisa = **flake port, BUKAN regresi**: `lan_sync_item41_test.
-dart` gagal dgn `SocketException: Address already in use, port = 8625`.
-**8625 itu port sync TETAP milik app** (`lan_sync_service.dart`), dan 4
-file test real-HTTP memperebutkannya saat `flutter test` menjalankan file
-secara paralel: `lan_sync_item41_test.dart`, `lan_sync_slow_transfer_test.
-dart`, `lan_sync_timeout_test.dart`, `proposal_unchanged_end_to_end_test.
-dart`. Lolos bersih 2/2 saat dijalankan sendiri — sudah diverifikasi, dan
-kelas flake yg sama sudah tercatat sejak sesi 24 Juli (dulu muncul di
-`proposal_unchanged_end_to_end_test.dart`). Kalau mau benar-benar
-dihilangkan: port harus bisa disuntik per-test (bukan konstanta), itu
-perubahan pada kode produksi jadi ditahan dulu.
+2 kegagalan sisa = **flake port, BUKAN regresi**: `SocketException: Address
+already in use, port = 8625`. **8625 itu port sync TETAP milik app**
+(`lan_sync_service.dart`), dan 4 file test real-HTTP memperebutkannya saat
+`flutter test` menjalankan file secara paralel: `lan_sync_item41_test.dart`,
+`lan_sync_slow_transfer_test.dart`, `lan_sync_timeout_test.dart`,
+`proposal_unchanged_end_to_end_test.dart`. **File mana yang kalah undian
+port BERGANTI-GANTI tiap run** (pernah `lan_sync_item41`, pernah
+`proposal_unchanged_end_to_end`) — itu justru penanda bahwa ini balapan
+port, bukan bug logika di file tertentu. Yang kalah selalu lolos bersih
+saat dijalankan sendiri (sudah diverifikasi tiap kali). Kelas flake ini
+tercatat sejak sesi 24 Juli. Kalau mau benar² dihilangkan: port harus bisa
+disuntik per-test (bukan konstanta) — itu perubahan kode produksi, ditahan.
 
 Flake lama `stock_opname_unit_conversion_test.dart`/`cek_stok_unit_output_
 test.dart` (akar masalahnya Item 38) dikonfirmasi HILANG — 3x run batch
@@ -90,8 +117,10 @@ berulang semua bersih.
 
 ## Yang menggantung / belum sempat
 
-- Tidak ada item baru dari sesi ini. Semua pekerjaan sudah di-commit &
-  push ke `claude/kategori-produk-qty-harga-mqjh21`.
+- **Fix barcode ganda belum di-merge ke `main`** (main terakhir di
+  `a08af7a`). Tag `v2.2.0` juga BELUM dibuat — sengaja, menunggu keputusan
+  user. Fix ini sebaiknya masuk SEBELUM tag, karena bug-nya kehilangan data
+  diam-diam.
 - Item lama yang masih terbuka: lihat `PLAN.md` (Item 17+21 sync ditunda
-  sesi fokus, Item 23 sisa, Item 28 konsep, Item 32 tunggu konfirmasi user
-  device fisik, Item 41 sisa P3, Item 51 tunggu keputusan user).
+  sesi fokus, Item 23 sisa, Item 28 konsep, Item 41 sisa P3, Item 51 tunggu
+  keputusan user). Item 32 & D.1 sudah DITUTUP (user konfirmasi tes device).

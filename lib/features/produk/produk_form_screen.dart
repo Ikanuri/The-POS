@@ -486,6 +486,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         });
       }
       return true;
+    } on BarcodeConflictException catch (e) {
+      // Pesannya sudah ramah & menyebut produk pemegang barcode-nya, jadi
+      // tampilkan apa adanya (jangan dibungkus "Error: ..."). Seluruh
+      // transaksi saveProduct sudah ter-rollback — tidak ada produk
+      // setengah tersimpan, dan barcode produk lain TIDAK tersentuh.
+      if (mounted) _showBanner(e.toString());
+      return false;
     } catch (e) {
       if (mounted) _showBanner('Error: $e');
       return false;
@@ -1117,6 +1124,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   /// Pesan error yang jelas utk kasus barcode bentrok (paling sering
   /// terjadi), fallback ke pesan mentah utk error lain.
   String _friendlyBarcodeError(Object e, String? barcode) {
+    // Bentrok yang terdeteksi eksplisit oleh DB: pesannya sudah menyebut
+    // produk pemegangnya, lebih berguna dari pesan generik di bawah.
+    if (e is BarcodeConflictException) return e.toString();
     final msg = e.toString();
     if (barcode != null &&
         barcode.isNotEmpty &&

@@ -139,6 +139,22 @@ typedef InventoryRow = ({
   int costPrice,
 });
 
+/// Barcode yang mau dipakai ternyata masih dipegang produk LAIN yang aktif.
+/// Dilempar dari dalam transaksi [AppDatabase.saveProduct] supaya seluruh
+/// penyimpanan di-rollback (tidak ada produk setengah tersimpan), dan supaya
+/// UI bisa menyebut produk mana yang bentrok — bukan sekadar "UNIQUE
+/// constraint failed". Satu barcode WAJIB memetakan ke tepat satu produk:
+/// kalau tidak, scan di kasir jadi ambigu & bisa menagih barang yang salah.
+class BarcodeConflictException implements Exception {
+  BarcodeConflictException({required this.barcode, required this.productName});
+  final String barcode;
+  final String productName;
+  @override
+  String toString() =>
+      'Barcode "$barcode" sudah dipakai produk "$productName". Gunakan '
+      'barcode lain, atau hapus dulu barcode itu dari produk tersebut.';
+}
+
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
 
@@ -1641,13 +1657,7 @@ class AppDatabase extends _$AppDatabase {
                   t.productUnitId.equals(unitId) & t.isPrimary.equals(true)))
             .go();
         for (final bc in barcodes) {
-          // Cegah tabrakan UNIQUE(barcode): nilai barcode yang sama bisa
-          // sudah ada di baris lain (id berbeda). insertOnConflictUpdate
-          // hanya menangani konflik PK id, bukan unique barcode — jadi
-          // hapus dulu baris mana pun yang memegang nilai itu.
-          await (delete(productBarcodes)
-                ..where((t) => t.barcode.equals(bc.barcode.value)))
-              .go();
+          await _claimBarcodeFor(productId, bc.barcode.value);
           await into(productBarcodes).insert(bc);
         }
       }
@@ -1694,6 +1704,55 @@ class AppDatabase extends _$AppDatabase {
   /// OR REPLACE` (keyed by id yang sama) ke device lain — pelepasan ikut
   /// terpropagasi otomatis lewat mekanisme sync yang sudah ada, tanpa
   /// perubahan protokol.
+  /// Bebaskan nilai [barcode] supaya bisa dipakai [productId], ATAU lempar
+  /// [BarcodeConflictException] kalau nilai itu masih dipegang produk lain
+  /// yang MASIH AKTIF.
+  ///
+  /// Dulu di sini cuma `DELETE ... WHERE barcode = value` polos supaya tidak
+  /// menabrak `UNIQUE(barcode)`. Efeknya: menyimpan produk B dgn barcode
+  /// produk A **MENGHAPUS barcode A tanpa error apa pun** — A jadi tidak
+  /// bisa di-scan, dan scan kode itu di kasir menagih produk yang SALAH (B),
+  /// tanpa ada yang sadar. Dilaporkan user 25 Juli ("dua produk barcode sama
+  /// lolos" — yang sebenarnya terjadi: yang kedua mencuri dari yang pertama).
+  ///
+  /// Kasus reuse yang SAH tidak lewat sini: produk yang dinonaktifkan/varian
+  /// dihapus sudah dilepas lewat [_releaseBarcodesForProduct] (nilainya
+  /// di-rename `RELEASED:...`), jadi tidak pernah cocok dgn `equals(value)`.
+  /// Yang MASIH perlu diganti tanpa protes: baris milik produk INI sendiri —
+  /// mis. alias `isPrimary=false` yang ditulis sinkron harga antar toko
+  /// (lihat CLAUDE.md) lalu diketik owner sbg barcode utama.
+  Future<void> _claimBarcodeFor(String productId, String barcode) async {
+    // `barcode` UNIQUE, jadi paling banyak satu pemegang.
+    final holder = await (select(productBarcodes)
+          ..where((t) => t.barcode.equals(barcode)))
+        .getSingleOrNull();
+    if (holder == null) return;
+
+    final holderUnit = await (select(productUnits)
+          ..where((t) => t.id.equals(holder.productUnitId)))
+        .getSingleOrNull();
+    if (holderUnit == null || holderUnit.productId == productId) {
+      // Milik produk ini sendiri (atau baris yatim) — aman diganti.
+      await (delete(productBarcodes)..where((t) => t.id.equals(holder.id)))
+          .go();
+      return;
+    }
+
+    final other = await (select(products)
+          ..where((t) => t.id.equals(holderUnit.productId)))
+        .getSingleOrNull();
+    if (other != null && other.isActive) {
+      throw BarcodeConflictException(barcode: barcode, productName: other.name);
+    }
+    // Pemegangnya produk tidak aktif yang barcode-nya belum pernah dilepas
+    // (data lama, sebelum mekanisme RELEASED ada). Lepas dgn cara yang sama
+    // — rename, JANGAN hard-delete, supaya jejaknya tidak hilang.
+    await (update(productBarcodes)..where((t) => t.id.equals(holder.id)))
+        .write(ProductBarcodesCompanion(
+      barcode: Value('RELEASED:${holder.id}:${holder.barcode}'),
+    ));
+  }
+
   Future<void> _releaseBarcodesForProduct(String productId) async {
     final units = await (select(productUnits)
           ..where((t) => t.productId.equals(productId)))

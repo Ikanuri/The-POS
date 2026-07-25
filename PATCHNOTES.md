@@ -46,6 +46,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Layar "Hitung Fisik" (Stock Opname) jauh lebih cepat terbuka** untuk
   toko dengan banyak produk — dulu menunggu memuat data satuan produk satu
   per satu sebelum daftarnya muncul.
+- **Barcode yang sama tidak bisa lagi dipakai dua produk sekaligus.** Dulu
+  menyimpan produk baru dengan barcode yang sudah dipakai produk lain
+  "berhasil" tanpa peringatan apa pun — padahal diam-diam barcode itu
+  DIAMBIL dari produk yang lama. Akibatnya produk lama tidak bisa di-scan
+  lagi, dan men-scan kode tersebut di kasir menagih produk yang SALAH,
+  tanpa ada tanda apa pun. Sekarang penyimpanan ditolak dengan pesan yang
+  menyebutkan produk mana yang sudah memakai barcode itu. Barcode dari
+  produk yang sudah dinonaktifkan tetap boleh dipakai ulang seperti biasa.
 
 ## 24 Juli 2026
 
