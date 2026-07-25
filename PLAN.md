@@ -265,19 +265,6 @@ tersendiri dulu"), implementasi ditunda.
 
 ---
 
-## Item 32 — Barcode scanner eksternal kurang responsif (kode SUDAH di-fix, tunggu konfirmasi user)
-
-Debounce anti-echo scanner eksternal diturunkan 300ms→150ms (`839a29c`,
-lihat CHANGELOG). **TIDAK BISA diverifikasi otomatis** (perilaku echo
-hardware scanner sungguhan tidak bisa disimulasikan widget test) — WAJIB
-user coba langsung di device asli dgn scanner fisiknya: (a) scan dobel
-cepat yg disengaja sekarang berhasil dobel, (b) tidak muncul balik gejala
-echo lama. Kalau (b) muncul, 150ms masih kurang tinggi utk scanner user —
-perlu naik sedikit, bukan bukti keputusan salah arah. **Belum ada
-konfirmasi hasil tes user** — tanyakan kalau sesi depan lanjut.
-
----
-
 ## Item 41 — Audit kode menyeluruh (18 Juli 2026) — SISA yang belum dieksekusi
 
 Audit baca-kode penuh + verifikasi nyata (Flutter 3.24.5 pin CI: analyze
@@ -308,11 +295,6 @@ Di bawah ini HANYA yang masih menggantung.
    SATU PAKET dgn Item 17+21: persist antrian approval host ke DB →
    watermark upload aman dimajukan. Sesi fokus tersendiri (risiko
    data-loss, wajib test round-trip HTTP asli).
-3. **[P2] D.1 sisa — uji printer Bluetooth di device fisik Android
-   10/11.** Manifest sudah dirapikan (maxSdkVersion=30 utk izin legacy;
-   ACCESS_FINE_LOCATION sengaja TIDAK diminta karena app hanya membaca
-   bonded list, bukan discovery scan). Verifikasi di HP Android ≤11
-   sungguhan bahwa daftar printer tetap muncul.
 ### Sisa [P3]
 
 1. **A.8 redirect router tidak reaktif** — `ref.read` tanpa
@@ -469,12 +451,10 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 3. **Item 17+21 (sync)** — ditunda ke sesi fokus (risiko data-loss).
 4. **Item 28** (pegawai lanjutkan pesanan owner lintas device) — konsep,
    belum didesain.
-5. **Item 32** (debounce scanner eksternal) — tunggu konfirmasi user tes
-   device fisik.
-6. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
+5. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
    di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
-   keputusan desain user), C.2 (gabung Item 17+21), uji printer device
-   fisik Android ≤11, dan daftar P3 — detail di Item 41 di atas.
-8. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
+   keputusan desain user), C.2 (gabung Item 17+21), dan daftar P3 —
+   detail di Item 41 di atas.
+6. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.

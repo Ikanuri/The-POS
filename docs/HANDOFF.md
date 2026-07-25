@@ -60,12 +60,12 @@ bocor.
    (stok 5 + ketik "12" → tersimpan 512, bahaya data nyata, bukan cuma
    merepotkan) → select-all. Plus field Poin pelanggan berhenti prefill '0'.
 
-**Sisa risiko yang TIDAK bisa ditutup test otomatis** (perlu Anda coba di
-device fisik sebelum tag resmi): **Item 32** scanner HID (PLAN.md sendiri
-menandai "TIDAK BISA diverifikasi otomatis", masih menunggu konfirmasi
-user) & **uji printer thermal Bluetooth Android ≤11** (Item 41/D.1).
-Surface rilis ini besar: 157 commit sejak 2.1.1, nol jam pemakaian toko
-nyata.
+**Dua sisa risiko yang tak bisa ditutup test otomatis SUDAH DITUTUP user
+(25 Juli)**: scanner HID (Item 32) & printer thermal Bluetooth Android ≤11
+(Item 41/D.1) dilaporkan user "sudah ditest dan baik baik saja" di device
+asli — kedua item itu DIHAPUS dari PLAN.md. Jadi tidak ada lagi verifikasi
+manual yang menggantung untuk rilis 2.2.0. Catatan konteks: surface rilis
+ini tetap besar (157 commit sejak 2.1.1).
 
 ## Status test suite
 
