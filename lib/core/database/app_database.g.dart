@@ -11264,6 +11264,12 @@ class $SyncUploadQueueTable extends SyncUploadQueue
   late final GeneratedColumn<String> fromIp = GeneratedColumn<String>(
       'from_ip', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _deviceCodeMeta =
+      const VerificationMeta('deviceCode');
+  @override
+  late final GeneratedColumn<String> deviceCode = GeneratedColumn<String>(
+      'device_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _arrivedAtMeta =
       const VerificationMeta('arrivedAt');
   @override
@@ -11291,7 +11297,7 @@ class $SyncUploadQueueTable extends SyncUploadQueue
       type: DriftSqlType.string, requiredDuringInsert: true);
   @override
   List<GeneratedColumn> get $columns =>
-      [id, fromIp, arrivedAt, tablesJson, since, tablesSummary];
+      [id, fromIp, deviceCode, arrivedAt, tablesJson, since, tablesSummary];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -11313,6 +11319,12 @@ class $SyncUploadQueueTable extends SyncUploadQueue
           fromIp.isAcceptableOrUnknown(data['from_ip']!, _fromIpMeta));
     } else if (isInserting) {
       context.missing(_fromIpMeta);
+    }
+    if (data.containsKey('device_code')) {
+      context.handle(
+          _deviceCodeMeta,
+          deviceCode.isAcceptableOrUnknown(
+              data['device_code']!, _deviceCodeMeta));
     }
     if (data.containsKey('arrived_at')) {
       context.handle(_arrivedAtMeta,
@@ -11353,6 +11365,8 @@ class $SyncUploadQueueTable extends SyncUploadQueue
           .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
       fromIp: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}from_ip'])!,
+      deviceCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}device_code']),
       arrivedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}arrived_at'])!,
       tablesJson: attachedDatabase.typeMapping
@@ -11374,6 +11388,7 @@ class SyncUploadQueueData extends DataClass
     implements Insertable<SyncUploadQueueData> {
   final String id;
   final String fromIp;
+  final String? deviceCode;
   final DateTime arrivedAt;
   final String tablesJson;
   final DateTime since;
@@ -11381,6 +11396,7 @@ class SyncUploadQueueData extends DataClass
   const SyncUploadQueueData(
       {required this.id,
       required this.fromIp,
+      this.deviceCode,
       required this.arrivedAt,
       required this.tablesJson,
       required this.since,
@@ -11390,6 +11406,9 @@ class SyncUploadQueueData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['from_ip'] = Variable<String>(fromIp);
+    if (!nullToAbsent || deviceCode != null) {
+      map['device_code'] = Variable<String>(deviceCode);
+    }
     map['arrived_at'] = Variable<DateTime>(arrivedAt);
     map['tables_json'] = Variable<String>(tablesJson);
     map['since'] = Variable<DateTime>(since);
@@ -11401,6 +11420,9 @@ class SyncUploadQueueData extends DataClass
     return SyncUploadQueueCompanion(
       id: Value(id),
       fromIp: Value(fromIp),
+      deviceCode: deviceCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceCode),
       arrivedAt: Value(arrivedAt),
       tablesJson: Value(tablesJson),
       since: Value(since),
@@ -11414,6 +11436,7 @@ class SyncUploadQueueData extends DataClass
     return SyncUploadQueueData(
       id: serializer.fromJson<String>(json['id']),
       fromIp: serializer.fromJson<String>(json['fromIp']),
+      deviceCode: serializer.fromJson<String?>(json['deviceCode']),
       arrivedAt: serializer.fromJson<DateTime>(json['arrivedAt']),
       tablesJson: serializer.fromJson<String>(json['tablesJson']),
       since: serializer.fromJson<DateTime>(json['since']),
@@ -11426,6 +11449,7 @@ class SyncUploadQueueData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'fromIp': serializer.toJson<String>(fromIp),
+      'deviceCode': serializer.toJson<String?>(deviceCode),
       'arrivedAt': serializer.toJson<DateTime>(arrivedAt),
       'tablesJson': serializer.toJson<String>(tablesJson),
       'since': serializer.toJson<DateTime>(since),
@@ -11436,6 +11460,7 @@ class SyncUploadQueueData extends DataClass
   SyncUploadQueueData copyWith(
           {String? id,
           String? fromIp,
+          Value<String?> deviceCode = const Value.absent(),
           DateTime? arrivedAt,
           String? tablesJson,
           DateTime? since,
@@ -11443,6 +11468,7 @@ class SyncUploadQueueData extends DataClass
       SyncUploadQueueData(
         id: id ?? this.id,
         fromIp: fromIp ?? this.fromIp,
+        deviceCode: deviceCode.present ? deviceCode.value : this.deviceCode,
         arrivedAt: arrivedAt ?? this.arrivedAt,
         tablesJson: tablesJson ?? this.tablesJson,
         since: since ?? this.since,
@@ -11452,6 +11478,8 @@ class SyncUploadQueueData extends DataClass
     return SyncUploadQueueData(
       id: data.id.present ? data.id.value : this.id,
       fromIp: data.fromIp.present ? data.fromIp.value : this.fromIp,
+      deviceCode:
+          data.deviceCode.present ? data.deviceCode.value : this.deviceCode,
       arrivedAt: data.arrivedAt.present ? data.arrivedAt.value : this.arrivedAt,
       tablesJson:
           data.tablesJson.present ? data.tablesJson.value : this.tablesJson,
@@ -11467,6 +11495,7 @@ class SyncUploadQueueData extends DataClass
     return (StringBuffer('SyncUploadQueueData(')
           ..write('id: $id, ')
           ..write('fromIp: $fromIp, ')
+          ..write('deviceCode: $deviceCode, ')
           ..write('arrivedAt: $arrivedAt, ')
           ..write('tablesJson: $tablesJson, ')
           ..write('since: $since, ')
@@ -11477,13 +11506,14 @@ class SyncUploadQueueData extends DataClass
 
   @override
   int get hashCode => Object.hash(
-      id, fromIp, arrivedAt, tablesJson, since, tablesSummary);
+      id, fromIp, deviceCode, arrivedAt, tablesJson, since, tablesSummary);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SyncUploadQueueData &&
           other.id == this.id &&
           other.fromIp == this.fromIp &&
+          other.deviceCode == this.deviceCode &&
           other.arrivedAt == this.arrivedAt &&
           other.tablesJson == this.tablesJson &&
           other.since == this.since &&
@@ -11493,6 +11523,7 @@ class SyncUploadQueueData extends DataClass
 class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
   final Value<String> id;
   final Value<String> fromIp;
+  final Value<String?> deviceCode;
   final Value<DateTime> arrivedAt;
   final Value<String> tablesJson;
   final Value<DateTime> since;
@@ -11501,6 +11532,7 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
   const SyncUploadQueueCompanion({
     this.id = const Value.absent(),
     this.fromIp = const Value.absent(),
+    this.deviceCode = const Value.absent(),
     this.arrivedAt = const Value.absent(),
     this.tablesJson = const Value.absent(),
     this.since = const Value.absent(),
@@ -11510,6 +11542,7 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
   SyncUploadQueueCompanion.insert({
     required String id,
     required String fromIp,
+    this.deviceCode = const Value.absent(),
     this.arrivedAt = const Value.absent(),
     required String tablesJson,
     required DateTime since,
@@ -11523,6 +11556,7 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
   static Insertable<SyncUploadQueueData> custom({
     Expression<String>? id,
     Expression<String>? fromIp,
+    Expression<String>? deviceCode,
     Expression<DateTime>? arrivedAt,
     Expression<String>? tablesJson,
     Expression<DateTime>? since,
@@ -11532,6 +11566,7 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (fromIp != null) 'from_ip': fromIp,
+      if (deviceCode != null) 'device_code': deviceCode,
       if (arrivedAt != null) 'arrived_at': arrivedAt,
       if (tablesJson != null) 'tables_json': tablesJson,
       if (since != null) 'since': since,
@@ -11543,6 +11578,7 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
   SyncUploadQueueCompanion copyWith(
       {Value<String>? id,
       Value<String>? fromIp,
+      Value<String?>? deviceCode,
       Value<DateTime>? arrivedAt,
       Value<String>? tablesJson,
       Value<DateTime>? since,
@@ -11551,6 +11587,7 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
     return SyncUploadQueueCompanion(
       id: id ?? this.id,
       fromIp: fromIp ?? this.fromIp,
+      deviceCode: deviceCode ?? this.deviceCode,
       arrivedAt: arrivedAt ?? this.arrivedAt,
       tablesJson: tablesJson ?? this.tablesJson,
       since: since ?? this.since,
@@ -11567,6 +11604,9 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
     }
     if (fromIp.present) {
       map['from_ip'] = Variable<String>(fromIp.value);
+    }
+    if (deviceCode.present) {
+      map['device_code'] = Variable<String>(deviceCode.value);
     }
     if (arrivedAt.present) {
       map['arrived_at'] = Variable<DateTime>(arrivedAt.value);
@@ -11591,6 +11631,7 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
     return (StringBuffer('SyncUploadQueueCompanion(')
           ..write('id: $id, ')
           ..write('fromIp: $fromIp, ')
+          ..write('deviceCode: $deviceCode, ')
           ..write('arrivedAt: $arrivedAt, ')
           ..write('tablesJson: $tablesJson, ')
           ..write('since: $since, ')

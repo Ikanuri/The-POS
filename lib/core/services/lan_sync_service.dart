@@ -706,6 +706,14 @@ class LanSyncService {
           ? DateTime.parse(sinceStr)
           : DateTime.fromMillisecondsSinceEpoch(0);
 
+      // Identitas pengirim (mis. 'K1') — dipakai sbg kunci "satu slot per
+      // pengirim" di KEDUA antrian (data biasa & usulan produk), MENGGANTIKAN
+      // `ip` mentah. Bug nyata: 2 device BEDA yang kebetulan dpt IP sama
+      // dari hotspot HP (pool DHCP kecil, umum di toko kecil) saling
+      // menimpa antrian satu sama lain kalau kuncinya masih `ip`. Null utk
+      // klien versi lama yang belum kirim `deviceCode` di payload sync.
+      final rawDeviceCode = payload['deviceCode'] as String?;
+
       // B-4: Queue incoming tables for owner approval instead of auto-merging.
       final rawTables = payload['tables'] as Map<String, dynamic>? ?? {};
       final tables = rawTables.map((k, v) {
@@ -732,15 +740,16 @@ class LanSyncService {
       // insert ini gagal/exception, klien tidak akan pernah menerima
       // respons sukses, jadi watermark-nya TIDAK maju & akan otomatis
       // kirim ulang di percobaan berikutnya (aman, tidak ada data hilang).
-      // "1 slot per IP" (Item 41 A.3, cegah RAM menumpuk saat klien
-      // nge-sync berulang sebelum owner approve) dipertahankan di dalam
-      // `enqueueSyncUpload` (delete+insert 1 transaksi) — AMAN menimpa item
-      // lama krn payload klien per-sync selalu superset dari watermark
-      // upload klien saat itu.
+      // "1 slot per pengirim" (Item 41 A.3, cegah RAM/DB menumpuk saat
+      // klien nge-sync berulang sebelum owner approve) dipertahankan di
+      // dalam `enqueueSyncUpload` (delete+insert 1 transaksi) — AMAN
+      // menimpa item lama krn payload klien per-sync selalu superset dari
+      // watermark upload klien saat itu.
       final itemId = _generateNonce();
       await _db!.enqueueSyncUpload(
         id: itemId,
         fromIp: ip,
+        deviceCode: rawDeviceCode,
         tablesJson: jsonEncode(tables),
         since: since,
         tablesSummary: summary,
@@ -748,12 +757,7 @@ class LanSyncService {
       onQueueChanged?.call();
 
       // Item 40 — usulan harga/produk, antrian TERPISAH dari _pendingQueue
-      // (lihat dok PendingProductProposal soal alasan dipisah). `slotKey`
-      // preferensi `deviceCode` (dikirim klien versi baru, lihat
-      // `syncToHost`) drpd `ip` mentah — bug nyata: 2 device BEDA yang
-      // kebetulan dpt IP sama dari hotspot HP (pool DHCP kecil, umum di
-      // toko kecil) saling menimpa usulan satu sama lain di `ip` sbg kunci.
-      final rawDeviceCode = payload['deviceCode'] as String?;
+      // (lihat dok PendingProductProposal soal alasan dipisah).
       final slotKey = (rawDeviceCode != null && rawDeviceCode.isNotEmpty)
           ? rawDeviceCode
           : ip;

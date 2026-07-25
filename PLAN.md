@@ -265,32 +265,6 @@ tersendiri dulu"), implementasi ditunda.
 
 ---
 
-## Item 38 — Tie-break `_rawBaseStock` tidak kronologis kalau 2 perubahan stok jatuh di detik yang sama (ditemukan tak sengaja, belum ada laporan dampak nyata)
-
-**Prioritas:** Rendah — ditemukan lewat test Item 36 (stock opname), BUKAN
-laporan bug user. Belum ada bukti ini pernah kejadian di device asli.
-
-**Detail:** `AppDatabase._rawBaseStock()` (dipakai `currentStock`/
-`adjustStock`/`commitOpname`) mengambil baris `stock_ledger` terbaru via
-`ORDER BY created_at DESC, id DESC LIMIT 1`. Kolom `created_at` disimpan
-dgn presisi DETIK (bukan milidetik), dan `id` adalah UUID v4 ACAK — kalau
-dua perubahan stok (mis. "Atur Stok" manual lalu langsung "Stock Opname",
-atau dua penyesuaian cepat berurutan) jatuh di detik yang SAMA PERSIS, tie-
-break `id DESC` bisa memilih baris yang SALAH (UUID acak tidak berkorelasi
-dgn urutan insert), sehingga stok yang terbaca bisa jadi versi yang lebih
-lama, bukan yang paling akhir ditulis. Baru KETAHUAN karena test otomatis
-Item 36 (`test/stock_opname_test.dart`) menjalankan 2 penulisan stok tanpa
-jeda & hasilnya salah — di device asli kemungkinan sangat jarang kejadian
-(perubahan stok manual biasanya berjarak lebih dari 1 detik antar aksi).
-
-**Kemungkinan fix (belum dikerjakan):** tambah kolom sequence/`rowid`
-auto-increment murni sbg tie-break kedua (SQLite `rowid` built-in bisa
-dipakai via `ORDER BY created_at DESC, rowid DESC` tanpa migrasi kolom
-baru), ATAU naikkan presisi `created_at` ke milidetik. Perlu diverifikasi
-mana yang lebih murah sebelum dieksekusi.
-
----
-
 ## Item 32 — Barcode scanner eksternal kurang responsif (kode SUDAH di-fix, tunggu konfirmasi user)
 
 Debounce anti-echo scanner eksternal diturunkan 300ms→150ms (`839a29c`,
@@ -339,18 +313,6 @@ Di bawah ini HANYA yang masih menggantung.
    ACCESS_FINE_LOCATION sengaja TIDAK diminta karena app hanya membaca
    bonded list, bukan discovery scan). Verifikasi di HP Android ≤11
    sungguhan bahwa daftar printer tetap muncul.
-4. **[P2] `sync_upload_queue` (antrian sync transaksi/dll, BEDA dari
-   antrian usulan produk yang sudah diperbaiki 24 Juli) masih dikunci
-   per-IP mentah** (`enqueueSyncUpload`/`AppDatabase.dart`) — bug yang
-   SAMA (device beda kebetulan IP sama dari hotspot HP kecil bisa saling
-   menimpa antrian) berpotensi terjadi di sini juga, belum diverifikasi/
-   diperbaiki krn butuh migrasi skema (`sync_upload_queue` tabel
-   persisten, beda dari `_pendingProposals` yang murni in-memory) di
-   sandbox yang codegen Drift-nya rusak (lihat gotcha `app_database.g.dart`
-   di CLAUDE.md). Fix-nya sama: tambah kolom `device_code`, kunci slot
-   preferensi itu drpd `from_ip` (pola sama persis spt
-   `PendingProductProposal.slotKey`).
-
 ### Sisa [P3]
 
 1. **A.8 redirect router tidak reaktif** — `ref.read` tanpa
@@ -508,12 +470,9 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 3. **Item 17+21 (sync)** — ditunda ke sesi fokus (risiko data-loss).
 4. **Item 28** (pegawai lanjutkan pesanan owner lintas device) — konsep,
    belum didesain.
-5. **Item 38** (tie-break `_rawBaseStock` tidak kronologis kalau 2
-   perubahan stok jatuh di detik yang sama) — prioritas rendah, ditemukan
-   tak sengaja lewat test, belum ada laporan dampak nyata di device asli.
-6. **Item 32** (debounce scanner eksternal) — tunggu konfirmasi user tes
+5. **Item 32** (debounce scanner eksternal) — tunggu konfirmasi user tes
    device fisik.
-7. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
+6. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
    di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
    keputusan desain user), C.2 (gabung Item 17+21), uji printer device
    fisik Android ≤11, dan daftar P3 — detail di Item 41 di atas.

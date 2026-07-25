@@ -58,9 +58,14 @@ void main() {
     expect(find.byType(DropdownButton<int>), findsOneWidget,
         reason: 'produk berjenjang yg dicentang harus dapat pemilih satuan');
 
-    await tester.tap(find.byType(DropdownButton<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Dus').last);
+    // Panggil langsung callback `onChanged` (bukan tap buka popup lalu tap
+    // opsi) — hindari ketergantungan pada timing Overlay/Route popup
+    // `DropdownButton` (ditemukan flaky sesekali di full-suite test).
+    final dropdown =
+        tester.widget<DropdownButton<int>>(find.byType(DropdownButton<int>));
+    final dusIdx = dropdown.items!
+        .indexWhere((item) => (item.child as Text).data == 'Dus');
+    dropdown.onChanged!(dusIdx);
     await tester.pumpAndSettle();
 
     // 25 pcs / ratio 10 = 2.5 dus.

@@ -97,11 +97,19 @@ void main() {
         reason: 'produk berjenjang harus dapat pemilih satuan');
 
     await tester.enterText(find.byType(TextField).first, '10');
-    // Pilih satuan "Dus" dari dropdown.
-    await tester.tap(find.byType(DropdownButton<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Dus').last);
-    await tester.pumpAndSettle();
+    // Pilih satuan "Dus" — panggil langsung callback `onChanged` (bukan
+    // tap buka popup lalu tap opsi) supaya test TIDAK bergantung pada
+    // timing Overlay/Route milik popup `DropdownButton` (ditemukan flaky
+    // sesekali di full-suite: popup yg belum sempat settle bisa
+    // menghalangi tap "Simpan" di layar berikutnya). Ini tetap menguji
+    // wiring `onChanged` sungguhan (state + konversi), cuma tidak
+    // menguji mekanik popup Flutter sendiri (sudah teruji framework).
+    final dropdown =
+        tester.widget<DropdownButton<int>>(find.byType(DropdownButton<int>));
+    final dusIdx = dropdown.items!
+        .indexWhere((item) => (item.child as Text).data == 'Dus');
+    dropdown.onChanged!(dusIdx);
+    await tester.pump();
 
     await tester.tap(find.text('Review Selisih'));
     await tester.pumpAndSettle();

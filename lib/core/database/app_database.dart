@@ -150,7 +150,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -292,6 +292,19 @@ class AppDatabase extends _$AppDatabase {
             // diisi/ditahan), supaya bisa tampil stabil & ikut ter-transfer
             // via QR (Item 56).
             await m.createTable(reservedOrderNumbers);
+          }
+          if (from < 21 && from >= 18) {
+            // Bug nyata dilaporkan user (sama persis dgn `_pendingProposals`
+            // yang sudah diperbaiki 25 Juli): antrian sync_upload_queue
+            // dikunci per-IP mentah, device beda yg kebetulan berbagi IP
+            // (hotspot HP) saling menimpa antrian. Kolom baru dipakai sbg
+            // kunci slot pengganti (nullable, fallback ke from_ip kalau
+            // klien lama belum kirim deviceCode).
+            // Guard `from >= 18`: kalau upgrade langsung dari versi < 18,
+            // `createTable(syncUploadQueue)` di step v18 di atas SUDAH
+            // memakai definisi tabel TERKINI (sudah termasuk device_code)
+            // — addColumn lagi di sini akan gagal "duplicate column name".
+            await m.addColumn(syncUploadQueue, syncUploadQueue.deviceCode);
           }
         },
         beforeOpen: (details) async {
@@ -435,11 +448,21 @@ class AppDatabase extends _$AppDatabase {
   /// satuan dasar). Tidak boleh dipanggil langsung dari luar — gunakan
   /// [currentStock].
   Future<double> _rawBaseStock(String baseUnitId) async {
+    // Item 38 — tie-break dulu pakai `id` (UUID v4 ACAK), yang TIDAK
+    // berkorelasi dgn urutan insert. `created_at` presisi DETIK — kalau 2
+    // penulisan stok jatuh di detik yang sama (mis. `adjustStock` setup
+    // langsung disusul `commitOpname` di alur otomatis/test, atau 2
+    // penyesuaian manual cepat berurutan), tie-break `id DESC` bisa memilih
+    // baris LAMA, bukan yang terakhir ditulis (stok jadi tampak "mundur").
+    // Fix: tie-break kedua pakai `rowid` (SQLite built-in, monoton naik
+    // sesuai urutan insert, tanpa perlu migrasi kolom baru).
     final row = await (select(stockLedger)
           ..where((t) => t.productUnitId.equals(baseUnitId))
           ..orderBy([
             (t) => OrderingTerm.desc(t.createdAt),
-            (t) => OrderingTerm.desc(t.id),
+            (_) => OrderingTerm(
+                expression: const CustomExpression<int>('rowid'),
+                mode: OrderingMode.desc),
           ])
           ..limit(1))
         .getSingleOrNull();
@@ -3557,23 +3580,41 @@ class AppDatabase extends _$AppDatabase {
 
   /// Antrian approval sync sisi HOST, sekarang PERSISTEN — dulu
   /// `_pendingQueue` di `LanSyncService` cuma hidup di RAM, hilang total
-  /// kalau app owner di-restart sebelum sempat approve. "1 slot per IP"
-  /// dipertahankan (hapus entri lama dari IP yang sama SEBELUM insert baru,
-  /// dalam satu transaksi) — aman krn klien selalu kirim data superset dari
-  /// upload sebelumnya (lihat dok watermark upload di lan_sync_service.dart).
+  /// kalau app owner di-restart sebelum sempat approve. "1 slot per
+  /// PENGIRIM" dipertahankan (hapus entri lama dari pengirim yang sama
+  /// SEBELUM insert baru, dalam satu transaksi) — aman krn klien selalu
+  /// kirim data superset dari upload sebelumnya (lihat dok watermark upload
+  /// di lan_sync_service.dart).
+  ///
+  /// Bug nyata dilaporkan user (sama persis dgn `_pendingProposals` yang
+  /// sudah diperbaiki 25 Juli): slot dulu dikunci `fromIp` MENTAH — dua
+  /// device BERBEDA yang kebetulan tersambung dari alamat IP yang SAMA
+  /// (hotspot HP dgn pool DHCP kecil, setup umum toko kecil) saling
+  /// menimpa antrian satu sama lain sebelum owner sempat approve. Kunci
+  /// slot sekarang preferensi [deviceCode] (dikirim klien via
+  /// `syncToHost`), fallback ke [fromIp] kalau klien lama belum kirim itu.
   Future<void> enqueueSyncUpload({
     required String id,
     required String fromIp,
+    String? deviceCode,
     required String tablesJson,
     required DateTime since,
     required String tablesSummary,
   }) =>
       transaction(() async {
-        await (delete(syncUploadQueue)..where((t) => t.fromIp.equals(fromIp)))
+        final slotKey = (deviceCode != null && deviceCode.isNotEmpty)
+            ? deviceCode
+            : fromIp;
+        await (delete(syncUploadQueue)
+              ..where((t) =>
+                  (deviceCode != null && deviceCode.isNotEmpty
+                      ? t.deviceCode.equals(slotKey)
+                      : t.fromIp.equals(slotKey) & t.deviceCode.isNull())))
             .go();
         await into(syncUploadQueue).insert(SyncUploadQueueCompanion.insert(
           id: id,
           fromIp: fromIp,
+          deviceCode: Value(deviceCode),
           tablesJson: tablesJson,
           since: since,
           tablesSummary: tablesSummary,
