@@ -13,6 +13,7 @@ import '../../features/pengaturan/alih_owner_screen.dart';
 import '../../features/pengaturan/arsip_screen.dart';
 import '../../features/pengaturan/backup_screen.dart';
 import '../../features/pengaturan/crash_log_screen.dart';
+import '../../features/pengaturan/duplicate_data_screen.dart';
 import '../../features/pengaturan/csv_import_screen.dart';
 import '../../features/pengaturan/asisten_permissions_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
@@ -262,6 +263,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: 'log-error',
                   builder: (_, __) => const CrashLogScreen()),
+              GoRoute(
+                  path: 'duplikat-data',
+                  builder: (_, __) => const DuplicateDataScreen()),
             ],
           ),
         ],

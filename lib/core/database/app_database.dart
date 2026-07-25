@@ -1386,6 +1386,89 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.productUnitId.equals(productUnitId)))
           .get();
 
+  /// Deteksi baris duplikat di `product_barcodes`/`price_tiers`/`alt_prices`
+  /// akibat pemulihan backup dari device lain yang datanya sudah basi (lihat
+  /// dok panjang di fix commit `6455b9a`, orphan-cleanup `mergeRows`):
+  /// `restoreFromDump` menimpa SELURUH DB lokal VERBATIM dari file backup,
+  /// TANPA cek invarian apa pun ("1 barcode Primer per satuan", dst) — kalau
+  /// backup-nya diambil dari device yang sempat kena bug lama (baris basi
+  /// belum sempat dibersihkan sinkron), duplikatnya ikut terbawa mentah² ke
+  /// device manapun yang me-restore file itu, termasuk device HOST sendiri.
+  ///
+  /// SENGAJA cuma MELAPOR, tidak menghapus otomatis: barcode/tier/Harga Lain
+  /// mana yang benar (mis. label sudah tercetak & dipakai scanner) tidak
+  /// bisa ditentukan cuma dari data lokal (tabel-tabel ini tak punya kolom
+  /// waktu) — owner yang harus tinjau lalu simpan ulang produknya lewat
+  /// form Edit Produk (delete-lama-insert-baru yang sudah ada di
+  /// `saveProduct` otomatis merapikan jadi 1 baris saat disimpan).
+  Future<List<MasterDataDuplicate>> findMasterDataDuplicates() async {
+    final result = <MasterDataDuplicate>[];
+
+    final barcodeDupes = await customSelect(
+      'SELECT pu.product_id AS product_id, p.name AS product_name, '
+      'ut.name AS unit_name, COUNT(*) AS cnt '
+      'FROM product_barcodes pb '
+      'JOIN product_units pu ON pu.id = pb.product_unit_id '
+      'JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'WHERE pb.is_primary = 1 '
+      'GROUP BY pb.product_unit_id '
+      'HAVING COUNT(*) > 1',
+    ).get();
+    for (final r in barcodeDupes) {
+      result.add(MasterDataDuplicate(
+        productId: r.data['product_id'] as String,
+        productName: r.data['product_name'] as String,
+        unitName: (r.data['unit_name'] as String?) ?? 'Satuan',
+        table: 'product_barcodes',
+        detail: '${r.data['cnt']} barcode ditandai Primer sekaligus',
+      ));
+    }
+
+    final tierDupes = await customSelect(
+      'SELECT pu.product_id AS product_id, p.name AS product_name, '
+      'ut.name AS unit_name, pt.min_qty AS min_qty, COUNT(*) AS cnt '
+      'FROM price_tiers pt '
+      'JOIN product_units pu ON pu.id = pt.product_unit_id '
+      'JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'GROUP BY pt.product_unit_id, pt.min_qty '
+      'HAVING COUNT(*) > 1',
+    ).get();
+    for (final r in tierDupes) {
+      result.add(MasterDataDuplicate(
+        productId: r.data['product_id'] as String,
+        productName: r.data['product_name'] as String,
+        unitName: (r.data['unit_name'] as String?) ?? 'Satuan',
+        table: 'price_tiers',
+        detail:
+            '${r.data['cnt']} tier harga dobel di qty>=${r.data['min_qty']}',
+      ));
+    }
+
+    final altDupes = await customSelect(
+      'SELECT pu.product_id AS product_id, p.name AS product_name, '
+      'ut.name AS unit_name, ap.label AS label, COUNT(*) AS cnt '
+      'FROM alt_prices ap '
+      'JOIN product_units pu ON pu.id = ap.product_unit_id '
+      'JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'GROUP BY ap.product_unit_id, ap.label '
+      'HAVING COUNT(*) > 1',
+    ).get();
+    for (final r in altDupes) {
+      result.add(MasterDataDuplicate(
+        productId: r.data['product_id'] as String,
+        productName: r.data['product_name'] as String,
+        unitName: (r.data['unit_name'] as String?) ?? 'Satuan',
+        table: 'alt_prices',
+        detail: '${r.data['cnt']} Harga Lain "${r.data['label']}" dobel',
+      ));
+    }
+
+    return result;
+  }
+
   Future<ProductBarcode?> lookupBarcode(String barcode) =>
       (select(productBarcodes)..where((t) => t.barcode.equals(barcode)))
           .getSingleOrNull();
@@ -4639,6 +4722,23 @@ class CustomerRevenueStat {
   final int loyaltyPoints;
   final int totalSpent;
   final int txCount;
+}
+
+/// Satu temuan baris duplikat di master-data (lihat `findMasterDataDuplicates`).
+class MasterDataDuplicate {
+  const MasterDataDuplicate({
+    required this.productId,
+    required this.productName,
+    required this.unitName,
+    required this.table,
+    required this.detail,
+  });
+
+  final String productId;
+  final String productName;
+  final String unitName;
+  final String table;
+  final String detail;
 }
 
 /// Build typed variable list for raw SQL queries.
