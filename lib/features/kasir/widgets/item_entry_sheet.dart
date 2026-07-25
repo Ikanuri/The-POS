@@ -524,7 +524,17 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                             _PriceChip(
                               label: _options[i].unitName,
                               price: _options[i].basePrice,
-                              selected: i == _selectedIdx && !_priceOverridden,
+                              // BUG dilaporkan user: dulu `&& !_priceOverridden`
+                              // — begitu pilih chip "Harga Lain" (yg men-set
+                              // `_priceOverridden=true`), highlight satuan
+                              // yang sedang aktif ikut MATI, padahal
+                              // satuannya sendiri tidak berubah sama sekali.
+                              // Dua hal berbeda (satuan aktif vs harga yg
+                              // dipakai) dipaksa jadi satu kondisi. Satuan
+                              // aktif HANYA ditentukan `_selectedIdx` —
+                              // harga yg dipakai punya highlight sendiri di
+                              // baris "Pilih harga" di bawah.
+                              selected: i == _selectedIdx,
                               onTap: () => _selectUnit(i),
                             ),
                         ],

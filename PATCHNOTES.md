@@ -56,6 +56,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   ketuk salah satu, tanpa buka apa pun dulu.
 
 ### 🛠️ Perbaikan
+- **Memilih "Harga Lain" tidak lagi mematikan tanda satuan yang aktif.**
+  Sebelumnya begitu Anda memilih harga alternatif/grosir, kotak satuan yang
+  sedang dipakai jadi terlihat "tidak terpilih" — padahal satuannya sendiri
+  tidak berubah. Sekarang keduanya independen: kotak satuan tetap menyala
+  sesuai satuan yang aktif, kotak harga menyala sesuai harga yang dipakai.
+- **Tanda "stok habis" yang diubah owner sekarang benar-benar tersinkron ke
+  HP kasir/asisten** — sebelumnya bisa tersangkut & tidak pernah sampai ke
+  perangkat lain, terutama untuk produk yang sudah lama tidak diedit.
 - **Kategori produk (buat/ganti nama/hapus/urutkan) sekarang benar-benar
   tersinkron ke HP kasir/asisten** — sebelumnya kategori baru yang dibuat
   owner tidak pernah sampai ke perangkat lain, meski produk yang

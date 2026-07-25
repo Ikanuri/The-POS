@@ -336,13 +336,34 @@ approve, bukan instan). Perlu user putuskan salah satu:
       murah implementasinya, tapi mengubah semantik fitur ("akses cepat")
       jadi "tertunda sampai owner approve" — kemungkinan besar BUKAN yg
       diinginkan user, tercantum di sini supaya opsinya lengkap.
-Belum ditanyakan ke user secara eksplisit lewat AskUserQuestion pada
-giliran ini — sesi berikutnya harus menawarkan pilihan di atas SEBELUM
-menyentuh kode lagi di area ini.
+**UPDATE (giliran yg sama, langsung setelah opsi ditawarkan)**: user
+jawab "tidak perlu deh" — client→host utk `markedOutOfStock` SENGAJA
+TIDAK dikerjakan, opsi (a) (biarkan lokal per-device) yg berlaku secara
+default. JANGAN dikerjakan lagi kecuali user minta ulang secara eksplisit.
+
+## Bug highlight satuan hilang saat pilih Harga Lain (dilaporkan user 25 Juli)
+
+User: "kita jadinya tidak tahu satuan mana yang sedang dipilih" setelah
+menekan chip Harga Lain. Akar masalah SUDAH ADA sejak `6564852` (jauh
+sebelum sesi ini) — chip satuan (`item_entry_sheet.dart`, baris "Pilih
+satuan") pakai `selected: i == _selectedIdx && !_priceOverridden`. Begitu
+chip Harga Lain dipilih (`_applyTierPrice` men-set `_priceOverridden =
+true`), highlight satuan yg sedang aktif ikut MATI walau satuannya sendiri
+tidak berubah — dua hal berbeda (satuan aktif vs harga yg dipakai) dipaksa
+jadi satu kondisi. Baru KETARA sekarang krn chip Harga Lain sesi ini
+dibuat selalu tampil (dulu tersembunyi di popup, jadi user jarang lihat
+efeknya bersamaan).
+
+Fix: `selected: i == _selectedIdx` saja — satuan aktif independen dari
+harga yg dipakai; harga yg dipakai sudah py highlight sendiri di baris
+"Pilih harga" di bawahnya. Test baru di `item_entry_price_menu_test.dart`
+(baca warna `Container.decoration.color` chip sebelum/sesudah tap Harga
+Lain, harus IDENTIK) — revert-verified: `Color(0x1fc96442)` (accent tint)
+vs `Color(0xffebe8e0)` (netral) saat bug direproduksi.
 
 ## Status test suite
 
-`flutter test` PENUH: **715 test, SEMUA hijau** (run terakhir exit 0,
+`flutter test` PENUH: **716 test, SEMUA hijau** (run terakhir exit 0,
 flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
