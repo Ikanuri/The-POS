@@ -17,7 +17,8 @@ import '../cart_provider.dart';
 /// [OrderParserService]) — bukan dipercaya dari teks — jadi katalog yang
 /// sedikit basi tidak pernah membuat transaksi salah hitung.
 class PasteOrderSheet extends ConsumerStatefulWidget {
-  const PasteOrderSheet({super.key, this.cartId = kMainCartId, this.initialText});
+  const PasteOrderSheet(
+      {super.key, this.cartId = kMainCartId, this.initialText});
 
   final String cartId;
 
@@ -121,14 +122,27 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
       ref.read(cartProvider(widget.cartId).notifier).addItem(item.toCartItem());
     }
 
-    // Nama pelanggan (bila ada) pra-isi ke metadata keranjang — sama seperti
-    // pola pelanggan ad-hoc bernama tanpa record terdaftar. Nomor HP &
-    // catatan sengaja tidak ada tempatnya di metadata keranjang saat ini,
-    // ditampilkan di preview saja untuk referensi kasir.
+    // Nama pelanggan (bila ada) pra-isi ke metadata keranjang. Item 4/57 —
+    // kalau teksnya bawa `PelangganId:` DAN sudah tervalidasi ada di DB
+    // lokal ([result.customerId], lihat `OrderParserService.parse`), pakai
+    // itu supaya kasir tidak perlu ubah dari "Umum" lalu pilih manual lagi
+    // — kalau tidak, fallback ke nama polos (ad-hoc, tanpa record
+    // terdaftar) spt sebelumnya. Nomor HP & catatan sengaja tidak ada
+    // tempatnya di metadata keranjang saat ini, ditampilkan di preview
+    // saja untuk referensi kasir.
     if (result.customerName != null) {
       ref
           .read(cartMetaProvider(widget.cartId).notifier)
-          .setCustomer(null, result.customerName);
+          .setCustomer(result.customerId, result.customerName);
+    }
+    // Item 55/56 — nomor nota yang sudah direservasi PENGIRIM (transfer
+    // owner/asisten/pegawai) ikut dipakai apa adanya, BUKAN reservasi baru
+    // — lihat dok `CartMeta.reservedLocalId`. null utk pesanan pelanggan
+    // biasa dari Katalog Pesanan (tidak membawa baris `Nota:`).
+    if (result.reservedLocalId != null) {
+      ref
+          .read(cartMetaProvider(widget.cartId).notifier)
+          .setReservedLocalId(result.reservedLocalId);
     }
 
     if (mounted) {
@@ -140,191 +154,210 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final result = _result;
+    final ctx = context;
 
+    // `DraggableScrollableSheet` (dipakai sebelumnya) punya `currentSize`
+    // (fraksi tinggi) yang HANYA diset sekali di awal (initialChildSize) dan
+    // TIDAK direkalkulasi otomatis saat keyboard muncul/hilang — beda dari
+    // Padding+Column biasa yang dipakai sheet lain (item_entry_sheet.dart,
+    // cart_meta_pickers.dart), yang bereaksi benar krn ukurannya dihitung
+    // ULANG tiap build dari `MediaQuery.viewInsets`. Akibatnya tombol
+    // "Masukkan N Barang ke Keranjang" (pinned di bawah, muncul setelah
+    // "Proses Pesanan" ditekan SAAT keyboard masih terbuka) jatuh di balik
+    // keyboard — dibuktikan lewat widget test (`test/probe_paste_order_
+    // test.dart`, dihapus setelah lolos) yang men-simulasikan
+    // `viewInsets.bottom` & mengukur posisi tombol relatif thd area yang
+    // masih terlihat. Fix: `Padding` (turunkan area utk keyboard) +
+    // `LayoutBuilder` (baca tinggi tersedia SUNGGUHAN dari constraints,
+    // bukan `MediaQuery.size` yang bisa meleset dari constraints nyata
+    // saat ukuran ambient berubah) + `ConstrainedBox` + `Column` biasa,
+    // dihitung ulang tiap build — sama seperti pola yang sudah terbukti
+    // benar di sheet lain.
     return Padding(
       padding:
           EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (ctx, scrollCtrl) => Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Text('Tempel Pesanan',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView(
-                controller: scrollCtrl,
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Text(
-                    'Tempel teks pesanan yang dikirim pelanggan dari '
-                    'Katalog Pesanan.',
-                    style: TextStyle(
-                        fontSize: 12.5, color: scheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _textCtrl,
-                    maxLines: 6,
-                    minLines: 4,
-                    decoration: InputDecoration(
-                      hintText: 'PESANAN — Toko Anda\n…\n#PSN:...',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _processing ? null : _process,
-                      icon: _processing
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.playlist_add_check, size: 18),
-                      label:
-                          Text(_processing ? 'Memproses…' : 'Proses Pesanan'),
-                    ),
-                  ),
-                  if (result != null) ...[
-                    const SizedBox(height: 16),
-                    if (!result.hasMachineCode)
-                      _WarnBanner(
-                        icon: Icons.error_outline,
-                        color: scheme.error,
-                        text: 'Teks ini tidak mengandung kode pesanan '
-                            '(baris "#PSN:..."). Pastikan ditempel utuh dari '
-                            'hasil "Kirim via WhatsApp" / "Salin Teks Pesanan" '
-                            'di Katalog Pesanan.',
-                      )
-                    else ...[
-                      if (result.customerName != null ||
-                          result.customerPhone != null ||
-                          result.note != null)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(10),
-                          margin: const EdgeInsets.only(bottom: 10),
-                          decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (result.customerName != null)
-                                Text('Nama: ${result.customerName}',
-                                    style: const TextStyle(fontSize: 12.5)),
-                              if (result.customerPhone != null)
-                                Text('HP: ${result.customerPhone}',
-                                    style: const TextStyle(fontSize: 12.5)),
-                              if (result.note != null)
-                                Text('Catatan: ${result.note}',
-                                    style: const TextStyle(
-                                        fontSize: 12.5,
-                                        fontStyle: FontStyle.italic)),
-                            ],
-                          ),
-                        ),
-                      if (result.items.isEmpty && result.notFound.isEmpty)
-                        _WarnBanner(
-                          icon: Icons.info_outline,
-                          color: scheme.onSurfaceVariant,
-                          text: 'Tidak ada barang di pesanan ini.',
-                        ),
-                      ...result.items.map((item) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.check_circle,
-                                size: 18, color: scheme.primary),
-                            title: Text(item.productName,
-                                style: const TextStyle(fontSize: 13.5)),
-                            subtitle: Text(
-                                '${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} '
-                                '${item.unitName} × ${formatRupiah(item.price)}',
-                                style: const TextStyle(fontSize: 11.5)),
-                            trailing: Text(formatRupiah(item.subtotal),
-                                style: const TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600)),
-                          )),
-                      if (result.notFound.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: _WarnBanner(
-                            icon: Icons.warning_amber_rounded,
-                            color: scheme.error,
-                            text:
-                                '${result.notFound.length} barang tidak ditemukan '
-                                '(mungkin sudah dihapus/dinonaktifkan sejak '
-                                'katalog dibuat) — dilewati, barang lain tetap '
-                                'masuk keranjang.',
-                          ),
-                        ),
-                      if (result.items.isNotEmpty) ...[
-                        const Divider(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Total',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
-                            Text(formatRupiah(result.total),
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: scheme.primary,
-                                    fontSize: 16)),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ],
-                  const SizedBox(height: 12),
-                ],
-              ),
-            ),
-            if (result != null && result.items.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                    16, 8, 16, MediaQuery.of(context).padding.bottom + 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _adding ? null : _addToCart,
-                    child: Text(_adding
-                        ? 'Menambahkan…'
-                        : 'Masukkan ${result.items.length} Barang ke Keranjang'),
-                  ),
+      child: LayoutBuilder(
+        builder: (_, constraints) => ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.9),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-          ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Text('Tempel Pesanan',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Tempel teks pesanan yang dikirim pelanggan dari '
+                      'Katalog Pesanan.',
+                      style: TextStyle(
+                          fontSize: 12.5, color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _textCtrl,
+                      maxLines: 6,
+                      minLines: 4,
+                      decoration: InputDecoration(
+                        hintText: 'PESANAN — Toko Anda\n…\n#PSN:...',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _processing ? null : _process,
+                        icon: _processing
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.playlist_add_check, size: 18),
+                        label:
+                            Text(_processing ? 'Memproses…' : 'Proses Pesanan'),
+                      ),
+                    ),
+                    if (result != null) ...[
+                      const SizedBox(height: 16),
+                      if (!result.hasMachineCode)
+                        _WarnBanner(
+                          icon: Icons.error_outline,
+                          color: scheme.error,
+                          text: 'Teks ini tidak mengandung kode pesanan '
+                              '(baris "#PSN:..."). Pastikan ditempel utuh dari '
+                              'hasil "Kirim via WhatsApp" / "Salin Teks Pesanan" '
+                              'di Katalog Pesanan.',
+                        )
+                      else ...[
+                        if (result.customerName != null ||
+                            result.customerPhone != null ||
+                            result.note != null)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (result.customerName != null)
+                                  Text('Nama: ${result.customerName}',
+                                      style: const TextStyle(fontSize: 12.5)),
+                                if (result.customerPhone != null)
+                                  Text('HP: ${result.customerPhone}',
+                                      style: const TextStyle(fontSize: 12.5)),
+                                if (result.note != null)
+                                  Text('Catatan: ${result.note}',
+                                      style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontStyle: FontStyle.italic)),
+                              ],
+                            ),
+                          ),
+                        if (result.items.isEmpty && result.notFound.isEmpty)
+                          _WarnBanner(
+                            icon: Icons.info_outline,
+                            color: scheme.onSurfaceVariant,
+                            text: 'Tidak ada barang di pesanan ini.',
+                          ),
+                        ...result.items.map((item) => ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.check_circle,
+                                  size: 18, color: scheme.primary),
+                              title: Text(item.productName,
+                                  style: const TextStyle(fontSize: 13.5)),
+                              subtitle: Text(
+                                  '${item.qty % 1 == 0 ? item.qty.toInt() : item.qty} '
+                                  '${item.unitName} × ${formatRupiah(item.price)}',
+                                  style: const TextStyle(fontSize: 11.5)),
+                              trailing: Text(formatRupiah(item.subtotal),
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600)),
+                            )),
+                        if (result.notFound.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: _WarnBanner(
+                              icon: Icons.warning_amber_rounded,
+                              color: scheme.error,
+                              text:
+                                  '${result.notFound.length} barang tidak ditemukan '
+                                  '(mungkin sudah dihapus/dinonaktifkan sejak '
+                                  'katalog dibuat) — dilewati, barang lain tetap '
+                                  'masuk keranjang.',
+                            ),
+                          ),
+                        if (result.items.isNotEmpty) ...[
+                          const Divider(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w700)),
+                              Text(formatRupiah(result.total),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.primary,
+                                      fontSize: 16)),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ],
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+              if (result != null && result.items.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      16, 8, 16, MediaQuery.of(context).padding.bottom + 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _adding ? null : _addToCart,
+                      child: Text(_adding
+                          ? 'Menambahkan…'
+                          : 'Masukkan ${result.items.length} Barang ke Keranjang'),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

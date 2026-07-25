@@ -8,14 +8,93 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 25 Juli 2026
+
+### ✨ Fitur Baru
+- **Nama produk panjang di keranjang tidak lagi terpotong** — sekarang
+  boleh tampil sampai 2 baris.
+- **Stock Opname bisa dihitung pakai satuan yang lebih nyaman** — produk
+  yang punya beberapa satuan (misalnya Pcs/Dus) sekarang bisa dihitung
+  langsung dalam satuan besarnya (misalnya "10 dus"), otomatis dikonversi
+  ke satuan dasar. Produk dengan satu satuan saja tidak berubah sama
+  sekali.
+- **Cek Stok: pilih satuan tampilan untuk daftar Order Restock** — produk
+  berjenjang yang dicentang untuk restock sekarang bisa ditampilkan dalam
+  satuan pilihan (misalnya "2 dus" alih-alih "20 pcs") di teks yang
+  disalin/dikirim ke supplier.
+
+### 🛠️ Perbaikan
+- **Kategori produk (buat/ganti nama/hapus/urutkan) sekarang benar-benar
+  tersinkron ke HP kasir/asisten** — sebelumnya kategori baru yang dibuat
+  owner tidak pernah sampai ke perangkat lain, meski produk yang
+  ditugaskan ke kategori itu sudah tersinkron duluan.
+- **Sinkronisasi data 2 device yang kebetulan berbagi alamat IP (mis.
+  hotspot HP) sekarang tidak lagi saling menimpa** — sebelumnya kalau 2
+  HP berbeda tersambung dari IP yang sama, sinkronisasi salah satu bisa
+  hilang tergantikan yang lain.
+- **Stok kadang tampil tidak update ke angka terbaru** kalau ada 2
+  perubahan stok yang terjadi sangat berdekatan (misalnya atur stok awal
+  langsung disusul stock opname) — sekarang selalu menampilkan angka
+  hasil perubahan terakhir.
+
+## 24 Juli 2026
+
+### 🛠️ Perbaikan
+- **Restore backup yang selalu gagal dengan pesan error** ("FOREIGN KEY
+  constraint failed") sudah diperbaiki — sebelumnya toko yang pernah
+  memakai fitur kategori-tambahan (satu produk masuk lebih dari satu
+  kategori) tidak bisa restore backup APAPUN sama sekali. Sekalian
+  kategori-tambahan dan reservasi nomor nota sekarang benar-benar ikut
+  tersimpan di file backup (sebelumnya diam-diam terlewat).
+- **Produk baru yang diusulkan asisten/pegawai kadang hilang begitu saja
+  dari daftar tinjauan owner** setelah sync — sekarang tidak lagi. Bug ini
+  muncul kalau ada dua HP kasir/asisten berbeda yang kebetulan tersambung
+  dari alamat jaringan yang sama (biasa terjadi di hotspot HP).
+
 ## 23 Juli 2026
 
 ### ✨ Fitur Baru
-- **Pindah banyak produk sekaligus ke satu kategori.** Di layar Kelola
-  Kategori, sekarang tinggal ketuk nama kategorinya untuk membuka daftar
-  produk — centang produk yang mau dipindahkan (boleh lebih dari satu
-  sekaligus, termasuk produk yang sebelumnya sudah punya kategori lain),
-  lalu ketuk "Terapkan". Tidak perlu lagi buka form tiap produk satu-satu.
+- **Tombol Bayar baru di keranjang (cart bar)** — sekarang ada tombol "Bayar"
+  warna terracotta di samping tombol "Tahan", langsung membuka layar
+  Pembayaran (tidak perlu buka keranjang dulu). Tombol ini hanya muncul
+  untuk owner, asisten, dan pegawai yang memang diberi izin menerima
+  pembayaran.
+- **Transfer transaksi lewat QR, kini bebas dipakai owner/asisten/pegawai
+  berizin** — bukan cuma pegawai tanpa izin menerima pembayaran. Di
+  keranjang, ada ikon baru (QR + panah) di sebelah tombol kosongkan untuk
+  mengirim seluruh isi keranjang ke perangkat lain lewat QR — berguna kalau
+  satu kasir belum bisa memproses transaksi dan perlu melempar ke kasir
+  lain. Tombol "Kosongkan" sekarang berbentuk ikon tempat sampah (konfirmasi
+  tetap ada sebelum benar-benar mengosongkan).
+- **Nomor nota (mis. #17) sekarang tampil dari awal** — begitu barang
+  pertama masuk keranjang, nomor notanya langsung ditetapkan dan tampil di
+  cart bar serta di kartu pesanan yang ditahan. Nomor ini tidak berubah-ubah
+  lagi sampai transaksi selesai, termasuk kalau transaksinya ditransfer ke
+  perangkat lain lewat QR.
+- **Transfer QR sekarang ikut membawa data pelanggan** — kalau transaksi
+  yang ditransfer sudah punya pelanggan terpilih (bukan "Umum"), perangkat
+  penerima otomatis mengenali pelanggan yang sama (kalau datanya sudah
+  tersinkron), jadi tidak perlu pilih ulang manual.
+- **Buka pesanan hasil transfer QR jadi lebih cepat** — sebelumnya harus
+  centang satu-satu tiap barang dulu sebelum bisa lanjut ke keranjang;
+  sekarang ketuk kartu pesanan langsung masuk ke keranjang, tanpa langkah
+  centang lagi.
+
+- **Satu produk sekarang bisa ada di lebih dari satu kategori.** Di layar
+  Kelola Kategori, ketuk nama kategori untuk membuka daftar produk — centang
+  produk yang mau dimasukkan ke kategori itu, langsung tersimpan seketika
+  (tidak perlu tombol "Terapkan" lagi). Uncentang untuk mengeluarkan produk
+  dari kategori itu saja — kategori lain yang sudah dipunyai produk tersebut
+  TETAP ada, tidak ikut hilang. Daftar produk juga menampilkan harga & stok,
+  serta keterangan "Juga ada di: ..." kalau produk sudah ada di kategori lain.
+- **Kategori sekarang muncul juga di layar Kasir.** Tombol kecil di bawah
+  bilah pencarian — ketuk untuk memfilter produk sesuai kategori itu, ketuk
+  lagi untuk menampilkan semua produk kembali. Urutan tombol kategori bisa
+  diatur sendiri: tekan agak lama lalu geser ke posisi yang diinginkan.
+
+### 🛠️ Perbaikan
+- Sheet "Tempel Pesanan" di Kasir — tombol konfirmasinya sempat tertutup
+  keyboard saat mengetik, sekarang selalu terlihat penuh.
 
 ---
 

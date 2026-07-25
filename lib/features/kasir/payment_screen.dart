@@ -435,8 +435,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final notifier = ref.read(cartProvider(_cartId).notifier);
       final now = DateTime.now();
 
-      // Nomor nota dijamin unik (penjualan & retur berbagi ruang sequence).
-      final localId = await db.generateUniqueLocalId(device.deviceCode, now);
+      // Item 55 — pakai nomor yang SUDAH direservasi sejak keranjang mulai
+      // diisi/ditahan (stabil, sama dgn yg tampil di cart bar/kartu
+      // tertahan/QR transfer) — bukan generate baru di sini. Fallback ke
+      // `generateUniqueLocalId` HANYA kalau entah bagaimana belum sempat
+      // direservasi (seharusnya tidak terjadi di alur normal).
+      final reservedId = ref.read(cartMetaProvider(_cartId)).reservedLocalId;
+      final localId = reservedId ??
+          await db.generateUniqueLocalId(device.deviceCode, now);
 
       final isTempo = _selectedMethodType == 'tempo';
       final paidAmount = isTempo ? 0 : _paid;
@@ -574,6 +580,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         now: now,
         loyaltyEntry: loyaltyEntry,
       );
+      // Item 55 — nomor sudah "dikonsumsi" jadi transaction.local_id
+      // sungguhan, lepaskan dari reservasi (kalau memang berasal dari
+      // reservasi, bukan fallback generateUniqueLocalId).
+      if (reservedId != null) await db.releaseLocalId(reservedId);
 
       // Item 46 — peringatan stok menipis dari produk yang baru terjual,
       // disimpan untuk ditampilkan sbg banner saat pengguna kembali ke kasir

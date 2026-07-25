@@ -72,6 +72,7 @@ const kAsistenPermissionKeys = <String>[
   AppSettings,
   Products,
   ProductGroups,
+  ProductGroupTags,
   UnitTypes,
   ProductUnits,
   ProductBarcodes,
@@ -84,6 +85,7 @@ const kAsistenPermissionKeys = <String>[
   TransactionItems,
   TransactionPayments,
   HeldOrders,
+  ReservedOrderNumbers,
   StockLedger,
   Expenses,
   LoyaltyPointLedger,
@@ -148,7 +150,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 21;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -277,6 +279,32 @@ class AppDatabase extends _$AppDatabase {
             // (dulu murni in-memory `_pendingQueue` di LanSyncService, hilang
             // total kalau app di-restart sebelum owner sempat approve).
             await m.createTable(syncUploadQueue);
+          }
+          if (from < 19) {
+            // Item 54 — kategori tambahan (many-to-many) di luar kategori
+            // utama `Products.productGroupId`, + urutan tampil chip kategori
+            // di tab Kasir (drag reorder).
+            await m.addColumn(productGroups, productGroups.sortOrder);
+            await m.createTable(productGroupTags);
+          }
+          if (from < 20) {
+            // Item 55 — reservasi nomor nota lebih awal (sejak keranjang
+            // diisi/ditahan), supaya bisa tampil stabil & ikut ter-transfer
+            // via QR (Item 56).
+            await m.createTable(reservedOrderNumbers);
+          }
+          if (from < 21 && from >= 18) {
+            // Bug nyata dilaporkan user (sama persis dgn `_pendingProposals`
+            // yang sudah diperbaiki 25 Juli): antrian sync_upload_queue
+            // dikunci per-IP mentah, device beda yg kebetulan berbagi IP
+            // (hotspot HP) saling menimpa antrian. Kolom baru dipakai sbg
+            // kunci slot pengganti (nullable, fallback ke from_ip kalau
+            // klien lama belum kirim deviceCode).
+            // Guard `from >= 18`: kalau upgrade langsung dari versi < 18,
+            // `createTable(syncUploadQueue)` di step v18 di atas SUDAH
+            // memakai definisi tabel TERKINI (sudah termasuk device_code)
+            // — addColumn lagi di sini akan gagal "duplicate column name".
+            await m.addColumn(syncUploadQueue, syncUploadQueue.deviceCode);
           }
         },
         beforeOpen: (details) async {
@@ -420,11 +448,21 @@ class AppDatabase extends _$AppDatabase {
   /// satuan dasar). Tidak boleh dipanggil langsung dari luar — gunakan
   /// [currentStock].
   Future<double> _rawBaseStock(String baseUnitId) async {
+    // Item 38 — tie-break dulu pakai `id` (UUID v4 ACAK), yang TIDAK
+    // berkorelasi dgn urutan insert. `created_at` presisi DETIK — kalau 2
+    // penulisan stok jatuh di detik yang sama (mis. `adjustStock` setup
+    // langsung disusul `commitOpname` di alur otomatis/test, atau 2
+    // penyesuaian manual cepat berurutan), tie-break `id DESC` bisa memilih
+    // baris LAMA, bukan yang terakhir ditulis (stok jadi tampak "mundur").
+    // Fix: tie-break kedua pakai `rowid` (SQLite built-in, monoton naik
+    // sesuai urutan insert, tanpa perlu migrasi kolom baru).
     final row = await (select(stockLedger)
           ..where((t) => t.productUnitId.equals(baseUnitId))
           ..orderBy([
             (t) => OrderingTerm.desc(t.createdAt),
-            (t) => OrderingTerm.desc(t.id),
+            (_) => OrderingTerm(
+                expression: const CustomExpression<int>('rowid'),
+                mode: OrderingMode.desc),
           ])
           ..limit(1))
         .getSingleOrNull();
@@ -638,18 +676,65 @@ class AppDatabase extends _$AppDatabase {
   /// Nomor nota harian yang dijamin unik. Penjualan dan retur berbagi ruang
   /// penghitung yang sama, sehingga menghitung jumlah transaksi hari ini +1
   /// mentah bisa bertabrakan. Method ini mencari sequence bebas berikutnya
-  /// dengan memeriksa localId yang sudah ada.
+  /// dengan memeriksa localId yang sudah ada. Item 55 — juga menghindari
+  /// nomor yang sedang DIRESERVASI (`reserved_order_numbers`, mis. keranjang
+  /// lain yang belum checkout) supaya tidak bentrok begitu keranjang itu
+  /// akhirnya dibayar. Dipakai sbg FALLBACK saat checkout tanpa
+  /// `CartMeta.reservedLocalId` (seharusnya jarang terjadi di alur normal —
+  /// lihat `reserveLocalId`, dipanggil lebih awal saat keranjang mulai
+  /// diisi/ditahan).
   Future<String> generateUniqueLocalId(String deviceCode,
       [DateTime? at]) async {
-    final now = at ?? DateTime.now();
-    final datePart = '${now.year}'
-        '${now.month.toString().padLeft(2, '0')}'
-        '${now.day.toString().padLeft(2, '0')}';
-    final prefix = '$deviceCode-$datePart-';
-    final existing = await (select(transactions)
+    final prefix = _localIdPrefix(deviceCode, at ?? DateTime.now());
+    final used = await _usedLocalIdsWithPrefix(prefix);
+    return _nextFreeLocalId(prefix, used);
+  }
+
+  /// Item 55 — reserve nomor nota LEBIH AWAL (sebelum ada baris `transactions`
+  /// sungguhan), sejak keranjang mulai diisi atau ditahan — supaya nomor
+  /// "urutan pelanggan yang harus dilayani" tampil stabil di cart bar & kartu
+  /// pesanan tertahan, dan ikut terbawa utuh saat transfer via QR (Item 56).
+  /// Nomor dicatat ke `reserved_order_numbers` (bukan `transactions`) supaya
+  /// reservasi keranjang LAIN yang juga belum checkout tidak kebentur nomor
+  /// yang sama. Lepaskan dengan [releaseLocalId] setelah dikonsumsi jadi
+  /// transaksi sungguhan, atau saat keranjang dibatalkan.
+  Future<String> reserveLocalId(String deviceCode, [DateTime? at]) async {
+    final prefix = _localIdPrefix(deviceCode, at ?? DateTime.now());
+    final used = await _usedLocalIdsWithPrefix(prefix);
+    final candidate = _nextFreeLocalId(prefix, used);
+    await into(reservedOrderNumbers)
+        .insert(ReservedOrderNumbersCompanion.insert(localId: candidate));
+    return candidate;
+  }
+
+  /// Lepaskan reservasi [localId] — dipanggil setelah nomor dikonsumsi jadi
+  /// `transactions.local_id` sungguhan, atau saat keranjang yang mereservasi
+  /// dibatalkan/dikosongkan tanpa checkout.
+  Future<void> releaseLocalId(String localId) =>
+      (delete(reservedOrderNumbers)..where((t) => t.localId.equals(localId)))
+          .go();
+
+  String _localIdPrefix(String deviceCode, DateTime at) {
+    final datePart = '${at.year}'
+        '${at.month.toString().padLeft(2, '0')}'
+        '${at.day.toString().padLeft(2, '0')}';
+    return '$deviceCode-$datePart-';
+  }
+
+  Future<Set<String>> _usedLocalIdsWithPrefix(String prefix) async {
+    final existingTx = await (select(transactions)
           ..where((t) => t.localId.like('$prefix%')))
         .get();
-    final used = existing.map((t) => t.localId).toSet();
+    final existingReserved = await (select(reservedOrderNumbers)
+          ..where((t) => t.localId.like('$prefix%')))
+        .get();
+    return {
+      ...existingTx.map((t) => t.localId),
+      ...existingReserved.map((r) => r.localId),
+    };
+  }
+
+  String _nextFreeLocalId(String prefix, Set<String> used) {
     var seq = used.length + 1;
     var candidate = '$prefix${seq.toString().padLeft(4, '0')}';
     while (used.contains(candidate)) {
@@ -992,6 +1077,37 @@ class AppDatabase extends _$AppDatabase {
     return q.watch();
   }
 
+  /// Item 54 — versi [watchProducts] untuk chip kategori tab Kasir: filter
+  /// [groupId] mencakup UNION kategori utama (`productGroupId`) ATAU
+  /// kategori tambahan (`product_group_tags`) — beda dari [watchProducts]
+  /// yang dipakai filter kategori di tab Produk (`produk_list_screen.dart`),
+  /// SENGAJA tetap primary-only di sana (di luar scope Item 54, tidak
+  /// disentuh). Tanpa `groupId`, perilaku identik [watchProducts].
+  Stream<List<Product>> watchProductsForKasir(
+      {String query = '', int? groupId}) {
+    if (groupId == null) return watchProducts(query: query);
+    final q = select(products).join([
+      leftOuterJoin(
+        productGroupTags,
+        productGroupTags.productId.equalsExp(products.id) &
+            productGroupTags.groupId.equals(groupId),
+      ),
+    ])
+      ..where(products.isActive.equals(true))
+      ..where(products.parentProductId.isNull())
+      ..where(products.productGroupId.equals(groupId) |
+          productGroupTags.groupId.equals(groupId));
+    if (query.isNotEmpty) {
+      final ql = query.toLowerCase();
+      q.where(products.name.lower().contains(ql) |
+          products.kodeProduk.lower().contains(ql));
+    }
+    q.orderBy([OrderingTerm.asc(products.name)]);
+    return q
+        .watch()
+        .map((rows) => rows.map((r) => r.readTable(products)).toList());
+  }
+
   /// Harga dasar (tier minQty=1) tiap produk pada satuan DASARnya — dipakai
   /// tab Produk utk tampilkan harga di bawah nama tanpa N+1 query per baris.
   Future<Map<String, int>> getBaseUnitPrices() async {
@@ -1216,6 +1332,31 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(t) => OrderingTerm.asc(t.name)]))
       .get();
 
+  /// Item 54 — kategori terurut `sortOrder` (tie-break nama) untuk chip
+  /// kategori tab Kasir, reaktif terhadap hasil drag-reorder
+  /// ([reorderProductGroups]) TANPA perlu tutup-buka layar.
+  Stream<List<ProductGroup>> watchProductGroupsForKasir() => (select(
+          productGroups)
+        ..where((t) => t.name.isNotNull())
+        ..orderBy([
+          (t) => OrderingTerm.asc(t.sortOrder),
+          (t) => OrderingTerm.asc(t.name),
+        ]))
+      .watch();
+
+  /// Item 54 — simpan urutan baru chip kategori Kasir setelah drag-reorder.
+  /// [orderedIds] adalah urutan tampil BARU secara utuh (index 0 = paling
+  /// kiri) — sortOrder ditulis sbg index-nya, dibungkus 1 transaksi.
+  Future<void> reorderProductGroups(List<int> orderedIds) async {
+    await transaction(() async {
+      for (var i = 0; i < orderedIds.length; i++) {
+        await (update(productGroups)
+              ..where((t) => t.id.equals(orderedIds[i])))
+            .write(ProductGroupsCompanion(sortOrder: Value(i)));
+      }
+    });
+  }
+
   /// Peta id produk → nama kategori untuk sekumpulan id (dipakai katalog untuk
   /// mengelompokkan produk per kategori). Hanya satu query untuk produk + grup.
   Future<Map<String, String>> getCategoryNamesForProducts(
@@ -1234,20 +1375,29 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> addProductGroup(String name) async {
+    // Item 54 — kategori baru selalu ditaruh PALING AKHIR urutan chip Kasir
+    // (bukan 0) — begitu kategori lain sudah pernah di-reorder manual,
+    // default 0 akan melompat kategori baru ke paling depan tanpa alasan.
+    final maxOrderRow = await customSelect(
+            'SELECT MAX(sort_order) as mx FROM product_groups')
+        .getSingleOrNull();
+    final nextOrder = (maxOrderRow?.data['mx'] as int? ?? -1) + 1;
+
     final emptySlot = await (select(productGroups)
           ..where((t) => t.name.isNull())
           ..limit(1))
         .getSingleOrNull();
     if (emptySlot != null) {
       await (update(productGroups)..where((t) => t.id.equals(emptySlot.id)))
-          .write(ProductGroupsCompanion(name: Value(name)));
+          .write(ProductGroupsCompanion(
+              name: Value(name), sortOrder: Value(nextOrder)));
     } else {
       final rows =
           await customSelect('SELECT MAX(id) as mx FROM product_groups')
               .getSingleOrNull();
       final nextId = (rows?.data['mx'] as int? ?? 20) + 1;
-      await into(productGroups).insert(
-          ProductGroupsCompanion.insert(id: Value(nextId), name: Value(name)));
+      await into(productGroups).insert(ProductGroupsCompanion.insert(
+          id: Value(nextId), name: Value(name), sortOrder: Value(nextOrder)));
     }
   }
 
@@ -1271,11 +1421,28 @@ class AppDatabase extends _$AppDatabase {
       (update(productGroups)..where((t) => t.id.equals(id)))
           .write(ProductGroupsCompanion(name: Value(newName)));
 
+  /// Item 53 — `updatedAt` WAJIB dicap ulang di sini (pola sama spt gotcha
+  /// `deactivateProduct`/`applyProductProposals` yang sudah tercatat
+  /// CLAUDE.md) supaya produk yang jadi "Tanpa Kategori" gara-gara
+  /// kategorinya dihapus ikut tersinkron ke klien lain, bukan cuma diam
+  /// di DB lokal. Tag kategori TAMBAHAN (`product_group_tags`) milik
+  /// kategori ini juga WAJIB dihapus di sini — kalau tidak, id kategori
+  /// (nama-nya di-null-kan tapi barisnya tetap ada utk dipakai ulang lewat
+  /// slot kosong `addProductGroup`) bisa "hidup lagi" nempel ke kategori
+  /// BARU yang kebetulan dapat id yang sama, produk lama tiba-tiba tampil
+  /// tertag ke kategori yang sama sekali tidak berhubungan.
   Future<void> deleteProductGroup(int id) async {
-    await (update(products)..where((t) => t.productGroupId.equals(id)))
-        .write(const ProductsCompanion(productGroupId: Value(null)));
-    await (update(productGroups)..where((t) => t.id.equals(id)))
-        .write(const ProductGroupsCompanion(name: Value(null)));
+    await transaction(() async {
+      await (update(products)..where((t) => t.productGroupId.equals(id)))
+          .write(ProductsCompanion(
+        productGroupId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      ));
+      await (delete(productGroupTags)..where((t) => t.groupId.equals(id)))
+          .go();
+      await (update(productGroups)..where((t) => t.id.equals(id)))
+          .write(const ProductGroupsCompanion(name: Value(null)));
+    });
   }
 
   /// Hapus banyak kategori sekaligus — produk yg memakainya jadi tanpa
@@ -1288,29 +1455,81 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Item 52 — bulk assign banyak produk ke satu kategori sekaligus (dari
-  /// layar Kelola Kategori: tap kategori → pilih produk). Produk yang
-  /// SUDAH punya kategori lain BOLEH ikut dipilih & ditimpa (keputusan
-  /// user eksplisit, bukan dibatasi ke "Tanpa Kategori" saja). `updatedAt`
-  /// WAJIB dicap ulang — pola sama spt `deactivateProduct` (lihat gotcha
-  /// CLAUDE.md) — supaya perpindahan kategori ikut tersinkron ke klien
-  /// lain, bukan cuma diam di DB lokal.
-  Future<void> assignProductsToGroup(
-      List<String> productIds, int groupId) async {
-    if (productIds.isEmpty) return;
-    await (update(products)..where((t) => t.id.isIn(productIds))).write(
-      ProductsCompanion(
-        productGroupId: Value(groupId),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+  /// Item 54 — live-toggle centang produk di layar assign kategori
+  /// (menggantikan `assignProductsToGroup` Item 52 yang batch-overwrite —
+  /// dihapus krn kontradiktif dgn keputusan baru "kategori lama tetap
+  /// dipertahankan"). [member]=true: kalau produk BELUM punya kategori
+  /// utama, kategori ini jadi kategori UTAMA-nya; kalau SUDAH punya
+  /// kategori utama LAIN, kategori ini jadi TAG TAMBAHAN (`product_group_
+  /// tags`) — kategori utama lama tidak tersentuh. [member]=false:
+  /// lepaskan dari kategori ini, entah itu kategori utama (→ null,
+  /// `updatedAt` dicap ulang spt gotcha `deactivateProduct`) atau tag
+  /// tambahan (→ hapus baris `product_group_tags`).
+  Future<void> setProductGroupMembership(
+      String productId, int groupId, bool member) async {
+    final product = await getProductById(productId);
+    if (product == null) return;
+    await transaction(() async {
+      if (member) {
+        if (product.productGroupId == null) {
+          await (update(products)..where((t) => t.id.equals(productId)))
+              .write(ProductsCompanion(
+            productGroupId: Value(groupId),
+            updatedAt: Value(DateTime.now()),
+          ));
+        } else if (product.productGroupId != groupId) {
+          await into(productGroupTags).insertOnConflictUpdate(
+            ProductGroupTagsCompanion.insert(
+                productId: productId, groupId: groupId),
+          );
+        }
+        // else: kategori ini SUDAH jadi kategori utama produk — no-op.
+      } else {
+        if (product.productGroupId == groupId) {
+          await (update(products)..where((t) => t.id.equals(productId)))
+              .write(ProductsCompanion(
+            productGroupId: const Value(null),
+            updatedAt: Value(DateTime.now()),
+          ));
+        } else {
+          await (delete(productGroupTags)
+                ..where((t) =>
+                    t.productId.equals(productId) & t.groupId.equals(groupId)))
+              .go();
+        }
+      }
+    });
   }
 
+  /// Peta productId → set id kategori TAMBAHAN (tag) untuk sekumpulan produk
+  /// — satu query, hindari N+1 (dipakai layar assign kategori utk tampilkan
+  /// "juga ada di kategori lain"). Kategori UTAMA (`productGroupId`) TIDAK
+  /// ikut di sini — pemanggil sudah punya itu langsung dari baris `Product`.
+  Future<Map<String, Set<int>>> getProductGroupTagsFor(
+      List<String> productIds) async {
+    if (productIds.isEmpty) return {};
+    final rows = await (select(productGroupTags)
+          ..where((t) => t.productId.isIn(productIds)))
+        .get();
+    final map = <String, Set<int>>{};
+    for (final r in rows) {
+      map.putIfAbsent(r.productId, () => {}).add(r.groupId);
+    }
+    return map;
+  }
+
+  /// Dihitung dari UNION kategori utama + tag tambahan (Item 54) — dipakai
+  /// peringatan "N produk menggunakan kategori ini" sebelum hapus kategori.
   Future<int> countProductsInGroup(int groupId) async {
     final row = await customSelect(
-      'SELECT COUNT(*) as cnt FROM products '
-      'WHERE product_group_id = ? AND is_active = 1',
-      variables: [Variable.withInt(groupId)],
+      'SELECT COUNT(DISTINCT p.id) as cnt FROM products p '
+      'LEFT JOIN product_group_tags t ON t.product_id = p.id AND t.group_id = ? '
+      'WHERE p.is_active = 1 AND (p.product_group_id = ? OR t.group_id = ?)',
+      variables: [
+        Variable.withInt(groupId),
+        Variable.withInt(groupId),
+        Variable.withInt(groupId)
+      ],
     ).getSingleOrNull();
     return row?.data['cnt'] as int? ?? 0;
   }
@@ -3361,23 +3580,41 @@ class AppDatabase extends _$AppDatabase {
 
   /// Antrian approval sync sisi HOST, sekarang PERSISTEN — dulu
   /// `_pendingQueue` di `LanSyncService` cuma hidup di RAM, hilang total
-  /// kalau app owner di-restart sebelum sempat approve. "1 slot per IP"
-  /// dipertahankan (hapus entri lama dari IP yang sama SEBELUM insert baru,
-  /// dalam satu transaksi) — aman krn klien selalu kirim data superset dari
-  /// upload sebelumnya (lihat dok watermark upload di lan_sync_service.dart).
+  /// kalau app owner di-restart sebelum sempat approve. "1 slot per
+  /// PENGIRIM" dipertahankan (hapus entri lama dari pengirim yang sama
+  /// SEBELUM insert baru, dalam satu transaksi) — aman krn klien selalu
+  /// kirim data superset dari upload sebelumnya (lihat dok watermark upload
+  /// di lan_sync_service.dart).
+  ///
+  /// Bug nyata dilaporkan user (sama persis dgn `_pendingProposals` yang
+  /// sudah diperbaiki 25 Juli): slot dulu dikunci `fromIp` MENTAH — dua
+  /// device BERBEDA yang kebetulan tersambung dari alamat IP yang SAMA
+  /// (hotspot HP dgn pool DHCP kecil, setup umum toko kecil) saling
+  /// menimpa antrian satu sama lain sebelum owner sempat approve. Kunci
+  /// slot sekarang preferensi [deviceCode] (dikirim klien via
+  /// `syncToHost`), fallback ke [fromIp] kalau klien lama belum kirim itu.
   Future<void> enqueueSyncUpload({
     required String id,
     required String fromIp,
+    String? deviceCode,
     required String tablesJson,
     required DateTime since,
     required String tablesSummary,
   }) =>
       transaction(() async {
-        await (delete(syncUploadQueue)..where((t) => t.fromIp.equals(fromIp)))
+        final slotKey = (deviceCode != null && deviceCode.isNotEmpty)
+            ? deviceCode
+            : fromIp;
+        await (delete(syncUploadQueue)
+              ..where((t) =>
+                  (deviceCode != null && deviceCode.isNotEmpty
+                      ? t.deviceCode.equals(slotKey)
+                      : t.fromIp.equals(slotKey) & t.deviceCode.isNull())))
             .go();
         await into(syncUploadQueue).insert(SyncUploadQueueCompanion.insert(
           id: id,
           fromIp: fromIp,
+          deviceCode: Value(deviceCode),
           tablesJson: tablesJson,
           since: since,
           tablesSummary: tablesSummary,
@@ -3401,10 +3638,28 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Backup / Restore ─────────────────────────
 
+  // Bug nyata dilaporkan user: restore gagal total dgn "FOREIGN KEY
+  // constraint failed ... DELETE FROM product_groups" utk toko mana pun yg
+  // pernah pakai kategori-tambahan (Item 54). Akar masalah: `product_groups`
+  // (skema Drift, `@DriftDatabase` di atas) ditambah setelahnya TAPI daftar
+  // ini (dipakai backup DAN restore) lupa diperbarui — baris lama di
+  // `product_group_tags` tidak pernah ikut dihapus di awal restore krn
+  // tabelnya tidak ada di daftar ini, jadi masih menunjuk ke `product_groups`
+  // lama saat `DELETE FROM "product_groups"` dijalankan → SQLite menolak.
+  // Sekalian dampak lain yg SAMA (tapi diam-diam, tanpa error krn tabelnya
+  // sendiri tanpa FK): `reserved_order_numbers` (Item 55) juga tidak pernah
+  // ikut ter-backup/restore. `product_group_tags` WAJIB disebut SETELAH
+  // `products` & `product_groups` (FK ke keduanya) — urutan list ini dipakai
+  // apa adanya utk INSERT (parent dulu) & REVERSED utk DELETE (anak dulu).
+  // `sync_upload_queue` SENGAJA TIDAK dimasukkan — itu antrian approval host
+  // yang sifatnya transient/proses-saat-ini, bukan data bisnis; me-restore
+  // antrian lama dari backup lama tidak masuk akal (bisa duplikat/konflik
+  // dgn antrian yg sedang berjalan).
   static const _allTables = [
     'app_settings',
     'products',
     'product_groups',
+    'product_group_tags',
     'unit_types',
     'product_units',
     'product_barcodes',
@@ -3417,6 +3672,7 @@ class AppDatabase extends _$AppDatabase {
     'transaction_items',
     'transaction_payments',
     'held_orders',
+    'reserved_order_numbers',
     'stock_ledger',
     'expenses',
     'loyalty_point_ledger',
@@ -3514,10 +3770,23 @@ class AppDatabase extends _$AppDatabase {
     ];
     const masterData = [
       'products',
+      // Bug nyata dilaporkan user: kategori (create/rename/delete/reorder
+      // KATEGORI ITU SENDIRI, beda dari penugasan produk ke kategori yang
+      // sudah benar via `products.productGroupId`/`product_group_tags`)
+      // tidak pernah tersinkron ke klien sama sekali — `product_groups`
+      // lupa dimasukkan ke daftar ini sejak awal. Full-dump tiap sync
+      // (tidak ada kolom `updated_at` di tabel ini) sudah AMAN krn baris
+      // kategori tidak pernah benar² dihapus — `deleteProductGroup`
+      // menombstone `name=null` (slot id dipakai ulang), bukan DELETE baris,
+      // jadi INSERT OR REPLACE polos (tanpa cleanup orphan spt
+      // `product_group_tags`) sudah cukup merefleksikan state kategori host
+      // ke klien apa adanya.
+      'product_groups',
       'product_units',
       'price_tiers',
       'alt_prices',
       'product_barcodes',
+      'product_group_tags',
       'customers',
       'customer_groups',
       'customer_group_prices',
@@ -4140,6 +4409,36 @@ class AppDatabase extends _$AppDatabase {
         } catch (e, st) {
           await CrashLogService.record(e, st,
               context: 'app_database_merge_rows_row table=$tableName');
+        }
+      }
+
+      // Item 54 — `product_group_tags` SELALU dikirim full-dump (lihat
+      // `dumpSince`, sama seperti `customer_groups`), beda dari tabel
+      // master lain yang cuma bertambah/berganti isi (tidak pernah benar²
+      // hilang barisnya). Untag kategori (hapus baris) adalah aksi
+      // sehari-hari di sini — tanpa cleanup ini, baris yang sudah di-untag
+      // di owner akan MENETAP SELAMANYA di klien (INSERT OR REPLACE saja
+      // tidak pernah menghapus baris yang tidak lagi ada di payload).
+      // Payload yang diterima = kebenaran LENGKAP saat ini, jadi aman
+      // hapus semua baris lokal yang TIDAK ada di dalamnya.
+      if (!isAppendOnly && tableName == 'product_group_tags') {
+        final incomingKeys = rows
+            .map((r) => '${r['product_id']}|${r['group_id']}')
+            .toSet();
+        final existing = await customSelect(
+          'SELECT product_id, group_id FROM product_group_tags',
+        ).get();
+        for (final e in existing) {
+          final pid = e.data['product_id'];
+          final gid = e.data['group_id'];
+          if (!incomingKeys.contains('$pid|$gid')) {
+            await customUpdate(
+              'DELETE FROM product_group_tags WHERE product_id = ? AND group_id = ?',
+              variables: [Variable<Object>(pid!), Variable<Object>(gid!)],
+              updates: {productGroupTags},
+              updateKind: UpdateKind.delete,
+            );
+          }
         }
       }
     });

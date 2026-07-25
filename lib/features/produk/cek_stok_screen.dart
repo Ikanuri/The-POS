@@ -35,6 +35,14 @@ final _cekStokOverviewProvider =
 });
 
 class _CekStokScreenState extends ConsumerState<CekStokScreen> {
+  // Item 4 (usulan user) — pilih satuan PER PRODUK utk teks Order Restock:
+  // produk berjenjang (>1 satuan) boleh ditampilkan dlm satuan yg lebih
+  // nyata (mis. "2 dus" drpd "20 pcs"). Dimuat malas (baru saat produk
+  // dicentang), bukan semua produk sekaligus — hemat query utk kategori
+  // besar yg mayoritas tidak dicentang.
+  final Map<String, List<_UnitChoice>> _unitsByProduct = {};
+  final Map<String, int> _selectedUnitIdx = {};
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +58,28 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   Future<void> _toggle(String productId, bool value) async {
     final db = ref.read(databaseProvider);
     await db.setMarkedOutOfStock(productId, value);
+    if (value) await _ensureUnitsLoaded(productId);
+  }
+
+  Future<void> _ensureUnitsLoaded(String productId) async {
+    if (_unitsByProduct.containsKey(productId)) return;
+    final db = ref.read(databaseProvider);
+    final units = await db.getProductUnits(productId);
+    if (units.length <= 1) {
+      _unitsByProduct[productId] = const [];
+      return;
+    }
+    final choices = <_UnitChoice>[];
+    for (final u in units) {
+      final unitType = await (db.select(db.unitTypes)
+            ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
+          .getSingleOrNull();
+      choices.add(_UnitChoice(unit: u, unitName: unitType?.name ?? 'Satuan'));
+    }
+    _unitsByProduct[productId] = choices;
+    final baseIdx = choices.indexWhere((c) => c.unit.isBaseUnit);
+    _selectedUnitIdx[productId] = baseIdx < 0 ? 0 : baseIdx;
+    if (mounted) setState(() {});
   }
 
   void _copyOrderText(String text) {
@@ -128,6 +158,10 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
                   itemBuilder: (context, i) => _StockRow(
                     row: rows[i],
                     onToggle: (v) => _toggle(rows[i].productId, v),
+                    unitChoices: _unitsByProduct[rows[i].productId],
+                    selectedUnitIdx: _selectedUnitIdx[rows[i].productId] ?? 0,
+                    onUnitChanged: (idx) => setState(
+                        () => _selectedUnitIdx[rows[i].productId] = idx),
                   ),
                 );
               },
@@ -154,13 +188,34 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     );
   }
 
+  // Item 4 (usulan user) — baris output "{qty} {satuan} {nama}" (format
+  // sama dgn contoh yg dikirim user) kalau produk itu punya satuan
+  // berjenjang & sudah dipilih satuannya; selain itu tetap "- {nama}"
+  // polos spt sebelumnya (tidak ada qty krn stok satuan tunggal biasanya
+  // sudah jelas dari angka di badge kartu produknya sendiri).
   String _buildOrderText(List<StockOverviewRow> checked) {
     final buf = StringBuffer('Order Restock:\n');
     for (final r in checked) {
-      buf.writeln('- ${r.name}');
+      final choices = _unitsByProduct[r.productId];
+      if (choices != null && choices.isNotEmpty) {
+        final idx = _selectedUnitIdx[r.productId] ?? 0;
+        final chosen = choices[idx];
+        final qty = r.stock / chosen.unit.ratioToBase;
+        buf.writeln('${_fmtQty(qty)} ${chosen.unitName} ${r.name}');
+      } else {
+        buf.writeln('- ${r.name}');
+      }
     }
     return buf.toString().trim();
   }
+
+  String _fmtQty(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
+}
+
+class _UnitChoice {
+  _UnitChoice({required this.unit, required this.unitName});
+  final ProductUnit unit;
+  final String unitName;
 }
 
 class _GroupChip extends StatelessWidget {
@@ -185,9 +240,21 @@ class _GroupChip extends StatelessWidget {
 }
 
 class _StockRow extends StatelessWidget {
-  const _StockRow({required this.row, required this.onToggle});
+  const _StockRow({
+    required this.row,
+    required this.onToggle,
+    this.unitChoices,
+    this.selectedUnitIdx = 0,
+    this.onUnitChanged,
+  });
   final StockOverviewRow row;
   final ValueChanged<bool> onToggle;
+
+  /// Item 4 (usulan user) — non-null & non-empty HANYA utk produk
+  /// berjenjang (>1 satuan); null selama belum dicentang (dimuat malas).
+  final List<_UnitChoice>? unitChoices;
+  final int selectedUnitIdx;
+  final ValueChanged<int>? onUnitChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -230,6 +297,33 @@ class _StockRow extends StatelessWidget {
             decoration: checked ? TextDecoration.lineThrough : null,
           ),
         ),
+        subtitle: (checked && unitChoices != null && unitChoices!.isNotEmpty)
+            ? Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Text('Tampilkan sbg: ',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    DropdownButton<int>(
+                      value: selectedUnitIdx,
+                      isDense: true,
+                      underline: const SizedBox.shrink(),
+                      style: const TextStyle(fontSize: 11, color: Colors.black87),
+                      items: [
+                        for (var j = 0; j < unitChoices!.length; j++)
+                          DropdownMenuItem(
+                            value: j,
+                            child: Text(unitChoices![j].unitName),
+                          ),
+                      ],
+                      onChanged: (v) => onUnitChanged?.call(v ?? 0),
+                    ),
+                  ],
+                ),
+              )
+            : null,
         secondary: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(

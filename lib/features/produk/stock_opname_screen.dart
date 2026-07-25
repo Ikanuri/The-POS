@@ -140,19 +140,58 @@ class _GroupChip extends StatelessWidget {
 
 /// Step 2 — hitung BUTA: input qty fisik kosong per produk, TANPA
 /// menampilkan stok sistem sama sekali (menghindari bias konfirmasi).
-class _OpnameCountScreen extends StatefulWidget {
+class _OpnameCountScreen extends ConsumerStatefulWidget {
   const _OpnameCountScreen({required this.rows, required this.categoryLabel});
   final List<StockOverviewRow> rows;
   final String? categoryLabel;
 
   @override
-  State<_OpnameCountScreen> createState() => _OpnameCountScreenState();
+  ConsumerState<_OpnameCountScreen> createState() => _OpnameCountScreenState();
 }
 
-class _OpnameCountScreenState extends State<_OpnameCountScreen> {
+/// Item 3 (usulan user) — produk bersatuan berjenjang (>1 satuan, mis.
+/// Kg/Dus) boleh dihitung dalam satuan yang lebih nyaman ("10 dus"), bukan
+/// wajib satuan dasar ("500 biji"). Konversi ke satuan dasar (`ratioToBase`)
+/// terjadi saat lanjut ke review — produk bersatuan tunggal TIDAK berubah
+/// tampilannya sama sekali (field polos seperti sebelumnya).
+class _UnitChoice {
+  _UnitChoice({required this.unit, required this.unitName});
+  final ProductUnit unit;
+  final String unitName;
+}
+
+class _OpnameCountScreenState extends ConsumerState<_OpnameCountScreen> {
   late final Map<String, TextEditingController> _ctrls = {
     for (final r in widget.rows) r.productId: TextEditingController(),
   };
+  final Map<String, List<_UnitChoice>> _unitsByProduct = {};
+  final Map<String, int> _selectedUnitIdx = {};
+  bool _loadingUnits = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnits();
+  }
+
+  Future<void> _loadUnits() async {
+    final db = ref.read(databaseProvider);
+    for (final r in widget.rows) {
+      final units = await db.getProductUnits(r.productId);
+      if (units.length <= 1) continue;
+      final choices = <_UnitChoice>[];
+      for (final u in units) {
+        final unitType = await (db.select(db.unitTypes)
+              ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
+            .getSingleOrNull();
+        choices.add(_UnitChoice(unit: u, unitName: unitType?.name ?? 'Satuan'));
+      }
+      _unitsByProduct[r.productId] = choices;
+      _selectedUnitIdx[r.productId] =
+          choices.indexWhere((c) => c.unit.isBaseUnit).clamp(0, choices.length - 1);
+    }
+    if (mounted) setState(() => _loadingUnits = false);
+  }
 
   @override
   void dispose() {
@@ -167,9 +206,28 @@ class _OpnameCountScreenState extends State<_OpnameCountScreen> {
     for (final r in widget.rows) {
       final text = _ctrls[r.productId]!.text.trim().replaceAll(',', '.');
       if (text.isEmpty) continue;
-      final counted = double.tryParse(text);
-      if (counted == null || counted < 0) continue;
-      entries.add(_OpnameEntry(row: r, counted: counted));
+      final entered = double.tryParse(text);
+      if (entered == null || entered < 0) continue;
+
+      final choices = _unitsByProduct[r.productId];
+      double baseQty = entered;
+      double? enteredQty;
+      String? enteredUnitName;
+      if (choices != null) {
+        final idx = _selectedUnitIdx[r.productId] ?? 0;
+        final chosen = choices[idx];
+        if (chosen.unit.ratioToBase != 1.0) {
+          baseQty = entered * chosen.unit.ratioToBase;
+          enteredQty = entered;
+          enteredUnitName = chosen.unitName;
+        }
+      }
+      entries.add(_OpnameEntry(
+        row: r,
+        counted: baseQty,
+        enteredQty: enteredQty,
+        enteredUnitName: enteredUnitName,
+      ));
     }
     if (entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -192,41 +250,65 @@ class _OpnameCountScreenState extends State<_OpnameCountScreen> {
             ? 'Hitung Fisik — Semua'
             : 'Hitung Fisik — ${widget.categoryLabel}'),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-        itemCount: widget.rows.length,
-        itemBuilder: (context, i) {
-          final r = widget.rows[i];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(r.name, style: const TextStyle(fontSize: 13)),
+      body: _loadingUnits
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              itemCount: widget.rows.length,
+              itemBuilder: (context, i) {
+                final r = widget.rows[i];
+                final choices = _unitsByProduct[r.productId];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    child: choices == null
+                        ? Row(
+                            children: [
+                              Expanded(
+                                child: Text(r.name,
+                                    style: const TextStyle(fontSize: 13)),
+                              ),
+                              SizedBox(
+                                width: 90,
+                                child: _qtyField(r.productId),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(
+                                child: Text(r.name,
+                                    style: const TextStyle(fontSize: 13)),
+                              ),
+                              SizedBox(
+                                width: 76,
+                                child: _qtyField(r.productId),
+                              ),
+                              const SizedBox(width: 6),
+                              DropdownButton<int>(
+                                value: _selectedUnitIdx[r.productId] ?? 0,
+                                isDense: true,
+                                underline: const SizedBox.shrink(),
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black87),
+                                items: [
+                                  for (var j = 0; j < choices.length; j++)
+                                    DropdownMenuItem(
+                                      value: j,
+                                      child: Text(choices[j].unitName),
+                                    ),
+                                ],
+                                onChanged: (v) => setState(() =>
+                                    _selectedUnitIdx[r.productId] = v ?? 0),
+                              ),
+                            ],
+                          ),
                   ),
-                  SizedBox(
-                    width: 90,
-                    child: TextField(
-                      controller: _ctrls[r.productId],
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      textAlign: TextAlign.center,
-                      decoration: const InputDecoration(
-                        hintText: '0',
-                        isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -239,12 +321,38 @@ class _OpnameCountScreenState extends State<_OpnameCountScreen> {
       ),
     );
   }
+
+  Widget _qtyField(String productId) => TextField(
+        controller: _ctrls[productId],
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textAlign: TextAlign.center,
+        decoration: const InputDecoration(
+          hintText: '0',
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        ),
+      );
 }
 
 class _OpnameEntry {
-  _OpnameEntry({required this.row, required this.counted});
+  _OpnameEntry({
+    required this.row,
+    required this.counted,
+    this.enteredQty,
+    this.enteredUnitName,
+  });
   final StockOverviewRow row;
+
+  /// SELALU dalam satuan DASAR (dipakai diff & commit) — kalau dihitung
+  /// dalam satuan berjenjang (mis. dus), nilai ini sudah dikonversi.
   final double counted;
+
+  /// Qty & nama satuan APA ADANYA yang diketik user, sebelum dikonversi —
+  /// null kalau dihitung langsung dalam satuan dasar (tampilan review sama
+  /// seperti sebelumnya, tidak ada info tambahan).
+  final double? enteredQty;
+  final String? enteredUnitName;
+
   double get selisih => counted - row.stock;
 }
 
@@ -333,38 +441,57 @@ class _OpnameReviewScreenState extends ConsumerState<_OpnameReviewScreen>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 3,
-                          child: Text(e.row.name,
-                              style: const TextStyle(fontSize: 13)),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(e.row.name,
+                                  style: const TextStyle(fontSize: 13)),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text('Sistem: ${_fmt(e.row.stock)}',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: scheme.onSurfaceVariant)),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text('Fisik: ${_fmt(e.counted)}',
+                                  style: const TextStyle(fontSize: 11)),
+                            ),
+                            SizedBox(
+                              width: 64,
+                              child: Text(
+                                hasDiff
+                                    ? '${e.selisih > 0 ? '+' : ''}${_fmt(e.selisih)}'
+                                    : '-',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: fg),
+                              ),
+                            ),
+                          ],
                         ),
-                        Expanded(
-                          flex: 2,
-                          child: Text('Sistem: ${_fmt(e.row.stock)}',
+                        // Item 3 (usulan user) — dihitung dlm satuan
+                        // berjenjang (mis. dus), tampilkan apa yg diketik
+                        // user apa adanya di samping hasil konversinya.
+                        if (e.enteredQty != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              'diketik: ${_fmt(e.enteredQty!)} ${e.enteredUnitName}',
                               style: TextStyle(
-                                  fontSize: 11,
-                                  color: scheme.onSurfaceVariant)),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text('Fisik: ${_fmt(e.counted)}',
-                              style: const TextStyle(fontSize: 11)),
-                        ),
-                        SizedBox(
-                          width: 64,
-                          child: Text(
-                            hasDiff
-                                ? '${e.selisih > 0 ? '+' : ''}${_fmt(e.selisih)}'
-                                : '-',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: fg),
+                                  fontSize: 10.5,
+                                  fontStyle: FontStyle.italic,
+                                  color: scheme.onSurfaceVariant),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),

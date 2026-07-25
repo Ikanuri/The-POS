@@ -128,3 +128,19 @@ class HeldOrders extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+/// Item 55 — nomor nota (`local_id`) yang di-reserve LEBIH AWAL (sejak
+/// keranjang mulai diisi/ditahan), sebelum ada baris `transactions`
+/// sungguhan — supaya nomor "urutan pelanggan yang harus dilayani" stabil
+/// di cart bar/kartu tertahan & ikut terbawa utuh saat transfer via QR.
+/// Baris di sini dihapus lagi begitu nomor benar-benar dipakai jadi
+/// `transactions.local_id` (dikonsumsi) ATAU keranjang dibatalkan tanpa
+/// checkout (dilepas). Lokal per device — TIDAK disinkron (murni
+/// mencegah tabrakan antar keranjang aktif di device yang SAMA).
+class ReservedOrderNumbers extends Table {
+  TextColumn get localId => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {localId};
+}

@@ -27,6 +27,7 @@ import '../produk/catalog/catalog_store.dart';
 import '../shell/sync_status_banner.dart';
 import 'cart_meta_provider.dart';
 import 'cart_provider.dart';
+import 'handoff_gate_provider.dart';
 import 'widgets/add_control.dart';
 import 'widgets/cart_meta_pickers.dart';
 import 'widgets/cart_sheet.dart';
@@ -323,8 +324,8 @@ class _ScanShutterButton extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white,
-                border: Border.all(
-                    color: Colors.white.withOpacity(0.35), width: 4),
+                border:
+                    Border.all(color: Colors.white.withOpacity(0.35), width: 4),
                 boxShadow: [
                   BoxShadow(
                       color: Colors.black.withOpacity(0.35),
@@ -474,9 +475,6 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
 /// Format lama (kompatibel mundur): list item langsung tanpa metadata.
 /// `awaitingPayment` (Item 24d) — true untuk handoff pegawai via QR (lihat
 /// `cart_sheet.dart` `_showHandoffQr`), beda tampilan di `_HeldCard`.
-/// `checked` (Item 24b) — centangan verifikasi owner sebelum lanjut bayar,
-/// sejajar index dengan `items`; murni 1 device (owner), TIDAK ikut
-/// terbawa ke transaksi/struk setelah "Lanjut ke Keranjang".
 /// `employeeName` (susulan Item 24d) — nama pegawai PENGIRIM handoff,
 /// disimpan TERPISAH dari `label` (yang sekarang jadi nama pelanggan)
 /// supaya keduanya bisa tampil bersamaan di `_HeldCard` (tab pegawai +
@@ -485,16 +483,8 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
   List<CartItem> items,
   CartMeta meta,
   bool awaitingPayment,
-  List<bool> checked,
   String? employeeName,
 }) _parseHeldPayload(String json) {
-  List<bool> parseChecked(dynamic raw, int itemCount) {
-    if (raw is List && raw.length == itemCount) {
-      return raw.map((e) => e == true).toList();
-    }
-    return List.filled(itemCount, false);
-  }
-
   try {
     final decoded = jsonDecode(json);
     if (decoded is List) {
@@ -506,7 +496,6 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         items: items,
         meta: const CartMeta(),
         awaitingPayment: false,
-        checked: List.filled(items.length, false),
         employeeName: null,
       );
     }
@@ -520,7 +509,6 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         items: items,
         meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
         awaitingPayment: decoded['awaitingPayment'] as bool? ?? false,
-        checked: parseChecked(decoded['checked'], items.length),
         employeeName: decoded['employeeName'] as String?,
       );
     }
@@ -529,16 +517,23 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
     items: const <CartItem>[],
     meta: const CartMeta(),
     awaitingPayment: false,
-    checked: const <bool>[],
     employeeName: null,
   );
 }
 
 final _kasirProductsProvider =
-    StreamProvider.family<List<Product>, String>((ref, query) {
+    StreamProvider.family<List<Product>, (String, int?)>((ref, args) {
   final db = ref.watch(databaseProvider);
-  return db.watchProducts(query: query);
+  return db.watchProductsForKasir(query: args.$1, groupId: args.$2);
 });
+
+/// Item 54 — chip kategori tab Kasir: kategori terurut `sortOrder` (drag
+/// reorder) + kategori yang sedang difilter (single-select, null = "Semua").
+final _kasirGroupsProvider =
+    StreamProvider.autoDispose<List<ProductGroup>>((ref) {
+  return ref.watch(databaseProvider).watchProductGroupsForKasir();
+});
+final _kasirSelectedGroupProvider = StateProvider<int?>((ref) => null);
 
 /// Detail katalog per produk: harga satuan dasar + jumlah satuan.
 class CatalogDetail {
@@ -566,7 +561,7 @@ final _catalogDetailProvider =
   final db = ref.watch(databaseProvider);
   // Watch product list (name/group changes) AND explicit update counter
   // (price/barcode changes don't touch the products table).
-  ref.watch(_kasirProductsProvider(''));
+  ref.watch(_kasirProductsProvider(('', null)));
   ref.watch(productUpdateCountProvider);
   final units = await db.getProductUnits(productId);
   if (units.isEmpty) {
@@ -957,7 +952,6 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         return true;
       }
 
-
       if (code.length >= _kMinBarcodeLen) {
         _handleBarcode(code, fromExternal: true);
         return true;
@@ -1280,17 +1274,23 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
 
     final employeeName = parsed.employeeName;
     if (employeeName != null) {
-      // Item 24d/24b susulan — pelanggan (bila pegawai sempat memilih di
-      // keranjangnya) ikut lewat baris "Nama:" yang sama dgn Tempel Pesanan
-      // (lihat `encodeHandoff`). Ini ad-hoc (customerId TIDAK di-resolve —
-      // sama seperti alur Tempel Pesanan biasa), murni nama tampilan.
-      // `label` kartu antrian jadi nama PELANGGAN (bukan pegawai lagi —
-      // pegawai pengirim ditampilkan lewat tab terpisah di `_HeldCard`,
-      // lihat `employeeName` di payload).
+      // Item 24d/24b susulan — pelanggan (bila pegawai/owner/asisten
+      // pengirim sempat memilih di keranjangnya) ikut lewat baris "Nama:"
+      // yang sama dgn Tempel Pesanan (lihat `encodeHandoff`). Item 4/57 —
+      // `customerId` (kalau ada & tervalidasi ada lokal, lihat
+      // `OrderParserService.parse`) ikut disertakan supaya penerima TIDAK
+      // perlu ubah dari "Umum" lalu pilih manual lagi. `label` kartu
+      // antrian jadi nama PELANGGAN (bukan nama pengirim — pengirim
+      // ditampilkan lewat tab terpisah di `_HeldCard`, lihat `employeeName`
+      // di payload).
       final customerName = parsed.customerName;
       final meta = (customerName != null && customerName.isNotEmpty)
-          ? CartMeta(customerName: customerName)
-          : const CartMeta();
+          ? CartMeta(
+              customerId: parsed.customerId,
+              customerName: customerName,
+              reservedLocalId: parsed.reservedLocalId,
+            )
+          : CartMeta(reservedLocalId: parsed.reservedLocalId);
       final payload = jsonEncode({
         'items': parsed.items.map((i) => i.toCartItem().toJson()).toList(),
         'meta': meta.toJson(),
@@ -1306,8 +1306,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       );
       if (!mounted) return;
       if (_scannerOpen) _closeScanner();
-      _showBanner('Pesanan dari $employeeName masuk antrian',
-          InlineBannerType.success);
+      _showBanner(
+          'Pesanan dari $employeeName masuk antrian', InlineBannerType.success);
       return;
     }
 
@@ -1494,25 +1494,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     }
   }
 
-  /// Item 24b — dispatch tap kartu antrian: pesanan handoff pegawai
-  /// (`awaitingPayment`) buka sheet verifikasi dulu (pegawai bacakan
-  /// barang, owner centang), pesanan ditahan biasa langsung lanjut seperti
-  /// sebelumnya (tidak ada yang perlu diverifikasi).
-  void _onHeldCardTap(HeldOrder order) {
-    final parsed = _parseHeldPayload(order.cartJson);
-    if (!parsed.awaitingPayment) {
-      _resumeHeld(order);
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _VerifyOrderSheet(
-        order: order,
-        onLanjut: () => _resumeHeld(order),
-      ),
-    );
-  }
+  /// Tap kartu antrian (ditahan biasa maupun handoff pegawai via QR) —
+  /// langsung resume ke keranjang, tanpa sheet verifikasi centang (fitur
+  /// itu dihapus: pengirim sudah menyusun barangnya sendiri, tidak perlu
+  /// dicek ulang lagi oleh penerima sebelum lanjut bayar).
+  void _onHeldCardTap(HeldOrder order) => _resumeHeld(order);
 
   Future<void> _resumeHeld(HeldOrder order) async {
     final parsed = _parseHeldPayload(order.cartJson);
@@ -1642,7 +1628,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
             ),
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1700,8 +1687,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                         onTap: () {
                           const options = [3, 5, 10];
                           final i = options.indexOf(_toastDurationSeconds);
-                          _setToastDuration(
-                              options[(i + 1) % options.length]);
+                          _setToastDuration(options[(i + 1) % options.length]);
                         },
                       ),
                     ],
@@ -1727,10 +1713,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
 
     final cart = ref.watch(cartProvider(_cartId));
     final cartNotifier = ref.read(cartProvider(_cartId).notifier);
+    // Item 55 — nomor nota (di-reserve `_CartMetaTab`) ditampilkan di cart
+    // bar; watch (bukan read) supaya bar ikut update begitu reservasi
+    // selesai async tanpa perlu rebuild dari trigger lain.
+    final cartMeta = ref.watch(cartMetaProvider(_cartId));
     final query = ref.watch(_kasirSearchProvider(_cartId));
     final isGrid = ref.watch(kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
-    final productsAsync = ref.watch(_kasirProductsProvider(query));
+    final selectedGroup = ref.watch(_kasirSelectedGroupProvider);
+    final productsAsync =
+        ref.watch(_kasirProductsProvider((query, selectedGroup)));
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -1786,6 +1778,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
             // Mode katalog: sembunyikan Antrian & Riwayat agar tak ambigu.
             showQueueAndHistory: !_isCatalogMode,
           ),
+          const _KasirCategoryChipRow(),
           Expanded(
             // Tap atau scroll di mana pun di bawah topbar keluar dari state
             // input pencarian (fokus hilang → kolom shrink lewat listener di
@@ -1851,48 +1844,65 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                     Expanded(
                       child: StepperActiveScope(
                         child: productsAsync.when(
-                        data: (prods) {
-                          if (prods.isEmpty) {
-                            return Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 56,
-                                    height: 56,
-                                    decoration: BoxDecoration(
-                                      color: cs.surfaceContainerLowest,
-                                      borderRadius: BorderRadius.circular(14),
+                          data: (prods) {
+                            if (prods.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        color: cs.surfaceContainerLowest,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Icon(Icons.inventory_2_outlined,
+                                          color: cs.onSurfaceVariant, size: 26),
                                     ),
-                                    child: Icon(Icons.inventory_2_outlined,
-                                        color: cs.onSurfaceVariant, size: 26),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    query.isEmpty
-                                        ? 'Belum ada produk'
-                                        : 'Produk tidak ditemukan',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: cs.onSurfaceVariant,
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      query.isEmpty
+                                          ? 'Belum ada produk'
+                                          : 'Produk tidak ditemukan',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: cs.onSurfaceVariant,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                          if (isGrid) {
-                            return GridView.builder(
-                              padding: const EdgeInsets.all(12),
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 180,
-                                mainAxisExtent: 138,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                              ),
+                                  ],
+                                ),
+                              );
+                            }
+                            if (isGrid) {
+                              return GridView.builder(
+                                padding: const EdgeInsets.all(12),
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 180,
+                                  mainAxisExtent: 138,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                ),
+                                itemCount: prods.length,
+                                itemBuilder: (_, i) => _ProductCard(
+                                  product: prods[i],
+                                  cartId: _cartId,
+                                  onTapBody: () => _openEntry(prods[i]),
+                                  onQuickAdd: _quickAdd,
+                                  onOpenEntry: () => _openEntry(prods[i]),
+                                  onBeforeTap: _markSkipSearchCollapse,
+                                ),
+                              );
+                            }
+                            return ListView.separated(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
                               itemCount: prods.length,
-                              itemBuilder: (_, i) => _ProductCard(
+                              separatorBuilder: (_, __) => Divider(
+                                  height: 1,
+                                  indent: 62,
+                                  color: cs.outlineVariant),
+                              itemBuilder: (_, i) => _ProductListTile(
                                 product: prods[i],
                                 cartId: _cartId,
                                 onTapBody: () => _openEntry(prods[i]),
@@ -1901,28 +1911,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                 onBeforeTap: _markSkipSearchCollapse,
                               ),
                             );
-                          }
-                          return ListView.separated(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            itemCount: prods.length,
-                            separatorBuilder: (_, __) => Divider(
-                                height: 1,
-                                indent: 62,
-                                color: cs.outlineVariant),
-                            itemBuilder: (_, i) => _ProductListTile(
-                              product: prods[i],
-                              cartId: _cartId,
-                              onTapBody: () => _openEntry(prods[i]),
-                              onQuickAdd: _quickAdd,
-                              onOpenEntry: () => _openEntry(prods[i]),
-                              onBeforeTap: _markSkipSearchCollapse,
-                            ),
-                          );
-                        },
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (e, _) => Center(child: Text('Error: $e')),
-                      ),
+                          },
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (e, _) => Center(child: Text('Error: $e')),
+                        ),
                       ),
                     ),
                   ],
@@ -1953,6 +1946,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                         child: _CartMetaTab(
                           cartId: _cartId,
                           onHold: _holdCurrent,
+                          // `_isAddMode` sudah dipastikan false oleh guard
+                          // `if (!_isAddMode)` di atas — rute bayar SELALU
+                          // `/kasir/bayar` di sini (mode tambah belanjaan
+                          // punya rute sendiri & TIDAK menampilkan tab ini).
+                          onBayar: () => context.push('/kasir/bayar'),
                         ),
                       ),
                     // Geser ke atas untuk membuka sheet keranjang.
@@ -1974,6 +1972,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             : cartNotifier
                                 .effectiveQtyFor(cartNotifier.lastTouchedItem!),
                         showSwipeHint: _swipeHintVisible,
+                        orderNumber:
+                            _isAddMode ? null : cartMeta.displayOrderNumber,
                       ),
                     ),
                   ],
@@ -2079,6 +2079,66 @@ const _kSearchAnimCurve = Curves.easeOutCubic;
 /// sebagai jarak field cari↔tombol scan saat collapsed, supaya "rapi"
 /// (jaraknya konsisten, bukan menimpa tombol scan).
 const _kTbGap = 4.0;
+
+/// Item 54 — chip kategori tab Kasir: tombol kecil di bawah topbar, tap
+/// untuk filter (single-select — union kategori utama + tag tambahan,
+/// lihat [AppDatabase.watchProductsForKasir]), hold+drag untuk reorder
+/// (tersimpan ke `sortOrder` via [AppDatabase.reorderProductGroups]).
+/// Kosong total (tidak ada kategori bernama) → tidak render apa pun.
+class _KasirCategoryChipRow extends ConsumerWidget {
+  const _KasirCategoryChipRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groupsAsync = ref.watch(_kasirGroupsProvider);
+    final groups = groupsAsync.valueOrNull ?? const <ProductGroup>[];
+    if (groups.isEmpty) return const SizedBox.shrink();
+    final selected = ref.watch(_kasirSelectedGroupProvider);
+    final scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      height: 40,
+      child: ReorderableListView(
+        scrollDirection: Axis.horizontal,
+        buildDefaultDragHandles: false,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        onReorder: (oldIndex, newIndex) {
+          final ids = groups.map((g) => g.id).toList();
+          if (newIndex > oldIndex) newIndex--;
+          final moved = ids.removeAt(oldIndex);
+          ids.insert(newIndex, moved);
+          ref.read(databaseProvider).reorderProductGroups(ids);
+        },
+        children: [
+          for (var i = 0; i < groups.length; i++)
+            // Delayed (hold-then-drag), bukan drag-langsung — supaya tap
+            // singkat biasa tetap terdeteksi FilterChip.onSelected (drag
+            // langsung akan "mencuri" gestur tap chip).
+            ReorderableDelayedDragStartListener(
+              key: ValueKey(groups[i].id),
+              index: i,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: FilterChip(
+                  label: Text(groups[i].name!,
+                      style: const TextStyle(fontSize: 12)),
+                  selected: selected == groups[i].id,
+                  onSelected: (_) => ref
+                      .read(_kasirSelectedGroupProvider.notifier)
+                      .state = selected == groups[i].id ? null : groups[i].id,
+                  visualDensity: VisualDensity.compact,
+                  selectedColor: scheme.primaryContainer,
+                  checkmarkColor: scheme.onPrimaryContainer,
+                  side: BorderSide.none,
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 class _KasirTopbar extends StatefulWidget {
   const _KasirTopbar({
@@ -2960,10 +3020,17 @@ class _CartBar extends StatelessWidget {
     this.lastItem,
     this.lastEffQty = 0,
     this.showSwipeHint = false,
+    this.orderNumber,
   });
 
   final int total;
   final int count;
+
+  /// Item 55 — segmen terakhir nomor nota (mis. "17"), null selama belum
+  /// direservasi (keranjang baru saja mulai diisi) atau mode tambah
+  /// belanjaan (memakai nomor nota transaksi ASLI, ditampilkan di struk,
+  /// bukan di sini).
+  final String? orderNumber;
 
   /// Produk terakhir yang ditambahkan/disentuh — ditampilkan ringkas di bawah
   /// total. null bila tidak relevan (mis. mode tambah belanjaan).
@@ -2999,75 +3066,90 @@ class _CartBar extends StatelessWidget {
         ),
       ),
       padding: EdgeInsets.fromLTRB(14, 12, 14, 12 + bottomPad),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          // Total diperbesar & di-center, dengan badge jumlah item di kiri.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
+          Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ItemCountBadge(count: count),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+              // Total diperbesar & di-center, dengan badge jumlah item di kiri.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    'Total',
+                  ItemCountBadge(count: count),
+                  const SizedBox(width: 10),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        formatRupiah(total),
+                        style: AppTheme.numStyle(context,
+                            size: 23, weight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (lastParts != null) ...[
+                const SizedBox(height: 5),
+                Text.rich(
+                  TextSpan(
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: cs.onSurfaceVariant,
                     ),
+                    children: [
+                      TextSpan(text: lastParts.prefix),
+                      TextSpan(
+                        text: lastParts.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextSpan(text: lastParts.suffix),
+                    ],
                   ),
-                  Text(
-                    formatRupiah(total),
-                    style: AppTheme.numStyle(context,
-                        size: 23, weight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          if (lastParts != null) ...[
-            const SizedBox(height: 5),
-            Text.rich(
-              TextSpan(
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant,
-                ),
-                children: [
-                  TextSpan(text: lastParts.prefix),
-                  TextSpan(
-                    text: lastParts.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  TextSpan(text: lastParts.suffix),
-                ],
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          if (showSwipeHint) ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.keyboard_arrow_up_rounded,
-                    size: 14, color: cs.onSurfaceVariant.withOpacity(0.5)),
-                const SizedBox(width: 3),
-                Text(
-                  'Geser ke atas untuk lihat keranjang',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant.withOpacity(0.5)),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
+              if (showSwipeHint) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.keyboard_arrow_up_rounded,
+                        size: 14, color: cs.onSurfaceVariant.withOpacity(0.5)),
+                    const SizedBox(width: 3),
+                    Text(
+                      'Geser ke atas untuk lihat keranjang',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant.withOpacity(0.5)),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+          if (orderNumber != null)
+            Positioned(
+              top: -2,
+              right: 0,
+              child: Text('#$orderNumber',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurfaceVariant)),
             ),
-          ],
         ],
       ),
     );
@@ -3310,10 +3392,25 @@ class _CatalogItemsSheet extends ConsumerWidget {
 /// Tab berbentuk trapesium (seperti label folder) yang menempel di atas cart
 /// bar. Berisi chip pelanggan, chip pegawai, dan tombol tahan pesanan.
 class _CartMetaTab extends ConsumerWidget {
-  const _CartMetaTab({required this.cartId, required this.onHold});
+  const _CartMetaTab(
+      {required this.cartId, required this.onHold, required this.onBayar});
 
   final String cartId;
   final VoidCallback onHold;
+  final VoidCallback onBayar;
+
+  /// Item 55 — reserve nomor nota SEKALI begitu tab ini pertama kali
+  /// terlihat dgn keranjang berisi (tab cuma dirender saat cart non-kosong,
+  /// lihat `bottomNavigationBar: cart.isEmpty ? null : ...` di parent).
+  /// `ensureReservedLocalId` sendiri no-op kalau sudah punya nomor/sedang
+  /// reserve, aman dipanggil ulang tiap build.
+  void _ensureReserved(WidgetRef ref) {
+    final device = ref.read(deviceProvider);
+    final db = ref.read(databaseProvider);
+    ref
+        .read(cartMetaProvider(cartId).notifier)
+        .ensureReservedLocalId(() => db.reserveLocalId(device.deviceCode));
+  }
 
   Future<void> _pickCustomer(BuildContext context, WidgetRef ref) async {
     final meta = ref.read(cartMetaProvider(cartId));
@@ -3336,6 +3433,12 @@ class _CartMetaTab extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final meta = ref.watch(cartMetaProvider(cartId));
     final notifier = ref.read(cartMetaProvider(cartId).notifier);
+    // Item 56 — pegawai TANPA izin `terima_pembayaran` tidak dapat segmen
+    // Bayar sama sekali (tombol utamanya di cart sheet sudah jadi "Kirim ke
+    // Owner/Asisten" — lihat cart_sheet.dart). Owner/asisten/pegawai
+    // berizin selalu dapat.
+    final needsGate = ref.watch(needsPaymentGateProvider).valueOrNull ?? false;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureReserved(ref));
     const slant = 14.0;
 
     return Transform.translate(
@@ -3392,6 +3495,37 @@ class _CartMetaTab extends ConsumerWidget {
                   ),
                 ),
               ),
+              // Item 56 — segmen "Bayar" terracotta, menempel setelah Tahan
+              // (Varian A) — tap langsung ke layar bayar (`/kasir/bayar`),
+              // TANPA lewat sheet keranjang dulu (checkout cepat).
+              if (!needsGate) ...[
+                const SizedBox(width: 4),
+                InkWell(
+                  onTap: onBayar,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.payments_outlined,
+                            size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text('Bayar',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -3676,15 +3810,34 @@ class _HeldCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              order.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                // Item 55 — nomor nota (di-reserve sejak keranjang diisi/
+                // ditahan), sama dgn yg tampil di cart bar.
+                if (parsed.meta.displayOrderNumber != null) ...[
+                  const SizedBox(width: 4),
+                  Text('#${parsed.meta.displayOrderNumber}',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurfaceVariant)),
+                ],
+              ],
             ),
             const SizedBox(height: 2),
             Text(
-              isHandoff ? '$itemCount item · siap dibayarkan' : '$itemCount item · $time',
+              isHandoff
+                  ? '$itemCount item · siap dibayarkan'
+                  : '$itemCount item · $time',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
@@ -3708,116 +3861,3 @@ class _HeldCard extends StatelessWidget {
   }
 }
 
-/// Item 24b — sheet verifikasi pesanan handoff pegawai sebelum lanjut bayar:
-/// pegawai bacakan barang, owner centang tiap yang cocok. Centangan
-/// persisted langsung ke `held_orders.cartJson` (bukan cuma state widget)
-/// supaya tidak hilang kalau owner sempat tertunda (mis. dipanggil pembeli
-/// lain). Murni 1 device (owner) — TIDAK ada mekanisme sync, dan checklist
-/// ini SELESAI tugasnya begitu "Lanjut ke Keranjang" ditekan (tidak
-/// menempel ke transaksi/struk setelahnya).
-class _VerifyOrderSheet extends ConsumerStatefulWidget {
-  const _VerifyOrderSheet({required this.order, required this.onLanjut});
-
-  final HeldOrder order;
-  final VoidCallback onLanjut;
-
-  @override
-  ConsumerState<_VerifyOrderSheet> createState() => _VerifyOrderSheetState();
-}
-
-class _VerifyOrderSheetState extends ConsumerState<_VerifyOrderSheet> {
-  late final List<CartItem> _items;
-  late List<bool> _checked;
-  late final CartMeta _meta;
-  late final String? _employeeName;
-
-  @override
-  void initState() {
-    super.initState();
-    final parsed = _parseHeldPayload(widget.order.cartJson);
-    _items = parsed.items;
-    _checked = List.of(parsed.checked);
-    // Pertahankan meta (nama pelanggan) & employeeName dari payload asli —
-    // menulis balik payload kosong di sini akan MENGHAPUS atribusi
-    // pelanggan/pegawai yang sudah kebawa lewat QR (bug yang pernah terjadi).
-    _meta = parsed.meta;
-    _employeeName = parsed.employeeName;
-  }
-
-  Future<void> _toggle(int i, bool value) async {
-    setState(() => _checked[i] = value);
-    final payload = jsonEncode({
-      'items': _items.map((c) => c.toJson()).toList(),
-      'meta': _meta.toJson(),
-      'awaitingPayment': true,
-      'employeeName': _employeeName,
-      'checked': _checked,
-    });
-    await ref.read(databaseProvider).updateHeldOrder(widget.order.id, payload);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final allChecked = _items.isNotEmpty && _checked.every((c) => c);
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 2),
-            child: Text('Verifikasi Pesanan · ${widget.order.label}',
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Text(
-              'Pegawai bacakan barang, centang tiap yang sudah dicek.',
-              style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
-            ),
-          ),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              itemCount: _items.length,
-              itemBuilder: (_, i) {
-                final item = _items[i];
-                final qtyLabel = item.qty % 1 == 0
-                    ? item.qty.toInt().toString()
-                    : item.qty.toString();
-                return CheckboxListTile(
-                  dense: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: _checked[i],
-                  onChanged: (v) => _toggle(i, v ?? false),
-                  title: Text(item.productName,
-                      style: const TextStyle(fontSize: 13.5)),
-                  subtitle: Text('$qtyLabel ${item.unitName}'
-                      '${item.itemNote != null && item.itemNote!.isNotEmpty ? ' · ${item.itemNote}' : ''}'),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  widget.onLanjut();
-                },
-                child: Text(allChecked
-                    ? 'Lanjut ke Keranjang'
-                    : 'Lanjut ke Keranjang (belum semua dicentang)'),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

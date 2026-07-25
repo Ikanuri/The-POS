@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
@@ -118,6 +119,38 @@ void main() {
             'sampai app di-restart manual');
 
     await sub.cancel();
+    await db.close();
+  });
+
+  test(
+      'dumpAllTables + restoreFromDump: toko yang pernah pakai kategori-'
+      'tambahan (product_group_tags) TIDAK gagal dgn FOREIGN KEY constraint '
+      'saat restore (bug nyata: DELETE FROM product_groups ditolak SQLite)',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.into(db.productGroups).insert(
+        ProductGroupsCompanion.insert(id: const Value(1), name: const Value('Sembako')));
+    await db.into(db.products).insert(
+        ProductsCompanion.insert(id: 'p1', name: 'Gula Pasir'));
+    // Kategori TAMBAHAN (Item 54) — baris ini yg dulu bikin restore gagal
+    // krn tabelnya lupa dimasukkan ke `_allTables`.
+    await db.into(db.productGroupTags).insert(
+        ProductGroupTagsCompanion.insert(productId: 'p1', groupId: 1));
+
+    final dump = await db.dumpAllTables();
+    expect(dump['product_group_tags'], isNotEmpty,
+        reason: 'harus ikut ter-backup, bukan cuma tidak error saat restore');
+
+    // Restore dump yang SAMA ke DB yang sama (skenario nyata: backup lalu
+    // restore file itu lagi) — dulu ini melempar SqliteException(787) di
+    // "DELETE FROM product_groups" krn baris product_group_tags lama tidak
+    // pernah ikut dihapus duluan.
+    await db.restoreFromDump(dump);
+
+    final tags = await db.select(db.productGroupTags).get();
+    expect(tags, hasLength(1));
+    expect(tags.single.productId, 'p1');
+
     await db.close();
   });
 }

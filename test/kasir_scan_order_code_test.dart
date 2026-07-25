@@ -281,33 +281,4 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
-
-  testWidgets(
-      'susulan Item 24d — centang di sheet Verifikasi Pesanan TIDAK '
-      'menghapus atribusi pelanggan/pegawai yang sudah kebawa lewat QR '
-      '(bug lama: _toggle menulis balik meta kosong)', (tester) async {
-    final db = await seedProduct();
-    addTearDown(() async => db.close());
-
-    await _pumpKasirWithScannerOpen(tester, db);
-    fake.emitBarcode('#PSN:u1=2;\nPegawai: Budi\nNama: Siti');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.pause_circle_outline_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Siti'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(Checkbox).first);
-    await tester.pumpAndSettle();
-
-    final rows = await db.select(db.heldOrders).get();
-    expect(rows.first.cartJson, contains('"customerName":"Siti"'),
-        reason: 'meta pelanggan harus tetap ada setelah centang, TIDAK ditimpa kosong');
-    expect(rows.first.cartJson, contains('"employeeName":"Budi"'),
-        reason: 'employeeName juga harus tetap ada setelah centang');
-
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 10));
-  });
 }

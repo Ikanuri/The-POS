@@ -18,6 +18,15 @@ import 'package:drift/drift.dart';
 class SyncUploadQueue extends Table {
   TextColumn get id => text()();
   TextColumn get fromIp => text()();
+
+  /// Identitas device pengirim (mis. 'K1', 'K2') — dipakai sbg kunci "satu
+  /// slot per pengirim", MENGGANTIKAN `fromIp` mentah (lihat dok
+  /// `AppDatabase.enqueueSyncUpload`). Bug nyata: dua device BEDA yang
+  /// kebetulan tersambung dari alamat IP yang sama (hotspot HP, pool DHCP
+  /// kecil — setup umum toko kecil) saling menimpa antrian sync satu sama
+  /// lain kalau kuncinya masih `fromIp`. Nullable krn klien versi lama
+  /// (belum kirim `deviceCode` di payload sync) fallback ke `fromIp`.
+  TextColumn get deviceCode => text().nullable()();
   DateTimeColumn get arrivedAt => dateTime().withDefault(currentDateAndTime)();
   TextColumn get tablesJson => text()();
   DateTimeColumn get since => dateTime()();
