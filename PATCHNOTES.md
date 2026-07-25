@@ -8,6 +8,27 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 25 Juli 2026
+
+### ✨ Fitur Baru
+- **Nama produk panjang di keranjang tidak lagi terpotong** — sekarang
+  boleh tampil sampai 2 baris.
+- **Stock Opname bisa dihitung pakai satuan yang lebih nyaman** — produk
+  yang punya beberapa satuan (misalnya Pcs/Dus) sekarang bisa dihitung
+  langsung dalam satuan besarnya (misalnya "10 dus"), otomatis dikonversi
+  ke satuan dasar. Produk dengan satu satuan saja tidak berubah sama
+  sekali.
+- **Cek Stok: pilih satuan tampilan untuk daftar Order Restock** — produk
+  berjenjang yang dicentang untuk restock sekarang bisa ditampilkan dalam
+  satuan pilihan (misalnya "2 dus" alih-alih "20 pcs") di teks yang
+  disalin/dikirim ke supplier.
+
+### 🛠️ Perbaikan
+- **Kategori produk (buat/ganti nama/hapus/urutkan) sekarang benar-benar
+  tersinkron ke HP kasir/asisten** — sebelumnya kategori baru yang dibuat
+  owner tidak pernah sampai ke perangkat lain, meski produk yang
+  ditugaskan ke kategori itu sudah tersinkron duluan.
+
 ## 24 Juli 2026
 
 ### 🛠️ Perbaikan
