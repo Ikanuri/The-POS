@@ -54,6 +54,15 @@ final _allowNegativeStockProvider = FutureProvider<bool>((ref) async {
   return v == '1';
 });
 
+/// Item susulan usulan user: jeda pelacakan stok semua produk sementara
+/// (mis. sedang tidak sempat rapikan data stok, tapi kasir tetap perlu
+/// jualan tanpa peringatan/pengurangan stok). Lihat
+/// `AppDatabase.pauseStockTrackingForAllProducts`.
+final _stockPauseProvider = FutureProvider<bool>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return db.isStockTrackingPaused();
+});
+
 class PengaturanScreen extends ConsumerWidget {
   const PengaturanScreen({super.key});
 
@@ -360,6 +369,22 @@ class PengaturanScreen extends ConsumerWidget {
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => context.push('/pengaturan/arsip'),
                         ),
+                        Consumer(builder: (context, ref, _) {
+                          final paused =
+                              ref.watch(_stockPauseProvider).valueOrNull ??
+                                  false;
+                          return SwitchListTile(
+                            secondary:
+                                const Icon(Icons.inventory_2_outlined),
+                            title: const Text('Jeda Pelacakan Stok'),
+                            subtitle: Text(paused
+                                ? 'Aktif — semua produk yang tadinya dilacak sementara jadi non-stok'
+                                : 'Set semua produk yang masih dilacak jadi non-stok sementara'),
+                            value: paused,
+                            onChanged: (v) =>
+                                _toggleStockPause(context, ref, v),
+                          );
+                        }),
                       ],
                     ),
                   ),
@@ -531,6 +556,45 @@ class PengaturanScreen extends ConsumerWidget {
     }
     thresholdCtrl.dispose();
     perCtrl.dispose();
+  }
+
+  Future<void> _toggleStockPause(
+      BuildContext context, WidgetRef ref, bool turnOn) async {
+    final db = ref.read(databaseProvider);
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (turnOn) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Jeda Pelacakan Stok?'),
+          content: const Text(
+              'SEMUA produk yang saat ini masih dilacak stoknya akan '
+              'ditandai non-stok sementara — kasir bisa jual tanpa '
+              'peringatan/pengurangan stok. Produk yang sudah non-stok '
+              'sebelumnya (mis. varian jasa) tidak ikut tersentuh. Bisa '
+              'dikembalikan kapan saja lewat toggle yang sama.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Jeda')),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      final count = await db.pauseStockTrackingForAllProducts();
+      ref.invalidate(_stockPauseProvider);
+      messenger.showSnackBar(SnackBar(
+          content: Text('$count produk ditandai non-stok sementara')));
+    } else {
+      final count = await db.resumeStockTrackingForAllProducts();
+      ref.invalidate(_stockPauseProvider);
+      messenger.showSnackBar(
+          SnackBar(content: Text('Pelacakan stok $count produk dipulihkan')));
+    }
   }
 }
 

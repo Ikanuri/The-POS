@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -1881,6 +1882,51 @@ class AppDatabase extends _$AppDatabase {
           ProductsCompanion(
               markedOutOfStock: Value(value),
               updatedAt: Value(DateTime.now())));
+
+  // ───────────────────────── Jeda pelacakan stok (sementara) ───────────────
+
+  static const _stockPauseSnapshotKey = 'stock_pause_snapshot';
+
+  Future<bool> isStockTrackingPaused() async {
+    final raw = await getSetting(_stockPauseSnapshotKey);
+    return raw != null && raw.isNotEmpty;
+  }
+
+  /// Set SEMUA satuan produk yang saat ini masih dilacak stoknya jadi
+  /// non-stok, sekaligus (idempoten — panggilan kedua saat sudah jeda
+  /// adalah no-op, mengembalikan 0). Daftar id yang diubah disimpan sbg
+  /// snapshot di `app_settings` supaya [resumeStockTrackingForAllProducts]
+  /// bisa mengembalikan PERSIS satuan yang sama — satuan yang MEMANG sudah
+  /// non-stok sebelumnya (mis. varian jasa) sengaja tidak ikut tersentuh
+  /// sama sekali, baik saat jeda maupun saat dipulihkan.
+  Future<int> pauseStockTrackingForAllProducts() async {
+    if (await isStockTrackingPaused()) return 0;
+    final tracked = await (select(productUnits)
+          ..where((t) => t.isNonStock.equals(false)))
+        .get();
+    final ids = tracked.map((u) => u.id).toList();
+    await setSetting(_stockPauseSnapshotKey, jsonEncode(ids));
+    if (ids.isNotEmpty) {
+      await (update(productUnits)..where((t) => t.id.isIn(ids)))
+          .write(const ProductUnitsCompanion(isNonStock: Value(true)));
+    }
+    return ids.length;
+  }
+
+  /// Kembalikan pelacakan stok utk satuan yang diubah oleh
+  /// [pauseStockTrackingForAllProducts] (dan HANYA itu — lihat dok di sana).
+  /// No-op (return 0) bila sedang tidak dijeda.
+  Future<int> resumeStockTrackingForAllProducts() async {
+    final raw = await getSetting(_stockPauseSnapshotKey);
+    if (raw == null) return 0;
+    final ids = (jsonDecode(raw) as List).cast<String>();
+    if (ids.isNotEmpty) {
+      await (update(productUnits)..where((t) => t.id.isIn(ids)))
+          .write(const ProductUnitsCompanion(isNonStock: Value(false)));
+    }
+    await setSetting(_stockPauseSnapshotKey, '');
+    return ids.length;
+  }
 
   // ───────────────────────── Transaction save ─────────────────────────
 

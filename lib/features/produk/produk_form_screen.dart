@@ -215,6 +215,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           ratioToBase: u.ratioToBase,
           price: baseTier.price,
           costPrice: baseTier.costPrice,
+          isNonStock: u.isNonStock,
           extraTiers: extraTiers,
           altPrices: altPriceEntries,
           barcode: barcodes
@@ -402,7 +403,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 unitTypeId: Value(u.unitTypeId),
                 isBaseUnit: Value(u.isBaseUnit),
                 ratioToBase: Value(u.ratioToBase),
-                isNonStock: const Value(false),
+                isNonStock: Value(u.isNonStock),
                 // Ambang stok menipis hanya di satuan dasar (Item 11).
                 minStock: Value(u.isBaseUnit ? minStockVal : null),
               ))
@@ -1318,6 +1319,7 @@ class _UnitEntry {
     required this.ratioToBase,
     required this.price,
     required this.costPrice,
+    this.isNonStock = false,
     List<_TierEntry>? extraTiers,
     List<_AltPriceEntry>? altPrices,
     this.barcode,
@@ -1330,6 +1332,7 @@ class _UnitEntry {
   double ratioToBase;
   int price;
   int costPrice;
+  bool isNonStock;
   List<_TierEntry> extraTiers;
   List<_AltPriceEntry> altPrices;
   String? barcode;
@@ -1340,6 +1343,7 @@ class _UnitEntry {
     double? ratioToBase,
     int? price,
     int? costPrice,
+    bool? isNonStock,
     List<_TierEntry>? extraTiers,
     List<_AltPriceEntry>? altPrices,
     String? barcode,
@@ -1351,6 +1355,7 @@ class _UnitEntry {
         ratioToBase: ratioToBase ?? this.ratioToBase,
         price: price ?? this.price,
         costPrice: costPrice ?? this.costPrice,
+        isNonStock: isNonStock ?? this.isNonStock,
         extraTiers: extraTiers ?? this.extraTiers,
         altPrices: altPrices ?? this.altPrices,
         barcode: barcode ?? this.barcode,
@@ -1817,6 +1822,21 @@ class _UnitCardState extends State<_UnitCard> {
                   ),
                 ),
               ],
+            ),
+
+            // ── Lacak stok ───────────────────────────────────────────────────
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: !widget.entry.isNonStock,
+              onChanged: widget.readOnly
+                  ? null
+                  : (v) => widget.onChanged(
+                      widget.entry.copyWith(isNonStock: !v)),
+              title: const Text('Lacak stok', style: TextStyle(fontSize: 14)),
+              subtitle: const Text(
+                  'Matikan bila satuan ini tidak perlu dihitung stok (mis. jasa)',
+                  style: TextStyle(fontSize: 11)),
             ),
 
             // ── Grosir tiers ─────────────────────────────────────────────────
