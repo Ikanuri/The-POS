@@ -440,7 +440,7 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 
 ---
 
-## Item 52 — "Laci Meja": Titip/Ketinggalan, Pinjaman Barang, Pre-order (26 Juli, rancangan FINAL, siap eksekusi — sempat dicoba, TERHENTI di migrasi skema krn bug alat sandbox, lihat docs/HANDOFF.md)
+## Item 52 — "Laci Meja": Titip/Ketinggalan, Pinjaman Barang, Pre-order (26 Juli, rancangan FINAL, SIAP EKSEKUSI — tidak ada lagi hambatan alat, codegen sudah normal)
 
 **Konteks**: usulan user bertahap lewat diskusi panjang (bukan spek awal
 sekali jadi) — 3 fitur "catatan operasional harian" toko, digabung jadi
@@ -585,7 +585,7 @@ support ini native) → muncul menu kecil di atas ikon: "Buka Kasir" /
   paralel), prioritaskan TIDAK menyentuh alur usulan produk yg sudah
   matang & banyak bug-fix nyata di baliknya.
 
-### Rancangan skema (sempat ditulis, DIBATALKAN krn bug codegen — lihat HANDOFF.md, tulis ulang persis ini saat lanjut)
+### Rancangan skema (tulis persis ini saat lanjut)
 
 ```dart
 // lib/core/database/tables/laci_meja_tables.dart
@@ -650,9 +650,14 @@ requiresDeposit)` di blok `if (from < 22)`.
 ### Urutan eksekusi disarankan (per fase, masing² diverifikasi sblm lanjut — disiplin sesi ini)
 
 1. Skema + migrasi (di atas) → **jalankan `dart run build_runner build
-   --delete-conflicting-outputs` DULU, pastikan berhasil, sebelum tulis
-   kode lain apa pun** (lihat HANDOFF.md soal bug sandbox yg sempat
-   menghentikan ini).
+   --delete-conflicting-outputs` DULU, pastikan `app_database.g.dart`
+   benar-benar ikut berubah, sebelum tulis kode lain apa pun.** Kalau
+   ternyata tidak berubah padahal build "Succeeded", cek dengan
+   `dart run drift_dev identify-databases` — output kosong = anotasi
+   `@DriftDatabase` terlepas dari `class AppDatabase` lagi (lihat
+   docs/HANDOFF.md; sudah dipagari `test/drift_codegen_in_sync_test.dart`).
+   Ingat: menambah tabel baru berarti menambah nama class ke daftar di
+   dalam blok `@DriftDatabase(tables: [...])` juga.
 2. DB layer: CRUD dasar 3 tabel (create/list/tandai-selesai) + test DB
    murni.
 3. Sync: masuk `dumpSince`/`clientMergeableTables`, + jalur usulan
@@ -689,10 +694,9 @@ requiresDeposit)` di blok `if (from < 22)`.
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
 7. **Item 52** ("Laci Meja" — Titip/Ketinggalan, Pinjaman, Pre-order) —
-   rancangan FINAL siap eksekusi, SEMPAT dicoba tapi terhenti di langkah
-   migrasi skema krn bug alat codegen Drift di sandbox sesi itu (BUKAN
-   bug kode/rancangan — lihat docs/HANDOFF.md utk bukti lengkap & cara
-   cek cepat di sesi baru). Semua perubahan source sudah dibatalkan
-   bersih. Detail rancangan lengkap (skema, alur, business rules,
-   urutan eksekusi per fase) di Item 52 di atas — jangan didesain ulang,
-   langsung eksekusi dari fase 1.
+   rancangan FINAL siap eksekusi, **tidak ada lagi hambatan alat**
+   (bug codegen Drift yang sempat menghentikannya sudah ditemukan &
+   diperbaiki — akarnya anotasi `@DriftDatabase` terlepas dari
+   class-nya, lihat docs/HANDOFF.md). Detail rancangan lengkap (skema,
+   alur, business rules, urutan eksekusi per fase) di Item 52 di atas —
+   jangan didesain ulang, langsung eksekusi dari fase 1.
