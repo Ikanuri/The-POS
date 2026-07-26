@@ -21,6 +21,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   memang sudah non-stok sejak awal, mis. jasa, tidak ikut berubah).
 
 ### 🛠️ Perbaikan
+- **Nominal kembalian di struk (dalam aplikasi) sekarang lebih menonjol
+  (tebal)** — supaya kasir tidak salah lihat berapa uang kembali yang
+  harus diserahkan sekarang, beda dari riwayat pembayaran di bawahnya yang
+  cuma catatan.
 - **Pembayaran yang dibatalkan tidak lagi ikut tercetak/dibagikan di
   struk.** Dulu kalau ada pembayaran yang salah lalu dibatalkan (mis. salah
   ketik nominal), baris itu tetap ikut tercetak di struk kertas & struk

@@ -5,10 +5,21 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 26 Juli 2026 — commit `a64f1bf` (SELESAI, terverifikasi):
-lanjutan langsung dari sesi yang sama (sync host→klien, barcode Amplop,
-restore-backup, struk pembayaran dibatalkan) — user tanya fitur non-stok
-produk utama, lalu minta jeda stok semua produk sementara._
+_Update sesi 26 Juli 2026 — commit `256f61c` (SELESAI, terverifikasi):
+lanjutan langsung dari sesi yang sama — setelah fitur non-stok produk
+utama & jeda stok, user minta kembalian terakhir di struk in-app di-bold._
+
+## Fix: kembalian terakhir di Ringkasan struk in-app di-bold (26 Juli)
+
+User: "di struk in app, kembalian terakhir (bukan riwayat) itu
+highlight/bold". `_ChangeTakenRow` (widget yg sama dipakai di 2 tempat:
+baris Ringkasan atas & baris per-pembayaran di kartu Riwayat Pembayaran)
+dapat parameter `bold` baru (default false — TIDAK mengubah tampilan
+Riwayat Pembayaran), di-set `true` HANYA di baris Ringkasan (nominal yg
+harus benar-benar diserahkan sekarang, beda dari histori). Test
+`receipt_change_taken_bold_test.dart` memverifikasi 2 `Text('Kembalian')`
+yg match `find.text('Kembalian')` — pertama (Ringkasan) harus `w700`,
+kedua (Riwayat Pembayaran) harus TETAP normal.
 
 ## Fitur: non-stok produk utama + jeda stok semua produk (26 Juli)
 
@@ -505,12 +516,12 @@ vs `Color(0xffebe8e0)` (netral) saat bug direproduksi.
 
 ## Status test suite
 
-`flutter test` PENUH: **734 test**. Run terakhir (sesi ini): 2 gagal
-(`migration_v9_test.dart`, `migration_v18_test.dart`) — TIDAK terkait
-perubahan sesi ini (tak menyentuh migrasi/skema sama sekali), keduanya
-lolos bersih saat dijalankan sendiri; pola sama dgn flake full-run yg sudah
-tercatat (test acak beda-beda tiap run, selalu hijau saat isolasi — lihat
-paragraf flake port di bawah). `flutter analyze` bersih (0 issue).
+`flutter test` PENUH: **736 test, SEMUA hijau** (run terakhir sesi ini
+bersih). Run sebelumnya sempat 2 gagal (`migration_v9_test.dart`,
+`migration_v18_test.dart`, tak terkait perubahan kode sama sekali) — pola
+flake full-run yg sudah tercatat (test acak beda-beda tiap run, selalu
+hijau saat isolasi — lihat paragraf flake port di bawah). `flutter
+analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
 terakhir bersih): `SocketException: Address already in use, port = 8625`. **8625 itu port sync TETAP milik app**
