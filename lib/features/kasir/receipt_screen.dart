@@ -2019,6 +2019,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   formatRupiah(_latestPayment!.changeGiven),
                               taken: _latestPayment!.changeTaken,
                               color: scheme.tertiary,
+                              bold: true,
                               onChanged: isVoid
                                   ? null
                                   : (v) => _toggleChangeTaken(
@@ -2905,15 +2906,23 @@ class _ChangeTakenRow extends StatelessWidget {
     required this.taken,
     required this.color,
     required this.onChanged,
+    this.bold = false,
   });
 
   final String amount;
   final bool taken;
   final Color color;
   final ValueChanged<bool>? onChanged;
+  // Dilaporkan user: kembalian TERAKHIR (baris ringkasan atas, bukan baris
+  // per-pembayaran di kartu Riwayat Pembayaran) perlu menonjol — nominal
+  // yang harus benar-benar diserahkan ke pelanggan sekarang, beda dari
+  // riwayat pembayaran yang cuma catatan historis.
+  final bool bold;
 
   @override
   Widget build(BuildContext context) {
+    final style = TextStyle(
+        color: color, fontWeight: bold ? FontWeight.w700 : null);
     return InkWell(
       onTap: onChanged == null ? null : () => onChanged!(!taken),
       borderRadius: BorderRadius.circular(8),
@@ -2936,10 +2945,10 @@ class _ChangeTakenRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 2),
-                Text('Kembalian', style: TextStyle(color: color)),
+                Text('Kembalian', style: style),
               ],
             ),
-            Text(amount, style: TextStyle(color: color)),
+            Text(amount, style: style),
           ],
         ),
       ),
