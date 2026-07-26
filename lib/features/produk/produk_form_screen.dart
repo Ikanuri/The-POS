@@ -216,6 +216,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           price: baseTier.price,
           costPrice: baseTier.costPrice,
           isNonStock: u.isNonStock,
+          requiresDeposit: u.requiresDeposit,
           extraTiers: extraTiers,
           altPrices: altPriceEntries,
           barcode: barcodes
@@ -404,6 +405,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 isBaseUnit: Value(u.isBaseUnit),
                 ratioToBase: Value(u.ratioToBase),
                 isNonStock: Value(u.isNonStock),
+                requiresDeposit: Value(u.requiresDeposit),
                 // Ambang stok menipis hanya di satuan dasar (Item 11).
                 minStock: Value(u.isBaseUnit ? minStockVal : null),
               ))
@@ -1320,6 +1322,7 @@ class _UnitEntry {
     required this.price,
     required this.costPrice,
     this.isNonStock = false,
+    this.requiresDeposit = false,
     List<_TierEntry>? extraTiers,
     List<_AltPriceEntry>? altPrices,
     this.barcode,
@@ -1333,6 +1336,10 @@ class _UnitEntry {
   int price;
   int costPrice;
   bool isNonStock;
+
+  /// Item 52 ("Laci Meja") — produk model tukar-wadah (LPG, galon, dst):
+  /// antri stok kosong WAJIB titip wadah fisik sbg jaminan.
+  bool requiresDeposit;
   List<_TierEntry> extraTiers;
   List<_AltPriceEntry> altPrices;
   String? barcode;
@@ -1344,6 +1351,7 @@ class _UnitEntry {
     int? price,
     int? costPrice,
     bool? isNonStock,
+    bool? requiresDeposit,
     List<_TierEntry>? extraTiers,
     List<_AltPriceEntry>? altPrices,
     String? barcode,
@@ -1356,6 +1364,7 @@ class _UnitEntry {
         price: price ?? this.price,
         costPrice: costPrice ?? this.costPrice,
         isNonStock: isNonStock ?? this.isNonStock,
+        requiresDeposit: requiresDeposit ?? this.requiresDeposit,
         extraTiers: extraTiers ?? this.extraTiers,
         altPrices: altPrices ?? this.altPrices,
         barcode: barcode ?? this.barcode,
@@ -1836,6 +1845,23 @@ class _UnitCardState extends State<_UnitCard> {
               title: const Text('Lacak stok', style: TextStyle(fontSize: 14)),
               subtitle: const Text(
                   'Matikan bila satuan ini tidak perlu dihitung stok (mis. jasa)',
+                  style: TextStyle(fontSize: 11)),
+            ),
+
+            // ── Butuh Jaminan Fisik (Item 52 — Laci Meja/Pre-order) ──────────
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: widget.entry.requiresDeposit,
+              onChanged: widget.readOnly
+                  ? null
+                  : (v) => widget.onChanged(
+                      widget.entry.copyWith(requiresDeposit: v)),
+              title: const Text('Butuh Jaminan Fisik saat Antri',
+                  style: TextStyle(fontSize: 14)),
+              subtitle: const Text(
+                  'Aktifkan utk produk tukar-wadah (mis. LPG, galon) — antri '
+                  'stok kosong wajib titip wadah, bukan cuma nomor urut',
                   style: TextStyle(fontSize: 11)),
             ),
 
