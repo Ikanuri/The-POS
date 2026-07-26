@@ -806,8 +806,15 @@ class PrinterService {
     // kenal method itu shg tampil sbg string mentah "edit"/"retur" di struk
     // fisik. Difilter di sini (share pakai pola sama, in-app tetap tampilkan
     // semua).
-    final visiblePayments =
-        payments.where((p) => p.method != 'edit' && p.method != 'retur');
+    //
+    // Dilaporkan user: pembayaran yang DIBATALKAN ikut tercetak di sini —
+    // struk kertas/gambar tidak bisa menampilkan coretan "Dibatalkan" spt
+    // kartu Riwayat Pembayaran in-app, jadi pelanggan melihat beberapa baris
+    // "Tunai" identik tanpa tahu sebagian sudah batal, seolah dibayar
+    // berkali-kali. `!p.voided` menutup ini — in-app (kartu Riwayat
+    // Pembayaran, bukan jalur cetak ini) tetap tampilkan semua.
+    final visiblePayments = payments
+        .where((p) => p.method != 'edit' && p.method != 'retur' && !p.voided);
     final showTimeline = visiblePayments.length > 1 ||
         (visiblePayments.length == 1 &&
             visiblePayments.first.paidAt != tx.createdAt);
