@@ -409,8 +409,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
       markedOutOfStock: attachedDatabase.typeMapping.read(
           DriftSqlType.bool, data['${effectivePrefix}marked_out_of_stock'])!,
-      locallyModified: attachedDatabase.typeMapping.read(
-          DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
+      locallyModified: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -442,6 +442,15 @@ class Product extends DataClass implements Insertable<Product> {
   /// fungsi + — itu wewenang izin "Izinkan Stok Minus"), tapi benar-benar
   /// menonaktifkan tombol tambah di katalog HTML statis.
   final bool markedOutOfStock;
+
+  /// Item 40 — true bila produk ini diedit LOKAL di device non-owner
+  /// (asisten/kasir) sejak terakhir diketahui identik dengan data host.
+  /// Dipakai `dumpLocalProposals()` utk kirim "usulan harga/produk" ke
+  /// owner via sync — TIDAK pernah di-set true di device owner (owner
+  /// adalah sumber kebenaran, tidak perlu mengusulkan ke diri sendiri).
+  /// Otomatis kembali false saat baris ini ditimpa oleh push resmi dari
+  /// host (mis. setelah owner setuju) — lihat AppDatabase.mergeRows,
+  /// row dari host SELALU bawa locally_modified=false.
   final bool locallyModified;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -853,6 +862,11 @@ class $ProductGroupsTable extends ProductGroups
 class ProductGroup extends DataClass implements Insertable<ProductGroup> {
   final int id;
   final String? name;
+
+  /// Item 54 — urutan tampil chip kategori di tab Kasir (drag reorder).
+  /// Semua baris lama default 0 setelah migrasi (belum pernah diurutkan
+  /// manual) — tie-break sekunder ke `name` menjaga urutan tetap stabil
+  /// sampai user benar-benar drag salah satu chip.
   final int sortOrder;
   const ProductGroup({required this.id, this.name, required this.sortOrder});
   @override
@@ -906,8 +920,7 @@ class ProductGroup extends DataClass implements Insertable<ProductGroup> {
     return ProductGroup(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
-      sortOrder:
-          data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
     );
   }
 
@@ -1015,8 +1028,8 @@ class $ProductGroupTagsTable extends ProductGroupTags
       'group_id', aliasedName, false,
       type: DriftSqlType.int,
       requiredDuringInsert: true,
-      defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'REFERENCES product_groups (id)'));
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES product_groups (id)'));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -1038,10 +1051,8 @@ class $ProductGroupTagsTable extends ProductGroupTags
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('product_id')) {
-      context.handle(
-          _productIdMeta,
-          productId.isAcceptableOrUnknown(
-              data['product_id']!, _productIdMeta));
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
     } else if (isInserting) {
       context.missing(_productIdMeta);
     }
@@ -1079,8 +1090,7 @@ class $ProductGroupTagsTable extends ProductGroupTags
   }
 }
 
-class ProductGroupTag extends DataClass
-    implements Insertable<ProductGroupTag> {
+class ProductGroupTag extends DataClass implements Insertable<ProductGroupTag> {
   final String productId;
   final int groupId;
   final DateTime createdAt;
@@ -5127,8 +5137,8 @@ class $TransactionItemsTable extends TransactionItems
           .read(DriftSqlType.int, data['${effectivePrefix}subtotal'])!,
       addedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}added_at']),
-      returnedAt: attachedDatabase.typeMapping.read(
-          DriftSqlType.dateTime, data['${effectivePrefix}returned_at']),
+      returnedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}returned_at']),
     );
   }
 
@@ -6437,8 +6447,7 @@ class ReservedOrderNumber extends DataClass
     implements Insertable<ReservedOrderNumber> {
   final String localId;
   final DateTime createdAt;
-  const ReservedOrderNumber(
-      {required this.localId, required this.createdAt});
+  const ReservedOrderNumber({required this.localId, required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -6479,8 +6488,7 @@ class ReservedOrderNumber extends DataClass
   ReservedOrderNumber copyWithCompanion(ReservedOrderNumbersCompanion data) {
     return ReservedOrderNumber(
       localId: data.localId.present ? data.localId.value : this.localId,
-      createdAt:
-          data.createdAt.present ? data.createdAt.value : this.createdAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
 
@@ -6531,9 +6539,7 @@ class ReservedOrderNumbersCompanion
   }
 
   ReservedOrderNumbersCompanion copyWith(
-      {Value<String>? localId,
-      Value<DateTime>? createdAt,
-      Value<int>? rowid}) {
+      {Value<String>? localId, Value<DateTime>? createdAt, Value<int>? rowid}) {
     return ReservedOrderNumbersCompanion(
       localId: localId ?? this.localId,
       createdAt: createdAt ?? this.createdAt,
@@ -11258,8 +11264,7 @@ class $SyncUploadQueueTable extends SyncUploadQueue
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
       'id', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _fromIpMeta =
-      const VerificationMeta('fromIp');
+  static const VerificationMeta _fromIpMeta = const VerificationMeta('fromIp');
   @override
   late final GeneratedColumn<String> fromIp = GeneratedColumn<String>(
       'from_ip', aliasedName, false,
@@ -11373,8 +11378,8 @@ class $SyncUploadQueueTable extends SyncUploadQueue
           .read(DriftSqlType.string, data['${effectivePrefix}tables_json'])!,
       since: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}since'])!,
-      tablesSummary: attachedDatabase.typeMapping.read(
-          DriftSqlType.string, data['${effectivePrefix}tables_summary'])!,
+      tablesSummary: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tables_summary'])!,
     );
   }
 
@@ -11388,6 +11393,14 @@ class SyncUploadQueueData extends DataClass
     implements Insertable<SyncUploadQueueData> {
   final String id;
   final String fromIp;
+
+  /// Identitas device pengirim (mis. 'K1', 'K2') — dipakai sbg kunci "satu
+  /// slot per pengirim", MENGGANTIKAN `fromIp` mentah (lihat dok
+  /// `AppDatabase.enqueueSyncUpload`). Bug nyata: dua device BEDA yang
+  /// kebetulan tersambung dari alamat IP yang sama (hotspot HP, pool DHCP
+  /// kecil — setup umum toko kecil) saling menimpa antrian sync satu sama
+  /// lain kalau kuncinya masih `fromIp`. Nullable krn klien versi lama
+  /// (belum kirim `deviceCode` di payload sync) fallback ke `fromIp`.
   final String? deviceCode;
   final DateTime arrivedAt;
   final String tablesJson;
@@ -11888,6 +11901,23 @@ final class $$ProductsTableReferences
     extends BaseReferences<_$AppDatabase, $ProductsTable, Product> {
   $$ProductsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
+  static MultiTypedResultKey<$ProductGroupTagsTable, List<ProductGroupTag>>
+      _productGroupTagsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.productGroupTags,
+              aliasName: $_aliasNameGenerator(
+                  db.products.id, db.productGroupTags.productId));
+
+  $$ProductGroupTagsTableProcessedTableManager get productGroupTagsRefs {
+    final manager =
+        $$ProductGroupTagsTableTableManager($_db, $_db.productGroupTags)
+            .filter((f) => f.productId.id($_item.id));
+
+    final cache =
+        $_typedResult.readTableOrNull(_productGroupTagsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
   static MultiTypedResultKey<$ProductUnitsTable, List<ProductUnit>>
       _productUnitsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
           db.productUnits,
@@ -11946,6 +11976,27 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> productGroupTagsRefs(
+      Expression<bool> Function($$ProductGroupTagsTableFilterComposer f) f) {
+    final $$ProductGroupTagsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.productGroupTags,
+        getReferencedColumn: (t) => t.productId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductGroupTagsTableFilterComposer(
+              $db: $db,
+              $table: $db.productGroupTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 
   Expression<bool> productUnitsRefs(
       Expression<bool> Function($$ProductUnitsTableFilterComposer f) f) {
@@ -12052,6 +12103,27 @@ class $$ProductsTableAnnotationComposer
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
+  Expression<T> productGroupTagsRefs<T extends Object>(
+      Expression<T> Function($$ProductGroupTagsTableAnnotationComposer a) f) {
+    final $$ProductGroupTagsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.productGroupTags,
+        getReferencedColumn: (t) => t.productId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductGroupTagsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.productGroupTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
   Expression<T> productUnitsRefs<T extends Object>(
       Expression<T> Function($$ProductUnitsTableAnnotationComposer a) f) {
     final $$ProductUnitsTableAnnotationComposer composer = $composerBuilder(
@@ -12085,7 +12157,8 @@ class $$ProductsTableTableManager extends RootTableManager<
     $$ProductsTableUpdateCompanionBuilder,
     (Product, $$ProductsTableReferences),
     Product,
-    PrefetchHooks Function({bool productUnitsRefs})> {
+    PrefetchHooks Function(
+        {bool productGroupTagsRefs, bool productUnitsRefs})> {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
       : super(TableManagerState(
           db: db,
@@ -12152,13 +12225,29 @@ class $$ProductsTableTableManager extends RootTableManager<
               .map((e) =>
                   (e.readTable(table), $$ProductsTableReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: ({productUnitsRefs = false}) {
+          prefetchHooksCallback: (
+              {productGroupTagsRefs = false, productUnitsRefs = false}) {
             return PrefetchHooks(
               db: db,
-              explicitlyWatchedTables: [if (productUnitsRefs) db.productUnits],
+              explicitlyWatchedTables: [
+                if (productGroupTagsRefs) db.productGroupTags,
+                if (productUnitsRefs) db.productUnits
+              ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
                 return [
+                  if (productGroupTagsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$ProductsTableReferences
+                            ._productGroupTagsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProductsTableReferences(db, table, p0)
+                                .productGroupTagsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.productId == item.id),
+                        typedResults: items),
                   if (productUnitsRefs)
                     await $_getPrefetchedData(
                         currentTable: table,
@@ -12189,17 +12278,42 @@ typedef $$ProductsTableProcessedTableManager = ProcessedTableManager<
     $$ProductsTableUpdateCompanionBuilder,
     (Product, $$ProductsTableReferences),
     Product,
-    PrefetchHooks Function({bool productUnitsRefs})>;
+    PrefetchHooks Function({bool productGroupTagsRefs, bool productUnitsRefs})>;
 typedef $$ProductGroupsTableCreateCompanionBuilder = ProductGroupsCompanion
     Function({
   Value<int> id,
   Value<String?> name,
+  Value<int> sortOrder,
 });
 typedef $$ProductGroupsTableUpdateCompanionBuilder = ProductGroupsCompanion
     Function({
   Value<int> id,
   Value<String?> name,
+  Value<int> sortOrder,
 });
+
+final class $$ProductGroupsTableReferences
+    extends BaseReferences<_$AppDatabase, $ProductGroupsTable, ProductGroup> {
+  $$ProductGroupsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$ProductGroupTagsTable, List<ProductGroupTag>>
+      _productGroupTagsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.productGroupTags,
+              aliasName: $_aliasNameGenerator(
+                  db.productGroups.id, db.productGroupTags.groupId));
+
+  $$ProductGroupTagsTableProcessedTableManager get productGroupTagsRefs {
+    final manager =
+        $$ProductGroupTagsTableTableManager($_db, $_db.productGroupTags)
+            .filter((f) => f.groupId.id($_item.id));
+
+    final cache =
+        $_typedResult.readTableOrNull(_productGroupTagsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
 
 class $$ProductGroupsTableFilterComposer
     extends Composer<_$AppDatabase, $ProductGroupsTable> {
@@ -12215,6 +12329,30 @@ class $$ProductGroupsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> productGroupTagsRefs(
+      Expression<bool> Function($$ProductGroupTagsTableFilterComposer f) f) {
+    final $$ProductGroupTagsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.productGroupTags,
+        getReferencedColumn: (t) => t.groupId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductGroupTagsTableFilterComposer(
+              $db: $db,
+              $table: $db.productGroupTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$ProductGroupsTableOrderingComposer
@@ -12231,6 +12369,9 @@ class $$ProductGroupsTableOrderingComposer
 
   ColumnOrderings<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ProductGroupsTableAnnotationComposer
@@ -12247,6 +12388,30 @@ class $$ProductGroupsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  Expression<T> productGroupTagsRefs<T extends Object>(
+      Expression<T> Function($$ProductGroupTagsTableAnnotationComposer a) f) {
+    final $$ProductGroupTagsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.productGroupTags,
+        getReferencedColumn: (t) => t.groupId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductGroupTagsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.productGroupTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$ProductGroupsTableTableManager extends RootTableManager<
@@ -12258,12 +12423,9 @@ class $$ProductGroupsTableTableManager extends RootTableManager<
     $$ProductGroupsTableAnnotationComposer,
     $$ProductGroupsTableCreateCompanionBuilder,
     $$ProductGroupsTableUpdateCompanionBuilder,
-    (
-      ProductGroup,
-      BaseReferences<_$AppDatabase, $ProductGroupsTable, ProductGroup>
-    ),
+    (ProductGroup, $$ProductGroupsTableReferences),
     ProductGroup,
-    PrefetchHooks Function()> {
+    PrefetchHooks Function({bool productGroupTagsRefs})> {
   $$ProductGroupsTableTableManager(_$AppDatabase db, $ProductGroupsTable table)
       : super(TableManagerState(
           db: db,
@@ -12277,23 +12439,54 @@ class $$ProductGroupsTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String?> name = const Value.absent(),
+            Value<int> sortOrder = const Value.absent(),
           }) =>
               ProductGroupsCompanion(
             id: id,
             name: name,
+            sortOrder: sortOrder,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String?> name = const Value.absent(),
+            Value<int> sortOrder = const Value.absent(),
           }) =>
               ProductGroupsCompanion.insert(
             id: id,
             name: name,
+            sortOrder: sortOrder,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable(table),
+                    $$ProductGroupsTableReferences(db, table, e)
+                  ))
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({productGroupTagsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (productGroupTagsRefs) db.productGroupTags
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (productGroupTagsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$ProductGroupsTableReferences
+                            ._productGroupTagsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProductGroupsTableReferences(db, table, p0)
+                                .productGroupTagsRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.groupId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
         ));
 }
 
@@ -12306,12 +12499,329 @@ typedef $$ProductGroupsTableProcessedTableManager = ProcessedTableManager<
     $$ProductGroupsTableAnnotationComposer,
     $$ProductGroupsTableCreateCompanionBuilder,
     $$ProductGroupsTableUpdateCompanionBuilder,
-    (
-      ProductGroup,
-      BaseReferences<_$AppDatabase, $ProductGroupsTable, ProductGroup>
-    ),
+    (ProductGroup, $$ProductGroupsTableReferences),
     ProductGroup,
-    PrefetchHooks Function()>;
+    PrefetchHooks Function({bool productGroupTagsRefs})>;
+typedef $$ProductGroupTagsTableCreateCompanionBuilder
+    = ProductGroupTagsCompanion Function({
+  required String productId,
+  required int groupId,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$ProductGroupTagsTableUpdateCompanionBuilder
+    = ProductGroupTagsCompanion Function({
+  Value<String> productId,
+  Value<int> groupId,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+final class $$ProductGroupTagsTableReferences extends BaseReferences<
+    _$AppDatabase, $ProductGroupTagsTable, ProductGroupTag> {
+  $$ProductGroupTagsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+          $_aliasNameGenerator(db.productGroupTags.productId, db.products.id));
+
+  $$ProductsTableProcessedTableManager get productId {
+    final manager = $$ProductsTableTableManager($_db, $_db.products)
+        .filter((f) => f.id($_item.productId));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static $ProductGroupsTable _groupIdTable(_$AppDatabase db) =>
+      db.productGroups.createAlias($_aliasNameGenerator(
+          db.productGroupTags.groupId, db.productGroups.id));
+
+  $$ProductGroupsTableProcessedTableManager get groupId {
+    final manager = $$ProductGroupsTableTableManager($_db, $_db.productGroups)
+        .filter((f) => f.id($_item.groupId));
+    final item = $_typedResult.readTableOrNull(_groupIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$ProductGroupTagsTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductGroupTagsTable> {
+  $$ProductGroupTagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productId,
+        referencedTable: $db.products,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductsTableFilterComposer(
+              $db: $db,
+              $table: $db.products,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$ProductGroupsTableFilterComposer get groupId {
+    final $$ProductGroupsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.groupId,
+        referencedTable: $db.productGroups,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductGroupsTableFilterComposer(
+              $db: $db,
+              $table: $db.productGroups,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductGroupTagsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductGroupTagsTable> {
+  $$ProductGroupTagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productId,
+        referencedTable: $db.products,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductsTableOrderingComposer(
+              $db: $db,
+              $table: $db.products,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$ProductGroupsTableOrderingComposer get groupId {
+    final $$ProductGroupsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.groupId,
+        referencedTable: $db.productGroups,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductGroupsTableOrderingComposer(
+              $db: $db,
+              $table: $db.productGroups,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductGroupTagsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductGroupTagsTable> {
+  $$ProductGroupTagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productId,
+        referencedTable: $db.products,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.products,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$ProductGroupsTableAnnotationComposer get groupId {
+    final $$ProductGroupsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.groupId,
+        referencedTable: $db.productGroups,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductGroupsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.productGroups,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductGroupTagsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ProductGroupTagsTable,
+    ProductGroupTag,
+    $$ProductGroupTagsTableFilterComposer,
+    $$ProductGroupTagsTableOrderingComposer,
+    $$ProductGroupTagsTableAnnotationComposer,
+    $$ProductGroupTagsTableCreateCompanionBuilder,
+    $$ProductGroupTagsTableUpdateCompanionBuilder,
+    (ProductGroupTag, $$ProductGroupTagsTableReferences),
+    ProductGroupTag,
+    PrefetchHooks Function({bool productId, bool groupId})> {
+  $$ProductGroupTagsTableTableManager(
+      _$AppDatabase db, $ProductGroupTagsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductGroupTagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductGroupTagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProductGroupTagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> productId = const Value.absent(),
+            Value<int> groupId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProductGroupTagsCompanion(
+            productId: productId,
+            groupId: groupId,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String productId,
+            required int groupId,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProductGroupTagsCompanion.insert(
+            productId: productId,
+            groupId: groupId,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$ProductGroupTagsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({productId = false, groupId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (productId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.productId,
+                    referencedTable:
+                        $$ProductGroupTagsTableReferences._productIdTable(db),
+                    referencedColumn: $$ProductGroupTagsTableReferences
+                        ._productIdTable(db)
+                        .id,
+                  ) as T;
+                }
+                if (groupId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.groupId,
+                    referencedTable:
+                        $$ProductGroupTagsTableReferences._groupIdTable(db),
+                    referencedColumn:
+                        $$ProductGroupTagsTableReferences._groupIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$ProductGroupTagsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ProductGroupTagsTable,
+    ProductGroupTag,
+    $$ProductGroupTagsTableFilterComposer,
+    $$ProductGroupTagsTableOrderingComposer,
+    $$ProductGroupTagsTableAnnotationComposer,
+    $$ProductGroupTagsTableCreateCompanionBuilder,
+    $$ProductGroupTagsTableUpdateCompanionBuilder,
+    (ProductGroupTag, $$ProductGroupTagsTableReferences),
+    ProductGroupTag,
+    PrefetchHooks Function({bool productId, bool groupId})>;
 typedef $$UnitTypesTableCreateCompanionBuilder = UnitTypesCompanion Function({
   Value<int> id,
   required String name,
@@ -16185,6 +16695,140 @@ typedef $$HeldOrdersTableProcessedTableManager = ProcessedTableManager<
     (HeldOrder, BaseReferences<_$AppDatabase, $HeldOrdersTable, HeldOrder>),
     HeldOrder,
     PrefetchHooks Function()>;
+typedef $$ReservedOrderNumbersTableCreateCompanionBuilder
+    = ReservedOrderNumbersCompanion Function({
+  required String localId,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$ReservedOrderNumbersTableUpdateCompanionBuilder
+    = ReservedOrderNumbersCompanion Function({
+  Value<String> localId,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$ReservedOrderNumbersTableFilterComposer
+    extends Composer<_$AppDatabase, $ReservedOrderNumbersTable> {
+  $$ReservedOrderNumbersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localId => $composableBuilder(
+      column: $table.localId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ReservedOrderNumbersTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReservedOrderNumbersTable> {
+  $$ReservedOrderNumbersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localId => $composableBuilder(
+      column: $table.localId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ReservedOrderNumbersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReservedOrderNumbersTable> {
+  $$ReservedOrderNumbersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$ReservedOrderNumbersTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ReservedOrderNumbersTable,
+    ReservedOrderNumber,
+    $$ReservedOrderNumbersTableFilterComposer,
+    $$ReservedOrderNumbersTableOrderingComposer,
+    $$ReservedOrderNumbersTableAnnotationComposer,
+    $$ReservedOrderNumbersTableCreateCompanionBuilder,
+    $$ReservedOrderNumbersTableUpdateCompanionBuilder,
+    (
+      ReservedOrderNumber,
+      BaseReferences<_$AppDatabase, $ReservedOrderNumbersTable,
+          ReservedOrderNumber>
+    ),
+    ReservedOrderNumber,
+    PrefetchHooks Function()> {
+  $$ReservedOrderNumbersTableTableManager(
+      _$AppDatabase db, $ReservedOrderNumbersTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReservedOrderNumbersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReservedOrderNumbersTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReservedOrderNumbersTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> localId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ReservedOrderNumbersCompanion(
+            localId: localId,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String localId,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ReservedOrderNumbersCompanion.insert(
+            localId: localId,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ReservedOrderNumbersTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $ReservedOrderNumbersTable,
+        ReservedOrderNumber,
+        $$ReservedOrderNumbersTableFilterComposer,
+        $$ReservedOrderNumbersTableOrderingComposer,
+        $$ReservedOrderNumbersTableAnnotationComposer,
+        $$ReservedOrderNumbersTableCreateCompanionBuilder,
+        $$ReservedOrderNumbersTableUpdateCompanionBuilder,
+        (
+          ReservedOrderNumber,
+          BaseReferences<_$AppDatabase, $ReservedOrderNumbersTable,
+              ReservedOrderNumber>
+        ),
+        ReservedOrderNumber,
+        PrefetchHooks Function()>;
 typedef $$StockLedgerTableCreateCompanionBuilder = StockLedgerCompanion
     Function({
   required String id,
@@ -18736,6 +19380,211 @@ typedef $$CashClosingsTableProcessedTableManager = ProcessedTableManager<
     ),
     CashClosing,
     PrefetchHooks Function()>;
+typedef $$SyncUploadQueueTableCreateCompanionBuilder = SyncUploadQueueCompanion
+    Function({
+  required String id,
+  required String fromIp,
+  Value<String?> deviceCode,
+  Value<DateTime> arrivedAt,
+  required String tablesJson,
+  required DateTime since,
+  required String tablesSummary,
+  Value<int> rowid,
+});
+typedef $$SyncUploadQueueTableUpdateCompanionBuilder = SyncUploadQueueCompanion
+    Function({
+  Value<String> id,
+  Value<String> fromIp,
+  Value<String?> deviceCode,
+  Value<DateTime> arrivedAt,
+  Value<String> tablesJson,
+  Value<DateTime> since,
+  Value<String> tablesSummary,
+  Value<int> rowid,
+});
+
+class $$SyncUploadQueueTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncUploadQueueTable> {
+  $$SyncUploadQueueTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fromIp => $composableBuilder(
+      column: $table.fromIp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get arrivedAt => $composableBuilder(
+      column: $table.arrivedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get tablesJson => $composableBuilder(
+      column: $table.tablesJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get since => $composableBuilder(
+      column: $table.since, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get tablesSummary => $composableBuilder(
+      column: $table.tablesSummary, builder: (column) => ColumnFilters(column));
+}
+
+class $$SyncUploadQueueTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncUploadQueueTable> {
+  $$SyncUploadQueueTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get fromIp => $composableBuilder(
+      column: $table.fromIp, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get arrivedAt => $composableBuilder(
+      column: $table.arrivedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get tablesJson => $composableBuilder(
+      column: $table.tablesJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get since => $composableBuilder(
+      column: $table.since, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get tablesSummary => $composableBuilder(
+      column: $table.tablesSummary,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$SyncUploadQueueTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncUploadQueueTable> {
+  $$SyncUploadQueueTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get fromIp =>
+      $composableBuilder(column: $table.fromIp, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get arrivedAt =>
+      $composableBuilder(column: $table.arrivedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get tablesJson => $composableBuilder(
+      column: $table.tablesJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get since =>
+      $composableBuilder(column: $table.since, builder: (column) => column);
+
+  GeneratedColumn<String> get tablesSummary => $composableBuilder(
+      column: $table.tablesSummary, builder: (column) => column);
+}
+
+class $$SyncUploadQueueTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $SyncUploadQueueTable,
+    SyncUploadQueueData,
+    $$SyncUploadQueueTableFilterComposer,
+    $$SyncUploadQueueTableOrderingComposer,
+    $$SyncUploadQueueTableAnnotationComposer,
+    $$SyncUploadQueueTableCreateCompanionBuilder,
+    $$SyncUploadQueueTableUpdateCompanionBuilder,
+    (
+      SyncUploadQueueData,
+      BaseReferences<_$AppDatabase, $SyncUploadQueueTable, SyncUploadQueueData>
+    ),
+    SyncUploadQueueData,
+    PrefetchHooks Function()> {
+  $$SyncUploadQueueTableTableManager(
+      _$AppDatabase db, $SyncUploadQueueTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncUploadQueueTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncUploadQueueTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncUploadQueueTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> fromIp = const Value.absent(),
+            Value<String?> deviceCode = const Value.absent(),
+            Value<DateTime> arrivedAt = const Value.absent(),
+            Value<String> tablesJson = const Value.absent(),
+            Value<DateTime> since = const Value.absent(),
+            Value<String> tablesSummary = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncUploadQueueCompanion(
+            id: id,
+            fromIp: fromIp,
+            deviceCode: deviceCode,
+            arrivedAt: arrivedAt,
+            tablesJson: tablesJson,
+            since: since,
+            tablesSummary: tablesSummary,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String fromIp,
+            Value<String?> deviceCode = const Value.absent(),
+            Value<DateTime> arrivedAt = const Value.absent(),
+            required String tablesJson,
+            required DateTime since,
+            required String tablesSummary,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncUploadQueueCompanion.insert(
+            id: id,
+            fromIp: fromIp,
+            deviceCode: deviceCode,
+            arrivedAt: arrivedAt,
+            tablesJson: tablesJson,
+            since: since,
+            tablesSummary: tablesSummary,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$SyncUploadQueueTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $SyncUploadQueueTable,
+    SyncUploadQueueData,
+    $$SyncUploadQueueTableFilterComposer,
+    $$SyncUploadQueueTableOrderingComposer,
+    $$SyncUploadQueueTableAnnotationComposer,
+    $$SyncUploadQueueTableCreateCompanionBuilder,
+    $$SyncUploadQueueTableUpdateCompanionBuilder,
+    (
+      SyncUploadQueueData,
+      BaseReferences<_$AppDatabase, $SyncUploadQueueTable, SyncUploadQueueData>
+    ),
+    SyncUploadQueueData,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -18746,6 +19595,8 @@ class $AppDatabaseManager {
       $$ProductsTableTableManager(_db, _db.products);
   $$ProductGroupsTableTableManager get productGroups =>
       $$ProductGroupsTableTableManager(_db, _db.productGroups);
+  $$ProductGroupTagsTableTableManager get productGroupTags =>
+      $$ProductGroupTagsTableTableManager(_db, _db.productGroupTags);
   $$UnitTypesTableTableManager get unitTypes =>
       $$UnitTypesTableTableManager(_db, _db.unitTypes);
   $$ProductUnitsTableTableManager get productUnits =>
@@ -18770,6 +19621,8 @@ class $AppDatabaseManager {
       $$TransactionPaymentsTableTableManager(_db, _db.transactionPayments);
   $$HeldOrdersTableTableManager get heldOrders =>
       $$HeldOrdersTableTableManager(_db, _db.heldOrders);
+  $$ReservedOrderNumbersTableTableManager get reservedOrderNumbers =>
+      $$ReservedOrderNumbersTableTableManager(_db, _db.reservedOrderNumbers);
   $$StockLedgerTableTableManager get stockLedger =>
       $$StockLedgerTableTableManager(_db, _db.stockLedger);
   $$ExpensesTableTableManager get expenses =>
@@ -18792,4 +19645,6 @@ class $AppDatabaseManager {
       $$EmployeesTableTableManager(_db, _db.employees);
   $$CashClosingsTableTableManager get cashClosings =>
       $$CashClosingsTableTableManager(_db, _db.cashClosings);
+  $$SyncUploadQueueTableTableManager get syncUploadQueue =>
+      $$SyncUploadQueueTableTableManager(_db, _db.syncUploadQueue);
 }
