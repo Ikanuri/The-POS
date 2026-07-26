@@ -5,12 +5,37 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 25 Juli 2026 — commit `1176d97` (SELESAI, terverifikasi):
-lanjutan sesi yang sama, dipicu pertanyaan user "dari host ke client,
-perubahan apa saja yang diterapkan?" lalu laporan bug nyata "kenapa barcode
-yang diedit di host tidak ikut berubah di client setelah sync?", lalu
-temuan LIVE user sendiri: produk "Amplop" punya 2 barcode Primer di device
-HOST-nya sendiri._
+_Update sesi 26 Juli 2026 — commit `ce2c427` (SELESAI, terverifikasi):
+lanjutan langsung dari sesi 25 Juli (dipicu pertanyaan sync host→klien,
+lalu laporan barcode Amplop, lalu temuan restore-backup) — user kirim foto
+struk kertas: pembayaran yang dibatalkan ikut tercetak sbg baris Tunai
+biasa._
+
+## Fix: pembayaran dibatalkan ikut tercetak/ter-share di struk (26 Juli)
+
+User kirim 2 foto: struk kertas (3 baris "Tunai Rp150.000" identik) vs
+layar in-app "Struk" (kartu Riwayat Pembayaran yg BENAR menampilkan 2 dari
+3 itu sbg "Dibatalkan" dgn coretan). Kertas termal tidak bisa mencetak
+coretan, jadi 2 pembayaran yg sudah batal terlihat identik dgn yg asli di
+struk fisik — pelanggan bisa salah kira dibayar 3x.
+
+**Akar**: `_visiblePayments` getter (`receipt_screen.dart`, dipakai widget
+`_ReceiptPaper` khusus utk share-image) & `visiblePayments` local var
+(`printer_service.dart`, dipakai builder ESC/POS cetak fisik) SAMA-SAMA
+sudah filter `method != 'edit' && method != 'retur'` (Item 49f, marker
+audit internal) tapi LUPA filter `voided` — padahal `_refundTotal`/
+`_refundMethod` di FILE YANG SAMA (`_ReceiptPaper`) sudah benar pakai
+`!p.voided`. Simpel oversight, bukan bug baru — sudah ada sejak
+`voidPayment` (Item pembatalan pembayaran) dibuat.
+
+**Fix**: tambah `&& !p.voided` di kedua tempat. In-app SENGAJA TIDAK
+disentuh — kartu "Riwayat Pembayaran" (bagian LAIN dari `receipt_screen.
+dart`, bukan `_ReceiptPaper`) memang harus tetap tampilkan semua incl. yg
+dibatalkan (dgn coretan), itu satu-satunya tempat histori lengkap ada.
+
+Test baru `receipt_paper_voided_payment_hidden_test.dart` (mirip pola
+`receipt_paper_audit_marker_hidden_test.dart` yg sudah ada utk marker
+audit 'retur'/'edit') — revert-verified.
 
 ## Layar Cek Duplikat Data (Pengaturan > Diagnostik) — susulan temuan Amplop
 
@@ -436,7 +461,7 @@ vs `Color(0xffebe8e0)` (netral) saat bug direproduksi.
 
 ## Status test suite
 
-`flutter test` PENUH: **726 test, SEMUA hijau** (run terakhir exit 0,
+`flutter test` PENUH: **727 test, SEMUA hijau** (run terakhir exit 0,
 flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run

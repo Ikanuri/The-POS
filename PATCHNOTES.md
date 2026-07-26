@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 26 Juli 2026
+
+### 🛠️ Perbaikan
+- **Pembayaran yang dibatalkan tidak lagi ikut tercetak/dibagikan di
+  struk.** Dulu kalau ada pembayaran yang salah lalu dibatalkan (mis. salah
+  ketik nominal), baris itu tetap ikut tercetak di struk kertas & struk
+  gambar (share) seolah pembayaran sungguhan — bisa terlihat seperti
+  pelanggan bayar berkali-kali. Sekarang pembayaran yang sudah dibatalkan
+  hanya tampil di riwayat pembayaran dalam aplikasi, tidak lagi ikut ke
+  struk yang dicetak atau dibagikan.
+
 ## 25 Juli 2026
 
 ### ✨ Fitur Baru
