@@ -5,9 +5,93 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 26 Juli 2026 — commit `256f61c` (SELESAI, terverifikasi):
-lanjutan langsung dari sesi yang sama — setelah fitur non-stok produk
-utama & jeda stok, user minta kembalian terakhir di struk in-app di-bold._
+_Update sesi 26 Juli 2026 (lanjutan, akhir sesi) — TIDAK ada commit baru
+dari bagian ini: sesi lanjut ke diskusi desain fitur "Laci Meja"
+(rancangan lengkap final, lihat **PLAN.md Item 52**), lalu user minta
+eksekusi langsung — **terhenti di langkah paling awal (migrasi skema)
+karena bug alat codegen Drift di sandbox sesi ini** (bukan bug kode).
+Semua perubahan source yang sempat dicoba SUDAH dibatalkan bersih — repo
+kembali ke commit `256f61c`, `flutter analyze` 0 issue. User akan coba
+lagi di SESI BARU (sandbox baru)._
+
+## PENTING utk sesi baru: coba codegen SEBELUM baca detail bug di bawah
+
+Kalau kamu sesi baru yang melanjutkan ini: **langsung coba**
+`dart run build_runner build --delete-conflicting-outputs` di root
+project (belum ada perubahan skema apa pun, jadi ini cuma test toolchain).
+- **Kalau berhasil** (muncul/ter-update `lib/core/database/app_database.g.dart`
+  tanpa error) → bug sesi lalu memang spesifik ke sandbox instance itu,
+  TIDAK relevan lagi di sini. Lewati bagian "Bug codegen" di bawah,
+  langsung eksekusi **PLAN.md Item 52** dari awal.
+- **Kalau gagal** (file `app_database.g.dart` tidak muncul/tidak berubah,
+  TANPA pesan error yang jelas) → bug yang sama. Baca bagian di bawah,
+  JANGAN ulangi diagnosis dari nol (sudah dibuktikan lewat bisection
+  manual, lihat detail) — langsung ke opsi penyelesaian di paling bawah.
+
+## Bug: codegen Drift (build_runner) gagal di sandbox — TIDAK terkait kode
+
+**Gejala**: `dart run build_runner build --delete-conflicting-outputs`
+melaporkan "Succeeded" (ratusan output, tanpa error), TAPI
+`lib/core/database/app_database.g.dart` (file `part` hasil generate,
+18.795 baris, TERCOMMIT di git) tidak pernah tertulis/terbarui sama
+sekali — hilang kalau dipaksa (`--delete-conflicting-outputs`), atau
+diam-diam tetap versi lama kalau tidak dipaksa.
+
+**Sudah dibuktikan BUKAN gara-gara kode** (jangan diulang manual, sudah
+final):
+1. Reproduksi tetap terjadi di skema **ASLI belum diubah sama sekali**
+   (`git stash` semua perubahan dulu, tetap gagal) — jadi bukan gara-gara
+   3 tabel baru yang sempat saya rancang (`LeftBehindItems`/
+   `BorrowedItems`/`PreorderEntries`, lihat PLAN.md Item 52).
+2. Proyek Drift minimal baru (1 tabel, di `/tmp`) — **BERHASIL** generate
+   normal. Jadi bukan sandbox yang TOTAL tidak bisa codegen sama sekali.
+3. Disalin isi asli `app_database.dart` + semua file tabel aslinya ke
+   proyek minimal terpisah (tanpa 700+ file lain proyek ini ikut) —
+   **tetap GAGAL**. Jadi bukan soal "proyek ini kebanyakan file lain".
+4. **Bisection manual** (potong `app_database.dart` bertahap, cari titik
+   tepatnya): kelas `AppDatabase` MINIMAL (cuma `schemaVersion`, tanpa
+   migrasi apa pun) → berhasil. Begitu blok `MigrationStrategy`
+   (riwayat migrasi `onUpgrade` ~21 langkah, baris ~201-406 di
+   `app_database.dart`) ikut disertakan → GAGAL, walau isinya SENDIRI
+   cuma ~240 baris (bukan soal ukuran file total 4889 baris — separuh
+   file pun tanpa blok migrasi ini kemungkinan besar akan lolos, belum
+   sempat dites presisi krn waktu sesi habis).
+5. Root cause teknis (utk yang mau lanjut investigasi): intermediate
+   cache `.dart_tool/build/generated/.../app_database.dart.drift_elements.json`
+   isinya `{"valid_import":true,"imports":[...lengkap 22 file benar...],
+   "elements":[]}` — artinya tahap resolusi `analyzer` (dipakai
+   `build_resolvers`/`drift_dev` scr programatik, BEDA dari `flutter
+   analyze` yg pakai analyzer bawaan SDK & selalu 0 issue) diam-diam
+   kembali KOSONG utk file ini, tanpa exception yg ke-log di mana pun
+   (sudah dicoba `--verbose`, grep log lengkap, cek semua file `.json`
+   cache — nihil).
+6. **PENTING**: `app_database.g.dart` yang TERCOMMIT sekarang (mencakup
+   skema sampai v21, migrasi sama panjangnya) TERBUKTI PERNAH berhasil
+   di-generate di sesi/sandbox SEBELUMNYA — jadi ini BUKAN batas keras
+   permanen di alatnya, lebih ke arah **batas marginal/sensitif kondisi
+   sandbox tertentu** (kemungkinan resource/isolate, bukan RAM — sandbox
+   yg gagal py 15GB RAM bebas) yg kebetulan konsisten gagal di SATU
+   instance sandbox tsb, bukan berarti akan gagal lagi di sandbox lain.
+
+**JANGAN dicoba** (sudah dipertimbangkan & ditolak, jangan diulang):
+- **Upgrade major `analyzer`/`drift_dev`/`build_runner`** (versi jauh
+  lebih baru tersedia, mis. analyzer 6.7.0→14.1.0) — bisa mengubah bentuk
+  kode hasil generate scr breaking di ratusan titik pemakaian di seluruh
+  app, TIDAK bisa diuji aman tanpa codegen yg jalan normal dulu (masalah
+  yg sama, muter-muter). Risikonya besar utk keuntungan yg tidak pasti.
+- **Menyederhanakan/squash riwayat migrasi produksi** demi menyiasati bug
+  sandbox ini — salah prioritas (mengubah kode produksi sensitif demi
+  masalah alat lokal) DAN kemungkinan besar TIDAK akan menurunkan cukup
+  baris (isi perintah migrasi, bukan pembungkus `if`, yg dominan makan
+  baris) — lihat penjelasan lengkap di riwayat percakapan sesi ini.
+
+**Kalau di sesi baru bug ini MASIH muncul** (sandbox baru kebetulan sama
+bermasalahnya): opsi realistis (1) jalankan `build_runner` di komputer/
+laptop sendiri (bukan sandbox remote) lalu commit hasil `.g.dart`-nya, (2)
+tulis dulu SEMUA source code Item 52 di sandbox (tanpa jalankan codegen),
+serahkan ke user utk generate+commit manual sekali di lingkungan yg
+normal, (3) coba lagi sesi baru lain (tiap sesi dapat sandbox baru,
+mungkin kondisinya beda).
 
 ## Fix: kembalian terakhir di Ringkasan struk in-app di-bold (26 Juli)
 
