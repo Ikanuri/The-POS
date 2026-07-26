@@ -69,37 +69,6 @@ const kAsistenPermissionKeys = <String>[
   'asisten_stok_minus',
 ];
 
-@DriftDatabase(tables: [
-  AppSettings,
-  Products,
-  ProductGroups,
-  ProductGroupTags,
-  UnitTypes,
-  ProductUnits,
-  ProductBarcodes,
-  PriceTiers,
-  AltPrices,
-  CustomerGroups,
-  CustomerGroupPrices,
-  Customers,
-  Transactions,
-  TransactionItems,
-  TransactionPayments,
-  HeldOrders,
-  ReservedOrderNumbers,
-  StockLedger,
-  Expenses,
-  LoyaltyPointLedger,
-  Suppliers,
-  Purchases,
-  PurchaseItems,
-  KasirPermissions,
-  PaymentMethods,
-  DailySummaries,
-  Employees,
-  CashClosings,
-  SyncUploadQueue,
-])
 /// Baris hasil [AppDatabase.watchStockOverview] — Item 30 ("Cek Stok").
 /// [unitId] = id satuan DASAR produk ini (dipakai Item 36 stock opname utk
 /// panggil [AppDatabase.commitOpname], yang butuh productUnitId bukan productId).
@@ -164,6 +133,37 @@ class BarcodeConflictException implements Exception {
       'barcode lain, atau hapus dulu barcode itu dari produk tersebut.';
 }
 
+@DriftDatabase(tables: [
+  AppSettings,
+  Products,
+  ProductGroups,
+  ProductGroupTags,
+  UnitTypes,
+  ProductUnits,
+  ProductBarcodes,
+  PriceTiers,
+  AltPrices,
+  CustomerGroups,
+  CustomerGroupPrices,
+  Customers,
+  Transactions,
+  TransactionItems,
+  TransactionPayments,
+  HeldOrders,
+  ReservedOrderNumbers,
+  StockLedger,
+  Expenses,
+  LoyaltyPointLedger,
+  Suppliers,
+  Purchases,
+  PurchaseItems,
+  KasirPermissions,
+  PaymentMethods,
+  DailySummaries,
+  Employees,
+  CashClosings,
+  SyncUploadQueue,
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
 
