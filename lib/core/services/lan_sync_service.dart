@@ -126,6 +126,29 @@ class PendingProductProposal {
   final int productCount;
 }
 
+/// Item 52 ("Laci Meja") — usulan client->host, PARALEL dari
+/// [PendingProductProposal] (tidak menyentuhnya sama sekali, supaya alur
+/// usulan produk yang sudah matang tidak ikut berisiko). [rows] berisi
+/// gabungan 3 tabel (`left_behind_items`/`borrowed_items`/
+/// `preorder_entries`) dari `AppDatabase.dumpLaciMejaProposals`.
+class PendingLaciMejaProposal {
+  PendingLaciMejaProposal({
+    required this.id,
+    required this.fromIp,
+    String? slotKey,
+    required this.arrivedAt,
+    required this.rows,
+    required this.entryCount,
+  }) : slotKey = slotKey ?? fromIp;
+
+  final String id;
+  final String fromIp;
+  final String slotKey;
+  final DateTime arrivedAt;
+  final Map<String, List<Map<String, Object?>>> rows;
+  final int entryCount;
+}
+
 class LanSyncService {
   LanSyncService._();
 
@@ -231,6 +254,39 @@ class LanSyncService {
     return _db!.applyProductProposals(item.rows, approvedProductIds);
   }
 
+  // Item 52 ("Laci Meja") — antrian usulan PARALEL, sama pola persis dgn
+  // _pendingProposals di atas tapi utk 3 tabel Laci Meja.
+  static final _pendingLaciMejaProposals = <PendingLaciMejaProposal>[];
+  static void Function()? onLaciMejaProposalsChanged;
+
+  static List<PendingLaciMejaProposal> get pendingLaciMejaProposals =>
+      List.unmodifiable(_pendingLaciMejaProposals);
+
+  @visibleForTesting
+  static void debugAddLaciMejaProposal(PendingLaciMejaProposal p) {
+    _pendingLaciMejaProposals.add(p);
+  }
+
+  @visibleForTesting
+  static void debugClearLaciMejaProposals() =>
+      _pendingLaciMejaProposals.clear();
+
+  static void dismissLaciMejaProposal(String id) {
+    _pendingLaciMejaProposals.removeWhere((p) => p.id == id);
+    onLaciMejaProposalsChanged?.call();
+  }
+
+  /// [approvedIds] per tabel (`left_behind_items`/`borrowed_items`/
+  /// `preorder_entries`) — subset id yang disetujui owner.
+  static Future<int> applyLaciMejaProposal(
+      String id, Map<String, Set<String>> approvedIds) async {
+    final idx = _pendingLaciMejaProposals.indexWhere((p) => p.id == id);
+    if (idx < 0) return 0;
+    final item = _pendingLaciMejaProposals.removeAt(idx);
+    onLaciMejaProposalsChanged?.call();
+    return _db!.applyLaciMejaProposals(item.rows, approvedIds);
+  }
+
   /// Tabel append-only yang boleh diunggah klien ke host. Master data tidak
   /// pernah di-merge dari klien (alir satu arah host → bawahan).
   static const appendOnlyTables = {
@@ -261,6 +317,10 @@ class LanSyncService {
     'customer_groups',
     'customer_group_prices',
     'kasir_permissions',
+    // Item 52 ("Laci Meja") — auto-merge host->klien.
+    'left_behind_items',
+    'borrowed_items',
+    'preorder_entries',
   };
 
   /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi
@@ -806,6 +866,34 @@ class LanSyncService {
         onProposalsChanged?.call();
       }
 
+      // Item 52 ("Laci Meja") — usulan PARALEL, antrian & slotKey terpisah
+      // dari usulan produk (lihat dok PendingLaciMejaProposal).
+      final rawLaciMejaProposals =
+          payload['laciMejaProposals'] as Map<String, dynamic>? ?? {};
+      final laciMejaProposalRows = rawLaciMejaProposals.map((k, v) {
+        final rows = (v as List).cast<Map<String, dynamic>>().map((r) {
+          return r.map<String, Object?>((rk, rv) => MapEntry(rk, rv));
+        }).toList();
+        return MapEntry(k, rows);
+      });
+      final laciMejaEntryCount =
+          laciMejaProposalRows.values.fold<int>(0, (a, b) => a + b.length);
+      if (laciMejaEntryCount > 0) {
+        _pendingLaciMejaProposals.removeWhere((p) => p.slotKey == slotKey);
+        _pendingLaciMejaProposals.add(PendingLaciMejaProposal(
+          id: _generateNonce(),
+          fromIp: ip,
+          slotKey: slotKey,
+          arrivedAt: DateTime.now(),
+          rows: laciMejaProposalRows,
+          entryCount: laciMejaEntryCount,
+        ));
+        onLaciMejaProposalsChanged?.call();
+      } else if (_pendingLaciMejaProposals.any((p) => p.slotKey == slotKey)) {
+        _pendingLaciMejaProposals.removeWhere((p) => p.slotKey == slotKey);
+        onLaciMejaProposalsChanged?.call();
+      }
+
       // Immediately send back the host's data since the client's timestamp.
       // The client receives host updates even before their data is approved.
       final outDump = await _db!.dumpSince(since);
@@ -993,11 +1081,15 @@ class LanSyncService {
     // manual lewat antrian TERPISAH (lihat PendingProductProposal). Kosong
     // (`{}`) di device owner (tidak pernah menandai produknya sendiri).
     final proposals = await db.dumpLocalProposals();
+    // Item 52 ("Laci Meja") — usulan PARALEL, field payload terpisah dari
+    // 'proposals' (produk) supaya kedua jalur review independen di host.
+    final laciMejaProposals = await db.dumpLaciMejaProposals();
     final payload = {
       // Item 41 A.2 — UTC eksplisit, lihat catatan di atas.
       'since': downloadSince.toUtc().toIso8601String(),
       'tables': outDump,
       'proposals': proposals,
+      'laciMejaProposals': laciMejaProposals,
       if (deviceCode != null && deviceCode.isNotEmpty)
         'deviceCode': deviceCode,
     };

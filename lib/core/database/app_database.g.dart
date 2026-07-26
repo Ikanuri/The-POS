@@ -1518,6 +1518,16 @@ class $ProductUnitsTable extends ProductUnits
   late final GeneratedColumn<int> minStock = GeneratedColumn<int>(
       'min_stock', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _requiresDepositMeta =
+      const VerificationMeta('requiresDeposit');
+  @override
+  late final GeneratedColumn<bool> requiresDeposit = GeneratedColumn<bool>(
+      'requires_deposit', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("requires_deposit" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -1526,7 +1536,8 @@ class $ProductUnitsTable extends ProductUnits
         isBaseUnit,
         ratioToBase,
         isNonStock,
-        minStock
+        minStock,
+        requiresDeposit
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1577,6 +1588,12 @@ class $ProductUnitsTable extends ProductUnits
       context.handle(_minStockMeta,
           minStock.isAcceptableOrUnknown(data['min_stock']!, _minStockMeta));
     }
+    if (data.containsKey('requires_deposit')) {
+      context.handle(
+          _requiresDepositMeta,
+          requiresDeposit.isAcceptableOrUnknown(
+              data['requires_deposit']!, _requiresDepositMeta));
+    }
     return context;
   }
 
@@ -1600,6 +1617,8 @@ class $ProductUnitsTable extends ProductUnits
           .read(DriftSqlType.bool, data['${effectivePrefix}is_non_stock'])!,
       minStock: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}min_stock']),
+      requiresDeposit: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}requires_deposit'])!,
     );
   }
 
@@ -1620,6 +1639,11 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
   /// Item 11: ambang stok menipis, disimpan di baris satuan DASAR saja
   /// (stok selalu dianker ke satuan dasar). null = tidak dipantau.
   final int? minStock;
+
+  /// Item 52 (Laci Meja/Pre-order): produk model tukar-wadah (LPG, galon,
+  /// dst) — antri stok kosong WAJIB titip wadah fisik sbg jaminan, bukan
+  /// cuma nomor urut. Default false = backorder biasa tanpa syarat fisik.
+  final bool requiresDeposit;
   const ProductUnit(
       {required this.id,
       required this.productId,
@@ -1627,7 +1651,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       required this.isBaseUnit,
       required this.ratioToBase,
       required this.isNonStock,
-      this.minStock});
+      this.minStock,
+      required this.requiresDeposit});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1642,6 +1667,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
     if (!nullToAbsent || minStock != null) {
       map['min_stock'] = Variable<int>(minStock);
     }
+    map['requires_deposit'] = Variable<bool>(requiresDeposit);
     return map;
   }
 
@@ -1658,6 +1684,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       minStock: minStock == null && nullToAbsent
           ? const Value.absent()
           : Value(minStock),
+      requiresDeposit: Value(requiresDeposit),
     );
   }
 
@@ -1672,6 +1699,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       ratioToBase: serializer.fromJson<double>(json['ratioToBase']),
       isNonStock: serializer.fromJson<bool>(json['isNonStock']),
       minStock: serializer.fromJson<int?>(json['minStock']),
+      requiresDeposit: serializer.fromJson<bool>(json['requiresDeposit']),
     );
   }
   @override
@@ -1685,6 +1713,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       'ratioToBase': serializer.toJson<double>(ratioToBase),
       'isNonStock': serializer.toJson<bool>(isNonStock),
       'minStock': serializer.toJson<int?>(minStock),
+      'requiresDeposit': serializer.toJson<bool>(requiresDeposit),
     };
   }
 
@@ -1695,7 +1724,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           bool? isBaseUnit,
           double? ratioToBase,
           bool? isNonStock,
-          Value<int?> minStock = const Value.absent()}) =>
+          Value<int?> minStock = const Value.absent(),
+          bool? requiresDeposit}) =>
       ProductUnit(
         id: id ?? this.id,
         productId: productId ?? this.productId,
@@ -1704,6 +1734,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
         ratioToBase: ratioToBase ?? this.ratioToBase,
         isNonStock: isNonStock ?? this.isNonStock,
         minStock: minStock.present ? minStock.value : this.minStock,
+        requiresDeposit: requiresDeposit ?? this.requiresDeposit,
       );
   ProductUnit copyWithCompanion(ProductUnitsCompanion data) {
     return ProductUnit(
@@ -1718,6 +1749,9 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       isNonStock:
           data.isNonStock.present ? data.isNonStock.value : this.isNonStock,
       minStock: data.minStock.present ? data.minStock.value : this.minStock,
+      requiresDeposit: data.requiresDeposit.present
+          ? data.requiresDeposit.value
+          : this.requiresDeposit,
     );
   }
 
@@ -1730,14 +1764,15 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           ..write('isBaseUnit: $isBaseUnit, ')
           ..write('ratioToBase: $ratioToBase, ')
           ..write('isNonStock: $isNonStock, ')
-          ..write('minStock: $minStock')
+          ..write('minStock: $minStock, ')
+          ..write('requiresDeposit: $requiresDeposit')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, productId, unitTypeId, isBaseUnit, ratioToBase, isNonStock, minStock);
+  int get hashCode => Object.hash(id, productId, unitTypeId, isBaseUnit,
+      ratioToBase, isNonStock, minStock, requiresDeposit);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1748,7 +1783,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           other.isBaseUnit == this.isBaseUnit &&
           other.ratioToBase == this.ratioToBase &&
           other.isNonStock == this.isNonStock &&
-          other.minStock == this.minStock);
+          other.minStock == this.minStock &&
+          other.requiresDeposit == this.requiresDeposit);
 }
 
 class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
@@ -1759,6 +1795,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
   final Value<double> ratioToBase;
   final Value<bool> isNonStock;
   final Value<int?> minStock;
+  final Value<bool> requiresDeposit;
   final Value<int> rowid;
   const ProductUnitsCompanion({
     this.id = const Value.absent(),
@@ -1768,6 +1805,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.ratioToBase = const Value.absent(),
     this.isNonStock = const Value.absent(),
     this.minStock = const Value.absent(),
+    this.requiresDeposit = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProductUnitsCompanion.insert({
@@ -1778,6 +1816,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.ratioToBase = const Value.absent(),
     this.isNonStock = const Value.absent(),
     this.minStock = const Value.absent(),
+    this.requiresDeposit = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         productId = Value(productId);
@@ -1789,6 +1828,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     Expression<double>? ratioToBase,
     Expression<bool>? isNonStock,
     Expression<int>? minStock,
+    Expression<bool>? requiresDeposit,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1799,6 +1839,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       if (ratioToBase != null) 'ratio_to_base': ratioToBase,
       if (isNonStock != null) 'is_non_stock': isNonStock,
       if (minStock != null) 'min_stock': minStock,
+      if (requiresDeposit != null) 'requires_deposit': requiresDeposit,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1811,6 +1852,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       Value<double>? ratioToBase,
       Value<bool>? isNonStock,
       Value<int?>? minStock,
+      Value<bool>? requiresDeposit,
       Value<int>? rowid}) {
     return ProductUnitsCompanion(
       id: id ?? this.id,
@@ -1820,6 +1862,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       ratioToBase: ratioToBase ?? this.ratioToBase,
       isNonStock: isNonStock ?? this.isNonStock,
       minStock: minStock ?? this.minStock,
+      requiresDeposit: requiresDeposit ?? this.requiresDeposit,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1848,6 +1891,9 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     if (minStock.present) {
       map['min_stock'] = Variable<int>(minStock.value);
     }
+    if (requiresDeposit.present) {
+      map['requires_deposit'] = Variable<bool>(requiresDeposit.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1864,6 +1910,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
           ..write('ratioToBase: $ratioToBase, ')
           ..write('isNonStock: $isNonStock, ')
           ..write('minStock: $minStock, ')
+          ..write('requiresDeposit: $requiresDeposit, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -11655,6 +11702,1954 @@ class SyncUploadQueueCompanion extends UpdateCompanion<SyncUploadQueueData> {
   }
 }
 
+class $LeftBehindItemsTable extends LeftBehindItems
+    with TableInfo<$LeftBehindItemsTable, LeftBehindItem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LeftBehindItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _transactionIdMeta =
+      const VerificationMeta('transactionId');
+  @override
+  late final GeneratedColumn<String> transactionId = GeneratedColumn<String>(
+      'transaction_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES transactions (id)'));
+  static const VerificationMeta _itemNameMeta =
+      const VerificationMeta('itemName');
+  @override
+  late final GeneratedColumn<String> itemName = GeneratedColumn<String>(
+      'item_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _jenisMeta = const VerificationMeta('jenis');
+  @override
+  late final GeneratedColumn<String> jenis = GeneratedColumn<String>(
+      'jenis', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _customerIdMeta =
+      const VerificationMeta('customerId');
+  @override
+  late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
+      'customer_id', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES customers (id)'));
+  static const VerificationMeta _customerNameTextMeta =
+      const VerificationMeta('customerNameText');
+  @override
+  late final GeneratedColumn<String> customerNameText = GeneratedColumn<String>(
+      'customer_name_text', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _locallyModifiedMeta =
+      const VerificationMeta('locallyModified');
+  @override
+  late final GeneratedColumn<bool> locallyModified = GeneratedColumn<bool>(
+      'locally_modified', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("locally_modified" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _collectedAtMeta =
+      const VerificationMeta('collectedAt');
+  @override
+  late final GeneratedColumn<DateTime> collectedAt = GeneratedColumn<DateTime>(
+      'collected_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        transactionId,
+        itemName,
+        jenis,
+        customerId,
+        customerNameText,
+        note,
+        locallyModified,
+        createdAt,
+        updatedAt,
+        collectedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'left_behind_items';
+  @override
+  VerificationContext validateIntegrity(Insertable<LeftBehindItem> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('transaction_id')) {
+      context.handle(
+          _transactionIdMeta,
+          transactionId.isAcceptableOrUnknown(
+              data['transaction_id']!, _transactionIdMeta));
+    } else if (isInserting) {
+      context.missing(_transactionIdMeta);
+    }
+    if (data.containsKey('item_name')) {
+      context.handle(_itemNameMeta,
+          itemName.isAcceptableOrUnknown(data['item_name']!, _itemNameMeta));
+    } else if (isInserting) {
+      context.missing(_itemNameMeta);
+    }
+    if (data.containsKey('jenis')) {
+      context.handle(
+          _jenisMeta, jenis.isAcceptableOrUnknown(data['jenis']!, _jenisMeta));
+    } else if (isInserting) {
+      context.missing(_jenisMeta);
+    }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+          _customerIdMeta,
+          customerId.isAcceptableOrUnknown(
+              data['customer_id']!, _customerIdMeta));
+    }
+    if (data.containsKey('customer_name_text')) {
+      context.handle(
+          _customerNameTextMeta,
+          customerNameText.isAcceptableOrUnknown(
+              data['customer_name_text']!, _customerNameTextMeta));
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('locally_modified')) {
+      context.handle(
+          _locallyModifiedMeta,
+          locallyModified.isAcceptableOrUnknown(
+              data['locally_modified']!, _locallyModifiedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('collected_at')) {
+      context.handle(
+          _collectedAtMeta,
+          collectedAt.isAcceptableOrUnknown(
+              data['collected_at']!, _collectedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LeftBehindItem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LeftBehindItem(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      transactionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}transaction_id'])!,
+      itemName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}item_name'])!,
+      jenis: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}jenis'])!,
+      customerId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}customer_id']),
+      customerNameText: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}customer_name_text']),
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      locallyModified: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      collectedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}collected_at']),
+    );
+  }
+
+  @override
+  $LeftBehindItemsTable createAlias(String alias) {
+    return $LeftBehindItemsTable(attachedDatabase, alias);
+  }
+}
+
+class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
+  final String id;
+  final String transactionId;
+  final String itemName;
+  final String jenis;
+  final String? customerId;
+  final String? customerNameText;
+  final String? note;
+
+  /// Item 40 pattern: true bila baris ini dibuat/diedit di device non-owner,
+  /// menunggu persetujuan owner via sync. Device owner tidak pernah set ini.
+  final bool locallyModified;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? collectedAt;
+  const LeftBehindItem(
+      {required this.id,
+      required this.transactionId,
+      required this.itemName,
+      required this.jenis,
+      this.customerId,
+      this.customerNameText,
+      this.note,
+      required this.locallyModified,
+      required this.createdAt,
+      required this.updatedAt,
+      this.collectedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['transaction_id'] = Variable<String>(transactionId);
+    map['item_name'] = Variable<String>(itemName);
+    map['jenis'] = Variable<String>(jenis);
+    if (!nullToAbsent || customerId != null) {
+      map['customer_id'] = Variable<String>(customerId);
+    }
+    if (!nullToAbsent || customerNameText != null) {
+      map['customer_name_text'] = Variable<String>(customerNameText);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['locally_modified'] = Variable<bool>(locallyModified);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || collectedAt != null) {
+      map['collected_at'] = Variable<DateTime>(collectedAt);
+    }
+    return map;
+  }
+
+  LeftBehindItemsCompanion toCompanion(bool nullToAbsent) {
+    return LeftBehindItemsCompanion(
+      id: Value(id),
+      transactionId: Value(transactionId),
+      itemName: Value(itemName),
+      jenis: Value(jenis),
+      customerId: customerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerId),
+      customerNameText: customerNameText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerNameText),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      locallyModified: Value(locallyModified),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      collectedAt: collectedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(collectedAt),
+    );
+  }
+
+  factory LeftBehindItem.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LeftBehindItem(
+      id: serializer.fromJson<String>(json['id']),
+      transactionId: serializer.fromJson<String>(json['transactionId']),
+      itemName: serializer.fromJson<String>(json['itemName']),
+      jenis: serializer.fromJson<String>(json['jenis']),
+      customerId: serializer.fromJson<String?>(json['customerId']),
+      customerNameText: serializer.fromJson<String?>(json['customerNameText']),
+      note: serializer.fromJson<String?>(json['note']),
+      locallyModified: serializer.fromJson<bool>(json['locallyModified']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      collectedAt: serializer.fromJson<DateTime?>(json['collectedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'transactionId': serializer.toJson<String>(transactionId),
+      'itemName': serializer.toJson<String>(itemName),
+      'jenis': serializer.toJson<String>(jenis),
+      'customerId': serializer.toJson<String?>(customerId),
+      'customerNameText': serializer.toJson<String?>(customerNameText),
+      'note': serializer.toJson<String?>(note),
+      'locallyModified': serializer.toJson<bool>(locallyModified),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'collectedAt': serializer.toJson<DateTime?>(collectedAt),
+    };
+  }
+
+  LeftBehindItem copyWith(
+          {String? id,
+          String? transactionId,
+          String? itemName,
+          String? jenis,
+          Value<String?> customerId = const Value.absent(),
+          Value<String?> customerNameText = const Value.absent(),
+          Value<String?> note = const Value.absent(),
+          bool? locallyModified,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> collectedAt = const Value.absent()}) =>
+      LeftBehindItem(
+        id: id ?? this.id,
+        transactionId: transactionId ?? this.transactionId,
+        itemName: itemName ?? this.itemName,
+        jenis: jenis ?? this.jenis,
+        customerId: customerId.present ? customerId.value : this.customerId,
+        customerNameText: customerNameText.present
+            ? customerNameText.value
+            : this.customerNameText,
+        note: note.present ? note.value : this.note,
+        locallyModified: locallyModified ?? this.locallyModified,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        collectedAt: collectedAt.present ? collectedAt.value : this.collectedAt,
+      );
+  LeftBehindItem copyWithCompanion(LeftBehindItemsCompanion data) {
+    return LeftBehindItem(
+      id: data.id.present ? data.id.value : this.id,
+      transactionId: data.transactionId.present
+          ? data.transactionId.value
+          : this.transactionId,
+      itemName: data.itemName.present ? data.itemName.value : this.itemName,
+      jenis: data.jenis.present ? data.jenis.value : this.jenis,
+      customerId:
+          data.customerId.present ? data.customerId.value : this.customerId,
+      customerNameText: data.customerNameText.present
+          ? data.customerNameText.value
+          : this.customerNameText,
+      note: data.note.present ? data.note.value : this.note,
+      locallyModified: data.locallyModified.present
+          ? data.locallyModified.value
+          : this.locallyModified,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      collectedAt:
+          data.collectedAt.present ? data.collectedAt.value : this.collectedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeftBehindItem(')
+          ..write('id: $id, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('itemName: $itemName, ')
+          ..write('jenis: $jenis, ')
+          ..write('customerId: $customerId, ')
+          ..write('customerNameText: $customerNameText, ')
+          ..write('note: $note, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('collectedAt: $collectedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      transactionId,
+      itemName,
+      jenis,
+      customerId,
+      customerNameText,
+      note,
+      locallyModified,
+      createdAt,
+      updatedAt,
+      collectedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LeftBehindItem &&
+          other.id == this.id &&
+          other.transactionId == this.transactionId &&
+          other.itemName == this.itemName &&
+          other.jenis == this.jenis &&
+          other.customerId == this.customerId &&
+          other.customerNameText == this.customerNameText &&
+          other.note == this.note &&
+          other.locallyModified == this.locallyModified &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.collectedAt == this.collectedAt);
+}
+
+class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
+  final Value<String> id;
+  final Value<String> transactionId;
+  final Value<String> itemName;
+  final Value<String> jenis;
+  final Value<String?> customerId;
+  final Value<String?> customerNameText;
+  final Value<String?> note;
+  final Value<bool> locallyModified;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> collectedAt;
+  final Value<int> rowid;
+  const LeftBehindItemsCompanion({
+    this.id = const Value.absent(),
+    this.transactionId = const Value.absent(),
+    this.itemName = const Value.absent(),
+    this.jenis = const Value.absent(),
+    this.customerId = const Value.absent(),
+    this.customerNameText = const Value.absent(),
+    this.note = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.collectedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LeftBehindItemsCompanion.insert({
+    required String id,
+    required String transactionId,
+    required String itemName,
+    required String jenis,
+    this.customerId = const Value.absent(),
+    this.customerNameText = const Value.absent(),
+    this.note = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.collectedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        transactionId = Value(transactionId),
+        itemName = Value(itemName),
+        jenis = Value(jenis);
+  static Insertable<LeftBehindItem> custom({
+    Expression<String>? id,
+    Expression<String>? transactionId,
+    Expression<String>? itemName,
+    Expression<String>? jenis,
+    Expression<String>? customerId,
+    Expression<String>? customerNameText,
+    Expression<String>? note,
+    Expression<bool>? locallyModified,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? collectedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (transactionId != null) 'transaction_id': transactionId,
+      if (itemName != null) 'item_name': itemName,
+      if (jenis != null) 'jenis': jenis,
+      if (customerId != null) 'customer_id': customerId,
+      if (customerNameText != null) 'customer_name_text': customerNameText,
+      if (note != null) 'note': note,
+      if (locallyModified != null) 'locally_modified': locallyModified,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (collectedAt != null) 'collected_at': collectedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LeftBehindItemsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? transactionId,
+      Value<String>? itemName,
+      Value<String>? jenis,
+      Value<String?>? customerId,
+      Value<String?>? customerNameText,
+      Value<String?>? note,
+      Value<bool>? locallyModified,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? collectedAt,
+      Value<int>? rowid}) {
+    return LeftBehindItemsCompanion(
+      id: id ?? this.id,
+      transactionId: transactionId ?? this.transactionId,
+      itemName: itemName ?? this.itemName,
+      jenis: jenis ?? this.jenis,
+      customerId: customerId ?? this.customerId,
+      customerNameText: customerNameText ?? this.customerNameText,
+      note: note ?? this.note,
+      locallyModified: locallyModified ?? this.locallyModified,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      collectedAt: collectedAt ?? this.collectedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (transactionId.present) {
+      map['transaction_id'] = Variable<String>(transactionId.value);
+    }
+    if (itemName.present) {
+      map['item_name'] = Variable<String>(itemName.value);
+    }
+    if (jenis.present) {
+      map['jenis'] = Variable<String>(jenis.value);
+    }
+    if (customerId.present) {
+      map['customer_id'] = Variable<String>(customerId.value);
+    }
+    if (customerNameText.present) {
+      map['customer_name_text'] = Variable<String>(customerNameText.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (locallyModified.present) {
+      map['locally_modified'] = Variable<bool>(locallyModified.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (collectedAt.present) {
+      map['collected_at'] = Variable<DateTime>(collectedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeftBehindItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('itemName: $itemName, ')
+          ..write('jenis: $jenis, ')
+          ..write('customerId: $customerId, ')
+          ..write('customerNameText: $customerNameText, ')
+          ..write('note: $note, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('collectedAt: $collectedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BorrowedItemsTable extends BorrowedItems
+    with TableInfo<$BorrowedItemsTable, BorrowedItem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BorrowedItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _transactionIdMeta =
+      const VerificationMeta('transactionId');
+  @override
+  late final GeneratedColumn<String> transactionId = GeneratedColumn<String>(
+      'transaction_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES transactions (id)'));
+  static const VerificationMeta _itemNameMeta =
+      const VerificationMeta('itemName');
+  @override
+  late final GeneratedColumn<String> itemName = GeneratedColumn<String>(
+      'item_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _customerIdMeta =
+      const VerificationMeta('customerId');
+  @override
+  late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
+      'customer_id', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES customers (id)'));
+  static const VerificationMeta _customerNameTextMeta =
+      const VerificationMeta('customerNameText');
+  @override
+  late final GeneratedColumn<String> customerNameText = GeneratedColumn<String>(
+      'customer_name_text', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _qtyMeta = const VerificationMeta('qty');
+  @override
+  late final GeneratedColumn<double> qty = GeneratedColumn<double>(
+      'qty', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _qtyReturnedMeta =
+      const VerificationMeta('qtyReturned');
+  @override
+  late final GeneratedColumn<double> qtyReturned = GeneratedColumn<double>(
+      'qty_returned', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _locallyModifiedMeta =
+      const VerificationMeta('locallyModified');
+  @override
+  late final GeneratedColumn<bool> locallyModified = GeneratedColumn<bool>(
+      'locally_modified', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("locally_modified" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _fullyReturnedAtMeta =
+      const VerificationMeta('fullyReturnedAt');
+  @override
+  late final GeneratedColumn<DateTime> fullyReturnedAt =
+      GeneratedColumn<DateTime>('fully_returned_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        transactionId,
+        itemName,
+        customerId,
+        customerNameText,
+        qty,
+        qtyReturned,
+        note,
+        locallyModified,
+        createdAt,
+        updatedAt,
+        fullyReturnedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'borrowed_items';
+  @override
+  VerificationContext validateIntegrity(Insertable<BorrowedItem> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('transaction_id')) {
+      context.handle(
+          _transactionIdMeta,
+          transactionId.isAcceptableOrUnknown(
+              data['transaction_id']!, _transactionIdMeta));
+    } else if (isInserting) {
+      context.missing(_transactionIdMeta);
+    }
+    if (data.containsKey('item_name')) {
+      context.handle(_itemNameMeta,
+          itemName.isAcceptableOrUnknown(data['item_name']!, _itemNameMeta));
+    } else if (isInserting) {
+      context.missing(_itemNameMeta);
+    }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+          _customerIdMeta,
+          customerId.isAcceptableOrUnknown(
+              data['customer_id']!, _customerIdMeta));
+    }
+    if (data.containsKey('customer_name_text')) {
+      context.handle(
+          _customerNameTextMeta,
+          customerNameText.isAcceptableOrUnknown(
+              data['customer_name_text']!, _customerNameTextMeta));
+    }
+    if (data.containsKey('qty')) {
+      context.handle(
+          _qtyMeta, qty.isAcceptableOrUnknown(data['qty']!, _qtyMeta));
+    } else if (isInserting) {
+      context.missing(_qtyMeta);
+    }
+    if (data.containsKey('qty_returned')) {
+      context.handle(
+          _qtyReturnedMeta,
+          qtyReturned.isAcceptableOrUnknown(
+              data['qty_returned']!, _qtyReturnedMeta));
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('locally_modified')) {
+      context.handle(
+          _locallyModifiedMeta,
+          locallyModified.isAcceptableOrUnknown(
+              data['locally_modified']!, _locallyModifiedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('fully_returned_at')) {
+      context.handle(
+          _fullyReturnedAtMeta,
+          fullyReturnedAt.isAcceptableOrUnknown(
+              data['fully_returned_at']!, _fullyReturnedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BorrowedItem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BorrowedItem(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      transactionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}transaction_id'])!,
+      itemName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}item_name'])!,
+      customerId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}customer_id']),
+      customerNameText: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}customer_name_text']),
+      qty: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}qty'])!,
+      qtyReturned: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}qty_returned'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      locallyModified: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      fullyReturnedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}fully_returned_at']),
+    );
+  }
+
+  @override
+  $BorrowedItemsTable createAlias(String alias) {
+    return $BorrowedItemsTable(attachedDatabase, alias);
+  }
+}
+
+class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
+  final String id;
+  final String transactionId;
+  final String itemName;
+  final String? customerId;
+  final String? customerNameText;
+  final double qty;
+  final double qtyReturned;
+  final String? note;
+  final bool locallyModified;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? fullyReturnedAt;
+  const BorrowedItem(
+      {required this.id,
+      required this.transactionId,
+      required this.itemName,
+      this.customerId,
+      this.customerNameText,
+      required this.qty,
+      required this.qtyReturned,
+      this.note,
+      required this.locallyModified,
+      required this.createdAt,
+      required this.updatedAt,
+      this.fullyReturnedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['transaction_id'] = Variable<String>(transactionId);
+    map['item_name'] = Variable<String>(itemName);
+    if (!nullToAbsent || customerId != null) {
+      map['customer_id'] = Variable<String>(customerId);
+    }
+    if (!nullToAbsent || customerNameText != null) {
+      map['customer_name_text'] = Variable<String>(customerNameText);
+    }
+    map['qty'] = Variable<double>(qty);
+    map['qty_returned'] = Variable<double>(qtyReturned);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['locally_modified'] = Variable<bool>(locallyModified);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || fullyReturnedAt != null) {
+      map['fully_returned_at'] = Variable<DateTime>(fullyReturnedAt);
+    }
+    return map;
+  }
+
+  BorrowedItemsCompanion toCompanion(bool nullToAbsent) {
+    return BorrowedItemsCompanion(
+      id: Value(id),
+      transactionId: Value(transactionId),
+      itemName: Value(itemName),
+      customerId: customerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerId),
+      customerNameText: customerNameText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerNameText),
+      qty: Value(qty),
+      qtyReturned: Value(qtyReturned),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      locallyModified: Value(locallyModified),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      fullyReturnedAt: fullyReturnedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fullyReturnedAt),
+    );
+  }
+
+  factory BorrowedItem.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BorrowedItem(
+      id: serializer.fromJson<String>(json['id']),
+      transactionId: serializer.fromJson<String>(json['transactionId']),
+      itemName: serializer.fromJson<String>(json['itemName']),
+      customerId: serializer.fromJson<String?>(json['customerId']),
+      customerNameText: serializer.fromJson<String?>(json['customerNameText']),
+      qty: serializer.fromJson<double>(json['qty']),
+      qtyReturned: serializer.fromJson<double>(json['qtyReturned']),
+      note: serializer.fromJson<String?>(json['note']),
+      locallyModified: serializer.fromJson<bool>(json['locallyModified']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      fullyReturnedAt: serializer.fromJson<DateTime?>(json['fullyReturnedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'transactionId': serializer.toJson<String>(transactionId),
+      'itemName': serializer.toJson<String>(itemName),
+      'customerId': serializer.toJson<String?>(customerId),
+      'customerNameText': serializer.toJson<String?>(customerNameText),
+      'qty': serializer.toJson<double>(qty),
+      'qtyReturned': serializer.toJson<double>(qtyReturned),
+      'note': serializer.toJson<String?>(note),
+      'locallyModified': serializer.toJson<bool>(locallyModified),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'fullyReturnedAt': serializer.toJson<DateTime?>(fullyReturnedAt),
+    };
+  }
+
+  BorrowedItem copyWith(
+          {String? id,
+          String? transactionId,
+          String? itemName,
+          Value<String?> customerId = const Value.absent(),
+          Value<String?> customerNameText = const Value.absent(),
+          double? qty,
+          double? qtyReturned,
+          Value<String?> note = const Value.absent(),
+          bool? locallyModified,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> fullyReturnedAt = const Value.absent()}) =>
+      BorrowedItem(
+        id: id ?? this.id,
+        transactionId: transactionId ?? this.transactionId,
+        itemName: itemName ?? this.itemName,
+        customerId: customerId.present ? customerId.value : this.customerId,
+        customerNameText: customerNameText.present
+            ? customerNameText.value
+            : this.customerNameText,
+        qty: qty ?? this.qty,
+        qtyReturned: qtyReturned ?? this.qtyReturned,
+        note: note.present ? note.value : this.note,
+        locallyModified: locallyModified ?? this.locallyModified,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        fullyReturnedAt: fullyReturnedAt.present
+            ? fullyReturnedAt.value
+            : this.fullyReturnedAt,
+      );
+  BorrowedItem copyWithCompanion(BorrowedItemsCompanion data) {
+    return BorrowedItem(
+      id: data.id.present ? data.id.value : this.id,
+      transactionId: data.transactionId.present
+          ? data.transactionId.value
+          : this.transactionId,
+      itemName: data.itemName.present ? data.itemName.value : this.itemName,
+      customerId:
+          data.customerId.present ? data.customerId.value : this.customerId,
+      customerNameText: data.customerNameText.present
+          ? data.customerNameText.value
+          : this.customerNameText,
+      qty: data.qty.present ? data.qty.value : this.qty,
+      qtyReturned:
+          data.qtyReturned.present ? data.qtyReturned.value : this.qtyReturned,
+      note: data.note.present ? data.note.value : this.note,
+      locallyModified: data.locallyModified.present
+          ? data.locallyModified.value
+          : this.locallyModified,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      fullyReturnedAt: data.fullyReturnedAt.present
+          ? data.fullyReturnedAt.value
+          : this.fullyReturnedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BorrowedItem(')
+          ..write('id: $id, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('itemName: $itemName, ')
+          ..write('customerId: $customerId, ')
+          ..write('customerNameText: $customerNameText, ')
+          ..write('qty: $qty, ')
+          ..write('qtyReturned: $qtyReturned, ')
+          ..write('note: $note, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('fullyReturnedAt: $fullyReturnedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      transactionId,
+      itemName,
+      customerId,
+      customerNameText,
+      qty,
+      qtyReturned,
+      note,
+      locallyModified,
+      createdAt,
+      updatedAt,
+      fullyReturnedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BorrowedItem &&
+          other.id == this.id &&
+          other.transactionId == this.transactionId &&
+          other.itemName == this.itemName &&
+          other.customerId == this.customerId &&
+          other.customerNameText == this.customerNameText &&
+          other.qty == this.qty &&
+          other.qtyReturned == this.qtyReturned &&
+          other.note == this.note &&
+          other.locallyModified == this.locallyModified &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.fullyReturnedAt == this.fullyReturnedAt);
+}
+
+class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
+  final Value<String> id;
+  final Value<String> transactionId;
+  final Value<String> itemName;
+  final Value<String?> customerId;
+  final Value<String?> customerNameText;
+  final Value<double> qty;
+  final Value<double> qtyReturned;
+  final Value<String?> note;
+  final Value<bool> locallyModified;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> fullyReturnedAt;
+  final Value<int> rowid;
+  const BorrowedItemsCompanion({
+    this.id = const Value.absent(),
+    this.transactionId = const Value.absent(),
+    this.itemName = const Value.absent(),
+    this.customerId = const Value.absent(),
+    this.customerNameText = const Value.absent(),
+    this.qty = const Value.absent(),
+    this.qtyReturned = const Value.absent(),
+    this.note = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.fullyReturnedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BorrowedItemsCompanion.insert({
+    required String id,
+    required String transactionId,
+    required String itemName,
+    this.customerId = const Value.absent(),
+    this.customerNameText = const Value.absent(),
+    required double qty,
+    this.qtyReturned = const Value.absent(),
+    this.note = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.fullyReturnedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        transactionId = Value(transactionId),
+        itemName = Value(itemName),
+        qty = Value(qty);
+  static Insertable<BorrowedItem> custom({
+    Expression<String>? id,
+    Expression<String>? transactionId,
+    Expression<String>? itemName,
+    Expression<String>? customerId,
+    Expression<String>? customerNameText,
+    Expression<double>? qty,
+    Expression<double>? qtyReturned,
+    Expression<String>? note,
+    Expression<bool>? locallyModified,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? fullyReturnedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (transactionId != null) 'transaction_id': transactionId,
+      if (itemName != null) 'item_name': itemName,
+      if (customerId != null) 'customer_id': customerId,
+      if (customerNameText != null) 'customer_name_text': customerNameText,
+      if (qty != null) 'qty': qty,
+      if (qtyReturned != null) 'qty_returned': qtyReturned,
+      if (note != null) 'note': note,
+      if (locallyModified != null) 'locally_modified': locallyModified,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (fullyReturnedAt != null) 'fully_returned_at': fullyReturnedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BorrowedItemsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? transactionId,
+      Value<String>? itemName,
+      Value<String?>? customerId,
+      Value<String?>? customerNameText,
+      Value<double>? qty,
+      Value<double>? qtyReturned,
+      Value<String?>? note,
+      Value<bool>? locallyModified,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? fullyReturnedAt,
+      Value<int>? rowid}) {
+    return BorrowedItemsCompanion(
+      id: id ?? this.id,
+      transactionId: transactionId ?? this.transactionId,
+      itemName: itemName ?? this.itemName,
+      customerId: customerId ?? this.customerId,
+      customerNameText: customerNameText ?? this.customerNameText,
+      qty: qty ?? this.qty,
+      qtyReturned: qtyReturned ?? this.qtyReturned,
+      note: note ?? this.note,
+      locallyModified: locallyModified ?? this.locallyModified,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      fullyReturnedAt: fullyReturnedAt ?? this.fullyReturnedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (transactionId.present) {
+      map['transaction_id'] = Variable<String>(transactionId.value);
+    }
+    if (itemName.present) {
+      map['item_name'] = Variable<String>(itemName.value);
+    }
+    if (customerId.present) {
+      map['customer_id'] = Variable<String>(customerId.value);
+    }
+    if (customerNameText.present) {
+      map['customer_name_text'] = Variable<String>(customerNameText.value);
+    }
+    if (qty.present) {
+      map['qty'] = Variable<double>(qty.value);
+    }
+    if (qtyReturned.present) {
+      map['qty_returned'] = Variable<double>(qtyReturned.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (locallyModified.present) {
+      map['locally_modified'] = Variable<bool>(locallyModified.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (fullyReturnedAt.present) {
+      map['fully_returned_at'] = Variable<DateTime>(fullyReturnedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BorrowedItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('itemName: $itemName, ')
+          ..write('customerId: $customerId, ')
+          ..write('customerNameText: $customerNameText, ')
+          ..write('qty: $qty, ')
+          ..write('qtyReturned: $qtyReturned, ')
+          ..write('note: $note, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('fullyReturnedAt: $fullyReturnedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PreorderEntriesTable extends PreorderEntries
+    with TableInfo<$PreorderEntriesTable, PreorderEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PreorderEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productUnitIdMeta =
+      const VerificationMeta('productUnitId');
+  @override
+  late final GeneratedColumn<String> productUnitId = GeneratedColumn<String>(
+      'product_unit_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _transactionIdMeta =
+      const VerificationMeta('transactionId');
+  @override
+  late final GeneratedColumn<String> transactionId = GeneratedColumn<String>(
+      'transaction_id', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES transactions (id)'));
+  static const VerificationMeta _customerNameMeta =
+      const VerificationMeta('customerName');
+  @override
+  late final GeneratedColumn<String> customerName = GeneratedColumn<String>(
+      'customer_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+      'phone', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _qtyOrderedMeta =
+      const VerificationMeta('qtyOrdered');
+  @override
+  late final GeneratedColumn<double> qtyOrdered = GeneratedColumn<double>(
+      'qty_ordered', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _depositQtyMeta =
+      const VerificationMeta('depositQty');
+  @override
+  late final GeneratedColumn<double> depositQty = GeneratedColumn<double>(
+      'deposit_qty', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _paidMeta = const VerificationMeta('paid');
+  @override
+  late final GeneratedColumn<bool> paid = GeneratedColumn<bool>(
+      'paid', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("paid" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _locallyModifiedMeta =
+      const VerificationMeta('locallyModified');
+  @override
+  late final GeneratedColumn<bool> locallyModified = GeneratedColumn<bool>(
+      'locally_modified', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("locally_modified" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _fulfilledAtMeta =
+      const VerificationMeta('fulfilledAt');
+  @override
+  late final GeneratedColumn<DateTime> fulfilledAt = GeneratedColumn<DateTime>(
+      'fulfilled_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _cancelledAtMeta =
+      const VerificationMeta('cancelledAt');
+  @override
+  late final GeneratedColumn<DateTime> cancelledAt = GeneratedColumn<DateTime>(
+      'cancelled_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        productId,
+        productUnitId,
+        transactionId,
+        customerName,
+        phone,
+        qtyOrdered,
+        depositQty,
+        paid,
+        note,
+        locallyModified,
+        createdAt,
+        updatedAt,
+        fulfilledAt,
+        cancelledAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'preorder_entries';
+  @override
+  VerificationContext validateIntegrity(Insertable<PreorderEntry> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('product_unit_id')) {
+      context.handle(
+          _productUnitIdMeta,
+          productUnitId.isAcceptableOrUnknown(
+              data['product_unit_id']!, _productUnitIdMeta));
+    } else if (isInserting) {
+      context.missing(_productUnitIdMeta);
+    }
+    if (data.containsKey('transaction_id')) {
+      context.handle(
+          _transactionIdMeta,
+          transactionId.isAcceptableOrUnknown(
+              data['transaction_id']!, _transactionIdMeta));
+    }
+    if (data.containsKey('customer_name')) {
+      context.handle(
+          _customerNameMeta,
+          customerName.isAcceptableOrUnknown(
+              data['customer_name']!, _customerNameMeta));
+    } else if (isInserting) {
+      context.missing(_customerNameMeta);
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+          _phoneMeta, phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta));
+    }
+    if (data.containsKey('qty_ordered')) {
+      context.handle(
+          _qtyOrderedMeta,
+          qtyOrdered.isAcceptableOrUnknown(
+              data['qty_ordered']!, _qtyOrderedMeta));
+    } else if (isInserting) {
+      context.missing(_qtyOrderedMeta);
+    }
+    if (data.containsKey('deposit_qty')) {
+      context.handle(
+          _depositQtyMeta,
+          depositQty.isAcceptableOrUnknown(
+              data['deposit_qty']!, _depositQtyMeta));
+    }
+    if (data.containsKey('paid')) {
+      context.handle(
+          _paidMeta, paid.isAcceptableOrUnknown(data['paid']!, _paidMeta));
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('locally_modified')) {
+      context.handle(
+          _locallyModifiedMeta,
+          locallyModified.isAcceptableOrUnknown(
+              data['locally_modified']!, _locallyModifiedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('fulfilled_at')) {
+      context.handle(
+          _fulfilledAtMeta,
+          fulfilledAt.isAcceptableOrUnknown(
+              data['fulfilled_at']!, _fulfilledAtMeta));
+    }
+    if (data.containsKey('cancelled_at')) {
+      context.handle(
+          _cancelledAtMeta,
+          cancelledAt.isAcceptableOrUnknown(
+              data['cancelled_at']!, _cancelledAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PreorderEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PreorderEntry(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_id'])!,
+      productUnitId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}product_unit_id'])!,
+      transactionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}transaction_id']),
+      customerName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}customer_name'])!,
+      phone: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}phone']),
+      qtyOrdered: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}qty_ordered'])!,
+      depositQty: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}deposit_qty'])!,
+      paid: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}paid'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      locallyModified: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      fulfilledAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}fulfilled_at']),
+      cancelledAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}cancelled_at']),
+    );
+  }
+
+  @override
+  $PreorderEntriesTable createAlias(String alias) {
+    return $PreorderEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
+  final String id;
+  final String productId;
+  final String productUnitId;
+
+  /// NULLABLE — satu-satunya kasus null: pembeli cuma titip wadah tanpa
+  /// membeli apa pun (tidak ada transaksi lain berjalan saat itu).
+  final String? transactionId;
+  final String customerName;
+  final String? phone;
+  final double qtyOrdered;
+
+  /// Jumlah wadah dititip sbg jaminan — wajib >0 kalau satuan produknya
+  /// `requiresDeposit = true` (divalidasi di layer aplikasi, bukan DB).
+  final double depositQty;
+  final bool paid;
+  final String? note;
+  final bool locallyModified;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? fulfilledAt;
+  final DateTime? cancelledAt;
+  const PreorderEntry(
+      {required this.id,
+      required this.productId,
+      required this.productUnitId,
+      this.transactionId,
+      required this.customerName,
+      this.phone,
+      required this.qtyOrdered,
+      required this.depositQty,
+      required this.paid,
+      this.note,
+      required this.locallyModified,
+      required this.createdAt,
+      required this.updatedAt,
+      this.fulfilledAt,
+      this.cancelledAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['product_id'] = Variable<String>(productId);
+    map['product_unit_id'] = Variable<String>(productUnitId);
+    if (!nullToAbsent || transactionId != null) {
+      map['transaction_id'] = Variable<String>(transactionId);
+    }
+    map['customer_name'] = Variable<String>(customerName);
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    map['qty_ordered'] = Variable<double>(qtyOrdered);
+    map['deposit_qty'] = Variable<double>(depositQty);
+    map['paid'] = Variable<bool>(paid);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['locally_modified'] = Variable<bool>(locallyModified);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || fulfilledAt != null) {
+      map['fulfilled_at'] = Variable<DateTime>(fulfilledAt);
+    }
+    if (!nullToAbsent || cancelledAt != null) {
+      map['cancelled_at'] = Variable<DateTime>(cancelledAt);
+    }
+    return map;
+  }
+
+  PreorderEntriesCompanion toCompanion(bool nullToAbsent) {
+    return PreorderEntriesCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      productUnitId: Value(productUnitId),
+      transactionId: transactionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionId),
+      customerName: Value(customerName),
+      phone:
+          phone == null && nullToAbsent ? const Value.absent() : Value(phone),
+      qtyOrdered: Value(qtyOrdered),
+      depositQty: Value(depositQty),
+      paid: Value(paid),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      locallyModified: Value(locallyModified),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      fulfilledAt: fulfilledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fulfilledAt),
+      cancelledAt: cancelledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cancelledAt),
+    );
+  }
+
+  factory PreorderEntry.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PreorderEntry(
+      id: serializer.fromJson<String>(json['id']),
+      productId: serializer.fromJson<String>(json['productId']),
+      productUnitId: serializer.fromJson<String>(json['productUnitId']),
+      transactionId: serializer.fromJson<String?>(json['transactionId']),
+      customerName: serializer.fromJson<String>(json['customerName']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      qtyOrdered: serializer.fromJson<double>(json['qtyOrdered']),
+      depositQty: serializer.fromJson<double>(json['depositQty']),
+      paid: serializer.fromJson<bool>(json['paid']),
+      note: serializer.fromJson<String?>(json['note']),
+      locallyModified: serializer.fromJson<bool>(json['locallyModified']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      fulfilledAt: serializer.fromJson<DateTime?>(json['fulfilledAt']),
+      cancelledAt: serializer.fromJson<DateTime?>(json['cancelledAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'productId': serializer.toJson<String>(productId),
+      'productUnitId': serializer.toJson<String>(productUnitId),
+      'transactionId': serializer.toJson<String?>(transactionId),
+      'customerName': serializer.toJson<String>(customerName),
+      'phone': serializer.toJson<String?>(phone),
+      'qtyOrdered': serializer.toJson<double>(qtyOrdered),
+      'depositQty': serializer.toJson<double>(depositQty),
+      'paid': serializer.toJson<bool>(paid),
+      'note': serializer.toJson<String?>(note),
+      'locallyModified': serializer.toJson<bool>(locallyModified),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'fulfilledAt': serializer.toJson<DateTime?>(fulfilledAt),
+      'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
+    };
+  }
+
+  PreorderEntry copyWith(
+          {String? id,
+          String? productId,
+          String? productUnitId,
+          Value<String?> transactionId = const Value.absent(),
+          String? customerName,
+          Value<String?> phone = const Value.absent(),
+          double? qtyOrdered,
+          double? depositQty,
+          bool? paid,
+          Value<String?> note = const Value.absent(),
+          bool? locallyModified,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> fulfilledAt = const Value.absent(),
+          Value<DateTime?> cancelledAt = const Value.absent()}) =>
+      PreorderEntry(
+        id: id ?? this.id,
+        productId: productId ?? this.productId,
+        productUnitId: productUnitId ?? this.productUnitId,
+        transactionId:
+            transactionId.present ? transactionId.value : this.transactionId,
+        customerName: customerName ?? this.customerName,
+        phone: phone.present ? phone.value : this.phone,
+        qtyOrdered: qtyOrdered ?? this.qtyOrdered,
+        depositQty: depositQty ?? this.depositQty,
+        paid: paid ?? this.paid,
+        note: note.present ? note.value : this.note,
+        locallyModified: locallyModified ?? this.locallyModified,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        fulfilledAt: fulfilledAt.present ? fulfilledAt.value : this.fulfilledAt,
+        cancelledAt: cancelledAt.present ? cancelledAt.value : this.cancelledAt,
+      );
+  PreorderEntry copyWithCompanion(PreorderEntriesCompanion data) {
+    return PreorderEntry(
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      productUnitId: data.productUnitId.present
+          ? data.productUnitId.value
+          : this.productUnitId,
+      transactionId: data.transactionId.present
+          ? data.transactionId.value
+          : this.transactionId,
+      customerName: data.customerName.present
+          ? data.customerName.value
+          : this.customerName,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      qtyOrdered:
+          data.qtyOrdered.present ? data.qtyOrdered.value : this.qtyOrdered,
+      depositQty:
+          data.depositQty.present ? data.depositQty.value : this.depositQty,
+      paid: data.paid.present ? data.paid.value : this.paid,
+      note: data.note.present ? data.note.value : this.note,
+      locallyModified: data.locallyModified.present
+          ? data.locallyModified.value
+          : this.locallyModified,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      fulfilledAt:
+          data.fulfilledAt.present ? data.fulfilledAt.value : this.fulfilledAt,
+      cancelledAt:
+          data.cancelledAt.present ? data.cancelledAt.value : this.cancelledAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PreorderEntry(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('productUnitId: $productUnitId, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('customerName: $customerName, ')
+          ..write('phone: $phone, ')
+          ..write('qtyOrdered: $qtyOrdered, ')
+          ..write('depositQty: $depositQty, ')
+          ..write('paid: $paid, ')
+          ..write('note: $note, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('fulfilledAt: $fulfilledAt, ')
+          ..write('cancelledAt: $cancelledAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      productId,
+      productUnitId,
+      transactionId,
+      customerName,
+      phone,
+      qtyOrdered,
+      depositQty,
+      paid,
+      note,
+      locallyModified,
+      createdAt,
+      updatedAt,
+      fulfilledAt,
+      cancelledAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PreorderEntry &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.productUnitId == this.productUnitId &&
+          other.transactionId == this.transactionId &&
+          other.customerName == this.customerName &&
+          other.phone == this.phone &&
+          other.qtyOrdered == this.qtyOrdered &&
+          other.depositQty == this.depositQty &&
+          other.paid == this.paid &&
+          other.note == this.note &&
+          other.locallyModified == this.locallyModified &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.fulfilledAt == this.fulfilledAt &&
+          other.cancelledAt == this.cancelledAt);
+}
+
+class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
+  final Value<String> id;
+  final Value<String> productId;
+  final Value<String> productUnitId;
+  final Value<String?> transactionId;
+  final Value<String> customerName;
+  final Value<String?> phone;
+  final Value<double> qtyOrdered;
+  final Value<double> depositQty;
+  final Value<bool> paid;
+  final Value<String?> note;
+  final Value<bool> locallyModified;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> fulfilledAt;
+  final Value<DateTime?> cancelledAt;
+  final Value<int> rowid;
+  const PreorderEntriesCompanion({
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.productUnitId = const Value.absent(),
+    this.transactionId = const Value.absent(),
+    this.customerName = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.qtyOrdered = const Value.absent(),
+    this.depositQty = const Value.absent(),
+    this.paid = const Value.absent(),
+    this.note = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.fulfilledAt = const Value.absent(),
+    this.cancelledAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PreorderEntriesCompanion.insert({
+    required String id,
+    required String productId,
+    required String productUnitId,
+    this.transactionId = const Value.absent(),
+    required String customerName,
+    this.phone = const Value.absent(),
+    required double qtyOrdered,
+    this.depositQty = const Value.absent(),
+    this.paid = const Value.absent(),
+    this.note = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.fulfilledAt = const Value.absent(),
+    this.cancelledAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        productId = Value(productId),
+        productUnitId = Value(productUnitId),
+        customerName = Value(customerName),
+        qtyOrdered = Value(qtyOrdered);
+  static Insertable<PreorderEntry> custom({
+    Expression<String>? id,
+    Expression<String>? productId,
+    Expression<String>? productUnitId,
+    Expression<String>? transactionId,
+    Expression<String>? customerName,
+    Expression<String>? phone,
+    Expression<double>? qtyOrdered,
+    Expression<double>? depositQty,
+    Expression<bool>? paid,
+    Expression<String>? note,
+    Expression<bool>? locallyModified,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? fulfilledAt,
+    Expression<DateTime>? cancelledAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (productUnitId != null) 'product_unit_id': productUnitId,
+      if (transactionId != null) 'transaction_id': transactionId,
+      if (customerName != null) 'customer_name': customerName,
+      if (phone != null) 'phone': phone,
+      if (qtyOrdered != null) 'qty_ordered': qtyOrdered,
+      if (depositQty != null) 'deposit_qty': depositQty,
+      if (paid != null) 'paid': paid,
+      if (note != null) 'note': note,
+      if (locallyModified != null) 'locally_modified': locallyModified,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (fulfilledAt != null) 'fulfilled_at': fulfilledAt,
+      if (cancelledAt != null) 'cancelled_at': cancelledAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PreorderEntriesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? productId,
+      Value<String>? productUnitId,
+      Value<String?>? transactionId,
+      Value<String>? customerName,
+      Value<String?>? phone,
+      Value<double>? qtyOrdered,
+      Value<double>? depositQty,
+      Value<bool>? paid,
+      Value<String?>? note,
+      Value<bool>? locallyModified,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? fulfilledAt,
+      Value<DateTime?>? cancelledAt,
+      Value<int>? rowid}) {
+    return PreorderEntriesCompanion(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      productUnitId: productUnitId ?? this.productUnitId,
+      transactionId: transactionId ?? this.transactionId,
+      customerName: customerName ?? this.customerName,
+      phone: phone ?? this.phone,
+      qtyOrdered: qtyOrdered ?? this.qtyOrdered,
+      depositQty: depositQty ?? this.depositQty,
+      paid: paid ?? this.paid,
+      note: note ?? this.note,
+      locallyModified: locallyModified ?? this.locallyModified,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      fulfilledAt: fulfilledAt ?? this.fulfilledAt,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (productUnitId.present) {
+      map['product_unit_id'] = Variable<String>(productUnitId.value);
+    }
+    if (transactionId.present) {
+      map['transaction_id'] = Variable<String>(transactionId.value);
+    }
+    if (customerName.present) {
+      map['customer_name'] = Variable<String>(customerName.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (qtyOrdered.present) {
+      map['qty_ordered'] = Variable<double>(qtyOrdered.value);
+    }
+    if (depositQty.present) {
+      map['deposit_qty'] = Variable<double>(depositQty.value);
+    }
+    if (paid.present) {
+      map['paid'] = Variable<bool>(paid.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (locallyModified.present) {
+      map['locally_modified'] = Variable<bool>(locallyModified.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (fulfilledAt.present) {
+      map['fulfilled_at'] = Variable<DateTime>(fulfilledAt.value);
+    }
+    if (cancelledAt.present) {
+      map['cancelled_at'] = Variable<DateTime>(cancelledAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PreorderEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('productUnitId: $productUnitId, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('customerName: $customerName, ')
+          ..write('phone: $phone, ')
+          ..write('qtyOrdered: $qtyOrdered, ')
+          ..write('depositQty: $depositQty, ')
+          ..write('paid: $paid, ')
+          ..write('note: $note, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('fulfilledAt: $fulfilledAt, ')
+          ..write('cancelledAt: $cancelledAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11696,6 +13691,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CashClosingsTable cashClosings = $CashClosingsTable(this);
   late final $SyncUploadQueueTable syncUploadQueue =
       $SyncUploadQueueTable(this);
+  late final $LeftBehindItemsTable leftBehindItems =
+      $LeftBehindItemsTable(this);
+  late final $BorrowedItemsTable borrowedItems = $BorrowedItemsTable(this);
+  late final $PreorderEntriesTable preorderEntries =
+      $PreorderEntriesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11729,7 +13729,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         dailySummaries,
         employees,
         cashClosings,
-        syncUploadQueue
+        syncUploadQueue,
+        leftBehindItems,
+        borrowedItems,
+        preorderEntries
       ];
 }
 
@@ -12960,6 +14963,7 @@ typedef $$ProductUnitsTableCreateCompanionBuilder = ProductUnitsCompanion
   Value<double> ratioToBase,
   Value<bool> isNonStock,
   Value<int?> minStock,
+  Value<bool> requiresDeposit,
   Value<int> rowid,
 });
 typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
@@ -12971,6 +14975,7 @@ typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
   Value<double> ratioToBase,
   Value<bool> isNonStock,
   Value<int?> minStock,
+  Value<bool> requiresDeposit,
   Value<int> rowid,
 });
 
@@ -13083,6 +15088,10 @@ class $$ProductUnitsTableFilterComposer
 
   ColumnFilters<int> get minStock => $composableBuilder(
       column: $table.minStock, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get requiresDeposit => $composableBuilder(
+      column: $table.requiresDeposit,
+      builder: (column) => ColumnFilters(column));
 
   $$ProductsTableFilterComposer get productId {
     final $$ProductsTableFilterComposer composer = $composerBuilder(
@@ -13216,6 +15225,10 @@ class $$ProductUnitsTableOrderingComposer
   ColumnOrderings<int> get minStock => $composableBuilder(
       column: $table.minStock, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get requiresDeposit => $composableBuilder(
+      column: $table.requiresDeposit,
+      builder: (column) => ColumnOrderings(column));
+
   $$ProductsTableOrderingComposer get productId {
     final $$ProductsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -13263,6 +15276,9 @@ class $$ProductUnitsTableAnnotationComposer
 
   GeneratedColumn<int> get minStock =>
       $composableBuilder(column: $table.minStock, builder: (column) => column);
+
+  GeneratedColumn<bool> get requiresDeposit => $composableBuilder(
+      column: $table.requiresDeposit, builder: (column) => column);
 
   $$ProductsTableAnnotationComposer get productId {
     final $$ProductsTableAnnotationComposer composer = $composerBuilder(
@@ -13406,6 +15422,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<double> ratioToBase = const Value.absent(),
             Value<bool> isNonStock = const Value.absent(),
             Value<int?> minStock = const Value.absent(),
+            Value<bool> requiresDeposit = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion(
@@ -13416,6 +15433,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             ratioToBase: ratioToBase,
             isNonStock: isNonStock,
             minStock: minStock,
+            requiresDeposit: requiresDeposit,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -13426,6 +15444,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<double> ratioToBase = const Value.absent(),
             Value<bool> isNonStock = const Value.absent(),
             Value<int?> minStock = const Value.absent(),
+            Value<bool> requiresDeposit = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion.insert(
@@ -13436,6 +15455,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             ratioToBase: ratioToBase,
             isNonStock: isNonStock,
             minStock: minStock,
+            requiresDeposit: requiresDeposit,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -15009,6 +17029,43 @@ typedef $$CustomersTableUpdateCompanionBuilder = CustomersCompanion Function({
   Value<int> rowid,
 });
 
+final class $$CustomersTableReferences
+    extends BaseReferences<_$AppDatabase, $CustomersTable, Customer> {
+  $$CustomersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$LeftBehindItemsTable, List<LeftBehindItem>>
+      _leftBehindItemsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.leftBehindItems,
+              aliasName: $_aliasNameGenerator(
+                  db.customers.id, db.leftBehindItems.customerId));
+
+  $$LeftBehindItemsTableProcessedTableManager get leftBehindItemsRefs {
+    final manager =
+        $$LeftBehindItemsTableTableManager($_db, $_db.leftBehindItems)
+            .filter((f) => f.customerId.id($_item.id));
+
+    final cache =
+        $_typedResult.readTableOrNull(_leftBehindItemsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$BorrowedItemsTable, List<BorrowedItem>>
+      _borrowedItemsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.borrowedItems,
+              aliasName: $_aliasNameGenerator(
+                  db.customers.id, db.borrowedItems.customerId));
+
+  $$BorrowedItemsTableProcessedTableManager get borrowedItemsRefs {
+    final manager = $$BorrowedItemsTableTableManager($_db, $_db.borrowedItems)
+        .filter((f) => f.customerId.id($_item.id));
+
+    final cache = $_typedResult.readTableOrNull(_borrowedItemsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
+
 class $$CustomersTableFilterComposer
     extends Composer<_$AppDatabase, $CustomersTable> {
   $$CustomersTableFilterComposer({
@@ -15055,6 +17112,48 @@ class $$CustomersTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> leftBehindItemsRefs(
+      Expression<bool> Function($$LeftBehindItemsTableFilterComposer f) f) {
+    final $$LeftBehindItemsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.leftBehindItems,
+        getReferencedColumn: (t) => t.customerId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LeftBehindItemsTableFilterComposer(
+              $db: $db,
+              $table: $db.leftBehindItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> borrowedItemsRefs(
+      Expression<bool> Function($$BorrowedItemsTableFilterComposer f) f) {
+    final $$BorrowedItemsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.borrowedItems,
+        getReferencedColumn: (t) => t.customerId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$BorrowedItemsTableFilterComposer(
+              $db: $db,
+              $table: $db.borrowedItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$CustomersTableOrderingComposer
@@ -15150,6 +17249,48 @@ class $$CustomersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> leftBehindItemsRefs<T extends Object>(
+      Expression<T> Function($$LeftBehindItemsTableAnnotationComposer a) f) {
+    final $$LeftBehindItemsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.leftBehindItems,
+        getReferencedColumn: (t) => t.customerId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LeftBehindItemsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.leftBehindItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<T> borrowedItemsRefs<T extends Object>(
+      Expression<T> Function($$BorrowedItemsTableAnnotationComposer a) f) {
+    final $$BorrowedItemsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.borrowedItems,
+        getReferencedColumn: (t) => t.customerId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$BorrowedItemsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.borrowedItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$CustomersTableTableManager extends RootTableManager<
@@ -15161,9 +17302,10 @@ class $$CustomersTableTableManager extends RootTableManager<
     $$CustomersTableAnnotationComposer,
     $$CustomersTableCreateCompanionBuilder,
     $$CustomersTableUpdateCompanionBuilder,
-    (Customer, BaseReferences<_$AppDatabase, $CustomersTable, Customer>),
+    (Customer, $$CustomersTableReferences),
     Customer,
-    PrefetchHooks Function()> {
+    PrefetchHooks Function(
+        {bool leftBehindItemsRefs, bool borrowedItemsRefs})> {
   $$CustomersTableTableManager(_$AppDatabase db, $CustomersTable table)
       : super(TableManagerState(
           db: db,
@@ -15235,9 +17377,50 @@ class $$CustomersTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable(table),
+                    $$CustomersTableReferences(db, table, e)
+                  ))
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: (
+              {leftBehindItemsRefs = false, borrowedItemsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (leftBehindItemsRefs) db.leftBehindItems,
+                if (borrowedItemsRefs) db.borrowedItems
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (leftBehindItemsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$CustomersTableReferences
+                            ._leftBehindItemsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$CustomersTableReferences(db, table, p0)
+                                .leftBehindItemsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.customerId == item.id),
+                        typedResults: items),
+                  if (borrowedItemsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$CustomersTableReferences
+                            ._borrowedItemsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$CustomersTableReferences(db, table, p0)
+                                .borrowedItemsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.customerId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
         ));
 }
 
@@ -15250,9 +17433,9 @@ typedef $$CustomersTableProcessedTableManager = ProcessedTableManager<
     $$CustomersTableAnnotationComposer,
     $$CustomersTableCreateCompanionBuilder,
     $$CustomersTableUpdateCompanionBuilder,
-    (Customer, BaseReferences<_$AppDatabase, $CustomersTable, Customer>),
+    (Customer, $$CustomersTableReferences),
     Customer,
-    PrefetchHooks Function()>;
+    PrefetchHooks Function({bool leftBehindItemsRefs, bool borrowedItemsRefs})>;
 typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
     Function({
   required String id,
@@ -15333,6 +17516,55 @@ final class $$TransactionsTableReferences
 
     final cache =
         $_typedResult.readTableOrNull(_transactionPaymentsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$LeftBehindItemsTable, List<LeftBehindItem>>
+      _leftBehindItemsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.leftBehindItems,
+              aliasName: $_aliasNameGenerator(
+                  db.transactions.id, db.leftBehindItems.transactionId));
+
+  $$LeftBehindItemsTableProcessedTableManager get leftBehindItemsRefs {
+    final manager =
+        $$LeftBehindItemsTableTableManager($_db, $_db.leftBehindItems)
+            .filter((f) => f.transactionId.id($_item.id));
+
+    final cache =
+        $_typedResult.readTableOrNull(_leftBehindItemsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$BorrowedItemsTable, List<BorrowedItem>>
+      _borrowedItemsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.borrowedItems,
+              aliasName: $_aliasNameGenerator(
+                  db.transactions.id, db.borrowedItems.transactionId));
+
+  $$BorrowedItemsTableProcessedTableManager get borrowedItemsRefs {
+    final manager = $$BorrowedItemsTableTableManager($_db, $_db.borrowedItems)
+        .filter((f) => f.transactionId.id($_item.id));
+
+    final cache = $_typedResult.readTableOrNull(_borrowedItemsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$PreorderEntriesTable, List<PreorderEntry>>
+      _preorderEntriesRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.preorderEntries,
+              aliasName: $_aliasNameGenerator(
+                  db.transactions.id, db.preorderEntries.transactionId));
+
+  $$PreorderEntriesTableProcessedTableManager get preorderEntriesRefs {
+    final manager =
+        $$PreorderEntriesTableTableManager($_db, $_db.preorderEntries)
+            .filter((f) => f.transactionId.id($_item.id));
+
+    final cache =
+        $_typedResult.readTableOrNull(_preorderEntriesRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -15436,6 +17668,69 @@ class $$TransactionsTableFilterComposer
             $$TransactionPaymentsTableFilterComposer(
               $db: $db,
               $table: $db.transactionPayments,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> leftBehindItemsRefs(
+      Expression<bool> Function($$LeftBehindItemsTableFilterComposer f) f) {
+    final $$LeftBehindItemsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.leftBehindItems,
+        getReferencedColumn: (t) => t.transactionId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LeftBehindItemsTableFilterComposer(
+              $db: $db,
+              $table: $db.leftBehindItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> borrowedItemsRefs(
+      Expression<bool> Function($$BorrowedItemsTableFilterComposer f) f) {
+    final $$BorrowedItemsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.borrowedItems,
+        getReferencedColumn: (t) => t.transactionId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$BorrowedItemsTableFilterComposer(
+              $db: $db,
+              $table: $db.borrowedItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> preorderEntriesRefs(
+      Expression<bool> Function($$PreorderEntriesTableFilterComposer f) f) {
+    final $$PreorderEntriesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.preorderEntries,
+        getReferencedColumn: (t) => t.transactionId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PreorderEntriesTableFilterComposer(
+              $db: $db,
+              $table: $db.preorderEntries,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -15622,6 +17917,69 @@ class $$TransactionsTableAnnotationComposer
                 ));
     return f(composer);
   }
+
+  Expression<T> leftBehindItemsRefs<T extends Object>(
+      Expression<T> Function($$LeftBehindItemsTableAnnotationComposer a) f) {
+    final $$LeftBehindItemsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.leftBehindItems,
+        getReferencedColumn: (t) => t.transactionId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LeftBehindItemsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.leftBehindItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<T> borrowedItemsRefs<T extends Object>(
+      Expression<T> Function($$BorrowedItemsTableAnnotationComposer a) f) {
+    final $$BorrowedItemsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.borrowedItems,
+        getReferencedColumn: (t) => t.transactionId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$BorrowedItemsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.borrowedItems,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<T> preorderEntriesRefs<T extends Object>(
+      Expression<T> Function($$PreorderEntriesTableAnnotationComposer a) f) {
+    final $$PreorderEntriesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.preorderEntries,
+        getReferencedColumn: (t) => t.transactionId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PreorderEntriesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.preorderEntries,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$TransactionsTableTableManager extends RootTableManager<
@@ -15636,7 +17994,11 @@ class $$TransactionsTableTableManager extends RootTableManager<
     (Transaction, $$TransactionsTableReferences),
     Transaction,
     PrefetchHooks Function(
-        {bool transactionItemsRefs, bool transactionPaymentsRefs})> {
+        {bool transactionItemsRefs,
+        bool transactionPaymentsRefs,
+        bool leftBehindItemsRefs,
+        bool borrowedItemsRefs,
+        bool preorderEntriesRefs})> {
   $$TransactionsTableTableManager(_$AppDatabase db, $TransactionsTable table)
       : super(TableManagerState(
           db: db,
@@ -15738,12 +18100,19 @@ class $$TransactionsTableTableManager extends RootTableManager<
                   ))
               .toList(),
           prefetchHooksCallback: (
-              {transactionItemsRefs = false, transactionPaymentsRefs = false}) {
+              {transactionItemsRefs = false,
+              transactionPaymentsRefs = false,
+              leftBehindItemsRefs = false,
+              borrowedItemsRefs = false,
+              preorderEntriesRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (transactionItemsRefs) db.transactionItems,
-                if (transactionPaymentsRefs) db.transactionPayments
+                if (transactionPaymentsRefs) db.transactionPayments,
+                if (leftBehindItemsRefs) db.leftBehindItems,
+                if (borrowedItemsRefs) db.borrowedItems,
+                if (preorderEntriesRefs) db.preorderEntries
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -15771,6 +18140,42 @@ class $$TransactionsTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.transactionId == item.id),
+                        typedResults: items),
+                  if (leftBehindItemsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$TransactionsTableReferences
+                            ._leftBehindItemsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$TransactionsTableReferences(db, table, p0)
+                                .leftBehindItemsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.transactionId == item.id),
+                        typedResults: items),
+                  if (borrowedItemsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$TransactionsTableReferences
+                            ._borrowedItemsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$TransactionsTableReferences(db, table, p0)
+                                .borrowedItemsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.transactionId == item.id),
+                        typedResults: items),
+                  if (preorderEntriesRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$TransactionsTableReferences
+                            ._preorderEntriesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$TransactionsTableReferences(db, table, p0)
+                                .preorderEntriesRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.transactionId == item.id),
                         typedResults: items)
                 ];
               },
@@ -15791,7 +18196,11 @@ typedef $$TransactionsTableProcessedTableManager = ProcessedTableManager<
     (Transaction, $$TransactionsTableReferences),
     Transaction,
     PrefetchHooks Function(
-        {bool transactionItemsRefs, bool transactionPaymentsRefs})>;
+        {bool transactionItemsRefs,
+        bool transactionPaymentsRefs,
+        bool leftBehindItemsRefs,
+        bool borrowedItemsRefs,
+        bool preorderEntriesRefs})>;
 typedef $$TransactionItemsTableCreateCompanionBuilder
     = TransactionItemsCompanion Function({
   required String id,
@@ -19585,6 +21994,1344 @@ typedef $$SyncUploadQueueTableProcessedTableManager = ProcessedTableManager<
     ),
     SyncUploadQueueData,
     PrefetchHooks Function()>;
+typedef $$LeftBehindItemsTableCreateCompanionBuilder = LeftBehindItemsCompanion
+    Function({
+  required String id,
+  required String transactionId,
+  required String itemName,
+  required String jenis,
+  Value<String?> customerId,
+  Value<String?> customerNameText,
+  Value<String?> note,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> collectedAt,
+  Value<int> rowid,
+});
+typedef $$LeftBehindItemsTableUpdateCompanionBuilder = LeftBehindItemsCompanion
+    Function({
+  Value<String> id,
+  Value<String> transactionId,
+  Value<String> itemName,
+  Value<String> jenis,
+  Value<String?> customerId,
+  Value<String?> customerNameText,
+  Value<String?> note,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> collectedAt,
+  Value<int> rowid,
+});
+
+final class $$LeftBehindItemsTableReferences extends BaseReferences<
+    _$AppDatabase, $LeftBehindItemsTable, LeftBehindItem> {
+  $$LeftBehindItemsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $TransactionsTable _transactionIdTable(_$AppDatabase db) =>
+      db.transactions.createAlias($_aliasNameGenerator(
+          db.leftBehindItems.transactionId, db.transactions.id));
+
+  $$TransactionsTableProcessedTableManager get transactionId {
+    final manager = $$TransactionsTableTableManager($_db, $_db.transactions)
+        .filter((f) => f.id($_item.transactionId));
+    final item = $_typedResult.readTableOrNull(_transactionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
+      db.customers.createAlias(
+          $_aliasNameGenerator(db.leftBehindItems.customerId, db.customers.id));
+
+  $$CustomersTableProcessedTableManager? get customerId {
+    if ($_item.customerId == null) return null;
+    final manager = $$CustomersTableTableManager($_db, $_db.customers)
+        .filter((f) => f.id($_item.customerId!));
+    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$LeftBehindItemsTableFilterComposer
+    extends Composer<_$AppDatabase, $LeftBehindItemsTable> {
+  $$LeftBehindItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get itemName => $composableBuilder(
+      column: $table.itemName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get jenis => $composableBuilder(
+      column: $table.jenis, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get customerNameText => $composableBuilder(
+      column: $table.customerNameText,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get collectedAt => $composableBuilder(
+      column: $table.collectedAt, builder: (column) => ColumnFilters(column));
+
+  $$TransactionsTableFilterComposer get transactionId {
+    final $$TransactionsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableFilterComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CustomersTableFilterComposer get customerId {
+    final $$CustomersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.customerId,
+        referencedTable: $db.customers,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CustomersTableFilterComposer(
+              $db: $db,
+              $table: $db.customers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$LeftBehindItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LeftBehindItemsTable> {
+  $$LeftBehindItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get itemName => $composableBuilder(
+      column: $table.itemName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get jenis => $composableBuilder(
+      column: $table.jenis, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get customerNameText => $composableBuilder(
+      column: $table.customerNameText,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get collectedAt => $composableBuilder(
+      column: $table.collectedAt, builder: (column) => ColumnOrderings(column));
+
+  $$TransactionsTableOrderingComposer get transactionId {
+    final $$TransactionsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableOrderingComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CustomersTableOrderingComposer get customerId {
+    final $$CustomersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.customerId,
+        referencedTable: $db.customers,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CustomersTableOrderingComposer(
+              $db: $db,
+              $table: $db.customers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$LeftBehindItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LeftBehindItemsTable> {
+  $$LeftBehindItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get itemName =>
+      $composableBuilder(column: $table.itemName, builder: (column) => column);
+
+  GeneratedColumn<String> get jenis =>
+      $composableBuilder(column: $table.jenis, builder: (column) => column);
+
+  GeneratedColumn<String> get customerNameText => $composableBuilder(
+      column: $table.customerNameText, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get collectedAt => $composableBuilder(
+      column: $table.collectedAt, builder: (column) => column);
+
+  $$TransactionsTableAnnotationComposer get transactionId {
+    final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CustomersTableAnnotationComposer get customerId {
+    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.customerId,
+        referencedTable: $db.customers,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CustomersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.customers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$LeftBehindItemsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $LeftBehindItemsTable,
+    LeftBehindItem,
+    $$LeftBehindItemsTableFilterComposer,
+    $$LeftBehindItemsTableOrderingComposer,
+    $$LeftBehindItemsTableAnnotationComposer,
+    $$LeftBehindItemsTableCreateCompanionBuilder,
+    $$LeftBehindItemsTableUpdateCompanionBuilder,
+    (LeftBehindItem, $$LeftBehindItemsTableReferences),
+    LeftBehindItem,
+    PrefetchHooks Function({bool transactionId, bool customerId})> {
+  $$LeftBehindItemsTableTableManager(
+      _$AppDatabase db, $LeftBehindItemsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LeftBehindItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LeftBehindItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LeftBehindItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> transactionId = const Value.absent(),
+            Value<String> itemName = const Value.absent(),
+            Value<String> jenis = const Value.absent(),
+            Value<String?> customerId = const Value.absent(),
+            Value<String?> customerNameText = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> collectedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              LeftBehindItemsCompanion(
+            id: id,
+            transactionId: transactionId,
+            itemName: itemName,
+            jenis: jenis,
+            customerId: customerId,
+            customerNameText: customerNameText,
+            note: note,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            collectedAt: collectedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String transactionId,
+            required String itemName,
+            required String jenis,
+            Value<String?> customerId = const Value.absent(),
+            Value<String?> customerNameText = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> collectedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              LeftBehindItemsCompanion.insert(
+            id: id,
+            transactionId: transactionId,
+            itemName: itemName,
+            jenis: jenis,
+            customerId: customerId,
+            customerNameText: customerNameText,
+            note: note,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            collectedAt: collectedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$LeftBehindItemsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({transactionId = false, customerId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (transactionId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.transactionId,
+                    referencedTable: $$LeftBehindItemsTableReferences
+                        ._transactionIdTable(db),
+                    referencedColumn: $$LeftBehindItemsTableReferences
+                        ._transactionIdTable(db)
+                        .id,
+                  ) as T;
+                }
+                if (customerId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.customerId,
+                    referencedTable:
+                        $$LeftBehindItemsTableReferences._customerIdTable(db),
+                    referencedColumn: $$LeftBehindItemsTableReferences
+                        ._customerIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$LeftBehindItemsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $LeftBehindItemsTable,
+    LeftBehindItem,
+    $$LeftBehindItemsTableFilterComposer,
+    $$LeftBehindItemsTableOrderingComposer,
+    $$LeftBehindItemsTableAnnotationComposer,
+    $$LeftBehindItemsTableCreateCompanionBuilder,
+    $$LeftBehindItemsTableUpdateCompanionBuilder,
+    (LeftBehindItem, $$LeftBehindItemsTableReferences),
+    LeftBehindItem,
+    PrefetchHooks Function({bool transactionId, bool customerId})>;
+typedef $$BorrowedItemsTableCreateCompanionBuilder = BorrowedItemsCompanion
+    Function({
+  required String id,
+  required String transactionId,
+  required String itemName,
+  Value<String?> customerId,
+  Value<String?> customerNameText,
+  required double qty,
+  Value<double> qtyReturned,
+  Value<String?> note,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> fullyReturnedAt,
+  Value<int> rowid,
+});
+typedef $$BorrowedItemsTableUpdateCompanionBuilder = BorrowedItemsCompanion
+    Function({
+  Value<String> id,
+  Value<String> transactionId,
+  Value<String> itemName,
+  Value<String?> customerId,
+  Value<String?> customerNameText,
+  Value<double> qty,
+  Value<double> qtyReturned,
+  Value<String?> note,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> fullyReturnedAt,
+  Value<int> rowid,
+});
+
+final class $$BorrowedItemsTableReferences
+    extends BaseReferences<_$AppDatabase, $BorrowedItemsTable, BorrowedItem> {
+  $$BorrowedItemsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $TransactionsTable _transactionIdTable(_$AppDatabase db) =>
+      db.transactions.createAlias($_aliasNameGenerator(
+          db.borrowedItems.transactionId, db.transactions.id));
+
+  $$TransactionsTableProcessedTableManager get transactionId {
+    final manager = $$TransactionsTableTableManager($_db, $_db.transactions)
+        .filter((f) => f.id($_item.transactionId));
+    final item = $_typedResult.readTableOrNull(_transactionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
+      db.customers.createAlias(
+          $_aliasNameGenerator(db.borrowedItems.customerId, db.customers.id));
+
+  $$CustomersTableProcessedTableManager? get customerId {
+    if ($_item.customerId == null) return null;
+    final manager = $$CustomersTableTableManager($_db, $_db.customers)
+        .filter((f) => f.id($_item.customerId!));
+    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$BorrowedItemsTableFilterComposer
+    extends Composer<_$AppDatabase, $BorrowedItemsTable> {
+  $$BorrowedItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get itemName => $composableBuilder(
+      column: $table.itemName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get customerNameText => $composableBuilder(
+      column: $table.customerNameText,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get qtyReturned => $composableBuilder(
+      column: $table.qtyReturned, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get fullyReturnedAt => $composableBuilder(
+      column: $table.fullyReturnedAt,
+      builder: (column) => ColumnFilters(column));
+
+  $$TransactionsTableFilterComposer get transactionId {
+    final $$TransactionsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableFilterComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CustomersTableFilterComposer get customerId {
+    final $$CustomersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.customerId,
+        referencedTable: $db.customers,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CustomersTableFilterComposer(
+              $db: $db,
+              $table: $db.customers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$BorrowedItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $BorrowedItemsTable> {
+  $$BorrowedItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get itemName => $composableBuilder(
+      column: $table.itemName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get customerNameText => $composableBuilder(
+      column: $table.customerNameText,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get qtyReturned => $composableBuilder(
+      column: $table.qtyReturned, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get fullyReturnedAt => $composableBuilder(
+      column: $table.fullyReturnedAt,
+      builder: (column) => ColumnOrderings(column));
+
+  $$TransactionsTableOrderingComposer get transactionId {
+    final $$TransactionsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableOrderingComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CustomersTableOrderingComposer get customerId {
+    final $$CustomersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.customerId,
+        referencedTable: $db.customers,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CustomersTableOrderingComposer(
+              $db: $db,
+              $table: $db.customers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$BorrowedItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BorrowedItemsTable> {
+  $$BorrowedItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get itemName =>
+      $composableBuilder(column: $table.itemName, builder: (column) => column);
+
+  GeneratedColumn<String> get customerNameText => $composableBuilder(
+      column: $table.customerNameText, builder: (column) => column);
+
+  GeneratedColumn<double> get qty =>
+      $composableBuilder(column: $table.qty, builder: (column) => column);
+
+  GeneratedColumn<double> get qtyReturned => $composableBuilder(
+      column: $table.qtyReturned, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get fullyReturnedAt => $composableBuilder(
+      column: $table.fullyReturnedAt, builder: (column) => column);
+
+  $$TransactionsTableAnnotationComposer get transactionId {
+    final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CustomersTableAnnotationComposer get customerId {
+    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.customerId,
+        referencedTable: $db.customers,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CustomersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.customers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$BorrowedItemsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $BorrowedItemsTable,
+    BorrowedItem,
+    $$BorrowedItemsTableFilterComposer,
+    $$BorrowedItemsTableOrderingComposer,
+    $$BorrowedItemsTableAnnotationComposer,
+    $$BorrowedItemsTableCreateCompanionBuilder,
+    $$BorrowedItemsTableUpdateCompanionBuilder,
+    (BorrowedItem, $$BorrowedItemsTableReferences),
+    BorrowedItem,
+    PrefetchHooks Function({bool transactionId, bool customerId})> {
+  $$BorrowedItemsTableTableManager(_$AppDatabase db, $BorrowedItemsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BorrowedItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BorrowedItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BorrowedItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> transactionId = const Value.absent(),
+            Value<String> itemName = const Value.absent(),
+            Value<String?> customerId = const Value.absent(),
+            Value<String?> customerNameText = const Value.absent(),
+            Value<double> qty = const Value.absent(),
+            Value<double> qtyReturned = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> fullyReturnedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              BorrowedItemsCompanion(
+            id: id,
+            transactionId: transactionId,
+            itemName: itemName,
+            customerId: customerId,
+            customerNameText: customerNameText,
+            qty: qty,
+            qtyReturned: qtyReturned,
+            note: note,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            fullyReturnedAt: fullyReturnedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String transactionId,
+            required String itemName,
+            Value<String?> customerId = const Value.absent(),
+            Value<String?> customerNameText = const Value.absent(),
+            required double qty,
+            Value<double> qtyReturned = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> fullyReturnedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              BorrowedItemsCompanion.insert(
+            id: id,
+            transactionId: transactionId,
+            itemName: itemName,
+            customerId: customerId,
+            customerNameText: customerNameText,
+            qty: qty,
+            qtyReturned: qtyReturned,
+            note: note,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            fullyReturnedAt: fullyReturnedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$BorrowedItemsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({transactionId = false, customerId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (transactionId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.transactionId,
+                    referencedTable:
+                        $$BorrowedItemsTableReferences._transactionIdTable(db),
+                    referencedColumn: $$BorrowedItemsTableReferences
+                        ._transactionIdTable(db)
+                        .id,
+                  ) as T;
+                }
+                if (customerId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.customerId,
+                    referencedTable:
+                        $$BorrowedItemsTableReferences._customerIdTable(db),
+                    referencedColumn:
+                        $$BorrowedItemsTableReferences._customerIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$BorrowedItemsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $BorrowedItemsTable,
+    BorrowedItem,
+    $$BorrowedItemsTableFilterComposer,
+    $$BorrowedItemsTableOrderingComposer,
+    $$BorrowedItemsTableAnnotationComposer,
+    $$BorrowedItemsTableCreateCompanionBuilder,
+    $$BorrowedItemsTableUpdateCompanionBuilder,
+    (BorrowedItem, $$BorrowedItemsTableReferences),
+    BorrowedItem,
+    PrefetchHooks Function({bool transactionId, bool customerId})>;
+typedef $$PreorderEntriesTableCreateCompanionBuilder = PreorderEntriesCompanion
+    Function({
+  required String id,
+  required String productId,
+  required String productUnitId,
+  Value<String?> transactionId,
+  required String customerName,
+  Value<String?> phone,
+  required double qtyOrdered,
+  Value<double> depositQty,
+  Value<bool> paid,
+  Value<String?> note,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> fulfilledAt,
+  Value<DateTime?> cancelledAt,
+  Value<int> rowid,
+});
+typedef $$PreorderEntriesTableUpdateCompanionBuilder = PreorderEntriesCompanion
+    Function({
+  Value<String> id,
+  Value<String> productId,
+  Value<String> productUnitId,
+  Value<String?> transactionId,
+  Value<String> customerName,
+  Value<String?> phone,
+  Value<double> qtyOrdered,
+  Value<double> depositQty,
+  Value<bool> paid,
+  Value<String?> note,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> fulfilledAt,
+  Value<DateTime?> cancelledAt,
+  Value<int> rowid,
+});
+
+final class $$PreorderEntriesTableReferences extends BaseReferences<
+    _$AppDatabase, $PreorderEntriesTable, PreorderEntry> {
+  $$PreorderEntriesTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $TransactionsTable _transactionIdTable(_$AppDatabase db) =>
+      db.transactions.createAlias($_aliasNameGenerator(
+          db.preorderEntries.transactionId, db.transactions.id));
+
+  $$TransactionsTableProcessedTableManager? get transactionId {
+    if ($_item.transactionId == null) return null;
+    final manager = $$TransactionsTableTableManager($_db, $_db.transactions)
+        .filter((f) => f.id($_item.transactionId!));
+    final item = $_typedResult.readTableOrNull(_transactionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$PreorderEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $PreorderEntriesTable> {
+  $$PreorderEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productUnitId => $composableBuilder(
+      column: $table.productUnitId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get customerName => $composableBuilder(
+      column: $table.customerName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get phone => $composableBuilder(
+      column: $table.phone, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get qtyOrdered => $composableBuilder(
+      column: $table.qtyOrdered, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get depositQty => $composableBuilder(
+      column: $table.depositQty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get paid => $composableBuilder(
+      column: $table.paid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get fulfilledAt => $composableBuilder(
+      column: $table.fulfilledAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get cancelledAt => $composableBuilder(
+      column: $table.cancelledAt, builder: (column) => ColumnFilters(column));
+
+  $$TransactionsTableFilterComposer get transactionId {
+    final $$TransactionsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableFilterComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$PreorderEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PreorderEntriesTable> {
+  $$PreorderEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productUnitId => $composableBuilder(
+      column: $table.productUnitId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get customerName => $composableBuilder(
+      column: $table.customerName,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get phone => $composableBuilder(
+      column: $table.phone, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get qtyOrdered => $composableBuilder(
+      column: $table.qtyOrdered, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get depositQty => $composableBuilder(
+      column: $table.depositQty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get paid => $composableBuilder(
+      column: $table.paid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get fulfilledAt => $composableBuilder(
+      column: $table.fulfilledAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get cancelledAt => $composableBuilder(
+      column: $table.cancelledAt, builder: (column) => ColumnOrderings(column));
+
+  $$TransactionsTableOrderingComposer get transactionId {
+    final $$TransactionsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableOrderingComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$PreorderEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PreorderEntriesTable> {
+  $$PreorderEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<String> get productUnitId => $composableBuilder(
+      column: $table.productUnitId, builder: (column) => column);
+
+  GeneratedColumn<String> get customerName => $composableBuilder(
+      column: $table.customerName, builder: (column) => column);
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<double> get qtyOrdered => $composableBuilder(
+      column: $table.qtyOrdered, builder: (column) => column);
+
+  GeneratedColumn<double> get depositQty => $composableBuilder(
+      column: $table.depositQty, builder: (column) => column);
+
+  GeneratedColumn<bool> get paid =>
+      $composableBuilder(column: $table.paid, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get fulfilledAt => $composableBuilder(
+      column: $table.fulfilledAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get cancelledAt => $composableBuilder(
+      column: $table.cancelledAt, builder: (column) => column);
+
+  $$TransactionsTableAnnotationComposer get transactionId {
+    final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.transactionId,
+        referencedTable: $db.transactions,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.transactions,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$PreorderEntriesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $PreorderEntriesTable,
+    PreorderEntry,
+    $$PreorderEntriesTableFilterComposer,
+    $$PreorderEntriesTableOrderingComposer,
+    $$PreorderEntriesTableAnnotationComposer,
+    $$PreorderEntriesTableCreateCompanionBuilder,
+    $$PreorderEntriesTableUpdateCompanionBuilder,
+    (PreorderEntry, $$PreorderEntriesTableReferences),
+    PreorderEntry,
+    PrefetchHooks Function({bool transactionId})> {
+  $$PreorderEntriesTableTableManager(
+      _$AppDatabase db, $PreorderEntriesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PreorderEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PreorderEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PreorderEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> productId = const Value.absent(),
+            Value<String> productUnitId = const Value.absent(),
+            Value<String?> transactionId = const Value.absent(),
+            Value<String> customerName = const Value.absent(),
+            Value<String?> phone = const Value.absent(),
+            Value<double> qtyOrdered = const Value.absent(),
+            Value<double> depositQty = const Value.absent(),
+            Value<bool> paid = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> fulfilledAt = const Value.absent(),
+            Value<DateTime?> cancelledAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PreorderEntriesCompanion(
+            id: id,
+            productId: productId,
+            productUnitId: productUnitId,
+            transactionId: transactionId,
+            customerName: customerName,
+            phone: phone,
+            qtyOrdered: qtyOrdered,
+            depositQty: depositQty,
+            paid: paid,
+            note: note,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            fulfilledAt: fulfilledAt,
+            cancelledAt: cancelledAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String productId,
+            required String productUnitId,
+            Value<String?> transactionId = const Value.absent(),
+            required String customerName,
+            Value<String?> phone = const Value.absent(),
+            required double qtyOrdered,
+            Value<double> depositQty = const Value.absent(),
+            Value<bool> paid = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> fulfilledAt = const Value.absent(),
+            Value<DateTime?> cancelledAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PreorderEntriesCompanion.insert(
+            id: id,
+            productId: productId,
+            productUnitId: productUnitId,
+            transactionId: transactionId,
+            customerName: customerName,
+            phone: phone,
+            qtyOrdered: qtyOrdered,
+            depositQty: depositQty,
+            paid: paid,
+            note: note,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            fulfilledAt: fulfilledAt,
+            cancelledAt: cancelledAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$PreorderEntriesTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({transactionId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (transactionId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.transactionId,
+                    referencedTable: $$PreorderEntriesTableReferences
+                        ._transactionIdTable(db),
+                    referencedColumn: $$PreorderEntriesTableReferences
+                        ._transactionIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$PreorderEntriesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $PreorderEntriesTable,
+    PreorderEntry,
+    $$PreorderEntriesTableFilterComposer,
+    $$PreorderEntriesTableOrderingComposer,
+    $$PreorderEntriesTableAnnotationComposer,
+    $$PreorderEntriesTableCreateCompanionBuilder,
+    $$PreorderEntriesTableUpdateCompanionBuilder,
+    (PreorderEntry, $$PreorderEntriesTableReferences),
+    PreorderEntry,
+    PrefetchHooks Function({bool transactionId})>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -19647,4 +23394,10 @@ class $AppDatabaseManager {
       $$CashClosingsTableTableManager(_db, _db.cashClosings);
   $$SyncUploadQueueTableTableManager get syncUploadQueue =>
       $$SyncUploadQueueTableTableManager(_db, _db.syncUploadQueue);
+  $$LeftBehindItemsTableTableManager get leftBehindItems =>
+      $$LeftBehindItemsTableTableManager(_db, _db.leftBehindItems);
+  $$BorrowedItemsTableTableManager get borrowedItems =>
+      $$BorrowedItemsTableTableManager(_db, _db.borrowedItems);
+  $$PreorderEntriesTableTableManager get preorderEntries =>
+      $$PreorderEntriesTableTableManager(_db, _db.preorderEntries);
 }
