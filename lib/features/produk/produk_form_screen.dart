@@ -101,12 +101,22 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   String? _bannerMsg;
   InlineBannerType _bannerType = InlineBannerType.error;
+  String? _bannerLinkText;
+  VoidCallback? _bannerOnLinkTap;
 
+  /// [linkText] + [onLinkTap] opsional: potongan pesan yang di-highlight &
+  /// bisa diketuk (mis. nama produk yang barcode-nya bentrok → buka produk
+  /// itu). Selalu di-set ulang tiap panggilan, termasuk ke null, supaya
+  /// tautan dari pesan SEBELUMNYA tidak menempel di pesan berikutnya.
   void _showBanner(String msg,
-      [InlineBannerType type = InlineBannerType.error]) {
+      [InlineBannerType type = InlineBannerType.error,
+      String? linkText,
+      VoidCallback? onLinkTap]) {
     setState(() {
       _bannerMsg = msg;
       _bannerType = type;
+      _bannerLinkText = linkText;
+      _bannerOnLinkTap = onLinkTap;
     });
   }
 
@@ -205,6 +215,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           ratioToBase: u.ratioToBase,
           price: baseTier.price,
           costPrice: baseTier.costPrice,
+          isNonStock: u.isNonStock,
           extraTiers: extraTiers,
           altPrices: altPriceEntries,
           barcode: barcodes
@@ -392,7 +403,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 unitTypeId: Value(u.unitTypeId),
                 isBaseUnit: Value(u.isBaseUnit),
                 ratioToBase: Value(u.ratioToBase),
-                isNonStock: const Value(false),
+                isNonStock: Value(u.isNonStock),
                 // Ambang stok menipis hanya di satuan dasar (Item 11).
                 minStock: Value(u.isBaseUnit ? minStockVal : null),
               ))
@@ -486,6 +497,30 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         });
       }
       return true;
+    } on BarcodeConflictException catch (e) {
+      // Pesannya sudah ramah & menyebut produk pemegang barcode-nya, jadi
+      // tampilkan apa adanya (jangan dibungkus "Error: ..."). Seluruh
+      // transaksi saveProduct sudah ter-rollback — tidak ada produk
+      // setengah tersimpan, dan barcode produk lain TIDAK tersentuh.
+      //
+      // Nama produknya dijadikan tautan: ketuk → buka produk itu (di-PUSH
+      // di atas form ini, jadi isian form yang belum tersimpan TETAP utuh
+      // saat kembali). Alur yang dituju: ketuk nama → bebaskan/ganti
+      // barcode di produk itu → kembali → simpan lagi.
+      if (mounted) {
+        _showBanner(
+          e.toString(),
+          InlineBannerType.error,
+          e.productName,
+          () {
+            // Tutup banner dulu: kalau user membebaskan barcode di produk
+            // tujuan lalu kembali, pesan lama sudah tidak berlaku.
+            setState(() => _bannerMsg = null);
+            context.push('/produk/${e.productId}');
+          },
+        );
+      }
+      return false;
     } catch (e) {
       if (mounted) _showBanner('Error: $e');
       return false;
@@ -588,6 +623,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   InlineBanner(
                     message: _bannerMsg,
                     type: _bannerType,
+                    linkText: _bannerLinkText,
+                    onLinkTap: _bannerOnLinkTap,
                     onDismiss: () => setState(() => _bannerMsg = null),
                   ),
                   Expanded(
@@ -1117,6 +1154,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   /// Pesan error yang jelas utk kasus barcode bentrok (paling sering
   /// terjadi), fallback ke pesan mentah utk error lain.
   String _friendlyBarcodeError(Object e, String? barcode) {
+    // Bentrok yang terdeteksi eksplisit oleh DB: pesannya sudah menyebut
+    // produk pemegangnya, lebih berguna dari pesan generik di bawah.
+    if (e is BarcodeConflictException) return e.toString();
     final msg = e.toString();
     if (barcode != null &&
         barcode.isNotEmpty &&
@@ -1279,6 +1319,7 @@ class _UnitEntry {
     required this.ratioToBase,
     required this.price,
     required this.costPrice,
+    this.isNonStock = false,
     List<_TierEntry>? extraTiers,
     List<_AltPriceEntry>? altPrices,
     this.barcode,
@@ -1291,6 +1332,7 @@ class _UnitEntry {
   double ratioToBase;
   int price;
   int costPrice;
+  bool isNonStock;
   List<_TierEntry> extraTiers;
   List<_AltPriceEntry> altPrices;
   String? barcode;
@@ -1301,6 +1343,7 @@ class _UnitEntry {
     double? ratioToBase,
     int? price,
     int? costPrice,
+    bool? isNonStock,
     List<_TierEntry>? extraTiers,
     List<_AltPriceEntry>? altPrices,
     String? barcode,
@@ -1312,6 +1355,7 @@ class _UnitEntry {
         ratioToBase: ratioToBase ?? this.ratioToBase,
         price: price ?? this.price,
         costPrice: costPrice ?? this.costPrice,
+        isNonStock: isNonStock ?? this.isNonStock,
         extraTiers: extraTiers ?? this.extraTiers,
         altPrices: altPrices ?? this.altPrices,
         barcode: barcode ?? this.barcode,
@@ -1778,6 +1822,21 @@ class _UnitCardState extends State<_UnitCard> {
                   ),
                 ),
               ],
+            ),
+
+            // ── Lacak stok ───────────────────────────────────────────────────
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: !widget.entry.isNonStock,
+              onChanged: widget.readOnly
+                  ? null
+                  : (v) => widget.onChanged(
+                      widget.entry.copyWith(isNonStock: !v)),
+              title: const Text('Lacak stok', style: TextStyle(fontSize: 14)),
+              subtitle: const Text(
+                  'Matikan bila satuan ini tidak perlu dihitung stok (mis. jasa)',
+                  style: TextStyle(fontSize: 11)),
             ),
 
             // ── Grosir tiers ─────────────────────────────────────────────────

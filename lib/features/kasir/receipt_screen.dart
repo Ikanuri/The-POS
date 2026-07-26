@@ -2019,6 +2019,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   formatRupiah(_latestPayment!.changeGiven),
                               taken: _latestPayment!.changeTaken,
                               color: scheme.tertiary,
+                              bold: true,
                               onChanged: isVoid
                                   ? null
                                   : (v) => _toggleChangeTaken(
@@ -2777,8 +2778,18 @@ class _ReceiptPaper extends StatelessWidget {
   /// konsumsi pelanggan (`_methodShort` tak kenal method itu, jadi tampil
   /// sbg string mentah "edit"/"retur" di struk fisik). Sembunyikan dari
   /// share — in-app tetap tampilkan semua (lihat _buildPaymentTimeline).
+  ///
+  /// Dilaporkan user: pembayaran yang DIBATALKAN (mis. salah input nominal,
+  /// dibatalkan lalu diulang) tetap ikut tercetak/ter-share di sini —
+  /// struk fisik/gambar TIDAK bisa menampilkan coretan "Dibatalkan" spt di
+  /// kartu "Riwayat Pembayaran" in-app (`_buildPaymentTimeline`), jadi
+  /// pelanggan yang baca struk kertas melihat 3x "Tunai Rp150.000" identik
+  /// tanpa tahu 2 di antaranya sudah batal — seolah dibayar 3x. `_refundTotal`
+  /// /`_refundMethod` di atas sudah benar filter `!p.voided`; baris ini
+  /// terlewat. In-app tetap py jalur sendiri (kartu Riwayat Pembayaran,
+  /// bukan widget ini) yg SENGAJA tampilkan semua termasuk yg dibatalkan.
   List<TransactionPayment> get _visiblePayments => payments
-      .where((p) => p.method != 'edit' && p.method != 'retur')
+      .where((p) => p.method != 'edit' && p.method != 'retur' && !p.voided)
       .toList();
 
   bool get _showTimeline {
@@ -2895,15 +2906,23 @@ class _ChangeTakenRow extends StatelessWidget {
     required this.taken,
     required this.color,
     required this.onChanged,
+    this.bold = false,
   });
 
   final String amount;
   final bool taken;
   final Color color;
   final ValueChanged<bool>? onChanged;
+  // Dilaporkan user: kembalian TERAKHIR (baris ringkasan atas, bukan baris
+  // per-pembayaran di kartu Riwayat Pembayaran) perlu menonjol — nominal
+  // yang harus benar-benar diserahkan ke pelanggan sekarang, beda dari
+  // riwayat pembayaran yang cuma catatan historis.
+  final bool bold;
 
   @override
   Widget build(BuildContext context) {
+    final style = TextStyle(
+        color: color, fontWeight: bold ? FontWeight.w700 : null);
     return InkWell(
       onTap: onChanged == null ? null : () => onChanged!(!taken),
       borderRadius: BorderRadius.circular(8),
@@ -2926,10 +2945,10 @@ class _ChangeTakenRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 2),
-                Text('Kembalian', style: TextStyle(color: color)),
+                Text('Kembalian', style: style),
               ],
             ),
-            Text(amount, style: TextStyle(color: color)),
+            Text(amount, style: style),
           ],
         ),
       ),

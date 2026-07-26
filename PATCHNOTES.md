@@ -8,9 +8,40 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 26 Juli 2026
+
+### ✨ Fitur Baru
+- **Produk utama sekarang bisa diset non-stok**, tidak cuma varian. Ada
+  toggle "Lacak stok" baru di tiap satuan pada form Edit Produk — matikan
+  kalau satuan itu tidak perlu dihitung stoknya (mis. produk jasa).
+- **Menu baru "Jeda Pelacakan Stok"** (Pengaturan > Manajemen Data) —
+  set SEMUA produk yang masih dilacak stoknya jadi non-stok sementara
+  sekaligus, tanpa perlu edit satu-satu. Bisa dikembalikan kapan saja lewat
+  toggle yang sama, dan akan kembali PERSIS seperti semula (produk yang
+  memang sudah non-stok sejak awal, mis. jasa, tidak ikut berubah).
+
+### 🛠️ Perbaikan
+- **Nominal kembalian di struk (dalam aplikasi) sekarang lebih menonjol
+  (tebal)** — supaya kasir tidak salah lihat berapa uang kembali yang
+  harus diserahkan sekarang, beda dari riwayat pembayaran di bawahnya yang
+  cuma catatan.
+- **Pembayaran yang dibatalkan tidak lagi ikut tercetak/dibagikan di
+  struk.** Dulu kalau ada pembayaran yang salah lalu dibatalkan (mis. salah
+  ketik nominal), baris itu tetap ikut tercetak di struk kertas & struk
+  gambar (share) seolah pembayaran sungguhan — bisa terlihat seperti
+  pelanggan bayar berkali-kali. Sekarang pembayaran yang sudah dibatalkan
+  hanya tampil di riwayat pembayaran dalam aplikasi, tidak lagi ikut ke
+  struk yang dicetak atau dibagikan.
+
 ## 25 Juli 2026
 
 ### ✨ Fitur Baru
+- **Menu baru "Cek Duplikat Data"** (Pengaturan > Diagnostik, khusus owner) —
+  memeriksa apakah ada produk yang barcode/harga-nya ke-dobel (misalnya 2
+  barcode "Primer" sekaligus), yang bisa terjadi kalau HP pernah restore
+  backup dari HP lain yang datanya sempat kurang rapi. Kalau ketemu, tinggal
+  ketuk produknya untuk membuka Edit Produk lalu simpan ulang — otomatis
+  rapi jadi satu.
 - **Nama produk panjang di keranjang tidak lagi terpotong** — sekarang
   boleh tampil sampai 2 baris.
 - **Stock Opname bisa dihitung pakai satuan yang lebih nyaman** — produk
@@ -18,12 +49,58 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   langsung dalam satuan besarnya (misalnya "10 dus"), otomatis dikonversi
   ke satuan dasar. Produk dengan satu satuan saja tidak berubah sama
   sekali.
-- **Cek Stok: pilih satuan tampilan untuk daftar Order Restock** — produk
-  berjenjang yang dicentang untuk restock sekarang bisa ditampilkan dalam
-  satuan pilihan (misalnya "2 dus" alih-alih "20 pcs") di teks yang
-  disalin/dikirim ke supplier.
+- **Cek Stok: tentukan sendiri jumlah & satuan yang mau diorder.** Setiap
+  produk yang dicentang kini punya baris `[−] [jumlah] [+] [satuan]` —
+  jumlahnya mulai dari 1, bisa dinaikkan/diturunkan, atau **diketuk untuk
+  mengetik angkanya langsung**. Satuannya bisa dipilih dari satuan milik
+  produk itu (Pcs/Dus) maupun dari daftar satuan umum, jadi produk
+  bersatuan tunggal pun tetap bisa diorder dalam satuan lain. Teks yang
+  dikirim ke supplier jadi berbentuk "10 Dus Indomie".
+- **Filter Semua / Dicentang / Belum di Cek Stok.** Berlaku bersamaan dengan
+  filter kategori, jadi bisa misalnya melihat hanya produk Sembako yang belum
+  dicentang. Judul panel juga menunjukkan berapa produk yang akan ikut
+  terkirim ke supplier.
+- **Kecualikan kategori tertentu dari teks Order Restock.** Kalau ada
+  kategori yang memang dipesan lewat cara lain (misalnya LPG), sekarang bisa
+  ditandai "dikecualikan" — produknya tetap boleh dicentang & tampil di
+  daftar seperti biasa, cuma tidak ikut ditulis ke teks yang dikirim ke
+  supplier. Chip ini muncul di atas kotak teks kalau tokonya punya 2
+  kategori atau lebih.
+- **Tampilan baris jumlah order di Cek Stok dirombak** — kotak −/+/satuan
+  sekarang jadi satu jalur menyatu yang serasi dengan tampilan field lain
+  di aplikasi, dan angkanya pakai gaya angka yang sama dengan nominal Rupiah
+  di seluruh aplikasi.
+- **Warna kartu produk tercentang di Cek Stok tidak lagi ikut warna
+  kritis/aman stoknya** — dulu produk berstok kritis yang dicentang jadi
+  merah tebal (dua arti berbeda numpuk jadi satu warna, membingungkan).
+  Sekarang produk tercentang selalu warna oranye netral, dan warna
+  kritis/menipis/aman tetap cuma di angka badge stoknya.
+- **Teks Order Restock sekarang bisa diedit langsung, dua arah.** Anda bisa
+  mengetik/menempel langsung di kotak teksnya; centang, jumlah, dan satuan
+  di daftar atas ikut menyesuaikan. Menghapus satu baris juga otomatis
+  membatalkan centang produknya.
+- **Kasir: "Harga Lain" langsung tampil sebagai pilihan, tidak perlu buka
+  menu dulu.** Sebelumnya harga grosir/harga alternatif satuan disembunyikan
+  di balik satu tombol "Harga lain (N)" — sekarang setiap opsi (harga
+  dasar, tier grosir, harga alternatif) langsung tampil sebagai kotak
+  pilihan sendiri-sendiri, sebaris dengan "Pilih satuan" di atasnya. Tinggal
+  ketuk salah satu, tanpa buka apa pun dulu.
 
 ### 🛠️ Perbaikan
+- **Barcode/tier grosir/Harga Lain yang diganti owner sekarang benar-benar
+  hilang dari HP kasir/asisten setelah sinkronisasi.** Dulu kalau owner
+  mengedit barcode (atau tier harga grosir/Harga Lain) sebuah produk,
+  nilai LAMA-nya tetap tersimpan di HP kasir/asisten setelah sync —
+  barcode lama masih bisa di-scan, dan hasilnya bisa keliru. Sekarang
+  nilai lama ikut terhapus begitu ada penggantinya di owner.
+- **Memilih "Harga Lain" tidak lagi mematikan tanda satuan yang aktif.**
+  Sebelumnya begitu Anda memilih harga alternatif/grosir, kotak satuan yang
+  sedang dipakai jadi terlihat "tidak terpilih" — padahal satuannya sendiri
+  tidak berubah. Sekarang keduanya independen: kotak satuan tetap menyala
+  sesuai satuan yang aktif, kotak harga menyala sesuai harga yang dipakai.
+- **Tanda "stok habis" yang diubah owner sekarang benar-benar tersinkron ke
+  HP kasir/asisten** — sebelumnya bisa tersangkut & tidak pernah sampai ke
+  perangkat lain, terutama untuk produk yang sudah lama tidak diedit.
 - **Kategori produk (buat/ganti nama/hapus/urutkan) sekarang benar-benar
   tersinkron ke HP kasir/asisten** — sebelumnya kategori baru yang dibuat
   owner tidak pernah sampai ke perangkat lain, meski produk yang
@@ -43,9 +120,35 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   tersorot, jadi mengetik langsung menggantinya.
 - **Kotak "Poin Loyalitas" pelanggan baru tidak lagi berisi "0"** yang
   harus dihapus dulu sebelum bisa diisi.
+- **Jumlah di Order Restock tidak lagi diambil dari angka stok.** Dulu
+  jumlahnya adalah stok saat ini, sehingga produk berstok minus keluar
+  sebagai "-104 Pres Lawet Ijo" — dan angkanya sama sekali tidak bisa
+  diubah. Sekarang jumlahnya Anda tentukan sendiri.
+- **Pemilih satuan & jumlah di Cek Stok kini juga muncul untuk produk yang
+  sudah ditandai habis sebelumnya.** Dulu hanya muncul kalau produknya baru
+  dicentang di sesi itu; produk yang sudah tercentang dari sebelumnya tampil
+  tanpa satuan dan teksnya turun jadi "- Nama Produk" polos.
+- **Nama satuan di Cek Stok terbaca jelas di mode gelap** (dulu warnanya
+  dipaksa hitam sehingga nyaris tidak terlihat).
+- **Angka stok tidak bisa lagi berbeda antar layar.** Untuk produk yang
+  punya dua perubahan stok di detik yang sama, layar Cek Stok / Stock
+  Opname / laporan inventori bisa menampilkan angka lama sementara
+  perhitungan internal memakai angka terbaru. Sekarang semuanya konsisten.
 - **Layar "Hitung Fisik" (Stock Opname) jauh lebih cepat terbuka** untuk
   toko dengan banyak produk — dulu menunggu memuat data satuan produk satu
   per satu sebelum daftarnya muncul.
+- **Barcode yang sama tidak bisa lagi dipakai dua produk sekaligus.** Dulu
+  menyimpan produk baru dengan barcode yang sudah dipakai produk lain
+  "berhasil" tanpa peringatan apa pun — padahal diam-diam barcode itu
+  DIAMBIL dari produk yang lama. Akibatnya produk lama tidak bisa di-scan
+  lagi, dan men-scan kode tersebut di kasir menagih produk yang SALAH,
+  tanpa ada tanda apa pun. Sekarang penyimpanan ditolak dengan pesan yang
+  menyebutkan produk mana yang sudah memakai barcode itu. **Nama produk di
+  pesan itu bisa langsung diketuk** untuk membuka produk tersebut — jadi
+  kalau memang barcode-nya mau dipindahkan, tinggal ketuk namanya, hapus
+  barcode di sana, lalu kembali dan simpan (isian yang sedang diketik tidak
+  hilang). Barcode dari produk yang sudah dinonaktifkan tetap boleh dipakai
+  ulang seperti biasa.
 
 ## 24 Juli 2026
 

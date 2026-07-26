@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -138,6 +139,30 @@ typedef InventoryRow = ({
   double stock,
   int costPrice,
 });
+
+/// Barcode yang mau dipakai ternyata masih dipegang produk LAIN yang aktif.
+/// Dilempar dari dalam transaksi [AppDatabase.saveProduct] supaya seluruh
+/// penyimpanan di-rollback (tidak ada produk setengah tersimpan), dan supaya
+/// UI bisa menyebut produk mana yang bentrok — bukan sekadar "UNIQUE
+/// constraint failed". Satu barcode WAJIB memetakan ke tepat satu produk:
+/// kalau tidak, scan di kasir jadi ambigu & bisa menagih barang yang salah.
+class BarcodeConflictException implements Exception {
+  BarcodeConflictException({
+    required this.barcode,
+    required this.productName,
+    required this.productId,
+  });
+  final String barcode;
+  final String productName;
+
+  /// Supaya UI bisa menawarkan "buka produk itu" langsung dari pesan error —
+  /// owner tidak perlu mencarinya manual utk membebaskan barcode-nya.
+  final String productId;
+  @override
+  String toString() =>
+      'Barcode "$barcode" sudah dipakai produk "$productName". Gunakan '
+      'barcode lain, atau hapus dulu barcode itu dari produk tersebut.';
+}
 
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -626,7 +651,7 @@ class AppDatabase extends _$AppDatabase {
       // Saldo non-base dari entry terakhir (dalam satuan non-base).
       final lastRow = await customSelect(
         'SELECT stock_after FROM stock_ledger '
-        'WHERE product_unit_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        'WHERE product_unit_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
         variables: [Variable.withString(unitId)],
       ).getSingleOrNull();
       if (lastRow == null) continue;
@@ -651,7 +676,7 @@ class AppDatabase extends _$AppDatabase {
       // Saldo dasar saat ini.
       final baseLastRow = await customSelect(
         'SELECT stock_after FROM stock_ledger '
-        'WHERE product_unit_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        'WHERE product_unit_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
         variables: [Variable.withString(baseUnitId)],
       ).getSingleOrNull();
       final currentBase = baseLastRow != null
@@ -773,7 +798,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT pu.product_id AS pid, p.name AS name, pu.min_stock AS min_stock,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
-                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+                  ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id
       WHERE pu.is_base_unit = 1 AND pu.min_stock IS NOT NULL AND p.is_active = 1
@@ -816,7 +841,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT pu.product_id AS pid,
         (SELECT sl.stock_after FROM stock_ledger sl
          WHERE sl.product_unit_id = pu.id
-         ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1) AS stock
+         ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1) AS stock
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id
       WHERE pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1
@@ -847,7 +872,7 @@ class AppDatabase extends _$AppDatabase {
         p.marked_out_of_stock AS marked_out_of_stock,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
-                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock
+                  ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id
       WHERE $where
@@ -986,7 +1011,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT p.id AS pid, p.name AS name, p.product_group_id AS group_id,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
-                  ORDER BY sl.created_at DESC, sl.id DESC LIMIT 1), 0) AS stock,
+                  ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock,
         COALESCE(pt.cost_price, 0) AS cost_price
       FROM product_units pu
       JOIN products p ON p.id = pu.product_id
@@ -1362,6 +1387,89 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.productUnitId.equals(productUnitId)))
           .get();
 
+  /// Deteksi baris duplikat di `product_barcodes`/`price_tiers`/`alt_prices`
+  /// akibat pemulihan backup dari device lain yang datanya sudah basi (lihat
+  /// dok panjang di fix commit `6455b9a`, orphan-cleanup `mergeRows`):
+  /// `restoreFromDump` menimpa SELURUH DB lokal VERBATIM dari file backup,
+  /// TANPA cek invarian apa pun ("1 barcode Primer per satuan", dst) — kalau
+  /// backup-nya diambil dari device yang sempat kena bug lama (baris basi
+  /// belum sempat dibersihkan sinkron), duplikatnya ikut terbawa mentah² ke
+  /// device manapun yang me-restore file itu, termasuk device HOST sendiri.
+  ///
+  /// SENGAJA cuma MELAPOR, tidak menghapus otomatis: barcode/tier/Harga Lain
+  /// mana yang benar (mis. label sudah tercetak & dipakai scanner) tidak
+  /// bisa ditentukan cuma dari data lokal (tabel-tabel ini tak punya kolom
+  /// waktu) — owner yang harus tinjau lalu simpan ulang produknya lewat
+  /// form Edit Produk (delete-lama-insert-baru yang sudah ada di
+  /// `saveProduct` otomatis merapikan jadi 1 baris saat disimpan).
+  Future<List<MasterDataDuplicate>> findMasterDataDuplicates() async {
+    final result = <MasterDataDuplicate>[];
+
+    final barcodeDupes = await customSelect(
+      'SELECT pu.product_id AS product_id, p.name AS product_name, '
+      'ut.name AS unit_name, COUNT(*) AS cnt '
+      'FROM product_barcodes pb '
+      'JOIN product_units pu ON pu.id = pb.product_unit_id '
+      'JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'WHERE pb.is_primary = 1 '
+      'GROUP BY pb.product_unit_id '
+      'HAVING COUNT(*) > 1',
+    ).get();
+    for (final r in barcodeDupes) {
+      result.add(MasterDataDuplicate(
+        productId: r.data['product_id'] as String,
+        productName: r.data['product_name'] as String,
+        unitName: (r.data['unit_name'] as String?) ?? 'Satuan',
+        table: 'product_barcodes',
+        detail: '${r.data['cnt']} barcode ditandai Primer sekaligus',
+      ));
+    }
+
+    final tierDupes = await customSelect(
+      'SELECT pu.product_id AS product_id, p.name AS product_name, '
+      'ut.name AS unit_name, pt.min_qty AS min_qty, COUNT(*) AS cnt '
+      'FROM price_tiers pt '
+      'JOIN product_units pu ON pu.id = pt.product_unit_id '
+      'JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'GROUP BY pt.product_unit_id, pt.min_qty '
+      'HAVING COUNT(*) > 1',
+    ).get();
+    for (final r in tierDupes) {
+      result.add(MasterDataDuplicate(
+        productId: r.data['product_id'] as String,
+        productName: r.data['product_name'] as String,
+        unitName: (r.data['unit_name'] as String?) ?? 'Satuan',
+        table: 'price_tiers',
+        detail:
+            '${r.data['cnt']} tier harga dobel di qty>=${r.data['min_qty']}',
+      ));
+    }
+
+    final altDupes = await customSelect(
+      'SELECT pu.product_id AS product_id, p.name AS product_name, '
+      'ut.name AS unit_name, ap.label AS label, COUNT(*) AS cnt '
+      'FROM alt_prices ap '
+      'JOIN product_units pu ON pu.id = ap.product_unit_id '
+      'JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'GROUP BY ap.product_unit_id, ap.label '
+      'HAVING COUNT(*) > 1',
+    ).get();
+    for (final r in altDupes) {
+      result.add(MasterDataDuplicate(
+        productId: r.data['product_id'] as String,
+        productName: r.data['product_name'] as String,
+        unitName: (r.data['unit_name'] as String?) ?? 'Satuan',
+        table: 'alt_prices',
+        detail: '${r.data['cnt']} Harga Lain "${r.data['label']}" dobel',
+      ));
+    }
+
+    return result;
+  }
+
   Future<ProductBarcode?> lookupBarcode(String barcode) =>
       (select(productBarcodes)..where((t) => t.barcode.equals(barcode)))
           .getSingleOrNull();
@@ -1641,13 +1749,7 @@ class AppDatabase extends _$AppDatabase {
                   t.productUnitId.equals(unitId) & t.isPrimary.equals(true)))
             .go();
         for (final bc in barcodes) {
-          // Cegah tabrakan UNIQUE(barcode): nilai barcode yang sama bisa
-          // sudah ada di baris lain (id berbeda). insertOnConflictUpdate
-          // hanya menangani konflik PK id, bukan unique barcode — jadi
-          // hapus dulu baris mana pun yang memegang nilai itu.
-          await (delete(productBarcodes)
-                ..where((t) => t.barcode.equals(bc.barcode.value)))
-              .go();
+          await _claimBarcodeFor(productId, bc.barcode.value);
           await into(productBarcodes).insert(bc);
         }
       }
@@ -1694,6 +1796,59 @@ class AppDatabase extends _$AppDatabase {
   /// OR REPLACE` (keyed by id yang sama) ke device lain — pelepasan ikut
   /// terpropagasi otomatis lewat mekanisme sync yang sudah ada, tanpa
   /// perubahan protokol.
+  /// Bebaskan nilai [barcode] supaya bisa dipakai [productId], ATAU lempar
+  /// [BarcodeConflictException] kalau nilai itu masih dipegang produk lain
+  /// yang MASIH AKTIF.
+  ///
+  /// Dulu di sini cuma `DELETE ... WHERE barcode = value` polos supaya tidak
+  /// menabrak `UNIQUE(barcode)`. Efeknya: menyimpan produk B dgn barcode
+  /// produk A **MENGHAPUS barcode A tanpa error apa pun** — A jadi tidak
+  /// bisa di-scan, dan scan kode itu di kasir menagih produk yang SALAH (B),
+  /// tanpa ada yang sadar. Dilaporkan user 25 Juli ("dua produk barcode sama
+  /// lolos" — yang sebenarnya terjadi: yang kedua mencuri dari yang pertama).
+  ///
+  /// Kasus reuse yang SAH tidak lewat sini: produk yang dinonaktifkan/varian
+  /// dihapus sudah dilepas lewat [_releaseBarcodesForProduct] (nilainya
+  /// di-rename `RELEASED:...`), jadi tidak pernah cocok dgn `equals(value)`.
+  /// Yang MASIH perlu diganti tanpa protes: baris milik produk INI sendiri —
+  /// mis. alias `isPrimary=false` yang ditulis sinkron harga antar toko
+  /// (lihat CLAUDE.md) lalu diketik owner sbg barcode utama.
+  Future<void> _claimBarcodeFor(String productId, String barcode) async {
+    // `barcode` UNIQUE, jadi paling banyak satu pemegang.
+    final holder = await (select(productBarcodes)
+          ..where((t) => t.barcode.equals(barcode)))
+        .getSingleOrNull();
+    if (holder == null) return;
+
+    final holderUnit = await (select(productUnits)
+          ..where((t) => t.id.equals(holder.productUnitId)))
+        .getSingleOrNull();
+    if (holderUnit == null || holderUnit.productId == productId) {
+      // Milik produk ini sendiri (atau baris yatim) — aman diganti.
+      await (delete(productBarcodes)..where((t) => t.id.equals(holder.id)))
+          .go();
+      return;
+    }
+
+    final other = await (select(products)
+          ..where((t) => t.id.equals(holderUnit.productId)))
+        .getSingleOrNull();
+    if (other != null && other.isActive) {
+      throw BarcodeConflictException(
+        barcode: barcode,
+        productName: other.name,
+        productId: other.id,
+      );
+    }
+    // Pemegangnya produk tidak aktif yang barcode-nya belum pernah dilepas
+    // (data lama, sebelum mekanisme RELEASED ada). Lepas dgn cara yang sama
+    // — rename, JANGAN hard-delete, supaya jejaknya tidak hilang.
+    await (update(productBarcodes)..where((t) => t.id.equals(holder.id)))
+        .write(ProductBarcodesCompanion(
+      barcode: Value('RELEASED:${holder.id}:${holder.barcode}'),
+    ));
+  }
+
   Future<void> _releaseBarcodesForProduct(String productId) async {
     final units = await (select(productUnits)
           ..where((t) => t.productId.equals(productId)))
@@ -1714,9 +1869,64 @@ class AppDatabase extends _$AppDatabase {
 
   /// Item 25a — tandai/lepas tanda "stok habis" manual (lihat komentar
   /// kolom `markedOutOfStock` di product_tables.dart).
+  ///
+  /// `updated_at` WAJIB dicap ulang eksplisit — kelas bug yang SAMA PERSIS
+  /// dgn `deactivateProduct`/`applyProductProposals` (lihat dok panjang di
+  /// keduanya): tanpa ini, `dumpSince` (host→klien, filter `WHERE
+  /// updated_at >= since`) tidak akan pernah lagi menyertakan baris ini
+  /// begitu watermark klien sudah lewat dari kapan produk itu TERAKHIR
+  /// DIEDIT (bukan kapan ditandai habis) — tanda "stok habis" yang di-toggle
+  /// owner di host tidak pernah sampai ke klien.
   Future<void> setMarkedOutOfStock(String productId, bool value) =>
       (update(products)..where((t) => t.id.equals(productId))).write(
-          ProductsCompanion(markedOutOfStock: Value(value)));
+          ProductsCompanion(
+              markedOutOfStock: Value(value),
+              updatedAt: Value(DateTime.now())));
+
+  // ───────────────────────── Jeda pelacakan stok (sementara) ───────────────
+
+  static const _stockPauseSnapshotKey = 'stock_pause_snapshot';
+
+  Future<bool> isStockTrackingPaused() async {
+    final raw = await getSetting(_stockPauseSnapshotKey);
+    return raw != null && raw.isNotEmpty;
+  }
+
+  /// Set SEMUA satuan produk yang saat ini masih dilacak stoknya jadi
+  /// non-stok, sekaligus (idempoten — panggilan kedua saat sudah jeda
+  /// adalah no-op, mengembalikan 0). Daftar id yang diubah disimpan sbg
+  /// snapshot di `app_settings` supaya [resumeStockTrackingForAllProducts]
+  /// bisa mengembalikan PERSIS satuan yang sama — satuan yang MEMANG sudah
+  /// non-stok sebelumnya (mis. varian jasa) sengaja tidak ikut tersentuh
+  /// sama sekali, baik saat jeda maupun saat dipulihkan.
+  Future<int> pauseStockTrackingForAllProducts() async {
+    if (await isStockTrackingPaused()) return 0;
+    final tracked = await (select(productUnits)
+          ..where((t) => t.isNonStock.equals(false)))
+        .get();
+    final ids = tracked.map((u) => u.id).toList();
+    await setSetting(_stockPauseSnapshotKey, jsonEncode(ids));
+    if (ids.isNotEmpty) {
+      await (update(productUnits)..where((t) => t.id.isIn(ids)))
+          .write(const ProductUnitsCompanion(isNonStock: Value(true)));
+    }
+    return ids.length;
+  }
+
+  /// Kembalikan pelacakan stok utk satuan yang diubah oleh
+  /// [pauseStockTrackingForAllProducts] (dan HANYA itu — lihat dok di sana).
+  /// No-op (return 0) bila sedang tidak dijeda.
+  Future<int> resumeStockTrackingForAllProducts() async {
+    final raw = await getSetting(_stockPauseSnapshotKey);
+    if (raw == null) return 0;
+    final ids = (jsonDecode(raw) as List).cast<String>();
+    if (ids.isNotEmpty) {
+      await (update(productUnits)..where((t) => t.id.isIn(ids)))
+          .write(const ProductUnitsCompanion(isNonStock: Value(false)));
+    }
+    await setSetting(_stockPauseSnapshotKey, '');
+    return ids.length;
+  }
 
   // ───────────────────────── Transaction save ─────────────────────────
 
@@ -4483,6 +4693,42 @@ class AppDatabase extends _$AppDatabase {
           }
         }
       }
+
+      // Bug nyata dilaporkan user: owner edit barcode produk -> setelah sync
+      // ke klien, barcode LAMA masih ada (bisa di-scan) BERDAMPINGAN dgn yg
+      // baru. Akar: `saveProduct` HAPUS baris lama + INSERT baris baru (id
+      // UUID baru) saat barcode diedit, bukan update in-place — dan tabel ini
+      // (sama seperti price_tiers/alt_prices) SELALU full-dump tanpa
+      // `updated_at` (lihat `dumpSince`), jadi `INSERT OR REPLACE` di atas
+      // tidak pernah menghapus baris yang sudah tak ada di payload. Payload
+      // full-dump = kebenaran LENGKAP host saat ini, jadi aman hapus baris
+      // lokal yang id-nya tak ada di dalamnya — KECUALI baris milik unit yang
+      // sedang diproteksi (`protectedUnitIds`, usulan lokal blm di-approve),
+      // supaya edit lokal yang belum di-review owner tidak ikut kehapus.
+      const orphanCleanupTables = {'product_barcodes', 'price_tiers', 'alt_prices'};
+      if (!isAppendOnly && orphanCleanupTables.contains(tableName)) {
+        final incomingIds =
+            rows.map((r) => r['id']).whereType<String>().toSet();
+        final existing = await customSelect(
+          'SELECT id, product_unit_id FROM "$tableName"',
+        ).get();
+        for (final e in existing) {
+          final id = e.data['id'] as String?;
+          if (id == null || incomingIds.contains(id)) continue;
+          final unitId = e.data['product_unit_id'] as String?;
+          if (protectedUnitIds != null &&
+              unitId != null &&
+              protectedUnitIds.contains(unitId)) {
+            continue;
+          }
+          await customUpdate(
+            'DELETE FROM "$tableName" WHERE id = ?',
+            variables: [Variable<Object>(id)],
+            updates: {table!},
+            updateKind: UpdateKind.delete,
+          );
+        }
+      }
     });
     return count;
   }
@@ -4522,6 +4768,23 @@ class CustomerRevenueStat {
   final int loyaltyPoints;
   final int totalSpent;
   final int txCount;
+}
+
+/// Satu temuan baris duplikat di master-data (lihat `findMasterDataDuplicates`).
+class MasterDataDuplicate {
+  const MasterDataDuplicate({
+    required this.productId,
+    required this.productName,
+    required this.unitName,
+    required this.table,
+    required this.detail,
+  });
+
+  final String productId;
+  final String productName;
+  final String unitName;
+  final String table;
+  final String detail;
 }
 
 /// Build typed variable list for raw SQL queries.

@@ -33,7 +33,7 @@ void main() {
     await pumpWithFakeApp(tester, db: db, child: const CekStokScreen());
 
     expect(find.text('Gula Pasir'), findsOneWidget);
-    expect(find.text('Teks Order Restock'), findsNothing,
+    expect(find.textContaining('Teks Order Restock'), findsNothing,
         reason: 'panel belum muncul sebelum ada yg dicentang');
 
     await tester.tap(find.byType(Checkbox).first);
@@ -43,7 +43,7 @@ void main() {
           ..where((t) => t.id.equals('p-Gula Pasir')))
         .getSingle();
     expect(product.markedOutOfStock, isTrue);
-    expect(find.text('Teks Order Restock'), findsOneWidget);
+    expect(find.textContaining('Teks Order Restock'), findsOneWidget);
     expect(find.textContaining('Gula Pasir'), findsWidgets);
 
     await tester.tap(find.byType(Checkbox).first);
@@ -53,7 +53,7 @@ void main() {
           ..where((t) => t.id.equals('p-Gula Pasir')))
         .getSingle();
     expect(productAfter.markedOutOfStock, isFalse);
-    expect(find.text('Teks Order Restock'), findsNothing);
+    expect(find.textContaining('Teks Order Restock'), findsNothing);
 
     await db.close();
   });

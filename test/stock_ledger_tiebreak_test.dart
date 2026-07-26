@@ -86,4 +86,43 @@ void main() {
 
     expect(await db.currentStock(unitId), 100);
   });
+
+  test(
+      'SEMUA jalur baca stok sepakat di detik yang sama — currentStock (Drift) '
+      'DAN query raw SQL (watchStockOverview/getInventoryRows/dll) sama-sama '
+      'tie-break pakai rowid, bukan UUID acak', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final unitId = await addProduct(db, 'Gajah Baru');
+
+    final sameSecond = DateTime(2026, 7, 25, 17, 11, 0);
+    // Ditulis DULU, id leksikografis LEBIH BESAR (menang tie-break lama).
+    await db.into(db.stockLedger).insert(StockLedgerCompanion.insert(
+          id: 'zzz-duluan',
+          productUnitId: unitId,
+          type: 'adjustment',
+          qtyChange: 5,
+          stockAfter: 5,
+          createdAt: Value(sameSecond),
+        ));
+    // Ditulis BELAKANGAN (yang benar), id lebih kecil.
+    await db.into(db.stockLedger).insert(StockLedgerCompanion.insert(
+          id: 'aaa-belakangan',
+          productUnitId: unitId,
+          type: 'adjustment',
+          qtyChange: 95,
+          stockAfter: 100,
+          createdAt: Value(sameSecond),
+        ));
+
+    // Jalur Drift (dipakai commitOpname/adjustStock).
+    expect(await db.currentStock(unitId), 100);
+
+    // Jalur raw SQL yang memasok layar Cek Stok & Stock Opname — dulu masih
+    // `sl.id DESC` walau `_rawBaseStock` sudah diperbaiki, jadi kedua jalur
+    // bisa MENAMPILKAN ANGKA BERBEDA untuk produk yang sama.
+    final overview = await db.watchStockOverview().first;
+    expect(overview.single.stock, 100,
+        reason: 'watchStockOverview harus setuju dgn currentStock');
+  });
 }
