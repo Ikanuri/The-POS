@@ -20,6 +20,7 @@ import '../../core/services/order_parser_service.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../laci_meja/preorder_entry_dialog.dart';
 import '../../core/widgets/item_count_badge.dart';
 import '../produk/catalog/catalog_models.dart';
 import '../produk/catalog/catalog_share.dart';
@@ -545,6 +546,7 @@ class CatalogDetail {
     required this.unitCount,
     this.barcode,
     this.hasVariants = false,
+    this.requiresDeposit = false,
   });
 
   final String baseUnitId;
@@ -554,6 +556,10 @@ class CatalogDetail {
   final int unitCount;
   final String? barcode;
   final bool hasVariants;
+
+  /// Item 52 ("Laci Meja") — satuan dasar produk ini butuh jaminan fisik
+  /// (titip wadah) saat antri Pre-order stok kosong, mis. tukar-wadah LPG.
+  final bool requiresDeposit;
 }
 
 final _catalogDetailProvider =
@@ -590,6 +596,7 @@ final _catalogDetailProvider =
     barcode:
         barcodes.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull,
     hasVariants: variants.isNotEmpty,
+    requiresDeposit: base.requiresDeposit,
   );
 });
 
@@ -2826,6 +2833,30 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
                                       color: cs.error)),
+                              // Item 52 ("Laci Meja") — entry Pre-order
+                              // langsung dari pencarian, tanpa pindah layar
+                              // (usulan user: jangan terlalu banyak step).
+                              detailAsync.maybeWhen(
+                                data: (d) => d.baseUnitId.isEmpty
+                                    ? const SizedBox.shrink()
+                                    : TextButton(
+                                        style: TextButton.styleFrom(
+                                            minimumSize: Size.zero,
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6),
+                                            visualDensity: VisualDensity.compact),
+                                        onPressed: () => showPreorderEntryDialog(
+                                          context,
+                                          ref,
+                                          productId: product.id,
+                                          productUnitId: d.baseUnitId,
+                                          requiresDeposit: d.requiresDeposit,
+                                        ),
+                                        child: const Text('+ Antri',
+                                            style: TextStyle(fontSize: 10.5)),
+                                      ),
+                                orElse: () => const SizedBox.shrink(),
+                              ),
                             ],
                             if (hasVariants) ...[
                               const SizedBox(width: 4),

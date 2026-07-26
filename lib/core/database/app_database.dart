@@ -81,6 +81,7 @@ typedef StockOverviewRow = ({
   double stock,
   double? minStock,
   bool markedOutOfStock,
+  bool requiresDeposit,
 });
 
 /// Baris ringkasan satu sesi stock opname (Item 36) — dikelompokkan dari
@@ -882,6 +883,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT pu.id AS unit_id, pu.product_id AS pid, p.name AS name,
         p.product_group_id AS group_id, pu.min_stock AS min_stock,
         p.marked_out_of_stock AS marked_out_of_stock,
+        pu.requires_deposit AS requires_deposit,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
                   ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock
@@ -901,6 +903,7 @@ class AppDatabase extends _$AppDatabase {
                   minStock: (r.data['min_stock'] as num?)?.toDouble(),
                   markedOutOfStock:
                       (r.data['marked_out_of_stock'] as int) == 1,
+                  requiresDeposit: (r.data['requires_deposit'] as int) == 1,
                 ))
             .toList());
   }

@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../laci_meja/preorder_entry_dialog.dart';
 import 'stock_opname_screen.dart';
 
 /// Item 30(b) — layar kontrol stok terpisah dari daftar Produk (fokus
@@ -429,6 +430,15 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
                     onQtyTap: () =>
                         _promptQty(rows[i].productId, rows[i].name),
                     onUnitChanged: (u) => _setUnit(rows[i].productId, u),
+                    // Item 52 ("Laci Meja") — jalur kedua entry Pre-order,
+                    // dari halaman Produk (jalur pertama: pencarian Kasir).
+                    onPreorder: () => showPreorderEntryDialog(
+                      context,
+                      ref,
+                      productId: rows[i].productId,
+                      productUnitId: rows[i].unitId,
+                      requiresDeposit: rows[i].requiresDeposit,
+                    ),
                   ),
                 );
               },
@@ -656,9 +666,11 @@ class _StockRow extends StatelessWidget {
     this.onQtyDelta,
     this.onQtyTap,
     this.onUnitChanged,
+    this.onPreorder,
   });
   final StockOverviewRow row;
   final ValueChanged<bool> onToggle;
+  final VoidCallback? onPreorder;
 
   /// Jumlah yang mau DIORDER (bukan stok). Awal 1, seperti acuan.
   final double qty;
@@ -737,14 +749,38 @@ class _StockRow extends StatelessWidget {
         subtitle: (checked && unitOptions != null && unitOptions!.isNotEmpty)
             ? Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: _QtyUnitStepper(
-                  qty: qty,
-                  fmtQty: fmtQty,
-                  unitOptions: unitOptions!,
-                  selectedUnit: selectedUnit,
-                  onQtyDelta: (d) => onQtyDelta?.call(d),
-                  onQtyTap: () => onQtyTap?.call(),
-                  onUnitChanged: (u) => onUnitChanged?.call(u),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _QtyUnitStepper(
+                      qty: qty,
+                      fmtQty: fmtQty,
+                      unitOptions: unitOptions!,
+                      selectedUnit: selectedUnit,
+                      onQtyDelta: (d) => onQtyDelta?.call(d),
+                      onQtyTap: () => onQtyTap?.call(),
+                      onUnitChanged: (u) => onUnitChanged?.call(u),
+                    ),
+                    // Item 52 ("Laci Meja") — baris TERPISAH (bukan
+                    // ditambahkan ke Row stepper yang sudah padat di HP
+                    // 360px) supaya tidak memicu overflow.
+                    if (onPreorder != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                              minimumSize: Size.zero,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              visualDensity: VisualDensity.compact),
+                          onPressed: onPreorder,
+                          icon: const Icon(Icons.hourglass_empty, size: 14),
+                          label: const Text('Catat Pre-order',
+                              style: TextStyle(fontSize: 11.5)),
+                        ),
+                      ),
+                  ],
                 ),
               )
             : null,
