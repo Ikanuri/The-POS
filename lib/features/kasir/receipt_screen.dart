@@ -12,9 +12,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/laci_meja_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
@@ -1550,6 +1552,167 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     );
   }
 
+  /// Item 52 ("Laci Meja") — tombol gabungan "+ Catat", satu ikon (BUKAN
+  /// dua ikon terpisah di app bar yang sudah padat), pilihan jenis di
+  /// dalam menu: Titip/Ketinggalan atau Pinjaman Barang. Kedua kategori ini
+  /// SELALU menumpang transaksi yang sedang berjalan (transactionId NOT
+  /// NULL) — lihat keputusan "jangan buat struk terpisah" di PLAN.md
+  /// Item 52.
+  Future<void> _showCatatMenu(String transactionId) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.inventory_outlined),
+              title: const Text('Titip/Ketinggalan'),
+              subtitle: const Text('Barang lupa dibawa atau sengaja dititip'),
+              onTap: () => Navigator.pop(ctx, 'titip_ketinggalan'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz),
+              title: const Text('Pinjaman Barang'),
+              subtitle: const Text('Wadah/deposit (galon, tabung) — harus kembali fisik'),
+              onTap: () => Navigator.pop(ctx, 'pinjaman'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'titip_ketinggalan') {
+      await _showLeftBehindDialog(transactionId);
+    } else {
+      await _showBorrowedDialog(transactionId);
+    }
+  }
+
+  Future<void> _showLeftBehindDialog(String transactionId) async {
+    final nameController = TextEditingController();
+    final customerController = TextEditingController();
+    var jenis = 'titip';
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Catat Titip/Ketinggalan'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Nama barang'),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'titip', label: Text('Titip')),
+                  ButtonSegment(value: 'ketinggalan', label: Text('Ketinggalan')),
+                ],
+                selected: {jenis},
+                onSelectionChanged: (s) => setDialogState(() => jenis = s.first),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: customerController,
+                decoration:
+                    const InputDecoration(labelText: 'Nama pelanggan (opsional)'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Simpan')),
+          ],
+        ),
+      ),
+    );
+    if (result != true || nameController.text.trim().isEmpty) return;
+    final db = ref.read(databaseProvider);
+    final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+    await db.addLeftBehindItem(
+      id: const Uuid().v4(),
+      transactionId: transactionId,
+      itemName: nameController.text.trim(),
+      jenis: jenis,
+      customerNameText: customerController.text.trim().isEmpty
+          ? null
+          : customerController.text.trim(),
+      locallyModified: locallyModified,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
+  }
+
+  Future<void> _showBorrowedDialog(String transactionId) async {
+    final nameController = TextEditingController();
+    final qtyController = TextEditingController(text: '1');
+    final customerController = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Catat Pinjaman Barang'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Nama barang'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Jumlah'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: customerController,
+              decoration:
+                  const InputDecoration(labelText: 'Nama pelanggan (opsional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Simpan')),
+        ],
+      ),
+    );
+    final qty = double.tryParse(qtyController.text.trim());
+    if (result != true || nameController.text.trim().isEmpty || qty == null || qty <= 0) {
+      return;
+    }
+    final db = ref.read(databaseProvider);
+    final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+    await db.addBorrowedItem(
+      id: const Uuid().v4(),
+      transactionId: transactionId,
+      itemName: nameController.text.trim(),
+      qty: qty,
+      customerNameText: customerController.text.trim().isEmpty
+          ? null
+          : customerController.text.trim(),
+      locallyModified: locallyModified,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
+  }
+
   Future<void> _showShareSheet() async {
     final prefs = await _getStorePrefs();
     final device = ref.read(deviceProvider);
@@ -1696,6 +1859,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       style: TextStyle(fontSize: 13)),
                 ),
               ],
+            ),
+          if (!isVoid)
+            IconButton(
+              icon: const Icon(Icons.playlist_add),
+              tooltip: '+ Catat',
+              onPressed: () => _showCatatMenu(tx.id),
             ),
           IconButton(
             icon: const Icon(Icons.share_outlined),
