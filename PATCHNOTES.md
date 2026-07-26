@@ -10,6 +10,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 26 Juli 2026
 
+### ✨ Fitur Baru
+- **Produk utama sekarang bisa diset non-stok**, tidak cuma varian. Ada
+  toggle "Lacak stok" baru di tiap satuan pada form Edit Produk — matikan
+  kalau satuan itu tidak perlu dihitung stoknya (mis. produk jasa).
+- **Menu baru "Jeda Pelacakan Stok"** (Pengaturan > Manajemen Data) —
+  set SEMUA produk yang masih dilacak stoknya jadi non-stok sementara
+  sekaligus, tanpa perlu edit satu-satu. Bisa dikembalikan kapan saja lewat
+  toggle yang sama, dan akan kembali PERSIS seperti semula (produk yang
+  memang sudah non-stok sejak awal, mis. jasa, tidak ikut berubah).
+
 ### 🛠️ Perbaikan
 - **Pembayaran yang dibatalkan tidak lagi ikut tercetak/dibagikan di
   struk.** Dulu kalau ada pembayaran yang salah lalu dibatalkan (mis. salah

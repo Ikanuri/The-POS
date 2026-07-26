@@ -5,11 +5,55 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 26 Juli 2026 — commit `ce2c427` (SELESAI, terverifikasi):
-lanjutan langsung dari sesi 25 Juli (dipicu pertanyaan sync host→klien,
-lalu laporan barcode Amplop, lalu temuan restore-backup) — user kirim foto
-struk kertas: pembayaran yang dibatalkan ikut tercetak sbg baris Tunai
-biasa._
+_Update sesi 26 Juli 2026 — commit `a64f1bf` (SELESAI, terverifikasi):
+lanjutan langsung dari sesi yang sama (sync host→klien, barcode Amplop,
+restore-backup, struk pembayaran dibatalkan) — user tanya fitur non-stok
+produk utama, lalu minta jeda stok semua produk sementara._
+
+## Fitur: non-stok produk utama + jeda stok semua produk (26 Juli)
+
+User tanya "adakah fitur produk bisa diset ke non stok?" — ternyata SUDAH
+ada tapi HANYA utk varian (`_variantDialog` "Lacak stok varian" di
+`produk_form_screen.dart`, dipakai `createVariant`/`updateVariant`).
+Produk utama (base unit / satuan tambahan lewat `_UnitCard`) selalu hardcode
+`isNonStock: const Value(false)` — tak pernah bisa diubah dari UI. User
+minta ditambahkan, lalu SUSUL minta "set semua produk ke non stok untuk
+sementara".
+
+**Bagian 1 — toggle per satuan**: `_UnitEntry` (`produk_form_screen.dart`)
+dapat field `isNonStock` baru (default false, dimuat dari `ProductUnit.
+isNonStock` saat edit) + `SwitchListTile` "Lacak stok" di `_UnitCard`
+(persis gaya "Lacak stok varian"), diletakkan setelah baris ratio/barcode.
+`saveProduct`'s hardcode `Value(false)` diganti `Value(u.isNonStock)`.
+Berlaku baik di satuan dasar maupun satuan tambahan (tiap `ProductUnit`
+punya kolom sendiri) — TIDAK ada logika baru yg memaksa semua satuan 1
+produk konsisten; kalau produk py 2+ satuan & user mau semuanya non-stok,
+toggle tiap kartu (jarang jadi masalah krn kebanyakan produk cuma 1 satuan).
+
+**Bagian 2 — jeda massal, reversibel**: `AppDatabase.
+pauseStockTrackingForAllProducts()`/`resumeStockTrackingForAllProducts()`/
+`isStockTrackingPaused()` — snapshot id `product_units` yang MASIH dilacak
+(`isNonStock=false`) disimpan sbg JSON di `app_settings` key
+`stock_pause_snapshot` SEBELUM di-set semua jadi non-stok; resume membaca
+snapshot itu balik & HANYA memulihkan id-id itu (bukan "semua produk jadi
+tracked lagi" polos) — satuan yang MEMANG sudah non-stok dari awal (mis.
+varian jasa) tidak pernah tersentuh sama sekali di kedua arah. Idempoten:
+pause 2x / resume tanpa sedang dijeda = no-op (return 0). Toggle
+"Jeda Pelacakan Stok" baru di Pengaturan > Manajemen Data (kartu merah,
+owner-only), dgn dialog konfirmasi saat MENYALAKAN (efeknya luas — SEMUA
+produk), tanpa konfirmasi saat mematikan (resume aman/diharapkan).
+
+**Belum/tidak dikerjakan**: tidak ada UI/laporan yang menunjukkan APA SAJA
+yang sedang dijeda (cuma toggle on/off + snapshot count di snackbar) — kalau
+user butuh lihat daftar produk yang kena, itu perluasan terpisah, belum
+diminta.
+
+Test baru: `produk_form_non_stock_toggle_test.dart` (2 kasus, salah satunya
+lewat `routerProvider` sungguhan krn "Simpan Produk" memanggil
+`context.pop()` yg butuh GoRouter asli — `pumpWithFakeApp` tanpa router
+akan crash "No GoRouter found"), `stock_pause_db_test.dart` (4 kasus DB
+murni), `pengaturan_stock_pause_toggle_test.dart` (1 kasus end-to-end
+toggle ON→OFF via UI) — semua revert-verified.
 
 ## Fix: pembayaran dibatalkan ikut tercetak/ter-share di struk (26 Juli)
 
@@ -461,8 +505,12 @@ vs `Color(0xffebe8e0)` (netral) saat bug direproduksi.
 
 ## Status test suite
 
-`flutter test` PENUH: **727 test, SEMUA hijau** (run terakhir exit 0,
-flake port di bawah tidak muncul; tergantung undian, bukan berarti hilang). `flutter analyze` bersih (0 issue).
+`flutter test` PENUH: **734 test**. Run terakhir (sesi ini): 2 gagal
+(`migration_v9_test.dart`, `migration_v18_test.dart`) — TIDAK terkait
+perubahan sesi ini (tak menyentuh migrasi/skema sama sekali), keduanya
+lolos bersih saat dijalankan sendiri; pola sama dgn flake full-run yg sudah
+tercatat (test acak beda-beda tiap run, selalu hijau saat isolasi — lihat
+paragraf flake port di bawah). `flutter analyze` bersih (0 issue).
 
 Flake port yang masih mengintai (muncul/tidak tergantung undian; run
 terakhir bersih): `SocketException: Address already in use, port = 8625`. **8625 itu port sync TETAP milik app**
