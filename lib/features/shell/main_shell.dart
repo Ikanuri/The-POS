@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/laci_meja_provider.dart';
 import '../../core/providers/license_provider.dart';
 import '../../core/services/backup_reminder.dart';
+import '../../core/theme/app_theme.dart';
 
 class _TabItem {
   const _TabItem(this.path, this.label, this.icon, this.selectedIcon);
@@ -83,6 +85,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (selected < 0) selected = 0;
 
     final cs = Theme.of(context).colorScheme;
+    final kasirIndex = tabs.indexWhere((t) => t.path == '/kasir');
+    final laciMejaCount = ref.watch(laciMejaOpenCountProvider).valueOrNull ?? 0;
+
     return Scaffold(
       // Item 21 (Fase 1) — status sync dulu tampil sbg banner tunggal di
       // sini, di ATAS setiap layar tab (termasuk di atas toolbar/AppBar
@@ -100,19 +105,96 @@ class _MainShellState extends ConsumerState<MainShell> {
             top: BorderSide(color: cs.outlineVariant, width: 0.5),
           ),
         ),
-        child: NavigationBar(
-          selectedIndex: selected,
-          onDestinationSelected: (i) => context.go(tabs[i].path),
-          destinations: [
-            for (final t in tabs)
-              NavigationDestination(
-                icon: Icon(t.icon),
-                selectedIcon: Icon(t.selectedIcon),
-                label: t.label,
-              ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final itemWidth = constraints.maxWidth / tabs.length;
+            return Stack(
+              children: [
+                NavigationBar(
+                  selectedIndex: selected,
+                  onDestinationSelected: (i) => context.go(tabs[i].path),
+                  destinations: [
+                    for (final t in tabs)
+                      NavigationDestination(
+                        icon: t.path == '/kasir' && laciMejaCount > 0
+                            ? Badge(
+                                label: Text('$laciMejaCount'),
+                                child: Icon(t.icon))
+                            : Icon(t.icon),
+                        selectedIcon: t.path == '/kasir' && laciMejaCount > 0
+                            ? Badge(
+                                label: Text('$laciMejaCount'),
+                                child: Icon(t.selectedIcon))
+                            : Icon(t.selectedIcon),
+                        label: t.label,
+                      ),
+                  ],
+                ),
+                // Item 52 ("Laci Meja") — tekan-tahan tab Kasir (ala
+                // Telegram) membuka menu "Buka Kasir"/"Buka Laci Meja".
+                // `HitTestBehavior.translucent`: pointer event tetap
+                // diteruskan ke NavigationBar di baliknya, jadi tap SINGKAT
+                // tetap berfungsi normal (menang di gesture arena krn tidak
+                // ada timer long-press yg keburu terpicu) — tahan adalah
+                // perilaku TAMBAHAN, bukan pengganti.
+                if (kasirIndex >= 0)
+                  Positioned(
+                    left: itemWidth * kasirIndex,
+                    width: itemWidth,
+                    top: 0,
+                    bottom: 0,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onLongPressStart: (details) =>
+                          _showLaciMejaMenu(details.globalPosition),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
+  }
+
+  Future<void> _showLaciMejaMenu(Offset globalPosition) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final laciMejaCount = ref.read(laciMejaOpenCountProvider).valueOrNull ?? 0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selection = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        // Menu muncul DI ATAS titik tekan (dekat ikon Kasir), bukan
+        // menempel pas di jari — offset kecil ke atas.
+        Rect.fromCenter(
+            center: globalPosition - const Offset(0, 56), width: 1, height: 1),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        const PopupMenuItem(value: 'kasir', child: Text('Buka Kasir')),
+        PopupMenuItem(
+          value: 'laci_meja',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.inbox_outlined, color: AppTheme.laciFg(isDark), size: 20),
+              const SizedBox(width: 8),
+              const Text('Buka Laci Meja'),
+              if (laciMejaCount > 0) ...[
+                const SizedBox(width: 6),
+                Badge(label: Text('$laciMejaCount')),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    if (selection == 'kasir') {
+      context.go('/kasir');
+    } else if (selection == 'laci_meja') {
+      context.push('/laci-meja');
+    }
   }
 }

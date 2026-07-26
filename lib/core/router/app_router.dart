@@ -6,6 +6,7 @@ import '../../features/produk/barcode_screen.dart';
 import '../../features/kasir/kasir_screen.dart';
 import '../../features/kasir/payment_screen.dart';
 import '../../features/kasir/receipt_screen.dart';
+import '../../features/laci_meja/laci_meja_dashboard_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
@@ -269,6 +270,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      // Item 52 ("Laci Meja") — diakses dari MANA PUN (tekan-tahan tab
+      // Kasir di bottom nav, chrome global), bukan bagian dari tab manapun
+      // — jadi di LUAR ShellRoute, dibuka via context.push (layar penuh
+      // dgn tombol kembali, bottom nav sementara hilang).
+      GoRoute(
+        path: '/laci-meja',
+        builder: (_, __) => const LaciMejaDashboardScreen(),
       ),
     ],
   );
