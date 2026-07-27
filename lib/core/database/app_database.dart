@@ -4853,7 +4853,12 @@ class AppDatabase extends _$AppDatabase {
   /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
   /// pengingat hutang), supaya barang titipan/pinjaman/pre-order tidak
   /// terlupa saat pelanggan yang sama datang lagi.
-  Future<({int titipKetinggalan, int pinjaman, int preorder})>
+  ///
+  /// `titip` dan `ketinggalan` DIPISAH (bukan digabung satu angka) —
+  /// permintaan user: keterangan di modal checkout wajib cocok dgn jenis
+  /// asli barangnya, jangan selalu tertulis "dititip" padahal aslinya
+  /// ketinggalan tanpa sengaja.
+  Future<({int titip, int ketinggalan, int pinjaman, int preorder})>
       getLaciMejaPendingForCustomer(String customerId) async {
     final left = await (select(leftBehindItems)
           ..where((t) =>
@@ -4864,7 +4869,8 @@ class AppDatabase extends _$AppDatabase {
               t.customerId.equals(customerId) & t.fullyReturnedAt.isNull()))
         .get();
     return (
-      titipKetinggalan: left.length,
+      titip: left.where((e) => e.jenis == 'titip').length,
+      ketinggalan: left.where((e) => e.jenis == 'ketinggalan').length,
       pinjaman: borrowed.length,
       preorder: 0,
     );
@@ -4874,11 +4880,11 @@ class AppDatabase extends _$AppDatabase {
   /// TIDAK terdaftar (hanya punya nama teks) — Pre-order memang hanya
   /// menyimpan nama (tanpa `customerId`), jadi pencocokan nama satu-satunya
   /// jalan utk kategori itu.
-  Future<({int titipKetinggalan, int pinjaman, int preorder})>
+  Future<({int titip, int ketinggalan, int pinjaman, int preorder})>
       getLaciMejaPendingForName(String customerName) async {
     final nama = customerName.trim();
     if (nama.isEmpty) {
-      return (titipKetinggalan: 0, pinjaman: 0, preorder: 0);
+      return (titip: 0, ketinggalan: 0, pinjaman: 0, preorder: 0);
     }
     final left = await (select(leftBehindItems)
           ..where((t) =>
@@ -4895,7 +4901,8 @@ class AppDatabase extends _$AppDatabase {
               t.cancelledAt.isNull()))
         .get();
     return (
-      titipKetinggalan: left.length,
+      titip: left.where((e) => e.jenis == 'titip').length,
+      ketinggalan: left.where((e) => e.jenis == 'ketinggalan').length,
       pinjaman: borrowed.length,
       preorder: preorder.length,
     );

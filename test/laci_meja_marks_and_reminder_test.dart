@@ -115,14 +115,29 @@ void main() {
     test('ringkasan hanya menyebut kategori yang memang ada isinya', () {
       expect(
           LaciMejaReminder.summaryOf(
-              (titipKetinggalan: 2, pinjaman: 0, preorder: 1)),
+              (titip: 2, ketinggalan: 0, pinjaman: 0, preorder: 1)),
           '2 barang dititip · 1 pre-order menunggu');
       expect(
           LaciMejaReminder.summaryOf(
-              (titipKetinggalan: 0, pinjaman: 0, preorder: 0)),
+              (titip: 0, ketinggalan: 0, pinjaman: 0, preorder: 0)),
           isNull,
           reason: 'tidak ada yang menggantung -> pengingat tidak muncul');
       expect(LaciMejaReminder.summaryOf(null), isNull);
+    });
+
+    test(
+        'jenis titip & ketinggalan WAJIB jadi klausa terpisah, bukan '
+        'digabung selalu tertulis "dititip" (bug dilaporkan user)', () {
+      expect(
+          LaciMejaReminder.summaryOf(
+              (titip: 0, ketinggalan: 3, pinjaman: 0, preorder: 0)),
+          '3 barang ketinggalan',
+          reason: 'barang yang jenisnya ketinggalan TIDAK BOLEH tertulis '
+              '"dititip"');
+      expect(
+          LaciMejaReminder.summaryOf(
+              (titip: 1, ketinggalan: 2, pinjaman: 0, preorder: 0)),
+          '1 barang dititip · 2 barang ketinggalan');
     });
 
     test('query per-pelanggan TERDAFTAR hanya menghitung yang menggantung',
@@ -150,8 +165,30 @@ void main() {
           customerId: 'c1');
 
       final p = await db.getLaciMejaPendingForCustomer('c1');
-      expect(p.titipKetinggalan, 1, reason: 'yang sudah diambil tidak dihitung');
+      expect(p.titip, 1, reason: 'yang sudah diambil tidak dihitung');
       expect(p.pinjaman, 1);
+    });
+
+    test('query per-pelanggan membedakan jenis titip vs ketinggalan',
+        () async {
+      await db.into(db.customers).insert(
+          CustomersCompanion.insert(id: 'c2', name: 'Pak Joko'));
+      await db.addLeftBehindItem(
+          id: 'l3',
+          transactionId: txId,
+          itemName: 'Payung',
+          jenis: 'ketinggalan',
+          customerId: 'c2');
+      await db.addLeftBehindItem(
+          id: 'l4',
+          transactionId: txId,
+          itemName: 'Botol',
+          jenis: 'titip',
+          customerId: 'c2');
+
+      final p = await db.getLaciMejaPendingForCustomer('c2');
+      expect(p.titip, 1);
+      expect(p.ketinggalan, 1);
     });
 
     test(
@@ -184,7 +221,8 @@ void main() {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: LaciMejaReminder(
-            pending: (titipKetinggalan: 1, pinjaman: 0, preorder: 0)),
+            pending:
+                (titip: 1, ketinggalan: 0, pinjaman: 0, preorder: 0)),
       ),
     ));
     expect(find.textContaining('Laci Meja: 1 barang dititip'), findsOneWidget);

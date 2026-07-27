@@ -3516,58 +3516,78 @@ class _CartMetaTab extends ConsumerWidget {
           // segmen yang tidak muat turun ke baris berikutnya (tab ikut
           // meninggi), jadi tombol Bayar SELALU terjangkau berapa pun
           // panjang namanya.
-          child: Wrap(
-            spacing: 4,
-            runSpacing: 2,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          //
+          // Penyesuaian susulan: `Bayar` WAJIB tetap menempel di kanan walau
+          // baris Pelanggan/Pegawai/Tahan melipat ke 2 baris — kalau semua
+          // segmen (termasuk Bayar) satu `Wrap` yang sama, Bayar ikut hanyut
+          // ke mana pun sisa ruang jatuh. Jadi Bayar dikeluarkan dari Wrap:
+          // `Expanded(Wrap(...))` menampung segmen kiri yang boleh melipat,
+          // Bayar sendiri jadi elemen `Row` terakhir yang selalu di ujung
+          // kanan.
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _MetaChip(
-                icon: Icons.person_outline,
-                label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
-                active: meta.hasCustomer,
-                onTap: () => _pickCustomer(context, ref),
-                onClear:
-                    meta.hasCustomer ? () => notifier.clearCustomer() : null,
-              ),
-              _MetaChip(
-                icon: Icons.badge_outlined,
-                label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
-                active: meta.hasEmployee,
-                onTap: () => _pickEmployee(context, ref),
-                onClear:
-                    meta.hasEmployee ? () => notifier.clearEmployee() : null,
-              ),
-              InkWell(
-                onTap: onHold,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.pause_circle_outline,
-                          size: 16, color: cs.primary),
-                      const SizedBox(width: 4),
-                      Text('Tahan',
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: cs.primary)),
-                    ],
-                  ),
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _MetaChip(
+                      icon: Icons.person_outline,
+                      label:
+                          meta.hasCustomer ? meta.customerName! : 'Pelanggan',
+                      active: meta.hasCustomer,
+                      onTap: () => _pickCustomer(context, ref),
+                      onClear: meta.hasCustomer
+                          ? () => notifier.clearCustomer()
+                          : null,
+                    ),
+                    _MetaChip(
+                      icon: Icons.badge_outlined,
+                      label:
+                          meta.hasEmployee ? meta.employeeName! : 'Pegawai',
+                      active: meta.hasEmployee,
+                      onTap: () => _pickEmployee(context, ref),
+                      onClear: meta.hasEmployee
+                          ? () => notifier.clearEmployee()
+                          : null,
+                    ),
+                    InkWell(
+                      onTap: onHold,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 5),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.pause_circle_outline,
+                                size: 16, color: cs.primary),
+                            const SizedBox(width: 4),
+                            Text('Tahan',
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.primary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              // Item 56 — segmen "Bayar" terracotta, menempel setelah Tahan
-              // (Varian A) — tap langsung ke layar bayar (`/kasir/bayar`),
-              // TANPA lewat sheet keranjang dulu (checkout cepat).
-              if (!needsGate)
+              // Item 56 — segmen "Bayar" terracotta — tap langsung ke layar
+              // bayar (`/kasir/bayar`), TANPA lewat sheet keranjang dulu
+              // (checkout cepat). Di LUAR Wrap kiri supaya selalu di kanan.
+              if (!needsGate) ...[
+                const SizedBox(width: 4),
                 InkWell(
                   onTap: onBayar,
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: AppTheme.accent,
                       borderRadius: BorderRadius.circular(8),
@@ -3587,6 +3607,7 @@ class _CartMetaTab extends ConsumerWidget {
                     ),
                   ),
                 ),
+              ],
             ],
           ),
         ),

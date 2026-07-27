@@ -16,8 +16,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   kasir mentok padahal uang sudah diterima. Sekarang pembayaran selalu
   bisa diselesaikan; nomor notanya yang menyesuaikan otomatis.
 - **Nama pelanggan panjang di bar keranjang tidak lagi menutupi tombol
-  "Bayar"** — barisnya turun ke bawah kalau tidak muat, jadi tombolnya
-  selalu bisa ditekan.
+  "Bayar"** — barisnya turun ke bawah kalau tidak muat, dan tombol
+  "Bayar"-nya sekarang selalu tetap di kanan walau baris di sebelahnya
+  melipat jadi 2 baris.
+- **Keterangan pengingat Laci Meja sekarang menyebut jenis barang yang
+  benar** — barang yang tercatat "ketinggalan" tidak lagi ikut tertulis
+  "dititip" di pengingat modal checkout/bar keranjang.
 
 ### ✨ Fitur Baru
 - **"Laci Meja" — fitur baru untuk catatan operasional harian toko.**

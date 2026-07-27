@@ -14,15 +14,21 @@ import '../../core/theme/app_theme.dart';
 class LaciMejaReminder extends StatelessWidget {
   const LaciMejaReminder({super.key, required this.pending, this.margin});
 
-  final ({int titipKetinggalan, int pinjaman, int preorder})? pending;
+  final ({int titip, int ketinggalan, int pinjaman, int preorder})? pending;
   final EdgeInsetsGeometry? margin;
 
   /// Ringkasan " · "-terpisah, hanya kategori yang memang ada isinya.
+  ///
+  /// `titip` dan `ketinggalan` WAJIB jadi klausa terpisah (bukan digabung
+  /// jadi satu kata "dititip") — user melaporkan keterangan lama selalu
+  /// menulis "dititip" walau barangnya sebenarnya `jenis='ketinggalan'`
+  /// (ketinggalan tanpa sengaja, bukan dititip sengaja oleh pelanggan).
   static String? summaryOf(
-      ({int titipKetinggalan, int pinjaman, int preorder})? p) {
+      ({int titip, int ketinggalan, int pinjaman, int preorder})? p) {
     if (p == null) return null;
     final parts = <String>[
-      if (p.titipKetinggalan > 0) '${p.titipKetinggalan} barang dititip',
+      if (p.titip > 0) '${p.titip} barang dititip',
+      if (p.ketinggalan > 0) '${p.ketinggalan} barang ketinggalan',
       if (p.pinjaman > 0) '${p.pinjaman} pinjaman belum kembali',
       if (p.preorder > 0) '${p.preorder} pre-order menunggu',
     ];

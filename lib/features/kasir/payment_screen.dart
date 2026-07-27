@@ -72,7 +72,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// pelanggan terpilih (titip/ketinggalan, pinjaman, pre-order). Pola sama
   /// dgn pengingat hutang di atasnya, tapi aksen dusty rose (Laci Meja) —
   /// sengaja DIBEDAKAN dari merah hutang supaya tidak tertukar maknanya.
-  ({int titipKetinggalan, int pinjaman, int preorder})? _laciMejaPending;
+  ({int titip, int ketinggalan, int pinjaman, int preorder})? _laciMejaPending;
 
   Future<void> _refreshLaciMejaPending() async {
     final db = ref.read(databaseProvider);

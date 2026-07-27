@@ -8,6 +8,8 @@ import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/providers/license_provider.dart';
 import 'package:the_pos/core/router/app_router.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/features/kasir/cart_meta_provider.dart';
+import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 
 /// Item 55/56 — segmen "Bayar" terracotta di cart bar (tab meta, sejajar
 /// "Tahan"): muncul utk owner/asisten/pegawai BERIZIN `terima_pembayaran`,
@@ -37,7 +39,7 @@ void main() {
     return db;
   }
 
-  Future<void> pumpKasir(WidgetTester tester, AppDatabase db,
+  Future<ProviderContainer> pumpKasir(WidgetTester tester, AppDatabase db,
       {required String deviceRole}) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -81,6 +83,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_rounded).first);
     await tester.pump();
     await tester.pump();
+    return container;
   }
 
   testWidgets('owner melihat segmen Bayar di cart bar, tap ke Pembayaran',
@@ -130,5 +133,42 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('#1'), findsWidgets);
+  });
+
+  testWidgets(
+      'segmen Bayar tetap menempel di kanan walau baris chip melipat ke 2 '
+      'baris (permintaan user, nama pelanggan panjang)', (tester) async {
+    final db = await seedDb();
+    addTearDown(() async => db.close());
+    final container = await pumpKasir(tester, db, deviceRole: 'owner');
+
+    final rightBefore =
+        tester.getTopRight(find.text('Bayar')).dx;
+
+    container
+        .read(cartMetaProvider(kMainCartId).notifier)
+        .setCustomer('c1', 'Pelanggan Dengan Nama Sangat Sangat Panjang Sekali');
+    await tester.pump();
+    await tester.pump();
+
+    // Nama sepanjang itu WAJIB memaksa baris Pelanggan/Pegawai/Tahan
+    // melipat ke >1 baris di lebar layar sempit (420px) ini — kalau tidak,
+    // pengujian ini tidak membuktikan apa-apa.
+    final chipTop = tester.getTopLeft(find.text('Tahan')).dy;
+    final bayarTop = tester.getTopLeft(find.text('Bayar')).dy;
+
+    final rightAfter = tester.getTopRight(find.text('Bayar')).dx;
+    expect(rightAfter, closeTo(rightBefore, 1.0),
+        reason: 'tepi kanan tombol Bayar TIDAK BOLEH bergeser berapa pun '
+            'panjang nama pelanggan / berapa baris pun chip di kirinya '
+            'melipat — kalau Bayar ikut satu Wrap yang sama dgn chip kiri, '
+            'ia bisa hanyut ke baris tengah/kiri, bukan tetap di kanan');
+
+    // Prakondisi: kasus ini memang harus melipat (chip "Tahan" turun ke
+    // baris ke-2, DI BAWAH baris "Bayar") — kalau tidak, assertion di atas
+    // tidak membuktikan apa-apa.
+    expect(chipTop, greaterThan(bayarTop),
+        reason: 'nama pelanggan ini harus cukup panjang utk memaksa baris '
+            'kiri melipat ke 2 baris di lebar 420px');
   });
 }

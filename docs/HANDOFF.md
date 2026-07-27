@@ -6,12 +6,46 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 27 Juli 2026 (lanjutan) — **Item 52 ("Laci Meja") SELESAI
-TOTAL** termasuk bagian yang sempat ditunda (layar review usulan) DAN 2
+TOTAL** termasuk bagian yang sempat ditunda (layar review usulan), 2
 koreksi UX dari user setelah demo awal (link ke produk struk, redirect
-dashboard ke nota). Belum di-merge ke `main` / di-push ke `origin` —
-commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
-menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
-dulu baru merge/push)._
+dashboard ke nota), 1 bugfix KRITIS (checkout gagal setelah handoff QR
+bolak-balik) + 4 perbaikan UI dari laporan screenshot device asli, lalu
+2 penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
+keterangan Laci Meja membedakan titip vs ketinggalan). Belum di-merge ke
+`main` / di-push ke `origin` — commit-commit ada di branch
+`claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
+(pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
+
+## Penyesuaian susulan terbaru (sesudah 4 perbaikan UI, commit `45ede18`)
+
+User beri 2 catatan kecil setelah cek hasil 4 perbaikan UI:
+
+1. **"Bayar" harus tetap di kanan walau cart bar melipat 2 baris.** Fix
+   sebelumnya (`Wrap` tunggal utk Pelanggan/Pegawai/Tahan/Bayar) membiarkan
+   Bayar ikut hanyut ke mana pun sisa ruang jatuh begitu melipat. Sekarang
+   `_CartMetaTab` (`kasir_screen.dart`) pakai `Row` terluar: `Expanded(Wrap(
+   ...))` menampung 3 chip kiri (boleh melipat bebas), Bayar jadi elemen
+   `Row` TERAKHIR di luar Wrap itu — posisinya selalu di ujung kanan,
+   independen dari berapa baris kiri melipat. Test baru di
+   `cart_bar_bayar_button_test.dart` (nama pelanggan sangat panjang @420px,
+   verifikasi tepi kanan `find.text('Bayar')` tidak bergeser dibanding
+   sebelum nama diisi) — revert-verified (layout `Wrap` lama gagal dgn
+   selisih ~260px, sensible).
+2. **Keterangan Laci Meja harus sebut jenis yang benar.** `getLaciMeja
+   PendingForCustomer`/`ForName` (`app_database.dart`) dulu menggabung
+   `titip`+`ketinggalan` jadi satu angka `titipKetinggalan`, dan
+   `LaciMejaReminder.summaryOf` SELALU menulis "N barang dititip" — barang
+   yang jenisnya `ketinggalan` (ketinggalan tanpa sengaja) ikut tertulis
+   seolah dititip sengaja. Record dipecah jadi `{titip, ketinggalan,
+   pinjaman, preorder}` (dihitung per `jenis` dari `LeftBehindItems`),
+   `summaryOf` sekarang punya klausa terpisah "N barang dititip" DAN/ATAU
+   "M barang ketinggalan". Propagasi lewat `laciMejaPendingProvider`
+   (`lib/core/providers/laci_meja_provider.dart`) & `_laciMejaPending`
+   (`payment_screen.dart`). Test baru di
+   `laci_meja_marks_and_reminder_test.dart` — revert-verified.
+
+Test suite penuh sesudah kedua fix: **785 test hijau**, `flutter analyze`
+0 issue.
 
 ## Item 52 ("Laci Meja") — SELESAI TOTAL, ringkasan implementasi
 

@@ -33,7 +33,7 @@ final laciMejaLocallyModifiedProvider = Provider<bool>((ref) {
 /// pengingat hutang di modal checkout). Key: (customerId, customerName) —
 /// pelanggan terdaftar dicocokkan lewat id, pembeli lepas lewat nama.
 final laciMejaPendingProvider = FutureProvider.family<
-    ({int titipKetinggalan, int pinjaman, int preorder}),
+    ({int titip, int ketinggalan, int pinjaman, int preorder}),
     (String?, String?)>((ref, key) async {
   final (customerId, customerName) = key;
   final db = ref.watch(databaseProvider);
@@ -45,5 +45,5 @@ final laciMejaPendingProvider = FutureProvider.family<
   if (customerName != null && customerName.trim().isNotEmpty) {
     return db.getLaciMejaPendingForName(customerName);
   }
-  return (titipKetinggalan: 0, pinjaman: 0, preorder: 0);
+  return (titip: 0, ketinggalan: 0, pinjaman: 0, preorder: 0);
 });
