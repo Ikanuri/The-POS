@@ -38,17 +38,19 @@ void main() {
   });
 
   testWidgets(
-      'jarak atas (antara TabBar dan kartu KPI pertama) lebih sempit drpd '
-      'jarak sisi/bawah — screenshot beranotasi panah dari user menunjuk '
-      'PERSIS gap ini', (tester) async {
+      'jarak atas (antara TabBar dan kartu KPI pertama) MEPET PENUH (0) — '
+      'screenshot beranotasi panah dari user (2x laporan) menunjuk PERSIS '
+      'gap ini, pengurangan ke 8px belum cukup', (tester) async {
     await pumpWithFakeApp(tester, db: db, child: RingkasanTab(range: range));
     await tester.pumpAndSettle();
 
     final listView = tester.widget<ListView>(find.byType(ListView));
     final padding = listView.padding as EdgeInsets;
-    expect(padding.top, lessThan(padding.left),
-        reason: 'jarak atas harus dipersempit drpd sisi kiri/kanan (16), '
-            'bukan sama rata EdgeInsets.all(16) spt sebelumnya');
+    expect(padding.top, 0,
+        reason: 'jarak atas harus 0 — kartu KPI mepet penuh ke TabBar, '
+            'bukan cuma dipersempit sebagian (16 atau 8) spt percobaan '
+            'sebelumnya yg dilaporkan user masih terasa renggang');
+    expect(padding.left, 16, reason: 'sisi kiri/kanan/bawah tetap 16');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

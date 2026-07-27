@@ -22,7 +22,6 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../laci_meja/laci_meja_reminder.dart';
-import '../laci_meja/preorder_entry_dialog.dart';
 import '../../core/widgets/item_count_badge.dart';
 import '../produk/catalog/catalog_models.dart';
 import '../produk/catalog/catalog_share.dart';
@@ -2844,35 +2843,16 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                               const SizedBox(width: 6),
                               // Item 25a — kosmetik saja, tidak menonaktifkan
                               // tombol +/- (itu wewenang izin stok minus).
+                              // Item 52 redesain pre-order — tombol "+ Antri"
+                              // (dialog terpisah, tanpa tautan nota) DIHAPUS
+                              // total; pre-order sekarang HANYA lewat kartu
+                              // "Pre-order?" di modal tap item (ItemEntrySheet),
+                              // supaya selalu tertaut ke transactionId.
                               Text('Habis',
                                   style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
                                       color: cs.error)),
-                              // Item 52 ("Laci Meja") — entry Pre-order
-                              // langsung dari pencarian, tanpa pindah layar
-                              // (usulan user: jangan terlalu banyak step).
-                              detailAsync.maybeWhen(
-                                data: (d) => d.baseUnitId.isEmpty
-                                    ? const SizedBox.shrink()
-                                    : TextButton(
-                                        style: TextButton.styleFrom(
-                                            minimumSize: Size.zero,
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 6),
-                                            visualDensity: VisualDensity.compact),
-                                        onPressed: () => showPreorderEntryDialog(
-                                          context,
-                                          ref,
-                                          productId: product.id,
-                                          productUnitId: d.baseUnitId,
-                                          requiresDeposit: d.requiresDeposit,
-                                        ),
-                                        child: const Text('+ Antri',
-                                            style: TextStyle(fontSize: 10.5)),
-                                      ),
-                                orElse: () => const SizedBox.shrink(),
-                              ),
                             ],
                             if (hasVariants) ...[
                               const SizedBox(width: 4),

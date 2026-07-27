@@ -18,6 +18,9 @@ class CartItem {
     this.parentProductUnitId,
     this.isVariant = false,
     this.checked = false,
+    this.isPreorder = false,
+    this.preorderPaid = false,
+    this.depositQty,
   });
 
   final String productId;
@@ -50,6 +53,24 @@ class CartItem {
   /// checklist ini dari titik yang sama (lihat `receipt_screen.dart`).
   final bool checked;
 
+  /// Item 52 redesain pre-order — item ini dipesan sbg pre-order (produk
+  /// sedang `markedOutOfStock`, dicentang "Pre-order?" di modal tap item).
+  /// Dipakai saat checkout utk membuat baris `PreorderEntries` (link
+  /// `transactionId` OTOMATIS ke nota yg sedang dibuat) + dikecualikan dari
+  /// pengurangan stok (barangnya belum ada secara fisik).
+  final bool isPreorder;
+
+  /// "DP?" di modal — true = harga (di [price]) SUDAH diisi penuh & dianggap
+  /// dibayar lunas sekarang; false = [price] sengaja 0 (dicatat dulu, bayar
+  /// nanti saat barang datang). Hanya relevan bila [isPreorder].
+  final bool preorderPaid;
+
+  /// Jumlah wadah/jaminan yang dititip pelanggan (mis. tabung gas kosong) —
+  /// HANYA diisi bila satuan produk `requiresDeposit=true` DAN [isPreorder].
+  /// Null bila tidak berlaku (bukan pre-order, atau satuan tidak butuh
+  /// jaminan).
+  final double? depositQty;
+
   /// True bila varian ini menempel ke baris satuan induk [parentLine].
   /// Prioritas [parentProductUnitId] (presisi per-satuan); fallback ke
   /// [parentProductId] untuk data lama yang belum punya id satuan induk.
@@ -74,6 +95,9 @@ class CartItem {
     bool? priceOverridden,
     Object? itemNote = _unset,
     bool? checked,
+    bool? isPreorder,
+    bool? preorderPaid,
+    Object? depositQty = _unset,
   }) =>
       CartItem(
         productId: productId,
@@ -93,6 +117,11 @@ class CartItem {
         parentProductUnitId: parentProductUnitId,
         isVariant: isVariant,
         checked: checked ?? this.checked,
+        isPreorder: isPreorder ?? this.isPreorder,
+        preorderPaid: preorderPaid ?? this.preorderPaid,
+        depositQty: identical(depositQty, _unset)
+            ? this.depositQty
+            : depositQty as double?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -111,6 +140,9 @@ class CartItem {
         'parentProductUnitId': parentProductUnitId,
         'isVariant': isVariant,
         'checked': checked,
+        'isPreorder': isPreorder,
+        'preorderPaid': preorderPaid,
+        'depositQty': depositQty,
       };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
@@ -129,5 +161,8 @@ class CartItem {
         parentProductUnitId: json['parentProductUnitId'] as String?,
         isVariant: json['isVariant'] as bool? ?? false,
         checked: json['checked'] as bool? ?? false,
+        isPreorder: json['isPreorder'] as bool? ?? false,
+        preorderPaid: json['preorderPaid'] as bool? ?? false,
+        depositQty: (json['depositQty'] as num?)?.toDouble(),
       );
 }

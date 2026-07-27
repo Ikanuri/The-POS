@@ -580,8 +580,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           : <TransactionPaymentsCompanion>[];
 
       // Stock items — only deduct stock for items with effective qty > 0.
+      // Item 52 redesain pre-order — item pre-order DIKECUALIKAN dari
+      // pengurangan stok: barangnya belum ada secara fisik di toko (baru
+      // dipesan), jadi belum ada apa pun yang benar-benar keluar dari rak.
+      // Stok baru bergerak nanti saat direstock sungguhan.
       final stockItems = cart
-          .where((item) => effQty(item) > 0)
+          .where((item) => effQty(item) > 0 && !item.isPreorder)
           .map((item) => (
                 productUnitId: item.productUnitId,
                 qty: effQty(item),
@@ -613,6 +617,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // sungguhan, lepaskan dari reservasi (kalau memang berasal dari
       // reservasi, bukan fallback generateUniqueLocalId).
       if (reservedId != null) await db.releaseLocalId(reservedId);
+
+      // Item 52 redesain pre-order — item yg dicentang "Pre-order?" di modal
+      // tap item SEKARANG menulis baris `PreorderEntries` langsung di sini,
+      // dgn `transactionId: txId` OTOMATIS terisi (bukan lagi via dialog
+      // terpisah tanpa tautan nota) — supaya administrasi/tracking jadi satu
+      // jalur & tap di dashboard Laci Meja bisa redirect ke nota ini.
+      final locallyModifiedLaci = !device.isOwner;
+      for (final item in cart.where((i) => i.isPreorder)) {
+        await db.addPreorderEntry(
+          id: _uuid.v4(),
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          customerName: _selectedCustomer?.name ?? customerName ?? 'Umum',
+          qtyOrdered: effQty(item),
+          transactionId: txId,
+          depositQty: item.depositQty ?? 0,
+          paid: item.preorderPaid,
+          locallyModified: locallyModifiedLaci,
+        );
+      }
 
       // Item 46 — peringatan stok menipis dari produk yang baru terjual,
       // disimpan untuk ditampilkan sbg banner saat pengguna kembali ke kasir
@@ -680,8 +704,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         ),
     ];
 
+    // Item 52 redesain pre-order — sama spt checkout normal: item pre-order
+    // dikecualikan dari pengurangan stok (belum ada fisik di toko).
     final stockItems = cart
-        .where((item) => effQty(item) > 0)
+        .where((item) => effQty(item) > 0 && !item.isPreorder)
         .map((item) => (
               productUnitId: item.productUnitId,
               qty: effQty(item),
@@ -719,6 +745,36 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (updatedTx?.customerId != null) {
       await db.awardLoyaltyPointsIfEligible(
           txId: txId, customerId: updatedTx!.customerId!);
+    }
+
+    // Item 52 redesain pre-order — sama spt checkout normal (lihat
+    // _confirmPayment), transactionId langsung terisi dari nota yg sedang
+    // ditambahi. Nama pelanggan diwarisi dari nota (bukan hardcode "Umum"),
+    // konsisten dgn pola pewarisan Laci Meja lain (lihat dok
+    // receipt_screen.dart `_customerDisplay`).
+    String preorderCustomerName = 'Umum';
+    if (updatedTx?.customerId != null) {
+      final cust = await (db.select(db.customers)
+            ..where((t) => t.id.equals(updatedTx!.customerId!)))
+          .getSingleOrNull();
+      preorderCustomerName = cust?.name ?? 'Umum';
+    } else if (updatedTx?.customerName != null &&
+        updatedTx!.customerName!.trim().isNotEmpty) {
+      preorderCustomerName = updatedTx.customerName!.trim();
+    }
+    final locallyModifiedLaci = !device.isOwner;
+    for (final item in cart.where((i) => i.isPreorder)) {
+      await db.addPreorderEntry(
+        id: _uuid.v4(),
+        productId: item.productId,
+        productUnitId: item.productUnitId,
+        customerName: preorderCustomerName,
+        qtyOrdered: effQty(item),
+        transactionId: txId,
+        depositQty: item.depositQty ?? 0,
+        paid: item.preorderPaid,
+        locallyModified: locallyModifiedLaci,
+      );
     }
 
     notifier.clear();

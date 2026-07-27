@@ -72,10 +72,11 @@ class RingkasanTab extends ConsumerWidget {
 
     return dataAsync.when(
       data: (data) => ListView(
-        // Permintaan user (screenshot beranotasi panah): jarak kosong
-        // antara TabBar dan kartu KPI pertama terlalu lebar dibanding
-        // sisi/bawah — top dipersempit drpd `EdgeInsets.all(16)` semula.
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        // Permintaan user (screenshot beranotasi panah, 2x laporan): jarak
+        // kosong antara TabBar dan kartu KPI pertama masih terasa renggang
+        // walau sudah dipersempit ke 8px — dibuat MEPET PENUH (0) skrg,
+        // kartu KPI langsung menempel ke TabBar tanpa jarak sama sekali.
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
           // Main KPIs
           _KpiRow(

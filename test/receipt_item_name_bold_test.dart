@@ -42,8 +42,17 @@ void main() {
 
     // Tanpa produk di-seed ke tabel `products`, nama jatuh ke fallback
     // productId ('P1') — cukup utk menguji style, tidak perlu nama asli.
-    final nameText = tester.widget<Text>(find.text('P1'));
-    expect(nameText.style?.fontWeight, FontWeight.w700,
+    // Baris nama sekarang `Text.rich` (bisa disambung penanda Laci Meja/
+    // pre-order di span berikutnya) — cari RichText yg plain-text-nya 'P1'
+    // lalu baca style span akar (nama tidak override style, ikut akar).
+    // `Text.rich` selalu membungkus TextSpan yg diberikan sbg CHILD dari
+    // TextSpan luar (gaya default) — style yg kita set ada di children.first,
+    // bukan di .text.style langsung punya RichText.
+    final richText = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .firstWhere((rt) => rt.text.toPlainText() == 'P1');
+    final ourSpan = (richText.text as TextSpan).children!.first as TextSpan;
+    expect(ourSpan.style?.fontWeight, FontWeight.w700,
         reason: 'nama produk di baris item harus bold');
 
     await tester.pumpWidget(const SizedBox());

@@ -126,6 +126,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// (transaction_items.id -> jenis). Ditampilkan sbg penanda kecil di
   /// samping nama barang, pola sama dgn badge "Habis" di katalog kasir.
   Map<String, String> _leftBehindMarks = {};
+
+  /// Item 52 redesain pre-order — qty jaminan dititip per produk+satuan
+  /// ('$productId|$productUnitId' -> qty), dipakai label "Titip [qty]" di
+  /// samping nama barang di struk in-app.
+  Map<String, double> _preorderDeposit = {};
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
   Customer? _customer;
@@ -351,36 +356,55 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     size: 13, color: scheme.onSurfaceVariant),
               ),
             Expanded(
-              child: Text(
-                _productNames[item.productId] ?? item.productId,
+              // Item 52 susulan/redesain — penanda "Dititip"/"Ketinggalan"/
+              // "Titip [qty]" (jaminan) DISATUKAN ke text run yang SAMA dgn
+              // nama (Text.rich), BUKAN Text terpisah + SizedBox gap —
+              // permintaan user: dekatkan persis pola badge "Habis" di
+              // katalog kasir (`'${product.name} · Habis'`, satu text run
+              // tanpa jarak tambahan sama sekali).
+              child: Text.rich(
+                TextSpan(
+                  style: TextStyle(
+                    fontSize: isVariant ? 12 : 13,
+                    fontWeight: isVariant ? FontWeight.w500 : FontWeight.w700,
+                    decoration: checked ? TextDecoration.lineThrough : null,
+                    color: checked
+                        ? scheme.onSurfaceVariant
+                        : (isVariant ? scheme.onSurfaceVariant : null),
+                  ),
+                  children: [
+                    TextSpan(
+                        text: _productNames[item.productId] ?? item.productId),
+                    if (_leftBehindMarks[item.id] != null)
+                      TextSpan(
+                        text: _leftBehindMarks[item.id] == 'titip'
+                            ? ' · Dititip'
+                            : ' · Ketinggalan',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.laciFg(Theme.of(context)
+                                    .brightness ==
+                                Brightness.dark)),
+                      ),
+                    if (_preorderDeposit['${item.productId}|${item.productUnitId}'] !=
+                        null)
+                      TextSpan(
+                        text: ' · Titip '
+                            '${_fmtQtyShort(_preorderDeposit['${item.productId}|${item.productUnitId}']!)}',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.laciFg(Theme.of(context)
+                                    .brightness ==
+                                Brightness.dark)),
+                      ),
+                  ],
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: isVariant ? 12 : 13,
-                  fontWeight: isVariant ? FontWeight.w500 : FontWeight.w700,
-                  decoration: checked ? TextDecoration.lineThrough : null,
-                  color: checked
-                      ? scheme.onSurfaceVariant
-                      : (isVariant ? scheme.onSurfaceVariant : null),
-                ),
               ),
             ),
-            // Item 52 susulan — penanda "Dititip"/"Ketinggalan" persis pola
-            // badge "Habis" di katalog kasir (teks kecil di samping nama,
-            // BUKAN chip/baris baru — tidak menambah tinggi baris).
-            if (_leftBehindMarks[item.id] != null) ...[
-              const SizedBox(width: 6),
-              Text(
-                _leftBehindMarks[item.id] == 'titip'
-                    ? 'Dititip'
-                    : 'Ketinggalan',
-                style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.laciFg(
-                        Theme.of(context).brightness == Brightness.dark)),
-              ),
-            ],
           ],
         ),
         subtitle: isPlaceholder
@@ -931,6 +955,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     final leftBehindMarks =
         await db.getLeftBehindMarksForTransaction(widget.transactionId);
+    final preorderDeposit =
+        await db.getPreorderDepositForTransaction(widget.transactionId);
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -952,6 +978,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ..addEntries(checkedIds.map((id) => MapEntry(id, true)));
         _productNames = productNames;
         _leftBehindMarks = leftBehindMarks;
+        _preorderDeposit = preorderDeposit;
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customer = customer;

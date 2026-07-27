@@ -4873,6 +4873,22 @@ class AppDatabase extends _$AppDatabase {
     };
   }
 
+  /// Item 52 redesain pre-order — jumlah jaminan (wadah kosong) yang dititip
+  /// utk tiap produk+satuan di SATU nota, dipakai struk in-app memberi label
+  /// "Titip [qty]" di samping nama barang (persis pola qty+satuan di atas).
+  /// Key: `'$productId|$productUnitId'` (PreorderEntries tidak menyimpan
+  /// `transactionItemId`, hanya productId+productUnitId — cukup presisi krn
+  /// pre-order dibuat via SATU baris cart per produk+satuan per nota).
+  Future<Map<String, double>> getPreorderDepositForTransaction(
+      String transactionId) async {
+    final rows = await (select(preorderEntries)
+          ..where((t) =>
+              t.transactionId.equals(transactionId) &
+              t.depositQty.isBiggerThanValue(0)))
+        .get();
+    return {for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty};
+  }
+
   /// Ringkasan Laci Meja yang MASIH menggantung utk satu pelanggan —
   /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
   /// pengingat hutang), supaya barang titipan/pinjaman/pre-order tidak

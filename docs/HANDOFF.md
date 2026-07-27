@@ -14,28 +14,115 @@ penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
 keterangan Laci Meja membedakan titip vs ketinggalan), SATU putaran
 redesign (menu cepat Kasir/Laci Meja + 2 perbaikan di tab Ringkasan &
 struk share), SATU PUTARAN LAGI (animasi menu, grouping frame
-Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis), lalu SATU FIX
-KECIL PENUTUP (gap TabBar->kartu KPI, akhirnya ketemu lewat screenshot
-beranotasi panah user — lihat bagian PALING BAWAH). Belum di-merge ke
-`main` / di-push ke `origin` — commit-commit ada di branch
-`claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
-(pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
+Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis), lalu **REDESAIN
+BESAR Pre-order** (nyambung total ke keranjang/nota, ganti 2 jalur lama)
++ gap Ringkasan percobaan ke-3 (0px, BELUM DIKONFIRMASI user) — lihat
+bagian PALING BAWAH. Belum di-merge ke `main` / di-push ke `origin` —
+commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
+menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
+dulu baru merge/push)._
 
-## Fix gap TabBar->kartu KPI RingkasanTab — akhirnya ketemu (SELESAI)
+## ⚠️ Gap TabBar->kartu KPI RingkasanTab — percobaan ke-3, BELUM dikonfirmasi
 
-Riwayat percobaan (supaya tidak diulang kalau muncul lagi dgn gejala
-serupa): percobaan PERTAMA (`673d045`, `margin: EdgeInsets.zero` di Card
-KPI) menyasar jarak ANTAR-baris KPI — user KONFIRMASI build sudah
-terpasang tapi gap MASIH terlihat, jadi itu bukan akarnya. Diminta
-screenshot beranotasi panah — ternyata gap yang dimaksud SEJAK AWAL
-adalah ruang kosong ANTARA underline tab "Ringkasan" dan kartu "Omzet" di
-BARIS PERTAMA (bukan antar-baris). Akar: `ListView`'s `padding:
-EdgeInsets.all(16)` sama rata di semua sisi — top 16px berdiri sendiri
-tanpa elemen visual lain mengisinya (beda dgn kartu² di bawahnya yg
-saling berdekatan), jadi terasa lebih lebar drpd sisi kiri/kanan/bawah.
-Fix: `EdgeInsets.fromLTRB(16, 8, 16, 16)` — top dipersempit jadi 8, sisi
-lain tetap. Test baru di `ringkasan_kpi_card_margin_test.dart` (assert
-`padding.top < padding.left`) — revert-verified.
+**Riwayat penting** (supaya tidak diulang blind guess lagi kalau muncul
+lagi): percobaan #1 (`673d045`, margin Card KPI, menyasar jarak
+ANTAR-baris) — user konfirmasi build sudah update, gap MASIH terasa.
+Percobaan #2 (top padding `ListView` 16px->8px, menyasar gap ATAS kartu
+pertama, ditemukan via screenshot beranotasi panah user) — user KEMBALI
+konfirmasi build sudah update (`AskUserQuestion`, jawaban eksplisit:
+"Automated dev build from claude/kategori-produk-qty-harga-mqjh21 @
+6275514"), **gap MASIH terasa juga**. Diukur pakai widget test
+(`tester.getBottomLeft(TabBar)` vs `tester.getTopLeft(Card)`): gap
+SUNGGUHAN memang berkurang jadi 8px sesuai kode — jadi arah fix-nya
+BENAR, cuma nilainya belum cukup agresif utk terlihat beda scr kasat
+mata. Percobaan #3 (SEKARANG): top padding dibuat 0 penuh (`EdgeInsets
+.fromLTRB(16, 0, 16, 16)`), atas rekomendasi eksplisit user sendiri
+("Perkecil ke 0px sekalian") drpd minta screenshot lagi. **BELUM ADA
+KONFIRMASI dari user apakah ini akhirnya cukup** — kalau sesi
+berikutnya dapat laporan "masih renggang" LAGI dgn top sudah 0, kemungkinan
+besar akar masalahnya BUKAN padding ListView sama sekali (sudah 2x
+terbukti mengubah angka ini tidak menyelesaikan persepsi user) — coba
+telusuri arah lain sepenuhnya (mis. shadow/elevation Card, kontras warna
+kartu vs background yg bikin "terasa longgar" scr persepsi bukan
+struktural, atau minta user rekam video/GIF drpd screenshot statis).
+Test `ringkasan_kpi_card_margin_test.dart` diperbarui tiap percobaan
+(assert `padding.top == 0` sekarang) — revert-verified tiap kali.
+
+## Redesain BESAR: Pre-order nyambung ke keranjang/nota (ganti total jalur lama)
+
+Permintaan user, dikonfirmasi lewat 4 `AskUserQuestion` sebelum coding
+(krn perubahan arsitektur besar, salah tebak = banyak kerja ulang):
+ganti TOTAL 2 jalur lama ("+ Antri" di pencarian Kasir, "Catat Pre-order"
+di Cek Stok — keduanya dialog terpisah `preorder_entry_dialog.dart`,
+`transactionId` SERING NULL) jadi SATU jalur baru via `ItemEntrySheet`
+(modal tap item produk kasir).
+
+**Alur baru**: kartu "Pre-order?" muncul HANYA saat `_markedOutOfStock`
+true (state lokal di `ItemEntrySheet`, reaktif — toggle habis on/off
+langsung memunculkan/menyembunyikan kartu tanpa reload). Toggle Ya/Tidak
+(default Tidak) → toggle "DP?" (Ya = harga penuh & `paid=true`, dibayar
+lunas sekarang; Tidak/default = harga dipaksa 0, `paid=false`, dicatat
+dulu bayar nanti) → field "Jumlah jaminan dititip" (HANYA muncul bila
+`sel.unit.requiresDeposit`, default = qty pesanan, bisa diubah manual).
+
+**Field baru di `CartItem`** (`lib/core/models/cart_item.dart`):
+`isPreorder`, `preorderPaid`, `depositQty` — full round-trip di
+`copyWith`/`toJson`/`fromJson` (pola sentinel `_unset` utk `depositQty`
+sama seperti `itemNote`).
+
+**Checkout** (`payment_screen.dart`, KEDUA jalur — transaksi baru
+`_confirmPayment` DAN tambah-belanjaan `_confirmAddItems`): setelah
+`saveTransaction`/`addItemsToTransaction`, loop `cart.where((i) =>
+i.isPreorder)` menulis `db.addPreorderEntry(...)` dgn `transactionId:
+txId` OTOMATIS (bukan lagi via dialog terpisah tanpa tautan) —
+inilah yg bikin tap-redirect-ke-nota di dashboard Laci Meja langsung
+jalan tanpa kerja tambahan. **Keputusan penting (dikonfirmasi user)**:
+item pre-order DIKECUALIKAN dari `stockItems` (pengurangan stok) di
+KEDUA jalur checkout — barangnya belum ada fisik di toko, stok baru
+bergerak nanti saat direstock sungguhan; kalau ini tidak dikecualikan,
+produk yg SUDAH minus/habis akan tambah minus lagi hanya krn dipesan.
+
+**Dihapus total**: tombol "+ Antri" (`kasir_screen.dart`, grid & list
+tile), tombol "Catat Pre-order" + param `onPreorder` (`cek_stok_screen
+.dart`), file `preorder_entry_dialog.dart`, dan 2 test lamanya
+(`kasir_preorder_entry_test.dart`, `cek_stok_preorder_entry_test.dart` —
+menguji jalur yg sudah tidak ada).
+
+**Label "Titip [qty]"** (jaminan) ditambahkan di 2 tempat, keduanya
+DISATUKAN ke text run nama produk yg sama (`Text.rich`, BUKAN `Text`
+terpisah + `SizedBox` gap) — permintaan user eksplisit: posisi persis
+pola badge "Habis" di katalog kasir (`'${name} · Habis'`, satu run,
+tanpa jarak tambahan):
+1. `cart_sheet.dart` — `_CartItemTile` title, kalau `item.depositQty >
+   0`.
+2. `receipt_screen.dart` — title item struk, gabungan SEMUA penanda
+   (Dititip/Ketinggalan DAN Titip-jaminan) jadi satu `Text.rich` dgn
+   banyak `TextSpan`. Butuh query baru `getPreorderDepositForTransaction`
+   (`app_database.dart`, key `'$productId|$productUnitId'` krn
+   `PreorderEntries` TIDAK simpan `transactionItemId`, beda dari
+   `LeftBehindItems` yg sudah punya kolom itu sejak migrasi v23).
+
+**Gotcha test PENTING** (bakal kena lagi kalau ada yg convert `Text`
+lain jadi `Text.rich` di masa depan): `find.text(name)` HANYA cocok
+`Text` widget dgn `.data` persis — begitu diganti `Text.rich`, PECAH
+semua test yg pakai `find.text(nama_produk)` polos utk membaca style
+(3 file lama pecah: `receipt_item_name_bold_test.dart`,
+`receipt_qty_unit_bold_test.dart`, `laci_meja_marks_and_reminder_test
+.dart`). Fix: (a) `find.textContaining(x, findRichText: true)` utk
+sekadar cek keberadaan teks; (b) utk baca STYLE span tertentu, cari
+`RichText` via `find.byType(RichText)` + `.text.toPlainText() == '...'`,
+LALU descend SATU LEVEL ke `(richText.text as TextSpan).children!
+.first` — `Text.rich(mySpan)` SELALU membungkus `mySpan` sbg CHILD dari
+TextSpan LUAR (default style bawaan tema), jadi `richText.text.style`
+langsung TIDAK PERNAH mencerminkan style yg kita set sendiri (selalu
+w400 normal, bukan span kita).
+
+Test baru: `item_entry_preorder_test.dart` (6 kasus: card visibility,
+DP toggle, deposit qty conditional+default), `payment_preorder_checkout_
+test.dart` (2: transactionId terisi + stok tidak terpotong, DP Ya ->
+paid=true), `cart_sheet_preorder_deposit_label_test.dart` (1) — semua
+revert-verified. Full suite sesudah semua ini: **801 test hijau**,
+`flutter analyze` 0 issue.
 
 **Pelajaran**: laporan visual user ("ada gap/renggang") bisa BUKAN
 merujuk ke hal yang paling jelas kelihatan sekilas dari kode (jarak

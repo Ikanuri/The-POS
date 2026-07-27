@@ -66,7 +66,10 @@ void main() {
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
 
-    expect(find.text('Dititip'), findsOneWidget,
+    // Item 52 redesain — penanda sekarang disatukan ke text run yang SAMA
+    // dgn nama (Text.rich " · Dititip", biar rapat — bukan Text terpisah),
+    // jadi dicari via textContaining + findRichText (bukan exact find.text).
+    expect(find.textContaining('Dititip', findRichText: true), findsOneWidget,
         reason: 'tepat SATU baris tertandai, bukan dua (produk sama, '
             'satuan beda) — tautan lewat transactionItemId, bukan nama');
 
@@ -85,8 +88,9 @@ void main() {
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
 
-    expect(find.text('Ketinggalan'), findsOneWidget);
-    expect(find.text('Dititip'), findsNothing);
+    expect(find.textContaining('Ketinggalan', findRichText: true),
+        findsOneWidget);
+    expect(find.textContaining('Dititip', findRichText: true), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

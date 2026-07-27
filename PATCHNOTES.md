@@ -24,7 +24,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   jumlah & satuannya. Tombol "Sudah Diambil" juga disederhanakan jadi
   tombol kecil "Ambil".
 - **Tab Ringkasan di Laporan tidak lagi terasa "renggang"** — jarak antar
-  kartu ringkasan (Omzet, Transaksi, dll) dirapikan.
+  kartu ringkasan (Omzet, Transaksi, dll) dirapikan, dan jarak antara
+  tab dan kartu pertama dibuat mepet penuh.
+- **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
+  nama barang** — sekarang posisinya persis seperti tanda "Habis" di
+  daftar produk kasir, tidak berjarak lagi.
 - **Struk yang dibagikan (gambar)**: baris jumlah barang & harga per
   barang tidak lagi tercetak tebal — hanya nama produk yang tetap tebal,
   jadi lebih mudah dibaca.
@@ -52,9 +56,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
     yang harus kembali secara fisik ke toko, bisa dicatat kembali
     sebagian (mis. pinjam 3, baru kembali 2).
   - **Pre-order** — catat pesanan untuk produk yang stoknya sedang habis
-    (termasuk antrian tabung LPG). Bisa dicatat langsung dari pencarian
-    di Kasir (tombol "+ Antri" muncul saat produk berstatus habis) atau
-    dari layar Cek Stok.
+    (termasuk antrian tabung LPG). **Diperbarui**: sekarang dicatat
+    langsung lewat modal tambah barang di Kasir — begitu produk ditandai
+    "Habis", muncul pertanyaan "Pre-order?" (Ya/Tidak), lalu "DP?" (bayar
+    sekarang atau nanti), dan kalau produknya butuh jaminan fisik (mis.
+    tukar tabung gas), muncul kolom jumlah jaminan yang dititip. Karena
+    langsung nyambung ke keranjang, pesanan pre-order otomatis tercatat
+    di nota yang sama — memudahkan pelacakan & tap-untuk-lihat-nota di
+    dashboard Laci Meja.
   - Badge angka di ikon Kasir menampilkan total catatan yang masih aktif
     di ketiga kategori, tanpa perlu ditahan dulu.
   - Untuk produk model tukar-wadah (mis. LPG), ada toggle baru "Butuh
