@@ -45,6 +45,8 @@ void main() {
     v12.execute('PRAGMA user_version = 12;');
     // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
     v12.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
+    // product_units diperlukan agar migrasi v22 (addColumn requires_deposit) tak gagal.
+    v12.execute('CREATE TABLE product_units(id TEXT PRIMARY KEY);');
     v12.dispose();
 
     // ── 2. Buka via AppDatabase (schemaVersion 13) → onUpgrade(12,13) jalan.
@@ -59,7 +61,7 @@ void main() {
     expect(p.amount, 50000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 21);
+    expect(ver.data.values.first, 22);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

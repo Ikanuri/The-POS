@@ -23,6 +23,8 @@ void main() {
     final v20 = raw.sqlite3.open(path);
     v20.execute('PRAGMA user_version = 20;');
     v20.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
+    // product_units diperlukan agar migrasi v22 (addColumn requires_deposit) tak gagal.
+    v20.execute('CREATE TABLE product_units(id TEXT PRIMARY KEY);');
     v20.execute('''
       CREATE TABLE sync_upload_queue (
         id TEXT NOT NULL PRIMARY KEY,
@@ -67,7 +69,7 @@ void main() {
     expect(rows.single.deviceCode, isNull);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 21);
+    expect(ver.data.values.first, 22);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
