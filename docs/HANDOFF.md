@@ -14,39 +14,101 @@ penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
 keterangan Laci Meja membedakan titip vs ketinggalan), SATU putaran
 redesign (menu cepat Kasir/Laci Meja + 2 perbaikan di tab Ringkasan &
 struk share), SATU PUTARAN LAGI (animasi menu, grouping frame
-Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis), lalu **REDESAIN
-BESAR Pre-order** (nyambung total ke keranjang/nota, ganti 2 jalur lama)
-+ gap Ringkasan percobaan ke-3 (0px, BELUM DIKONFIRMASI user) — lihat
-bagian PALING BAWAH. Belum di-merge ke `main` / di-push ke `origin` —
+Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis), REDESAIN BESAR
+Pre-order (nyambung total ke keranjang/nota, ganti 2 jalur lama), lalu
+**putaran TERBARU**: gap Ringkasan AKHIRNYA KETEMU akarnya (percobaan
+ke-4, `TabAlignment`, BUKAN soal padding/margin sama sekali — 3
+percobaan sebelumnya semua salah sasaran), grouping Pre-order/Pinjaman
+di dashboard, dan penanda "Pinjaman" baru di struk in-app — lihat bagian
+PALING BAWAH. Belum di-merge ke `main` / di-push ke `origin` —
 commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
 menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
 dulu baru merge/push)._
 
-## ⚠️ Gap TabBar->kartu KPI RingkasanTab — percobaan ke-3, BELUM dikonfirmasi
+## ✅ Gap Ringkasan — AKHIRNYA KETEMU akarnya (percobaan ke-4, SELESAI)
 
-**Riwayat penting** (supaya tidak diulang blind guess lagi kalau muncul
-lagi): percobaan #1 (`673d045`, margin Card KPI, menyasar jarak
-ANTAR-baris) — user konfirmasi build sudah update, gap MASIH terasa.
-Percobaan #2 (top padding `ListView` 16px->8px, menyasar gap ATAS kartu
-pertama, ditemukan via screenshot beranotasi panah user) — user KEMBALI
-konfirmasi build sudah update (`AskUserQuestion`, jawaban eksplisit:
-"Automated dev build from claude/kategori-produk-qty-harga-mqjh21 @
-6275514"), **gap MASIH terasa juga**. Diukur pakai widget test
-(`tester.getBottomLeft(TabBar)` vs `tester.getTopLeft(Card)`): gap
-SUNGGUHAN memang berkurang jadi 8px sesuai kode — jadi arah fix-nya
-BENAR, cuma nilainya belum cukup agresif utk terlihat beda scr kasat
-mata. Percobaan #3 (SEKARANG): top padding dibuat 0 penuh (`EdgeInsets
-.fromLTRB(16, 0, 16, 16)`), atas rekomendasi eksplisit user sendiri
-("Perkecil ke 0px sekalian") drpd minta screenshot lagi. **BELUM ADA
-KONFIRMASI dari user apakah ini akhirnya cukup** — kalau sesi
-berikutnya dapat laporan "masih renggang" LAGI dgn top sudah 0, kemungkinan
-besar akar masalahnya BUKAN padding ListView sama sekali (sudah 2x
-terbukti mengubah angka ini tidak menyelesaikan persepsi user) — coba
-telusuri arah lain sepenuhnya (mis. shadow/elevation Card, kontras warna
-kartu vs background yg bikin "terasa longgar" scr persepsi bukan
-struktural, atau minta user rekam video/GIF drpd screenshot statis).
-Test `ringkasan_kpi_card_margin_test.dart` diperbarui tiap percobaan
-(assert `padding.top == 0` sekarang) — revert-verified tiap kali.
+**Riwayat lengkap 4 percobaan** (WAJIB dibaca kalau ada laporan gap
+serupa lagi — 3 dari 4 percobaan salah total, pelajarannya penting):
+1. `673d045` — margin Card KPI (jarak ANTAR-baris). User konfirmasi
+   build update, gap MASIH terasa.
+2. Top padding `ListView` 16px→8px (gap ATAS kartu pertama, dari
+   screenshot panah PERTAMA). User KEMBALI konfirmasi build update
+   (`AskUserQuestion` eksplisit), gap MASIH terasa. Diukur via widget
+   test: gap sungguhan BENAR berkurang jadi 8px sesuai kode — arah fix
+   benar tapi PERCUMA, karena bukan itu akarnya sama sekali.
+3. Top padding dibuat 0 penuh, atas rekomendasi user sendiri. **User
+   kirim SCREENSHOT PANAH KEDUA** — dan panahnya menunjuk KE KIRI tab
+   "Ringkasan" itu sendiri (bukan area vertikal kartu SAMA SEKALI).
+   Ternyata 3 percobaan sebelumnya salah sasaran arah TOTAL (vertikal
+   vs horizontal) — deskripsi teks user ("renggang", "gap") sejak awal
+   TIDAK CUKUP presisi utk membedakan "gap di atas kartu" vs "gap di
+   kiri tab", dan saya keliru berasumsi itu soal jarak ke kartu KPI dari
+   percobaan pertama.
+4. **Akar sesungguhnya**: `TabBar(isScrollable: true)` Material 3
+   default `tabAlignment: TabAlignment.startOffset` — inset ~52dp di
+   depan tab PERTAMA (dirancang API Flutter utk sejajar leading
+   icon/drawer button; `LaporanScreen`'s AppBar TIDAK punya leading icon
+   jadi inset ini murni buang-buang ruang tanpa alasan). Fix:
+   `tabAlignment: TabAlignment.start`. Test baru
+   `laporan_tab_left_align_test.dart` — revert-verified (gap SUNGGUHAN
+   68px sebelum fix, terbukti presisi cocok dgn deskripsi "~52dp inset
+   bawaan" + padding AppBar bawaannya).
+
+**Pelajaran KERAS** (kalau laporan visual serupa muncul lagi di layar
+LAIN): "gap"/"renggang" dari user BISA merujuk ke sumbu yang SAMA SEKALI
+beda dari yang kelihatan jelas dari kode (contoh nyata: margin Card
+antar-baris — jelas ADA bug-nya secara kode — ternyata bukan yang
+dimaksud user sejak awal). **Screenshot beranotasi PANAH WAJIB diminta
+di percobaan PERTAMA** kalau laporan "ada gap" datang tanpa gambar,
+BUKAN ditunda sampai 2-3 percobaan gagal dulu — tiap percobaan buta
+berarti minimal satu siklus build+install APK yang terbuang.
+
+## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
+
+Susulan redesain Pre-order besar (bagian di bawah) — user minta 2
+penyesuaian tampilan dashboard, plus 1 fitur baru di struk:
+
+1. **Pre-order** — grouping SAMA persis Titip/Ketinggalan (per
+   `transactionId`, satu Card per nota), TAPI beda format konten: header
+   Card = NAMA PELANGGAN bold (SEKALI per grup, bukan diulang tiap
+   baris spt Titip/Ketinggalan), tiap baris produk format ringkas
+   `"[qty] [nama produk] - [qty jaminan]"` (bagian jaminan cuma muncul
+   kalau `depositQty > 0`). Butuh JOIN baru
+   `getProductUnitLabelsFor(productUnitIds)` (`app_database.dart`) krn
+   `PreorderEntries` cuma simpan `productId`/`productUnitId`, TIDAK
+   simpan nama produk cache (beda dari `LeftBehindItems.itemName` yg
+   sudah simpan nama langsung).
+2. **Pinjaman — grouping BEDA dari 2 kategori lain**: PER-PELANGGAN
+   (`customerId` kalau ada, fallback nama teks, fallback `'anon'`),
+   BUKAN per-nota — krn satu pelanggan bisa pinjam di BEBERAPA nota
+   beda-beda waktu, semua harus kelihatan jadi satu daftar biar
+   trackingnya utuh. Tiap baris di dalam grup TETAP tertaut ke
+   `transactionId` MILIKNYA SENDIRI (bisa beda-beda per baris dalam satu
+   grup) — jadi tap satu baris redirect ke NOTA baris itu, bukan nota
+   pertama yg kebetulan ada di grup.
+3. **Penanda "Pinjaman" di struk in-app** ("rujukan kebenaran" —
+   permintaan user: staf bisa cek nota asli utk konfirmasi barang apa
+   yg benar dipinjamkan) — butuh kolom BARU
+   `BorrowedItems.transactionItemId` (migrasi schemaVersion 23→24, pola
+   identik `LeftBehindItems.transactionItemId` dari migrasi v23) utk
+   tautan PRESISI (bukan cocok-nama — sama alasan kenapa
+   `LeftBehindItems` butuh kolom itu duluan: produk sama bisa muncul 2x
+   di satu nota dgn satuan beda). **Konsekuensi**: dialog "Catat
+   Pinjaman Barang" (`receipt_screen.dart`) DIROMBAK dari `TextField`
+   nama+qty bebas jadi CHECKLIST barang nyata di nota ini (pola identik
+   `_showLeftBehindDialog`) — perlu diketahui kalau menyentuh dialog ini
+   lagi: qty pinjaman SEKARANG otomatis = qty produk di baris nota
+   (bukan input manual terpisah lagi). Penanda tampil TERLEPAS status
+   sudah/belum kembali (nota = bukti historis permanen, bukan indikator
+   status hidup — SENGAJA, lihat komentar di
+   `getBorrowedMarkersForTransaction`).
+
+Test baru: `laporan_tab_left_align_test.dart`, `migration_v24_test.dart`,
++6 test di `laci_meja_dashboard_grouping_test.dart` (grup Pre-order & 2
+test Pinjaman), `receipt_borrowed_marker_test.dart` (3 kasus) — semua
+revert-verified. `receipt_catat_laci_meja_test.dart` disesuaikan ke
+checklist Pinjaman baru. Full suite: **809 test hijau**, `flutter
+analyze` 0 issue.
 
 ## Redesain BESAR: Pre-order nyambung ke keranjang/nota (ganti total jalur lama)
 

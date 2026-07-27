@@ -47,6 +47,13 @@ class BorrowedItems extends Table {
   TextColumn get id => text()(); // UUID
   TextColumn get transactionId => text().references(Transactions, #id)();
   TextColumn get itemName => text()();
+
+  /// Item 52 redesain — id baris `transaction_items` yang dipinjamkan.
+  /// Tautan PRESISI ke baris nota (bukan cocok-nama), pola identik
+  /// `LeftBehindItems.transactionItemId` — dipakai struk in-app memberi
+  /// penanda "Pinjaman" di baris yang benar. Nullable utk entri lama yang
+  /// dibuat sebelum kolom ini ada.
+  TextColumn get transactionItemId => text().nullable()();
   TextColumn get customerId => text().nullable().references(Customers, #id)();
   TextColumn get customerNameText => text().nullable()();
   RealColumn get qty => real()();

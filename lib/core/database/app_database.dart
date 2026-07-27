@@ -180,7 +180,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -354,6 +354,15 @@ class AppDatabase extends _$AppDatabase {
             // Pola identik dgn guard v21 (`syncUploadQueue.deviceCode`).
             await m.addColumn(
                 leftBehindItems, leftBehindItems.transactionItemId);
+          }
+          if (from < 24 && from >= 22) {
+            // Item 52 redesain — tautan presisi entri Pinjaman ke baris
+            // nota, pola identik guard v23 di atas (`leftBehindItems.
+            // transactionItemId`). Guard `from >= 22`: upgrade dari versi
+            // < 22 sudah dapat definisi tabel TERKINI dari `createTable`
+            // di step v22.
+            await m.addColumn(
+                borrowedItems, borrowedItems.transactionItemId);
           }
         },
         beforeOpen: (details) async {
@@ -4889,6 +4898,46 @@ class AppDatabase extends _$AppDatabase {
     return {for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty};
   }
 
+  /// Item 52 redesain — nama produk+satuan utk sekumpulan `product_unit_id`
+  /// (dipakai dashboard Laci Meja tab Pre-order menampilkan "qty produk -
+  /// jaminan" per baris). Satu JOIN, bukan N+1.
+  Future<Map<String, ({String productName, String unitName})>>
+      getProductUnitLabelsFor(List<String> productUnitIds) async {
+    if (productUnitIds.isEmpty) return {};
+    final rows = await (select(productUnits).join([
+      innerJoin(products, products.id.equalsExp(productUnits.productId)),
+      leftOuterJoin(
+          unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
+    ])
+          ..where(productUnits.id.isIn(productUnitIds)))
+        .get();
+    return {
+      for (final row in rows)
+        row.readTable(productUnits).id: (
+          productName: row.readTable(products).name,
+          unitName: row.readTableOrNull(unitTypes)?.name ?? '',
+        ),
+    };
+  }
+
+  /// Item 52 redesain — baris `BorrowedItems` (pinjaman) yang tertaut ke SATU
+  /// nota, dipakai struk in-app memberi penanda "Pinjaman" di samping nama
+  /// barang — "rujukan kebenaran" permintaan user: staf bisa cek nota asli
+  /// utk konfirmasi barang apa yang memang dipinjamkan dari transaksi itu.
+  /// Key: `transaction_items.id` (tautan PRESISI, pola sama
+  /// `getLeftBehindMarksForTransaction`) — entri lama tanpa
+  /// `transactionItemId` otomatis terlewat. Ditampilkan TERLEPAS dari status
+  /// sudah/belum kembali (nota adalah bukti historis, bukan status hidup).
+  Future<Map<String, bool>> getBorrowedMarkersForTransaction(
+      String transactionId) async {
+    final rows = await (select(borrowedItems)
+          ..where((t) =>
+              t.transactionId.equals(transactionId) &
+              t.transactionItemId.isNotNull()))
+        .get();
+    return {for (final r in rows) r.transactionItemId!: true};
+  }
+
   /// Ringkasan Laci Meja yang MASIH menggantung utk satu pelanggan —
   /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
   /// pengingat hutang), supaya barang titipan/pinjaman/pre-order tidak
@@ -4972,6 +5021,7 @@ class AppDatabase extends _$AppDatabase {
     required String transactionId,
     required String itemName,
     required double qty,
+    String? transactionItemId,
     String? customerId,
     String? customerNameText,
     String? note,
@@ -4982,6 +5032,7 @@ class AppDatabase extends _$AppDatabase {
         transactionId: transactionId,
         itemName: itemName,
         qty: qty,
+        transactionItemId: Value(transactionItemId),
         customerId: Value(customerId),
         customerNameText: Value(customerNameText),
         note: Value(note),

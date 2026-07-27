@@ -221,6 +221,18 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     );
   }
 
+  /// Item 52 redesain (permintaan user) — grup pinjaman BUKAN per-nota
+  /// (beda dari Titip/Ketinggalan) melainkan per-PELANGGAN: satu pelanggan
+  /// bisa punya pinjaman dari BEBERAPA nota berbeda, semuanya harus
+  /// kelihatan jadi satu grup supaya trackingnya utuh — tiap baris tetap
+  /// tertaut ke `transactionId`-nya SENDIRI (bisa beda-beda per baris dalam
+  /// satu grup) utk redirect nota masing-masing.
+  static String _borrowedGroupKey(BorrowedItem e) =>
+      e.customerId ??
+      (e.customerNameText != null && e.customerNameText!.trim().isNotEmpty
+          ? 'name:${e.customerNameText!.trim()}'
+          : 'anon');
+
   Widget _buildBorrowedList(BuildContext context, WidgetRef ref,
       List<BorrowedItem> items, bool isDark, ColorScheme scheme) {
     if (items.isEmpty) {
@@ -228,29 +240,59 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           child: Text('Tidak ada pinjaman barang aktif.',
               style: TextStyle(color: scheme.onSurfaceVariant)));
     }
+    final groups = <String, List<BorrowedItem>>{};
+    for (final e in items) {
+      groups.putIfAbsent(_borrowedGroupKey(e), () => []).add(e);
+    }
+    final keys = groups.keys.toList();
+
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemCount: keys.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
-        final e = items[i];
-        final days = _daysSince(e.createdAt);
-        final sisa = e.qty - e.qtyReturned;
-        return ListTile(
-          onTap: () => context.push('/kasir/struk/${e.transactionId}'),
-          title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: _subtitle(
-            leading: 'Sisa $sisa dari ${e.qty}',
-            customerName: e.customerNameText,
-            days: days,
-            isDark: isDark,
-          ),
-          trailing: TextButton(
-            onPressed: () => _showReturnDialog(context, ref, e),
-            child: const Text('Kembali'),
+        final group = groups[keys[i]]!;
+        final customerName = group.first.customerNameText ?? 'Umum';
+        return Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(customerName,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                for (final e in group)
+                  _borrowedTile(context, ref, e, isDark),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+
+  Widget _borrowedTile(
+      BuildContext context, WidgetRef ref, BorrowedItem e, bool isDark) {
+    final days = _daysSince(e.createdAt);
+    final sisa = e.qty - e.qtyReturned;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      // Tiap baris tetap tertaut ke transactionId MASING-MASING (satu grup
+      // pelanggan bisa berisi baris dari nota yang BERBEDA-BEDA).
+      onTap: () => context.push('/kasir/struk/${e.transactionId}'),
+      title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: _subtitle(
+        leading: 'Sisa $sisa dari ${e.qty}',
+        customerName: null,
+        days: days,
+        isDark: isDark,
+      ),
+      trailing: TextButton(
+        onPressed: () => _showReturnDialog(context, ref, e),
+        child: const Text('Kembali'),
+      ),
     );
   }
 
@@ -285,6 +327,13 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     await db.returnBorrowedItemQty(e.id, qty, locallyModified: locallyModified);
   }
 
+  /// Item 52 redesain (permintaan user, screenshot device asli) — barang
+  /// pre-order dari NOTA YANG SAMA dikumpulkan jadi satu "frame" (Card),
+  /// pola SAMA dgn Titip/Ketinggalan — "supaya kalau ada beberapa produk
+  /// pre-order dalam satu nota, tidak perlu kocar-kacir". Beda dari
+  /// Titip/Ketinggalan: header kartu = nama pelanggan (bold, sekali per
+  /// grup, bukan diulang per baris), tiap baris produk format ringkas
+  /// "[qty] [produk] - [qty jaminan]".
   Widget _buildPreorderList(BuildContext context, WidgetRef ref,
       List<PreorderEntry> items, bool isDark, ColorScheme scheme) {
     if (items.isEmpty) {
@@ -292,52 +341,104 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           child: Text('Tidak ada pre-order aktif.',
               style: TextStyle(color: scheme.onSurfaceVariant)));
     }
+    final labels = ref.watch(preorderProductUnitLabelsProvider).valueOrNull ?? {};
+
+    // transactionId NULLABLE (satu-satunya kasus: titip wadah tanpa beli
+    // apa pun) — baris begini masing-masing jadi grup sendiri (kunci per id).
+    final groups = <String, List<PreorderEntry>>{};
+    for (final e in items) {
+      groups.putIfAbsent(e.transactionId ?? 'no-tx-${e.id}', () => []).add(e);
+    }
+    final keys = groups.keys.toList();
+
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemCount: keys.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
-        final e = items[i];
-        final days = _daysSince(e.createdAt);
-        return ListTile(
-          // transactionId NULLABLE (satu-satunya kasus: titip wadah tanpa
-          // beli apa pun) — redirect hanya kalau memang ada nota terkait.
-          onTap: e.transactionId == null
-              ? null
-              : () => context.push('/kasir/struk/${e.transactionId}'),
-          title: Text(e.customerName, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: _subtitle(
-            leading: 'Qty ${e.qtyOrdered}'
-                '${e.depositQty > 0 ? ' · titip wadah ${e.depositQty}' : ''}'
-                '${e.paid ? ' · sudah bayar' : ''}',
-            customerName: null,
-            days: days,
-            isDark: isDark,
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'Batal',
-                icon: const Icon(Icons.close),
-                onPressed: () async {
-                  final db = ref.read(databaseProvider);
-                  final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-                  await db.cancelPreorderEntry(e.id, locallyModified: locallyModified);
-                },
-              ),
-              TextButton(
-                onPressed: () async {
-                  final db = ref.read(databaseProvider);
-                  final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-                  await db.fulfillPreorderEntry(e.id, locallyModified: locallyModified);
-                },
-                child: const Text('Penuhi'),
-              ),
-            ],
+        final group = groups[keys[i]]!;
+        final first = group.first;
+        final days = _daysSince(first.createdAt);
+        return Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: first.transactionId == null
+                      ? null
+                      : () =>
+                          context.push('/kasir/struk/${first.transactionId}'),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(first.customerName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                      Text('$days hari lalu',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: _ageColor(days, isDark),
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+                for (final e in group)
+                  _preorderTile(context, ref, e, labels, isDark),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+
+  Widget _preorderTile(
+      BuildContext context,
+      WidgetRef ref,
+      PreorderEntry e,
+      Map<String, ({String productName, String unitName})> labels,
+      bool isDark) {
+    final label = labels[e.productUnitId];
+    final productName = label?.productName ?? e.productId;
+    final qtyStr =
+        e.qtyOrdered % 1 == 0 ? e.qtyOrdered.toInt().toString() : '${e.qtyOrdered}';
+    final depositStr = e.depositQty > 0
+        ? ' - ${e.depositQty % 1 == 0 ? e.depositQty.toInt() : e.depositQty} jaminan'
+        : '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('$qtyStr $productName$depositStr'
+                '${e.paid ? ' · sudah bayar' : ''}',
+                style: TextStyle(fontSize: 13, color: AppTheme.laciFg(isDark))),
+          ),
+          IconButton(
+            tooltip: 'Batal',
+            icon: const Icon(Icons.close),
+            visualDensity: VisualDensity.compact,
+            onPressed: () async {
+              final db = ref.read(databaseProvider);
+              final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+              await db.cancelPreorderEntry(e.id, locallyModified: locallyModified);
+            },
+          ),
+          TextButton(
+            onPressed: () async {
+              final db = ref.read(databaseProvider);
+              final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+              await db.fulfillPreorderEntry(e.id, locallyModified: locallyModified);
+            },
+            child: const Text('Penuhi'),
+          ),
+        ],
+      ),
     );
   }
 }

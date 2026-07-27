@@ -69,7 +69,7 @@ void main() {
     expect(rows.single.deviceCode, isNull);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 23);
+    expect(ver.data.values.first, 24);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

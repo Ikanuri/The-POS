@@ -24,8 +24,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   jumlah & satuannya. Tombol "Sudah Diambil" juga disederhanakan jadi
   tombol kecil "Ambil".
 - **Tab Ringkasan di Laporan tidak lagi terasa "renggang"** — jarak antar
-  kartu ringkasan (Omzet, Transaksi, dll) dirapikan, dan jarak antara
-  tab dan kartu pertama dibuat mepet penuh.
+  kartu ringkasan (Omzet, Transaksi, dll) dirapikan, dan tab "Ringkasan"
+  sekarang menempel rapi di kiri (sebelumnya ada jarak kosong yang tidak
+  perlu).
+- **Dashboard Laci Meja — Pre-order dari nota yang sama sekarang
+  dikelompokkan jadi satu kartu** (nama pelanggan tampil sekali di atas,
+  daftar barang & jumlah jaminan di bawahnya), dan **Pinjaman Barang
+  dikelompokkan per pelanggan** — jadi satu pelanggan yang pinjam
+  beberapa kali di nota berbeda tetap kelihatan jadi satu daftar.
+- **Struk in-app sekarang menandai barang yang sedang dipinjamkan** —
+  label "Pinjaman" di samping nama barang, sebagai bukti kalau ada
+  yang perlu dicek ulang.
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.

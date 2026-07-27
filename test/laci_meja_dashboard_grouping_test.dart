@@ -164,4 +164,137 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  group('Pre-order (permintaan user putaran terbaru)', () {
+    Future<void> tapPreorderTab(WidgetTester tester) async {
+      await tester.tap(find.text('Pre-order'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        '2 produk pre-order dari NOTA SAMA jadi 1 Card, header nama '
+        'pelanggan (bold), tiap baris "[qty] [produk] - [jaminan]"',
+        (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'P1', name: 'Galon Aqua'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.into(db.products)
+          .insert(ProductsCompanion.insert(id: 'P2', name: 'Tabung Gas'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U2', productId: 'P2', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'p1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Bu Artia',
+          qtyOrdered: 2,
+          transactionId: 'tx1');
+      await db.addPreorderEntry(
+          id: 'p2',
+          productId: 'P2',
+          productUnitId: 'U2',
+          customerName: 'Bu Artia',
+          qtyOrdered: 1,
+          depositQty: 1,
+          transactionId: 'tx1');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tapPreorderTab(tester);
+
+      expect(find.byType(Card), findsOneWidget,
+          reason: '2 produk pre-order NOTA SAMA -> 1 frame, tidak kocar-kacir');
+      expect(find.text('Bu Artia'), findsOneWidget,
+          reason: 'header nama pelanggan tampil SEKALI per grup');
+      final header = tester.widget<Text>(find.text('Bu Artia'));
+      expect(header.style?.fontWeight, FontWeight.w700,
+          reason: 'header nama pelanggan harus bold');
+      expect(find.textContaining('2 Galon Aqua'), findsOneWidget);
+      expect(find.textContaining('1 Tabung Gas - 1 jaminan'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+  });
+
+  group('Pinjaman (permintaan user putaran terbaru — group by pelanggan)', () {
+    Future<void> tapPinjamanTab(WidgetTester tester) async {
+      await tester.tap(find.text('Pinjaman'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'pinjaman dari 2 NOTA BERBEDA tapi pelanggan SAMA dikumpulkan jadi '
+        '1 Card; tiap baris tetap tertaut ke transactionId-nya sendiri',
+        (tester) async {
+      await seedTransaction('tx1');
+      await seedTransaction('tx2');
+      await db.into(db.customers).insert(
+          CustomersCompanion.insert(id: 'c1', name: 'Pak Budi'));
+      await db.addBorrowedItem(
+          id: 'b1',
+          transactionId: 'tx1',
+          itemName: 'Galon Aqua',
+          qty: 2,
+          customerId: 'c1',
+          customerNameText: 'Pak Budi');
+      await db.addBorrowedItem(
+          id: 'b2',
+          transactionId: 'tx2',
+          itemName: 'Tabung Gas',
+          qty: 1,
+          customerId: 'c1',
+          customerNameText: 'Pak Budi');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tapPinjamanTab(tester);
+
+      expect(find.byType(Card), findsOneWidget,
+          reason: 'satu pelanggan, 2 nota berbeda -> tetap 1 grup');
+      expect(find.text('Pak Budi'), findsOneWidget,
+          reason: 'header nama pelanggan tampil SEKALI, bukan per baris');
+      expect(
+          find.descendant(
+              of: find.byType(Card), matching: find.byType(ListTile)),
+          findsNWidgets(2),
+          reason: '2 baris barang (dari 2 nota berbeda) di dalam 1 grup');
+
+      // Tap baris Galon Aqua -> redirect ke tx1 (BUKAN tx2), walau satu grup.
+      await tester.tap(find.text('Galon Aqua'));
+      await tester.pumpAndSettle();
+      expect(find.text('Layar Struk tx1'), findsOneWidget,
+          reason: 'tiap baris redirect ke transactionId MILIKNYA sendiri');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets('pelanggan BERBEDA -> Card terpisah', (tester) async {
+      await seedTransaction('tx1');
+      await db.addBorrowedItem(
+          id: 'b1',
+          transactionId: 'tx1',
+          itemName: 'Galon A',
+          qty: 1,
+          customerNameText: 'Ani');
+      await db.addBorrowedItem(
+          id: 'b2',
+          transactionId: 'tx1',
+          itemName: 'Galon B',
+          qty: 1,
+          customerNameText: 'Budi');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tapPinjamanTab(tester);
+
+      expect(find.byType(Card), findsNWidgets(2));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+  });
 }

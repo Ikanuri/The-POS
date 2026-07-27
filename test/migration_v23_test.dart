@@ -39,6 +39,25 @@ void main() {
       INSERT INTO left_behind_items (id, transaction_id, item_name, jenis)
       VALUES ('l-lama', 'tx-lama', 'Payung', 'titip');
     ''');
+    // borrowed_items juga harus ada (dibuat step v22) — DB ini diupgrade
+    // TERUS sampai schemaVersion current (24), yang step v24-nya menyentuh
+    // tabel ini (`ALTER TABLE borrowed_items ADD COLUMN transaction_item_id`).
+    v22.execute('''
+      CREATE TABLE borrowed_items (
+        id TEXT NOT NULL PRIMARY KEY,
+        transaction_id TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        customer_id TEXT,
+        customer_name_text TEXT,
+        qty REAL NOT NULL,
+        qty_returned REAL NOT NULL DEFAULT 0,
+        note TEXT,
+        locally_modified INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL DEFAULT 0,
+        fully_returned_at INTEGER
+      );
+    ''');
     final preCols = v22
         .select("PRAGMA table_info('left_behind_items')")
         .map((r) => r['name'] as String)
@@ -63,7 +82,7 @@ void main() {
         reason: 'entri lama memang tidak punya tautan ke baris nota');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 23);
+    expect(ver.data.values.first, 24);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

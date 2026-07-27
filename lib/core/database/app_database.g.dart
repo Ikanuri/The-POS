@@ -12362,6 +12362,12 @@ class $BorrowedItemsTable extends BorrowedItems
   late final GeneratedColumn<String> itemName = GeneratedColumn<String>(
       'item_name', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _transactionItemIdMeta =
+      const VerificationMeta('transactionItemId');
+  @override
+  late final GeneratedColumn<String> transactionItemId =
+      GeneratedColumn<String>('transaction_item_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _customerIdMeta =
       const VerificationMeta('customerId');
   @override
@@ -12432,6 +12438,7 @@ class $BorrowedItemsTable extends BorrowedItems
         id,
         transactionId,
         itemName,
+        transactionItemId,
         customerId,
         customerNameText,
         qty,
@@ -12470,6 +12477,12 @@ class $BorrowedItemsTable extends BorrowedItems
           itemName.isAcceptableOrUnknown(data['item_name']!, _itemNameMeta));
     } else if (isInserting) {
       context.missing(_itemNameMeta);
+    }
+    if (data.containsKey('transaction_item_id')) {
+      context.handle(
+          _transactionItemIdMeta,
+          transactionItemId.isAcceptableOrUnknown(
+              data['transaction_item_id']!, _transactionItemIdMeta));
     }
     if (data.containsKey('customer_id')) {
       context.handle(
@@ -12534,6 +12547,8 @@ class $BorrowedItemsTable extends BorrowedItems
           .read(DriftSqlType.string, data['${effectivePrefix}transaction_id'])!,
       itemName: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}item_name'])!,
+      transactionItemId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}transaction_item_id']),
       customerId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}customer_id']),
       customerNameText: attachedDatabase.typeMapping.read(
@@ -12565,6 +12580,13 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
   final String id;
   final String transactionId;
   final String itemName;
+
+  /// Item 52 redesain — id baris `transaction_items` yang dipinjamkan.
+  /// Tautan PRESISI ke baris nota (bukan cocok-nama), pola identik
+  /// `LeftBehindItems.transactionItemId` — dipakai struk in-app memberi
+  /// penanda "Pinjaman" di baris yang benar. Nullable utk entri lama yang
+  /// dibuat sebelum kolom ini ada.
+  final String? transactionItemId;
   final String? customerId;
   final String? customerNameText;
   final double qty;
@@ -12578,6 +12600,7 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       {required this.id,
       required this.transactionId,
       required this.itemName,
+      this.transactionItemId,
       this.customerId,
       this.customerNameText,
       required this.qty,
@@ -12593,6 +12616,9 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
     map['id'] = Variable<String>(id);
     map['transaction_id'] = Variable<String>(transactionId);
     map['item_name'] = Variable<String>(itemName);
+    if (!nullToAbsent || transactionItemId != null) {
+      map['transaction_item_id'] = Variable<String>(transactionItemId);
+    }
     if (!nullToAbsent || customerId != null) {
       map['customer_id'] = Variable<String>(customerId);
     }
@@ -12618,6 +12644,9 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       id: Value(id),
       transactionId: Value(transactionId),
       itemName: Value(itemName),
+      transactionItemId: transactionItemId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionItemId),
       customerId: customerId == null && nullToAbsent
           ? const Value.absent()
           : Value(customerId),
@@ -12643,6 +12672,8 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       id: serializer.fromJson<String>(json['id']),
       transactionId: serializer.fromJson<String>(json['transactionId']),
       itemName: serializer.fromJson<String>(json['itemName']),
+      transactionItemId:
+          serializer.fromJson<String?>(json['transactionItemId']),
       customerId: serializer.fromJson<String?>(json['customerId']),
       customerNameText: serializer.fromJson<String?>(json['customerNameText']),
       qty: serializer.fromJson<double>(json['qty']),
@@ -12661,6 +12692,7 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       'id': serializer.toJson<String>(id),
       'transactionId': serializer.toJson<String>(transactionId),
       'itemName': serializer.toJson<String>(itemName),
+      'transactionItemId': serializer.toJson<String?>(transactionItemId),
       'customerId': serializer.toJson<String?>(customerId),
       'customerNameText': serializer.toJson<String?>(customerNameText),
       'qty': serializer.toJson<double>(qty),
@@ -12677,6 +12709,7 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
           {String? id,
           String? transactionId,
           String? itemName,
+          Value<String?> transactionItemId = const Value.absent(),
           Value<String?> customerId = const Value.absent(),
           Value<String?> customerNameText = const Value.absent(),
           double? qty,
@@ -12690,6 +12723,9 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
         itemName: itemName ?? this.itemName,
+        transactionItemId: transactionItemId.present
+            ? transactionItemId.value
+            : this.transactionItemId,
         customerId: customerId.present ? customerId.value : this.customerId,
         customerNameText: customerNameText.present
             ? customerNameText.value
@@ -12711,6 +12747,9 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
           ? data.transactionId.value
           : this.transactionId,
       itemName: data.itemName.present ? data.itemName.value : this.itemName,
+      transactionItemId: data.transactionItemId.present
+          ? data.transactionItemId.value
+          : this.transactionItemId,
       customerId:
           data.customerId.present ? data.customerId.value : this.customerId,
       customerNameText: data.customerNameText.present
@@ -12737,6 +12776,7 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
           ..write('id: $id, ')
           ..write('transactionId: $transactionId, ')
           ..write('itemName: $itemName, ')
+          ..write('transactionItemId: $transactionItemId, ')
           ..write('customerId: $customerId, ')
           ..write('customerNameText: $customerNameText, ')
           ..write('qty: $qty, ')
@@ -12755,6 +12795,7 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       id,
       transactionId,
       itemName,
+      transactionItemId,
       customerId,
       customerNameText,
       qty,
@@ -12771,6 +12812,7 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
           other.id == this.id &&
           other.transactionId == this.transactionId &&
           other.itemName == this.itemName &&
+          other.transactionItemId == this.transactionItemId &&
           other.customerId == this.customerId &&
           other.customerNameText == this.customerNameText &&
           other.qty == this.qty &&
@@ -12786,6 +12828,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
   final Value<String> id;
   final Value<String> transactionId;
   final Value<String> itemName;
+  final Value<String?> transactionItemId;
   final Value<String?> customerId;
   final Value<String?> customerNameText;
   final Value<double> qty;
@@ -12800,6 +12843,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     this.id = const Value.absent(),
     this.transactionId = const Value.absent(),
     this.itemName = const Value.absent(),
+    this.transactionItemId = const Value.absent(),
     this.customerId = const Value.absent(),
     this.customerNameText = const Value.absent(),
     this.qty = const Value.absent(),
@@ -12815,6 +12859,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     required String id,
     required String transactionId,
     required String itemName,
+    this.transactionItemId = const Value.absent(),
     this.customerId = const Value.absent(),
     this.customerNameText = const Value.absent(),
     required double qty,
@@ -12833,6 +12878,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     Expression<String>? id,
     Expression<String>? transactionId,
     Expression<String>? itemName,
+    Expression<String>? transactionItemId,
     Expression<String>? customerId,
     Expression<String>? customerNameText,
     Expression<double>? qty,
@@ -12848,6 +12894,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
       if (id != null) 'id': id,
       if (transactionId != null) 'transaction_id': transactionId,
       if (itemName != null) 'item_name': itemName,
+      if (transactionItemId != null) 'transaction_item_id': transactionItemId,
       if (customerId != null) 'customer_id': customerId,
       if (customerNameText != null) 'customer_name_text': customerNameText,
       if (qty != null) 'qty': qty,
@@ -12865,6 +12912,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
       {Value<String>? id,
       Value<String>? transactionId,
       Value<String>? itemName,
+      Value<String?>? transactionItemId,
       Value<String?>? customerId,
       Value<String?>? customerNameText,
       Value<double>? qty,
@@ -12879,6 +12927,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
       id: id ?? this.id,
       transactionId: transactionId ?? this.transactionId,
       itemName: itemName ?? this.itemName,
+      transactionItemId: transactionItemId ?? this.transactionItemId,
       customerId: customerId ?? this.customerId,
       customerNameText: customerNameText ?? this.customerNameText,
       qty: qty ?? this.qty,
@@ -12903,6 +12952,9 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     }
     if (itemName.present) {
       map['item_name'] = Variable<String>(itemName.value);
+    }
+    if (transactionItemId.present) {
+      map['transaction_item_id'] = Variable<String>(transactionItemId.value);
     }
     if (customerId.present) {
       map['customer_id'] = Variable<String>(customerId.value);
@@ -12943,6 +12995,7 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
           ..write('id: $id, ')
           ..write('transactionId: $transactionId, ')
           ..write('itemName: $itemName, ')
+          ..write('transactionItemId: $transactionItemId, ')
           ..write('customerId: $customerId, ')
           ..write('customerNameText: $customerNameText, ')
           ..write('qty: $qty, ')
@@ -22515,6 +22568,7 @@ typedef $$BorrowedItemsTableCreateCompanionBuilder = BorrowedItemsCompanion
   required String id,
   required String transactionId,
   required String itemName,
+  Value<String?> transactionItemId,
   Value<String?> customerId,
   Value<String?> customerNameText,
   required double qty,
@@ -22531,6 +22585,7 @@ typedef $$BorrowedItemsTableUpdateCompanionBuilder = BorrowedItemsCompanion
   Value<String> id,
   Value<String> transactionId,
   Value<String> itemName,
+  Value<String?> transactionItemId,
   Value<String?> customerId,
   Value<String?> customerNameText,
   Value<double> qty,
@@ -22590,6 +22645,10 @@ class $$BorrowedItemsTableFilterComposer
 
   ColumnFilters<String> get itemName => $composableBuilder(
       column: $table.itemName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText,
@@ -22674,6 +22733,10 @@ class $$BorrowedItemsTableOrderingComposer
   ColumnOrderings<String> get itemName => $composableBuilder(
       column: $table.itemName, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText,
       builder: (column) => ColumnOrderings(column));
@@ -22756,6 +22819,9 @@ class $$BorrowedItemsTableAnnotationComposer
 
   GeneratedColumn<String> get itemName =>
       $composableBuilder(column: $table.itemName, builder: (column) => column);
+
+  GeneratedColumn<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId, builder: (column) => column);
 
   GeneratedColumn<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText, builder: (column) => column);
@@ -22848,6 +22914,7 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> transactionId = const Value.absent(),
             Value<String> itemName = const Value.absent(),
+            Value<String?> transactionItemId = const Value.absent(),
             Value<String?> customerId = const Value.absent(),
             Value<String?> customerNameText = const Value.absent(),
             Value<double> qty = const Value.absent(),
@@ -22863,6 +22930,7 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             id: id,
             transactionId: transactionId,
             itemName: itemName,
+            transactionItemId: transactionItemId,
             customerId: customerId,
             customerNameText: customerNameText,
             qty: qty,
@@ -22878,6 +22946,7 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             required String id,
             required String transactionId,
             required String itemName,
+            Value<String?> transactionItemId = const Value.absent(),
             Value<String?> customerId = const Value.absent(),
             Value<String?> customerNameText = const Value.absent(),
             required double qty,
@@ -22893,6 +22962,7 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             id: id,
             transactionId: transactionId,
             itemName: itemName,
+            transactionItemId: transactionItemId,
             customerId: customerId,
             customerNameText: customerNameText,
             qty: qty,

@@ -59,3 +59,13 @@ final leftBehindQtyUnitProvider = FutureProvider<
   final ids = items.map((e) => e.transactionItemId).whereType<String>().toList();
   return ref.watch(databaseProvider).getQtyUnitForTransactionItems(ids);
 });
+
+/// Item 52 redesain — nama produk+satuan per `product_unit_id` yang muncul
+/// di daftar Pre-order dashboard, dipakai menampilkan "qty produk - jaminan"
+/// per baris (dikelompokkan per nota).
+final preorderProductUnitLabelsProvider = FutureProvider<
+    Map<String, ({String productName, String unitName})>>((ref) async {
+  final items = ref.watch(preorderEntriesProvider).valueOrNull ?? [];
+  final ids = items.map((e) => e.productUnitId).toSet().toList();
+  return ref.watch(databaseProvider).getProductUnitLabelsFor(ids);
+});
