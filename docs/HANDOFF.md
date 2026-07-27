@@ -130,6 +130,13 @@ di percobaan PERTAMA** kalau laporan "ada gap" datang tanpa gambar,
 BUKAN ditunda sampai 2-3 percobaan gagal dulu — tiap percobaan buta
 berarti minimal satu siklus build+install APK yang terbuang.
 
+**Susulan (27 Juli)**: user minta padding `ListView` Ringkasan
+dikembalikan "seperti semula" — top padding yang sempat ditekan ke 0px
+di percobaan ke-3 (blind guess, sebelum akar sungguhan ketemu) sudah
+tidak perlu lagi karena `TabAlignment.start` adalah fix sungguhannya.
+Dikembalikan ke `EdgeInsets.all(16)` seragam, test
+`ringkasan_kpi_card_margin_test.dart` disesuaikan.
+
 ## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
 
 Susulan redesain Pre-order besar (bagian di bawah) — user minta 2

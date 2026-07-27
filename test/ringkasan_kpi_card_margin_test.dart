@@ -38,19 +38,19 @@ void main() {
   });
 
   testWidgets(
-      'jarak atas (antara TabBar dan kartu KPI pertama) MEPET PENUH (0) — '
-      'screenshot beranotasi panah dari user (2x laporan) menunjuk PERSIS '
-      'gap ini, pengurangan ke 8px belum cukup', (tester) async {
+      'padding ListView Ringkasan seragam 16 di semua sisi — akar masalah '
+      'gap sebenarnya adalah TabAlignment.startOffset (laporan_screen.dart), '
+      'bukan padding ini, jadi padding dikembalikan ke nilai normal',
+      (tester) async {
     await pumpWithFakeApp(tester, db: db, child: RingkasanTab(range: range));
     await tester.pumpAndSettle();
 
     final listView = tester.widget<ListView>(find.byType(ListView));
     final padding = listView.padding as EdgeInsets;
-    expect(padding.top, 0,
-        reason: 'jarak atas harus 0 — kartu KPI mepet penuh ke TabBar, '
-            'bukan cuma dipersempit sebagian (16 atau 8) spt percobaan '
-            'sebelumnya yg dilaporkan user masih terasa renggang');
-    expect(padding.left, 16, reason: 'sisi kiri/kanan/bawah tetap 16');
+    expect(padding, const EdgeInsets.all(16),
+        reason: 'padding seragam 16 di semua sisi — pengurangan top ke 8/0 '
+            'pada percobaan sebelumnya cuma tebakan buta yang ternyata '
+            'tidak perlu setelah akar masalah asli (TabAlignment) ketemu');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

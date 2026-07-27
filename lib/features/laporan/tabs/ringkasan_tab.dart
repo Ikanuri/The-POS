@@ -72,11 +72,12 @@ class RingkasanTab extends ConsumerWidget {
 
     return dataAsync.when(
       data: (data) => ListView(
-        // Permintaan user (screenshot beranotasi panah, 2x laporan): jarak
-        // kosong antara TabBar dan kartu KPI pertama masih terasa renggang
-        // walau sudah dipersempit ke 8px — dibuat MEPET PENUH (0) skrg,
-        // kartu KPI langsung menempel ke TabBar tanpa jarak sama sekali.
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        // Akar masalah "jarak" yang dilaporkan user sebenarnya BUKAN padding
+        // ini, melainkan TabBar(isScrollable: true) default Material 3
+        // (tabAlignment: startOffset) yang menambah inset ~52dp sebelum tab
+        // pertama — sudah diperbaiki di laporan_screen.dart (tabAlignment:
+        // TabAlignment.start). Padding di sini dikembalikan ke nilai normal.
+        padding: const EdgeInsets.all(16),
         children: [
           // Main KPIs
           _KpiRow(

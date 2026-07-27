@@ -33,8 +33,6 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (tanpa teks), sudutnya rounded, waktu tekan-tahan yang dibutuhkan untuk
   membukanya dipercepat, dan sekarang muncul/hilangnya dengan animasi
   halus (bukan langsung nongol/hilang begitu saja).
-- **Jarak kosong di atas kartu Ringkasan (tab Laporan) dirapikan** —
-  sebelumnya terasa lebih lebar dari jarak di sisi lainnya.
 - **Dashboard Laci Meja — barang Titip/Ketinggalan dari nota yang sama
   sekarang dikelompokkan jadi satu kartu**, tidak lagi tampil sebagai
   baris-baris terpisah yang membingungkan. Tiap barang juga menampilkan
