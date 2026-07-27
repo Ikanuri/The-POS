@@ -10,6 +10,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 27 Juli 2026
 
+### 🛠️ Perbaikan
+- **Transaksi tidak bisa dibayar setelah pesanan dipindah bolak-balik
+  lewat QR** (mis. owner → asisten → owner) — muncul pesan error dan
+  kasir mentok padahal uang sudah diterima. Sekarang pembayaran selalu
+  bisa diselesaikan; nomor notanya yang menyesuaikan otomatis.
+- **Nama pelanggan panjang di bar keranjang tidak lagi menutupi tombol
+  "Bayar"** — barisnya turun ke bawah kalau tidak muat, jadi tombolnya
+  selalu bisa ditekan.
+
 ### ✨ Fitur Baru
 - **"Laci Meja" — fitur baru untuk catatan operasional harian toko.**
   Tekan & tahan tab "Kasir" di menu bawah (mirip Telegram) untuk membuka
@@ -36,7 +45,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   - Ketuk salah satu catatan di dashboard Laci Meja untuk langsung
     membuka struk nota terkait (mirip cara buka nota dari Buku Hutang).
   - Nama pelanggan otomatis terbawa dari nota, jadi langsung terlihat di
-    kartu Laci Meja tanpa perlu diketik ulang.
+    kartu Laci Meja tanpa perlu diketik ulang (ditandai warna terracotta
+    supaya mudah dibedakan).
+  - Barang yang dititip/ketinggalan diberi penanda langsung di struk
+    dalam aplikasi, mirip penanda "Habis" pada daftar produk.
+  - Saat menerima pembayaran, muncul pengingat kalau pelanggan itu masih
+    punya barang dititip, pinjaman, atau pre-order yang belum selesai —
+    warnanya sengaja dibedakan dari pengingat hutang.
 
 ## 26 Juli 2026
 
