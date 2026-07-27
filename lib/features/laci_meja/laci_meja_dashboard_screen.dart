@@ -144,38 +144,80 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           child: Text('Tidak ada barang titip/ketinggalan.',
               style: TextStyle(color: scheme.onSurfaceVariant)));
     }
+    final qtyUnit = ref.watch(leftBehindQtyUnitProvider).valueOrNull ?? {};
+
+    // Item 52 susulan (permintaan user) — barang dari NOTA YANG SAMA
+    // dikumpulkan jadi satu "frame" (Card), bukan baris terpisah rata spt
+    // sebelumnya (screenshot user: 5 barang beda dari nota berbeda-beda
+    // tampil sbg 5 baris identik, susah dibedakan mana yg satu nota).
+    // `LinkedHashMap` bawaan Dart Map menjaga urutan insert -> tetap FIFO
+    // sesuai `watchLeftBehindItems` (ORDER BY created_at).
+    final groups = <String, List<LeftBehindItem>>{};
+    for (final e in items) {
+      groups.putIfAbsent(e.transactionId, () => []).add(e);
+    }
+    final txIds = groups.keys.toList();
+
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemCount: txIds.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
-        final e = items[i];
-        final days = _daysSince(e.createdAt);
-        return ListTile(
-          // Item 52 susulan — tap kartu redirect ke nota terkait, mekanisme
-          // SAMA PERSIS dgn Buku Hutang (HutangTab -> push
-          // '/kasir/struk/:txId'): sama-sama push ANTAR-RUTE DI DALAM satu
-          // ShellRoute yang sama, bukan lintas batas shell (lihat dok rute
-          // 'laci-meja' di app_router.dart soal kenapa layar ini pindah ke
-          // dalam shell).
-          onTap: () => context.push('/kasir/struk/${e.transactionId}'),
-          title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: _subtitle(
-            leading: e.jenis == 'titip' ? 'Dititip' : 'Ketinggalan',
-            customerName: e.customerNameText,
-            days: days,
-            isDark: isDark,
-          ),
-          trailing: TextButton(
-            onPressed: () async {
-              final db = ref.read(databaseProvider);
-              final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-              await db.markLeftBehindCollected(e.id, locallyModified: locallyModified);
-            },
-            child: const Text('Sudah Diambil'),
+        final group = groups[txIds[i]]!;
+        return Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var j = 0; j < group.length; j++) ...[
+                if (j > 0) const Divider(height: 1),
+                _leftBehindTile(context, ref, group[j], qtyUnit, isDark),
+              ],
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _leftBehindTile(
+      BuildContext context,
+      WidgetRef ref,
+      LeftBehindItem e,
+      Map<String, ({double qty, String unitName})> qtyUnit,
+      bool isDark) {
+    final days = _daysSince(e.createdAt);
+    // Permintaan user: tampilkan jumlah qty + jenis satuan produknya
+    // (butuh join ke transaction_items via transactionItemId — entri lama
+    // tanpa tautan itu cukup tidak menampilkan qty, bukan error).
+    final qu = e.transactionItemId != null ? qtyUnit[e.transactionItemId] : null;
+    final qtyLabel = qu == null
+        ? ''
+        : ' · ${qu.qty % 1 == 0 ? qu.qty.toInt() : qu.qty} ${qu.unitName}'
+            .trimRight();
+    return ListTile(
+      // Item 52 susulan — tap kartu redirect ke nota terkait, mekanisme
+      // SAMA PERSIS dgn Buku Hutang (HutangTab -> push
+      // '/kasir/struk/:txId'): sama-sama push ANTAR-RUTE DI DALAM satu
+      // ShellRoute yang sama, bukan lintas batas shell (lihat dok rute
+      // 'laci-meja' di app_router.dart soal kenapa layar ini pindah ke
+      // dalam shell).
+      onTap: () => context.push('/kasir/struk/${e.transactionId}'),
+      title: Text('${e.itemName}$qtyLabel',
+          style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: _subtitle(
+        leading: e.jenis == 'titip' ? 'Dititip' : 'Ketinggalan',
+        customerName: e.customerNameText,
+        days: days,
+        isDark: isDark,
+      ),
+      trailing: _CollectButton(
+        onTap: () async {
+          final db = ref.read(databaseProvider);
+          final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+          await db.markLeftBehindCollected(e.id, locallyModified: locallyModified);
+        },
+      ),
     );
   }
 
@@ -296,6 +338,42 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Redesain (permintaan user): tombol "Sudah Diambil" disederhanakan jadi
+/// pill kecil ikon+label singkat — minimalis tapi TIDAK kotak-persegi rigid
+/// (`StadiumBorder`), pola sama semangatnya dgn `_CollectButton` di chip
+/// lain app ini (rounded, aksen warna domain Laci Meja).
+class _CollectButton extends StatelessWidget {
+  const _CollectButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = AppTheme.laciFg(isDark);
+    return Material(
+      color: Colors.transparent,
+      shape: StadiumBorder(side: BorderSide(color: fg.withOpacity(0.5))),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_rounded, size: 16, color: fg),
+              const SizedBox(width: 4),
+              Text('Ambil',
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

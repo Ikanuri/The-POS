@@ -47,3 +47,15 @@ final laciMejaPendingProvider = FutureProvider.family<
   }
   return (titip: 0, ketinggalan: 0, pinjaman: 0, preorder: 0);
 });
+
+/// Item 52 susulan (permintaan user) — qty+satuan per baris nota yang
+/// ditandai titip/ketinggalan, dipakai dashboard Laci Meja. Ikut ter-refresh
+/// mengikuti `leftBehindItemsProvider` (bukan `.autoDispose` — dashboard
+/// kadang di-pop lalu dibuka lagi, cache singkat ini murah & aman dipakai
+/// ulang).
+final leftBehindQtyUnitProvider = FutureProvider<
+    Map<String, ({double qty, String unitName})>>((ref) async {
+  final items = ref.watch(leftBehindItemsProvider).valueOrNull ?? [];
+  final ids = items.map((e) => e.transactionItemId).whereType<String>().toList();
+  return ref.watch(databaseProvider).getQtyUnitForTransactionItems(ids);
+});

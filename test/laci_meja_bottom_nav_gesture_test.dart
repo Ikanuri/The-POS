@@ -194,6 +194,33 @@ void main() {
   });
 
   testWidgets(
+      'redesain: menu muncul dgn animasi smooth (fade+scale), bukan '
+      'langsung nongol rigid tanpa transisi', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Kasir'));
+    // SATU frame saja (bukan pumpAndSettle) — animasi harus BELUM selesai,
+    // kalau menu nongol instan tanpa animasi maka opacity/scale-nya akan
+    // langsung 1.0 di frame pertama ini.
+    await tester.pump();
+    final fadeMidway =
+        tester.widget<FadeTransition>(find.byKey(const Key('quickMenuFade')));
+    expect(fadeMidway.opacity.value, lessThan(1.0),
+        reason: 'di tengah animasi, opacity belum penuh — kalau ini sudah '
+            '1.0 berarti menu muncul instan tanpa transisi');
+
+    await tester.pumpAndSettle();
+    final fadeSettled =
+        tester.widget<FadeTransition>(find.byKey(const Key('quickMenuFade')));
+    expect(fadeSettled.opacity.value, 1.0,
+        reason: 'setelah animasi selesai, opacity harus penuh');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
       'redesain: delay tekan-tahan dipercepat — 300ms (di bawah 500ms '
       'bawaan Flutter) sudah cukup membuka menu', (tester) async {
     await tester.pumpWidget(buildApp());

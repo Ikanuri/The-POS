@@ -11,15 +11,76 @@ koreksi UX dari user setelah demo awal (link ke produk struk, redirect
 dashboard ke nota), 1 bugfix KRITIS (checkout gagal setelah handoff QR
 bolak-balik) + 4 perbaikan UI dari laporan screenshot device asli, 2
 penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
-keterangan Laci Meja membedakan titip vs ketinggalan), lalu SATU putaran
-redesign lagi (menu cepat Kasir/Laci Meja + 2 perbaikan lain di tab
-Ringkasan & struk share — lihat bagian PALING BAWAH dari daftar ini,
-paling baru). Belum di-merge ke `main` / di-push ke `origin` —
-commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
-menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
-dulu baru merge/push)._
+keterangan Laci Meja membedakan titip vs ketinggalan), SATU putaran
+redesign (menu cepat Kasir/Laci Meja + 2 perbaikan di tab Ringkasan &
+struk share), lalu SATU PUTARAN LAGI (animasi menu, grouping frame
+Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis — lihat bagian
+PALING BAWAH, paling baru). Belum di-merge ke `main` / di-push ke
+`origin` — commit-commit ada di branch
+`claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
+(pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
 
-## Redesain menu cepat Kasir/Laci Meja + 2 perbaikan lain (putaran terbaru)
+## ⚠️ ISU BELUM TERSELESAIKAN — gap "di kiri Ringkasan" (butuh info lebih)
+
+User laporkan (screenshot) masih ada "jarak/gap" di tab Laporan >
+Ringkasan meski fix margin Card KPI (putaran sebelumnya, commit
+`673d045`) SUDAH terpasang di build yang mereka pakai (dikonfirmasi
+via AskUserQuestion). Artinya root cause SESUNGGUHNYA BUKAN margin Card
+KPI (sudah dicoba, tidak cukup) — ada elemen lain yang bikin gap terlihat
+tidak semestinya, tapi belum berhasil dipastikan dari screenshot statis
+saja (kandidat yang sudah DIPERIKSA & DIRUNTUHKAN: top padding ListView
+16dp — sama persis dgn tab laporan lain jadi bukan penyebab unik;
+`SyncStatusBanner` — return `SizedBox.shrink()` kalau `!hasActivity`,
+tidak reserve ruang). **BELUM diperbaiki** — sesi berikutnya WAJIB minta
+user menunjuk PERSIS lokasi gap (mis. screenshot dgn lingkaran/panah, atau
+deskripsi "antara X dan Y") sebelum coba fix lagi, supaya tidak menebak
+buta & sia-sia rebuild APK lagi.
+
+## Redesain menu cepat Kasir/Laci Meja + 2 perbaikan lain (putaran kedua)
+
+User minta 4 hal lagi setelah putaran redesign pertama:
+
+1. **Animasi smooth muncul/hilangnya menu cepat** — `_QuickMenuPopup`
+   baru (`main_shell.dart`), `StatefulWidget` dgn `SingleTickerProvider
+   Mixin`: `FadeTransition`+`ScaleTransition` (durasi 160ms, `Curves.
+   easeOutBack` utk scale, `alignment: Alignment.bottomCenter` biar
+   terasa "tumbuh dari tab Kasir"). Tutup (tap area luar ATAU pilih item)
+   WAJIB `await _controller.reverse()` dulu baru `onRemove()` (lepas
+   `OverlayEntry`) + `onSelect()` (navigasi) — urutan animasi-keluar dulu
+   baru aksi, bukan sebaliknya. **Gotcha test PENTING**: `Tooltip` bawaan
+   Flutter (dipakai `_QuickMenuIcon`) JUGA punya `FadeTransition` sendiri
+   internal — `find.byType(FadeTransition).first` TANPA `Key` eksplisit
+   bisa salah tangkap widget Tooltip (opacity selalu 0, bukan punya kita)
+   alih-alih punya kita, GANTI-GANTI tergantung urutan build/pumpAndSettle
+   — WAJIB pasang `Key('quickMenuFade')` di `FadeTransition` sendiri &
+   query lewat `find.byKey`, bukan `find.byType().first`. Revert-verified
+   (duration `Duration.zero` -> opacity langsung 1.0, gagal sensible).
+2. **Barang Titip/Ketinggalan dari NOTA YANG SAMA dikumpulkan jadi SATU
+   frame (`Card`)** — dashboard Laci Meja (`laci_meja_dashboard_screen.
+   dart`) dulu render flat `ListView.separated` per-barang (screenshot
+   user: 5 baris nyaris identik, tidak jelas mana yg satu nota). Sekarang
+   di-`groupBy transactionId` (`Map` biasa, insertion-order = FIFO
+   otomatis mengikuti `watchLeftBehindItems` `ORDER BY created_at`), tiap
+   grup jadi satu `Card` berisi N `ListTile` (dipisah `Divider` internal).
+   Tap tiap `ListTile` tetap individual redirect ke nota (sama tujuannya
+   krn satu grup = satu `transactionId`).
+3. **Qty+satuan ditampilkan per barang** — butuh JOIN baru
+   `getQtyUnitForTransactionItems` (`app_database.dart`, satu query utk
+   sekumpulan `transaction_items.id`, BUKAN N+1) + provider
+   `leftBehindQtyUnitProvider` (`laci_meja_provider.dart`). Entri LAMA
+   tanpa `transactionItemId` (dibuat sebelum kolom itu ada, migrasi v23)
+   tetap tampil TANPA qty — bukan error, memang tidak bisa dipetakan ke
+   baris nota manapun.
+4. **Tombol "Sudah Diambil" diredesain minimal** — `_CollectButton` baru:
+   pill kecil `StadiumBorder` (bukan kotak persegi `TextButton` lama),
+   ikon centang + label singkat "Ambil".
+
+Test baru `laci_meja_dashboard_grouping_test.dart` (3 kasus: grouping,
+qty/satuan tertaut vs tidak, tombol Ambil) + 1 test animasi di
+`laci_meja_bottom_nav_gesture_test.dart` — semua revert-verified. Full
+suite sesudah semua ini: **794 test hijau**, `flutter analyze` 0 issue.
+
+## Redesain menu cepat Kasir/Laci Meja + 2 perbaikan lain (putaran pertama)
 
 User minta 6 hal sekaligus; 4 poin pertama satu redesign menu, 2 sisanya
 perbaikan terpisah:

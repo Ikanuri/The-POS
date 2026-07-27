@@ -13,8 +13,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ### 🛠️ Perbaikan
 - **Menu tekan-tahan tab "Kasir" dirombak tampilannya** — sekarang muncul
   tepat di atas tab (bukan di samping), hanya tampil ikon Kasir/Laci Meja
-  (tanpa teks), sudutnya rounded, dan waktu tekan-tahan yang dibutuhkan
-  untuk membukanya dipercepat.
+  (tanpa teks), sudutnya rounded, waktu tekan-tahan yang dibutuhkan untuk
+  membukanya dipercepat, dan sekarang muncul/hilangnya dengan animasi
+  halus (bukan langsung nongol/hilang begitu saja).
+- **Dashboard Laci Meja — barang Titip/Ketinggalan dari nota yang sama
+  sekarang dikelompokkan jadi satu kartu**, tidak lagi tampil sebagai
+  baris-baris terpisah yang membingungkan. Tiap barang juga menampilkan
+  jumlah & satuannya. Tombol "Sudah Diambil" juga disederhanakan jadi
+  tombol kecil "Ambil".
 - **Tab Ringkasan di Laporan tidak lagi terasa "renggang"** — jarak antar
   kartu ringkasan (Omzet, Transaksi, dll) dirapikan.
 - **Struk yang dibagikan (gambar)**: baris jumlah barang & harga per

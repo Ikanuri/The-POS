@@ -4849,6 +4849,30 @@ class AppDatabase extends _$AppDatabase {
     return {for (final r in rows) r.transactionItemId!: r.jenis};
   }
 
+  /// Item 52 susulan (permintaan user) — qty+satuan per baris nota yang
+  /// ditandai titip/ketinggalan, dipakai dashboard Laci Meja supaya kasir
+  /// tahu PERSIS berapa banyak & satuan apa tanpa buka nota. Satu query
+  /// JOIN (bukan N+1) utk sekumpulan `transaction_items.id` sekaligus.
+  Future<Map<String, ({double qty, String unitName})>>
+      getQtyUnitForTransactionItems(List<String> transactionItemIds) async {
+    if (transactionItemIds.isEmpty) return {};
+    final rows = await (select(transactionItems).join([
+      leftOuterJoin(productUnits,
+          productUnits.id.equalsExp(transactionItems.productUnitId)),
+      leftOuterJoin(
+          unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
+    ])
+          ..where(transactionItems.id.isIn(transactionItemIds)))
+        .get();
+    return {
+      for (final row in rows)
+        row.readTable(transactionItems).id: (
+          qty: row.readTable(transactionItems).qty,
+          unitName: row.readTableOrNull(unitTypes)?.name ?? '',
+        ),
+    };
+  }
+
   /// Ringkasan Laci Meja yang MASIH menggantung utk satu pelanggan —
   /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
   /// pengingat hutang), supaya barang titipan/pinjaman/pre-order tidak

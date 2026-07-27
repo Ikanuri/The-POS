@@ -186,7 +186,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// - muncul DI ATAS tab Kasir (bukan showMenu bawaan yg posisinya dihitung
   //    dari titik jari & bisa nongol ke SAMPING);
   /// - HANYA ikon (tanpa label teks "Buka Kasir"/"Buka Laci Meja");
-  /// - sudut rounded (bukan kotak persegi bawaan `PopupMenuItem`).
+  /// - sudut rounded (bukan kotak persegi bawaan `PopupMenuItem`);
+  /// - animasi muncul/hilang smooth (bukan langsung nongol/hilang rigid) —
+  ///   lihat `_QuickMenuPopup`.
   /// Dibangun sbg `OverlayEntry` custom (bukan `showMenu`) supaya posisi
   /// horizontal/vertikalnya bisa dikontrol persis relatif thd bottom bar.
   void _showLaciMejaMenu(Offset globalPosition) {
@@ -203,9 +205,12 @@ class _MainShellState extends ConsumerState<MainShell> {
     final left = (globalPosition.dx - menuWidth / 2)
         .clamp(8.0, screenWidth - menuWidth - 8.0);
 
-    void close(String? selection) {
+    void remove() {
       _quickMenuEntry?.remove();
       _quickMenuEntry = null;
+    }
+
+    void select(String? selection) {
       if (!mounted || selection == null) return;
       if (selection == 'kasir') {
         context.go('/kasir');
@@ -215,51 +220,135 @@ class _MainShellState extends ConsumerState<MainShell> {
     }
 
     _quickMenuEntry = OverlayEntry(
-      builder: (_) => Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => close(null),
-            ),
+      builder: (_) => _QuickMenuPopup(
+        left: left,
+        top: barTop - menuHeight - 8,
+        menuHeight: menuHeight,
+        cs: cs,
+        isDark: isDark,
+        laciMejaCount: laciMejaCount,
+        onRemove: remove,
+        onSelect: select,
+      ),
+    );
+    Overlay.of(context).insert(_quickMenuEntry!);
+  }
+}
+
+/// Bungkus animasi fade+scale utk menu cepat — permintaan user: transisi
+/// muncul/hilang harus smooth, bukan langsung nongol/hilang tanpa animasi.
+/// `onRemove` (lepas `OverlayEntry` dari overlay) dipanggil SETELAH animasi
+/// keluar selesai, `onSelect` (navigasi) baru dipanggil setelah itu — supaya
+/// urutan animasi-keluar lalu navigasi terasa natural, bukan navigasi duluan
+/// baru overlay hilang mendadak.
+class _QuickMenuPopup extends StatefulWidget {
+  const _QuickMenuPopup({
+    required this.left,
+    required this.top,
+    required this.menuHeight,
+    required this.cs,
+    required this.isDark,
+    required this.laciMejaCount,
+    required this.onRemove,
+    required this.onSelect,
+  });
+
+  final double left;
+  final double top;
+  final double menuHeight;
+  final ColorScheme cs;
+  final bool isDark;
+  final int laciMejaCount;
+  final VoidCallback onRemove;
+  final void Function(String? selection) onSelect;
+
+  @override
+  State<_QuickMenuPopup> createState() => _QuickMenuPopupState();
+}
+
+class _QuickMenuPopupState extends State<_QuickMenuPopup>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 160));
+  late final _scale =
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+  late final _fade =
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _close(String? selection) async {
+    await _controller.reverse();
+    widget.onRemove();
+    widget.onSelect(selection);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _close(null),
           ),
-          Positioned(
-            left: left,
-            top: barTop - menuHeight - 8,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Material(
-                color: cs.surfaceContainerHigh,
-                elevation: 8,
-                child: SizedBox(
-                  height: menuHeight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _QuickMenuIcon(
-                        icon: Icons.point_of_sale_outlined,
-                        color: cs.primary,
-                        tooltip: 'Buka Kasir',
-                        onTap: () => close('kasir'),
-                      ),
-                      Container(width: 1, height: 28, color: cs.outlineVariant),
-                      _QuickMenuIcon(
-                        icon: Icons.inbox_outlined,
-                        color: AppTheme.laciFg(isDark),
-                        tooltip: 'Buka Laci Meja',
-                        badgeCount: laciMejaCount,
-                        onTap: () => close('laci_meja'),
-                      ),
-                    ],
+        ),
+        Positioned(
+          left: widget.left,
+          top: widget.top,
+          child: FadeTransition(
+            key: const Key('quickMenuFade'),
+            opacity: _fade,
+            child: ScaleTransition(
+              scale: _scale,
+              alignment: Alignment.bottomCenter,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Material(
+                  color: widget.cs.surfaceContainerHigh,
+                  elevation: 8,
+                  child: SizedBox(
+                    height: widget.menuHeight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _QuickMenuIcon(
+                          icon: Icons.point_of_sale_outlined,
+                          color: widget.cs.primary,
+                          tooltip: 'Buka Kasir',
+                          onTap: () => _close('kasir'),
+                        ),
+                        Container(
+                            width: 1,
+                            height: 28,
+                            color: widget.cs.outlineVariant),
+                        _QuickMenuIcon(
+                          icon: Icons.inbox_outlined,
+                          color: AppTheme.laciFg(widget.isDark),
+                          tooltip: 'Buka Laci Meja',
+                          badgeCount: widget.laciMejaCount,
+                          onTap: () => _close('laci_meja'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
-    Overlay.of(context).insert(_quickMenuEntry!);
   }
 }
 
