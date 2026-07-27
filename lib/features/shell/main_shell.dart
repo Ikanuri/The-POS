@@ -194,7 +194,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (selection == 'kasir') {
       context.go('/kasir');
     } else if (selection == 'laci_meja') {
-      context.push('/laci-meja');
+      context.push('/kasir/laci-meja');
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -113,6 +114,42 @@ void main() {
     final rows = await db.select(db.leftBehindItems).get();
     expect(rows, hasLength(2));
     expect(rows.map((r) => r.itemName).toSet(), {'Payung Lipat', 'Topi'});
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'nama pelanggan DIWARISI dari nota (pra-isi & tersimpan), tidak perlu '
+      'diketik ulang — supaya kartu dashboard Laci Meja menampilkan namanya',
+      (tester) async {
+    await db.into(db.customers).insert(
+        CustomersCompanion.insert(id: 'c1', name: 'Bu Sari'));
+    await (db.update(db.transactions)..where((t) => t.id.equals(txId)))
+        .write(const TransactionsCompanion(
+            customerId: Value('c1'), customerName: Value('Bu Sari')));
+
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.byTooltip('+ Catat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Titip/Ketinggalan'));
+    await tester.pumpAndSettle();
+
+    // Field pelanggan sudah PRA-ISI dari nota, staf tidak mengetik apa pun.
+    expect(find.widgetWithText(TextField, 'Bu Sari'), findsOneWidget);
+
+    await tester.tap(find.text('Payung Lipat (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.leftBehindItems).get();
+    expect(rows, hasLength(1));
+    expect(rows.single.customerNameText, 'Bu Sari');
+    expect(rows.single.customerId, 'c1',
+        reason: 'ditaut ke pelanggan terdaftar dari nota, bukan cuma teks');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

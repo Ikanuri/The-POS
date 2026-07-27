@@ -11,19 +11,19 @@ import 'package:the_pos/core/theme/app_theme.dart';
 
 /// Item 52 susulan — bug NYATA dilaporkan user via device asli: tap kartu
 /// di dashboard Laci Meja untuk redirect ke nota menghasilkan HALAMAN
-/// BLANK. `laci_meja_dashboard_redirect_test.dart` (router sederhana buatan
-/// sendiri, TANPA ShellRoute) tidak menangkap ini krn di sana
-/// '/kasir/struk/:txId' cuma rute top-level biasa — beda dari router ASLI
-/// app (`routerProvider`) yang membungkus rute itu di DALAM `ShellRoute`
-/// (`MainShell`), sedangkan `/laci-meja` sengaja di LUAR ShellRoute (biar
-/// bottom nav hilang, layar penuh).
+/// BLANK. Versi awal menaruh `/laci-meja` di LUAR `ShellRoute` (biar bottom
+/// nav hilang), sedangkan `/kasir/struk/:txId` bersarang DI DALAM shell —
+/// push lintas batas shell itulah yang bikin halaman kosong di device.
 ///
-/// Akar bug: `context.push()` dari rute DI LUAR ShellRoute ke rute
-/// BERSARANG di dalam ShellRoute diam-diam GAGAL TOTAL — lokasi tidak
-/// pernah berubah sama sekali, TANPA exception/error yang terlihat di mana
-/// pun. `context.go()` (replace seluruh stack) bekerja normal. Test ini
-/// pakai `routerProvider` ASLI (bukan router buatan sendiri) supaya benar²
-/// menangkap kelas bug integrasi ShellRoute ini kalau terulang.
+/// Fix: layar ini dipindah ke DALAM shell sbg `/kasir/laci-meja`,
+/// MENGIKUTI POLA Buku Hutang (`/laporan` -> HutangTab -> push
+/// `/kasir/struk/:txId`) yang sudah lama terbukti di produksi — push antar
+/// rute di dalam SATU shell yang sama.
+///
+/// Test ini WAJIB pakai `routerProvider` ASLI (bukan router tiruan seperti
+/// `laci_meja_dashboard_redirect_test.dart`): router tiruan tidak punya
+/// `ShellRoute` sama sekali, jadi struktural tidak pernah bisa menangkap
+/// kelas bug batas-shell ini.
 void main() {
   testWidgets(
       'tap kartu Titip/Ketinggalan di dashboard (via routerProvider asli) '
@@ -61,7 +61,7 @@ void main() {
     addTearDown(container.dispose);
 
     final router = container.read(routerProvider);
-    router.go('/laci-meja');
+    router.go('/kasir/laci-meja');
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),

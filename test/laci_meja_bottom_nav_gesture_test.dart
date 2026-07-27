@@ -29,8 +29,15 @@ void main() {
                 path: '/ringkasan',
                 builder: (_, __) => const Scaffold(body: Text('Layar Ringkasan'))),
             GoRoute(
-                path: '/kasir',
-                builder: (_, __) => const Scaffold(body: Text('Layar Kasir'))),
+              path: '/kasir',
+              builder: (_, __) => const Scaffold(body: Text('Layar Kasir')),
+              routes: [
+                GoRoute(
+                  path: 'laci-meja',
+                  builder: (_, __) => const LaciMejaDashboardScreen(),
+                ),
+              ],
+            ),
             GoRoute(
                 path: '/produk',
                 builder: (_, __) => const Scaffold(body: Text('Layar Produk'))),
@@ -45,10 +52,7 @@ void main() {
                 builder: (_, __) => const Scaffold(body: Text('Layar Pengaturan'))),
           ],
         ),
-        GoRoute(
-          path: '/laci-meja',
-          builder: (_, __) => const LaciMejaDashboardScreen(),
-        ),
+
       ],
     );
     return ProviderScope(

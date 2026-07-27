@@ -124,11 +124,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         final days = _daysSince(e.createdAt);
         return ListTile(
           // Item 52 susulan — tap kartu redirect ke nota terkait, mekanisme
-          // sama persis dgn Lacak Hutang (HutangTab -> '/kasir/struk/:txId'):
-          // push dari layar di LUAR ShellRoute ('/laci-meja') ke rute
-          // bersarang DI DALAM ShellRoute (MainShell) — sudah diverifikasi
-          // bekerja normal (lihat laci_meja_dashboard_redirect_real_router_
-          // test.dart, pakai routerProvider ASLI bukan router tiruan).
+          // SAMA PERSIS dgn Buku Hutang (HutangTab -> push
+          // '/kasir/struk/:txId'): sama-sama push ANTAR-RUTE DI DALAM satu
+          // ShellRoute yang sama, bukan lintas batas shell (lihat dok rute
+          // 'laci-meja' di app_router.dart soal kenapa layar ini pindah ke
+          // dalam shell).
           onTap: () => context.push('/kasir/struk/${e.transactionId}'),
           title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(

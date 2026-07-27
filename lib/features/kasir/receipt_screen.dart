@@ -1596,7 +1596,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// spt `returnableItems` di `_showReturnSheet`.
   Future<void> _showLeftBehindDialog(String transactionId) async {
     final candidates = _items.where((i) => i.qty > 0).toList();
-    final customerController = TextEditingController();
+    // Pelanggan diwarisi dari NOTA (pra-isi), bukan dibiarkan kosong —
+    // entri ini memang milik nota itu, jadi kartu di dashboard Laci Meja
+    // bisa langsung menampilkan namanya tanpa staf mengetik ulang. Masih
+    // bisa diedit utk nota "Umum" (pembeli lewat yg tidak terdaftar).
+    final notaCustomer = _customerDisplay(_tx!);
+    final customerController = TextEditingController(
+        text: notaCustomer == 'Umum' ? '' : notaCustomer);
     var jenis = 'titip';
     final selectedIds = <String>{};
     final result = await showDialog<bool>(
@@ -1680,6 +1686,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         transactionId: transactionId,
         itemName: _productNames[item.productId] ?? item.productId,
         jenis: jenis,
+        customerId: _customer?.id,
         customerNameText: customerName,
         locallyModified: locallyModified,
       );
@@ -1695,7 +1702,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Future<void> _showBorrowedDialog(String transactionId) async {
     final nameController = TextEditingController();
     final qtyController = TextEditingController(text: '1');
-    final customerController = TextEditingController();
+    // Pelanggan diwarisi dari NOTA (lihat alasan di _showLeftBehindDialog).
+    final notaCustomer = _customerDisplay(_tx!);
+    final customerController = TextEditingController(
+        text: notaCustomer == 'Umum' ? '' : notaCustomer);
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1743,6 +1753,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       transactionId: transactionId,
       itemName: nameController.text.trim(),
       qty: qty,
+      customerId: _customer?.id,
       customerNameText: customerController.text.trim().isEmpty
           ? null
           : customerController.text.trim(),

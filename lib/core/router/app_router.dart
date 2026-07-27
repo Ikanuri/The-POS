@@ -129,6 +129,21 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (_, state) =>
                     ReceiptScreen(transactionId: state.pathParameters['txId']!),
               ),
+              // Item 52 ("Laci Meja") — SENGAJA di DALAM ShellRoute & sbg
+              // anak `/kasir`, MENGIKUTI POLA Buku Hutang (`/laporan` ->
+              // HutangTab -> push `/kasir/struk/:txId`) yang sudah terbukti
+              // lama di produksi. Versi awal menaruhnya di LUAR ShellRoute
+              // (biar bottom nav hilang) — hasilnya push ke `/kasir/struk/
+              // :txId` (rute BERSARANG di dalam shell) menampilkan halaman
+              // KOSONG di device asli: shell baru ter-mount tapi body-nya
+              // tidak pernah terisi. Navigasi lintas-batas shell spt itu
+              // memang bukan pola yang dipakai di app ini; sekarang seragam
+              // dgn semua layar lain (bottom nav tetap tampil, tombol
+              // kembali dari push tetap ada).
+              GoRoute(
+                path: 'laci-meja',
+                builder: (_, __) => const LaciMejaDashboardScreen(),
+              ),
               // Tambah belanjaan ke transaksi yang sudah ada.
               GoRoute(
                 path: 'tambah/:txId',
@@ -270,14 +285,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
-      ),
-      // Item 52 ("Laci Meja") — diakses dari MANA PUN (tekan-tahan tab
-      // Kasir di bottom nav, chrome global), bukan bagian dari tab manapun
-      // — jadi di LUAR ShellRoute, dibuka via context.push (layar penuh
-      // dgn tombol kembali, bottom nav sementara hilang).
-      GoRoute(
-        path: '/laci-meja',
-        builder: (_, __) => const LaciMejaDashboardScreen(),
       ),
     ],
   );
