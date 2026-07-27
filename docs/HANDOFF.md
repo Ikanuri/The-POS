@@ -6,10 +6,12 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 27 Juli 2026 (lanjutan) — **Item 52 ("Laci Meja") SELESAI
-TOTAL** termasuk bagian yang sempat ditunda (layar review usulan). Belum
-di-merge ke `main` / di-push ke `origin` — commit-commit ada di branch
-`claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
-(pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
+TOTAL** termasuk bagian yang sempat ditunda (layar review usulan) DAN 2
+koreksi UX dari user setelah demo awal (link ke produk struk, redirect
+dashboard ke nota). Belum di-merge ke `main` / di-push ke `origin` —
+commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
+menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
+dulu baru merge/push)._
 
 ## Item 52 ("Laci Meja") — SELESAI TOTAL, ringkasan implementasi
 
@@ -30,11 +32,29 @@ Laci Meja (Item 52) fase N` di riwayat, atau `git show` satu-satu.
 - **Fase 9 fix** (`ec7257e`): 11 test migrasi lama disesuaikan (assert
   versi 21->22, + 7 di antaranya butuh tabel `product_units` sintetis
   baru krn migrasi v22 menyentuhnya) — bukan bug produksi.
-- **Susulan** (`d25b8f2`): layar review usulan Laci Meja utk owner
-  (`LaciMejaProposalReviewScreen`, kartu "Usulan Laci Meja" di
+- **Susulan review UI** (`d25b8f2`): layar review usulan Laci Meja utk
+  owner (`LaciMejaProposalReviewScreen`, kartu "Usulan Laci Meja" di
   `SyncScreen`) — bagian yang sempat ditunda di commit fase 1-3, sekarang
   sudah ada. `SyncState.laciMejaProposals` diwire ke
   `LanSyncService.onLaciMejaProposalsChanged`.
+- **Koreksi UX** (`35495aa`, setelah user menjelaskan 2 kesalahpahaman
+  desain awal):
+  1. "Barang ketinggalan" WAJIB ditaut ke produk NYATA yang ada di nota
+     — dialog "Catat Titip/Ketinggalan" diganti dari TextField nama
+     bebas jadi checklist produk di nota ini (toggle centang 1+ barang
+     sekaligus), `itemName` diambil dari nama produk asli.
+  2. "Link ke nota" yang dimaksud user BUKAN sekadar kolom
+     `transactionId` tersimpan (itu sudah ada sejak fase 1), tapi TAP
+     kartu di dashboard Laci Meja harus redirect ke struk terkait —
+     ditambahkan `onTap` di 3 daftar dashboard, mekanisme identik
+     `HutangTab` (`context.push('/kasir/struk/:txId')`). Pre-order (satu-
+     satunya `transactionId` NULLABLE) di-guard: redirect hanya kalau
+     ada, kasus titip-wadah-tanpa-beli sengaja tidak navigasi apa pun.
+  **Pelajaran**: setelah demo/deskripsi fitur ke user, JANGAN asumsikan
+  "link ke nota" berarti kolom FK tersimpan sudah cukup — user sering
+  memaksudkan MEKANISME NAVIGASI UI yang konkret (spt pola yang sudah
+  ada di fitur lain, mis. Lacak Hutang). Tanyakan pola UI acuan yang
+  dimaksud kalau istilah "link"/"terhubung" ambigu.
 
 **Bug nyata ditemukan & diperbaiki SELAMA build** (bukan pra-eksisting):
 `applyLaciMejaProposals` awalnya `customInsert` tanpa param `updates:` —

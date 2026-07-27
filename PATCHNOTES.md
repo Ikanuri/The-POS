@@ -16,7 +16,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dashboard barunya. Ada 3 kategori:
   - **Titip/Ketinggalan** — catat barang yang lupa dibawa pembeli atau
     sengaja dititip. Dicatat langsung dari layar Struk lewat tombol baru
-    "+ Catat".
+    "+ Catat" — tinggal centang barang mana di nota itu yang titip/
+    ketinggalan, bisa lebih dari satu sekaligus.
   - **Pinjaman Barang** — catat wadah/deposit (galon, tabung gas, dll)
     yang harus kembali secara fisik ke toko, bisa dicatat kembali
     sebagian (mis. pinjam 3, baru kembali 2).
@@ -32,6 +33,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   - Kalau ada catatan Laci Meja yang dibuat pegawai/asisten (bukan
     owner), owner bisa meninjau & menyetujuinya dulu di layar Sinkron
     WiFi (kartu "Usulan Laci Meja") sebelum masuk ke data toko.
+  - Ketuk salah satu catatan di dashboard Laci Meja untuk langsung
+    membuka struk nota terkait (mirip cara buka nota dari Buku Hutang).
 
 ## 26 Juli 2026
 
