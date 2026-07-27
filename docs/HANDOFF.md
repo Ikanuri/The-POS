@@ -37,6 +37,28 @@ Laci Meja (Item 52) fase N` di riwayat, atau `git show` satu-satu.
   `SyncScreen`) — bagian yang sempat ditunda di commit fase 1-3, sekarang
   sudah ada. `SyncState.laciMejaProposals` diwire ke
   `LanSyncService.onLaciMejaProposalsChanged`.
+- **Koreksi rute + pewarisan pelanggan** (`3c7df58`, laporan user dari
+  DEVICE ASLI, sesudah `35495aa` ternyata masih bermasalah):
+  1. Redirect ke nota menampilkan **halaman BLANK**. Akar: `/laci-meja`
+     ditaruh di LUAR `ShellRoute` (biar bottom nav hilang), sedangkan
+     `/kasir/struk/:txId` bersarang DI DALAM shell — push lintas batas
+     shell bikin shell baru ter-mount dgn body kosong. Fix mengikuti
+     arahan user "bandingkan dgn pendekatan laporan hutang": dashboard
+     dipindah KE DALAM shell sbg **`/kasir/laci-meja`** (anak `/kasir`,
+     sebelah `/kasir/struk/:txId`) — persis situasi Buku Hutang yang
+     sudah lama terbukti. Bottom nav ikut tampil, konsisten dgn Struk.
+  2. Nama pelanggan tidak tampil di kartu → sekarang **diwarisi dari
+     nota** (dialog pra-isi + `customerId` nota ikut disimpan).
+
+  **PELAJARAN PENTING (jangan terulang)**: test navigasi dgn router
+  TIRUAN buatan sendiri (tanpa `ShellRoute`) **TIDAK PERNAH** bisa
+  menangkap kelas bug batas-shell — `laci_meja_dashboard_redirect_test.
+  dart` lulus hijau sementara device asli blank. Test navigasi WAJIB
+  pakai `routerProvider` ASLI (lihat `laci_meja_dashboard_redirect_
+  real_router_test.dart`). Pola umumnya: kalau menambah layar baru,
+  IKUTI struktur rute layar sejenis yang sudah ada di produksi, jangan
+  bikin penempatan rute baru yang belum pernah dipakai di app ini.
+
 - **Koreksi UX** (`35495aa`, setelah user menjelaskan 2 kesalahpahaman
   desain awal):
   1. "Barang ketinggalan" WAJIB ditaut ke produk NYATA yang ada di nota

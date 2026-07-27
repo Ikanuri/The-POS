@@ -35,6 +35,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
     WiFi (kartu "Usulan Laci Meja") sebelum masuk ke data toko.
   - Ketuk salah satu catatan di dashboard Laci Meja untuk langsung
     membuka struk nota terkait (mirip cara buka nota dari Buku Hutang).
+  - Nama pelanggan otomatis terbawa dari nota, jadi langsung terlihat di
+    kartu Laci Meja tanpa perlu diketik ulang.
 
 ## 26 Juli 2026
 
