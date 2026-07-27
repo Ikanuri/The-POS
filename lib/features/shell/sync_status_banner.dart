@@ -100,7 +100,9 @@ class SyncStatusBanner extends ConsumerWidget {
         _ => 'Sync berjalan…',
       };
     }
-    final waitingCount = sync.queue.length + sync.proposals.length;
+    final waitingCount = sync.queue.length +
+        sync.proposals.length +
+        sync.laciMejaProposals.length;
     return 'Host aktif · $waitingCount menunggu persetujuan';
   }
 }

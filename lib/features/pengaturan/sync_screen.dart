@@ -7,6 +7,7 @@ import '../../core/providers/sync_state_provider.dart';
 import '../../core/services/lan_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/qr_sync_widgets.dart';
+import '../laci_meja/laci_meja_proposal_review_screen.dart';
 import 'product_proposal_review_screen.dart';
 
 class SyncScreen extends ConsumerStatefulWidget {
@@ -470,6 +471,49 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                         MaterialPageRoute(
                           builder: (_) =>
                               ProductProposalReviewScreen(proposal: p),
+                        ),
+                      ),
+                      child: const Text('Tinjau'),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
+
+            // Item 52 ("Laci Meja") — antrian usulan PARALEL, TERPISAH dari
+            // usulan harga/produk di atas (independen, tidak saling
+            // mengganggu — lihat dok `PendingLaciMejaProposal`).
+            if (sync.laciMejaProposals.isNotEmpty) ...[
+              Row(children: [
+                Icon(Icons.inbox_outlined, color: scheme.tertiary, size: 18),
+                const SizedBox(width: 6),
+                Text('Usulan Laci Meja (${sync.laciMejaProposals.length})',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ]),
+              const SizedBox(height: 6),
+              ...sync.laciMejaProposals.map((p) {
+                final mins =
+                    DateTime.now().difference(p.arrivedAt).inMinutes;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading:
+                        Icon(Icons.inbox_outlined, color: scheme.tertiary),
+                    title: Text(p.fromIp,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                        '${p.entryCount} entri diusulkan · '
+                        '${mins == 0 ? 'Baru saja' : '$mins menit lalu'}',
+                        style: const TextStyle(fontSize: 12)),
+                    trailing: FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                      ),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              LaciMejaProposalReviewScreen(proposal: p),
                         ),
                       ),
                       child: const Text('Tinjau'),
