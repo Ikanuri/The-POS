@@ -1589,39 +1589,73 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
   }
 
+  /// Item 52 ("Laci Meja") — Titip/Ketinggalan WAJIB ditaut ke produk NYATA
+  /// yang ada di nota ini (koreksi user: bukan nama bebas) — UX-nya toggle
+  /// centang produk mana yang titip/ketinggalan, bisa lebih dari satu
+  /// sekaligus. Baris retur (qty negatif) dikecualikan dari daftar, sama
+  /// spt `returnableItems` di `_showReturnSheet`.
   Future<void> _showLeftBehindDialog(String transactionId) async {
-    final nameController = TextEditingController();
+    final candidates = _items.where((i) => i.qty > 0).toList();
     final customerController = TextEditingController();
     var jenis = 'titip';
+    final selectedIds = <String>{};
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('Catat Titip/Ketinggalan'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Nama barang'),
-              ),
-              const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'titip', label: Text('Titip')),
-                  ButtonSegment(value: 'ketinggalan', label: Text('Ketinggalan')),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Pilih barang di nota ini',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  if (candidates.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Tidak ada barang di nota ini.'),
+                    )
+                  else
+                    ...candidates.map((item) => CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: selectedIds.contains(item.id),
+                          title: Text(
+                              '${_productNames[item.productId] ?? item.productId}'
+                              ' (${_fmtQtyShort(item.qty)})',
+                              style: const TextStyle(fontSize: 13)),
+                          onChanged: (v) => setDialogState(() {
+                            if (v ?? false) {
+                              selectedIds.add(item.id);
+                            } else {
+                              selectedIds.remove(item.id);
+                            }
+                          }),
+                        )),
+                  const SizedBox(height: 8),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'titip', label: Text('Titip')),
+                      ButtonSegment(
+                          value: 'ketinggalan', label: Text('Ketinggalan')),
+                    ],
+                    selected: {jenis},
+                    onSelectionChanged: (s) =>
+                        setDialogState(() => jenis = s.first),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: customerController,
+                    decoration: const InputDecoration(
+                        labelText: 'Nama pelanggan (opsional)'),
+                  ),
                 ],
-                selected: {jenis},
-                onSelectionChanged: (s) => setDialogState(() => jenis = s.first),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: customerController,
-                decoration:
-                    const InputDecoration(labelText: 'Nama pelanggan (opsional)'),
-              ),
-            ],
+            ),
           ),
           actions: [
             TextButton(
@@ -1634,23 +1668,29 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ),
       ),
     );
-    if (result != true || nameController.text.trim().isEmpty) return;
+    if (result != true || selectedIds.isEmpty) return;
     final db = ref.read(databaseProvider);
     final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-    await db.addLeftBehindItem(
-      id: const Uuid().v4(),
-      transactionId: transactionId,
-      itemName: nameController.text.trim(),
-      jenis: jenis,
-      customerNameText: customerController.text.trim().isEmpty
-          ? null
-          : customerController.text.trim(),
-      locallyModified: locallyModified,
-    );
+    final customerName = customerController.text.trim().isEmpty
+        ? null
+        : customerController.text.trim();
+    for (final item in candidates.where((i) => selectedIds.contains(i.id))) {
+      await db.addLeftBehindItem(
+        id: const Uuid().v4(),
+        transactionId: transactionId,
+        itemName: _productNames[item.productId] ?? item.productId,
+        jenis: jenis,
+        customerNameText: customerName,
+        locallyModified: locallyModified,
+      );
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
   }
+
+  static String _fmtQtyShort(double qty) =>
+      qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
 
   Future<void> _showBorrowedDialog(String transactionId) async {
     final nameController = TextEditingController();

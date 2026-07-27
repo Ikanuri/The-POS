@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
@@ -122,6 +123,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         final e = items[i];
         final days = _daysSince(e.createdAt);
         return ListTile(
+          // Item 52 susulan — tap kartu redirect ke nota terkait, mekanisme
+          // sama persis dgn Lacak Hutang (HutangTab -> '/kasir/struk/:txId').
+          onTap: () => context.push('/kasir/struk/${e.transactionId}'),
           title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(
             '${e.jenis == 'titip' ? 'Dititip' : 'Ketinggalan'}'
@@ -161,6 +165,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         final days = _daysSince(e.createdAt);
         final sisa = e.qty - e.qtyReturned;
         return ListTile(
+          onTap: () => context.push('/kasir/struk/${e.transactionId}'),
           title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(
             'Sisa $sisa dari ${e.qty}'
@@ -226,6 +231,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         final e = items[i];
         final days = _daysSince(e.createdAt);
         return ListTile(
+          // transactionId NULLABLE (satu-satunya kasus: titip wadah tanpa
+          // beli apa pun) — redirect hanya kalau memang ada nota terkait.
+          onTap: e.transactionId == null
+              ? null
+              : () => context.push('/kasir/struk/${e.transactionId}'),
           title: Text(e.customerName, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(
             'Qty ${e.qtyOrdered}'
