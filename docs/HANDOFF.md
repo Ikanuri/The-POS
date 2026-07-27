@@ -9,14 +9,56 @@ _Update sesi 27 Juli 2026 (lanjutan) — **Item 52 ("Laci Meja") SELESAI
 TOTAL** termasuk bagian yang sempat ditunda (layar review usulan), 2
 koreksi UX dari user setelah demo awal (link ke produk struk, redirect
 dashboard ke nota), 1 bugfix KRITIS (checkout gagal setelah handoff QR
-bolak-balik) + 4 perbaikan UI dari laporan screenshot device asli, lalu
-2 penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
-keterangan Laci Meja membedakan titip vs ketinggalan). Belum di-merge ke
-`main` / di-push ke `origin` — commit-commit ada di branch
-`claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
-(pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
+bolak-balik) + 4 perbaikan UI dari laporan screenshot device asli, 2
+penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
+keterangan Laci Meja membedakan titip vs ketinggalan), lalu SATU putaran
+redesign lagi (menu cepat Kasir/Laci Meja + 2 perbaikan lain di tab
+Ringkasan & struk share — lihat bagian PALING BAWAH dari daftar ini,
+paling baru). Belum di-merge ke `main` / di-push ke `origin` —
+commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
+menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
+dulu baru merge/push)._
 
-## Penyesuaian susulan terbaru (sesudah 4 perbaikan UI, commit `45ede18`)
+## Redesain menu cepat Kasir/Laci Meja + 2 perbaikan lain (putaran terbaru)
+
+User minta 6 hal sekaligus; 4 poin pertama satu redesign menu, 2 sisanya
+perbaikan terpisah:
+
+1-4. **Menu tekan-tahan tab Kasir dirombak total** dari `showMenu`
+   (`PopupMenuItem` teks) jadi `OverlayEntry` custom di
+   `main_shell.dart`: (1) posisi DI ATAS bottom bar (dihitung dari
+   `_bottomBarKey.currentContext` render box top, BUKAN dari titik jari
+   spt versi lama yg kadang nongol ke samping); (2) HANYA ikon, label
+   teks "Buka Kasir"/"Buka Laci Meja" dihapus (pakai `Tooltip` utk
+   aksesibilitas & sbg pegangan test, bukan `Text` visible); (3) sudut
+   rounded via `ClipRRect(borderRadius: circular(20))`; (4) delay
+   tekan-tahan dipercepat 500ms→250ms — `GestureDetector` biasa TIDAK
+   bisa custom durasi long-press, wajib `RawGestureDetector` +
+   `LongPressGestureRecognizer(duration:)` eksplisit. Test lama
+   `laci_meja_bottom_nav_gesture_test.dart` disesuaikan (`find.byTooltip`
+   ganti `find.text`) + 3 test baru (icon-only, posisi+rounded, delay
+   300ms cukup) — semua revert-verified.
+5. **`RingkasanTab` "agak renggang"** — akar: `Card` Material 3 punya
+   margin bawaan `EdgeInsets.all(4)`, dipasang berulang di 4 baris KPI yg
+   SUDAH punya `SizedBox(height:12)` eksplisit antar baris → jarak
+   sungguhan 12+4+4=20px, tidak sesuai desain. Fix: `margin:
+   EdgeInsets.zero` khusus di Card KPI (`_KpiRow`) — Card lain di tab yg
+   sama (payment method, chart harian) SENGAJA tidak disentuh, konsisten
+   dgn tab laporan lain yg juga tidak override margin. Test baru
+   `ringkasan_kpi_card_margin_test.dart` — revert-verified.
+6. **Struk share (gambar) qty tidak bold lagi** — `_ReceiptPaper` baris
+   qty+satuan+harga dulu w600 (revisi lama), disederhanakan jadi `Text`
+   polos style `_mono` (normal). PENTING: user spesifik bilang "struk
+   share" — struk IN-APP (`_ItemRow` biasa, bukan `_ReceiptPaper`)
+   SENGAJA TIDAK disentuh, masih w600 sesuai
+   `receipt_qty_unit_bold_test.dart` yg sudah ada duluan (dua widget
+   BEDA, jangan disamakan kalau menyentuh ini lagi). Test baru
+   `receipt_paper_qty_not_bold_test.dart` — revert-verified.
+
+Full suite sesudah keenam poin: **790 test hijau**, `flutter analyze` 0
+issue.
+
+## Penyesuaian susulan (Bayar kanan + jenis Laci Meja, sesudah 4 perbaikan UI, commit `45ede18`)
 
 User beri 2 catatan kecil setelah cek hasil 4 perbaikan UI:
 

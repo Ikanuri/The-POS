@@ -250,6 +250,7 @@ class _KpiRow extends StatelessWidget {
       children: items
           .map((item) => Expanded(
                 child: Card(
+                  margin: EdgeInsets.zero,
                   color: bg,
                   child: Padding(
                     padding: const EdgeInsets.all(14),

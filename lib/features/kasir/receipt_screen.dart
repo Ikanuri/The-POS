@@ -2839,29 +2839,16 @@ class _ReceiptPaper extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Jumlah qty + satuan di-bold (biar mudah dibaca), tapi
-                    // TIDAK lebih tebal dari nama produk (w700 utk induk, w400
-                    // utk varian). Bagian "x harga" tetap berat normal.
-                    // Expanded — Item 49g: qty NEGATIF (baris retur) nambah
-                    // 1 karakter "-" yg bisa bikin Row ini overflow tipis di
-                    // container lebar tetap (300px) kalau tidak dibungkus.
+                    // Permintaan user: qty + satuan & jumlah (subtotal baris)
+                    // TIDAK bold — hanya nama produk yg bold (w700 utk induk,
+                    // w400 utk varian, di atas). Expanded — Item 49g: qty
+                    // NEGATIF (baris retur) nambah 1 karakter "-" yg bisa
+                    // bikin Row ini overflow tipis di container lebar tetap
+                    // (300px) kalau tidak dibungkus.
                     Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          style: _mono,
-                          children: [
-                            TextSpan(
-                              text:
-                                  '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''}',
-                              style: _mono.copyWith(
-                                  fontWeight: isVar
-                                      ? FontWeight.w400
-                                      : FontWeight.w600),
-                            ),
-                            TextSpan(
-                                text: ' x ${_fmtNum(item.priceAtSale)}'),
-                          ],
-                        ),
+                      child: Text(
+                        '$pad$qtyStr ${unitNames[item.productUnitId] ?? ''} x ${_fmtNum(item.priceAtSale)}',
+                        style: _mono,
                       ),
                     ),
                     Text(_fmtNum((item.priceAtSale * effQty).round()),

@@ -11,6 +11,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 27 Juli 2026
 
 ### 🛠️ Perbaikan
+- **Menu tekan-tahan tab "Kasir" dirombak tampilannya** — sekarang muncul
+  tepat di atas tab (bukan di samping), hanya tampil ikon Kasir/Laci Meja
+  (tanpa teks), sudutnya rounded, dan waktu tekan-tahan yang dibutuhkan
+  untuk membukanya dipercepat.
+- **Tab Ringkasan di Laporan tidak lagi terasa "renggang"** — jarak antar
+  kartu ringkasan (Omzet, Transaksi, dll) dirapikan.
+- **Struk yang dibagikan (gambar)**: baris jumlah barang & harga per
+  barang tidak lagi tercetak tebal — hanya nama produk yang tetap tebal,
+  jadi lebih mudah dibaca.
 - **Transaksi tidak bisa dibayar setelah pesanan dipindah bolak-balik
   lewat QR** (mis. owner → asisten → owner) — muncul pesan error dan
   kasir mentok padahal uang sudah diterima. Sekarang pembayaran selalu

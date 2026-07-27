@@ -109,7 +109,7 @@ void main() {
   });
 
   testWidgets(
-      'tekan-TAHAN tab Kasir membuka menu, "Buka Laci Meja" navigasi ke '
+      'tekan-TAHAN tab Kasir membuka menu ikon, "Laci Meja" navigasi ke '
       'dashboard', (tester) async {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
@@ -117,10 +117,11 @@ void main() {
     await tester.longPress(find.text('Kasir'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Buka Kasir'), findsOneWidget);
-    expect(find.text('Buka Laci Meja'), findsOneWidget);
+    // Menu redesain: HANYA ikon (tanpa label teks), dicari lewat tooltip.
+    expect(find.byTooltip('Buka Kasir'), findsOneWidget);
+    expect(find.byTooltip('Buka Laci Meja'), findsOneWidget);
 
-    await tester.tap(find.text('Buka Laci Meja'));
+    await tester.tap(find.byTooltip('Buka Laci Meja'));
     await tester.pumpAndSettle();
 
     expect(find.text('Laci Meja'), findsOneWidget);
@@ -130,18 +131,82 @@ void main() {
   });
 
   testWidgets(
-      'tekan-TAHAN lalu pilih "Buka Kasir" tetap di tab Kasir (menu tertutup, '
+      'tekan-TAHAN lalu pilih ikon Kasir tetap di tab Kasir (menu tertutup, '
       'bukan navigasi ganda)', (tester) async {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Kasir'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Buka Kasir'));
+    await tester.tap(find.byTooltip('Buka Kasir'));
     await tester.pumpAndSettle();
 
     expect(find.text('Layar Kasir'), findsOneWidget);
-    expect(find.text('Buka Kasir'), findsNothing, reason: 'menu harus tertutup');
+    expect(find.byTooltip('Buka Kasir'), findsNothing,
+        reason: 'menu harus tertutup');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'redesain menu (permintaan user): HANYA ikon, tanpa label teks '
+      '"Buka Kasir"/"Buka Laci Meja"', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Kasir'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Buka Kasir'), findsNothing,
+        reason: 'label teks HARUS dihilangkan, sisakan ikon saja');
+    expect(find.text('Buka Laci Meja'), findsNothing);
+    expect(find.byTooltip('Buka Kasir'), findsOneWidget);
+    expect(find.byTooltip('Buka Laci Meja'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'redesain menu: muncul DI ATAS tab Kasir (bukan di samping), sudut '
+      'rounded', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Kasir'));
+    await tester.pumpAndSettle();
+
+    final menuTop = tester.getTopLeft(find.byTooltip('Buka Kasir')).dy;
+    final barTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+    expect(menuTop, lessThan(barTop),
+        reason: 'menu wajib muncul DI ATAS bottom bar, bukan menimpa/di '
+            'samping bar itu sendiri');
+
+    final clip = tester.widget<ClipRRect>(find.byType(ClipRRect));
+    final radius = clip.borderRadius as BorderRadius;
+    expect(radius.topLeft.x, greaterThanOrEqualTo(16),
+        reason: 'sudut menu harus rounded (bukan kotak persegi bawaan '
+            'PopupMenuItem)');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'redesain: delay tekan-tahan dipercepat — 300ms (di bawah 500ms '
+      'bawaan Flutter) sudah cukup membuka menu', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(tester.getCenter(find.text('Kasir')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Buka Kasir'), findsOneWidget,
+        reason: 'delay tekan-tahan WAJIB lebih cepat dari 500ms bawaan '
+            'Flutter (GestureDetector polos) — 300ms sudah harus cukup');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
