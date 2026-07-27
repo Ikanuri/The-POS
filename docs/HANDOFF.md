@@ -5,68 +5,67 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 26 Juli 2026 (lanjutan) — semua pekerjaan sesi ini sudah
-di-**merge ke `main`** (merge commit `1083388`). Sesudah itu: **bug
-"codegen Drift tidak jalan" AKHIRNYA TERPECAHKAN** — ternyata BUKAN bug
-sandbox sama sekali, tapi bug NYATA di repo (anotasi `@DriftDatabase`
-terlepas dari class-nya). Sudah diperbaiki + dipagari test regresi.
-`build_runner` kini berfungsi normal lagi, jadi **PLAN.md Item 52 ("Laci
-Meja") sudah bisa langsung dieksekusi** tanpa hambatan alat._
+_Update sesi 27 Juli 2026 — **Item 52 ("Laci Meja") SELESAI dieksekusi
+penuh** (semua 10 fase: skema, DB layer, sync, dashboard, gesture bottom
+nav, entry dari Struk, 2 jalur entry Pre-order, toggle requiresDeposit).
+Belum di-merge ke `main` / di-push — commit-commit ada di branch
+`claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
+(pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
 
-## SOLVED: codegen Drift tidak pernah memperbarui `app_database.g.dart`
+## Item 52 ("Laci Meja") — SELESAI, ringkasan implementasi
 
-**Status: SELESAI.** Diagnosis sesi sebelumnya ("bug alat/sandbox, coba
-lagi di sesi baru") **KELIRU** — jangan dipakai lagi sebagai acuan.
+Fitur lengkap: Titip/Ketinggalan, Pinjaman Barang, Pre-order (termasuk
+antrian tabung LPG). Rancangan detail sudah dihapus dari PLAN.md (selesai
+dieksekusi, sesuai konvensi) — kalau perlu rujuk lagi detail bisnis
+rules/skema, baca commit-commit `feat: Laci Meja (Item 52) fase N` di
+riwayat, atau `git show` commit-commit itu satu-satu.
 
-**Akar masalah sesungguhnya**: di `lib/core/database/app_database.dart`,
-blok anotasi `@DriftDatabase(tables: [...])` **tidak lagi menempel di
-`class AppDatabase`**. Sejak commit `dd4bad3` (17 Juli) ada beberapa
-`typedef` (`StockOverviewRow`, `OpnameSessionSummary`, dst) plus
-`class BarcodeConflictException` yang tersisip **di antara** blok anotasi
-dan `class AppDatabase`. Dart menganggap ini **sah** — anotasi boleh
-dipasang di `typedef` — jadi anotasi itu diam-diam menempel ke
-`typedef StockOverviewRow`.
+- **Fase 1-3** (`2411e17`): skema (schemaVersion 21->22), DB layer CRUD,
+  sync (host->klien auto-merge, klien->host via antrian usulan PARALEL
+  yg tidak menyentuh alur usulan produk Item 40).
+- **Fase 4+8** (`955551c`): dashboard `/laci-meja` + gesture tekan-tahan
+  tab Kasir di bottom nav.
+- **Fase 5** (`50d778f`): tombol "+ Catat" di Struk.
+- **Fase 6** (`e5fe487`): dua jalur entry Pre-order (Kasir + Cek Stok).
+- **Fase 7** (`8f9e667`): toggle "Butuh Jaminan Fisik" di form produk.
+- **Fase 9 fix** (`ec7257e`): 11 test migrasi lama disesuaikan (assert
+  versi 21->22, + 7 di antaranya butuh tabel `product_units` sintetis
+  baru krn migrasi v22 menyentuhnya) — bukan bug produksi.
 
-**Kenapa sangat sulit dilacak** (dan kenapa sempat disalahartikan sbg
-bug sandbox):
-- `flutter analyze` tetap **0 issue**, seluruh test tetap **hijau**.
-- `build_runner` tetap melaporkan **"Succeeded"** dengan ribuan output.
-- Tidak ada **satu pun** pesan error/warning di mana pun.
-- Yang terjadi: drift_dev tidak menemukan database sama sekali, jadi
-  `app_database.g.dart` **tidak pernah ditulis ulang** — file lama yang
-  tercommit tetap dipakai, sehingga semuanya "kelihatan" normal.
+**Bug nyata ditemukan & diperbaiki SELAMA build** (bukan pra-eksisting):
+`applyLaciMejaProposals` awalnya `customInsert` tanpa param `updates:` —
+baris berhasil tertulis ke DB tapi `.watch()` tidak refresh (gotcha yang
+SAMA PERSIS sudah didokumentasikan di bagian Gotcha CLAUDE.md, ternyata
+masih bisa lolos ke kode BARU juga — pelajaran: pola lama tetap harus
+diperiksa ulang di kode baru, bukan diasumsikan otomatis dihindari).
 
-**Cara membuktikannya lagi kalau perlu** (alat diagnostik yang manjur):
-- `dart run drift_dev identify-databases` → kalau output kosong (tidak
-  menyebut satu database pun), berarti anotasi tidak terbaca. Ini
-  pemeriksaan **paling cepat & paling langsung**.
-- `.dart_tool/build/generated/the_pos/lib/core/database/app_database.dart.drift_elements.json`
-  → kalau `"elements": []` padahal `"imports"` terisi, gejalanya sama.
+**Gotcha baru ditemukan saat menulis test widget** (sudah cukup penting
+utk dicatat, belum masuk CLAUDE.md — pertimbangkan menambahkannya bila
+sesi depan mengonfirmasi berulang): memanggil `db.watchXxx().first`
+LANGSUNG di dalam `testWidgets` pada instance `db` yang SAMA dgn yang
+dipakai widget tree, SETELAH interaksi widget → bikin test **hang tanpa
+batas waktu** persis di langkah drain (`pumpWidget(SizedBox())`), bukan
+pada saat query-nya sendiri (query-nya sendiri selesai dgn benar). Fix:
+pakai one-shot `db.select(db.table).get()` alih-alih `.watch().first`
+utk verifikasi state di widget test.
 
-**Fix**: blok `@DriftDatabase(tables: [...])` dipindah agar **langsung di
-atas `class AppDatabase`**; semua `typedef`/class lain digeser ke atas
-blok anotasi. Tidak ada perubahan skema, tidak ada perubahan perilaku.
-
-**Dampak ke `app_database.g.dart`**: hasil regenerasi berbeda ~948
-baris dari yang tercommit, tapi **murni formatting + propagasi
-doc-comment** dari drift_dev versi lebih baru (2.23.1). Sudah
-diverifikasi **tidak ada kolom/tabel yang hilang atau bertambah**: 103
-nama kolom dan seluruh class `$...Table` identik antara versi lama dan
-baru. Jadi tidak pernah ada skema yang diam-diam rusak — kebetulan
-memang belum ada tabel/kolom baru yang ditambahkan sejak 17 Juli.
-
-**Pagar regresi**: `test/drift_codegen_in_sync_test.dart` (2 test)
-- menolak deklarasi apa pun yang menyelinap di antara `@DriftDatabase`
-  dan `class AppDatabase` (menangkap akar masalahnya), dan
-- membandingkan jumlah tabel di anotasi vs `db.allTables` hasil generate
-  (menangkap `app_database.g.dart` yang basi).
-Sudah dibuktikan GAGAL saat fix-nya di-revert sementara, dengan pesan
-yang menuntun ke solusinya.
-
-**Pelajaran utk ke depan**: kalau `build_runner` "sukses" tapi `.g.dart`
-tidak berubah, **jangan langsung menyalahkan sandbox/toolchain**. Cek
-dulu apakah anotasinya benar-benar terbaca lewat
-`dart run drift_dev identify-databases`.
+**Belum sempat/sengaja ditunda** (tidak menghalangi status "selesai" —
+scope asli PLAN.md Item 52 sudah tercakup semua):
+- Proposal-review UI utk Laci Meja (layar mirip
+  `product_proposal_review_screen.dart` tapi utk 3 tabel Laci Meja) BELUM
+  dibuat — `PendingLaciMejaProposal`/`applyLaciMejaProposal`/
+  `dismissLaciMejaProposal` sudah ada di `lan_sync_service.dart` (siap
+  pakai), tinggal butuh UI. Sampai ada UI ini, usulan client->host Laci
+  Meja akan MASUK antrian (`LanSyncService.pendingLaciMejaProposals`)
+  tapi TIDAK ADA cara owner meninjaunya dari layar mana pun — perlu
+  ditambahkan sebelum fitur "usulan" Laci Meja benar-benar terpakai
+  device non-owner di lapangan.
+- Ambang warna umur (hijau/kuning/merah) di dashboard Laci Meja pakai
+  angka sementara (7/30 hari, sama seperti `HutangTab`) — user belum
+  pernah diminta konfirmasi ambang spesifik utk kategori ini.
+- Hint UX utk gestur tekan-tahan (yang "tersembunyi"/tanpa affordance
+  visual) belum dibuat — didiskusikan sbg kebutuhan follow-up saat
+  desain, belum diimplementasi.
 
 ## Fix: kembalian terakhir di Ringkasan struk in-app di-bold (26 Juli)
 

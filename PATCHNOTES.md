@@ -8,6 +8,28 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 27 Juli 2026
+
+### ✨ Fitur Baru
+- **"Laci Meja" — fitur baru untuk catatan operasional harian toko.**
+  Tekan & tahan tab "Kasir" di menu bawah (mirip Telegram) untuk membuka
+  dashboard barunya. Ada 3 kategori:
+  - **Titip/Ketinggalan** — catat barang yang lupa dibawa pembeli atau
+    sengaja dititip. Dicatat langsung dari layar Struk lewat tombol baru
+    "+ Catat".
+  - **Pinjaman Barang** — catat wadah/deposit (galon, tabung gas, dll)
+    yang harus kembali secara fisik ke toko, bisa dicatat kembali
+    sebagian (mis. pinjam 3, baru kembali 2).
+  - **Pre-order** — catat pesanan untuk produk yang stoknya sedang habis
+    (termasuk antrian tabung LPG). Bisa dicatat langsung dari pencarian
+    di Kasir (tombol "+ Antri" muncul saat produk berstatus habis) atau
+    dari layar Cek Stok.
+  - Badge angka di ikon Kasir menampilkan total catatan yang masih aktif
+    di ketiga kategori, tanpa perlu ditahan dulu.
+  - Untuk produk model tukar-wadah (mis. LPG), ada toggle baru "Butuh
+    Jaminan Fisik saat Antri" di form Edit Produk — kalau diaktifkan,
+    pencatatan antrian mewajibkan jumlah wadah yang dititip diisi.
+
 ## 26 Juli 2026
 
 ### ✨ Fitur Baru
