@@ -11,6 +11,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 27 Juli 2026
 
 ### 🛠️ Perbaikan
+- **Bar keranjang dirombak biar tidak "goyang" lagi** — dulu nama pelanggan
+  panjang bikin tombol Tahan/Bayar pindah baris & posisinya berubah-ubah.
+  Sekarang porsi tiap tombol tetap, dan nama yang kepanjangan ditampilkan
+  sebagai **teks berjalan** (bergerak kiri-kanan beberapa kali lalu diam),
+  jadi nama tetap kebaca utuh tanpa mengubah tata letak.
+- **Pengingat di bar keranjang jadi lebih jelas** — catatan Laci Meja
+  pelanggan tampil satu baris per jenis (barang ketinggalan, pinjaman,
+  pre-order), dan baris pre-order menyebut langsung produk apa, berapa,
+  serta berapa jaminan yang dititip.
+- **Pengingat hutang sekarang juga muncul di bar keranjang** (di bawah
+  nominal Total): total hutang & di berapa nota, jadi ketahuan sebelum
+  transaksi baru diselesaikan.
+- **Catat Pinjaman Barang kembali ketik bebas** — supaya wadah kosong
+  (galon/tabung) yang memang bukan barang di nota tetap bisa dicatat.
+  Daftar pinjaman muncul sebagai bagian tersendiri di struk dalam aplikasi.
+- **Keterangan jaminan tidak lagi hilang dari nota** setelah pre-order-nya
+  ditandai terpenuhi.
 - **Menu tekan-tahan tab "Kasir" dirombak tampilannya** — sekarang muncul
   tepat di atas tab (bukan di samping), hanya tampil ikon Kasir/Laci Meja
   (tanpa teks), sudutnya rounded, waktu tekan-tahan yang dibutuhkan untuk
@@ -64,6 +81,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   - **Pinjaman Barang** — catat wadah/deposit (galon, tabung gas, dll)
     yang harus kembali secara fisik ke toko, bisa dicatat kembali
     sebagian (mis. pinjam 3, baru kembali 2).
+  - **Pre-order** — kini punya **kotak pencarian** (cari nama pelanggan
+    atau nama produk) dan **ringkasan angka**: total produk yang dipesan
+    dan total jaminan yang dititip, ditampilkan terpisah & ikut menyesuaikan
+    hasil pencarian.
   - **Pre-order** — catat pesanan untuk produk yang stoknya sedang habis
     (termasuk antrian tabung LPG). **Diperbarui**: sekarang dicatat
     langsung lewat modal tambah barang di Kasir — begitu produk ditandai

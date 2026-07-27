@@ -111,6 +111,31 @@ typedef InventoryRow = ({
   int costPrice,
 });
 
+/// Satu produk pre-order yang masih menunggu, lengkap dgn nama produk (hasil
+/// JOIN) — dipakai baris pre-order di pengingat cart bar, yang menurut
+/// permintaan user WAJIB menyebut produknya, bukan cuma jumlah entri.
+typedef PreorderPendingLine = ({
+  String productName,
+  double qty,
+  double depositQty,
+});
+
+/// Ringkasan Laci Meja yang masih menggantung utk SATU pelanggan — dipakai
+/// pengingat cart bar (per-kategori, satu baris masing-masing) & modal
+/// checkout. `titip`/`ketinggalan` sengaja dipisah (jenisnya beda maknanya,
+/// lihat dok `getLaciMejaPending`); `preorders` berisi RINCIAN (bukan sekadar
+/// jumlah) krn baris pre-order di cart bar menyebut nama produk + qty +
+/// jaminan.
+typedef LaciMejaPending = ({
+  int titip,
+  int ketinggalan,
+  int pinjaman,
+  List<PreorderPendingLine> preorders,
+});
+
+const LaciMejaPending kEmptyLaciMejaPending =
+    (titip: 0, ketinggalan: 0, pinjaman: 0, preorders: []);
+
 /// Barcode yang mau dipakai ternyata masih dipegang produk LAIN yang aktif.
 /// Dilempar dari dalam transaksi [AppDatabase.saveProduct] supaya seluruh
 /// penyimpanan di-rollback (tidak ada produk setengah tersimpan), dan supaya
@@ -4888,6 +4913,12 @@ class AppDatabase extends _$AppDatabase {
   /// Key: `'$productId|$productUnitId'` (PreorderEntries tidak menyimpan
   /// `transactionItemId`, hanya productId+productUnitId — cukup presisi krn
   /// pre-order dibuat via SATU baris cart per produk+satuan per nota).
+  /// SENGAJA TIDAK memfilter `fulfilledAt`/`cancelledAt` (permintaan user):
+  /// begitu pre-order-nya dipenuhi, keterangan jaminan HARUS TETAP ada di
+  /// nota — nota adalah bukti historis permanen "pelanggan ini pernah
+  /// menitipkan N wadah lewat transaksi ini", bukan indikator status hidup.
+  /// Kalau difilter, jejak jaminannya hilang persis saat paling dibutuhkan
+  /// (waktu wadahnya mau ditukar/dikembalikan).
   Future<Map<String, double>> getPreorderDepositForTransaction(
       String transactionId) async {
     final rows = await (select(preorderEntries)
@@ -4920,23 +4951,23 @@ class AppDatabase extends _$AppDatabase {
     };
   }
 
-  /// Item 52 redesain — baris `BorrowedItems` (pinjaman) yang tertaut ke SATU
-  /// nota, dipakai struk in-app memberi penanda "Pinjaman" di samping nama
-  /// barang — "rujukan kebenaran" permintaan user: staf bisa cek nota asli
-  /// utk konfirmasi barang apa yang memang dipinjamkan dari transaksi itu.
-  /// Key: `transaction_items.id` (tautan PRESISI, pola sama
-  /// `getLeftBehindMarksForTransaction`) — entri lama tanpa
-  /// `transactionItemId` otomatis terlewat. Ditampilkan TERLEPAS dari status
-  /// sudah/belum kembali (nota adalah bukti historis, bukan status hidup).
-  Future<Map<String, bool>> getBorrowedMarkersForTransaction(
-      String transactionId) async {
-    final rows = await (select(borrowedItems)
-          ..where((t) =>
-              t.transactionId.equals(transactionId) &
-              t.transactionItemId.isNotNull()))
-        .get();
-    return {for (final r in rows) r.transactionItemId!: true};
-  }
+  /// Baris `BorrowedItems` (pinjaman) milik SATU nota — dipakai struk in-app
+  /// menampilkan SECTION "Pinjaman Barang" ("rujukan kebenaran" permintaan
+  /// user: staf bisa cek nota asli utk konfirmasi barang apa yang memang
+  /// dipinjamkan dari transaksi itu).
+  ///
+  /// SECTION, bukan penanda per-baris produk: nama barang pinjaman diketik
+  /// bebas (biasanya WADAH — galon/tabung kosong — yang justru BUKAN baris
+  /// di nota), jadi tidak ada baris nota yang bisa ditempeli penanda.
+  ///
+  /// Sengaja TIDAK memfilter `fullyReturnedAt`: nota adalah bukti historis
+  /// permanen, bukan indikator status hidup — begitu sesuatu pernah
+  /// dipinjamkan lewat nota ini, catatannya tetap ada walau sudah kembali.
+  Future<List<BorrowedItem>> getBorrowedForTransaction(String transactionId) =>
+      (select(borrowedItems)
+            ..where((t) => t.transactionId.equals(transactionId))
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
 
   /// Ringkasan Laci Meja yang MASIH menggantung utk satu pelanggan —
   /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
@@ -4947,53 +4978,70 @@ class AppDatabase extends _$AppDatabase {
   /// permintaan user: keterangan di modal checkout wajib cocok dgn jenis
   /// asli barangnya, jangan selalu tertulis "dititip" padahal aslinya
   /// ketinggalan tanpa sengaja.
-  Future<({int titip, int ketinggalan, int pinjaman, int preorder})>
-      getLaciMejaPendingForCustomer(String customerId) async {
-    final left = await (select(leftBehindItems)
-          ..where((t) =>
-              t.customerId.equals(customerId) & t.collectedAt.isNull()))
-        .get();
-    final borrowed = await (select(borrowedItems)
-          ..where((t) =>
-              t.customerId.equals(customerId) & t.fullyReturnedAt.isNull()))
-        .get();
-    return (
-      titip: left.where((e) => e.jenis == 'titip').length,
-      ketinggalan: left.where((e) => e.jenis == 'ketinggalan').length,
-      pinjaman: borrowed.length,
-      preorder: 0,
-    );
-  }
+  /// SATU pintu utk semua kategori — [customerId] dipakai mencocokkan
+  /// Titip/Ketinggalan & Pinjaman (keduanya menyimpan FK pelanggan),
+  /// [customerName] dipakai mencocokkan Pre-order (tabel `PreorderEntries`
+  /// HANYA menyimpan nama, tanpa FK — lihat dok tabelnya).
+  ///
+  /// KEDUANYA boleh diisi sekaligus & memang seharusnya begitu utk pelanggan
+  /// TERDAFTAR: versi lama memisahkan jadi 2 method dan yang berbasis
+  /// `customerId` selalu mengembalikan `preorder: 0` — akibatnya pre-order
+  /// milik pelanggan terdaftar TIDAK PERNAH muncul di pengingat sama sekali.
+  Future<LaciMejaPending> getLaciMejaPending({
+    String? customerId,
+    String? customerName,
+  }) async {
+    final id = customerId?.trim() ?? '';
+    final nama = customerName?.trim() ?? '';
+    if (id.isEmpty && nama.isEmpty) return kEmptyLaciMejaPending;
 
-  /// Sama seperti [getLaciMejaPendingForCustomer] tapi utk pelanggan yang
-  /// TIDAK terdaftar (hanya punya nama teks) — Pre-order memang hanya
-  /// menyimpan nama (tanpa `customerId`), jadi pencocokan nama satu-satunya
-  /// jalan utk kategori itu.
-  Future<({int titip, int ketinggalan, int pinjaman, int preorder})>
-      getLaciMejaPendingForName(String customerName) async {
-    final nama = customerName.trim();
-    if (nama.isEmpty) {
-      return (titip: 0, ketinggalan: 0, pinjaman: 0, preorder: 0);
+    // Titip/Ketinggalan & Pinjaman: cocokkan lewat id kalau pelanggan
+    // terdaftar, kalau tidak lewat nama teksnya.
+    final left = id.isNotEmpty
+        ? await (select(leftBehindItems)
+              ..where((t) => t.customerId.equals(id) & t.collectedAt.isNull()))
+            .get()
+        : await (select(leftBehindItems)
+              ..where((t) =>
+                  t.customerNameText.equals(nama) & t.collectedAt.isNull()))
+            .get();
+    final borrowed = id.isNotEmpty
+        ? await (select(borrowedItems)
+              ..where(
+                  (t) => t.customerId.equals(id) & t.fullyReturnedAt.isNull()))
+            .get()
+        : await (select(borrowedItems)
+              ..where((t) =>
+                  t.customerNameText.equals(nama) &
+                  t.fullyReturnedAt.isNull()))
+            .get();
+
+    // Pre-order: SELALU lewat nama (satu-satunya yang disimpan), + JOIN
+    // produk supaya baris cart bar bisa menyebut nama produknya.
+    final preorders = <PreorderPendingLine>[];
+    if (nama.isNotEmpty) {
+      final rows = await (select(preorderEntries).join([
+        leftOuterJoin(products, products.id.equalsExp(preorderEntries.productId)),
+      ])
+            ..where(preorderEntries.customerName.equals(nama) &
+                preorderEntries.fulfilledAt.isNull() &
+                preorderEntries.cancelledAt.isNull()))
+          .get();
+      for (final row in rows) {
+        final e = row.readTable(preorderEntries);
+        preorders.add((
+          productName: row.readTableOrNull(products)?.name ?? e.productId,
+          qty: e.qtyOrdered,
+          depositQty: e.depositQty,
+        ));
+      }
     }
-    final left = await (select(leftBehindItems)
-          ..where((t) =>
-              t.customerNameText.equals(nama) & t.collectedAt.isNull()))
-        .get();
-    final borrowed = await (select(borrowedItems)
-          ..where((t) =>
-              t.customerNameText.equals(nama) & t.fullyReturnedAt.isNull()))
-        .get();
-    final preorder = await (select(preorderEntries)
-          ..where((t) =>
-              t.customerName.equals(nama) &
-              t.fulfilledAt.isNull() &
-              t.cancelledAt.isNull()))
-        .get();
+
     return (
       titip: left.where((e) => e.jenis == 'titip').length,
       ketinggalan: left.where((e) => e.jenis == 'ketinggalan').length,
       pinjaman: borrowed.length,
-      preorder: preorder.length,
+      preorders: preorders,
     );
   }
 

@@ -132,10 +132,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// samping nama barang di struk in-app.
   Map<String, double> _preorderDeposit = {};
 
-  /// Item 52 redesain — baris nota yang tertaut ke pinjaman aktif
-  /// (`transaction_items.id` -> true), dipakai penanda "Pinjaman" di struk
-  /// in-app ("rujukan kebenaran" permintaan user).
-  Map<String, bool> _borrowedMarks = {};
+  /// Pinjaman barang yang tercatat lewat nota ini — ditampilkan sbg SECTION
+  /// tersendiri di struk in-app ("rujukan kebenaran" permintaan user), bukan
+  /// penanda per-baris produk: nama barangnya diketik bebas (wadah kosong
+  /// biasanya BUKAN baris di nota).
+  List<BorrowedItem> _borrowedForTx = [];
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
   Customer? _customer;
@@ -397,16 +398,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       TextSpan(
                         text: ' · Titip '
                             '${_fmtQtyShort(_preorderDeposit['${item.productId}|${item.productUnitId}']!)}',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.laciFg(Theme.of(context)
-                                    .brightness ==
-                                Brightness.dark)),
-                      ),
-                    if (_borrowedMarks[item.id] != null)
-                      TextSpan(
-                        text: ' · Pinjaman',
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -972,8 +963,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         await db.getLeftBehindMarksForTransaction(widget.transactionId);
     final preorderDeposit =
         await db.getPreorderDepositForTransaction(widget.transactionId);
-    final borrowedMarks =
-        await db.getBorrowedMarkersForTransaction(widget.transactionId);
+    final borrowedForTx =
+        await db.getBorrowedForTransaction(widget.transactionId);
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -996,7 +987,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _productNames = productNames;
         _leftBehindMarks = leftBehindMarks;
         _preorderDeposit = preorderDeposit;
-        _borrowedMarks = borrowedMarks;
+        _borrowedForTx = borrowedForTx;
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customer = customer;
@@ -1774,99 +1765,87 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   static String _fmtQtyShort(double qty) =>
       qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
 
-  /// Item 52 redesain — diganti dari TextField nama bebas + qty manual jadi
-  /// checklist barang NYATA di nota ini (pola identik `_showLeftBehindDialog`)
-  /// — dibutuhkan supaya tiap baris pinjaman tertaut PRESISI
-  /// (`transactionItemId`) ke baris nota, dipakai penanda "Pinjaman" di
-  /// struk in-app ("rujukan kebenaran" permintaan user).
+  /// Input nama barang BEBAS KETIK (plain text) — permintaan user, kembali
+  /// dari eksperimen checklist-barang-nota. Alasannya kuat: yang dipinjamkan
+  /// biasanya WADAH (galon kosong, tabung gas), dan wadah itu justru BUKAN
+  /// baris di nota — yang jadi baris nota adalah isinya/refill-nya. Memaksa
+  /// checklist bikin barang yang sebenarnya dipinjam tidak bisa dicatat.
+  ///
+  /// Konsekuensinya penanda pinjaman di struk TIDAK bisa nempel per-baris
+  /// produk lagi (tidak ada `transactionItemId` utk ditaut) — diganti SECTION
+  /// terpisah di struk (lihat `_borrowedForTx` & bagian "Pinjaman Barang"),
+  /// yang tetap memenuhi maksud "rujukan kebenaran".
   Future<void> _showBorrowedDialog(String transactionId) async {
-    final candidates = _items.where((i) => i.qty > 0).toList();
+    final nameController = TextEditingController();
+    final qtyController = TextEditingController(text: '1');
     // Pelanggan diwarisi dari NOTA (lihat alasan di _showLeftBehindDialog).
     final notaCustomer = _customerDisplay(_tx!);
     final customerController = TextEditingController(
         text: notaCustomer == 'Umum' ? '' : notaCustomer);
-    final selectedIds = <String>{};
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Catat Pinjaman Barang'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Pilih barang di nota ini',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  if (candidates.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text('Tidak ada barang di nota ini.'),
-                    )
-                  else
-                    ...candidates.map((item) => CheckboxListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: selectedIds.contains(item.id),
-                          title: Text(
-                              '${_productNames[item.productId] ?? item.productId}'
-                              ' (${_fmtQtyShort(item.qty)})',
-                              style: const TextStyle(fontSize: 13)),
-                          onChanged: (v) => setDialogState(() {
-                            if (v ?? false) {
-                              selectedIds.add(item.id);
-                            } else {
-                              selectedIds.remove(item.id);
-                            }
-                          }),
-                        )),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: customerController,
-                    decoration: const InputDecoration(
-                        labelText: 'Nama pelanggan (opsional)'),
-                  ),
-                ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('Catat Pinjaman Barang'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Nama barang',
+                hintText: 'Contoh: Galon kosong, Tabung 3kg',
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Batal')),
-            FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Simpan')),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Jumlah'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: customerController,
+              decoration:
+                  const InputDecoration(labelText: 'Nama pelanggan (opsional)'),
+            ),
           ],
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Simpan')),
+        ],
       ),
     );
-    if (result != true || selectedIds.isEmpty) return;
+    final qty = double.tryParse(qtyController.text.trim());
+    if (result != true ||
+        nameController.text.trim().isEmpty ||
+        qty == null ||
+        qty <= 0) {
+      return;
+    }
     final db = ref.read(databaseProvider);
     final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-    final customerName = customerController.text.trim().isEmpty
-        ? null
-        : customerController.text.trim();
-    for (final item in candidates.where((i) => selectedIds.contains(i.id))) {
-      await db.addBorrowedItem(
-        id: const Uuid().v4(),
-        transactionId: transactionId,
-        itemName: _productNames[item.productId] ?? item.productId,
-        qty: item.qty,
-        transactionItemId: item.id,
-        customerId: _customer?.id,
-        customerNameText: customerName,
-        locallyModified: locallyModified,
-      );
-    }
+    await db.addBorrowedItem(
+      id: const Uuid().v4(),
+      transactionId: transactionId,
+      itemName: nameController.text.trim(),
+      qty: qty,
+      customerId: _customer?.id,
+      customerNameText: customerController.text.trim().isEmpty
+          ? null
+          : customerController.text.trim(),
+      locallyModified: locallyModified,
+    );
     if (!mounted) return;
-    // Muat ulang penanda supaya "Pinjaman" langsung tampil di baris
-    // barangnya tanpa perlu buka ulang struk.
-    final marks = await db.getBorrowedMarkersForTransaction(transactionId);
-    if (mounted) setState(() => _borrowedMarks = marks);
+    // Muat ulang daftar supaya section "Pinjaman Barang" di struk langsung
+    // memperlihatkannya tanpa perlu buka ulang struk.
+    final borrowed = await db.getBorrowedForTransaction(transactionId);
+    if (mounted) setState(() => _borrowedForTx = borrowed);
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
@@ -2393,6 +2372,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             ],
           ),
 
+          // Pinjaman barang yang tercatat lewat nota ini — SECTION sendiri
+          // (bukan penanda per-baris produk: wadah yang dipinjamkan biasanya
+          // BUKAN baris di nota). "Rujukan kebenaran" permintaan user.
+          if (_borrowedForTx.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildBorrowedCard(),
+          ],
+
           // Catatan internal — card terpisah
           if (!isVoid && !isRetur) ...[
             const SizedBox(height: 8),
@@ -2564,6 +2551,45 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   }
 
   /// Catatan internal — card terpisah.
+  /// Section "Pinjaman Barang" — daftar wadah/barang yang dipinjamkan lewat
+  /// nota ini, lengkap dgn status kembalinya. Aksen dusty rose (domain Laci
+  /// Meja) supaya sekilas kebaca satu keluarga dgn penanda Titip/Ketinggalan
+  /// di baris item, bukan bagian dari nominal transaksi.
+  Widget _buildBorrowedCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = AppTheme.laciFg(isDark);
+    return Card(
+      color: AppTheme.laciBg(isDark),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.swap_horiz, size: 15, color: fg),
+                const SizedBox(width: 6),
+                Text('Pinjaman Barang',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            for (final b in _borrowedForTx)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '${_fmtQtyShort(b.qty)} ${b.itemName}'
+                  '${b.fullyReturnedAt != null ? ' · sudah kembali' : (b.qtyReturned > 0 ? ' · sisa ${_fmtQtyShort(b.qty - b.qtyReturned)}' : ' · belum kembali')}',
+                  style: TextStyle(fontSize: 12, color: fg),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInternalNoteCard(ColorScheme scheme, Transaction tx) {
     final isReturTx = tx.internalNote?.startsWith('RETUR:') ?? false;
     if (isReturTx) return const SizedBox.shrink();

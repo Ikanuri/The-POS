@@ -136,39 +136,89 @@ void main() {
   });
 
   testWidgets(
-      'segmen Bayar tetap menempel di kanan walau baris chip melipat ke 2 '
-      'baris (permintaan user, nama pelanggan panjang)', (tester) async {
+      'REDESAIN: layout cart bar TIDAK BERUBAH SAMA SEKALI walau nama '
+      'pelanggan sangat panjang — nama panjang ditangani teks berjalan, '
+      'BUKAN dgn melipat baris (permintaan user)', (tester) async {
     final db = await seedDb();
     addTearDown(() async => db.close());
     final container = await pumpKasir(tester, db, deviceRole: 'owner');
 
-    final rightBefore =
-        tester.getTopRight(find.text('Bayar')).dx;
+    // Rekam posisi SEMUA tombol sebelum nama panjang dipasang.
+    final bayarBefore = tester.getRect(find.text('Bayar'));
+    final tahanBefore = tester.getRect(find.text('Tahan'));
+
+    container.read(cartMetaProvider(kMainCartId).notifier).setCustomer(
+        'c1', 'Pelanggan Dengan Nama Sangat Sangat Sangat Panjang Sekali');
+    await tester.pump();
+    await tester.pump();
+
+    final bayarAfter = tester.getRect(find.text('Bayar'));
+    final tahanAfter = tester.getRect(find.text('Tahan'));
+
+    // INTI permintaan user: "sekiranya semua tombol mendapat porsi pas nya
+    // tanpa harus diubah ubah lagi layoutnya" — posisi tombol harus IDENTIK,
+    // bukan sekadar "Bayar tetap di kanan".
+    expect(bayarAfter, bayarBefore,
+        reason: 'posisi tombol Bayar WAJIB identik — layout tidak boleh '
+            'bergeser/melipat hanya karena nama pelanggan panjang');
+    expect(tahanAfter, tahanBefore,
+        reason: 'tombol Tahan pun tidak boleh bergeser (dulu ikut melipat '
+            'ke baris ke-2 saat nama panjang)');
+
+    // Dan nama panjangnya memang dirender utuh (untuk digeser), bukan
+    // dipotong ellipsis — bukti jalur marquee yang dipakai.
+    expect(find.textContaining('Sangat Panjang Sekali'), findsOneWidget);
+  });
+
+  testWidgets(
+      'nama panjang BENAR-BENAR berjalan (offset bergeser seiring waktu), '
+      'bukan sekadar dipotong ellipsis', (tester) async {
+    final db = await seedDb();
+    addTearDown(() async => db.close());
+    final container = await pumpKasir(tester, db, deviceRole: 'owner');
+
+    container.read(cartMetaProvider(kMainCartId).notifier).setCustomer(
+        'c1', 'Pelanggan Dengan Nama Sangat Sangat Sangat Panjang Sekali');
+    await tester.pump();
+    await tester.pump();
+
+    // Teks yang meluber dirender di dalam ClipRect+Transform (jalur marquee),
+    // BUKAN sebagai Text ber-ellipsis biasa.
+    Offset offsetOfName() {
+      final t = tester.widget<Transform>(find.ancestor(
+        of: find.textContaining('Sangat Panjang Sekali'),
+        matching: find.byType(Transform),
+      ).first);
+      return Offset(t.transform.getTranslation().x, 0);
+    }
+
+    final awal = offsetOfName();
+    // Lewati fase "diam di ujung" (18% durasi) lalu ukur lagi.
+    await tester.pump(const Duration(milliseconds: 1500));
+    final sesudah = offsetOfName();
+
+    expect(sesudah.dx, lessThan(awal.dx),
+        reason: 'teks harus BERGESER ke kiri seiring waktu — kalau diam saja, '
+            'berarti jatuh ke ellipsis biasa, bukan teks berjalan');
+  });
+
+  testWidgets(
+      'porsi chip Pelanggan TIDAK dikurangi oleh fitur teks berjalan — tetap '
+      'segmen terlebar di baris meta', (tester) async {
+    final db = await seedDb();
+    addTearDown(() async => db.close());
+    final container = await pumpKasir(tester, db, deviceRole: 'owner');
 
     container
         .read(cartMetaProvider(kMainCartId).notifier)
-        .setCustomer('c1', 'Pelanggan Dengan Nama Sangat Sangat Panjang Sekali');
+        .setCustomer('c1', 'Bu Artia');
     await tester.pump();
     await tester.pump();
 
-    // Nama sepanjang itu WAJIB memaksa baris Pelanggan/Pegawai/Tahan
-    // melipat ke >1 baris di lebar layar sempit (420px) ini — kalau tidak,
-    // pengujian ini tidak membuktikan apa-apa.
-    final chipTop = tester.getTopLeft(find.text('Tahan')).dy;
-    final bayarTop = tester.getTopLeft(find.text('Bayar')).dy;
-
-    final rightAfter = tester.getTopRight(find.text('Bayar')).dx;
-    expect(rightAfter, closeTo(rightBefore, 1.0),
-        reason: 'tepi kanan tombol Bayar TIDAK BOLEH bergeser berapa pun '
-            'panjang nama pelanggan / berapa baris pun chip di kirinya '
-            'melipat — kalau Bayar ikut satu Wrap yang sama dgn chip kiri, '
-            'ia bisa hanyut ke baris tengah/kiri, bukan tetap di kanan');
-
-    // Prakondisi: kasus ini memang harus melipat (chip "Tahan" turun ke
-    // baris ke-2, DI BAWAH baris "Bayar") — kalau tidak, assertion di atas
-    // tidak membuktikan apa-apa.
-    expect(chipTop, greaterThan(bayarTop),
-        reason: 'nama pelanggan ini harus cukup panjang utk memaksa baris '
-            'kiri melipat ke 2 baris di lebar 420px');
+    final pelangganW = tester.getRect(find.text('Bu Artia')).width;
+    final pegawaiW = tester.getRect(find.text('Pegawai')).width;
+    expect(pelangganW, greaterThan(pegawaiW),
+        reason: 'chip Pelanggan dapat porsi lebih besar (flex 4 vs 3) — '
+            'permintaan user: porsinya jangan dikurangi');
   });
 }

@@ -1987,13 +1987,15 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             : cartNotifier
                                 .effectiveQtyFor(cartNotifier.lastTouchedItem!),
                         showSwipeHint: _swipeHintVisible,
-                        laciMejaSummary: LaciMejaReminder.summaryOf(
-                            ref
-                                .watch(laciMejaPendingProvider((
-                                  ref.watch(cartMetaProvider(_cartId)).customerId,
-                                  ref.watch(cartMetaProvider(_cartId)).customerName,
-                                )))
-                                .valueOrNull),
+                        laciMejaLines: LaciMejaReminder.linesOf(ref
+                            .watch(laciMejaPendingProvider(
+                                (cartMeta.customerId, cartMeta.customerName)))
+                            .valueOrNull),
+                        // Pengingat hutang akumulatif (permintaan user):
+                        // di CART BAR juga, bukan cuma modal checkout.
+                        customerDebt: ref
+                            .watch(cartCustomerDebtProvider(cartMeta.customerId))
+                            .valueOrNull,
                         orderNumber:
                             _isAddMode ? null : cartMeta.displayOrderNumber,
                       ),
@@ -3048,16 +3050,21 @@ class _CartBar extends StatelessWidget {
     this.lastEffQty = 0,
     this.showSwipeHint = false,
     this.orderNumber,
-    this.laciMejaSummary,
+    this.laciMejaLines = const [],
+    this.customerDebt,
   });
 
   final int total;
   final int count;
 
-  /// Item 52 susulan — ringkasan Laci Meja yang masih menggantung utk
-  /// pelanggan keranjang ini (null/kosong = tidak ada). Ditampilkan sbg
-  /// pengingat, pola sama dgn pengingat hutang di modal checkout.
-  final String? laciMejaSummary;
+  /// Item 52 susulan — pengingat Laci Meja yang masih menggantung utk
+  /// pelanggan keranjang ini, SATU BARIS PER KATEGORI (kosong = tidak ada).
+  /// Lihat `LaciMejaReminder.linesOf`.
+  final List<String> laciMejaLines;
+
+  /// Hutang akumulatif pelanggan keranjang ini: (total rupiah, jumlah nota
+  /// belum lunas). Null / count 0 = tidak ada hutang / pembeli tak terdaftar.
+  final (int total, int count)? customerDebt;
 
   /// Item 55 — segmen terakhir nomor nota (mis. "17"), null selama belum
   /// direservasi (keranjang baru saja mulai diisi) atau mode tambah
@@ -3105,8 +3112,8 @@ class _CartBar extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (laciMejaSummary != null && laciMejaSummary!.isNotEmpty)
-                LaciMejaReminder.bar(context, laciMejaSummary!),
+              if (laciMejaLines.isNotEmpty)
+                LaciMejaReminder.bar(context, laciMejaLines),
               // Total diperbesar & di-center, dengan badge jumlah item di kiri.
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -3134,6 +3141,34 @@ class _CartBar extends StatelessWidget {
                   ),
                 ],
               ),
+              // Pengingat hutang akumulatif — DI BAWAH nominal Total
+              // (permintaan user). Warna merah `error`, SENGAJA beda dari
+              // dusty rose Laci Meja di atas Total: dua peringatan berbeda
+              // makna, jangan sampai tertukar.
+              if (customerDebt != null && customerDebt!.$2 > 0) ...[
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.account_balance_wallet_outlined,
+                        size: 13, color: cs.error),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        'Hutang ${formatRupiah(customerDebt!.$1)} '
+                        'di ${customerDebt!.$2} nota',
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: cs.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (lastParts != null) ...[
                 const SizedBox(height: 5),
                 Text.rich(
@@ -3504,57 +3539,59 @@ class _CartMetaTab extends ConsumerWidget {
           // `Expanded(Wrap(...))` menampung segmen kiri yang boleh melipat,
           // Bayar sendiri jadi elemen `Row` terakhir yang selalu di ujung
           // kanan.
+          //
+          // Redesain (permintaan user): layout TIDAK BOLEH berubah-ubah lagi
+          // walau nama pelanggan panjang. `Wrap` lama menyelesaikan overflow
+          // dgn MELIPAT baris — artinya tinggi & posisi tombol ikut berubah
+          // tiap ganti pelanggan. Sekarang: satu `Row` TETAP, porsi tiap
+          // segmen dikunci `Expanded(flex:)` (chip pelanggan dapat porsi
+          // TERBESAR & tidak pernah dikurangi), dan nama yang tidak muat
+          // TIDAK memicu re-layout — ia BERJALAN kiri↔kanan di dalam
+          // porsinya sendiri (lihat `_MarqueeText`).
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: Wrap(
-                  spacing: 4,
-                  runSpacing: 2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _MetaChip(
-                      icon: Icons.person_outline,
-                      label:
-                          meta.hasCustomer ? meta.customerName! : 'Pelanggan',
-                      active: meta.hasCustomer,
-                      onTap: () => _pickCustomer(context, ref),
-                      onClear: meta.hasCustomer
-                          ? () => notifier.clearCustomer()
-                          : null,
-                    ),
-                    _MetaChip(
-                      icon: Icons.badge_outlined,
-                      label:
-                          meta.hasEmployee ? meta.employeeName! : 'Pegawai',
-                      active: meta.hasEmployee,
-                      onTap: () => _pickEmployee(context, ref),
-                      onClear: meta.hasEmployee
-                          ? () => notifier.clearEmployee()
-                          : null,
-                    ),
-                    InkWell(
-                      onTap: onHold,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.pause_circle_outline,
-                                size: 16, color: cs.primary),
-                            const SizedBox(width: 4),
-                            Text('Tahan',
-                                style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: cs.primary)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                flex: 4,
+                child: _MetaChip(
+                  icon: Icons.person_outline,
+                  label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
+                  active: meta.hasCustomer,
+                  onTap: () => _pickCustomer(context, ref),
+                  onClear:
+                      meta.hasCustomer ? () => notifier.clearCustomer() : null,
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: _MetaChip(
+                  icon: Icons.badge_outlined,
+                  label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
+                  active: meta.hasEmployee,
+                  onTap: () => _pickEmployee(context, ref),
+                  onClear:
+                      meta.hasEmployee ? () => notifier.clearEmployee() : null,
+                ),
+              ),
+              InkWell(
+                onTap: onHold,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.pause_circle_outline,
+                          size: 16, color: cs.primary),
+                      const SizedBox(width: 3),
+                      Text('Tahan',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: cs.primary)),
+                    ],
+                  ),
                 ),
               ),
               // Item 56 — segmen "Bayar" terracotta — tap langsung ke layar
@@ -3619,18 +3656,17 @@ class _MetaChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          // `min` DIHAPUS — chip sekarang mengisi porsi `Expanded` yang
+          // dijatah `_CartMetaTab`, jadi lebarnya TETAP walau labelnya
+          // berubah. Inilah yang bikin layout tidak lagi bergeser-geser.
           children: [
             Icon(icon, size: 16, color: active ? cs.primary : fg),
             const SizedBox(width: 4),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 110),
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Expanded(
+              child: _MarqueeText(
+                text: label,
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: active ? FontWeight.w600 : FontWeight.w400,
@@ -3651,6 +3687,159 @@ class _MetaChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Teks satu baris yang BERJALAN kiri↔kanan bila tidak muat di lebarnya —
+/// permintaan user, menggantikan ellipsis + layout yang melipat/bergeser.
+///
+/// Sengaja TIDAK memakai paket eksternal (app ini offline-first, dependency
+/// baru = beban rilis) — cukup `AnimationController` + `Transform.translate`.
+/// Kalau teks MUAT, widget ini berperilaku persis `Text` biasa (tidak ada
+/// animasi yang jalan sia-sia & tidak membangunkan frame terus-menerus).
+///
+/// Jalannya DIBATASI [_maxCycles] putaran lalu berhenti di awal teks, dan
+/// dimulai ULANG tiap teksnya berganti (mis. pelanggan lain dipilih) — bukan
+/// berputar selamanya. Dua alasan, keduanya nyata:
+///   1. Perangkat POS menyala seharian; animasi 60fps abadi di bar bawah
+///      membakar baterai tanpa guna setelah nama sempat terbaca.
+///   2. Animasi tanpa henti bikin `tester.pumpAndSettle()` TIDAK PERNAH
+///      selesai — 10 test kasir yang sudah ada langsung timeout. Dgn dibatasi,
+///      pumpAndSettle tetap bisa dipakai seperti biasa.
+class _MarqueeText extends StatefulWidget {
+  const _MarqueeText({required this.text, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    // Durasi disetel ulang tiap kali overflow diukur (lihat `_sync`) —
+    // makin panjang teksnya, makin lama satu putaran, supaya kecepatan
+    // bacanya konsisten dan tidak "ngebut" utk nama yang sangat panjang.
+    duration: const Duration(seconds: 3),
+  );
+
+  /// 4 = dua kali pergi-pulang; cukup utk membaca nama terpanjang sekalipun.
+  static const _maxCycles = 4;
+
+  /// Penghenti otomatis. TIDAK memakai `addStatusListener`: `repeat()` men-
+  /// drive controller lewat simulasi internal dan TIDAK pernah memancarkan
+  /// `completed`/`dismissed`, jadi listener status tak akan pernah terpanggil
+  /// (sudah dicoba — animasi lanjut selamanya & pumpAndSettle tetap timeout).
+  Timer? _stopTimer;
+  bool _done = false;
+
+  @override
+  void didUpdateWidget(_MarqueeText old) {
+    super.didUpdateWidget(old);
+    // Nama berganti (pelanggan lain dipilih) -> jalan lagi dari awal.
+    if (old.text != widget.text) {
+      _stopTimer?.cancel();
+      _stopTimer = null;
+      _done = false;
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Jalankan/hentikan animasi sesuai apakah teks benar-benar meluber.
+  void _sync(double overflow) {
+    if (overflow <= 0) {
+      _stopTimer?.cancel();
+      _stopTimer = null;
+      if (_controller.isAnimating) _controller.stop();
+      if (_controller.value != 0) _controller.value = 0;
+      return;
+    }
+    // Sudah cukup berputar -> jangan dinyalakan lagi oleh rebuild berikutnya.
+    if (_done || _controller.isAnimating) return;
+    // ~28 logical px per detik + jeda baca di tiap ujung (lihat kurva di
+    // `_offsetFor`), diklem supaya nama pendek-tapi-meluber tidak berkedip
+    // cepat & nama sangat panjang tidak jadi lambat menyiksa.
+    final detik = (overflow / 28).clamp(2.0, 8.0);
+    final durasi = Duration(milliseconds: (detik * 1000).round());
+    _controller.duration = durasi;
+    _controller.repeat(reverse: true);
+    _stopTimer = Timer(durasi * _maxCycles, () {
+      if (!mounted) return;
+      _controller.stop();
+      _controller.value = 0; // istirahat memperlihatkan awal nama
+      _done = true;
+    });
+  }
+
+  /// Kurva "diam di ujung → geser → diam di ujung" (bukan geser konstan)
+  /// supaya nama sempat terbaca utuh di kedua ujungnya.
+  double _offsetFor(double t, double overflow) {
+    const jeda = 0.18; // porsi waktu diam di tiap ujung
+    if (t <= jeda) return 0;
+    if (t >= 1 - jeda) return -overflow;
+    return -overflow * ((t - jeda) / (1 - 2 * jeda));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          maxLines: 1,
+          textDirection: Directionality.of(context),
+        )..layout();
+        final overflow = painter.width - constraints.maxWidth;
+
+        // Diukur saat layout; ubah state animasi SETELAH frame ini selesai
+        // (mengubah controller di tengah build = exception).
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _sync(overflow);
+        });
+
+        if (overflow <= 0) {
+          return Text(widget.text,
+              maxLines: 1, overflow: TextOverflow.clip, style: widget.style);
+        }
+
+        // Tinggi DIKUNCI ke tinggi teksnya sendiri: `_MetaChip` ada di dalam
+        // Column tanpa batas tinggi, dan `OverflowBox` tanpa batas tinggi di
+        // situ = "infinite size during layout" (crash render).
+        return SizedBox(
+          height: painter.height,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) => Transform.translate(
+                offset: Offset(_offsetFor(_controller.value, overflow), 0),
+                child: child,
+              ),
+              // `OverflowBox` — beri anak lebar tak terbatas supaya teksnya
+              // dirender UTUH (bukan di-ellipsis dulu), baru digeser &
+              // dipotong oleh `ClipRect` di atas.
+              child: OverflowBox(
+                alignment: Alignment.centerLeft,
+                maxWidth: double.infinity,
+                minHeight: painter.height,
+                maxHeight: painter.height,
+                child: Text(widget.text,
+                    maxLines: 1, softWrap: false, style: widget.style),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

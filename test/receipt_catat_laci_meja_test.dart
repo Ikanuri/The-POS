@@ -156,8 +156,8 @@ void main() {
   });
 
   testWidgets(
-      'catat Pinjaman Barang dari struk -> checklist barang nyata di nota, '
-      'tersimpan dgn qty & transactionItemId benar', (tester) async {
+      'catat Pinjaman Barang dari struk -> input nama BEBAS KETIK (bukan '
+      'checklist barang nota), tersimpan dgn qty benar', (tester) async {
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
 
@@ -166,24 +166,24 @@ void main() {
     await tester.tap(find.text('Pinjaman Barang'));
     await tester.pumpAndSettle();
 
-    // Item 52 redesain — bukan lagi TextField nama bebas, tapi checklist
-    // barang NYATA di nota ini (pola sama Titip/Ketinggalan) — dibutuhkan
-    // supaya tertaut presisi ke baris nota (transactionItemId).
-    expect(find.text('Payung Lipat (1)'), findsOneWidget);
-    expect(find.text('Topi (2)'), findsOneWidget);
+    // Permintaan user: kembali plain text. Yang dipinjamkan biasanya WADAH
+    // (galon/tabung kosong) yang justru BUKAN baris di nota — checklist
+    // barang nota bikin barang yg sebenarnya dipinjam tidak bisa dicatat.
+    expect(find.text('Payung Lipat (1)'), findsNothing,
+        reason: 'checklist barang nota TIDAK dipakai lagi di Pinjaman');
 
-    await tester.tap(find.text('Topi (2)'));
-    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Nama barang'), 'Galon kosong');
+    await tester.enterText(find.widgetWithText(TextField, 'Jumlah'), '3');
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
 
     final rows = await db.select(db.borrowedItems).get();
     expect(rows, hasLength(1));
-    expect(rows.single.itemName, 'Topi');
-    expect(rows.single.qty, 2, reason: 'qty diambil dari qty produk di nota');
+    expect(rows.single.itemName, 'Galon kosong',
+        reason: 'nama bebas ketik, boleh barang yg tidak ada di nota');
+    expect(rows.single.qty, 3);
     expect(rows.single.transactionId, txId);
-    expect(rows.single.transactionItemId, 'i1',
-        reason: 'tertaut PRESISI ke baris nota, bukan cocok-nama');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

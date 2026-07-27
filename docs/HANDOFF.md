@@ -25,6 +25,73 @@ commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
 menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
 dulu baru merge/push)._
 
+## Putaran TERBARU: redesain cart bar + pinjaman plain text + cari/statistik Pre-order
+
+1. **Pinjaman kembali PLAIN TEXT** (dikonfirmasi user via AskUserQuestion,
+   membalik keputusan putaran sebelumnya). Alasannya kuat & layak diingat:
+   yang dipinjamkan biasanya **WADAH** (galon/tabung KOSONG) — dan wadah itu
+   justru BUKAN baris di nota (yang jadi baris nota adalah isi/refill-nya).
+   Checklist-barang-nota karena itu membuat barang yang sebenarnya dipinjam
+   MUSTAHIL dicatat. Konsekuensi: penanda pinjaman di struk tidak bisa
+   nempel per-baris produk (tak ada `transactionItemId`) → diganti **SECTION
+   "Pinjaman Barang"** tersendiri (`getBorrowedForTransaction` +
+   `_buildBorrowedCard`), tetap memenuhi maksud "rujukan kebenaran".
+   **Kolom `BorrowedItems.transactionItemId` (migrasi v24) DIBIARKAN ADA
+   tapi tidak dipakai lagi** — schemaVersion SENGAJA tidak diturunkan balik
+   ke 23 karena build user sudah terlanjur v24; menurunkan schemaVersion
+   bikin drift menolak membuka DB (`user_version` > schemaVersion).
+
+2. **Redesain cart bar** (3 hal sekaligus):
+   - Pengingat Laci Meja jadi **satu baris per kategori**
+     (`LaciMejaReminder.linesOf`, dulu satu string digabung " · ").
+     Baris pre-order menyebut **nama produk + qty + jaminan**, diringkas
+     "+N lagi" bila >2 produk (dikonfirmasi user — cart bar tidak boleh
+     jadi sangat tinggi).
+   - **Pengingat hutang akumulatif** (total rupiah + jumlah nota) muncul
+     DI BAWAH nominal Total via `cartCustomerDebtProvider` (autoDispose).
+     Warna `cs.error` merah, SENGAJA beda dari dusty rose Laci Meja di
+     atas Total — dua peringatan beda makna.
+   - **Layout tidak lagi melipat**: `Wrap` → `Row` tetap dgn
+     `Expanded(flex: 4/3)` utk chip Pelanggan/Pegawai (porsi Pelanggan
+     terbesar & tidak pernah dikurangi — permintaan eksplisit user), dan
+     nama panjang ditangani `_MarqueeText` (teks berjalan kiri↔kanan).
+
+3. **`_MarqueeText` — 2 jebakan yang SUDAH kena, jangan diulang**:
+   - `OverflowBox` tanpa `maxHeight` di dalam Column tak-berbatas =
+     "infinite size during layout" (crash render). Tinggi WAJIB dikunci ke
+     `TextPainter.height`.
+   - Animasi **tidak boleh abadi**. Versi pertama `repeat(reverse: true)`
+     tanpa henti bikin `tester.pumpAndSettle()` TIMEOUT di **10 test kasir
+     yang sudah ada** (bukan cuma test baru). Sekarang dibatasi 4 putaran
+     lalu berhenti di awal teks, dan dimulai ulang saat teksnya berganti.
+     **`addStatusListener` TIDAK BISA dipakai utk menghitung putaran** —
+     `repeat()` menggerakkan controller lewat simulasi internal dan tidak
+     pernah memancarkan `completed`/`dismissed`; pakai `Timer(durasi *
+     maxCycles)` (sudah dicoba keduanya). Bonus: perangkat POS menyala
+     seharian, animasi 60fps abadi di bar bawah = baterai terbakar sia-sia.
+
+4. **Tab Pre-order dashboard**: kotak pencarian (cocokkan nama pelanggan
+   ATAU nama produk) + statistik akumulatif **total produk** & **total
+   jaminan** sbg dua angka TERPISAH (satuannya beda maknanya — barang yang
+   ditunggu vs wadah yang dipegang toko). Keduanya ikut tersaring hasil
+   pencarian, supaya angkanya menjawab pertanyaan yang sedang dicari.
+
+5. **Bug lama ikut tertutup**: `getLaciMejaPendingForCustomer`/`ForName`
+   disatukan jadi `getLaciMejaPending({customerId, customerName})`. Versi
+   lama yang berbasis `customerId` SELALU mengembalikan `preorder: 0` —
+   artinya pre-order milik pelanggan TERDAFTAR tidak pernah muncul di
+   pengingat mana pun (cart bar maupun modal checkout). Sekarang keduanya
+   dikirim bersamaan: titip/pinjaman dicocokkan lewat id, pre-order lewat
+   nama (tabel `PreorderEntries` memang hanya menyimpan nama, tanpa FK).
+
+Test baru: `cart_bar_reminder_lines_test.dart` (3),
+`receipt_borrowed_section_test.dart` (4, termasuk regresi "jaminan tidak
+hilang setelah Penuhi"), +4 pencarian/statistik di
+`laci_meja_dashboard_grouping_test.dart`, +2 marquee di
+`cart_bar_bayar_button_test.dart`, +3 di
+`laci_meja_marks_and_reminder_test.dart` — semua revert-verified. Full
+suite: **822 test hijau**, `flutter analyze` 0 issue.
+
 ## ✅ Gap Ringkasan — AKHIRNYA KETEMU akarnya (percobaan ke-4, SELESAI)
 
 **Riwayat lengkap 4 percobaan** (WAJIB dibaca kalau ada laporan gap

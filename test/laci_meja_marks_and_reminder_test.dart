@@ -118,30 +118,63 @@ void main() {
   group('pengingat (#4)', () {
     test('ringkasan hanya menyebut kategori yang memang ada isinya', () {
       expect(
-          LaciMejaReminder.summaryOf(
-              (titip: 2, ketinggalan: 0, pinjaman: 0, preorder: 1)),
-          '2 barang dititip · 1 pre-order menunggu');
-      expect(
-          LaciMejaReminder.summaryOf(
-              (titip: 0, ketinggalan: 0, pinjaman: 0, preorder: 0)),
-          isNull,
+          LaciMejaReminder.linesOf((
+            titip: 2,
+            ketinggalan: 0,
+            pinjaman: 0,
+            preorders: [(productName: 'Gas', qty: 1, depositQty: 0)]
+          )),
+          ['2 barang dititip', 'Pre-order: 1 Gas']);
+      expect(LaciMejaReminder.linesOf(kEmptyLaciMejaPending), isEmpty,
           reason: 'tidak ada yang menggantung -> pengingat tidak muncul');
-      expect(LaciMejaReminder.summaryOf(null), isNull);
+      expect(LaciMejaReminder.linesOf(null), isEmpty);
     });
 
     test(
         'jenis titip & ketinggalan WAJIB jadi klausa terpisah, bukan '
         'digabung selalu tertulis "dititip" (bug dilaporkan user)', () {
       expect(
-          LaciMejaReminder.summaryOf(
-              (titip: 0, ketinggalan: 3, pinjaman: 0, preorder: 0)),
-          '3 barang ketinggalan',
+          LaciMejaReminder.linesOf(
+              (titip: 0, ketinggalan: 3, pinjaman: 0, preorders: [])),
+          ['3 barang ketinggalan'],
           reason: 'barang yang jenisnya ketinggalan TIDAK BOLEH tertulis '
               '"dititip"');
       expect(
-          LaciMejaReminder.summaryOf(
-              (titip: 1, ketinggalan: 2, pinjaman: 0, preorder: 0)),
-          '1 barang dititip · 2 barang ketinggalan');
+          LaciMejaReminder.linesOf(
+              (titip: 1, ketinggalan: 2, pinjaman: 0, preorders: [])),
+          ['1 barang dititip · 2 barang ketinggalan']);
+    });
+
+    test(
+        'SATU BARIS PER KATEGORI (permintaan user): ketinggalan, pinjaman, '
+        'pre-order tidak lagi digabung jadi satu string panjang', () {
+      final lines = LaciMejaReminder.linesOf((
+        titip: 1,
+        ketinggalan: 1,
+        pinjaman: 2,
+        preorders: [(productName: 'Tabung Gas', qty: 2, depositQty: 2)],
+      ));
+      expect(lines, hasLength(3), reason: '3 kategori terisi -> 3 baris');
+      expect(lines[0], '1 barang dititip · 1 barang ketinggalan');
+      expect(lines[1], '2 pinjaman belum kembali');
+      expect(lines[2], 'Pre-order: 2 Tabung Gas (jaminan 2)',
+          reason: 'baris pre-order WAJIB sebut produk + qty + jaminan');
+    });
+
+    test('pre-order >2 produk diringkas "+N lagi" supaya cart bar tak tinggi',
+        () {
+      final lines = LaciMejaReminder.linesOf((
+        titip: 0,
+        ketinggalan: 0,
+        pinjaman: 0,
+        preorders: [
+          (productName: 'A', qty: 1, depositQty: 0),
+          (productName: 'B', qty: 2, depositQty: 0),
+          (productName: 'C', qty: 3, depositQty: 0),
+          (productName: 'D', qty: 4, depositQty: 0),
+        ],
+      ));
+      expect(lines.single, 'Pre-order: 1 A, 2 B +2 lagi');
     });
 
     test('query per-pelanggan TERDAFTAR hanya menghitung yang menggantung',
@@ -168,7 +201,7 @@ void main() {
           qty: 1,
           customerId: 'c1');
 
-      final p = await db.getLaciMejaPendingForCustomer('c1');
+      final p = await db.getLaciMejaPending(customerId: 'c1');
       expect(p.titip, 1, reason: 'yang sudah diambil tidak dihitung');
       expect(p.pinjaman, 1);
     });
@@ -190,7 +223,7 @@ void main() {
           jenis: 'titip',
           customerId: 'c2');
 
-      final p = await db.getLaciMejaPendingForCustomer('c2');
+      final p = await db.getLaciMejaPending(customerId: 'c2');
       expect(p.titip, 1);
       expect(p.ketinggalan, 1);
     });
@@ -212,11 +245,37 @@ void main() {
           qtyOrdered: 1);
       await db.cancelPreorderEntry('p2');
 
-      final p = await db.getLaciMejaPendingForName('Pak Budi');
-      expect(p.preorder, 1, reason: 'yang dibatalkan tidak dihitung');
+      final p = await db.getLaciMejaPending(customerName: 'Pak Budi');
+      expect(p.preorders, hasLength(1),
+          reason: 'yang dibatalkan tidak dihitung');
 
-      final kosong = await db.getLaciMejaPendingForName('');
-      expect(kosong.preorder, 0);
+      final kosong = await db.getLaciMejaPending(customerName: '');
+      expect(kosong.preorders, isEmpty);
+    });
+
+    test(
+        'pelanggan TERDAFTAR ikut dapat pre-order-nya (bug lama: jalur '
+        'customerId selalu mengembalikan preorder kosong)', () async {
+      await db.into(db.customers).insert(
+          CustomersCompanion.insert(id: 'c9', name: 'Bu Artia'));
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'prodX', name: 'Tabung Gas 3kg'));
+      await db.addPreorderEntry(
+          id: 'p9',
+          productId: 'prodX',
+          productUnitId: 'unitX',
+          customerName: 'Bu Artia',
+          qtyOrdered: 2,
+          depositQty: 2);
+
+      final p =
+          await db.getLaciMejaPending(customerId: 'c9', customerName: 'Bu Artia');
+      expect(p.preorders, hasLength(1),
+          reason: 'pre-order pelanggan terdaftar WAJIB ikut terhitung');
+      expect(p.preorders.single.productName, 'Tabung Gas 3kg',
+          reason: 'nama produk di-JOIN, bukan productId mentah');
+      expect(p.preorders.single.qty, 2);
+      expect(p.preorders.single.depositQty, 2);
     });
   });
 
@@ -226,7 +285,7 @@ void main() {
       home: Scaffold(
         body: LaciMejaReminder(
             pending:
-                (titip: 1, ketinggalan: 0, pinjaman: 0, preorder: 0)),
+                (titip: 1, ketinggalan: 0, pinjaman: 0, preorders: [])),
       ),
     ));
     expect(find.textContaining('Laci Meja: 1 barang dititip'), findsOneWidget);

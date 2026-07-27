@@ -12,6 +12,11 @@ enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 final _selectedCategoryProvider =
     StateProvider<_LaciMejaCategory>((ref) => _LaciMejaCategory.titipKetinggalan);
 
+/// Kata kunci pencarian tab Pre-order (permintaan user) — dicocokkan ke NAMA
+/// PELANGGAN maupun NAMA PRODUK sekaligus, karena staf bisa datang dari dua
+/// arah: "siapa yang antri Gas?" vs "Bu Artia antri apa saja?".
+final _preorderSearchProvider = StateProvider<String>((ref) => '');
+
 /// Item 52 ("Laci Meja") — dashboard 3 kartu tappable (sekaligus filter):
 /// Titip/Ketinggalan, Pinjaman Barang, Pre-order. Rancangan lengkap:
 /// PLAN.md Item 52.
@@ -342,15 +347,67 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
               style: TextStyle(color: scheme.onSurfaceVariant)));
     }
     final labels = ref.watch(preorderProductUnitLabelsProvider).valueOrNull ?? {};
+    final query = ref.watch(_preorderSearchProvider).trim().toLowerCase();
+
+    // Pencarian (permintaan user): cocokkan ke NAMA PELANGGAN atau NAMA
+    // PRODUK. Statistik di bawah dihitung dari hasil TERSARING — supaya
+    // saat mencari "Gas", angkanya menjawab "berapa Gas yang diantri",
+    // bukan total seluruh pre-order (yang sudah terlihat di kartu atas).
+    final filtered = query.isEmpty
+        ? items
+        : items.where((e) {
+            final produk =
+                (labels[e.productUnitId]?.productName ?? e.productId)
+                    .toLowerCase();
+            return e.customerName.toLowerCase().contains(query) ||
+                produk.contains(query);
+          }).toList();
+
+    // Statistik akumulatif — produk & jaminan SENGAJA dipisah (permintaan
+    // user): keduanya satuan berbeda maknanya (barang dipesan vs wadah
+    // dititip sbg jaminan), menjumlahkannya jadi satu angka menyesatkan.
+    final totalQty = filtered.fold<double>(0, (s, e) => s + e.qtyOrdered);
+    final totalDeposit = filtered.fold<double>(0, (s, e) => s + e.depositQty);
 
     // transactionId NULLABLE (satu-satunya kasus: titip wadah tanpa beli
     // apa pun) — baris begini masing-masing jadi grup sendiri (kunci per id).
     final groups = <String, List<PreorderEntry>>{};
-    for (final e in items) {
+    for (final e in filtered) {
       groups.putIfAbsent(e.transactionId ?? 'no-tx-${e.id}', () => []).add(e);
     }
     final keys = groups.keys.toList();
 
+    return Column(
+      children: [
+        _PreorderSearchField(
+          onChanged: (v) =>
+              ref.read(_preorderSearchProvider.notifier).state = v,
+        ),
+        _PreorderStats(
+          totalQty: totalQty,
+          totalDeposit: totalDeposit,
+          entryCount: filtered.length,
+          isDark: isDark,
+        ),
+        Expanded(
+          child: keys.isEmpty
+              ? Center(
+                  child: Text('Tidak ada yang cocok dgn "$query".',
+                      style: TextStyle(color: scheme.onSurfaceVariant)))
+              : _buildPreorderGroups(
+                  context, ref, groups, keys, labels, isDark),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreorderGroups(
+      BuildContext context,
+      WidgetRef ref,
+      Map<String, List<PreorderEntry>> groups,
+      List<String> keys,
+      Map<String, ({String productName, String unitName})> labels,
+      bool isDark) {
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: keys.length,
@@ -447,6 +504,151 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
 /// pill kecil ikon+label singkat — minimalis tapi TIDAK kotak-persegi rigid
 /// (`StadiumBorder`), pola sama semangatnya dgn `_CollectButton` di chip
 /// lain app ini (rounded, aksen warna domain Laci Meja).
+/// Kotak pencarian tab Pre-order (permintaan user) — `StatefulWidget` sendiri
+/// supaya `TextEditingController`-nya tidak dibuat ulang tiap rebuild daftar
+/// (kalau dibuat di dalam `build`, kursor melompat ke awal tiap ketikan).
+class _PreorderSearchField extends StatefulWidget {
+  const _PreorderSearchField({required this.onChanged});
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_PreorderSearchField> createState() => _PreorderSearchFieldState();
+}
+
+class _PreorderSearchFieldState extends State<_PreorderSearchField> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: TextField(
+        controller: _ctrl,
+        onChanged: (v) {
+          widget.onChanged(v);
+          // Rebuild lokal semata utk memunculkan/menyembunyikan tombol clear
+          // (state pencariannya sendiri hidup di provider, bukan di sini).
+          setState(() {});
+        },
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Cari nama pelanggan atau produk…',
+          prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: _ctrl.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    _ctrl.clear();
+                    widget.onChanged('');
+                    setState(() {});
+                  },
+                ),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        ),
+        onTapOutside: (_) => FocusScope.of(context).unfocus(),
+      ),
+    );
+  }
+}
+
+/// Statistik akumulasi tab Pre-order (permintaan user) — total produk dipesan
+/// & total jaminan dititip, SENGAJA dipisah jadi dua angka (satuannya beda
+/// maknanya: barang yang ditunggu vs wadah yang dipegang toko).
+class _PreorderStats extends StatelessWidget {
+  const _PreorderStats({
+    required this.totalQty,
+    required this.totalDeposit,
+    required this.entryCount,
+    required this.isDark,
+  });
+
+  final double totalQty;
+  final double totalDeposit;
+  final int entryCount;
+  final bool isDark;
+
+  static String _fmt(double q) =>
+      q % 1 == 0 ? q.toInt().toString() : q.toString();
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = AppTheme.laciFg(isDark);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StatTile(
+                label: 'Total produk',
+                value: _fmt(totalQty),
+                sub: '$entryCount entri',
+                fg: fg,
+                isDark: isDark),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _StatTile(
+                label: 'Total jaminan',
+                value: _fmt(totalDeposit),
+                sub: 'wadah dititip',
+                fg: fg,
+                isDark: isDark),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.sub,
+    required this.fg,
+    required this.isDark,
+  });
+
+  final String label;
+  final String value;
+  final String sub;
+  final Color fg;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.laciBg(isDark),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 11, color: fg)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: AppTheme.numStyle(context,
+                  size: 18, weight: FontWeight.w700, color: fg)),
+          Text(sub,
+              style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75))),
+        ],
+      ),
+    );
+  }
+}
+
 class _CollectButton extends StatelessWidget {
   const _CollectButton({required this.onTap});
   final VoidCallback onTap;

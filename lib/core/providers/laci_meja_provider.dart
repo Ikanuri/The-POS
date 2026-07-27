@@ -32,20 +32,29 @@ final laciMejaLocallyModifiedProvider = Provider<bool>((ref) {
 /// pelanggan keranjang aktif, dipakai pengingat di cart bar (pola sama dgn
 /// pengingat hutang di modal checkout). Key: (customerId, customerName) —
 /// pelanggan terdaftar dicocokkan lewat id, pembeli lepas lewat nama.
-final laciMejaPendingProvider = FutureProvider.family<
-    ({int titip, int ketinggalan, int pinjaman, int preorder}),
-    (String?, String?)>((ref, key) async {
+final laciMejaPendingProvider =
+    FutureProvider.family<LaciMejaPending, (String?, String?)>((ref, key) async {
   final (customerId, customerName) = key;
   final db = ref.watch(databaseProvider);
   // Ikut ter-refresh begitu ada entri Laci Meja berubah.
   ref.watch(laciMejaOpenCountProvider);
-  if (customerId != null && customerId.isNotEmpty) {
-    return db.getLaciMejaPendingForCustomer(customerId);
-  }
-  if (customerName != null && customerName.trim().isNotEmpty) {
-    return db.getLaciMejaPendingForName(customerName);
-  }
-  return (titip: 0, ketinggalan: 0, pinjaman: 0, preorder: 0);
+  return db.getLaciMejaPending(
+      customerId: customerId, customerName: customerName);
+});
+
+/// Hutang akumulatif pelanggan keranjang aktif (total rupiah + jumlah nota
+/// belum lunas) — permintaan user: pengingat hutang muncul DI CART BAR
+/// (di bawah nominal Total), bukan cuma di modal checkout spt sebelumnya.
+/// Null/(0,0) kalau pembeli tidak terdaftar (hutang selalu terikat
+/// `customerId`, pembeli lepas tidak bisa punya nota tempo).
+/// `.autoDispose` DISENGAJA: hutang hanya berubah saat nota tempo baru dibuat
+/// (checkout -> keranjang & pelanggan ikut dibersihkan) atau dilunasi di layar
+/// lain. Dgn autoDispose, angka selalu di-fetch ulang tiap pelanggan dipilih
+/// lagi — tidak ada cache basi yang menempel sepanjang umur app.
+final cartCustomerDebtProvider = FutureProvider.autoDispose
+    .family<(int total, int count), String?>((ref, customerId) async {
+  if (customerId == null || customerId.isEmpty) return (0, 0);
+  return ref.watch(databaseProvider).getCustomerOutstandingDebt(customerId);
 });
 
 /// Item 52 susulan (permintaan user) — qty+satuan per baris nota yang

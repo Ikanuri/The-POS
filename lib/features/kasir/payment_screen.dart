@@ -72,14 +72,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// pelanggan terpilih (titip/ketinggalan, pinjaman, pre-order). Pola sama
   /// dgn pengingat hutang di atasnya, tapi aksen dusty rose (Laci Meja) —
   /// sengaja DIBEDAKAN dari merah hutang supaya tidak tertukar maknanya.
-  ({int titip, int ketinggalan, int pinjaman, int preorder})? _laciMejaPending;
+  LaciMejaPending? _laciMejaPending;
 
   Future<void> _refreshLaciMejaPending() async {
     final db = ref.read(databaseProvider);
     final c = _selectedCustomer;
-    final pending = c != null
-        ? await db.getLaciMejaPendingForCustomer(c.id)
-        : await db.getLaciMejaPendingForName(_custNameManual);
+    // Pelanggan TERDAFTAR tetap perlu kirim namanya juga — Pre-order hanya
+    // menyimpan nama (tanpa FK), jadi tanpa ini pre-order miliknya tidak
+    // pernah ikut terhitung (bug lama, lihat dok `getLaciMejaPending`).
+    final pending = await db.getLaciMejaPending(
+      customerId: c?.id,
+      customerName: c?.name ?? _custNameManual,
+    );
     if (mounted) setState(() => _laciMejaPending = pending);
   }
   final _custCtrl = TextEditingController();

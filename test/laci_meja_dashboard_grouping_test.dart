@@ -219,6 +219,108 @@ void main() {
     });
   });
 
+  group('Pre-order: pencarian & statistik (permintaan user)', () {
+    Future<void> seedPreorders() async {
+      await seedTransaction('tx1');
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'P1', name: 'Tabung Gas'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'P2', name: 'Galon Aqua'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U2', productId: 'P2', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'po1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Bu Artia',
+          qtyOrdered: 2,
+          depositQty: 2,
+          transactionId: 'tx1');
+      await db.addPreorderEntry(
+          id: 'po2',
+          productId: 'P2',
+          productUnitId: 'U2',
+          customerName: 'Pak Budi',
+          qtyOrdered: 3,
+          depositQty: 1,
+          transactionId: 'tx1');
+    }
+
+    Future<void> openPreorderTab(WidgetTester tester) async {
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pre-order'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('statistik memisahkan total produk vs total jaminan',
+        (tester) async {
+      await seedPreorders();
+      await openPreorderTab(tester);
+
+      expect(find.text('Total produk'), findsOneWidget);
+      expect(find.text('Total jaminan'), findsOneWidget);
+      // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 wadah — SENGAJA dua angka
+      // terpisah, bukan dijumlahkan jadi satu.
+      expect(find.text('5'), findsOneWidget, reason: 'total produk dipesan');
+      expect(find.text('3'), findsOneWidget, reason: 'total jaminan dititip');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets('cari by NAMA PELANGGAN menyaring daftar & statistik',
+        (tester) async {
+      await seedPreorders();
+      await openPreorderTab(tester);
+
+      await tester.enterText(find.byType(TextField), 'Budi');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pak Budi'), findsOneWidget);
+      expect(find.text('Bu Artia'), findsNothing);
+      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan.
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets('cari by NAMA PRODUK juga bisa', (tester) async {
+      await seedPreorders();
+      await openPreorderTab(tester);
+
+      await tester.enterText(find.byType(TextField), 'galon');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pak Budi'), findsOneWidget,
+          reason: 'Galon Aqua dipesan Pak Budi');
+      expect(find.text('Bu Artia'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets('kata kunci tanpa hasil -> pesan kosong, bukan daftar penuh',
+        (tester) async {
+      await seedPreorders();
+      await openPreorderTab(tester);
+
+      await tester.enterText(find.byType(TextField), 'zzz');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Tidak ada yang cocok'), findsOneWidget);
+      expect(find.text('Bu Artia'), findsNothing);
+      expect(find.text('Pak Budi'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+  });
+
   group('Pinjaman (permintaan user putaran terbaru — group by pelanggan)', () {
     Future<void> tapPinjamanTab(WidgetTester tester) async {
       await tester.tap(find.text('Pinjaman'));
