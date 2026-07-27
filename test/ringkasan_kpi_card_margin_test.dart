@@ -36,4 +36,21 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  testWidgets(
+      'jarak atas (antara TabBar dan kartu KPI pertama) lebih sempit drpd '
+      'jarak sisi/bawah — screenshot beranotasi panah dari user menunjuk '
+      'PERSIS gap ini', (tester) async {
+    await pumpWithFakeApp(tester, db: db, child: RingkasanTab(range: range));
+    await tester.pumpAndSettle();
+
+    final listView = tester.widget<ListView>(find.byType(ListView));
+    final padding = listView.padding as EdgeInsets;
+    expect(padding.top, lessThan(padding.left),
+        reason: 'jarak atas harus dipersempit drpd sisi kiri/kanan (16), '
+            'bukan sama rata EdgeInsets.all(16) spt sebelumnya');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }

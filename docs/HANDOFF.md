@@ -13,28 +13,36 @@ bolak-balik) + 4 perbaikan UI dari laporan screenshot device asli, 2
 penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
 keterangan Laci Meja membedakan titip vs ketinggalan), SATU putaran
 redesign (menu cepat Kasir/Laci Meja + 2 perbaikan di tab Ringkasan &
-struk share), lalu SATU PUTARAN LAGI (animasi menu, grouping frame
-Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis — lihat bagian
-PALING BAWAH, paling baru). Belum di-merge ke `main` / di-push ke
-`origin` — commit-commit ada di branch
+struk share), SATU PUTARAN LAGI (animasi menu, grouping frame
+Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis), lalu SATU FIX
+KECIL PENUTUP (gap TabBar->kartu KPI, akhirnya ketemu lewat screenshot
+beranotasi panah user — lihat bagian PALING BAWAH). Belum di-merge ke
+`main` / di-push ke `origin` — commit-commit ada di branch
 `claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
 (pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
 
-## ⚠️ ISU BELUM TERSELESAIKAN — gap "di kiri Ringkasan" (butuh info lebih)
+## Fix gap TabBar->kartu KPI RingkasanTab — akhirnya ketemu (SELESAI)
 
-User laporkan (screenshot) masih ada "jarak/gap" di tab Laporan >
-Ringkasan meski fix margin Card KPI (putaran sebelumnya, commit
-`673d045`) SUDAH terpasang di build yang mereka pakai (dikonfirmasi
-via AskUserQuestion). Artinya root cause SESUNGGUHNYA BUKAN margin Card
-KPI (sudah dicoba, tidak cukup) — ada elemen lain yang bikin gap terlihat
-tidak semestinya, tapi belum berhasil dipastikan dari screenshot statis
-saja (kandidat yang sudah DIPERIKSA & DIRUNTUHKAN: top padding ListView
-16dp — sama persis dgn tab laporan lain jadi bukan penyebab unik;
-`SyncStatusBanner` — return `SizedBox.shrink()` kalau `!hasActivity`,
-tidak reserve ruang). **BELUM diperbaiki** — sesi berikutnya WAJIB minta
-user menunjuk PERSIS lokasi gap (mis. screenshot dgn lingkaran/panah, atau
-deskripsi "antara X dan Y") sebelum coba fix lagi, supaya tidak menebak
-buta & sia-sia rebuild APK lagi.
+Riwayat percobaan (supaya tidak diulang kalau muncul lagi dgn gejala
+serupa): percobaan PERTAMA (`673d045`, `margin: EdgeInsets.zero` di Card
+KPI) menyasar jarak ANTAR-baris KPI — user KONFIRMASI build sudah
+terpasang tapi gap MASIH terlihat, jadi itu bukan akarnya. Diminta
+screenshot beranotasi panah — ternyata gap yang dimaksud SEJAK AWAL
+adalah ruang kosong ANTARA underline tab "Ringkasan" dan kartu "Omzet" di
+BARIS PERTAMA (bukan antar-baris). Akar: `ListView`'s `padding:
+EdgeInsets.all(16)` sama rata di semua sisi — top 16px berdiri sendiri
+tanpa elemen visual lain mengisinya (beda dgn kartu² di bawahnya yg
+saling berdekatan), jadi terasa lebih lebar drpd sisi kiri/kanan/bawah.
+Fix: `EdgeInsets.fromLTRB(16, 8, 16, 16)` — top dipersempit jadi 8, sisi
+lain tetap. Test baru di `ringkasan_kpi_card_margin_test.dart` (assert
+`padding.top < padding.left`) — revert-verified.
+
+**Pelajaran**: laporan visual user ("ada gap/renggang") bisa BUKAN
+merujuk ke hal yang paling jelas kelihatan sekilas dari kode (jarak
+antar-baris yg memang ada bug margin-nya) — screenshot beranotasi PANAH
+dari user jauh lebih presisi drpd menebak dari deskripsi teks semata.
+Kalau fix pertama sudah dikonfirmasi live tapi keluhan MASIH ADA, JANGAN
+coba varian fix yg sama lagi — minta gambar beranotasi lebih dulu.
 
 ## Redesain menu cepat Kasir/Laci Meja + 2 perbaikan lain (putaran kedua)
 
