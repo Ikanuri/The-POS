@@ -5,20 +5,19 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 27 Juli 2026 — **Item 52 ("Laci Meja") SELESAI dieksekusi
-penuh** (semua 10 fase: skema, DB layer, sync, dashboard, gesture bottom
-nav, entry dari Struk, 2 jalur entry Pre-order, toggle requiresDeposit).
-Belum di-merge ke `main` / di-push — commit-commit ada di branch
+_Update sesi 27 Juli 2026 (lanjutan) — **Item 52 ("Laci Meja") SELESAI
+TOTAL** termasuk bagian yang sempat ditunda (layar review usulan). Belum
+di-merge ke `main` / di-push ke `origin` — commit-commit ada di branch
 `claude/kategori-produk-qty-harga-mqjh21`, menunggu user minta merge
 (pola sesi-sesi sebelumnya: minta eksplisit dulu baru merge/push)._
 
-## Item 52 ("Laci Meja") — SELESAI, ringkasan implementasi
+## Item 52 ("Laci Meja") — SELESAI TOTAL, ringkasan implementasi
 
 Fitur lengkap: Titip/Ketinggalan, Pinjaman Barang, Pre-order (termasuk
-antrian tabung LPG). Rancangan detail sudah dihapus dari PLAN.md (selesai
-dieksekusi, sesuai konvensi) — kalau perlu rujuk lagi detail bisnis
-rules/skema, baca commit-commit `feat: Laci Meja (Item 52) fase N` di
-riwayat, atau `git show` commit-commit itu satu-satu.
+antrian tabung LPG), plus layar review usulan owner. Rancangan detail
+sudah dihapus dari PLAN.md (selesai dieksekusi, sesuai konvensi) — kalau
+perlu rujuk lagi detail bisnis rules/skema, baca commit-commit `feat:
+Laci Meja (Item 52) fase N` di riwayat, atau `git show` satu-satu.
 
 - **Fase 1-3** (`2411e17`): skema (schemaVersion 21->22), DB layer CRUD,
   sync (host->klien auto-merge, klien->host via antrian usulan PARALEL
@@ -31,6 +30,11 @@ riwayat, atau `git show` commit-commit itu satu-satu.
 - **Fase 9 fix** (`ec7257e`): 11 test migrasi lama disesuaikan (assert
   versi 21->22, + 7 di antaranya butuh tabel `product_units` sintetis
   baru krn migrasi v22 menyentuhnya) — bukan bug produksi.
+- **Susulan** (`d25b8f2`): layar review usulan Laci Meja utk owner
+  (`LaciMejaProposalReviewScreen`, kartu "Usulan Laci Meja" di
+  `SyncScreen`) — bagian yang sempat ditunda di commit fase 1-3, sekarang
+  sudah ada. `SyncState.laciMejaProposals` diwire ke
+  `LanSyncService.onLaciMejaProposalsChanged`.
 
 **Bug nyata ditemukan & diperbaiki SELAMA build** (bukan pra-eksisting):
 `applyLaciMejaProposals` awalnya `customInsert` tanpa param `updates:` —
@@ -49,17 +53,8 @@ pada saat query-nya sendiri (query-nya sendiri selesai dgn benar). Fix:
 pakai one-shot `db.select(db.table).get()` alih-alih `.watch().first`
 utk verifikasi state di widget test.
 
-**Belum sempat/sengaja ditunda** (tidak menghalangi status "selesai" —
-scope asli PLAN.md Item 52 sudah tercakup semua):
-- Proposal-review UI utk Laci Meja (layar mirip
-  `product_proposal_review_screen.dart` tapi utk 3 tabel Laci Meja) BELUM
-  dibuat — `PendingLaciMejaProposal`/`applyLaciMejaProposal`/
-  `dismissLaciMejaProposal` sudah ada di `lan_sync_service.dart` (siap
-  pakai), tinggal butuh UI. Sampai ada UI ini, usulan client->host Laci
-  Meja akan MASUK antrian (`LanSyncService.pendingLaciMejaProposals`)
-  tapi TIDAK ADA cara owner meninjaunya dari layar mana pun — perlu
-  ditambahkan sebelum fitur "usulan" Laci Meja benar-benar terpakai
-  device non-owner di lapangan.
+**Belum sempat/sengaja ditunda** (kosmetik/keputusan desain, bukan
+fungsional — tidak menghalangi status "selesai"):
 - Ambang warna umur (hijau/kuning/merah) di dashboard Laci Meja pakai
   angka sementara (7/30 hari, sama seperti `HutangTab`) — user belum
   pernah diminta konfirmasi ambang spesifik utk kategori ini.

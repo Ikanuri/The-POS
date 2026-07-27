@@ -29,6 +29,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   - Untuk produk model tukar-wadah (mis. LPG), ada toggle baru "Butuh
     Jaminan Fisik saat Antri" di form Edit Produk — kalau diaktifkan,
     pencatatan antrian mewajibkan jumlah wadah yang dititip diisi.
+  - Kalau ada catatan Laci Meja yang dibuat pegawai/asisten (bukan
+    owner), owner bisa meninjau & menyetujuinya dulu di layar Sinkron
+    WiFi (kartu "Usulan Laci Meja") sebelum masuk ke data toko.
 
 ## 26 Juli 2026
 

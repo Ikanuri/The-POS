@@ -458,10 +458,3 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 6. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
-7. **Susulan Item 52 ("Laci Meja")** — fitur utama SUDAH selesai
-   dieksekusi & di-commit (lihat CHANGELOG 27 Juli). Satu bagian sengaja
-   ditunda: **layar review usulan client→host** utk 3 tabel Laci Meja
-   (mirip `product_proposal_review_screen.dart`) belum dibuat —
-   `PendingLaciMejaProposal`/`applyLaciMejaProposal`/
-   `dismissLaciMejaProposal` di `lan_sync_service.dart` sudah siap pakai,
-   tinggal butuh UI. Detail di docs/HANDOFF.md.
