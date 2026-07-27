@@ -16,7 +16,14 @@ import 'transaction_tables.dart';
 class LeftBehindItems extends Table {
   TextColumn get id => text()(); // UUID
   TextColumn get transactionId => text().references(Transactions, #id)();
-  TextColumn get itemName => text()(); // freeform, bukan produk terstruktur
+  TextColumn get itemName => text()(); // nama produk, disalin dari nota
+
+  /// Item 52 susulan — id baris `transaction_items` yang ditandai. Tautan
+  /// PRESISI ke baris nota (bukan cocok-nama): produk yang SAMA bisa muncul
+  /// beberapa kali di satu nota dgn satuan berbeda (Pak vs Slop — lazim di
+  /// data toko ini), jadi mencocokkan lewat nama akan salah tandai. Nullable
+  /// utk entri lama yang dibuat sebelum kolom ini ada.
+  TextColumn get transactionItemId => text().nullable()();
   TextColumn get jenis => text()(); // 'ketinggalan' | 'titip'
   TextColumn get customerId => text().nullable().references(Customers, #id)();
   TextColumn get customerNameText => text().nullable()();

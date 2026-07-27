@@ -20,6 +20,8 @@ import '../../core/services/order_parser_service.dart';
 import '../../core/services/price_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/providers/laci_meja_provider.dart';
+import '../laci_meja/laci_meja_reminder.dart';
 import '../laci_meja/preorder_entry_dialog.dart';
 import '../../core/widgets/item_count_badge.dart';
 import '../produk/catalog/catalog_models.dart';
@@ -1298,6 +1300,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
               reservedLocalId: parsed.reservedLocalId,
             )
           : CartMeta(reservedLocalId: parsed.reservedLocalId);
+      // Item 55/56 — nomor nota bawaan dari device pengirim WAJIB dicatat
+      // juga ke `reserved_order_numbers` device INI, kalau tidak nomor itu
+      // bisa dibagikan lagi ke keranjang lain di sini lalu bentrok UNIQUE
+      // saat checkout (bug nyata, lihat dok `adoptReservedLocalId`).
+      if (parsed.reservedLocalId != null) {
+        await db.adoptReservedLocalId(parsed.reservedLocalId!);
+      }
       final payload = jsonEncode({
         'items': parsed.items.map((i) => i.toCartItem().toJson()).toList(),
         'meta': meta.toJson(),
@@ -1979,6 +1988,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             : cartNotifier
                                 .effectiveQtyFor(cartNotifier.lastTouchedItem!),
                         showSwipeHint: _swipeHintVisible,
+                        laciMejaSummary: LaciMejaReminder.summaryOf(
+                            ref
+                                .watch(laciMejaPendingProvider((
+                                  ref.watch(cartMetaProvider(_cartId)).customerId,
+                                  ref.watch(cartMetaProvider(_cartId)).customerName,
+                                )))
+                                .valueOrNull),
                         orderNumber:
                             _isAddMode ? null : cartMeta.displayOrderNumber,
                       ),
@@ -3052,10 +3068,16 @@ class _CartBar extends StatelessWidget {
     this.lastEffQty = 0,
     this.showSwipeHint = false,
     this.orderNumber,
+    this.laciMejaSummary,
   });
 
   final int total;
   final int count;
+
+  /// Item 52 susulan — ringkasan Laci Meja yang masih menggantung utk
+  /// pelanggan keranjang ini (null/kosong = tidak ada). Ditampilkan sbg
+  /// pengingat, pola sama dgn pengingat hutang di modal checkout.
+  final String? laciMejaSummary;
 
   /// Item 55 — segmen terakhir nomor nota (mis. "17"), null selama belum
   /// direservasi (keranjang baru saja mulai diisi) atau mode tambah
@@ -3103,6 +3125,8 @@ class _CartBar extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (laciMejaSummary != null && laciMejaSummary!.isNotEmpty)
+                LaciMejaReminder.bar(context, laciMejaSummary!),
               // Total diperbesar & di-center, dengan badge jumlah item di kiri.
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -3148,7 +3172,9 @@ class _CartBar extends StatelessWidget {
                     ],
                   ),
                   textAlign: TextAlign.center,
-                  maxLines: 1,
+                  // Nama produk toko ini bisa panjang ("234 12 Edisi" dst) —
+                  // beri ruang 2 baris drpd terpotong ellipsis.
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -3484,8 +3510,16 @@ class _CartMetaTab extends ConsumerWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant, 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+          // Bug nyata dilaporkan user (screenshot): nama pelanggan panjang
+          // mendorong tombol "Bayar" KELUAR layar sampai terpotong — dulu
+          // `Row(mainAxisSize.min)` yang tidak pernah melipat. `Wrap` bikin
+          // segmen yang tidak muat turun ke baris berikutnya (tab ikut
+          // meninggi), jadi tombol Bayar SELALU terjangkau berapa pun
+          // panjang namanya.
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _MetaChip(
                 icon: Icons.person_outline,
@@ -3495,7 +3529,6 @@ class _CartMetaTab extends ConsumerWidget {
                 onClear:
                     meta.hasCustomer ? () => notifier.clearCustomer() : null,
               ),
-              const SizedBox(width: 4),
               _MetaChip(
                 icon: Icons.badge_outlined,
                 label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
@@ -3504,7 +3537,6 @@ class _CartMetaTab extends ConsumerWidget {
                 onClear:
                     meta.hasEmployee ? () => notifier.clearEmployee() : null,
               ),
-              const SizedBox(width: 4),
               InkWell(
                 onTap: onHold,
                 borderRadius: BorderRadius.circular(8),
@@ -3529,8 +3561,7 @@ class _CartMetaTab extends ConsumerWidget {
               // Item 56 — segmen "Bayar" terracotta, menempel setelah Tahan
               // (Varian A) — tap langsung ke layar bayar (`/kasir/bayar`),
               // TANPA lewat sheet keranjang dulu (checkout cepat).
-              if (!needsGate) ...[
-                const SizedBox(width: 4),
+              if (!needsGate)
                 InkWell(
                   onTap: onBayar,
                   borderRadius: BorderRadius.circular(8),
@@ -3556,7 +3587,6 @@ class _CartMetaTab extends ConsumerWidget {
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         ),

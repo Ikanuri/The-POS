@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' hide Column;
@@ -13,6 +14,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_meta_provider.dart';
 import 'discount_allocation.dart';
 import 'cart_provider.dart';
@@ -65,6 +67,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _custDropdownOpen = false;
   List<Customer> _custSuggestions = [];
   Map<String, (int, int)> _custDebts = {};
+
+  /// Item 52 susulan — jumlah catatan Laci Meja yang MASIH menggantung utk
+  /// pelanggan terpilih (titip/ketinggalan, pinjaman, pre-order). Pola sama
+  /// dgn pengingat hutang di atasnya, tapi aksen dusty rose (Laci Meja) —
+  /// sengaja DIBEDAKAN dari merah hutang supaya tidak tertukar maknanya.
+  ({int titipKetinggalan, int pinjaman, int preorder})? _laciMejaPending;
+
+  Future<void> _refreshLaciMejaPending() async {
+    final db = ref.read(databaseProvider);
+    final c = _selectedCustomer;
+    final pending = c != null
+        ? await db.getLaciMejaPendingForCustomer(c.id)
+        : await db.getLaciMejaPendingForName(_custNameManual);
+    if (mounted) setState(() => _laciMejaPending = pending);
+  }
   final _custCtrl = TextEditingController();
   // Untuk menggulir field pelanggan ke atas viewport agar dropdown saran tidak
   // tertutup keyboard saat mengetik.
@@ -175,6 +192,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         }
         _selectedEmployee = preEmployee;
       });
+      unawaited(_refreshLaciMejaPending());
     }
   }
 
@@ -441,8 +459,19 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // `generateUniqueLocalId` HANYA kalau entah bagaimana belum sempat
       // direservasi (seharusnya tidak terjadi di alur normal).
       final reservedId = ref.read(cartMetaProvider(_cartId)).reservedLocalId;
-      final localId = reservedId ??
-          await db.generateUniqueLocalId(device.deviceCode, now);
+      // Bug nyata dilaporkan user: pesanan dipindah owner->asisten via QR
+      // lalu dikembalikan asisten->owner, checkout GAGAL TOTAL dgn "UNIQUE
+      // constraint failed: transactions.local_id" — transaksi tidak bisa
+      // diselesaikan sama sekali (kasir mentok, uang sudah diterima).
+      // Akarnya di jalur reservasi nomor (lihat dok `adoptReservedLocalId`),
+      // TAPI penjaga di sini tetap WAJIB ada: nomor reservasi apa pun yang
+      // ternyata sudah keburu jadi `transactions.local_id` milik nota lain
+      // TIDAK BOLEH menggagalkan checkout — jatuh ke nomor bebas berikutnya
+      // saja. Lebih baik nomor nota lompat daripada penjualan tidak bisa
+      // ditutup.
+      final localId = (reservedId != null && !await db.isLocalIdTaken(reservedId))
+          ? reservedId
+          : await db.generateUniqueLocalId(device.deviceCode, now);
 
       final isTempo = _selectedMethodType == 'tempo';
       final paidAmount = isTempo ? 0 : _paid;
@@ -947,6 +976,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                             ],
                                           ),
                                         ),
+                                      LaciMejaReminder(pending: _laciMejaPending),
                                     ] else ...[
                                       TextField(
                                         key: _custFieldKey,
@@ -1064,6 +1094,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                                     _custDropdownOpen = false;
                                                   });
                                                   _syncMetaCustomer();
+                                                  unawaited(
+                                                      _refreshLaciMejaPending());
                                                 },
                                               );
                                             },

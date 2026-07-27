@@ -180,7 +180,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -343,6 +343,17 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(borrowedItems);
             await m.createTable(preorderEntries);
             await m.addColumn(productUnits, productUnits.requiresDeposit);
+          }
+          if (from < 23 && from >= 22) {
+            // Item 52 susulan — tautan presisi entri Titip/Ketinggalan ke
+            // baris nota (lihat dok kolom di laci_meja_tables.dart).
+            // Guard `from >= 22`: kalau upgrade dari versi < 22,
+            // `createTable(leftBehindItems)` di step v22 di atas SUDAH
+            // memakai definisi tabel TERKINI (sudah termasuk kolom ini) —
+            // addColumn lagi di sini akan gagal "duplicate column name".
+            // Pola identik dgn guard v21 (`syncUploadQueue.deviceCode`).
+            await m.addColumn(
+                leftBehindItems, leftBehindItems.transactionItemId);
           }
         },
         beforeOpen: (details) async {
@@ -751,6 +762,35 @@ class AppDatabase extends _$AppDatabase {
   Future<void> releaseLocalId(String localId) =>
       (delete(reservedOrderNumbers)..where((t) => t.localId.equals(localId)))
           .go();
+
+  /// Daftarkan ulang nomor nota yang DIBAWA MASUK dari device lain (transfer
+  /// QR, Item 56) ke `reserved_order_numbers` di device INI.
+  ///
+  /// Bug nyata dilaporkan user: pesanan dipindah owner→asisten via QR lalu
+  /// dikembalikan asisten→owner, saat checkout gagal total dgn "UNIQUE
+  /// constraint failed: transactions.local_id". Akarnya: nomor yang
+  /// diterima lewat QR cuma disimpan di `CartMeta.reservedLocalId`
+  /// (in-memory/JSON keranjang) tanpa PERNAH dicatat ke
+  /// `reserved_order_numbers` device penerima — jadi `reserveLocalId`
+  /// berikutnya di device itu tidak tahu nomor tsb sedang dipakai dan
+  /// membagikannya lagi ke keranjang LAIN. Begitu keranjang lain itu
+  /// checkout duluan, nomornya jadi milik `transactions`, dan keranjang
+  /// hasil transfer tadi menabrak UNIQUE saat gilirannya bayar.
+  ///
+  /// `insertOrIgnore`: aman dipanggil berkali-kali (mis. QR yang sama
+  /// di-scan ulang) & aman kalau nomor itu memang sudah direservasi di sini.
+  Future<void> adoptReservedLocalId(String localId) =>
+      into(reservedOrderNumbers).insert(
+          ReservedOrderNumbersCompanion.insert(localId: localId),
+          mode: InsertMode.insertOrIgnore);
+
+  /// true bila [localId] SUDAH dipakai baris `transactions` sungguhan —
+  /// dipakai checkout utk mendeteksi nomor reservasi basi sebelum insert
+  /// (lihat dok `adoptReservedLocalId` soal bagaimana itu bisa terjadi).
+  Future<bool> isLocalIdTaken(String localId) async =>
+      (await (select(transactions)..where((t) => t.localId.equals(localId)))
+              .getSingleOrNull()) !=
+      null;
 
   String _localIdPrefix(String deviceCode, DateTime at) {
     final datePart = '${at.year}'
@@ -4774,6 +4814,7 @@ class AppDatabase extends _$AppDatabase {
     required String transactionId,
     required String itemName,
     required String jenis,
+    String? transactionItemId,
     String? customerId,
     String? customerNameText,
     String? note,
@@ -4784,11 +4825,81 @@ class AppDatabase extends _$AppDatabase {
         transactionId: transactionId,
         itemName: itemName,
         jenis: jenis,
+        transactionItemId: Value(transactionItemId),
         customerId: Value(customerId),
         customerNameText: Value(customerNameText),
         note: Value(note),
         locallyModified: Value(locallyModified),
       ));
+
+  /// Baris nota mana saja yang ditandai titip/ketinggalan — dipakai struk
+  /// in-app utk memberi penanda per-item (pola sama dgn badge "Habis" di
+  /// katalog kasir). Key = `transaction_items.id`, value = jenis
+  /// ('titip'/'ketinggalan'). Entri lama tanpa `transactionItemId` (dibuat
+  /// sebelum kolom itu ada) otomatis terlewat — memang tidak bisa dipetakan
+  /// ke baris tertentu.
+  Future<Map<String, String>> getLeftBehindMarksForTransaction(
+      String transactionId) async {
+    final rows = await (select(leftBehindItems)
+          ..where((t) =>
+              t.transactionId.equals(transactionId) &
+              t.collectedAt.isNull() &
+              t.transactionItemId.isNotNull()))
+        .get();
+    return {for (final r in rows) r.transactionItemId!: r.jenis};
+  }
+
+  /// Ringkasan Laci Meja yang MASIH menggantung utk satu pelanggan —
+  /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
+  /// pengingat hutang), supaya barang titipan/pinjaman/pre-order tidak
+  /// terlupa saat pelanggan yang sama datang lagi.
+  Future<({int titipKetinggalan, int pinjaman, int preorder})>
+      getLaciMejaPendingForCustomer(String customerId) async {
+    final left = await (select(leftBehindItems)
+          ..where((t) =>
+              t.customerId.equals(customerId) & t.collectedAt.isNull()))
+        .get();
+    final borrowed = await (select(borrowedItems)
+          ..where((t) =>
+              t.customerId.equals(customerId) & t.fullyReturnedAt.isNull()))
+        .get();
+    return (
+      titipKetinggalan: left.length,
+      pinjaman: borrowed.length,
+      preorder: 0,
+    );
+  }
+
+  /// Sama seperti [getLaciMejaPendingForCustomer] tapi utk pelanggan yang
+  /// TIDAK terdaftar (hanya punya nama teks) — Pre-order memang hanya
+  /// menyimpan nama (tanpa `customerId`), jadi pencocokan nama satu-satunya
+  /// jalan utk kategori itu.
+  Future<({int titipKetinggalan, int pinjaman, int preorder})>
+      getLaciMejaPendingForName(String customerName) async {
+    final nama = customerName.trim();
+    if (nama.isEmpty) {
+      return (titipKetinggalan: 0, pinjaman: 0, preorder: 0);
+    }
+    final left = await (select(leftBehindItems)
+          ..where((t) =>
+              t.customerNameText.equals(nama) & t.collectedAt.isNull()))
+        .get();
+    final borrowed = await (select(borrowedItems)
+          ..where((t) =>
+              t.customerNameText.equals(nama) & t.fullyReturnedAt.isNull()))
+        .get();
+    final preorder = await (select(preorderEntries)
+          ..where((t) =>
+              t.customerName.equals(nama) &
+              t.fulfilledAt.isNull() &
+              t.cancelledAt.isNull()))
+        .get();
+    return (
+      titipKetinggalan: left.length,
+      pinjaman: borrowed.length,
+      preorder: preorder.length,
+    );
+  }
 
   /// Diurut PALING LAMA MENUNGGU dulu (FIFO), sesuai rancangan dashboard.
   Stream<List<LeftBehindItem>> watchLeftBehindItems(

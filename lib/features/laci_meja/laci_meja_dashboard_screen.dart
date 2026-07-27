@@ -28,6 +28,35 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     return AppTheme.changeFg(isDark);
   }
 
+  /// Subtitle kartu: keterangan + NAMA PELANGGAN ber-aksen terracotta
+  /// (`AppTheme.accent`, aksen utama app) supaya langsung kebaca "punya
+  /// siapa" — sengaja dibedakan dari warna umur (hijau/kuning/merah) yang
+  /// menandai seberapa lama menunggu.
+  static Widget _subtitle({
+    required String leading,
+    required String? customerName,
+    required int days,
+    required bool isDark,
+  }) {
+    final ageStyle = TextStyle(
+        fontSize: 12, color: _ageColor(days, isDark), fontWeight: FontWeight.w600);
+    return Text.rich(
+      TextSpan(
+        style: ageStyle,
+        children: [
+          TextSpan(text: leading),
+          if (customerName != null && customerName.isNotEmpty)
+            TextSpan(
+              text: ' — $customerName',
+              style: const TextStyle(
+                  color: AppTheme.accent, fontWeight: FontWeight.w700),
+            ),
+          TextSpan(text: ' · $days hari lalu'),
+        ],
+      ),
+    );
+  }
+
   static int _daysSince(DateTime d) => DateTime.now().difference(d).inDays;
 
   @override
@@ -131,14 +160,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           // dalam shell).
           onTap: () => context.push('/kasir/struk/${e.transactionId}'),
           title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text(
-            '${e.jenis == 'titip' ? 'Dititip' : 'Ketinggalan'}'
-            '${e.customerNameText != null ? ' — ${e.customerNameText}' : ''}'
-            ' · $days hari lalu',
-            style: TextStyle(
-                fontSize: 12,
-                color: _ageColor(days, isDark),
-                fontWeight: FontWeight.w600),
+          subtitle: _subtitle(
+            leading: e.jenis == 'titip' ? 'Dititip' : 'Ketinggalan',
+            customerName: e.customerNameText,
+            days: days,
+            isDark: isDark,
           ),
           trailing: TextButton(
             onPressed: () async {
@@ -171,14 +197,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         return ListTile(
           onTap: () => context.push('/kasir/struk/${e.transactionId}'),
           title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text(
-            'Sisa $sisa dari ${e.qty}'
-            '${e.customerNameText != null ? ' — ${e.customerNameText}' : ''}'
-            ' · $days hari lalu',
-            style: TextStyle(
-                fontSize: 12,
-                color: _ageColor(days, isDark),
-                fontWeight: FontWeight.w600),
+          subtitle: _subtitle(
+            leading: 'Sisa $sisa dari ${e.qty}',
+            customerName: e.customerNameText,
+            days: days,
+            isDark: isDark,
           ),
           trailing: TextButton(
             onPressed: () => _showReturnDialog(context, ref, e),
@@ -241,15 +264,13 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
               ? null
               : () => context.push('/kasir/struk/${e.transactionId}'),
           title: Text(e.customerName, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text(
-            'Qty ${e.qtyOrdered}'
-            '${e.depositQty > 0 ? ' · titip wadah ${e.depositQty}' : ''}'
-            '${e.paid ? ' · sudah bayar' : ''}'
-            ' · $days hari lalu',
-            style: TextStyle(
-                fontSize: 12,
-                color: _ageColor(days, isDark),
-                fontWeight: FontWeight.w600),
+          subtitle: _subtitle(
+            leading: 'Qty ${e.qtyOrdered}'
+                '${e.depositQty > 0 ? ' · titip wadah ${e.depositQty}' : ''}'
+                '${e.paid ? ' · sudah bayar' : ''}',
+            customerName: null,
+            days: days,
+            isDark: isDark,
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,

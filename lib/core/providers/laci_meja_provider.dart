@@ -27,3 +27,23 @@ final preorderEntriesProvider = StreamProvider<List<PreorderEntry>>((ref) {
 final laciMejaLocallyModifiedProvider = Provider<bool>((ref) {
   return !ref.watch(deviceProvider).isOwner;
 });
+
+/// Item 52 susulan — ringkasan Laci Meja yang masih menggantung utk
+/// pelanggan keranjang aktif, dipakai pengingat di cart bar (pola sama dgn
+/// pengingat hutang di modal checkout). Key: (customerId, customerName) —
+/// pelanggan terdaftar dicocokkan lewat id, pembeli lepas lewat nama.
+final laciMejaPendingProvider = FutureProvider.family<
+    ({int titipKetinggalan, int pinjaman, int preorder}),
+    (String?, String?)>((ref, key) async {
+  final (customerId, customerName) = key;
+  final db = ref.watch(databaseProvider);
+  // Ikut ter-refresh begitu ada entri Laci Meja berubah.
+  ref.watch(laciMejaOpenCountProvider);
+  if (customerId != null && customerId.isNotEmpty) {
+    return db.getLaciMejaPendingForCustomer(customerId);
+  }
+  if (customerName != null && customerName.trim().isNotEmpty) {
+    return db.getLaciMejaPendingForName(customerName);
+  }
+  return (titipKetinggalan: 0, pinjaman: 0, preorder: 0);
+});

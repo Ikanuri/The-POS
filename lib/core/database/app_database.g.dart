@@ -11728,6 +11728,12 @@ class $LeftBehindItemsTable extends LeftBehindItems
   late final GeneratedColumn<String> itemName = GeneratedColumn<String>(
       'item_name', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _transactionItemIdMeta =
+      const VerificationMeta('transactionItemId');
+  @override
+  late final GeneratedColumn<String> transactionItemId =
+      GeneratedColumn<String>('transaction_item_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _jenisMeta = const VerificationMeta('jenis');
   @override
   late final GeneratedColumn<String> jenis = GeneratedColumn<String>(
@@ -11790,6 +11796,7 @@ class $LeftBehindItemsTable extends LeftBehindItems
         id,
         transactionId,
         itemName,
+        transactionItemId,
         jenis,
         customerId,
         customerNameText,
@@ -11827,6 +11834,12 @@ class $LeftBehindItemsTable extends LeftBehindItems
           itemName.isAcceptableOrUnknown(data['item_name']!, _itemNameMeta));
     } else if (isInserting) {
       context.missing(_itemNameMeta);
+    }
+    if (data.containsKey('transaction_item_id')) {
+      context.handle(
+          _transactionItemIdMeta,
+          transactionItemId.isAcceptableOrUnknown(
+              data['transaction_item_id']!, _transactionItemIdMeta));
     }
     if (data.containsKey('jenis')) {
       context.handle(
@@ -11885,6 +11898,8 @@ class $LeftBehindItemsTable extends LeftBehindItems
           .read(DriftSqlType.string, data['${effectivePrefix}transaction_id'])!,
       itemName: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}item_name'])!,
+      transactionItemId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}transaction_item_id']),
       jenis: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}jenis'])!,
       customerId: attachedDatabase.typeMapping
@@ -11914,6 +11929,13 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
   final String id;
   final String transactionId;
   final String itemName;
+
+  /// Item 52 susulan — id baris `transaction_items` yang ditandai. Tautan
+  /// PRESISI ke baris nota (bukan cocok-nama): produk yang SAMA bisa muncul
+  /// beberapa kali di satu nota dgn satuan berbeda (Pak vs Slop — lazim di
+  /// data toko ini), jadi mencocokkan lewat nama akan salah tandai. Nullable
+  /// utk entri lama yang dibuat sebelum kolom ini ada.
+  final String? transactionItemId;
   final String jenis;
   final String? customerId;
   final String? customerNameText;
@@ -11929,6 +11951,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       {required this.id,
       required this.transactionId,
       required this.itemName,
+      this.transactionItemId,
       required this.jenis,
       this.customerId,
       this.customerNameText,
@@ -11943,6 +11966,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
     map['id'] = Variable<String>(id);
     map['transaction_id'] = Variable<String>(transactionId);
     map['item_name'] = Variable<String>(itemName);
+    if (!nullToAbsent || transactionItemId != null) {
+      map['transaction_item_id'] = Variable<String>(transactionItemId);
+    }
     map['jenis'] = Variable<String>(jenis);
     if (!nullToAbsent || customerId != null) {
       map['customer_id'] = Variable<String>(customerId);
@@ -11967,6 +11993,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       id: Value(id),
       transactionId: Value(transactionId),
       itemName: Value(itemName),
+      transactionItemId: transactionItemId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionItemId),
       jenis: Value(jenis),
       customerId: customerId == null && nullToAbsent
           ? const Value.absent()
@@ -11991,6 +12020,8 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       id: serializer.fromJson<String>(json['id']),
       transactionId: serializer.fromJson<String>(json['transactionId']),
       itemName: serializer.fromJson<String>(json['itemName']),
+      transactionItemId:
+          serializer.fromJson<String?>(json['transactionItemId']),
       jenis: serializer.fromJson<String>(json['jenis']),
       customerId: serializer.fromJson<String?>(json['customerId']),
       customerNameText: serializer.fromJson<String?>(json['customerNameText']),
@@ -12008,6 +12039,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       'id': serializer.toJson<String>(id),
       'transactionId': serializer.toJson<String>(transactionId),
       'itemName': serializer.toJson<String>(itemName),
+      'transactionItemId': serializer.toJson<String?>(transactionItemId),
       'jenis': serializer.toJson<String>(jenis),
       'customerId': serializer.toJson<String?>(customerId),
       'customerNameText': serializer.toJson<String?>(customerNameText),
@@ -12023,6 +12055,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           {String? id,
           String? transactionId,
           String? itemName,
+          Value<String?> transactionItemId = const Value.absent(),
           String? jenis,
           Value<String?> customerId = const Value.absent(),
           Value<String?> customerNameText = const Value.absent(),
@@ -12035,6 +12068,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
         itemName: itemName ?? this.itemName,
+        transactionItemId: transactionItemId.present
+            ? transactionItemId.value
+            : this.transactionItemId,
         jenis: jenis ?? this.jenis,
         customerId: customerId.present ? customerId.value : this.customerId,
         customerNameText: customerNameText.present
@@ -12053,6 +12089,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           ? data.transactionId.value
           : this.transactionId,
       itemName: data.itemName.present ? data.itemName.value : this.itemName,
+      transactionItemId: data.transactionItemId.present
+          ? data.transactionItemId.value
+          : this.transactionItemId,
       jenis: data.jenis.present ? data.jenis.value : this.jenis,
       customerId:
           data.customerId.present ? data.customerId.value : this.customerId,
@@ -12076,6 +12115,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           ..write('id: $id, ')
           ..write('transactionId: $transactionId, ')
           ..write('itemName: $itemName, ')
+          ..write('transactionItemId: $transactionItemId, ')
           ..write('jenis: $jenis, ')
           ..write('customerId: $customerId, ')
           ..write('customerNameText: $customerNameText, ')
@@ -12093,6 +12133,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       id,
       transactionId,
       itemName,
+      transactionItemId,
       jenis,
       customerId,
       customerNameText,
@@ -12108,6 +12149,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           other.id == this.id &&
           other.transactionId == this.transactionId &&
           other.itemName == this.itemName &&
+          other.transactionItemId == this.transactionItemId &&
           other.jenis == this.jenis &&
           other.customerId == this.customerId &&
           other.customerNameText == this.customerNameText &&
@@ -12122,6 +12164,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
   final Value<String> id;
   final Value<String> transactionId;
   final Value<String> itemName;
+  final Value<String?> transactionItemId;
   final Value<String> jenis;
   final Value<String?> customerId;
   final Value<String?> customerNameText;
@@ -12135,6 +12178,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     this.id = const Value.absent(),
     this.transactionId = const Value.absent(),
     this.itemName = const Value.absent(),
+    this.transactionItemId = const Value.absent(),
     this.jenis = const Value.absent(),
     this.customerId = const Value.absent(),
     this.customerNameText = const Value.absent(),
@@ -12149,6 +12193,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     required String id,
     required String transactionId,
     required String itemName,
+    this.transactionItemId = const Value.absent(),
     required String jenis,
     this.customerId = const Value.absent(),
     this.customerNameText = const Value.absent(),
@@ -12166,6 +12211,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     Expression<String>? id,
     Expression<String>? transactionId,
     Expression<String>? itemName,
+    Expression<String>? transactionItemId,
     Expression<String>? jenis,
     Expression<String>? customerId,
     Expression<String>? customerNameText,
@@ -12180,6 +12226,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       if (id != null) 'id': id,
       if (transactionId != null) 'transaction_id': transactionId,
       if (itemName != null) 'item_name': itemName,
+      if (transactionItemId != null) 'transaction_item_id': transactionItemId,
       if (jenis != null) 'jenis': jenis,
       if (customerId != null) 'customer_id': customerId,
       if (customerNameText != null) 'customer_name_text': customerNameText,
@@ -12196,6 +12243,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       {Value<String>? id,
       Value<String>? transactionId,
       Value<String>? itemName,
+      Value<String?>? transactionItemId,
       Value<String>? jenis,
       Value<String?>? customerId,
       Value<String?>? customerNameText,
@@ -12209,6 +12257,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       id: id ?? this.id,
       transactionId: transactionId ?? this.transactionId,
       itemName: itemName ?? this.itemName,
+      transactionItemId: transactionItemId ?? this.transactionItemId,
       jenis: jenis ?? this.jenis,
       customerId: customerId ?? this.customerId,
       customerNameText: customerNameText ?? this.customerNameText,
@@ -12232,6 +12281,9 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     }
     if (itemName.present) {
       map['item_name'] = Variable<String>(itemName.value);
+    }
+    if (transactionItemId.present) {
+      map['transaction_item_id'] = Variable<String>(transactionItemId.value);
     }
     if (jenis.present) {
       map['jenis'] = Variable<String>(jenis.value);
@@ -12269,6 +12321,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
           ..write('id: $id, ')
           ..write('transactionId: $transactionId, ')
           ..write('itemName: $itemName, ')
+          ..write('transactionItemId: $transactionItemId, ')
           ..write('jenis: $jenis, ')
           ..write('customerId: $customerId, ')
           ..write('customerNameText: $customerNameText, ')
@@ -21999,6 +22052,7 @@ typedef $$LeftBehindItemsTableCreateCompanionBuilder = LeftBehindItemsCompanion
   required String id,
   required String transactionId,
   required String itemName,
+  Value<String?> transactionItemId,
   required String jenis,
   Value<String?> customerId,
   Value<String?> customerNameText,
@@ -22014,6 +22068,7 @@ typedef $$LeftBehindItemsTableUpdateCompanionBuilder = LeftBehindItemsCompanion
   Value<String> id,
   Value<String> transactionId,
   Value<String> itemName,
+  Value<String?> transactionItemId,
   Value<String> jenis,
   Value<String?> customerId,
   Value<String?> customerNameText,
@@ -22072,6 +22127,10 @@ class $$LeftBehindItemsTableFilterComposer
 
   ColumnFilters<String> get itemName => $composableBuilder(
       column: $table.itemName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get jenis => $composableBuilder(
       column: $table.jenis, builder: (column) => ColumnFilters(column));
@@ -22152,6 +22211,10 @@ class $$LeftBehindItemsTableOrderingComposer
   ColumnOrderings<String> get itemName => $composableBuilder(
       column: $table.itemName, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get jenis => $composableBuilder(
       column: $table.jenis, builder: (column) => ColumnOrderings(column));
 
@@ -22230,6 +22293,9 @@ class $$LeftBehindItemsTableAnnotationComposer
 
   GeneratedColumn<String> get itemName =>
       $composableBuilder(column: $table.itemName, builder: (column) => column);
+
+  GeneratedColumn<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId, builder: (column) => column);
 
   GeneratedColumn<String> get jenis =>
       $composableBuilder(column: $table.jenis, builder: (column) => column);
@@ -22320,6 +22386,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> transactionId = const Value.absent(),
             Value<String> itemName = const Value.absent(),
+            Value<String?> transactionItemId = const Value.absent(),
             Value<String> jenis = const Value.absent(),
             Value<String?> customerId = const Value.absent(),
             Value<String?> customerNameText = const Value.absent(),
@@ -22334,6 +22401,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             id: id,
             transactionId: transactionId,
             itemName: itemName,
+            transactionItemId: transactionItemId,
             jenis: jenis,
             customerId: customerId,
             customerNameText: customerNameText,
@@ -22348,6 +22416,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             required String id,
             required String transactionId,
             required String itemName,
+            Value<String?> transactionItemId = const Value.absent(),
             required String jenis,
             Value<String?> customerId = const Value.absent(),
             Value<String?> customerNameText = const Value.absent(),
@@ -22362,6 +22431,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             id: id,
             transactionId: transactionId,
             itemName: itemName,
+            transactionItemId: transactionItemId,
             jenis: jenis,
             customerId: customerId,
             customerNameText: customerNameText,

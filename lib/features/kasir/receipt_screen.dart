@@ -121,6 +121,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   List<TransactionItem> _items = [];
   List<TransactionPayment> _payments = [];
   Map<String, String> _productNames = {};
+
+  /// Item 52 susulan — baris nota yang ditandai titip/ketinggalan
+  /// (transaction_items.id -> jenis). Ditampilkan sbg penanda kecil di
+  /// samping nama barang, pola sama dgn badge "Habis" di katalog kasir.
+  Map<String, String> _leftBehindMarks = {};
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
   Customer? _customer;
@@ -360,6 +365,22 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ),
               ),
             ),
+            // Item 52 susulan — penanda "Dititip"/"Ketinggalan" persis pola
+            // badge "Habis" di katalog kasir (teks kecil di samping nama,
+            // BUKAN chip/baris baru — tidak menambah tinggi baris).
+            if (_leftBehindMarks[item.id] != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                _leftBehindMarks[item.id] == 'titip'
+                    ? 'Dititip'
+                    : 'Ketinggalan',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.laciFg(
+                        Theme.of(context).brightness == Brightness.dark)),
+              ),
+            ],
           ],
         ),
         subtitle: isPlaceholder
@@ -908,6 +929,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       }
     }
 
+    final leftBehindMarks =
+        await db.getLeftBehindMarksForTransaction(widget.transactionId);
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -928,6 +951,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ..clear()
           ..addEntries(checkedIds.map((id) => MapEntry(id, true)));
         _productNames = productNames;
+        _leftBehindMarks = leftBehindMarks;
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customer = customer;
@@ -1686,11 +1710,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         transactionId: transactionId,
         itemName: _productNames[item.productId] ?? item.productId,
         jenis: jenis,
+        transactionItemId: item.id,
         customerId: _customer?.id,
         customerNameText: customerName,
         locallyModified: locallyModified,
       );
     }
+    if (!mounted) return;
+    // Muat ulang penanda supaya "Dititip"/"Ketinggalan" langsung tampil di
+    // baris barangnya tanpa perlu buka ulang struk.
+    final marks = await db.getLeftBehindMarksForTransaction(transactionId);
+    if (mounted) setState(() => _leftBehindMarks = marks);
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
