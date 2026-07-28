@@ -70,6 +70,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   — sebelumnya berhenti selamanya setelah beberapa putaran, jadi kalau
   layar dilihat beberapa detik kemudian nama malah kelihatan seperti
   kepotong lagi. Sekarang istirahat sebentar lalu jalan lagi otomatis.
+- **Catat Titip/Ketinggalan sekarang bisa untuk SEBAGIAN barang saja** —
+  kalau yang ketinggalan/dititip cuma sebagian dari jumlah yang dibeli
+  (mis. beli 5, ketinggalan 2), sekarang ada tombol +/- untuk mengatur
+  jumlahnya, tidak lagi selalu dianggap semua barang yang tertinggal.
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.

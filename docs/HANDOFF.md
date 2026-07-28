@@ -214,6 +214,32 @@ DIRINYA SENDIRI LAGI — bukan berhenti sekali lalu diam selamanya (masih
 dibatasi PER putaran-nyala, bukan `repeat()` tanpa henti sama sekali,
 demi alasan baterai + `pumpAndSettle` yg sama).
 
+**Susulan (27 Juli): qty SEBAGIAN utk Titip/Ketinggalan.** User: "kadang
+yang ketinggalan hanya sebagian (tidak semua)" — checklist polos (fase
+sebelumnya) selalu menyiratkan SELURUH qty baris nota, tidak bisa catat
+mis. beli 5 ketinggalan cuma 2. Fix: `LeftBehindItems.qty` baru
+(nullable — null = entri LAMA/seluruh qty, entri BARU selalu isi
+eksplisit), migrasi v24->v25. Dialog "Catat Titip/Ketinggalan" dapat
+stepper +/- per item (pola SAMA PERSIS `_showReturnSheet` yg sudah ada —
+clamp 1..qty baris nota, default penuh saat dicentang). Penanda struk
+& tile dashboard ikut menampilkan qty sebagian kalau ada.
+
+**Gotcha migrasi test lama ikut kena (27 Juli)**: menambah schemaVersion
+BARU (25) otomatis membuat SEMUA test migrasi lama (`migration_v7`
+s.d. `v24`) yg mengasersi versi akhir via `PRAGMA user_version` GAGAL
+(hardcode angka lama) — WAJIB disesuaikan tiap kali schemaVersion naik,
+bukan cuma test migrasi yg BARU ditambah. `migration_v24_test.dart`
+LEBIH RUMIT: skema sintetisnya HANYA `borrowed_items` (sengaja diisolasi
+utk fokus 1 langkah migrasi), tapi migrasi v25 BARU (nambah kolom ke
+`left_behind_items`) berjalan SETELAHNYA di chain yg sama — meledak "no
+such table" krn tabel itu memang tak dibuat di skema sintetis tsb. Fix:
+tambahkan `CREATE TABLE left_behind_items` (skema PERSIS versi v23,
+sudah ada `transaction_item_id`) ke setup sintetis test itu juga.
+**Pelajaran**: migrasi step BARU yg menyentuh tabel LAMA bisa mematahkan
+test migrasi tak-terkait yg skema sintetisnya sengaja minimal/parsial —
+cek SEMUA test migrasi (bukan cuma yg terasa relevan) tiap menambah
+migration step baru.
+
 **Gotcha test PALING RUMIT sesi ini**: membuktikan "istirahat lalu ulang
 lagi" via polling offset itu SULIT krn `repeat(reverse:true)` SENDIRI
 ALAMI menyentuh offset=0 berulang kali SAAT MARQUEE MASIH AKTIF (di titik

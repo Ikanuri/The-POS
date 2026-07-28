@@ -96,6 +96,42 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   });
 
+  testWidgets(
+      'susulan (permintaan user): qty SEBAGIAN ikut tampil di penanda struk '
+      '(mis. "Dititip 1"), qty penuh (null) TIDAK menampilkan angka',
+      (tester) async {
+    await db.addLeftBehindItem(
+        id: 'l1',
+        transactionId: txId,
+        itemName: 'Kopi Sachet',
+        jenis: 'titip',
+        transactionItemId: 'i-pak',
+        qty: 1);
+    // Baris kedua tanpa `qty` (null) — simulasi entri lama/qty penuh, HARUS
+    // tampil "Ketinggalan" saja tanpa angka menempel.
+    await db.addLeftBehindItem(
+        id: 'l2',
+        transactionId: txId,
+        itemName: 'Kopi Sachet',
+        jenis: 'ketinggalan',
+        transactionItemId: 'i-slop');
+
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    expect(find.textContaining('Dititip 1', findRichText: true),
+        findsOneWidget,
+        reason: 'qty SEBAGIAN (1) ikut tampil menempel di penanda');
+    expect(find.textContaining('Ketinggalan 1', findRichText: true),
+        findsNothing,
+        reason: 'entri qty null (penuh) TIDAK menampilkan angka apa pun');
+    expect(find.textContaining('Ketinggalan', findRichText: true),
+        findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
   testWidgets('entri yang SUDAH diambil tidak lagi diberi penanda',
       (tester) async {
     await db.addLeftBehindItem(

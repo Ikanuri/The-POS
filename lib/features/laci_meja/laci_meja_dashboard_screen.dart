@@ -196,9 +196,15 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // (butuh join ke transaction_items via transactionItemId — entri lama
     // tanpa tautan itu cukup tidak menampilkan qty, bukan error).
     final qu = e.transactionItemId != null ? qtyUnit[e.transactionItemId] : null;
-    final qtyLabel = qu == null
+    // Susulan (permintaan user): yang ketinggalan/dititip bisa SEBAGIAN dari
+    // qty baris nota — `e.qty` (kalau terisi) adalah angka SEBENARNYA yang
+    // tertinggal/dititip, BUKAN qty penuh baris nota (`qu.qty`). Null berarti
+    // entri lama (dibuat sebelum kolom ini ada) = seluruh qty baris nota.
+    final displayQty = e.qty ?? qu?.qty;
+    final qtyLabel = displayQty == null
         ? ''
-        : ' · ${qu.qty % 1 == 0 ? qu.qty.toInt() : qu.qty} ${qu.unitName}'
+        : ' · ${displayQty % 1 == 0 ? displayQty.toInt() : displayQty}'
+                ' ${qu?.unitName ?? ''}'
             .trimRight();
     return ListTile(
       // Item 52 susulan — tap kartu redirect ke nota terkait, mekanisme

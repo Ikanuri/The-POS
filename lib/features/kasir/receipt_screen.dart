@@ -123,9 +123,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Map<String, String> _productNames = {};
 
   /// Item 52 susulan — baris nota yang ditandai titip/ketinggalan
-  /// (transaction_items.id -> jenis). Ditampilkan sbg penanda kecil di
-  /// samping nama barang, pola sama dgn badge "Habis" di katalog kasir.
-  Map<String, String> _leftBehindMarks = {};
+  /// (transaction_items.id -> jenis + qty SEBAGIAN, nullable = seluruh
+  /// qty). Ditampilkan sbg penanda kecil di samping nama barang, pola sama
+  /// dgn badge "Habis" di katalog kasir.
+  Map<String, ({String jenis, double? qty})> _leftBehindMarks = {};
 
   /// Item 52 redesain pre-order — qty jaminan dititip per produk+satuan
   /// ('$productId|$productUnitId' -> qty), dipakai label "Titip [qty]" di
@@ -383,9 +384,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         text: _productNames[item.productId] ?? item.productId),
                     if (_leftBehindMarks[item.id] != null)
                       TextSpan(
-                        text: _leftBehindMarks[item.id] == 'titip'
-                            ? ' · Dititip'
-                            : ' · Ketinggalan',
+                        // Qty SEBAGIAN ikut ditampilkan (mis. "· Dititip 2")
+                        // supaya jelas bukan semua qty baris ini yang
+                        // titip/ketinggalan — null (entri lama/qty penuh)
+                        // tidak menampilkan angka sama sekali.
+                        text: (_leftBehindMarks[item.id]!.jenis == 'titip'
+                                ? ' · Dititip'
+                                : ' · Ketinggalan') +
+                            (_leftBehindMarks[item.id]!.qty != null
+                                ? ' ${_fmtQtyShort(_leftBehindMarks[item.id]!.qty!)}'
+                                : ''),
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -1654,6 +1662,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// centang produk mana yang titip/ketinggalan, bisa lebih dari satu
   /// sekaligus. Baris retur (qty negatif) dikecualikan dari daftar, sama
   /// spt `returnableItems` di `_showReturnSheet`.
+  ///
+  /// Susulan (permintaan user): yang ketinggalan/dititip kadang cuma
+  /// SEBAGIAN qty baris nota (mis. beli 5, ketinggalan cuma 2) — checklist
+  /// polos tidak cukup, tiap item yang dicentang dapat stepper qty sendiri
+  /// (default = qty penuh, bisa dikurangi), pola stepper sama persis dgn
+  /// `_showReturnSheet`.
   Future<void> _showLeftBehindDialog(String transactionId) async {
     final candidates = _items.where((i) => i.qty > 0).toList();
     // Pelanggan diwarisi dari NOTA (pra-isi), bukan dibiarkan kosong —
@@ -1664,7 +1678,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final customerController = TextEditingController(
         text: notaCustomer == 'Umum' ? '' : notaCustomer);
     var jenis = 'titip';
-    final selectedIds = <String>{};
+    // Presence di map = tercentang; nilainya = qty yg titip/ketinggalan
+    // (default qty penuh saat dicentang, bisa diturunkan via stepper).
+    final selectedQty = <String, double>{};
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1685,23 +1701,66 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       child: Text('Tidak ada barang di nota ini.'),
                     )
                   else
-                    ...candidates.map((item) => CheckboxListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: selectedIds.contains(item.id),
-                          title: Text(
-                              '${_productNames[item.productId] ?? item.productId}'
-                              ' (${_fmtQtyShort(item.qty)})',
-                              style: const TextStyle(fontSize: 13)),
-                          onChanged: (v) => setDialogState(() {
-                            if (v ?? false) {
-                              selectedIds.add(item.id);
+                    ...candidates.map((item) {
+                      final qty = selectedQty[item.id];
+                      final checked = qty != null;
+                      void toggle(bool v) => setDialogState(() {
+                            if (v) {
+                              selectedQty[item.id] = item.qty; // default penuh
                             } else {
-                              selectedIds.remove(item.id);
+                              selectedQty.remove(item.id);
                             }
-                          }),
-                        )),
+                          });
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => toggle(!checked),
+                        leading: Checkbox(
+                          value: checked,
+                          onChanged: (v) => toggle(v ?? false),
+                        ),
+                        title: Text(
+                            _productNames[item.productId] ?? item.productId,
+                            style: const TextStyle(fontSize: 13)),
+                        subtitle: Text('Maks ${_fmtQtyShort(item.qty)}',
+                            style: const TextStyle(fontSize: 11)),
+                        trailing: !checked
+                            ? null
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                        size: 20),
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: qty <= 1
+                                        ? null
+                                        : () => setDialogState(
+                                            () => selectedQty[item.id] =
+                                                qty - 1),
+                                  ),
+                                  SizedBox(
+                                    width: 28,
+                                    child: Text(_fmtQtyShort(qty),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600)),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline,
+                                        size: 20),
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: qty >= item.qty
+                                        ? null
+                                        : () => setDialogState(
+                                            () => selectedQty[item.id] =
+                                                qty + 1),
+                                  ),
+                                ],
+                              ),
+                      );
+                    }),
                   const SizedBox(height: 8),
                   SegmentedButton<String>(
                     segments: const [
@@ -1734,13 +1793,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ),
       ),
     );
-    if (result != true || selectedIds.isEmpty) return;
+    if (result != true || selectedQty.isEmpty) return;
     final db = ref.read(databaseProvider);
     final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
     final customerName = customerController.text.trim().isEmpty
         ? null
         : customerController.text.trim();
-    for (final item in candidates.where((i) => selectedIds.contains(i.id))) {
+    for (final item in candidates.where((i) => selectedQty.containsKey(i.id))) {
       await db.addLeftBehindItem(
         id: const Uuid().v4(),
         transactionId: transactionId,
@@ -1749,6 +1808,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         transactionItemId: item.id,
         customerId: _customer?.id,
         customerNameText: customerName,
+        qty: selectedQty[item.id],
         locallyModified: locallyModified,
       );
     }

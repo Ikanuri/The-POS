@@ -168,6 +168,51 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   });
 
+  testWidgets(
+      'susulan (permintaan user): qty SEBAGIAN (stepper) tampil, BUKAN qty '
+      'penuh baris nota', (tester) async {
+    await seedTransaction('tx1');
+    await db.into(db.products).insert(
+        ProductsCompanion.insert(id: 'P1', name: 'Galon Aqua Produk'));
+    await db.into(db.unitTypes).insert(
+        UnitTypesCompanion.insert(id: const Value(99), name: 'Pak'));
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+        id: 'U1',
+        productId: 'P1',
+        isBaseUnit: const Value(true),
+        unitTypeId: const Value(99)));
+    await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
+        id: 'i1',
+        transactionId: 'tx1',
+        productId: 'P1',
+        productUnitId: 'U1',
+        qty: 3, // beli 3, yang ketinggalan cuma 2 (SEBAGIAN)
+        priceAtSale: 5000,
+        originalPrice: 5000,
+        subtotal: 15000));
+
+    await db.addLeftBehindItem(
+        id: 'l1',
+        transactionId: 'tx1',
+        itemName: 'Galon Aqua',
+        jenis: 'ketinggalan',
+        transactionItemId: 'i1',
+        qty: 2);
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Galon Aqua · 2 Pak'), findsOneWidget,
+        reason: 'qty SEBAGIAN (2) yg ditampilkan, bukan qty penuh baris '
+            'nota (3)');
+    expect(find.textContaining('3 Pak'), findsNothing,
+        reason: 'qty penuh baris nota TIDAK boleh muncul menggantikan qty '
+            'sebagian');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
   testWidgets('tombol "Ambil" (redesain minimalis) menandai barang diambil',
       (tester) async {
     await seedTransaction('tx1');

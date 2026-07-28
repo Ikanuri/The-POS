@@ -41,6 +41,27 @@ void main() {
       INSERT INTO borrowed_items (id, transaction_id, item_name, qty)
       VALUES ('b-lama', 'tx-lama', 'Galon Aqua', 2);
     ''');
+    // `left_behind_items` juga HARUS ada di DB v23 sungguhan (dibuat sejak
+    // v22, `transaction_item_id` ditambah di migrasi v22->v23) — tanpa ini,
+    // migrasi v24->v25 (susulan: kolom `qty` parsial) yg jalan SETELAH
+    // migrasi ini akan gagal "no such table" krn tabelnya memang tidak ada
+    // di DB sintetis test ini.
+    v23.execute('''
+      CREATE TABLE left_behind_items (
+        id TEXT NOT NULL PRIMARY KEY,
+        transaction_id TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        transaction_item_id TEXT,
+        jenis TEXT NOT NULL,
+        customer_id TEXT,
+        customer_name_text TEXT,
+        note TEXT,
+        locally_modified INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL DEFAULT 0,
+        collected_at INTEGER
+      );
+    ''');
     final preCols = v23
         .select("PRAGMA table_info('borrowed_items')")
         .map((r) => r['name'] as String)
@@ -65,7 +86,9 @@ void main() {
         reason: 'entri lama memang tidak punya tautan ke baris nota');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 24);
+    // schemaVersion TERKINI (25, bukan cuma 24) — migrasi berjalan
+    // berurutan s.d. versi terbaru, bukan berhenti di step fokus test ini.
+    expect(ver.data.values.first, 25);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

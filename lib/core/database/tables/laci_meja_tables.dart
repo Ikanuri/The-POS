@@ -29,6 +29,14 @@ class LeftBehindItems extends Table {
   TextColumn get customerNameText => text().nullable()();
   TextColumn get note => text().nullable()();
 
+  /// Item 52 susulan lagi — jumlah yang SEBENARNYA tertinggal/dititip, bisa
+  /// SEBAGIAN dari qty baris nota (mis. beli 5, yang ketinggalan cuma 2).
+  /// Nullable: entri LAMA (dibuat sebelum kolom ini ada) berarti "seluruh
+  /// qty baris nota" (perilaku asal, sebelum fitur ini) — dibedakan dari
+  /// entri baru yang SELALU mengisi kolom ini eksplisit (walau nilainya
+  /// kebetulan sama dengan qty penuh).
+  RealColumn get qty => real().nullable()();
+
   /// Item 40 pattern: true bila baris ini dibuat/diedit di device non-owner,
   /// menunggu persetujuan owner via sync. Device owner tidak pernah set ini.
   BoolColumn get locallyModified =>

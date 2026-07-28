@@ -11759,6 +11759,11 @@ class $LeftBehindItemsTable extends LeftBehindItems
   late final GeneratedColumn<String> note = GeneratedColumn<String>(
       'note', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _qtyMeta = const VerificationMeta('qty');
+  @override
+  late final GeneratedColumn<double> qty = GeneratedColumn<double>(
+      'qty', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _locallyModifiedMeta =
       const VerificationMeta('locallyModified');
   @override
@@ -11801,6 +11806,7 @@ class $LeftBehindItemsTable extends LeftBehindItems
         customerId,
         customerNameText,
         note,
+        qty,
         locallyModified,
         createdAt,
         updatedAt,
@@ -11863,6 +11869,10 @@ class $LeftBehindItemsTable extends LeftBehindItems
       context.handle(
           _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
     }
+    if (data.containsKey('qty')) {
+      context.handle(
+          _qtyMeta, qty.isAcceptableOrUnknown(data['qty']!, _qtyMeta));
+    }
     if (data.containsKey('locally_modified')) {
       context.handle(
           _locallyModifiedMeta,
@@ -11908,6 +11918,8 @@ class $LeftBehindItemsTable extends LeftBehindItems
           DriftSqlType.string, data['${effectivePrefix}customer_name_text']),
       note: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      qty: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}qty']),
       locallyModified: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
       createdAt: attachedDatabase.typeMapping
@@ -11941,6 +11953,14 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
   final String? customerNameText;
   final String? note;
 
+  /// Item 52 susulan lagi — jumlah yang SEBENARNYA tertinggal/dititip, bisa
+  /// SEBAGIAN dari qty baris nota (mis. beli 5, yang ketinggalan cuma 2).
+  /// Nullable: entri LAMA (dibuat sebelum kolom ini ada) berarti "seluruh
+  /// qty baris nota" (perilaku asal, sebelum fitur ini) — dibedakan dari
+  /// entri baru yang SELALU mengisi kolom ini eksplisit (walau nilainya
+  /// kebetulan sama dengan qty penuh).
+  final double? qty;
+
   /// Item 40 pattern: true bila baris ini dibuat/diedit di device non-owner,
   /// menunggu persetujuan owner via sync. Device owner tidak pernah set ini.
   final bool locallyModified;
@@ -11956,6 +11976,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       this.customerId,
       this.customerNameText,
       this.note,
+      this.qty,
       required this.locallyModified,
       required this.createdAt,
       required this.updatedAt,
@@ -11978,6 +11999,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
     }
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || qty != null) {
+      map['qty'] = Variable<double>(qty);
     }
     map['locally_modified'] = Variable<bool>(locallyModified);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -12004,6 +12028,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           ? const Value.absent()
           : Value(customerNameText),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      qty: qty == null && nullToAbsent ? const Value.absent() : Value(qty),
       locallyModified: Value(locallyModified),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -12026,6 +12051,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       customerId: serializer.fromJson<String?>(json['customerId']),
       customerNameText: serializer.fromJson<String?>(json['customerNameText']),
       note: serializer.fromJson<String?>(json['note']),
+      qty: serializer.fromJson<double?>(json['qty']),
       locallyModified: serializer.fromJson<bool>(json['locallyModified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -12044,6 +12070,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       'customerId': serializer.toJson<String?>(customerId),
       'customerNameText': serializer.toJson<String?>(customerNameText),
       'note': serializer.toJson<String?>(note),
+      'qty': serializer.toJson<double?>(qty),
       'locallyModified': serializer.toJson<bool>(locallyModified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -12060,6 +12087,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           Value<String?> customerId = const Value.absent(),
           Value<String?> customerNameText = const Value.absent(),
           Value<String?> note = const Value.absent(),
+          Value<double?> qty = const Value.absent(),
           bool? locallyModified,
           DateTime? createdAt,
           DateTime? updatedAt,
@@ -12077,6 +12105,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
             ? customerNameText.value
             : this.customerNameText,
         note: note.present ? note.value : this.note,
+        qty: qty.present ? qty.value : this.qty,
         locallyModified: locallyModified ?? this.locallyModified,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -12099,6 +12128,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           ? data.customerNameText.value
           : this.customerNameText,
       note: data.note.present ? data.note.value : this.note,
+      qty: data.qty.present ? data.qty.value : this.qty,
       locallyModified: data.locallyModified.present
           ? data.locallyModified.value
           : this.locallyModified,
@@ -12120,6 +12150,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           ..write('customerId: $customerId, ')
           ..write('customerNameText: $customerNameText, ')
           ..write('note: $note, ')
+          ..write('qty: $qty, ')
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -12138,6 +12169,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       customerId,
       customerNameText,
       note,
+      qty,
       locallyModified,
       createdAt,
       updatedAt,
@@ -12154,6 +12186,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           other.customerId == this.customerId &&
           other.customerNameText == this.customerNameText &&
           other.note == this.note &&
+          other.qty == this.qty &&
           other.locallyModified == this.locallyModified &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -12169,6 +12202,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
   final Value<String?> customerId;
   final Value<String?> customerNameText;
   final Value<String?> note;
+  final Value<double?> qty;
   final Value<bool> locallyModified;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -12183,6 +12217,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     this.customerId = const Value.absent(),
     this.customerNameText = const Value.absent(),
     this.note = const Value.absent(),
+    this.qty = const Value.absent(),
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -12198,6 +12233,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     this.customerId = const Value.absent(),
     this.customerNameText = const Value.absent(),
     this.note = const Value.absent(),
+    this.qty = const Value.absent(),
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -12216,6 +12252,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     Expression<String>? customerId,
     Expression<String>? customerNameText,
     Expression<String>? note,
+    Expression<double>? qty,
     Expression<bool>? locallyModified,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -12231,6 +12268,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       if (customerId != null) 'customer_id': customerId,
       if (customerNameText != null) 'customer_name_text': customerNameText,
       if (note != null) 'note': note,
+      if (qty != null) 'qty': qty,
       if (locallyModified != null) 'locally_modified': locallyModified,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -12248,6 +12286,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       Value<String?>? customerId,
       Value<String?>? customerNameText,
       Value<String?>? note,
+      Value<double?>? qty,
       Value<bool>? locallyModified,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
@@ -12262,6 +12301,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       customerId: customerId ?? this.customerId,
       customerNameText: customerNameText ?? this.customerNameText,
       note: note ?? this.note,
+      qty: qty ?? this.qty,
       locallyModified: locallyModified ?? this.locallyModified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -12297,6 +12337,9 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (qty.present) {
+      map['qty'] = Variable<double>(qty.value);
+    }
     if (locallyModified.present) {
       map['locally_modified'] = Variable<bool>(locallyModified.value);
     }
@@ -12326,6 +12369,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
           ..write('customerId: $customerId, ')
           ..write('customerNameText: $customerNameText, ')
           ..write('note: $note, ')
+          ..write('qty: $qty, ')
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -22110,6 +22154,7 @@ typedef $$LeftBehindItemsTableCreateCompanionBuilder = LeftBehindItemsCompanion
   Value<String?> customerId,
   Value<String?> customerNameText,
   Value<String?> note,
+  Value<double?> qty,
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -22126,6 +22171,7 @@ typedef $$LeftBehindItemsTableUpdateCompanionBuilder = LeftBehindItemsCompanion
   Value<String?> customerId,
   Value<String?> customerNameText,
   Value<String?> note,
+  Value<double?> qty,
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -22194,6 +22240,9 @@ class $$LeftBehindItemsTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
       column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get locallyModified => $composableBuilder(
       column: $table.locallyModified,
@@ -22278,6 +22327,9 @@ class $$LeftBehindItemsTableOrderingComposer
   ColumnOrderings<String> get note => $composableBuilder(
       column: $table.note, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get locallyModified => $composableBuilder(
       column: $table.locallyModified,
       builder: (column) => ColumnOrderings(column));
@@ -22358,6 +22410,9 @@ class $$LeftBehindItemsTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<double> get qty =>
+      $composableBuilder(column: $table.qty, builder: (column) => column);
 
   GeneratedColumn<bool> get locallyModified => $composableBuilder(
       column: $table.locallyModified, builder: (column) => column);
@@ -22444,6 +22499,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             Value<String?> customerId = const Value.absent(),
             Value<String?> customerNameText = const Value.absent(),
             Value<String?> note = const Value.absent(),
+            Value<double?> qty = const Value.absent(),
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -22459,6 +22515,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             customerId: customerId,
             customerNameText: customerNameText,
             note: note,
+            qty: qty,
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -22474,6 +22531,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             Value<String?> customerId = const Value.absent(),
             Value<String?> customerNameText = const Value.absent(),
             Value<String?> note = const Value.absent(),
+            Value<double?> qty = const Value.absent(),
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -22489,6 +22547,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             customerId: customerId,
             customerNameText: customerNameText,
             note: note,
+            qty: qty,
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,

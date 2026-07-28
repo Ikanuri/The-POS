@@ -21,6 +21,12 @@ void main() {
   late AppDatabase db;
   const txId = 'tx1';
 
+  // Nama produk yg sama JUGA tampil di baris nota di BELAKANG dialog (bukan
+  // hilang saat dialog dibuka) — cari HANYA di dalam AlertDialog spy tak
+  // ambigu dgn Text.rich baris nota.
+  Finder inDialog(String text) => find.descendant(
+      of: find.byType(AlertDialog), matching: find.text(text));
+
   setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
     await db.into(db.transactions).insert(TransactionsCompanion.insert(
@@ -74,10 +80,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // Dua produk nota ini tampil sbg pilihan centang, bukan field teks.
-    expect(find.text('Payung Lipat (1)'), findsOneWidget);
-    expect(find.text('Topi (2)'), findsOneWidget);
+    expect(inDialog('Payung Lipat'), findsOneWidget);
+    expect(inDialog('Topi'), findsOneWidget);
 
-    await tester.tap(find.text('Payung Lipat (1)'));
+    await tester.tap(inDialog('Payung Lipat'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
@@ -88,7 +94,58 @@ void main() {
     expect(rows.single.itemName, 'Payung Lipat',
         reason: 'nama produk diambil dari nota, bukan diketik bebas');
     expect(rows.single.jenis, 'titip');
+    expect(rows.single.qty, 1,
+        reason: 'default qty PENUH (sama dgn qty baris nota) saat dicentang');
     expect(rows.single.locallyModified, isFalse);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'susulan (permintaan user): stepper qty membolehkan catat SEBAGIAN '
+      'dari qty baris nota (mis. beli 2, ketinggalan cuma 1)', (tester) async {
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.byTooltip('+ Catat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Titip/Ketinggalan'));
+    await tester.pumpAndSettle();
+
+    // Centang "Topi" (qty baris nota = 2), lalu kurangi steppernya ke 1.
+    await tester.tap(inDialog('Topi'));
+    await tester.pumpAndSettle();
+    expect(inDialog('2'), findsOneWidget,
+        reason: 'default stepper qty PENUH (2, sama dgn qty baris nota)');
+
+    await tester.tap(find.byIcon(Icons.remove_circle_outline));
+    await tester.pumpAndSettle();
+    expect(inDialog('1'), findsOneWidget,
+        reason: 'stepper turun ke 1 setelah tombol kurang ditekan');
+
+    // Tombol tambah harus berhenti di batas qty baris nota (tidak bisa lebih
+    // dari yg dibeli).
+    await tester.tap(find.byIcon(Icons.add_circle_outline));
+    await tester.pumpAndSettle();
+    expect(inDialog('2'), findsOneWidget);
+    final tambahLagi = tester.widget<IconButton>(find.ancestor(
+        of: find.byIcon(Icons.add_circle_outline),
+        matching: find.byType(IconButton)).first);
+    expect(tambahLagi.onPressed, isNull,
+        reason: 'tidak boleh melebihi qty baris nota (2)');
+
+    // Turunkan lagi ke 1 sebelum simpan.
+    await tester.tap(find.byIcon(Icons.remove_circle_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.leftBehindItems).get();
+    expect(rows, hasLength(1));
+    expect(rows.single.itemName, 'Topi');
+    expect(rows.single.qty, 1,
+        reason: 'qty SEBAGIAN (1 dari 2) tersimpan, bukan qty penuh nota');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -105,8 +162,8 @@ void main() {
     await tester.tap(find.text('Titip/Ketinggalan'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Payung Lipat (1)'));
-    await tester.tap(find.text('Topi (2)'));
+    await tester.tap(inDialog('Payung Lipat'));
+    await tester.tap(inDialog('Topi'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
@@ -140,7 +197,7 @@ void main() {
     // Field pelanggan sudah PRA-ISI dari nota, staf tidak mengetik apa pun.
     expect(find.widgetWithText(TextField, 'Bu Sari'), findsOneWidget);
 
-    await tester.tap(find.text('Payung Lipat (1)'));
+    await tester.tap(inDialog('Payung Lipat'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
@@ -169,7 +226,7 @@ void main() {
     // Permintaan user: kembali plain text. Yang dipinjamkan biasanya WADAH
     // (galon/tabung kosong) yang justru BUKAN baris di nota — checklist
     // barang nota bikin barang yg sebenarnya dipinjam tidak bisa dicatat.
-    expect(find.text('Payung Lipat (1)'), findsNothing,
+    expect(inDialog('Payung Lipat'), findsNothing,
         reason: 'checklist barang nota TIDAK dipakai lagi di Pinjaman');
 
     await tester.enterText(
@@ -210,7 +267,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Titip/Ketinggalan'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Payung Lipat (1)'));
+    await tester.tap(inDialog('Payung Lipat'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();

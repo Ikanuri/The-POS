@@ -205,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -388,6 +388,12 @@ class AppDatabase extends _$AppDatabase {
             // di step v22.
             await m.addColumn(
                 borrowedItems, borrowedItems.transactionItemId);
+          }
+          if (from < 25 && from >= 22) {
+            // Item 52 susulan lagi — qty parsial Titip/Ketinggalan (bisa
+            // sebagian dari qty baris nota), pola guard identik v23/v24 di
+            // atas.
+            await m.addColumn(leftBehindItems, leftBehindItems.qty);
           }
         },
         beforeOpen: (details) async {
@@ -4852,6 +4858,7 @@ class AppDatabase extends _$AppDatabase {
     String? customerId,
     String? customerNameText,
     String? note,
+    double? qty,
     bool locallyModified = false,
   }) =>
       into(leftBehindItems).insert(LeftBehindItemsCompanion.insert(
@@ -4863,24 +4870,27 @@ class AppDatabase extends _$AppDatabase {
         customerId: Value(customerId),
         customerNameText: Value(customerNameText),
         note: Value(note),
+        qty: Value(qty),
         locallyModified: Value(locallyModified),
       ));
 
   /// Baris nota mana saja yang ditandai titip/ketinggalan — dipakai struk
   /// in-app utk memberi penanda per-item (pola sama dgn badge "Habis" di
-  /// katalog kasir). Key = `transaction_items.id`, value = jenis
-  /// ('titip'/'ketinggalan'). Entri lama tanpa `transactionItemId` (dibuat
-  /// sebelum kolom itu ada) otomatis terlewat — memang tidak bisa dipetakan
-  /// ke baris tertentu.
-  Future<Map<String, String>> getLeftBehindMarksForTransaction(
-      String transactionId) async {
+  /// katalog kasir). Key = `transaction_items.id`, value = jenis + qty
+  /// (SEBAGIAN dari qty baris nota, bisa null utk entri lama = seluruh
+  /// qty). Entri tanpa `transactionItemId` (dibuat sebelum kolom itu ada)
+  /// otomatis terlewat — memang tidak bisa dipetakan ke baris tertentu.
+  Future<Map<String, ({String jenis, double? qty})>>
+      getLeftBehindMarksForTransaction(String transactionId) async {
     final rows = await (select(leftBehindItems)
           ..where((t) =>
               t.transactionId.equals(transactionId) &
               t.collectedAt.isNull() &
               t.transactionItemId.isNotNull()))
         .get();
-    return {for (final r in rows) r.transactionItemId!: r.jenis};
+    return {
+      for (final r in rows) r.transactionItemId!: (jenis: r.jenis, qty: r.qty)
+    };
   }
 
   /// Item 52 susulan (permintaan user) — qty+satuan per baris nota yang
