@@ -137,6 +137,14 @@ tidak perlu lagi karena `TabAlignment.start` adalah fix sungguhannya.
 Dikembalikan ke `EdgeInsets.all(16)` seragam, test
 `ringkasan_kpi_card_margin_test.dart` disesuaikan.
 
+**Susulan lagi (27 Juli)**: statistik tab Pre-order — istilah "wadah"
+diganti "jaminan" (`_StatTile` sub-label), dan kartu "Total jaminan"
+sekarang menampilkan rincian per produk di bawah angka total (mis.
+"LPG: 20 jaminan"), dihitung dari entri hasil pencarian yang sama dgn
+`totalDeposit` (bukan seluruh data — supaya konsisten dgn statistik lain
+yang ikut tersaring). `_StatTile` dapat parameter opsional `breakdown`
+(default kosong, tidak memengaruhi kartu "Total produk").
+
 ## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
 
 Susulan redesain Pre-order besar (bagian di bawah) — user minta 2

@@ -369,6 +369,15 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final totalQty = filtered.fold<double>(0, (s, e) => s + e.qtyOrdered);
     final totalDeposit = filtered.fold<double>(0, (s, e) => s + e.depositQty);
 
+    // Rincian jaminan per produk (permintaan user, mis. "LPG: 20 jaminan") —
+    // hanya entri yang benar-benar punya jaminan (>0) yang dihitung.
+    final depositByProduct = <String, double>{};
+    for (final e in filtered) {
+      if (e.depositQty <= 0) continue;
+      final name = labels[e.productUnitId]?.productName ?? e.productId;
+      depositByProduct[name] = (depositByProduct[name] ?? 0) + e.depositQty;
+    }
+
     // transactionId NULLABLE (satu-satunya kasus: titip wadah tanpa beli
     // apa pun) — baris begini masing-masing jadi grup sendiri (kunci per id).
     final groups = <String, List<PreorderEntry>>{};
@@ -387,6 +396,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           totalQty: totalQty,
           totalDeposit: totalDeposit,
           entryCount: filtered.length,
+          depositByProduct: depositByProduct,
           isDark: isDark,
         ),
         Expanded(
@@ -568,12 +578,14 @@ class _PreorderStats extends StatelessWidget {
     required this.totalQty,
     required this.totalDeposit,
     required this.entryCount,
+    required this.depositByProduct,
     required this.isDark,
   });
 
   final double totalQty;
   final double totalDeposit;
   final int entryCount;
+  final Map<String, double> depositByProduct;
   final bool isDark;
 
   static String _fmt(double q) =>
@@ -582,6 +594,9 @@ class _PreorderStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = AppTheme.laciFg(isDark);
+    final breakdown = depositByProduct.entries
+        .map((e) => '${e.key}: ${_fmt(e.value)} jaminan')
+        .toList();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Row(
@@ -599,7 +614,8 @@ class _PreorderStats extends StatelessWidget {
             child: _StatTile(
                 label: 'Total jaminan',
                 value: _fmt(totalDeposit),
-                sub: 'wadah dititip',
+                sub: 'jaminan dititip',
+                breakdown: breakdown,
                 fg: fg,
                 isDark: isDark),
           ),
@@ -614,6 +630,7 @@ class _StatTile extends StatelessWidget {
     required this.label,
     required this.value,
     required this.sub,
+    this.breakdown = const [],
     required this.fg,
     required this.isDark,
   });
@@ -621,6 +638,7 @@ class _StatTile extends StatelessWidget {
   final String label;
   final String value;
   final String sub;
+  final List<String> breakdown;
   final Color fg;
   final bool isDark;
 
@@ -643,6 +661,9 @@ class _StatTile extends StatelessWidget {
                   size: 18, weight: FontWeight.w700, color: fg)),
           Text(sub,
               style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75))),
+          for (final line in breakdown)
+            Text(line,
+                style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75))),
         ],
       ),
     );

@@ -50,6 +50,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Struk in-app sekarang menandai barang yang sedang dipinjamkan** —
   label "Pinjaman" di samping nama barang, sebagai bukti kalau ada
   yang perlu dicek ulang.
+- **Statistik jaminan di tab Pre-order sekarang lebih detail** — istilah
+  "wadah" diganti "jaminan", dan di bawah angka total jaminan sekarang
+  ada rincian per produk (mis. "LPG: 20 jaminan").
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.

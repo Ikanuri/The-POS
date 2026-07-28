@@ -262,10 +262,26 @@ void main() {
 
       expect(find.text('Total produk'), findsOneWidget);
       expect(find.text('Total jaminan'), findsOneWidget);
-      // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 wadah — SENGAJA dua angka
+      // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 jaminan — SENGAJA dua angka
       // terpisah, bukan dijumlahkan jadi satu.
       expect(find.text('5'), findsOneWidget, reason: 'total produk dipesan');
       expect(find.text('3'), findsOneWidget, reason: 'total jaminan dititip');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'rincian jaminan per produk (mis. "Tabung Gas: 2 jaminan") muncul di '
+        'bawah Total jaminan, bukan cuma satu angka gabungan',
+        (tester) async {
+      await seedPreorders();
+      await openPreorderTab(tester);
+
+      expect(find.text('Tabung Gas: 2 jaminan'), findsOneWidget,
+          reason: 'jaminan Tabung Gas (P1) 2, terpisah dari Galon Aqua');
+      expect(find.text('Galon Aqua: 1 jaminan'), findsOneWidget,
+          reason: 'jaminan Galon Aqua (P2) 1, terpisah dari Tabung Gas');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
