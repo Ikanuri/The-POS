@@ -74,6 +74,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   kalau yang ketinggalan/dititip cuma sebagian dari jumlah yang dibeli
   (mis. beli 5, ketinggalan 2), sekarang ada tombol +/- untuk mengatur
   jumlahnya, tidak lagi selalu dianggap semua barang yang tertinggal.
+- **Jumlah di Catat Titip/Ketinggalan sekarang bisa desimal** — untuk
+  produk timbang (mis. beras/minyak dijual per kg), angkanya bisa
+  diketik langsung (mis. "4.5"), tidak lagi terbatas kelipatan bulat.
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.

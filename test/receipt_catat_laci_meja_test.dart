@@ -60,6 +60,19 @@ void main() {
         priceAtSale: 5000,
         originalPrice: 5000,
         subtotal: 10000));
+    // Produk timbang, qty DESIMAL — permintaan user: "bagaimana jika barang
+    // yang ketinggalan itu bentuk desimal? Misal Filma 4.5kg?".
+    await db.into(db.products)
+        .insert(ProductsCompanion.insert(id: 'P2', name: 'Filma'));
+    await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
+        id: 'i2',
+        transactionId: txId,
+        productId: 'P2',
+        productUnitId: 'U2',
+        qty: 4.5,
+        priceAtSale: 20000,
+        originalPrice: 20000,
+        subtotal: 90000));
   });
   tearDown(() async => db.close());
 
@@ -146,6 +159,59 @@ void main() {
     expect(rows.single.itemName, 'Topi');
     expect(rows.single.qty, 1,
         reason: 'qty SEBAGIAN (1 dari 2) tersimpan, bukan qty penuh nota');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'susulan (permintaan user): qty DESIMAL (mis. Filma 4.5kg) bisa '
+      'diketik langsung — stepper +/-1 SENDIRIAN tidak bisa mencapai '
+      'nilai desimal sembarang', (tester) async {
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.byTooltip('+ Catat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Titip/Ketinggalan'));
+    await tester.pumpAndSettle();
+
+    // Centang "Filma" (qty baris nota = 4.5) — default qty PENUH desimal.
+    await tester.tap(inDialog('Filma'));
+    await tester.pumpAndSettle();
+    expect(inDialog('4.5'), findsOneWidget,
+        reason: 'default qty penuh 4.5 (desimal), bukan dibulatkan');
+
+    // Ketik langsung angka desimal SEMBARANG (2.5) — mustahil dicapai lewat
+    // stepper +/-1 murni dari 4.5 (loncat 3.5, 2.5, 1.5... TIDAK PERNAH
+    // mendarat di, mis., "2" bulat, tapi 2.5 kebetulan salah satu titiknya —
+    // makanya di sini kita uji angka yg TIDAK bisa dicapai stepper: 3).
+    final filmaTile = find.ancestor(
+        of: inDialog('Filma'), matching: find.byType(ListTile));
+    await tester.enterText(
+        find.descendant(of: filmaTile, matching: find.byType(TextField)),
+        '3');
+    await tester.pumpAndSettle();
+
+    // Tombol tambah harus tetap menghormati batas 4.5 (bukan +1 polos jadi
+    // 4 lalu tombol berikutnya melebihi jadi 5).
+    await tester.tap(find.byIcon(Icons.add_circle_outline));
+    await tester.pumpAndSettle();
+    expect(inDialog('4'), findsOneWidget,
+        reason: 'stepper +1 dari 3 -> 4 (masih valid, blm sampai batas)');
+    await tester.tap(find.byIcon(Icons.add_circle_outline));
+    await tester.pumpAndSettle();
+    expect(inDialog('4.5'), findsOneWidget,
+        reason: 'putaran berikutnya HARUS mendarat PAS di batas 4.5, bukan '
+            'melebihi jadi 5 — tombol tambah wajib mengklem ke qty persis');
+
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.leftBehindItems).get();
+    expect(rows, hasLength(1));
+    expect(rows.single.itemName, 'Filma');
+    expect(rows.single.qty, 4.5);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

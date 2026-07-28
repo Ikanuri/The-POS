@@ -214,7 +214,38 @@ DIRINYA SENDIRI LAGI — bukan berhenti sekali lalu diam selamanya (masih
 dibatasi PER putaran-nyala, bukan `repeat()` tanpa henti sama sekali,
 demi alasan baterai + `pumpAndSettle` yg sama).
 
-**Susulan (27 Juli): qty SEBAGIAN utk Titip/Ketinggalan.** User: "kadang
+**Susulan LANGSUNG lagi (27 Juli): qty DESIMAL utk Titip/Ketinggalan.**
+User: "bagaimana jika barang yang ketinggalan itu bentuk desimal? Misal
+Filma 4.5kg?" — stepper +/-1 (baru ditambah) TIDAK BISA mencapai nilai
+desimal sembarang murni dari langkah 1 (loncat 4.5→3.5→2.5..., tidak
+pernah pas di "2" bulat). Fix: angka qty jadi `TextField` bisa diketik
+bebas (keyboard desimal), stepper tetap ada utk kenyamanan qty bulat.
+**Bonus bug ketemu**: stepper +1 versi sebelumnya bisa MELEBIHI batas qty
+kalau sisa <1 (`qty>=item.qty?null:qty+1` — utk maks 4.5 dari 4, +1 jadi
+5!) — fix klem ke `item.qty` PERSIS. **Gotcha dispose**: sempat coba
+dispose `TextEditingController` qty tepat setelah `showDialog` selesai
+→ crash "used after disposed" (dialog MASIH animasi keluar saat itu) —
+dibiarkan TIDAK di-dispose eksplisit sama sekali, konsisten dgn
+`customerController` di fungsi yg sama yg JUGA tak pernah di-dispose
+(GC alami cukup utk `TextEditingController` transien dialog, bukan
+resource native mahal).
+
+**Investigasi marquee "masih terpotong" (27 Juli, SUDAH DIKONFIRMASI
+BUKAN BUG KODE)**: user kirim screenshot LAGI, nama "Buk..." masih
+statis walau 2 fix marquee (`cfebc31` textScaler, `99f1e88`
+istirahat-ulang) sudah di-commit. Ditanya balik via `AskUserQuestion`:
+dikonfirmasi tetap diam SELAMANYA (bukan cuma kebetulan tertangkap saat
+jeda). Re-review kode menyeluruh (`Align` wrapper di
+`bottomNavigationBar`, `TickerMode`/`IndexedStack` — TIDAK ADA di
+codebase ini, `ShellRoute` biasa bukan `StatefulShellRoute.indexedStack`,
+alur `setCustomer`/`CustomerPick` — tidak ada truncation data) TIDAK
+menemukan bug baru. Tulis widget test REPRODUKSI PERSIS nama asli user
+("Buk Khotimah", lebar device nyata 360px) memakai kode branch ini apa
+adanya — **marquee AKTIF dgn benar** (`OverflowBox` hadir), TIDAK macet.
+**Kesimpulan**: kode branch ini SUDAH BENAR utk skenario ini; dugaan
+kuat APK yg dites user belum berisi commit `cfebc31`/`99f1e88` (build
+lama/CI belum di-trigger ulang) — BUKAN kode yg masih salah. User diminta
+konfirmasi dari commit/build mana APK yg dites berasal.
 yang ketinggalan hanya sebagian (tidak semua)" — checklist polos (fase
 sebelumnya) selalu menyiratkan SELURUH qty baris nota, tidak bisa catat
 mis. beli 5 ketinggalan cuma 2. Fix: `LeftBehindItems.qty` baru

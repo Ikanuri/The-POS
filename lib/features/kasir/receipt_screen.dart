@@ -1668,6 +1668,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// polos tidak cukup, tiap item yang dicentang dapat stepper qty sendiri
   /// (default = qty penuh, bisa dikurangi), pola stepper sama persis dgn
   /// `_showReturnSheet`.
+  ///
+  /// Susulan lagi (permintaan user): produk timbang bisa punya qty DESIMAL
+  /// (mis. Filma 4.5kg) — stepper +/-1 SENDIRIAN tidak bisa mencapai nilai
+  /// desimal sembarang (loncat 1 penuh, tidak akan pernah pas di "2" kalau
+  /// mulai dari 4.5 turun kelipatan 1: 4.5, 3.5, 2.5, ...). Angka qty
+  /// diganti `TextField` yang bisa DIKETIK LANGSUNG (keyboard desimal),
+  /// stepper +/-1 tetap ada utk kenyamanan qty bulat & disinkronkan ke teks.
   Future<void> _showLeftBehindDialog(String transactionId) async {
     final candidates = _items.where((i) => i.qty > 0).toList();
     // Pelanggan diwarisi dari NOTA (pra-isi), bukan dibiarkan kosong —
@@ -1679,8 +1686,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         text: notaCustomer == 'Umum' ? '' : notaCustomer);
     var jenis = 'titip';
     // Presence di map = tercentang; nilainya = qty yg titip/ketinggalan
-    // (default qty penuh saat dicentang, bisa diturunkan via stepper).
+    // (default qty penuh saat dicentang, bisa diturunkan via stepper/ketik).
     final selectedQty = <String, double>{};
+    final qtyControllers = <String, TextEditingController>{};
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1704,9 +1712,19 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     ...candidates.map((item) {
                       final qty = selectedQty[item.id];
                       final checked = qty != null;
+                      final qtyCtrl = qtyControllers.putIfAbsent(
+                          item.id, () => TextEditingController());
+                      // Set nilai qty baru dari AKSI EKSPLISIT (stepper,
+                      // centang) — timpa teks field-nya juga. Ketikan manual
+                      // TIDAK lewat sini (lihat onChanged TextField di bawah)
+                      // supaya kursor/IME staf tidak diganggu saat mengetik.
+                      void setQty(double v) => setDialogState(() {
+                            selectedQty[item.id] = v;
+                            qtyCtrl.text = _fmtQtyShort(v);
+                          });
                       void toggle(bool v) => setDialogState(() {
                             if (v) {
-                              selectedQty[item.id] = item.qty; // default penuh
+                              setQty(item.qty); // default penuh
                             } else {
                               selectedQty.remove(item.id);
                             }
@@ -1736,16 +1754,44 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                     visualDensity: VisualDensity.compact,
                                     onPressed: qty <= 1
                                         ? null
-                                        : () => setDialogState(
-                                            () => selectedQty[item.id] =
-                                                qty - 1),
+                                        // Berhenti di 1 (bukan 0) — kalau
+                                        // mau menghapus item ini, uncheck
+                                        // via centang, bukan stepper turun
+                                        // ke 0 (status "tercentang tapi
+                                        // qty 0" membingungkan).
+                                        : () => setQty(qty - 1),
                                   ),
                                   SizedBox(
-                                    width: 28,
-                                    child: Text(_fmtQtyShort(qty),
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600)),
+                                    width: 52,
+                                    child: TextField(
+                                      controller: qtyCtrl,
+                                      textAlign: TextAlign.center,
+                                      keyboardType: const TextInputType
+                                          .numberWithOptions(decimal: true),
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600),
+                                      decoration: const InputDecoration(
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(
+                                              vertical: 4)),
+                                      // Ketik bebas (utk qty desimal, mis.
+                                      // "4.5") — stepper +/-1 SENDIRIAN tidak
+                                      // bisa mencapai nilai desimal
+                                      // sembarang. Divalidasi/diklem HANYA
+                                      // saat nilainya valid; input transien
+                                      // (mis. "4." sedang diketik) dibiarkan
+                                      // apa adanya, tidak dipaksa-benarkan.
+                                      onChanged: (v) {
+                                        final parsed = double.tryParse(v);
+                                        if (parsed != null &&
+                                            parsed > 0 &&
+                                            parsed <= item.qty) {
+                                          setDialogState(() =>
+                                              selectedQty[item.id] = parsed);
+                                        }
+                                      },
+                                    ),
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.add_circle_outline,
@@ -1753,9 +1799,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                     visualDensity: VisualDensity.compact,
                                     onPressed: qty >= item.qty
                                         ? null
-                                        : () => setDialogState(
-                                            () => selectedQty[item.id] =
-                                                qty + 1),
+                                        // Klem ke qty PERSIS (bukan qty+1
+                                        // polos) — kalau sisanya < 1 (mis.
+                                        // maks 4.5, qty skrg 4), tombol
+                                        // terakhir harus mendarat PAS di
+                                        // 4.5, bukan melebihi jadi 5.
+                                        : () => setQty(qty + 1 > item.qty
+                                            ? item.qty
+                                            : qty + 1),
                                   ),
                                 ],
                               ),
