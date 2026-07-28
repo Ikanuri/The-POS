@@ -159,6 +159,21 @@ krn `Text.rich(span)` selalu membungkus span kita 1 level ke dalam span
 default tema) — revert-verified (bold dicabut sementara, test gagal
 sensible "Expected FontWeight.w700, Actual null").
 
+**Keputusan jaminan pre-order DIBALIK LAGI (27 Juli)**: user kirim
+screenshot struk yg masih menampilkan "Titip 10" walau pre-order-nya
+sudah "Dipenuhi" di dashboard, lalu MINTA EKSPLISIT disamakan dgn pola
+Titip/Ketinggalan — temporary, hilang begitu terpenuhi. Ini MEMBALIK
+keputusan sesi sebelumnya (yg sengaja bikin permanen atas permintaan
+user YANG SAMA — lihat bagian "Redesain BESAR: Pre-order..." di bawah).
+**Pelajaran**: kadang user berubah pikiran setelah lihat hasil nyata di
+device — jangan asumsikan keputusan lama final selamanya, tapi JUGA
+jangan langsung ubah tanpa konfirmasi kalau permintaan baru tampak
+kontradiktif dgn permintaan eksplisit sebelumnya (sempat tanya balik via
+`AskUserQuestion` sebelum eksekusi, walau akhirnya user jawab lewat chat
+biasa bukan lewat pilihan). Fix: `getPreorderDepositForTransaction`
+tambah filter `fulfilledAt.isNull() & cancelledAt.isNull()`. Test
+`receipt_borrowed_section_test.dart` dibalik assersinya — revert-verified.
+
 ## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
 
 Susulan redesain Pre-order besar (bagian di bawah) — user minta 2

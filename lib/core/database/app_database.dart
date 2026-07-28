@@ -4913,18 +4913,18 @@ class AppDatabase extends _$AppDatabase {
   /// Key: `'$productId|$productUnitId'` (PreorderEntries tidak menyimpan
   /// `transactionItemId`, hanya productId+productUnitId — cukup presisi krn
   /// pre-order dibuat via SATU baris cart per produk+satuan per nota).
-  /// SENGAJA TIDAK memfilter `fulfilledAt`/`cancelledAt` (permintaan user):
-  /// begitu pre-order-nya dipenuhi, keterangan jaminan HARUS TETAP ada di
-  /// nota — nota adalah bukti historis permanen "pelanggan ini pernah
-  /// menitipkan N wadah lewat transaksi ini", bukan indikator status hidup.
-  /// Kalau difilter, jejak jaminannya hilang persis saat paling dibutuhkan
-  /// (waktu wadahnya mau ditukar/dikembalikan).
+  /// Keputusan DIBALIK (permintaan user, susulan): penanda ini SEKARANG
+  /// mengikuti pola sama dgn Titip/Ketinggalan — TEMPORARY, hilang begitu
+  /// pre-order-nya dipenuhi/dibatalkan (`fulfilledAt`/`cancelledAt` diisi) di
+  /// dashboard Laci Meja. Difilter di query ini, bukan cuma di UI.
   Future<Map<String, double>> getPreorderDepositForTransaction(
       String transactionId) async {
     final rows = await (select(preorderEntries)
           ..where((t) =>
               t.transactionId.equals(transactionId) &
-              t.depositQty.isBiggerThanValue(0)))
+              t.depositQty.isBiggerThanValue(0) &
+              t.fulfilledAt.isNull() &
+              t.cancelledAt.isNull()))
         .get();
     return {for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty};
   }

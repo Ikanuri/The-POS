@@ -57,6 +57,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Baris rincian pre-order juga ditebalkan** — nama produk & jumlahnya
   di kartu Pre-order sekarang bold, sisanya (jaminan, status bayar)
   tetap teks biasa.
+- **Keterangan "Titip [jumlah]" jaminan pre-order di struk sekarang
+  otomatis hilang setelah pre-order-nya dipenuhi** di dashboard Laci
+  Meja — sama seperti keterangan barang titip/ketinggalan, tidak lagi
+  menempel selamanya di struk.
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.

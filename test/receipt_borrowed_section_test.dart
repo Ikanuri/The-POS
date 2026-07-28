@@ -97,8 +97,9 @@ void main() {
   });
 
   testWidgets(
-      'keterangan jaminan pre-order TIDAK hilang dari nota setelah pre-order '
-      'DIPENUHI (permintaan user)', (tester) async {
+      'keterangan jaminan pre-order HILANG dari nota setelah pre-order '
+      'DIPENUHI (permintaan user, dibalik dari keputusan sebelumnya — '
+      'sekarang pola sama dgn Titip/Ketinggalan, temporary)', (tester) async {
     await db.addPreorderEntry(
       id: 'p1',
       productId: 'P0',
@@ -121,9 +122,10 @@ void main() {
 
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
-    expect(find.textContaining('Titip 2', findRichText: true), findsOneWidget,
-        reason: 'jaminan WAJIB tetap tercatat di nota walau pre-order sudah '
-            'dipenuhi — nota adalah bukti historis permanen');
+    expect(find.textContaining('Titip 2', findRichText: true), findsNothing,
+        reason: 'jaminan HARUS hilang begitu pre-order sudah dipenuhi di '
+            'dashboard Laci Meja — penanda temporary, bukan bukti permanen '
+            'lagi');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
