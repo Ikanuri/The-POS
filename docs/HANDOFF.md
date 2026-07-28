@@ -230,22 +230,70 @@ dibiarkan TIDAK di-dispose eksplisit sama sekali, konsisten dgn
 (GC alami cukup utk `TextEditingController` transien dialog, bukan
 resource native mahal).
 
-**Investigasi marquee "masih terpotong" (27 Juli, SUDAH DIKONFIRMASI
-BUKAN BUG KODE)**: user kirim screenshot LAGI, nama "Buk..." masih
-statis walau 2 fix marquee (`cfebc31` textScaler, `99f1e88`
-istirahat-ulang) sudah di-commit. Ditanya balik via `AskUserQuestion`:
-dikonfirmasi tetap diam SELAMANYA (bukan cuma kebetulan tertangkap saat
-jeda). Re-review kode menyeluruh (`Align` wrapper di
-`bottomNavigationBar`, `TickerMode`/`IndexedStack` — TIDAK ADA di
-codebase ini, `ShellRoute` biasa bukan `StatefulShellRoute.indexedStack`,
-alur `setCustomer`/`CustomerPick` — tidak ada truncation data) TIDAK
-menemukan bug baru. Tulis widget test REPRODUKSI PERSIS nama asli user
-("Buk Khotimah", lebar device nyata 360px) memakai kode branch ini apa
-adanya — **marquee AKTIF dgn benar** (`OverflowBox` hadir), TIDAK macet.
-**Kesimpulan**: kode branch ini SUDAH BENAR utk skenario ini; dugaan
-kuat APK yg dites user belum berisi commit `cfebc31`/`99f1e88` (build
-lama/CI belum di-trigger ulang) — BUKAN kode yg masih salah. User diminta
-konfirmasi dari commit/build mana APK yg dites berasal.
+## ✅ Nama pelanggan terpotong — AKAR SESUNGGUHNYA ketemu (percobaan ke-3)
+
+**WAJIB dibaca kalau ada laporan teks terpotong/tak muat lagi.** Tiga
+percobaan; dua yang pertama bug NYATA tapi BUKAN akar keluhan user:
+
+1. `cfebc31` — `textScaler` ambient tak diikutkan painter. Bug nyata,
+   keluhan user TETAP ADA.
+2. `99f1e88` — marquee berhenti PERMANEN stlh 4 putaran. Bug nyata juga,
+   keluhan TETAP ADA (user konfirmasi eksplisit lewat `AskUserQuestion`:
+   diam SELAMANYA, sudah ditunggu — bukan kebetulan kena jeda).
+3. **AKAR SESUNGGUHNYA: `fontFamily` ambient diabaikan `TextPainter`.**
+
+**PELAJARAN PALING PENTING — cara akhirnya ketemu**: BACA GEJALA VISUAL
+DI SCREENSHOT SECARA PRESISI, jangan berhenti di deskripsi teks user.
+"Buk Khotimah" tampil **"Buk" + RUANG KOSONG LEBAR** sebelum tombol ×.
+Kalau marquee aktif lalu ter-clip krn sempit, yang tampil PASTI "Buk
+Khotim…" MENGISI PENUH sampai batas clip. Kata kedua hilang tepat di
+*word boundary* DAN menyisakan ruang kosong = itu **text WRAPPING**
+(`maxLines: 1` menampilkan baris pertama saja), BUKAN clipping. Begitu
+dibaca begitu, akarnya ketemu langsung tanpa tebak-tebakan lagi.
+(Percobaan 1 & 2 gagal justru krn saya menduga-duga mekanisme animasi,
+tidak menginterogasi gejala visualnya dulu.)
+
+**Akarnya**: `_MetaChip` memberi `_MarqueeText` style
+`TextStyle(fontSize: 12.5, ...)` yang SENGAJA **tanpa `fontFamily`** —
+jadi `Text` sungguhan mewarisi **Hanken Grotesk** dari `DefaultTextStyle`
+tema (`GoogleFonts.hankenGroteskTextTheme`, `app_theme.dart`), sementara
+`TextPainter` yang diberi `TextSpan` style MENTAH memakai **font default
+engine (Roboto)**. Hanken Grotesk lebih LEBAR → painter SELALU
+under-measure → `overflow <= 0` → jatuh ke cabang `Text` biasa yang
+(waktu itu) tanpa `softWrap: false` → wrap di spasi → tinggal kata
+pertama.
+
+**Fix**: (1) painter mengukur pakai
+`DefaultTextStyle.of(context).style.merge(widget.style)` — style yang
+PERSIS dirender; (2) `softWrap: false` di cabang non-marquee sbg jaring
+pengaman: kalau pengukuran masih meleset tipis, teks terpotong MEPET
+(nyaris tak kelihatan) bukan runtuh jadi kata pertama (yang terlihat
+seperti data hilang).
+
+**ATURAN UMUM**: setiap `TextPainter` yang dipakai untuk MEMUTUSKAN
+layout WAJIB diberi style PERSIS SAMA dgn yang dirender — `DefaultTextStyle`
+ambient (fontFamily, letterSpacing, height) DAN `MediaQuery.textScaler`.
+Style mentah dari parameter widget hampir selalu TIDAK LENGKAP.
+
+**Kenapa 3 test marquee sebelumnya LOLOS padahal bug-nya ada**: di
+`flutter_test` GoogleFonts TIDAK BISA fetch font (tanpa jaringan), jadi
+painter DAN `Text` sama-sama jatuh ke font fallback yang SAMA —
+diskrepansinya HILANG, kelas bug ini MUSTAHIL direproduksi dgn tema app
+apa adanya. Reproduksinya pakai PROXY deterministik: suntik
+`letterSpacing` ke `theme.textTheme.bodyMedium` (properti style TURUNAN
+lain yang juga melebarkan teks & juga tak terlihat painter mentah).
+CATATAN: membungkus `DefaultTextStyle.merge` di LUAR router TIDAK BISA —
+`Material` MENGGANTI (bukan merge) DefaultTextStyle dgn `bodyMedium`,
+jadi harus lewat tema. Lihat param `ambientLetterSpacing` di `pumpKasir`
+(`cart_bar_bayar_button_test.dart`).
+
+**Pelajaran test**: konstanta empiris HARDCODE di test ("Karti" di test
+`textScaler`) JADI BASI begitu logika pengukurannya diperbaiki — test itu
+langsung gagal walau fix-nya benar. Test yang mencari batasnya SENDIRI
+scr empiris (loop prefix + cek `OverflowBox`) tahan thd perbaikan
+pengukuran berikutnya; pola itu yang dipakai sekarang.
+
+**Susulan (27 Juli): qty SEBAGIAN utk Titip/Ketinggalan.** User: "kadang
 yang ketinggalan hanya sebagian (tidak semua)" — checklist polos (fase
 sebelumnya) selalu menyiratkan SELURUH qty baris nota, tidak bisa catat
 mis. beli 5 ketinggalan cuma 2. Fix: `LeftBehindItems.qty` baru

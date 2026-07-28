@@ -40,7 +40,9 @@ void main() {
   }
 
   Future<ProviderContainer> pumpKasir(WidgetTester tester, AppDatabase db,
-      {required String deviceRole, double textScale = 1.0}) async {
+      {required String deviceRole,
+      double textScale = 1.0,
+      double ambientLetterSpacing = 0}) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -67,7 +69,33 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp.router(
-          theme: AppTheme.light(),
+          // `ambientLetterSpacing` (default 0) MELEBARKAN teks lewat
+          // `DefaultTextStyle` ambient (disuntik via `theme.textTheme` —
+          // `Material` MENGGANTI DefaultTextStyle dgn `bodyMedium`, jadi
+          // membungkus `DefaultTextStyle.merge` di luar router TIDAK akan
+          // sampai ke dalam Scaffold). Ini proxy DETERMINISTIK utk perbedaan
+          // fontFamily ambient (tema app pakai Hanken Grotesk via
+          // GoogleFonts) yg TIDAK BISA direproduksi langsung di
+          // `flutter_test`: GoogleFonts tak bisa fetch font di test, jadi
+          // painter & Text sama-sama jatuh ke font fallback yg SAMA dan
+          // diskrepansinya hilang. Kelas bug-nya identik: properti style
+          // TURUNAN yg melebarkan teks tapi tak terlihat oleh TextPainter
+          // yg diberi TextSpan style mentah.
+          theme: () {
+            final base = AppTheme.light();
+            if (ambientLetterSpacing == 0) return base;
+            final ls = TextStyle(letterSpacing: ambientLetterSpacing);
+            return base.copyWith(
+              textTheme: base.textTheme.copyWith(
+                bodyMedium: (base.textTheme.bodyMedium ?? const TextStyle())
+                    .merge(ls),
+                bodySmall: (base.textTheme.bodySmall ?? const TextStyle())
+                    .merge(ls),
+                bodyLarge: (base.textTheme.bodyLarge ?? const TextStyle())
+                    .merge(ls),
+              ),
+            );
+          }(),
           routerConfig: router,
           // `textScale` (default 1.0, dipakai regresi textScaler di bawah) —
           // meniru pengali skala font global yang diterapkan `main.dart`.
@@ -326,24 +354,38 @@ void main() {
         .evaluate()
         .isNotEmpty;
 
-    // "Karti" (5 huruf) ditentukan EMPIRIS thd widget sungguhan (surface
-    // 420x900, style chip aktif): di skala 1.4x (mis. aksesibilitas font
-    // besar), lebar SUNGGUHAN teks ini SUDAH melebihi porsi chip Pelanggan —
-    // marquee HARUS aktif. Tanpa fix `textScaler` di `_MarqueeText`,
-    // pengukuran overflow-nya tetap memakai skala 1.0 & keliru simpul "masih
-    // muat" (batas tanpa-fix baru overflow mulai 6 huruf, "Kartik") — nama
-    // terjebak di Text terpotong permanen selamanya, persis bug yg
-    // dilaporkan user (kata kedua nama pelanggan hilang, bukan geser).
-    const name = 'Karti';
-    final container =
+    // Batas dicari EMPIRIS thd widget sungguhan (BUKAN konstanta hardcode —
+    // konstanta jadi basi tiap pengukuran `_MarqueeText` diperbaiki): prefix
+    // TERPANJANG yg masih MUAT di skala 1.0.
+    const base = 'Kartikawulandarisetiawanpratamahandayanisuhermanaminah';
+    final c1 = await pumpKasir(tester, db, deviceRole: 'owner');
+    String? fitting;
+    for (var i = 1; i <= base.length; i++) {
+      final candidate = base.substring(0, i);
+      c1.read(cartMetaProvider(kMainCartId).notifier)
+          .setCustomer('c1', candidate);
+      await tester.pump();
+      await tester.pump();
+      if (marqueeActiveFor(candidate)) break;
+      fitting = candidate;
+    }
+    expect(fitting, isNotNull,
+        reason: 'harus ada prefix yg muat di skala 1.0 (baseline)');
+
+    // Teks yg SAMA di skala 1.4x (mis. aksesibilitas font besar) HARUS
+    // overflow: hurufnya melebar 40% DAN chip lain (Tahan/Bayar) juga
+    // melebar shg porsi Pelanggan menyempit. Tanpa fix `textScaler` di
+    // `_MarqueeText`, pengukuran tetap memakai skala 1.0 & keliru simpul
+    // "masih muat" — nama terjebak di Text terpotong permanen, persis bug
+    // yg dilaporkan user.
+    final c2 =
         await pumpKasir(tester, db, deviceRole: 'owner', textScale: 1.4);
-    container
-        .read(cartMetaProvider(kMainCartId).notifier)
-        .setCustomer('c1', name);
+    c2.read(cartMetaProvider(kMainCartId).notifier)
+        .setCustomer('c1', fitting!);
     await tester.pump();
     await tester.pump();
-    expect(marqueeActiveFor(name), isTrue,
-        reason: 'di skala font besar nama sependek ini pun HARUS overflow -> '
+    expect(marqueeActiveFor(fitting), isTrue,
+        reason: 'di skala font besar teks yg tadinya muat HARUS overflow -> '
             'marquee aktif, bukan dikira muat lalu terpotong permanen');
 
     // Drain: marquee AKTIF berarti `_stopTimer` (`Timer` sungguhan, bukan
@@ -352,5 +394,74 @@ void main() {
     // berakhir (lihat gotcha Timer di CLAUDE.md).
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'style AMBIENT yg melebarkan teks (fontFamily tema / letterSpacing) '
+      'WAJIB ikut diukur — kalau tidak, nama dikira muat lalu WRAP di spasi & '
+      'hanya kata pertama tersisa ("Buk Khotimah" -> "Buk" + ruang kosong '
+      'lebar, laporan user)', (tester) async {
+    final db = await seedDb();
+    addTearDown(() async => db.close());
+
+    bool marqueeActiveFor(String text) => find
+        .ancestor(of: find.text(text), matching: find.byType(OverflowBox))
+        .evaluate()
+        .isNotEmpty;
+
+    // Nama 2 KATA — penting: gejala yg dilaporkan user (kata KEDUA hilang,
+    // sisanya ruang kosong lebar) hanya muncul kalau ada spasi utk di-wrap.
+    const name = 'Buk Khotimah';
+
+    // Baseline: TANPA pelebaran ambient, nama ini MUAT (marquee tidak aktif).
+    final c1 = await pumpKasir(tester, db, deviceRole: 'owner');
+    c1.read(cartMetaProvider(kMainCartId).notifier).setCustomer('c1', name);
+    await tester.pump();
+    await tester.pump();
+    expect(marqueeActiveFor(name), isFalse,
+        reason: 'prakondisi: tanpa pelebaran ambient, nama ini memang muat');
+
+    // Sekarang lebarkan teks lewat style AMBIENT (proxy fontFamily tema —
+    // lihat dok `ambientLetterSpacing` di `pumpKasir`). Lebar SUNGGUHAN teks
+    // jadi melebihi porsi chip, jadi marquee HARUS aktif. Tanpa fix
+    // (`DefaultTextStyle.of(context).style.merge(...)` di `_MarqueeText`),
+    // `TextPainter` tidak melihat pelebaran ini, mengukur teks lebih SEMPIT
+    // dari kenyataan, menyimpulkan "muat", lalu jatuh ke cabang `Text` biasa.
+    final c2 = await pumpKasir(tester, db,
+        deviceRole: 'owner', ambientLetterSpacing: 2.5);
+    c2.read(cartMetaProvider(kMainCartId).notifier).setCustomer('c1', name);
+    await tester.pump();
+    await tester.pump();
+    expect(marqueeActiveFor(name), isTrue,
+        reason: 'pelebaran style ambient HARUS ikut terukur -> marquee aktif; '
+            'kalau tidak, teks jatuh ke Text biasa lalu WRAP di spasi dan '
+            'hanya "Buk" yang tersisa (persis screenshot user)');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'jaring pengaman: cabang non-marquee memakai softWrap:false, jadi kalau '
+      'pengukuran MASIH meleset sedikit teksnya terpotong MEPET — bukan '
+      'runtuh jadi kata pertama saja', (tester) async {
+    final db = await seedDb();
+    addTearDown(() async => db.close());
+    final container = await pumpKasir(tester, db, deviceRole: 'owner');
+
+    // Nama pendek 2 kata yg PASTI muat -> cabang non-marquee (`Text` biasa).
+    const name = 'Bu Ani';
+    container
+        .read(cartMetaProvider(kMainCartId).notifier)
+        .setCustomer('c1', name);
+    await tester.pump();
+    await tester.pump();
+
+    final txt = tester.widget<Text>(find.text(name));
+    expect(txt.softWrap, isFalse,
+        reason: 'tanpa softWrap:false, teks yg (nyaris) tidak muat akan WRAP '
+            'di spasi dan maxLines:1 menyisakan kata pertama saja — terlihat '
+            'seperti data hilang, bukan seperti terpotong');
+    expect(txt.maxLines, 1);
   });
 }

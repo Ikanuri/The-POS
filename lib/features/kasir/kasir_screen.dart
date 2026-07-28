@@ -3831,14 +3831,30 @@ class _MarqueeTextState extends State<_MarqueeText>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // `textScaler` WAJIB disamakan dgn ambient (`main.dart` menerapkan
-        // pengali skala font global) — tanpa ini, pengukuran overflow
-        // memakai skala 1.0 sementara `Text` sungguhan dirender lebih besar,
-        // jadi kadang keliru simpul "muat" padahal SEBENARNYA overflow. Efek
-        // nyatanya: marquee tidak pernah jalan, nama malah kepotong permanen
-        // (dilaporkan user — kata kedua nama pelanggan hilang, bukan geser).
+        // Pengukuran overflow WAJIB memakai style yang PERSIS SAMA dgn yang
+        // dipakai `Text` sungguhan di bawah — kalau tidak, painter bisa
+        // keliru simpul "muat" padahal SEBENARNYA overflow, marquee tidak
+        // pernah jalan, dan namanya malah kepotong permanen. Dua hal yang
+        // WAJIB diikutkan (keduanya sudah pernah jadi bug NYATA yg
+        // dilaporkan user):
+        //   1. `textScaler` — `main.dart` menerapkan pengali skala font
+        //      GLOBAL lewat `MediaQuery.textScaler`. Tanpa ini painter
+        //      mengukur di skala 1.0 sementara teks dirender lebih besar.
+        //   2. **`DefaultTextStyle` ambient (fontFamily!)** — `widget.style`
+        //      SENGAJA tidak menyebut `fontFamily`, jadi `Text` mewarisi
+        //      Hanken Grotesk dari tema (`GoogleFonts.hankenGroteskTextTheme`
+        //      di `app_theme.dart`) sementara `TextPainter` yang diberi
+        //      TextSpan style TANPA fontFamily memakai font DEFAULT ENGINE
+        //      (Roboto) — dan Hanken Grotesk lebih LEBAR, jadi painter
+        //      selalu under-measure. Efeknya persis laporan user: "Buk
+        //      Khotimah" tampil "Buk" saja + ruang kosong lebar (bukan
+        //      terpotong mepet), krn jatuh ke cabang `Text` biasa lalu
+        //      teksnya WRAP di spasi & `maxLines: 1` cuma menyisakan kata
+        //      pertama.
+        final resolvedStyle =
+            DefaultTextStyle.of(context).style.merge(widget.style);
         final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: widget.style),
+          text: TextSpan(text: widget.text, style: resolvedStyle),
           maxLines: 1,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
@@ -3852,8 +3868,16 @@ class _MarqueeTextState extends State<_MarqueeText>
         });
 
         if (overflow <= 0) {
+          // `softWrap: false` = jaring pengaman: kalau pengukuran di atas
+          // MASIH meleset sedikit (mis. font fallback beda tipis), teks
+          // terpotong MEPET di tengah karakter (nyaris tak kelihatan) —
+          // BUKAN runtuh jadi kata pertama saja dgn ruang kosong lebar
+          // (yang terlihat seperti data hilang, laporan user).
           return Text(widget.text,
-              maxLines: 1, overflow: TextOverflow.clip, style: widget.style);
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+              style: widget.style);
         }
 
         // Tinggi DIKUNCI ke tinggi teksnya sendiri: `_MetaChip` ada di dalam

@@ -70,6 +70,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   — sebelumnya berhenti selamanya setelah beberapa putaran, jadi kalau
   layar dilihat beberapa detik kemudian nama malah kelihatan seperti
   kepotong lagi. Sekarang istirahat sebentar lalu jalan lagi otomatis.
+- **Nama pelanggan panjang di bar keranjang akhirnya benar-benar berjalan**
+  — sebelumnya nama seperti "Buk Khotimah" cuma menampilkan "Buk" dan
+  sisanya kosong (kata kedua hilang, bukan bergerak). Sekarang nama
+  panjang selalu ditampilkan sebagai teks berjalan seperti seharusnya.
 - **Catat Titip/Ketinggalan sekarang bisa untuk SEBAGIAN barang saja** —
   kalau yang ketinggalan/dititip cuma sebagian dari jumlah yang dibeli
   (mis. beli 5, ketinggalan 2), sekarang ada tombol +/- untuk mengatur
