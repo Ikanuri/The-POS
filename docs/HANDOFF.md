@@ -5,7 +5,24 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 27 Juli 2026 (lanjutan) — **Item 52 ("Laci Meja") SELESAI
+_Update sesi 28 Juli 2026 — **v2.3.0 SUDAH RESMI DIRILIS** (tag `v2.3.0`,
+non-prerelease, APK ter-attach, lihat "Rilis v2.3.0" di bawah). Proyek
+memasuki fase MAINTENANCE (fitur dianggap selesai per user) — repo
+`The-POS` rencananya akan di-private-kan (hemat, tidak ada build rutin),
+dibuka public lagi sementara HANYA kalau perlu compile APK via GitHub
+Actions (kuota gratis repo public). Dua dependensi yang sempat butuh repo
+public SUDAH DIPUTUS: (1) kill-switch lisensi (`revoked.json`) sudah
+dipindah ke GitHub Gist terpisah (`gist.github.com/Ikanuri/
+ff6a99c3b1e642c81809b0664c8d681a`, URL raw TANPA hash revisi) — Gist
+independen dari visibility repo, jadi aman private permanen; (2) BARU
+DITEMUKAN & DIPERBAIKI sesi ini: backup penuh/Alihkan Owner ternyata
+TIDAK menyertakan 3 tabel Laci Meja (`left_behind_items`, `borrowed_items`,
+`preorder_entries`) — lihat "fix: backup Laci Meja" di CHANGELOG. Semua
+perubahan sesi ini SUDAH di-merge ke `main` & di-push ke `origin`
+(termasuk tag rilis). Belum ada pekerjaan menggantung di branch
+`claude/kategori-produk-qty-harga-mqjh21` per akhir sesi ini._
+
+_Riwayat sesi 27 Juli 2026 (lanjutan) — **Item 52 ("Laci Meja") SELESAI
 TOTAL** termasuk bagian yang sempat ditunda (layar review usulan), 2
 koreksi UX dari user setelah demo awal (link ke produk struk, redirect
 dashboard ke nota), 1 bugfix KRITIS (checkout gagal setelah handoff QR
@@ -16,14 +33,10 @@ redesign (menu cepat Kasir/Laci Meja + 2 perbaikan di tab Ringkasan &
 struk share), SATU PUTARAN LAGI (animasi menu, grouping frame
 Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis), REDESAIN BESAR
 Pre-order (nyambung total ke keranjang/nota, ganti 2 jalur lama), lalu
-**putaran TERBARU**: gap Ringkasan AKHIRNYA KETEMU akarnya (percobaan
-ke-4, `TabAlignment`, BUKAN soal padding/margin sama sekali — 3
-percobaan sebelumnya semua salah sasaran), grouping Pre-order/Pinjaman
-di dashboard, dan penanda "Pinjaman" baru di struk in-app — lihat bagian
-PALING BAWAH. Belum di-merge ke `main` / di-push ke `origin` —
-commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
-menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
-dulu baru merge/push)._
+gap Ringkasan AKHIRNYA KETEMU akarnya (percobaan ke-4, `TabAlignment`,
+BUKAN soal padding/margin sama sekali — 3 percobaan sebelumnya semua
+salah sasaran), grouping Pre-order/Pinjaman di dashboard, dan penanda
+"Pinjaman" baru di struk in-app — lihat bagian di bawah._
 
 ## Putaran TERBARU: redesain cart bar + pinjaman plain text + cari/statistik Pre-order
 
