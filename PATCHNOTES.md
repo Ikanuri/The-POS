@@ -8,6 +8,140 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 27 Juli 2026
+
+### 🛠️ Perbaikan
+- **Bar keranjang dirombak biar tidak "goyang" lagi** — dulu nama pelanggan
+  panjang bikin tombol Tahan/Bayar pindah baris & posisinya berubah-ubah.
+  Sekarang porsi tiap tombol tetap, dan nama yang kepanjangan ditampilkan
+  sebagai **teks berjalan** (bergerak kiri-kanan beberapa kali lalu diam),
+  jadi nama tetap kebaca utuh tanpa mengubah tata letak.
+- **Pengingat di bar keranjang jadi lebih jelas** — catatan Laci Meja
+  pelanggan tampil satu baris per jenis (barang ketinggalan, pinjaman,
+  pre-order), dan baris pre-order menyebut langsung produk apa, berapa,
+  serta berapa jaminan yang dititip.
+- **Pengingat hutang sekarang juga muncul di bar keranjang** (di bawah
+  nominal Total): total hutang & di berapa nota, jadi ketahuan sebelum
+  transaksi baru diselesaikan.
+- **Catat Pinjaman Barang kembali ketik bebas** — supaya wadah kosong
+  (galon/tabung) yang memang bukan barang di nota tetap bisa dicatat.
+  Daftar pinjaman muncul sebagai bagian tersendiri di struk dalam aplikasi.
+- **Keterangan jaminan tidak lagi hilang dari nota** setelah pre-order-nya
+  ditandai terpenuhi.
+- **Menu tekan-tahan tab "Kasir" dirombak tampilannya** — sekarang muncul
+  tepat di atas tab (bukan di samping), hanya tampil ikon Kasir/Laci Meja
+  (tanpa teks), sudutnya rounded, waktu tekan-tahan yang dibutuhkan untuk
+  membukanya dipercepat, dan sekarang muncul/hilangnya dengan animasi
+  halus (bukan langsung nongol/hilang begitu saja).
+- **Dashboard Laci Meja — barang Titip/Ketinggalan dari nota yang sama
+  sekarang dikelompokkan jadi satu kartu**, tidak lagi tampil sebagai
+  baris-baris terpisah yang membingungkan. Tiap barang juga menampilkan
+  jumlah & satuannya. Tombol "Sudah Diambil" juga disederhanakan jadi
+  tombol kecil "Ambil".
+- **Tab Ringkasan di Laporan tidak lagi terasa "renggang"** — jarak antar
+  kartu ringkasan (Omzet, Transaksi, dll) dirapikan, dan tab "Ringkasan"
+  sekarang menempel rapi di kiri (sebelumnya ada jarak kosong yang tidak
+  perlu).
+- **Dashboard Laci Meja — Pre-order dari nota yang sama sekarang
+  dikelompokkan jadi satu kartu** (nama pelanggan tampil sekali di atas,
+  daftar barang & jumlah jaminan di bawahnya), dan **Pinjaman Barang
+  dikelompokkan per pelanggan** — jadi satu pelanggan yang pinjam
+  beberapa kali di nota berbeda tetap kelihatan jadi satu daftar.
+- **Struk in-app sekarang menandai barang yang sedang dipinjamkan** —
+  label "Pinjaman" di samping nama barang, sebagai bukti kalau ada
+  yang perlu dicek ulang.
+- **Statistik jaminan di tab Pre-order sekarang lebih detail** — istilah
+  "wadah" diganti "jaminan", dan di bawah angka total jaminan sekarang
+  ada rincian per produk (mis. "LPG: 20 jaminan"), dengan nama produk &
+  angkanya ditebalkan biar cepat dibaca.
+- **Baris rincian pre-order juga ditebalkan** — nama produk & jumlahnya
+  di kartu Pre-order sekarang bold, sisanya (jaminan, status bayar)
+  tetap teks biasa.
+- **Keterangan "Titip [jumlah]" jaminan pre-order di struk sekarang
+  otomatis hilang setelah pre-order-nya dipenuhi** di dashboard Laci
+  Meja — sama seperti keterangan barang titip/ketinggalan, tidak lagi
+  menempel selamanya di struk.
+- **Perbaikan: nama pelanggan panjang di bar keranjang tidak lagi
+  terpotong permanen** di HP dengan pengaturan ukuran font besar —
+  sekarang teks berjalan (marquee) tetap aktif sesuai ukuran font yang
+  sedang dipakai, tidak lagi mengira teksnya muat padahal sebenarnya
+  kepotong.
+- **Teks nama pelanggan yang berjalan (marquee) sekarang berulang terus**
+  — sebelumnya berhenti selamanya setelah beberapa putaran, jadi kalau
+  layar dilihat beberapa detik kemudian nama malah kelihatan seperti
+  kepotong lagi. Sekarang istirahat sebentar lalu jalan lagi otomatis.
+- **Nama pelanggan panjang di bar keranjang akhirnya benar-benar berjalan**
+  — sebelumnya nama seperti "Buk Khotimah" cuma menampilkan "Buk" dan
+  sisanya kosong (kata kedua hilang, bukan bergerak). Sekarang nama
+  panjang selalu ditampilkan sebagai teks berjalan seperti seharusnya.
+- **Catat Titip/Ketinggalan sekarang bisa untuk SEBAGIAN barang saja** —
+  kalau yang ketinggalan/dititip cuma sebagian dari jumlah yang dibeli
+  (mis. beli 5, ketinggalan 2), sekarang ada tombol +/- untuk mengatur
+  jumlahnya, tidak lagi selalu dianggap semua barang yang tertinggal.
+- **Jumlah di Catat Titip/Ketinggalan sekarang bisa desimal** — untuk
+  produk timbang (mis. beras/minyak dijual per kg), angkanya bisa
+  diketik langsung (mis. "4.5"), tidak lagi terbatas kelipatan bulat.
+- **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
+  nama barang** — sekarang posisinya persis seperti tanda "Habis" di
+  daftar produk kasir, tidak berjarak lagi.
+- **Struk yang dibagikan (gambar)**: baris jumlah barang & harga per
+  barang tidak lagi tercetak tebal — hanya nama produk yang tetap tebal,
+  jadi lebih mudah dibaca.
+- **Transaksi tidak bisa dibayar setelah pesanan dipindah bolak-balik
+  lewat QR** (mis. owner → asisten → owner) — muncul pesan error dan
+  kasir mentok padahal uang sudah diterima. Sekarang pembayaran selalu
+  bisa diselesaikan; nomor notanya yang menyesuaikan otomatis.
+- **Nama pelanggan panjang di bar keranjang tidak lagi menutupi tombol
+  "Bayar"** — barisnya turun ke bawah kalau tidak muat, dan tombol
+  "Bayar"-nya sekarang selalu tetap di kanan walau baris di sebelahnya
+  melipat jadi 2 baris.
+- **Keterangan pengingat Laci Meja sekarang menyebut jenis barang yang
+  benar** — barang yang tercatat "ketinggalan" tidak lagi ikut tertulis
+  "dititip" di pengingat modal checkout/bar keranjang.
+
+### ✨ Fitur Baru
+- **"Laci Meja" — fitur baru untuk catatan operasional harian toko.**
+  Tekan & tahan tab "Kasir" di menu bawah (mirip Telegram) untuk membuka
+  dashboard barunya. Ada 3 kategori:
+  - **Titip/Ketinggalan** — catat barang yang lupa dibawa pembeli atau
+    sengaja dititip. Dicatat langsung dari layar Struk lewat tombol baru
+    "+ Catat" — tinggal centang barang mana di nota itu yang titip/
+    ketinggalan, bisa lebih dari satu sekaligus.
+  - **Pinjaman Barang** — catat wadah/deposit (galon, tabung gas, dll)
+    yang harus kembali secara fisik ke toko, bisa dicatat kembali
+    sebagian (mis. pinjam 3, baru kembali 2).
+  - **Pre-order** — kini punya **kotak pencarian** (cari nama pelanggan
+    atau nama produk) dan **ringkasan angka**: total produk yang dipesan
+    dan total jaminan yang dititip, ditampilkan terpisah & ikut menyesuaikan
+    hasil pencarian.
+  - **Pre-order** — catat pesanan untuk produk yang stoknya sedang habis
+    (termasuk antrian tabung LPG). **Diperbarui**: sekarang dicatat
+    langsung lewat modal tambah barang di Kasir — begitu produk ditandai
+    "Habis", muncul pertanyaan "Pre-order?" (Ya/Tidak), lalu "DP?" (bayar
+    sekarang atau nanti), dan kalau produknya butuh jaminan fisik (mis.
+    tukar tabung gas), muncul kolom jumlah jaminan yang dititip. Karena
+    langsung nyambung ke keranjang, pesanan pre-order otomatis tercatat
+    di nota yang sama — memudahkan pelacakan & tap-untuk-lihat-nota di
+    dashboard Laci Meja.
+  - Badge angka di ikon Kasir menampilkan total catatan yang masih aktif
+    di ketiga kategori, tanpa perlu ditahan dulu.
+  - Untuk produk model tukar-wadah (mis. LPG), ada toggle baru "Butuh
+    Jaminan Fisik saat Antri" di form Edit Produk — kalau diaktifkan,
+    pencatatan antrian mewajibkan jumlah wadah yang dititip diisi.
+  - Kalau ada catatan Laci Meja yang dibuat pegawai/asisten (bukan
+    owner), owner bisa meninjau & menyetujuinya dulu di layar Sinkron
+    WiFi (kartu "Usulan Laci Meja") sebelum masuk ke data toko.
+  - Ketuk salah satu catatan di dashboard Laci Meja untuk langsung
+    membuka struk nota terkait (mirip cara buka nota dari Buku Hutang).
+  - Nama pelanggan otomatis terbawa dari nota, jadi langsung terlihat di
+    kartu Laci Meja tanpa perlu diketik ulang (ditandai warna terracotta
+    supaya mudah dibedakan).
+  - Barang yang dititip/ketinggalan diberi penanda langsung di struk
+    dalam aplikasi, mirip penanda "Habis" pada daftar produk.
+  - Saat menerima pembayaran, muncul pengingat kalau pelanggan itu masih
+    punya barang dititip, pinjaman, atau pre-order yang belum selesai —
+    warnanya sengaja dibedakan dari pengingat hutang.
+
 ## 26 Juli 2026
 
 ### ✨ Fitur Baru

@@ -737,14 +737,20 @@ class _StockRow extends StatelessWidget {
         subtitle: (checked && unitOptions != null && unitOptions!.isNotEmpty)
             ? Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: _QtyUnitStepper(
-                  qty: qty,
-                  fmtQty: fmtQty,
-                  unitOptions: unitOptions!,
-                  selectedUnit: selectedUnit,
-                  onQtyDelta: (d) => onQtyDelta?.call(d),
-                  onQtyTap: () => onQtyTap?.call(),
-                  onUnitChanged: (u) => onUnitChanged?.call(u),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _QtyUnitStepper(
+                      qty: qty,
+                      fmtQty: fmtQty,
+                      unitOptions: unitOptions!,
+                      selectedUnit: selectedUnit,
+                      onQtyDelta: (d) => onQtyDelta?.call(d),
+                      onQtyTap: () => onQtyTap?.call(),
+                      onUnitChanged: (u) => onUnitChanged?.call(u),
+                    ),
+                  ],
                 ),
               )
             : null,

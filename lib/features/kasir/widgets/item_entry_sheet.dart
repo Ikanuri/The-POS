@@ -87,6 +87,17 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   int _price = 0;
   bool _priceOverridden = false;
 
+  /// Item 52 redesain pre-order — kartu "Pre-order?" HANYA muncul ketika
+  /// [_markedOutOfStock] true. Default Tidak (opt-in eksplisit, konsisten
+  /// dgn pola "aman/tidak mengasumsikan" fitur Laci Meja lain).
+  bool _isPreorder = false;
+  /// "DP?" — Ya berarti harga penuh terisi & dibayar lunas sekarang; Tidak
+  /// (default) berarti harga 0, dicatat dulu, bayar nanti saat barang
+  /// datang.
+  bool _dpPaid = false;
+  double _depositQty = 0;
+  final _depositQtyCtrl = TextEditingController();
+
   /// True bila satuan terpilih sudah ada di keranjang saat modal dibuka →
   /// tampilkan tombol "Hapus dari keranjang".
   bool _existsInCart = false;
@@ -106,6 +117,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     _priceCtrl.dispose();
     _qtyCtrl.dispose();
     _noteCtrl.dispose();
+    _depositQtyCtrl.dispose();
     super.dispose();
   }
 
@@ -323,12 +335,16 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         productName: widget.product.name,
         unitName: sel.unitName,
         qty: storedQty,
-        price: _price,
+        price: _effectivePrice,
         originalPrice: sel.basePrice,
         costPrice: sel.costPrice,
         priceOverridden: _priceOverridden,
         itemNote: note.isEmpty ? null : note,
         barcode: sel.barcode,
+        isPreorder: _isPreorder,
+        preorderPaid: _dpPaid,
+        depositQty:
+            (_isPreorder && sel.unit.requiresDeposit) ? _depositQty : null,
       ));
     }
 
@@ -375,11 +391,47 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   /// Item 25a — tandai/lepas "stok habis" cepat, tanpa buka form Produk.
   Future<void> _toggleOutOfStock() async {
     final next = !_markedOutOfStock;
-    setState(() => _markedOutOfStock = next);
+    setState(() {
+      _markedOutOfStock = next;
+      // Kartu "Pre-order?" cuma muncul selama produk masih ditandai habis —
+      // begitu ditandai tersedia lagi, reset supaya tidak ada state
+      // pre-order basi yg diam-diam ikut ke keranjang.
+      if (!next) {
+        _isPreorder = false;
+        _dpPaid = false;
+      }
+    });
     await ref
         .read(databaseProvider)
         .setMarkedOutOfStock(widget.product.id, next);
   }
+
+  void _setPreorder(bool value) {
+    setState(() {
+      _isPreorder = value;
+      _dpPaid = false;
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(_effectivePrice);
+      if (value && _sel != null && _sel!.unit.requiresDeposit) {
+        _depositQty = _qty;
+        _depositQtyCtrl.text = _fmtQty(_depositQty);
+      }
+    });
+  }
+
+  void _setDpPaid(bool value) {
+    setState(() {
+      _dpPaid = value;
+      _priceCtrl.text = ThousandsSeparatorFormatter.format(_effectivePrice);
+    });
+  }
+
+  /// Harga yang SUNGGUHAN disimpan ke keranjang — pre-order TANPA DP
+  /// (belum bayar) selalu 0, terlepas dari harga yang ter-resolve normal.
+  int get _effectivePrice => (_isPreorder && !_dpPaid) ? 0 : _price;
+
+  /// Field Harga dikunci (tak bisa diketik) selama pre-order TANPA DP —
+  /// harganya WAJIB 0, bukan sesuatu yang bisa disunting manual.
+  bool get _priceLocked => _isPreorder && !_dpPaid;
 
   /// Hapus item (satuan terpilih) dari keranjang. Hanya muncul saat item
   /// memang sudah ada di keranjang (modal dibuka dari keranjang).
@@ -650,7 +702,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               const SizedBox(height: 6),
                               TextField(
                                 controller: _priceCtrl,
-                                readOnly: !_canOverride,
+                                readOnly: !_canOverride || _priceLocked,
                                 keyboardType: TextInputType.number,
                                 inputFormatters: const [
                                   ThousandsSeparatorFormatter()
@@ -660,13 +712,13 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                   prefixText: 'Rp ',
                                   contentPadding: const EdgeInsets.symmetric(
                                       vertical: 8, horizontal: 10),
-                                  suffixIcon: !_canOverride
+                                  suffixIcon: (!_canOverride || _priceLocked)
                                       ? Icon(Icons.lock_outline,
                                           size: 14,
                                           color: scheme.onSurfaceVariant)
                                       : null,
                                 ),
-                                onTap: _canOverride
+                                onTap: (_canOverride && !_priceLocked)
                                     ? () => _priceCtrl.selection =
                                         TextSelection(
                                             baseOffset: 0,
@@ -689,13 +741,115 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                     ),
                   ),
 
+                  // ── Kartu "Pre-order?" — Item 52 redesain, HANYA muncul
+                  // selama produk ditandai habis (menggantikan total jalur
+                  // lama "+ Antri"/"Catat Pre-order" yg terpisah dari
+                  // keranjang; sekarang nyambung langsung supaya administrasi
+                  // & tracking-nya jadi satu jalur dgn nota).
+                  if (_markedOutOfStock && _sel != null) ...[
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.laciBg(
+                              Theme.of(context).brightness == Brightness.dark),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text('Pre-order?',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.laciFg(Theme.of(
+                                                      context)
+                                                  .brightness ==
+                                              Brightness.dark))),
+                                ),
+                                _YesNoToggle(
+                                  value: _isPreorder,
+                                  onChanged: _setPreorder,
+                                ),
+                              ],
+                            ),
+                            if (_isPreorder) ...[
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text('DP? (bayar lunas sekarang)',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: AppTheme.laciFg(Theme.of(
+                                                        context)
+                                                    .brightness ==
+                                                Brightness.dark))),
+                                  ),
+                                  _YesNoToggle(
+                                    value: _dpPaid,
+                                    onChanged: _setDpPaid,
+                                  ),
+                                ],
+                              ),
+                              if (_sel!.unit.requiresDeposit) ...[
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text('Jumlah jaminan dititip',
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              color: AppTheme.laciFg(Theme.of(
+                                                          context)
+                                                      .brightness ==
+                                                  Brightness.dark))),
+                                    ),
+                                    SizedBox(
+                                      width: 90,
+                                      child: TextField(
+                                        controller: _depositQtyCtrl,
+                                        textAlign: TextAlign.center,
+                                        keyboardType:
+                                            const TextInputType
+                                                    .numberWithOptions(
+                                                decimal: true),
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(
+                                              vertical: 8),
+                                        ),
+                                        onChanged: (v) {
+                                          final q = double.tryParse(v.trim());
+                                          if (q != null) {
+                                            setState(() => _depositQty =
+                                                q.clamp(0, 9999));
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
                   // ── Pilih harga (chip) — tier grosir & Harga Lain milik
                   // satuan terpilih, SATU CHIP PER OPSI (termasuk "Harga
                   // dasar" utk kembali cepat), bukan lagi satu ikon yang
                   // buka popup menu. Pola & widget SAMA dgn "Pilih satuan"
                   // di atas (`_PriceChip`) — usulan user: opsi harga
                   // sebanyak apa pun langsung kelihatan semua sekaligus.
-                  if (_priceOptions().length > 1) ...[
+                  if (_priceOptions().length > 1 && !_priceLocked) ...[
                     const SizedBox(height: 14),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -815,8 +969,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                     fontSize: 11,
                                     color: scheme.onSurfaceVariant)),
                             Text(
-                              formatRupiah(
-                                  (_price * _qty).round() + _variantTotal),
+                              formatRupiah((_effectivePrice * _qty).round() +
+                                  _variantTotal),
                               style: AppTheme.numStyle(context,
                                   size: 18, weight: FontWeight.w700),
                             ),
@@ -969,6 +1123,75 @@ class _PriceChip extends StatelessWidget {
                     weight: FontWeight.w700,
                     color: selected ? scheme.primary : scheme.onSurface),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Toggle "dua tombol centang Ya/Tidak" — dipakai kartu "Pre-order?"/"DP?"
+/// di [ItemEntrySheet]. Warna aksen Laci Meja (dusty rose) supaya konsisten
+/// dgn kartu pembungkusnya.
+class _YesNoToggle extends StatelessWidget {
+  const _YesNoToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = AppTheme.laciFg(isDark);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _YesNoButton(label: 'Ya', selected: value, color: fg, onTap: () => onChanged(true)),
+        const SizedBox(width: 6),
+        _YesNoButton(
+            label: 'Tidak', selected: !value, color: fg, onTap: () => onChanged(false)),
+      ],
+    );
+  }
+}
+
+class _YesNoButton extends StatelessWidget {
+  const _YesNoButton({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? color.withOpacity(0.18) : Colors.transparent,
+      shape: StadiumBorder(
+          side: BorderSide(color: selected ? color : color.withOpacity(0.4))),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                Icon(Icons.check, size: 14, color: color),
+                const SizedBox(width: 3),
+              ],
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: color)),
             ],
           ),
         ),

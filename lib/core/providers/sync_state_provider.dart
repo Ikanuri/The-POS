@@ -29,6 +29,7 @@ class SyncState {
     this.refreshingIp = false,
     this.queue = const [],
     this.proposals = const [],
+    this.laciMejaProposals = const [],
     this.timeoutProfile = SyncTimeoutProfile.normal,
     this.clientPhase = ClientSyncPhase.idle,
     this.clientResultMessage,
@@ -42,6 +43,9 @@ class SyncState {
   final bool refreshingIp;
   final List<PendingSyncItem> queue;
   final List<PendingProductProposal> proposals;
+  /// Item 52 ("Laci Meja") — antrian usulan PARALEL dari [proposals],
+  /// lihat dok `PendingLaciMejaProposal`.
+  final List<PendingLaciMejaProposal> laciMejaProposals;
   final SyncTimeoutProfile timeoutProfile;
   final ClientSyncPhase clientPhase;
   final String? clientResultMessage;
@@ -73,7 +77,10 @@ class SyncState {
   /// banner "Host aktif" menetap selamanya selama host hidup, walau tidak
   /// ada yang perlu ditinjau — laporan nyata user).
   bool get hasOngoing =>
-      queue.isNotEmpty || proposals.isNotEmpty || clientSyncing;
+      queue.isNotEmpty ||
+      proposals.isNotEmpty ||
+      laciMejaProposals.isNotEmpty ||
+      clientSyncing;
 
   /// true bila ADA sesuatu yang layak ditampilkan sbg banner shell (ongoing
   /// ATAU konfirmasi sekali-tampil) — dipakai `main_shell.dart` memutuskan
@@ -87,6 +94,7 @@ class SyncState {
     bool? refreshingIp,
     List<PendingSyncItem>? queue,
     List<PendingProductProposal>? proposals,
+    List<PendingLaciMejaProposal>? laciMejaProposals,
     SyncTimeoutProfile? timeoutProfile,
     ClientSyncPhase? clientPhase,
     Object? clientResultMessage = _sentinel,
@@ -100,6 +108,7 @@ class SyncState {
       refreshingIp: refreshingIp ?? this.refreshingIp,
       queue: queue ?? this.queue,
       proposals: proposals ?? this.proposals,
+      laciMejaProposals: laciMejaProposals ?? this.laciMejaProposals,
       timeoutProfile: timeoutProfile ?? this.timeoutProfile,
       clientPhase: clientPhase ?? this.clientPhase,
       clientResultMessage: identical(clientResultMessage, _sentinel)
@@ -135,6 +144,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
           // Item 40 (usulan produk) TETAP in-memory (di luar scope Item 17
           // Fase 2 — hanya antrian data append-only yang dipersist).
           proposals: LanSyncService.pendingProposals.toList(),
+          laciMejaProposals: LanSyncService.pendingLaciMejaProposals.toList(),
         )) {
     LanSyncService.onQueueChanged = () {
       unawaited(_refreshQueue());
@@ -142,6 +152,10 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     LanSyncService.onProposalsChanged = () {
       state =
           state.copyWith(proposals: LanSyncService.pendingProposals.toList());
+    };
+    LanSyncService.onLaciMejaProposalsChanged = () {
+      state = state.copyWith(
+          laciMejaProposals: LanSyncService.pendingLaciMejaProposals.toList());
     };
     // Pasang `_db` SEGERA (bukan menunggu owner tap "Mulai Sebagai Host") —
     // antrian `sync_upload_queue` adalah data DB persisten, independen dari
@@ -306,6 +320,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     _transientTimer?.cancel();
     LanSyncService.onQueueChanged = null;
     LanSyncService.onProposalsChanged = null;
+    LanSyncService.onLaciMejaProposalsChanged = null;
     super.dispose();
   }
 }

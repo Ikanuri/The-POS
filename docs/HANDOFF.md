@@ -5,68 +5,729 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 26 Juli 2026 (lanjutan) — semua pekerjaan sesi ini sudah
-di-**merge ke `main`** (merge commit `1083388`). Sesudah itu: **bug
-"codegen Drift tidak jalan" AKHIRNYA TERPECAHKAN** — ternyata BUKAN bug
-sandbox sama sekali, tapi bug NYATA di repo (anotasi `@DriftDatabase`
-terlepas dari class-nya). Sudah diperbaiki + dipagari test regresi.
-`build_runner` kini berfungsi normal lagi, jadi **PLAN.md Item 52 ("Laci
-Meja") sudah bisa langsung dieksekusi** tanpa hambatan alat._
+_Update sesi 27 Juli 2026 (lanjutan) — **Item 52 ("Laci Meja") SELESAI
+TOTAL** termasuk bagian yang sempat ditunda (layar review usulan), 2
+koreksi UX dari user setelah demo awal (link ke produk struk, redirect
+dashboard ke nota), 1 bugfix KRITIS (checkout gagal setelah handoff QR
+bolak-balik) + 4 perbaikan UI dari laporan screenshot device asli, 2
+penyesuaian susulan (Bayar tetap di kanan saat cart bar 2 baris;
+keterangan Laci Meja membedakan titip vs ketinggalan), SATU putaran
+redesign (menu cepat Kasir/Laci Meja + 2 perbaikan di tab Ringkasan &
+struk share), SATU PUTARAN LAGI (animasi menu, grouping frame
+Titip/Ketinggalan + qty/satuan, tombol Ambil minimalis), REDESAIN BESAR
+Pre-order (nyambung total ke keranjang/nota, ganti 2 jalur lama), lalu
+**putaran TERBARU**: gap Ringkasan AKHIRNYA KETEMU akarnya (percobaan
+ke-4, `TabAlignment`, BUKAN soal padding/margin sama sekali — 3
+percobaan sebelumnya semua salah sasaran), grouping Pre-order/Pinjaman
+di dashboard, dan penanda "Pinjaman" baru di struk in-app — lihat bagian
+PALING BAWAH. Belum di-merge ke `main` / di-push ke `origin` —
+commit-commit ada di branch `claude/kategori-produk-qty-harga-mqjh21`,
+menunggu user minta merge (pola sesi-sesi sebelumnya: minta eksplisit
+dulu baru merge/push)._
 
-## SOLVED: codegen Drift tidak pernah memperbarui `app_database.g.dart`
+## Putaran TERBARU: redesain cart bar + pinjaman plain text + cari/statistik Pre-order
 
-**Status: SELESAI.** Diagnosis sesi sebelumnya ("bug alat/sandbox, coba
-lagi di sesi baru") **KELIRU** — jangan dipakai lagi sebagai acuan.
+1. **Pinjaman kembali PLAIN TEXT** (dikonfirmasi user via AskUserQuestion,
+   membalik keputusan putaran sebelumnya). Alasannya kuat & layak diingat:
+   yang dipinjamkan biasanya **WADAH** (galon/tabung KOSONG) — dan wadah itu
+   justru BUKAN baris di nota (yang jadi baris nota adalah isi/refill-nya).
+   Checklist-barang-nota karena itu membuat barang yang sebenarnya dipinjam
+   MUSTAHIL dicatat. Konsekuensi: penanda pinjaman di struk tidak bisa
+   nempel per-baris produk (tak ada `transactionItemId`) → diganti **SECTION
+   "Pinjaman Barang"** tersendiri (`getBorrowedForTransaction` +
+   `_buildBorrowedCard`), tetap memenuhi maksud "rujukan kebenaran".
+   **Kolom `BorrowedItems.transactionItemId` (migrasi v24) DIBIARKAN ADA
+   tapi tidak dipakai lagi** — schemaVersion SENGAJA tidak diturunkan balik
+   ke 23 karena build user sudah terlanjur v24; menurunkan schemaVersion
+   bikin drift menolak membuka DB (`user_version` > schemaVersion).
 
-**Akar masalah sesungguhnya**: di `lib/core/database/app_database.dart`,
-blok anotasi `@DriftDatabase(tables: [...])` **tidak lagi menempel di
-`class AppDatabase`**. Sejak commit `dd4bad3` (17 Juli) ada beberapa
-`typedef` (`StockOverviewRow`, `OpnameSessionSummary`, dst) plus
-`class BarcodeConflictException` yang tersisip **di antara** blok anotasi
-dan `class AppDatabase`. Dart menganggap ini **sah** — anotasi boleh
-dipasang di `typedef` — jadi anotasi itu diam-diam menempel ke
-`typedef StockOverviewRow`.
+2. **Redesain cart bar** (3 hal sekaligus):
+   - Pengingat Laci Meja jadi **satu baris per kategori**
+     (`LaciMejaReminder.linesOf`, dulu satu string digabung " · ").
+     Baris pre-order menyebut **nama produk + qty + jaminan**, diringkas
+     "+N lagi" bila >2 produk (dikonfirmasi user — cart bar tidak boleh
+     jadi sangat tinggi).
+   - **Pengingat hutang akumulatif** (total rupiah + jumlah nota) muncul
+     DI BAWAH nominal Total via `cartCustomerDebtProvider` (autoDispose).
+     Warna `cs.error` merah, SENGAJA beda dari dusty rose Laci Meja di
+     atas Total — dua peringatan beda makna.
+   - **Layout tidak lagi melipat**: `Wrap` → `Row` tetap dgn
+     `Expanded(flex: 4/3)` utk chip Pelanggan/Pegawai (porsi Pelanggan
+     terbesar & tidak pernah dikurangi — permintaan eksplisit user), dan
+     nama panjang ditangani `_MarqueeText` (teks berjalan kiri↔kanan).
 
-**Kenapa sangat sulit dilacak** (dan kenapa sempat disalahartikan sbg
-bug sandbox):
-- `flutter analyze` tetap **0 issue**, seluruh test tetap **hijau**.
-- `build_runner` tetap melaporkan **"Succeeded"** dengan ribuan output.
-- Tidak ada **satu pun** pesan error/warning di mana pun.
-- Yang terjadi: drift_dev tidak menemukan database sama sekali, jadi
-  `app_database.g.dart` **tidak pernah ditulis ulang** — file lama yang
-  tercommit tetap dipakai, sehingga semuanya "kelihatan" normal.
+3. **`_MarqueeText` — 2 jebakan yang SUDAH kena, jangan diulang**:
+   - `OverflowBox` tanpa `maxHeight` di dalam Column tak-berbatas =
+     "infinite size during layout" (crash render). Tinggi WAJIB dikunci ke
+     `TextPainter.height`.
+   - Animasi **tidak boleh abadi**. Versi pertama `repeat(reverse: true)`
+     tanpa henti bikin `tester.pumpAndSettle()` TIMEOUT di **10 test kasir
+     yang sudah ada** (bukan cuma test baru). Sekarang dibatasi 4 putaran
+     lalu berhenti di awal teks, dan dimulai ulang saat teksnya berganti.
+     **`addStatusListener` TIDAK BISA dipakai utk menghitung putaran** —
+     `repeat()` menggerakkan controller lewat simulasi internal dan tidak
+     pernah memancarkan `completed`/`dismissed`; pakai `Timer(durasi *
+     maxCycles)` (sudah dicoba keduanya). Bonus: perangkat POS menyala
+     seharian, animasi 60fps abadi di bar bawah = baterai terbakar sia-sia.
 
-**Cara membuktikannya lagi kalau perlu** (alat diagnostik yang manjur):
-- `dart run drift_dev identify-databases` → kalau output kosong (tidak
-  menyebut satu database pun), berarti anotasi tidak terbaca. Ini
-  pemeriksaan **paling cepat & paling langsung**.
-- `.dart_tool/build/generated/the_pos/lib/core/database/app_database.dart.drift_elements.json`
-  → kalau `"elements": []` padahal `"imports"` terisi, gejalanya sama.
+4. **Tab Pre-order dashboard**: kotak pencarian (cocokkan nama pelanggan
+   ATAU nama produk) + statistik akumulatif **total produk** & **total
+   jaminan** sbg dua angka TERPISAH (satuannya beda maknanya — barang yang
+   ditunggu vs wadah yang dipegang toko). Keduanya ikut tersaring hasil
+   pencarian, supaya angkanya menjawab pertanyaan yang sedang dicari.
 
-**Fix**: blok `@DriftDatabase(tables: [...])` dipindah agar **langsung di
-atas `class AppDatabase`**; semua `typedef`/class lain digeser ke atas
-blok anotasi. Tidak ada perubahan skema, tidak ada perubahan perilaku.
+5. **Bug lama ikut tertutup**: `getLaciMejaPendingForCustomer`/`ForName`
+   disatukan jadi `getLaciMejaPending({customerId, customerName})`. Versi
+   lama yang berbasis `customerId` SELALU mengembalikan `preorder: 0` —
+   artinya pre-order milik pelanggan TERDAFTAR tidak pernah muncul di
+   pengingat mana pun (cart bar maupun modal checkout). Sekarang keduanya
+   dikirim bersamaan: titip/pinjaman dicocokkan lewat id, pre-order lewat
+   nama (tabel `PreorderEntries` memang hanya menyimpan nama, tanpa FK).
 
-**Dampak ke `app_database.g.dart`**: hasil regenerasi berbeda ~948
-baris dari yang tercommit, tapi **murni formatting + propagasi
-doc-comment** dari drift_dev versi lebih baru (2.23.1). Sudah
-diverifikasi **tidak ada kolom/tabel yang hilang atau bertambah**: 103
-nama kolom dan seluruh class `$...Table` identik antara versi lama dan
-baru. Jadi tidak pernah ada skema yang diam-diam rusak — kebetulan
-memang belum ada tabel/kolom baru yang ditambahkan sejak 17 Juli.
+Test baru: `cart_bar_reminder_lines_test.dart` (3),
+`receipt_borrowed_section_test.dart` (4, termasuk regresi "jaminan tidak
+hilang setelah Penuhi"), +4 pencarian/statistik di
+`laci_meja_dashboard_grouping_test.dart`, +2 marquee di
+`cart_bar_bayar_button_test.dart`, +3 di
+`laci_meja_marks_and_reminder_test.dart` — semua revert-verified. Full
+suite: **822 test hijau**, `flutter analyze` 0 issue.
 
-**Pagar regresi**: `test/drift_codegen_in_sync_test.dart` (2 test)
-- menolak deklarasi apa pun yang menyelinap di antara `@DriftDatabase`
-  dan `class AppDatabase` (menangkap akar masalahnya), dan
-- membandingkan jumlah tabel di anotasi vs `db.allTables` hasil generate
-  (menangkap `app_database.g.dart` yang basi).
-Sudah dibuktikan GAGAL saat fix-nya di-revert sementara, dengan pesan
-yang menuntun ke solusinya.
+## ✅ Gap Ringkasan — AKHIRNYA KETEMU akarnya (percobaan ke-4, SELESAI)
 
-**Pelajaran utk ke depan**: kalau `build_runner` "sukses" tapi `.g.dart`
-tidak berubah, **jangan langsung menyalahkan sandbox/toolchain**. Cek
-dulu apakah anotasinya benar-benar terbaca lewat
-`dart run drift_dev identify-databases`.
+**Riwayat lengkap 4 percobaan** (WAJIB dibaca kalau ada laporan gap
+serupa lagi — 3 dari 4 percobaan salah total, pelajarannya penting):
+1. `673d045` — margin Card KPI (jarak ANTAR-baris). User konfirmasi
+   build update, gap MASIH terasa.
+2. Top padding `ListView` 16px→8px (gap ATAS kartu pertama, dari
+   screenshot panah PERTAMA). User KEMBALI konfirmasi build update
+   (`AskUserQuestion` eksplisit), gap MASIH terasa. Diukur via widget
+   test: gap sungguhan BENAR berkurang jadi 8px sesuai kode — arah fix
+   benar tapi PERCUMA, karena bukan itu akarnya sama sekali.
+3. Top padding dibuat 0 penuh, atas rekomendasi user sendiri. **User
+   kirim SCREENSHOT PANAH KEDUA** — dan panahnya menunjuk KE KIRI tab
+   "Ringkasan" itu sendiri (bukan area vertikal kartu SAMA SEKALI).
+   Ternyata 3 percobaan sebelumnya salah sasaran arah TOTAL (vertikal
+   vs horizontal) — deskripsi teks user ("renggang", "gap") sejak awal
+   TIDAK CUKUP presisi utk membedakan "gap di atas kartu" vs "gap di
+   kiri tab", dan saya keliru berasumsi itu soal jarak ke kartu KPI dari
+   percobaan pertama.
+4. **Akar sesungguhnya**: `TabBar(isScrollable: true)` Material 3
+   default `tabAlignment: TabAlignment.startOffset` — inset ~52dp di
+   depan tab PERTAMA (dirancang API Flutter utk sejajar leading
+   icon/drawer button; `LaporanScreen`'s AppBar TIDAK punya leading icon
+   jadi inset ini murni buang-buang ruang tanpa alasan). Fix:
+   `tabAlignment: TabAlignment.start`. Test baru
+   `laporan_tab_left_align_test.dart` — revert-verified (gap SUNGGUHAN
+   68px sebelum fix, terbukti presisi cocok dgn deskripsi "~52dp inset
+   bawaan" + padding AppBar bawaannya).
+
+**Pelajaran KERAS** (kalau laporan visual serupa muncul lagi di layar
+LAIN): "gap"/"renggang" dari user BISA merujuk ke sumbu yang SAMA SEKALI
+beda dari yang kelihatan jelas dari kode (contoh nyata: margin Card
+antar-baris — jelas ADA bug-nya secara kode — ternyata bukan yang
+dimaksud user sejak awal). **Screenshot beranotasi PANAH WAJIB diminta
+di percobaan PERTAMA** kalau laporan "ada gap" datang tanpa gambar,
+BUKAN ditunda sampai 2-3 percobaan gagal dulu — tiap percobaan buta
+berarti minimal satu siklus build+install APK yang terbuang.
+
+**Susulan (27 Juli)**: user minta padding `ListView` Ringkasan
+dikembalikan "seperti semula" — top padding yang sempat ditekan ke 0px
+di percobaan ke-3 (blind guess, sebelum akar sungguhan ketemu) sudah
+tidak perlu lagi karena `TabAlignment.start` adalah fix sungguhannya.
+Dikembalikan ke `EdgeInsets.all(16)` seragam, test
+`ringkasan_kpi_card_margin_test.dart` disesuaikan.
+
+**Susulan lagi (27 Juli)**: statistik tab Pre-order — istilah "wadah"
+diganti "jaminan" (`_StatTile` sub-label), dan kartu "Total jaminan"
+sekarang menampilkan rincian per produk di bawah angka total (mis.
+"LPG: 20 jaminan"), dihitung dari entri hasil pencarian yang sama dgn
+`totalDeposit` (bukan seluruh data — supaya konsisten dgn statistik lain
+yang ikut tersaring). `_StatTile` dapat parameter opsional `breakdown`
+(default kosong, tidak memengaruhi kartu "Total produk").
+
+**Susulan visual (27 Juli)**: user minta nama produk & qty di-bold di 2
+tempat kartu Pre-order — baris rincian item (`_preorderTile`) DAN baris
+rincian jaminan (`_StatTile.breakdown`). Keduanya jadi `Text.rich` (dulu
+`Text` polos) supaya sebagian teks bisa bold sebagian tidak —
+`_StatTile.breakdown` type diganti dari `List<String>` jadi
+`List<({String name, String qty})>` supaya nama & qty bisa jadi span
+terpisah. **Gotcha lama (sudah didokumentasikan di CLAUDE.md) muncul
+lagi**: `find.text`/`find.textContaining` polos TIDAK match `Text.rich` —
+2 assertion existing disesuaikan `findRichText: true`. Test baru dibuat
+via helper `findBoldableSpan` (traversal rekursif `TextSpan.children`,
+krn `Text.rich(span)` selalu membungkus span kita 1 level ke dalam span
+default tema) — revert-verified (bold dicabut sementara, test gagal
+sensible "Expected FontWeight.w700, Actual null").
+
+**Keputusan jaminan pre-order DIBALIK LAGI (27 Juli)**: user kirim
+screenshot struk yg masih menampilkan "Titip 10" walau pre-order-nya
+sudah "Dipenuhi" di dashboard, lalu MINTA EKSPLISIT disamakan dgn pola
+Titip/Ketinggalan — temporary, hilang begitu terpenuhi. Ini MEMBALIK
+keputusan sesi sebelumnya (yg sengaja bikin permanen atas permintaan
+user YANG SAMA — lihat bagian "Redesain BESAR: Pre-order..." di bawah).
+**Pelajaran**: kadang user berubah pikiran setelah lihat hasil nyata di
+device — jangan asumsikan keputusan lama final selamanya, tapi JUGA
+jangan langsung ubah tanpa konfirmasi kalau permintaan baru tampak
+kontradiktif dgn permintaan eksplisit sebelumnya (sempat tanya balik via
+`AskUserQuestion` sebelum eksekusi, walau akhirnya user jawab lewat chat
+biasa bukan lewat pilihan). Fix: `getPreorderDepositForTransaction`
+tambah filter `fulfilledAt.isNull() & cancelledAt.isNull()`. Test
+`receipt_borrowed_section_test.dart` dibalik assersinya — revert-verified.
+
+**Bug NYATA ditemukan: `_MarqueeText` terpotong permanen di skala font
+besar (27 Juli)**. User kirim screenshot nama pelanggan "Buk..." yg
+kepotong di kata kedua, BUKAN bergeser seperti seharusnya. Akar: `main.
+dart` menerapkan pengali skala font GLOBAL (`fontScaleProvider` x faktor
+ukuran layar) lewat `MediaQuery.textScaler` di root app — tapi
+`TextPainter` internal `_MarqueeText` (dipakai MENGUKUR apakah nama
+overflow) TIDAK menyertakan `textScaler` itu, jadi mengukur selalu di
+skala 1.0 sementara `Text` sungguhan dirender lebih besar. Kalau device/
+user setting bikin skala gabungan >1, pengukuran keliru simpul "muat"
+padahal SEBENARNYA overflow -> kode jatuh ke cabang `Text` statis
+ber-`overflow: TextOverflow.clip` PERMANEN, marquee tak pernah aktif.
+Fix: tambah `textScaler: MediaQuery.textScalerOf(context)` di
+`TextPainter` pengukur (satu baris, `kasir_screen.dart`).
+
+**Gotcha test BARU ditemukan saat menulis regresinya** (penting kalau
+menyentuh marquee/animasi rute lagi): `find.byType(Transform)` polos utk
+mendeteksi "marquee aktif" MEMBERI FALSE POSITIVE — halaman kasir ini
+navigasi via GoRouter/MaterialPage yg default `ZoomPageTransitionsBuilder`
+(Material 3 di Android) JUGA membungkus konten rute dgn `Transform` saat
+transisi. Fix test: pakai ancestor `OverflowBox` sbg penanda (satu-
+satunya pemakaian `OverflowBox` di seluruh codebase, unik ke jalur
+marquee). Juga: menentukan lebar teks "pas muat" scr MANUAL pakai
+`TextPainter` di file test sendiri TIDAK BISA dipercaya — font ambient
+app (`DefaultTextStyle`/tema Hanken Grotesk) beda dari font default
+`TextPainter` polos tanpa `fontFamily` eksplisit, jadi perhitungan lebar
+meleset. Fix: cari batas EMPIRIS lewat widget sungguhan (`pumpKasir` +
+cek `OverflowBox` ancestor), bukan hitung manual.
+
+**Susulan LANGSUNG (27 Juli): marquee berhenti PERMANEN jadi kelihatan
+"kepotong" lagi.** Setelah fix textScaler di atas, user kirim screenshot
+KEDUA: nama "Bu Khotimah" tetap tampil "Bu" statis. Bukan bug yg sama —
+`_maxCycles=4` SENGAJA didesain berhenti SELAMANYA di posisi awal nama
+stlh 4 putaran (~8-32 detik). Kasir yg baru lihat layar SESUDAH periode
+itu (wajar — tidak nonton terus) melihat hasil yg PERSIS SAMA dgn bug
+pemotongan yg baru "diperbaiki". Fix: `_startCycle` sekarang menjadwalkan
+`_restTimer` (3 detik) setelah tiap putaran-nyala selesai, lalu MEMANGGIL
+DIRINYA SENDIRI LAGI — bukan berhenti sekali lalu diam selamanya (masih
+dibatasi PER putaran-nyala, bukan `repeat()` tanpa henti sama sekali,
+demi alasan baterai + `pumpAndSettle` yg sama).
+
+**Susulan LANGSUNG lagi (27 Juli): qty DESIMAL utk Titip/Ketinggalan.**
+User: "bagaimana jika barang yang ketinggalan itu bentuk desimal? Misal
+Filma 4.5kg?" — stepper +/-1 (baru ditambah) TIDAK BISA mencapai nilai
+desimal sembarang murni dari langkah 1 (loncat 4.5→3.5→2.5..., tidak
+pernah pas di "2" bulat). Fix: angka qty jadi `TextField` bisa diketik
+bebas (keyboard desimal), stepper tetap ada utk kenyamanan qty bulat.
+**Bonus bug ketemu**: stepper +1 versi sebelumnya bisa MELEBIHI batas qty
+kalau sisa <1 (`qty>=item.qty?null:qty+1` — utk maks 4.5 dari 4, +1 jadi
+5!) — fix klem ke `item.qty` PERSIS. **Gotcha dispose**: sempat coba
+dispose `TextEditingController` qty tepat setelah `showDialog` selesai
+→ crash "used after disposed" (dialog MASIH animasi keluar saat itu) —
+dibiarkan TIDAK di-dispose eksplisit sama sekali, konsisten dgn
+`customerController` di fungsi yg sama yg JUGA tak pernah di-dispose
+(GC alami cukup utk `TextEditingController` transien dialog, bukan
+resource native mahal).
+
+## Rilis v3.0.0 — bersih-bersih menjelang rilis resmi (27-28 Juli)
+
+Konteks: sebelum bikin tag rilis resmi pertama (`v3.0.0`, sebelumnya semua
+rilis lewat `main`/`claude/**` jadi pre-release `dev-<timestamp>`), user
+minta 4 hal: bump versi, bersihkan file tak terpakai, pastikan codegen
+bersih (tidak ada drift spt `migration_v24_test.dart` yg synthetic schema-nya
+ketinggalan tabel baru), dan sinkronkan dokumentasi.
+
+**Dependency dihapus dari `pubspec.yaml`** (diverifikasi per-paket via
+`grep -rl "package:$pkg/" lib/` — tiap dependency lain punya ≥1 pemakaian
+nyata, HANYA 3 ini yang nol):
+- `riverpod_annotation` + `riverpod_generator` (dev) — TIDAK ADA `@riverpod`
+  ataupun `.g.dart` hasil riverpod codegen di codebase manapun. Semua state
+  memang manual `StateNotifierProvider`/`StateProvider` sejak awal.
+- `printing` — 0 import. Ekspor PDF/Excel sudah lama pindah ke
+  `FilePicker.saveFile` (lihat gotcha CLAUDE.md soal `Printing.sharePdf`
+  OOM/gagal-diam), paket lama ini kepakai lagi.
+- `flutter pub get` setelahnya otomatis drop 9 paket total (termasuk
+  transitive: `analyzer_plugin`, `custom_lint_core`, `custom_lint_visitor`,
+  `freezed_annotation`, `pdf_widget_wrapper`, `riverpod_analyzer_utils`, dst).
+
+**File dihapus**: `preview/index.html` & `preview/phase6.html` — mockup
+desain pra-implementasi ("Phase 6 Preview"), diverifikasi 0 referensi di
+`.dart`/`.md`/`.yml` manapun, sudah lama digantikan app sungguhan.
+
+**File yang SENGAJA DIPERTAHANKAN** (jangan dihapus lagi kalau audit
+berikutnya menganggapnya "kelihatan tidak terpakai"):
+- `license/revoked.json` — di-fetch LIVE oleh `license_provider.dart` sbg
+  bagian gerbang lisensi (Item 25c), bukan file statis basi.
+- `docs/reference/*` — sample data asli dari user, tidak bisa dibuat ulang.
+- `docs/PROPOSAL_PERTIMBANGAN_BAROKAH_ORDER.md` — rationale historis
+  keputusan desain fitur "Tempel Pesanan", masih relevan sbg konteks.
+
+**Verifikasi codegen bersih** (langsung menjawab kekhawatiran user soal
+"codegen yg tidak bisa dijalankan cuma krn kode tidak match"): `rm -rf
+.dart_tool/build` lalu `dart run build_runner build
+--delete-conflicting-outputs` dari NOL — `app_database.g.dart` yang
+dihasilkan cocok BYTE-PER-BYTE dgn yang sudah di-commit. Tidak ada drift.
+
+**Ditemukan (bukan regresi, TIDAK diperbaiki — di luar scope)**: full suite
+`flutter test` kadang gagal di `test/proposal_unchanged_end_to_end_test.dart`
+dgn `SocketException: Address already in use, port 8625` — beberapa file
+test LAN-sync (`lan_sync_slow_transfer_test.dart`,
+`lan_sync_timeout_test.dart`, `sync_screen_proposal_layout_test.dart`) pakai
+port hardcoded yg bisa bentrok saat dijalankan paralel. Dikonfirmasi lolos
+100% saat file itu dijalankan sendirian — murni flakiness test-infra, bukan
+bug produk. Perlu port dinamis per-test kalau mau dibenahi suatu saat.
+
+**Dokumentasi diupdate**: `README.md` (tambah seksi fitur Laci Meja &
+Sinkron Harga Antar Toko, update tabel teknologi, diagram arsitektur
+`skema v25`) dan `CLAUDE.md` (hardcode `schemaVersion = 21` yg sudah basi
+diganti jadi pointer ke kode, bukan angka statis).
+
+**Hasil akhir**: versi `3.0.0+5`, full suite 831/832 hijau (1 gagal flaky
+di atas, tidak terkait), `flutter analyze` 0 issue. Tag `v3.0.0` di-push ke
+`main` setelah merge dari `claude/kategori-produk-qty-harga-mqjh21` — ini
+rilis resmi PERTAMA (sebelumnya semua rilis lewat pre-release otomatis).
+
+## ✅ Nama pelanggan terpotong — AKAR SESUNGGUHNYA ketemu (percobaan ke-3)
+
+**WAJIB dibaca kalau ada laporan teks terpotong/tak muat lagi.** Tiga
+percobaan; dua yang pertama bug NYATA tapi BUKAN akar keluhan user:
+
+1. `cfebc31` — `textScaler` ambient tak diikutkan painter. Bug nyata,
+   keluhan user TETAP ADA.
+2. `99f1e88` — marquee berhenti PERMANEN stlh 4 putaran. Bug nyata juga,
+   keluhan TETAP ADA (user konfirmasi eksplisit lewat `AskUserQuestion`:
+   diam SELAMANYA, sudah ditunggu — bukan kebetulan kena jeda).
+3. **AKAR SESUNGGUHNYA: `fontFamily` ambient diabaikan `TextPainter`.**
+
+**PELAJARAN PALING PENTING — cara akhirnya ketemu**: BACA GEJALA VISUAL
+DI SCREENSHOT SECARA PRESISI, jangan berhenti di deskripsi teks user.
+"Buk Khotimah" tampil **"Buk" + RUANG KOSONG LEBAR** sebelum tombol ×.
+Kalau marquee aktif lalu ter-clip krn sempit, yang tampil PASTI "Buk
+Khotim…" MENGISI PENUH sampai batas clip. Kata kedua hilang tepat di
+*word boundary* DAN menyisakan ruang kosong = itu **text WRAPPING**
+(`maxLines: 1` menampilkan baris pertama saja), BUKAN clipping. Begitu
+dibaca begitu, akarnya ketemu langsung tanpa tebak-tebakan lagi.
+(Percobaan 1 & 2 gagal justru krn saya menduga-duga mekanisme animasi,
+tidak menginterogasi gejala visualnya dulu.)
+
+**Akarnya**: `_MetaChip` memberi `_MarqueeText` style
+`TextStyle(fontSize: 12.5, ...)` yang SENGAJA **tanpa `fontFamily`** —
+jadi `Text` sungguhan mewarisi **Hanken Grotesk** dari `DefaultTextStyle`
+tema (`GoogleFonts.hankenGroteskTextTheme`, `app_theme.dart`), sementara
+`TextPainter` yang diberi `TextSpan` style MENTAH memakai **font default
+engine (Roboto)**. Hanken Grotesk lebih LEBAR → painter SELALU
+under-measure → `overflow <= 0` → jatuh ke cabang `Text` biasa yang
+(waktu itu) tanpa `softWrap: false` → wrap di spasi → tinggal kata
+pertama.
+
+**Fix**: (1) painter mengukur pakai
+`DefaultTextStyle.of(context).style.merge(widget.style)` — style yang
+PERSIS dirender; (2) `softWrap: false` di cabang non-marquee sbg jaring
+pengaman: kalau pengukuran masih meleset tipis, teks terpotong MEPET
+(nyaris tak kelihatan) bukan runtuh jadi kata pertama (yang terlihat
+seperti data hilang).
+
+**ATURAN UMUM**: setiap `TextPainter` yang dipakai untuk MEMUTUSKAN
+layout WAJIB diberi style PERSIS SAMA dgn yang dirender — `DefaultTextStyle`
+ambient (fontFamily, letterSpacing, height) DAN `MediaQuery.textScaler`.
+Style mentah dari parameter widget hampir selalu TIDAK LENGKAP.
+
+**Kenapa 3 test marquee sebelumnya LOLOS padahal bug-nya ada**: di
+`flutter_test` GoogleFonts TIDAK BISA fetch font (tanpa jaringan), jadi
+painter DAN `Text` sama-sama jatuh ke font fallback yang SAMA —
+diskrepansinya HILANG, kelas bug ini MUSTAHIL direproduksi dgn tema app
+apa adanya. Reproduksinya pakai PROXY deterministik: suntik
+`letterSpacing` ke `theme.textTheme.bodyMedium` (properti style TURUNAN
+lain yang juga melebarkan teks & juga tak terlihat painter mentah).
+CATATAN: membungkus `DefaultTextStyle.merge` di LUAR router TIDAK BISA —
+`Material` MENGGANTI (bukan merge) DefaultTextStyle dgn `bodyMedium`,
+jadi harus lewat tema. Lihat param `ambientLetterSpacing` di `pumpKasir`
+(`cart_bar_bayar_button_test.dart`).
+
+**Pelajaran test**: konstanta empiris HARDCODE di test ("Karti" di test
+`textScaler`) JADI BASI begitu logika pengukurannya diperbaiki — test itu
+langsung gagal walau fix-nya benar. Test yang mencari batasnya SENDIRI
+scr empiris (loop prefix + cek `OverflowBox`) tahan thd perbaikan
+pengukuran berikutnya; pola itu yang dipakai sekarang.
+
+**Susulan (27 Juli): qty SEBAGIAN utk Titip/Ketinggalan.** User: "kadang
+yang ketinggalan hanya sebagian (tidak semua)" — checklist polos (fase
+sebelumnya) selalu menyiratkan SELURUH qty baris nota, tidak bisa catat
+mis. beli 5 ketinggalan cuma 2. Fix: `LeftBehindItems.qty` baru
+(nullable — null = entri LAMA/seluruh qty, entri BARU selalu isi
+eksplisit), migrasi v24->v25. Dialog "Catat Titip/Ketinggalan" dapat
+stepper +/- per item (pola SAMA PERSIS `_showReturnSheet` yg sudah ada —
+clamp 1..qty baris nota, default penuh saat dicentang). Penanda struk
+& tile dashboard ikut menampilkan qty sebagian kalau ada.
+
+**Gotcha migrasi test lama ikut kena (27 Juli)**: menambah schemaVersion
+BARU (25) otomatis membuat SEMUA test migrasi lama (`migration_v7`
+s.d. `v24`) yg mengasersi versi akhir via `PRAGMA user_version` GAGAL
+(hardcode angka lama) — WAJIB disesuaikan tiap kali schemaVersion naik,
+bukan cuma test migrasi yg BARU ditambah. `migration_v24_test.dart`
+LEBIH RUMIT: skema sintetisnya HANYA `borrowed_items` (sengaja diisolasi
+utk fokus 1 langkah migrasi), tapi migrasi v25 BARU (nambah kolom ke
+`left_behind_items`) berjalan SETELAHNYA di chain yg sama — meledak "no
+such table" krn tabel itu memang tak dibuat di skema sintetis tsb. Fix:
+tambahkan `CREATE TABLE left_behind_items` (skema PERSIS versi v23,
+sudah ada `transaction_item_id`) ke setup sintetis test itu juga.
+**Pelajaran**: migrasi step BARU yg menyentuh tabel LAMA bisa mematahkan
+test migrasi tak-terkait yg skema sintetisnya sengaja minimal/parsial —
+cek SEMUA test migrasi (bukan cuma yg terasa relevan) tiap menambah
+migration step baru.
+
+**Gotcha test PALING RUMIT sesi ini**: membuktikan "istirahat lalu ulang
+lagi" via polling offset itu SULIT krn `repeat(reverse:true)` SENDIRI
+ALAMI menyentuh offset=0 berulang kali SAAT MARQUEE MASIH AKTIF (di titik
+balik antara leg reverse & leg forward berikutnya, ~`2 * jeda(0.18) *
+durasi` detik) — kalau nama yg dites overflow-nya BESAR (durasi diklem
+ke maksimum 8 detik), jeda alami ini bisa sampai ~2.9 detik, HAMPIR SAMA
+dgn `_restPause` (3 detik) yg mau dibuktikan — bikin test SALAH POSITIF
+(lolos walau fix dicabut, krn "jeda alami" itu sendiri disalahartikan
+sbg "istirahat sungguhan"). Fix: pilih nama yg overflow-nya SEMINIMAL
+mungkin (bukan nama sangat panjang) supaya durasinya diklem ke MINIMUM (2
+detik) — jeda alami jadi cuma ~0.72 detik, jauh di bawah ambang deteksi
+1.5 detik yg dipakai test, sementara `_restPause` (3 detik) tetap jelas
+di ATASnya. Revert-verify JUGA harus mensimulasikan ULANG flag `_done`
+(guard "sudah selesai, jangan restart") yg lama — sekadar menghapus baris
+penjadwalan `_restTimer` TIDAK CUKUP mensimulasikan kode lama, krn tanpa
+flag itu `_sync` akan restart lagi begitu widget rebuild krn alasan LAIN.
+
+## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
+
+Susulan redesain Pre-order besar (bagian di bawah) — user minta 2
+penyesuaian tampilan dashboard, plus 1 fitur baru di struk:
+
+1. **Pre-order** — grouping SAMA persis Titip/Ketinggalan (per
+   `transactionId`, satu Card per nota), TAPI beda format konten: header
+   Card = NAMA PELANGGAN bold (SEKALI per grup, bukan diulang tiap
+   baris spt Titip/Ketinggalan), tiap baris produk format ringkas
+   `"[qty] [nama produk] - [qty jaminan]"` (bagian jaminan cuma muncul
+   kalau `depositQty > 0`). Butuh JOIN baru
+   `getProductUnitLabelsFor(productUnitIds)` (`app_database.dart`) krn
+   `PreorderEntries` cuma simpan `productId`/`productUnitId`, TIDAK
+   simpan nama produk cache (beda dari `LeftBehindItems.itemName` yg
+   sudah simpan nama langsung).
+2. **Pinjaman — grouping BEDA dari 2 kategori lain**: PER-PELANGGAN
+   (`customerId` kalau ada, fallback nama teks, fallback `'anon'`),
+   BUKAN per-nota — krn satu pelanggan bisa pinjam di BEBERAPA nota
+   beda-beda waktu, semua harus kelihatan jadi satu daftar biar
+   trackingnya utuh. Tiap baris di dalam grup TETAP tertaut ke
+   `transactionId` MILIKNYA SENDIRI (bisa beda-beda per baris dalam satu
+   grup) — jadi tap satu baris redirect ke NOTA baris itu, bukan nota
+   pertama yg kebetulan ada di grup.
+3. **Penanda "Pinjaman" di struk in-app** ("rujukan kebenaran" —
+   permintaan user: staf bisa cek nota asli utk konfirmasi barang apa
+   yg benar dipinjamkan) — butuh kolom BARU
+   `BorrowedItems.transactionItemId` (migrasi schemaVersion 23→24, pola
+   identik `LeftBehindItems.transactionItemId` dari migrasi v23) utk
+   tautan PRESISI (bukan cocok-nama — sama alasan kenapa
+   `LeftBehindItems` butuh kolom itu duluan: produk sama bisa muncul 2x
+   di satu nota dgn satuan beda). **Konsekuensi**: dialog "Catat
+   Pinjaman Barang" (`receipt_screen.dart`) DIROMBAK dari `TextField`
+   nama+qty bebas jadi CHECKLIST barang nyata di nota ini (pola identik
+   `_showLeftBehindDialog`) — perlu diketahui kalau menyentuh dialog ini
+   lagi: qty pinjaman SEKARANG otomatis = qty produk di baris nota
+   (bukan input manual terpisah lagi). Penanda tampil TERLEPAS status
+   sudah/belum kembali (nota = bukti historis permanen, bukan indikator
+   status hidup — SENGAJA, lihat komentar di
+   `getBorrowedMarkersForTransaction`).
+
+Test baru: `laporan_tab_left_align_test.dart`, `migration_v24_test.dart`,
++6 test di `laci_meja_dashboard_grouping_test.dart` (grup Pre-order & 2
+test Pinjaman), `receipt_borrowed_marker_test.dart` (3 kasus) — semua
+revert-verified. `receipt_catat_laci_meja_test.dart` disesuaikan ke
+checklist Pinjaman baru. Full suite: **809 test hijau**, `flutter
+analyze` 0 issue.
+
+## Redesain BESAR: Pre-order nyambung ke keranjang/nota (ganti total jalur lama)
+
+Permintaan user, dikonfirmasi lewat 4 `AskUserQuestion` sebelum coding
+(krn perubahan arsitektur besar, salah tebak = banyak kerja ulang):
+ganti TOTAL 2 jalur lama ("+ Antri" di pencarian Kasir, "Catat Pre-order"
+di Cek Stok — keduanya dialog terpisah `preorder_entry_dialog.dart`,
+`transactionId` SERING NULL) jadi SATU jalur baru via `ItemEntrySheet`
+(modal tap item produk kasir).
+
+**Alur baru**: kartu "Pre-order?" muncul HANYA saat `_markedOutOfStock`
+true (state lokal di `ItemEntrySheet`, reaktif — toggle habis on/off
+langsung memunculkan/menyembunyikan kartu tanpa reload). Toggle Ya/Tidak
+(default Tidak) → toggle "DP?" (Ya = harga penuh & `paid=true`, dibayar
+lunas sekarang; Tidak/default = harga dipaksa 0, `paid=false`, dicatat
+dulu bayar nanti) → field "Jumlah jaminan dititip" (HANYA muncul bila
+`sel.unit.requiresDeposit`, default = qty pesanan, bisa diubah manual).
+
+**Field baru di `CartItem`** (`lib/core/models/cart_item.dart`):
+`isPreorder`, `preorderPaid`, `depositQty` — full round-trip di
+`copyWith`/`toJson`/`fromJson` (pola sentinel `_unset` utk `depositQty`
+sama seperti `itemNote`).
+
+**Checkout** (`payment_screen.dart`, KEDUA jalur — transaksi baru
+`_confirmPayment` DAN tambah-belanjaan `_confirmAddItems`): setelah
+`saveTransaction`/`addItemsToTransaction`, loop `cart.where((i) =>
+i.isPreorder)` menulis `db.addPreorderEntry(...)` dgn `transactionId:
+txId` OTOMATIS (bukan lagi via dialog terpisah tanpa tautan) —
+inilah yg bikin tap-redirect-ke-nota di dashboard Laci Meja langsung
+jalan tanpa kerja tambahan. **Keputusan penting (dikonfirmasi user)**:
+item pre-order DIKECUALIKAN dari `stockItems` (pengurangan stok) di
+KEDUA jalur checkout — barangnya belum ada fisik di toko, stok baru
+bergerak nanti saat direstock sungguhan; kalau ini tidak dikecualikan,
+produk yg SUDAH minus/habis akan tambah minus lagi hanya krn dipesan.
+
+**Dihapus total**: tombol "+ Antri" (`kasir_screen.dart`, grid & list
+tile), tombol "Catat Pre-order" + param `onPreorder` (`cek_stok_screen
+.dart`), file `preorder_entry_dialog.dart`, dan 2 test lamanya
+(`kasir_preorder_entry_test.dart`, `cek_stok_preorder_entry_test.dart` —
+menguji jalur yg sudah tidak ada).
+
+**Label "Titip [qty]"** (jaminan) ditambahkan di 2 tempat, keduanya
+DISATUKAN ke text run nama produk yg sama (`Text.rich`, BUKAN `Text`
+terpisah + `SizedBox` gap) — permintaan user eksplisit: posisi persis
+pola badge "Habis" di katalog kasir (`'${name} · Habis'`, satu run,
+tanpa jarak tambahan):
+1. `cart_sheet.dart` — `_CartItemTile` title, kalau `item.depositQty >
+   0`.
+2. `receipt_screen.dart` — title item struk, gabungan SEMUA penanda
+   (Dititip/Ketinggalan DAN Titip-jaminan) jadi satu `Text.rich` dgn
+   banyak `TextSpan`. Butuh query baru `getPreorderDepositForTransaction`
+   (`app_database.dart`, key `'$productId|$productUnitId'` krn
+   `PreorderEntries` TIDAK simpan `transactionItemId`, beda dari
+   `LeftBehindItems` yg sudah punya kolom itu sejak migrasi v23).
+
+**Gotcha test PENTING** (bakal kena lagi kalau ada yg convert `Text`
+lain jadi `Text.rich` di masa depan): `find.text(name)` HANYA cocok
+`Text` widget dgn `.data` persis — begitu diganti `Text.rich`, PECAH
+semua test yg pakai `find.text(nama_produk)` polos utk membaca style
+(3 file lama pecah: `receipt_item_name_bold_test.dart`,
+`receipt_qty_unit_bold_test.dart`, `laci_meja_marks_and_reminder_test
+.dart`). Fix: (a) `find.textContaining(x, findRichText: true)` utk
+sekadar cek keberadaan teks; (b) utk baca STYLE span tertentu, cari
+`RichText` via `find.byType(RichText)` + `.text.toPlainText() == '...'`,
+LALU descend SATU LEVEL ke `(richText.text as TextSpan).children!
+.first` — `Text.rich(mySpan)` SELALU membungkus `mySpan` sbg CHILD dari
+TextSpan LUAR (default style bawaan tema), jadi `richText.text.style`
+langsung TIDAK PERNAH mencerminkan style yg kita set sendiri (selalu
+w400 normal, bukan span kita).
+
+Test baru: `item_entry_preorder_test.dart` (6 kasus: card visibility,
+DP toggle, deposit qty conditional+default), `payment_preorder_checkout_
+test.dart` (2: transactionId terisi + stok tidak terpotong, DP Ya ->
+paid=true), `cart_sheet_preorder_deposit_label_test.dart` (1) — semua
+revert-verified. Full suite sesudah semua ini: **801 test hijau**,
+`flutter analyze` 0 issue.
+
+**Pelajaran**: laporan visual user ("ada gap/renggang") bisa BUKAN
+merujuk ke hal yang paling jelas kelihatan sekilas dari kode (jarak
+antar-baris yg memang ada bug margin-nya) — screenshot beranotasi PANAH
+dari user jauh lebih presisi drpd menebak dari deskripsi teks semata.
+Kalau fix pertama sudah dikonfirmasi live tapi keluhan MASIH ADA, JANGAN
+coba varian fix yg sama lagi — minta gambar beranotasi lebih dulu.
+
+## Redesain menu cepat Kasir/Laci Meja + 2 perbaikan lain (putaran kedua)
+
+User minta 4 hal lagi setelah putaran redesign pertama:
+
+1. **Animasi smooth muncul/hilangnya menu cepat** — `_QuickMenuPopup`
+   baru (`main_shell.dart`), `StatefulWidget` dgn `SingleTickerProvider
+   Mixin`: `FadeTransition`+`ScaleTransition` (durasi 160ms, `Curves.
+   easeOutBack` utk scale, `alignment: Alignment.bottomCenter` biar
+   terasa "tumbuh dari tab Kasir"). Tutup (tap area luar ATAU pilih item)
+   WAJIB `await _controller.reverse()` dulu baru `onRemove()` (lepas
+   `OverlayEntry`) + `onSelect()` (navigasi) — urutan animasi-keluar dulu
+   baru aksi, bukan sebaliknya. **Gotcha test PENTING**: `Tooltip` bawaan
+   Flutter (dipakai `_QuickMenuIcon`) JUGA punya `FadeTransition` sendiri
+   internal — `find.byType(FadeTransition).first` TANPA `Key` eksplisit
+   bisa salah tangkap widget Tooltip (opacity selalu 0, bukan punya kita)
+   alih-alih punya kita, GANTI-GANTI tergantung urutan build/pumpAndSettle
+   — WAJIB pasang `Key('quickMenuFade')` di `FadeTransition` sendiri &
+   query lewat `find.byKey`, bukan `find.byType().first`. Revert-verified
+   (duration `Duration.zero` -> opacity langsung 1.0, gagal sensible).
+2. **Barang Titip/Ketinggalan dari NOTA YANG SAMA dikumpulkan jadi SATU
+   frame (`Card`)** — dashboard Laci Meja (`laci_meja_dashboard_screen.
+   dart`) dulu render flat `ListView.separated` per-barang (screenshot
+   user: 5 baris nyaris identik, tidak jelas mana yg satu nota). Sekarang
+   di-`groupBy transactionId` (`Map` biasa, insertion-order = FIFO
+   otomatis mengikuti `watchLeftBehindItems` `ORDER BY created_at`), tiap
+   grup jadi satu `Card` berisi N `ListTile` (dipisah `Divider` internal).
+   Tap tiap `ListTile` tetap individual redirect ke nota (sama tujuannya
+   krn satu grup = satu `transactionId`).
+3. **Qty+satuan ditampilkan per barang** — butuh JOIN baru
+   `getQtyUnitForTransactionItems` (`app_database.dart`, satu query utk
+   sekumpulan `transaction_items.id`, BUKAN N+1) + provider
+   `leftBehindQtyUnitProvider` (`laci_meja_provider.dart`). Entri LAMA
+   tanpa `transactionItemId` (dibuat sebelum kolom itu ada, migrasi v23)
+   tetap tampil TANPA qty — bukan error, memang tidak bisa dipetakan ke
+   baris nota manapun.
+4. **Tombol "Sudah Diambil" diredesain minimal** — `_CollectButton` baru:
+   pill kecil `StadiumBorder` (bukan kotak persegi `TextButton` lama),
+   ikon centang + label singkat "Ambil".
+
+Test baru `laci_meja_dashboard_grouping_test.dart` (3 kasus: grouping,
+qty/satuan tertaut vs tidak, tombol Ambil) + 1 test animasi di
+`laci_meja_bottom_nav_gesture_test.dart` — semua revert-verified. Full
+suite sesudah semua ini: **794 test hijau**, `flutter analyze` 0 issue.
+
+## Redesain menu cepat Kasir/Laci Meja + 2 perbaikan lain (putaran pertama)
+
+User minta 6 hal sekaligus; 4 poin pertama satu redesign menu, 2 sisanya
+perbaikan terpisah:
+
+1-4. **Menu tekan-tahan tab Kasir dirombak total** dari `showMenu`
+   (`PopupMenuItem` teks) jadi `OverlayEntry` custom di
+   `main_shell.dart`: (1) posisi DI ATAS bottom bar (dihitung dari
+   `_bottomBarKey.currentContext` render box top, BUKAN dari titik jari
+   spt versi lama yg kadang nongol ke samping); (2) HANYA ikon, label
+   teks "Buka Kasir"/"Buka Laci Meja" dihapus (pakai `Tooltip` utk
+   aksesibilitas & sbg pegangan test, bukan `Text` visible); (3) sudut
+   rounded via `ClipRRect(borderRadius: circular(20))`; (4) delay
+   tekan-tahan dipercepat 500ms→250ms — `GestureDetector` biasa TIDAK
+   bisa custom durasi long-press, wajib `RawGestureDetector` +
+   `LongPressGestureRecognizer(duration:)` eksplisit. Test lama
+   `laci_meja_bottom_nav_gesture_test.dart` disesuaikan (`find.byTooltip`
+   ganti `find.text`) + 3 test baru (icon-only, posisi+rounded, delay
+   300ms cukup) — semua revert-verified.
+5. **`RingkasanTab` "agak renggang"** — akar: `Card` Material 3 punya
+   margin bawaan `EdgeInsets.all(4)`, dipasang berulang di 4 baris KPI yg
+   SUDAH punya `SizedBox(height:12)` eksplisit antar baris → jarak
+   sungguhan 12+4+4=20px, tidak sesuai desain. Fix: `margin:
+   EdgeInsets.zero` khusus di Card KPI (`_KpiRow`) — Card lain di tab yg
+   sama (payment method, chart harian) SENGAJA tidak disentuh, konsisten
+   dgn tab laporan lain yg juga tidak override margin. Test baru
+   `ringkasan_kpi_card_margin_test.dart` — revert-verified.
+6. **Struk share (gambar) qty tidak bold lagi** — `_ReceiptPaper` baris
+   qty+satuan+harga dulu w600 (revisi lama), disederhanakan jadi `Text`
+   polos style `_mono` (normal). PENTING: user spesifik bilang "struk
+   share" — struk IN-APP (`_ItemRow` biasa, bukan `_ReceiptPaper`)
+   SENGAJA TIDAK disentuh, masih w600 sesuai
+   `receipt_qty_unit_bold_test.dart` yg sudah ada duluan (dua widget
+   BEDA, jangan disamakan kalau menyentuh ini lagi). Test baru
+   `receipt_paper_qty_not_bold_test.dart` — revert-verified.
+
+Full suite sesudah keenam poin: **790 test hijau**, `flutter analyze` 0
+issue.
+
+## Penyesuaian susulan (Bayar kanan + jenis Laci Meja, sesudah 4 perbaikan UI, commit `45ede18`)
+
+User beri 2 catatan kecil setelah cek hasil 4 perbaikan UI:
+
+1. **"Bayar" harus tetap di kanan walau cart bar melipat 2 baris.** Fix
+   sebelumnya (`Wrap` tunggal utk Pelanggan/Pegawai/Tahan/Bayar) membiarkan
+   Bayar ikut hanyut ke mana pun sisa ruang jatuh begitu melipat. Sekarang
+   `_CartMetaTab` (`kasir_screen.dart`) pakai `Row` terluar: `Expanded(Wrap(
+   ...))` menampung 3 chip kiri (boleh melipat bebas), Bayar jadi elemen
+   `Row` TERAKHIR di luar Wrap itu — posisinya selalu di ujung kanan,
+   independen dari berapa baris kiri melipat. Test baru di
+   `cart_bar_bayar_button_test.dart` (nama pelanggan sangat panjang @420px,
+   verifikasi tepi kanan `find.text('Bayar')` tidak bergeser dibanding
+   sebelum nama diisi) — revert-verified (layout `Wrap` lama gagal dgn
+   selisih ~260px, sensible).
+2. **Keterangan Laci Meja harus sebut jenis yang benar.** `getLaciMeja
+   PendingForCustomer`/`ForName` (`app_database.dart`) dulu menggabung
+   `titip`+`ketinggalan` jadi satu angka `titipKetinggalan`, dan
+   `LaciMejaReminder.summaryOf` SELALU menulis "N barang dititip" — barang
+   yang jenisnya `ketinggalan` (ketinggalan tanpa sengaja) ikut tertulis
+   seolah dititip sengaja. Record dipecah jadi `{titip, ketinggalan,
+   pinjaman, preorder}` (dihitung per `jenis` dari `LeftBehindItems`),
+   `summaryOf` sekarang punya klausa terpisah "N barang dititip" DAN/ATAU
+   "M barang ketinggalan". Propagasi lewat `laciMejaPendingProvider`
+   (`lib/core/providers/laci_meja_provider.dart`) & `_laciMejaPending`
+   (`payment_screen.dart`). Test baru di
+   `laci_meja_marks_and_reminder_test.dart` — revert-verified.
+
+Test suite penuh sesudah kedua fix: **785 test hijau**, `flutter analyze`
+0 issue.
+
+## Item 52 ("Laci Meja") — SELESAI TOTAL, ringkasan implementasi
+
+Fitur lengkap: Titip/Ketinggalan, Pinjaman Barang, Pre-order (termasuk
+antrian tabung LPG), plus layar review usulan owner. Rancangan detail
+sudah dihapus dari PLAN.md (selesai dieksekusi, sesuai konvensi) — kalau
+perlu rujuk lagi detail bisnis rules/skema, baca commit-commit `feat:
+Laci Meja (Item 52) fase N` di riwayat, atau `git show` satu-satu.
+
+- **Fase 1-3** (`2411e17`): skema (schemaVersion 21->22), DB layer CRUD,
+  sync (host->klien auto-merge, klien->host via antrian usulan PARALEL
+  yg tidak menyentuh alur usulan produk Item 40).
+- **Fase 4+8** (`955551c`): dashboard `/laci-meja` + gesture tekan-tahan
+  tab Kasir di bottom nav.
+- **Fase 5** (`50d778f`): tombol "+ Catat" di Struk.
+- **Fase 6** (`e5fe487`): dua jalur entry Pre-order (Kasir + Cek Stok).
+- **Fase 7** (`8f9e667`): toggle "Butuh Jaminan Fisik" di form produk.
+- **Fase 9 fix** (`ec7257e`): 11 test migrasi lama disesuaikan (assert
+  versi 21->22, + 7 di antaranya butuh tabel `product_units` sintetis
+  baru krn migrasi v22 menyentuhnya) — bukan bug produksi.
+- **Susulan review UI** (`d25b8f2`): layar review usulan Laci Meja utk
+  owner (`LaciMejaProposalReviewScreen`, kartu "Usulan Laci Meja" di
+  `SyncScreen`) — bagian yang sempat ditunda di commit fase 1-3, sekarang
+  sudah ada. `SyncState.laciMejaProposals` diwire ke
+  `LanSyncService.onLaciMejaProposalsChanged`.
+- **Koreksi rute + pewarisan pelanggan** (`3c7df58`, laporan user dari
+  DEVICE ASLI, sesudah `35495aa` ternyata masih bermasalah):
+  1. Redirect ke nota menampilkan **halaman BLANK**. Akar: `/laci-meja`
+     ditaruh di LUAR `ShellRoute` (biar bottom nav hilang), sedangkan
+     `/kasir/struk/:txId` bersarang DI DALAM shell — push lintas batas
+     shell bikin shell baru ter-mount dgn body kosong. Fix mengikuti
+     arahan user "bandingkan dgn pendekatan laporan hutang": dashboard
+     dipindah KE DALAM shell sbg **`/kasir/laci-meja`** (anak `/kasir`,
+     sebelah `/kasir/struk/:txId`) — persis situasi Buku Hutang yang
+     sudah lama terbukti. Bottom nav ikut tampil, konsisten dgn Struk.
+  2. Nama pelanggan tidak tampil di kartu → sekarang **diwarisi dari
+     nota** (dialog pra-isi + `customerId` nota ikut disimpan).
+
+  **PELAJARAN PENTING (jangan terulang)**: test navigasi dgn router
+  TIRUAN buatan sendiri (tanpa `ShellRoute`) **TIDAK PERNAH** bisa
+  menangkap kelas bug batas-shell — `laci_meja_dashboard_redirect_test.
+  dart` lulus hijau sementara device asli blank. Test navigasi WAJIB
+  pakai `routerProvider` ASLI (lihat `laci_meja_dashboard_redirect_
+  real_router_test.dart`). Pola umumnya: kalau menambah layar baru,
+  IKUTI struktur rute layar sejenis yang sudah ada di produksi, jangan
+  bikin penempatan rute baru yang belum pernah dipakai di app ini.
+
+- **Koreksi UX** (`35495aa`, setelah user menjelaskan 2 kesalahpahaman
+  desain awal):
+  1. "Barang ketinggalan" WAJIB ditaut ke produk NYATA yang ada di nota
+     — dialog "Catat Titip/Ketinggalan" diganti dari TextField nama
+     bebas jadi checklist produk di nota ini (toggle centang 1+ barang
+     sekaligus), `itemName` diambil dari nama produk asli.
+  2. "Link ke nota" yang dimaksud user BUKAN sekadar kolom
+     `transactionId` tersimpan (itu sudah ada sejak fase 1), tapi TAP
+     kartu di dashboard Laci Meja harus redirect ke struk terkait —
+     ditambahkan `onTap` di 3 daftar dashboard, mekanisme identik
+     `HutangTab` (`context.push('/kasir/struk/:txId')`). Pre-order (satu-
+     satunya `transactionId` NULLABLE) di-guard: redirect hanya kalau
+     ada, kasus titip-wadah-tanpa-beli sengaja tidak navigasi apa pun.
+  **Pelajaran**: setelah demo/deskripsi fitur ke user, JANGAN asumsikan
+  "link ke nota" berarti kolom FK tersimpan sudah cukup — user sering
+  memaksudkan MEKANISME NAVIGASI UI yang konkret (spt pola yang sudah
+  ada di fitur lain, mis. Lacak Hutang). Tanyakan pola UI acuan yang
+  dimaksud kalau istilah "link"/"terhubung" ambigu.
+
+**Bug nyata ditemukan & diperbaiki SELAMA build** (bukan pra-eksisting):
+`applyLaciMejaProposals` awalnya `customInsert` tanpa param `updates:` —
+baris berhasil tertulis ke DB tapi `.watch()` tidak refresh (gotcha yang
+SAMA PERSIS sudah didokumentasikan di bagian Gotcha CLAUDE.md, ternyata
+masih bisa lolos ke kode BARU juga — pelajaran: pola lama tetap harus
+diperiksa ulang di kode baru, bukan diasumsikan otomatis dihindari).
+
+**Gotcha baru ditemukan saat menulis test widget** (sudah cukup penting
+utk dicatat, belum masuk CLAUDE.md — pertimbangkan menambahkannya bila
+sesi depan mengonfirmasi berulang): memanggil `db.watchXxx().first`
+LANGSUNG di dalam `testWidgets` pada instance `db` yang SAMA dgn yang
+dipakai widget tree, SETELAH interaksi widget → bikin test **hang tanpa
+batas waktu** persis di langkah drain (`pumpWidget(SizedBox())`), bukan
+pada saat query-nya sendiri (query-nya sendiri selesai dgn benar). Fix:
+pakai one-shot `db.select(db.table).get()` alih-alih `.watch().first`
+utk verifikasi state di widget test.
+
+**Belum sempat/sengaja ditunda** (kosmetik/keputusan desain, bukan
+fungsional — tidak menghalangi status "selesai"):
+- Ambang warna umur (hijau/kuning/merah) di dashboard Laci Meja pakai
+  angka sementara (7/30 hari, sama seperti `HutangTab`) — user belum
+  pernah diminta konfirmasi ambang spesifik utk kategori ini.
+- Hint UX utk gestur tekan-tahan (yang "tersembunyi"/tanpa affordance
+  visual) belum dibuat — didiskusikan sbg kebutuhan follow-up saat
+  desain, belum diimplementasi.
 
 ## Fix: kembalian terakhir di Ringkasan struk in-app di-bold (26 Juli)
 

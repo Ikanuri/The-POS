@@ -72,6 +72,11 @@ class RingkasanTab extends ConsumerWidget {
 
     return dataAsync.when(
       data: (data) => ListView(
+        // Akar masalah "jarak" yang dilaporkan user sebenarnya BUKAN padding
+        // ini, melainkan TabBar(isScrollable: true) default Material 3
+        // (tabAlignment: startOffset) yang menambah inset ~52dp sebelum tab
+        // pertama — sudah diperbaiki di laporan_screen.dart (tabAlignment:
+        // TabAlignment.start). Padding di sini dikembalikan ke nilai normal.
         padding: const EdgeInsets.all(16),
         children: [
           // Main KPIs
@@ -250,6 +255,7 @@ class _KpiRow extends StatelessWidget {
       children: items
           .map((item) => Expanded(
                 child: Card(
+                  margin: EdgeInsets.zero,
                   color: bg,
                   child: Padding(
                     padding: const EdgeInsets.all(14),

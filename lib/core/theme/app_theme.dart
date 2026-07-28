@@ -61,6 +61,13 @@ class AppTheme {
   static Color tealBg(bool isDark) =>
       isDark ? const Color(0x336FC7BC) : const Color(0xFFDDEEEB);
 
+  // Item 52 — "Laci Meja" (Titip/Ketinggalan, Pinjaman Barang, Pre-order).
+  // Dusty rose, hue baru agar beda dari warna fungsi toolbar kasir lain.
+  static Color laciFg(bool isDark) =>
+      isDark ? const Color(0xFFE3A8B7) : const Color(0xFF9C4F63);
+  static Color laciBg(bool isDark) =>
+      isDark ? const Color(0x33E3A8B7) : const Color(0xFFF5E3E8);
+
   /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
   /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).
   static void showSnack(BuildContext context, String message,

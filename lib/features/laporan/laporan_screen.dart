@@ -79,6 +79,16 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          // Permintaan user (screenshot beranotasi panah ke-2) — gap yang
+          // dimaksud SEJAK AWAL bukan jarak vertikal ke kartu KPI (2
+          // percobaan sebelumnya salah sasaran), tapi jarak HORIZONTAL di
+          // KIRI tab "Ringkasan" itu sendiri. Akar: `TabBar(isScrollable:
+          // true)` Material 3 defaultnya `TabAlignment.startOffset` — inset
+          // ~52dp di depan tab pertama (dirancang utk sejajar dgn leading
+          // icon/drawer, TIDAK relevan di sini krn AppBar ini tanpa leading
+          // icon). `TabAlignment.start` menempelkan tab pertama flush ke
+          // kiri (sejajar judul "Laporan" di atasnya).
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'Ringkasan'),
             Tab(text: 'Produk'),

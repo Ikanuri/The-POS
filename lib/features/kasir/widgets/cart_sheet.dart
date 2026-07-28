@@ -377,12 +377,41 @@ class _CartItemTile extends ConsumerWidget {
               // menyesuaikan tinggi baris ke title/subtitle-nya sendiri,
               // leading/trailing (checkbox, stepper, harga) tetap fixed-size
               // & otomatis center-vertikal — tidak perlu restrukturisasi.
-              child: Text(item.productName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: isVariant ? 15 : 17,
-                      color: isVariant ? scheme.onSurfaceVariant : null)),
+              //
+              // Item 52 redesain pre-order — label "Titip [qty]" (jaminan
+              // dititip) DISATUKAN ke text run yang SAMA (bukan Text/Container
+              // terpisah dgn jarak sendiri) — pola PERSIS badge "Habis" di
+              // katalog kasir (`'${product.name} · Habis'`), supaya
+              // keterangannya menempel rapat ke nama, bukan berjarak.
+              child: (item.depositQty != null && item.depositQty! > 0)
+                  ? Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                            fontSize: isVariant ? 15 : 17,
+                            color: isVariant ? scheme.onSurfaceVariant : null),
+                        children: [
+                          TextSpan(text: item.productName),
+                          TextSpan(
+                            text:
+                                ' · Titip ${item.depositQty! % 1 == 0 ? item.depositQty!.toInt() : item.depositQty}',
+                            style: TextStyle(
+                                fontSize: isVariant ? 12 : 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.laciFg(
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark)),
+                          ),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : Text(item.productName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: isVariant ? 15 : 17,
+                          color: isVariant ? scheme.onSurfaceVariant : null)),
             ),
           ],
         ),

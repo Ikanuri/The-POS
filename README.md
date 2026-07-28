@@ -56,11 +56,31 @@ serta terintegrasi dengan printer thermal Bluetooth dan barcode scanner.
 - **Pembatalan transaksi** (_void_) dengan reversal stok dan poin loyalitas otomatis.
 - **Pra-agregasi harian** (`DailySummaries`) agar laporan tetap cepat saat data menumpuk.
 
+### 🗄️ Laci Meja
+- **Barang titip/ketinggalan** — catat produk NYATA dari nota (bisa sebagian
+  qty, termasuk desimal untuk produk timbang), dikelompokkan per nota.
+- **Pinjaman barang** (wadah/deposit galon-tabung) — catat bebas, ditandai
+  kembali sebagian/penuh, dikelompokkan per pelanggan.
+- **Pre-order/backorder** — termasuk antrian tabung LPG dengan jaminan,
+  terhubung langsung ke keranjang & nota (bukan alur terpisah).
+- **Pengingat otomatis** di cart bar & modal bayar (per kategori, akumulatif
+  hutang pelanggan) supaya tidak ada yang terlupa.
+
+### 🔄 Sinkron Harga Antar Toko
+- Pencocokan produk antar toko independen (induk-cabang) via barcode/kode
+  produk persis (fuzzy-matching sengaja tidak dipakai — terbukti salah-cocok
+  produk beda varian dari data nyata).
+- Layar review manual utk pasangan produk ambigu, sekali dikonfirmasi
+  langsung dipetakan otomatis di sinkron berikutnya.
+
 ### ⚙️ Pengaturan & Manajemen Data
 - Informasi toko, metode pembayaran, dan **izin kasir** per peran.
-- **Backup & restore** database penuh.
+- **Backup & restore** database penuh, plus **alihkan owner** (transfer
+  kepemilikan toko via file terenkripsi, rekey SQLCipher).
 - **Impor produk dari CSV** dan **ekspor laporan** ke PDF / XLSX.
 - **Tutup buku tahunan** dengan pengarsipan data per tahun (`archive_YYYY.db`).
+- **Gerbang lisensi offline** (opsional, verifikasi kriptografi Ed25519
+  murni-Dart, tanpa server) — kill-switch aman bila tidak diaktifkan.
 
 ---
 
@@ -79,7 +99,7 @@ serta terintegrasi dengan printer thermal Bluetooth dan barcode scanner.
 │  csv_import · db_export · archive · tutup_buku            │
 ├──────────────────────────────────────────────────────────┤
 │              Database (Drift + SQLCipher)                 │
-│   SQLite terenkripsi · skema v4 · pre-aggregate summaries │
+│  SQLite terenkripsi · skema v25 · pre-aggregate summaries │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -94,15 +114,15 @@ perangkat owner. Sinkronisasi antar perangkat berjalan lewat jaringan lokal (LAN
 | Kategori | Paket |
 |---|---|
 | Framework | Flutter (Dart `>=3.3.0`) |
-| State | `flutter_riverpod`, `riverpod_annotation` |
+| State | `flutter_riverpod` |
 | Database | `drift`, `sqlcipher_flutter_libs`, `sqlite3` |
 | Routing | `go_router` |
-| Kripto | `encrypt`, `crypto`, `flutter_secure_storage` |
+| Kripto | `encrypt`, `crypto`, `cryptography`, `flutter_secure_storage` |
 | Barcode/QR | `mobile_scanner`, `barcode_widget`, `qr_flutter` |
 | Printer | `print_bluetooth_thermal`, `esc_pos_utils_plus`, `permission_handler` |
 | Sync LAN | `shelf`, `network_info_plus` |
-| Ekspor | `file_picker`, `excel`, `pdf`, `printing`, `share_plus` |
-| UI | `google_fonts` (Inter), `fl_chart` |
+| Ekspor | `file_picker`, `excel`, `pdf`, `share_plus` |
+| UI | `google_fonts` (Hanken Grotesk + Newsreader), `fl_chart` |
 
 ---
 
@@ -124,10 +144,12 @@ lib/
     ├── kasir/                  # Layar kasir, keranjang, pembayaran, struk
     ├── produk/                 # CRUD produk, varian, barcode, grup
     ├── pelanggan/              # CRUD pelanggan
+    ├── laci_meja/              # Titip/ketinggalan, pinjaman, pre-order
     ├── laporan/               # Laporan 4-tab + grafik
     ├── ringkasan/             # Dashboard ringkasan
     ├── pengaturan/            # Pengaturan, backup, sync, arsip
     ├── setup/                 # Welcome, setup toko, pairing
+    ├── aktivasi/               # Gerbang lisensi offline
     └── shell/                 # Navigation shell
 ```
 
@@ -145,7 +167,7 @@ lib/
 # Ambil dependensi
 flutter pub get
 
-# Generate kode Drift & Riverpod
+# Generate kode Drift (tabel, migrasi)
 dart run build_runner build --delete-conflicting-outputs
 
 # Jalankan di perangkat / emulator

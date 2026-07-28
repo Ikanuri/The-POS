@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' hide Column;
@@ -13,6 +14,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_meta_provider.dart';
 import 'discount_allocation.dart';
 import 'cart_provider.dart';
@@ -65,6 +67,25 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _custDropdownOpen = false;
   List<Customer> _custSuggestions = [];
   Map<String, (int, int)> _custDebts = {};
+
+  /// Item 52 susulan — jumlah catatan Laci Meja yang MASIH menggantung utk
+  /// pelanggan terpilih (titip/ketinggalan, pinjaman, pre-order). Pola sama
+  /// dgn pengingat hutang di atasnya, tapi aksen dusty rose (Laci Meja) —
+  /// sengaja DIBEDAKAN dari merah hutang supaya tidak tertukar maknanya.
+  LaciMejaPending? _laciMejaPending;
+
+  Future<void> _refreshLaciMejaPending() async {
+    final db = ref.read(databaseProvider);
+    final c = _selectedCustomer;
+    // Pelanggan TERDAFTAR tetap perlu kirim namanya juga — Pre-order hanya
+    // menyimpan nama (tanpa FK), jadi tanpa ini pre-order miliknya tidak
+    // pernah ikut terhitung (bug lama, lihat dok `getLaciMejaPending`).
+    final pending = await db.getLaciMejaPending(
+      customerId: c?.id,
+      customerName: c?.name ?? _custNameManual,
+    );
+    if (mounted) setState(() => _laciMejaPending = pending);
+  }
   final _custCtrl = TextEditingController();
   // Untuk menggulir field pelanggan ke atas viewport agar dropdown saran tidak
   // tertutup keyboard saat mengetik.
@@ -175,6 +196,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         }
         _selectedEmployee = preEmployee;
       });
+      unawaited(_refreshLaciMejaPending());
     }
   }
 
@@ -441,8 +463,19 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // `generateUniqueLocalId` HANYA kalau entah bagaimana belum sempat
       // direservasi (seharusnya tidak terjadi di alur normal).
       final reservedId = ref.read(cartMetaProvider(_cartId)).reservedLocalId;
-      final localId = reservedId ??
-          await db.generateUniqueLocalId(device.deviceCode, now);
+      // Bug nyata dilaporkan user: pesanan dipindah owner->asisten via QR
+      // lalu dikembalikan asisten->owner, checkout GAGAL TOTAL dgn "UNIQUE
+      // constraint failed: transactions.local_id" — transaksi tidak bisa
+      // diselesaikan sama sekali (kasir mentok, uang sudah diterima).
+      // Akarnya di jalur reservasi nomor (lihat dok `adoptReservedLocalId`),
+      // TAPI penjaga di sini tetap WAJIB ada: nomor reservasi apa pun yang
+      // ternyata sudah keburu jadi `transactions.local_id` milik nota lain
+      // TIDAK BOLEH menggagalkan checkout — jatuh ke nomor bebas berikutnya
+      // saja. Lebih baik nomor nota lompat daripada penjualan tidak bisa
+      // ditutup.
+      final localId = (reservedId != null && !await db.isLocalIdTaken(reservedId))
+          ? reservedId
+          : await db.generateUniqueLocalId(device.deviceCode, now);
 
       final isTempo = _selectedMethodType == 'tempo';
       final paidAmount = isTempo ? 0 : _paid;
@@ -551,8 +584,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           : <TransactionPaymentsCompanion>[];
 
       // Stock items — only deduct stock for items with effective qty > 0.
+      // Item 52 redesain pre-order — item pre-order DIKECUALIKAN dari
+      // pengurangan stok: barangnya belum ada secara fisik di toko (baru
+      // dipesan), jadi belum ada apa pun yang benar-benar keluar dari rak.
+      // Stok baru bergerak nanti saat direstock sungguhan.
       final stockItems = cart
-          .where((item) => effQty(item) > 0)
+          .where((item) => effQty(item) > 0 && !item.isPreorder)
           .map((item) => (
                 productUnitId: item.productUnitId,
                 qty: effQty(item),
@@ -584,6 +621,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // sungguhan, lepaskan dari reservasi (kalau memang berasal dari
       // reservasi, bukan fallback generateUniqueLocalId).
       if (reservedId != null) await db.releaseLocalId(reservedId);
+
+      // Item 52 redesain pre-order — item yg dicentang "Pre-order?" di modal
+      // tap item SEKARANG menulis baris `PreorderEntries` langsung di sini,
+      // dgn `transactionId: txId` OTOMATIS terisi (bukan lagi via dialog
+      // terpisah tanpa tautan nota) — supaya administrasi/tracking jadi satu
+      // jalur & tap di dashboard Laci Meja bisa redirect ke nota ini.
+      final locallyModifiedLaci = !device.isOwner;
+      for (final item in cart.where((i) => i.isPreorder)) {
+        await db.addPreorderEntry(
+          id: _uuid.v4(),
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          customerName: _selectedCustomer?.name ?? customerName ?? 'Umum',
+          qtyOrdered: effQty(item),
+          transactionId: txId,
+          depositQty: item.depositQty ?? 0,
+          paid: item.preorderPaid,
+          locallyModified: locallyModifiedLaci,
+        );
+      }
 
       // Item 46 — peringatan stok menipis dari produk yang baru terjual,
       // disimpan untuk ditampilkan sbg banner saat pengguna kembali ke kasir
@@ -651,8 +708,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         ),
     ];
 
+    // Item 52 redesain pre-order — sama spt checkout normal: item pre-order
+    // dikecualikan dari pengurangan stok (belum ada fisik di toko).
     final stockItems = cart
-        .where((item) => effQty(item) > 0)
+        .where((item) => effQty(item) > 0 && !item.isPreorder)
         .map((item) => (
               productUnitId: item.productUnitId,
               qty: effQty(item),
@@ -690,6 +749,36 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (updatedTx?.customerId != null) {
       await db.awardLoyaltyPointsIfEligible(
           txId: txId, customerId: updatedTx!.customerId!);
+    }
+
+    // Item 52 redesain pre-order — sama spt checkout normal (lihat
+    // _confirmPayment), transactionId langsung terisi dari nota yg sedang
+    // ditambahi. Nama pelanggan diwarisi dari nota (bukan hardcode "Umum"),
+    // konsisten dgn pola pewarisan Laci Meja lain (lihat dok
+    // receipt_screen.dart `_customerDisplay`).
+    String preorderCustomerName = 'Umum';
+    if (updatedTx?.customerId != null) {
+      final cust = await (db.select(db.customers)
+            ..where((t) => t.id.equals(updatedTx!.customerId!)))
+          .getSingleOrNull();
+      preorderCustomerName = cust?.name ?? 'Umum';
+    } else if (updatedTx?.customerName != null &&
+        updatedTx!.customerName!.trim().isNotEmpty) {
+      preorderCustomerName = updatedTx.customerName!.trim();
+    }
+    final locallyModifiedLaci = !device.isOwner;
+    for (final item in cart.where((i) => i.isPreorder)) {
+      await db.addPreorderEntry(
+        id: _uuid.v4(),
+        productId: item.productId,
+        productUnitId: item.productUnitId,
+        customerName: preorderCustomerName,
+        qtyOrdered: effQty(item),
+        transactionId: txId,
+        depositQty: item.depositQty ?? 0,
+        paid: item.preorderPaid,
+        locallyModified: locallyModifiedLaci,
+      );
     }
 
     notifier.clear();
@@ -947,6 +1036,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                             ],
                                           ),
                                         ),
+                                      LaciMejaReminder(pending: _laciMejaPending),
                                     ] else ...[
                                       TextField(
                                         key: _custFieldKey,
@@ -1064,6 +1154,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                                     _custDropdownOpen = false;
                                                   });
                                                   _syncMetaCustomer();
+                                                  unawaited(
+                                                      _refreshLaciMejaPending());
                                                 },
                                               );
                                             },

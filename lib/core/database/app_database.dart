@@ -15,6 +15,7 @@ import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
 import 'tables/employee_tables.dart';
+import 'tables/laci_meja_tables.dart';
 import 'tables/ledger_tables.dart';
 import 'tables/pricing_tables.dart';
 import 'tables/product_tables.dart';
@@ -80,6 +81,7 @@ typedef StockOverviewRow = ({
   double stock,
   double? minStock,
   bool markedOutOfStock,
+  bool requiresDeposit,
 });
 
 /// Baris ringkasan satu sesi stock opname (Item 36) — dikelompokkan dari
@@ -108,6 +110,31 @@ typedef InventoryRow = ({
   double stock,
   int costPrice,
 });
+
+/// Satu produk pre-order yang masih menunggu, lengkap dgn nama produk (hasil
+/// JOIN) — dipakai baris pre-order di pengingat cart bar, yang menurut
+/// permintaan user WAJIB menyebut produknya, bukan cuma jumlah entri.
+typedef PreorderPendingLine = ({
+  String productName,
+  double qty,
+  double depositQty,
+});
+
+/// Ringkasan Laci Meja yang masih menggantung utk SATU pelanggan — dipakai
+/// pengingat cart bar (per-kategori, satu baris masing-masing) & modal
+/// checkout. `titip`/`ketinggalan` sengaja dipisah (jenisnya beda maknanya,
+/// lihat dok `getLaciMejaPending`); `preorders` berisi RINCIAN (bukan sekadar
+/// jumlah) krn baris pre-order di cart bar menyebut nama produk + qty +
+/// jaminan.
+typedef LaciMejaPending = ({
+  int titip,
+  int ketinggalan,
+  int pinjaman,
+  List<PreorderPendingLine> preorders,
+});
+
+const LaciMejaPending kEmptyLaciMejaPending =
+    (titip: 0, ketinggalan: 0, pinjaman: 0, preorders: []);
 
 /// Barcode yang mau dipakai ternyata masih dipegang produk LAIN yang aktif.
 /// Dilempar dari dalam transaksi [AppDatabase.saveProduct] supaya seluruh
@@ -163,6 +190,9 @@ class BarcodeConflictException implements Exception {
   Employees,
   CashClosings,
   SyncUploadQueue,
+  LeftBehindItems,
+  BorrowedItems,
+  PreorderEntries,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -175,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 25;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -330,6 +360,40 @@ class AppDatabase extends _$AppDatabase {
             // memakai definisi tabel TERKINI (sudah termasuk device_code)
             // — addColumn lagi di sini akan gagal "duplicate column name".
             await m.addColumn(syncUploadQueue, syncUploadQueue.deviceCode);
+          }
+          if (from < 22) {
+            // Item 52 ("Laci Meja") — Titip/Ketinggalan, Pinjaman Barang,
+            // Pre-order.
+            await m.createTable(leftBehindItems);
+            await m.createTable(borrowedItems);
+            await m.createTable(preorderEntries);
+            await m.addColumn(productUnits, productUnits.requiresDeposit);
+          }
+          if (from < 23 && from >= 22) {
+            // Item 52 susulan — tautan presisi entri Titip/Ketinggalan ke
+            // baris nota (lihat dok kolom di laci_meja_tables.dart).
+            // Guard `from >= 22`: kalau upgrade dari versi < 22,
+            // `createTable(leftBehindItems)` di step v22 di atas SUDAH
+            // memakai definisi tabel TERKINI (sudah termasuk kolom ini) —
+            // addColumn lagi di sini akan gagal "duplicate column name".
+            // Pola identik dgn guard v21 (`syncUploadQueue.deviceCode`).
+            await m.addColumn(
+                leftBehindItems, leftBehindItems.transactionItemId);
+          }
+          if (from < 24 && from >= 22) {
+            // Item 52 redesain — tautan presisi entri Pinjaman ke baris
+            // nota, pola identik guard v23 di atas (`leftBehindItems.
+            // transactionItemId`). Guard `from >= 22`: upgrade dari versi
+            // < 22 sudah dapat definisi tabel TERKINI dari `createTable`
+            // di step v22.
+            await m.addColumn(
+                borrowedItems, borrowedItems.transactionItemId);
+          }
+          if (from < 25 && from >= 22) {
+            // Item 52 susulan lagi — qty parsial Titip/Ketinggalan (bisa
+            // sebagian dari qty baris nota), pola guard identik v23/v24 di
+            // atas.
+            await m.addColumn(leftBehindItems, leftBehindItems.qty);
           }
         },
         beforeOpen: (details) async {
@@ -739,6 +803,35 @@ class AppDatabase extends _$AppDatabase {
       (delete(reservedOrderNumbers)..where((t) => t.localId.equals(localId)))
           .go();
 
+  /// Daftarkan ulang nomor nota yang DIBAWA MASUK dari device lain (transfer
+  /// QR, Item 56) ke `reserved_order_numbers` di device INI.
+  ///
+  /// Bug nyata dilaporkan user: pesanan dipindah owner→asisten via QR lalu
+  /// dikembalikan asisten→owner, saat checkout gagal total dgn "UNIQUE
+  /// constraint failed: transactions.local_id". Akarnya: nomor yang
+  /// diterima lewat QR cuma disimpan di `CartMeta.reservedLocalId`
+  /// (in-memory/JSON keranjang) tanpa PERNAH dicatat ke
+  /// `reserved_order_numbers` device penerima — jadi `reserveLocalId`
+  /// berikutnya di device itu tidak tahu nomor tsb sedang dipakai dan
+  /// membagikannya lagi ke keranjang LAIN. Begitu keranjang lain itu
+  /// checkout duluan, nomornya jadi milik `transactions`, dan keranjang
+  /// hasil transfer tadi menabrak UNIQUE saat gilirannya bayar.
+  ///
+  /// `insertOrIgnore`: aman dipanggil berkali-kali (mis. QR yang sama
+  /// di-scan ulang) & aman kalau nomor itu memang sudah direservasi di sini.
+  Future<void> adoptReservedLocalId(String localId) =>
+      into(reservedOrderNumbers).insert(
+          ReservedOrderNumbersCompanion.insert(localId: localId),
+          mode: InsertMode.insertOrIgnore);
+
+  /// true bila [localId] SUDAH dipakai baris `transactions` sungguhan —
+  /// dipakai checkout utk mendeteksi nomor reservasi basi sebelum insert
+  /// (lihat dok `adoptReservedLocalId` soal bagaimana itu bisa terjadi).
+  Future<bool> isLocalIdTaken(String localId) async =>
+      (await (select(transactions)..where((t) => t.localId.equals(localId)))
+              .getSingleOrNull()) !=
+      null;
+
   String _localIdPrefix(String deviceCode, DateTime at) {
     final datePart = '${at.year}'
         '${at.month.toString().padLeft(2, '0')}'
@@ -870,6 +963,7 @@ class AppDatabase extends _$AppDatabase {
       SELECT pu.id AS unit_id, pu.product_id AS pid, p.name AS name,
         p.product_group_id AS group_id, pu.min_stock AS min_stock,
         p.marked_out_of_stock AS marked_out_of_stock,
+        pu.requires_deposit AS requires_deposit,
         COALESCE((SELECT sl.stock_after FROM stock_ledger sl
                   WHERE sl.product_unit_id = pu.id
                   ORDER BY sl.created_at DESC, sl.rowid DESC LIMIT 1), 0) AS stock
@@ -889,6 +983,7 @@ class AppDatabase extends _$AppDatabase {
                   minStock: (r.data['min_stock'] as num?)?.toDouble(),
                   markedOutOfStock:
                       (r.data['marked_out_of_stock'] as int) == 1,
+                  requiresDeposit: (r.data['requires_deposit'] as int) == 1,
                 ))
             .toList());
   }
@@ -4042,6 +4137,12 @@ class AppDatabase extends _$AppDatabase {
       'customers',
       'customer_groups',
       'customer_group_prices',
+      // Item 52 ("Laci Meja") — auto-merge host->klien, pola sama persis
+      // spt products/customers (delta by updated_at, bukan full-dump: bisa
+      // menumpuk banyak baris seiring waktu, beda dari price_tiers dkk).
+      'left_behind_items',
+      'borrowed_items',
+      'preorder_entries',
     ];
 
     final dump = <String, List<Map<String, Object?>>>{};
@@ -4080,7 +4181,11 @@ class AppDatabase extends _$AppDatabase {
     // → bawahan). Saat klien mengirim ke atas, dilewati agar tidak menimpa.
     if (includeMasterData) {
       for (final t in masterData) {
-        final hasUpdated = t == 'products' || t == 'customers';
+        final hasUpdated = t == 'products' ||
+            t == 'customers' ||
+            t == 'left_behind_items' ||
+            t == 'borrowed_items' ||
+            t == 'preorder_entries';
         if (hasUpdated) {
           final rows = await customSelect(
             'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
@@ -4727,6 +4832,437 @@ class AppDatabase extends _$AppDatabase {
             updates: {table!},
             updateKind: UpdateKind.delete,
           );
+        }
+      }
+    });
+    return count;
+  }
+
+  // ───────────────────────── Laci Meja (Item 52) ─────────────────────────
+  //
+  // Titip/Ketinggalan, Pinjaman Barang, Pre-order. Rancangan lengkap &
+  // keputusan bisnis: PLAN.md Item 52. `locallyModified` mengikuti pola
+  // Item 40 (usulan produk): UI yang memanggil create/update di sini WAJIB
+  // set true kalau device BUKAN owner (lihat `device.isOwner`) — device
+  // owner tidak pernah set true (sumber kebenaran, tidak perlu mengusulkan
+  // ke diri sendiri).
+
+  // ── Titip/Ketinggalan ──
+
+  Future<void> addLeftBehindItem({
+    required String id,
+    required String transactionId,
+    required String itemName,
+    required String jenis,
+    String? transactionItemId,
+    String? customerId,
+    String? customerNameText,
+    String? note,
+    double? qty,
+    bool locallyModified = false,
+  }) =>
+      into(leftBehindItems).insert(LeftBehindItemsCompanion.insert(
+        id: id,
+        transactionId: transactionId,
+        itemName: itemName,
+        jenis: jenis,
+        transactionItemId: Value(transactionItemId),
+        customerId: Value(customerId),
+        customerNameText: Value(customerNameText),
+        note: Value(note),
+        qty: Value(qty),
+        locallyModified: Value(locallyModified),
+      ));
+
+  /// Baris nota mana saja yang ditandai titip/ketinggalan — dipakai struk
+  /// in-app utk memberi penanda per-item (pola sama dgn badge "Habis" di
+  /// katalog kasir). Key = `transaction_items.id`, value = jenis + qty
+  /// (SEBAGIAN dari qty baris nota, bisa null utk entri lama = seluruh
+  /// qty). Entri tanpa `transactionItemId` (dibuat sebelum kolom itu ada)
+  /// otomatis terlewat — memang tidak bisa dipetakan ke baris tertentu.
+  Future<Map<String, ({String jenis, double? qty})>>
+      getLeftBehindMarksForTransaction(String transactionId) async {
+    final rows = await (select(leftBehindItems)
+          ..where((t) =>
+              t.transactionId.equals(transactionId) &
+              t.collectedAt.isNull() &
+              t.transactionItemId.isNotNull()))
+        .get();
+    return {
+      for (final r in rows) r.transactionItemId!: (jenis: r.jenis, qty: r.qty)
+    };
+  }
+
+  /// Item 52 susulan (permintaan user) — qty+satuan per baris nota yang
+  /// ditandai titip/ketinggalan, dipakai dashboard Laci Meja supaya kasir
+  /// tahu PERSIS berapa banyak & satuan apa tanpa buka nota. Satu query
+  /// JOIN (bukan N+1) utk sekumpulan `transaction_items.id` sekaligus.
+  Future<Map<String, ({double qty, String unitName})>>
+      getQtyUnitForTransactionItems(List<String> transactionItemIds) async {
+    if (transactionItemIds.isEmpty) return {};
+    final rows = await (select(transactionItems).join([
+      leftOuterJoin(productUnits,
+          productUnits.id.equalsExp(transactionItems.productUnitId)),
+      leftOuterJoin(
+          unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
+    ])
+          ..where(transactionItems.id.isIn(transactionItemIds)))
+        .get();
+    return {
+      for (final row in rows)
+        row.readTable(transactionItems).id: (
+          qty: row.readTable(transactionItems).qty,
+          unitName: row.readTableOrNull(unitTypes)?.name ?? '',
+        ),
+    };
+  }
+
+  /// Item 52 redesain pre-order — jumlah jaminan (wadah kosong) yang dititip
+  /// utk tiap produk+satuan di SATU nota, dipakai struk in-app memberi label
+  /// "Titip [qty]" di samping nama barang (persis pola qty+satuan di atas).
+  /// Key: `'$productId|$productUnitId'` (PreorderEntries tidak menyimpan
+  /// `transactionItemId`, hanya productId+productUnitId — cukup presisi krn
+  /// pre-order dibuat via SATU baris cart per produk+satuan per nota).
+  /// Keputusan DIBALIK (permintaan user, susulan): penanda ini SEKARANG
+  /// mengikuti pola sama dgn Titip/Ketinggalan — TEMPORARY, hilang begitu
+  /// pre-order-nya dipenuhi/dibatalkan (`fulfilledAt`/`cancelledAt` diisi) di
+  /// dashboard Laci Meja. Difilter di query ini, bukan cuma di UI.
+  Future<Map<String, double>> getPreorderDepositForTransaction(
+      String transactionId) async {
+    final rows = await (select(preorderEntries)
+          ..where((t) =>
+              t.transactionId.equals(transactionId) &
+              t.depositQty.isBiggerThanValue(0) &
+              t.fulfilledAt.isNull() &
+              t.cancelledAt.isNull()))
+        .get();
+    return {for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty};
+  }
+
+  /// Item 52 redesain — nama produk+satuan utk sekumpulan `product_unit_id`
+  /// (dipakai dashboard Laci Meja tab Pre-order menampilkan "qty produk -
+  /// jaminan" per baris). Satu JOIN, bukan N+1.
+  Future<Map<String, ({String productName, String unitName})>>
+      getProductUnitLabelsFor(List<String> productUnitIds) async {
+    if (productUnitIds.isEmpty) return {};
+    final rows = await (select(productUnits).join([
+      innerJoin(products, products.id.equalsExp(productUnits.productId)),
+      leftOuterJoin(
+          unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
+    ])
+          ..where(productUnits.id.isIn(productUnitIds)))
+        .get();
+    return {
+      for (final row in rows)
+        row.readTable(productUnits).id: (
+          productName: row.readTable(products).name,
+          unitName: row.readTableOrNull(unitTypes)?.name ?? '',
+        ),
+    };
+  }
+
+  /// Baris `BorrowedItems` (pinjaman) milik SATU nota — dipakai struk in-app
+  /// menampilkan SECTION "Pinjaman Barang" ("rujukan kebenaran" permintaan
+  /// user: staf bisa cek nota asli utk konfirmasi barang apa yang memang
+  /// dipinjamkan dari transaksi itu).
+  ///
+  /// SECTION, bukan penanda per-baris produk: nama barang pinjaman diketik
+  /// bebas (biasanya WADAH — galon/tabung kosong — yang justru BUKAN baris
+  /// di nota), jadi tidak ada baris nota yang bisa ditempeli penanda.
+  ///
+  /// Sengaja TIDAK memfilter `fullyReturnedAt`: nota adalah bukti historis
+  /// permanen, bukan indikator status hidup — begitu sesuatu pernah
+  /// dipinjamkan lewat nota ini, catatannya tetap ada walau sudah kembali.
+  Future<List<BorrowedItem>> getBorrowedForTransaction(String transactionId) =>
+      (select(borrowedItems)
+            ..where((t) => t.transactionId.equals(transactionId))
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+
+  /// Ringkasan Laci Meja yang MASIH menggantung utk satu pelanggan —
+  /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
+  /// pengingat hutang), supaya barang titipan/pinjaman/pre-order tidak
+  /// terlupa saat pelanggan yang sama datang lagi.
+  ///
+  /// `titip` dan `ketinggalan` DIPISAH (bukan digabung satu angka) —
+  /// permintaan user: keterangan di modal checkout wajib cocok dgn jenis
+  /// asli barangnya, jangan selalu tertulis "dititip" padahal aslinya
+  /// ketinggalan tanpa sengaja.
+  /// SATU pintu utk semua kategori — [customerId] dipakai mencocokkan
+  /// Titip/Ketinggalan & Pinjaman (keduanya menyimpan FK pelanggan),
+  /// [customerName] dipakai mencocokkan Pre-order (tabel `PreorderEntries`
+  /// HANYA menyimpan nama, tanpa FK — lihat dok tabelnya).
+  ///
+  /// KEDUANYA boleh diisi sekaligus & memang seharusnya begitu utk pelanggan
+  /// TERDAFTAR: versi lama memisahkan jadi 2 method dan yang berbasis
+  /// `customerId` selalu mengembalikan `preorder: 0` — akibatnya pre-order
+  /// milik pelanggan terdaftar TIDAK PERNAH muncul di pengingat sama sekali.
+  Future<LaciMejaPending> getLaciMejaPending({
+    String? customerId,
+    String? customerName,
+  }) async {
+    final id = customerId?.trim() ?? '';
+    final nama = customerName?.trim() ?? '';
+    if (id.isEmpty && nama.isEmpty) return kEmptyLaciMejaPending;
+
+    // Titip/Ketinggalan & Pinjaman: cocokkan lewat id kalau pelanggan
+    // terdaftar, kalau tidak lewat nama teksnya.
+    final left = id.isNotEmpty
+        ? await (select(leftBehindItems)
+              ..where((t) => t.customerId.equals(id) & t.collectedAt.isNull()))
+            .get()
+        : await (select(leftBehindItems)
+              ..where((t) =>
+                  t.customerNameText.equals(nama) & t.collectedAt.isNull()))
+            .get();
+    final borrowed = id.isNotEmpty
+        ? await (select(borrowedItems)
+              ..where(
+                  (t) => t.customerId.equals(id) & t.fullyReturnedAt.isNull()))
+            .get()
+        : await (select(borrowedItems)
+              ..where((t) =>
+                  t.customerNameText.equals(nama) &
+                  t.fullyReturnedAt.isNull()))
+            .get();
+
+    // Pre-order: SELALU lewat nama (satu-satunya yang disimpan), + JOIN
+    // produk supaya baris cart bar bisa menyebut nama produknya.
+    final preorders = <PreorderPendingLine>[];
+    if (nama.isNotEmpty) {
+      final rows = await (select(preorderEntries).join([
+        leftOuterJoin(products, products.id.equalsExp(preorderEntries.productId)),
+      ])
+            ..where(preorderEntries.customerName.equals(nama) &
+                preorderEntries.fulfilledAt.isNull() &
+                preorderEntries.cancelledAt.isNull()))
+          .get();
+      for (final row in rows) {
+        final e = row.readTable(preorderEntries);
+        preorders.add((
+          productName: row.readTableOrNull(products)?.name ?? e.productId,
+          qty: e.qtyOrdered,
+          depositQty: e.depositQty,
+        ));
+      }
+    }
+
+    return (
+      titip: left.where((e) => e.jenis == 'titip').length,
+      ketinggalan: left.where((e) => e.jenis == 'ketinggalan').length,
+      pinjaman: borrowed.length,
+      preorders: preorders,
+    );
+  }
+
+  /// Diurut PALING LAMA MENUNGGU dulu (FIFO), sesuai rancangan dashboard.
+  Stream<List<LeftBehindItem>> watchLeftBehindItems(
+          {bool includeCollected = false}) =>
+      (select(leftBehindItems)
+            ..where((t) => includeCollected ? const Constant(true) : t.collectedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .watch();
+
+  Future<void> markLeftBehindCollected(String id, {bool locallyModified = false}) =>
+      (update(leftBehindItems)..where((t) => t.id.equals(id))).write(
+        LeftBehindItemsCompanion(
+          collectedAt: Value(DateTime.now()),
+          locallyModified: Value(locallyModified),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  // ── Pinjaman Barang ──
+
+  Future<void> addBorrowedItem({
+    required String id,
+    required String transactionId,
+    required String itemName,
+    required double qty,
+    String? transactionItemId,
+    String? customerId,
+    String? customerNameText,
+    String? note,
+    bool locallyModified = false,
+  }) =>
+      into(borrowedItems).insert(BorrowedItemsCompanion.insert(
+        id: id,
+        transactionId: transactionId,
+        itemName: itemName,
+        qty: qty,
+        transactionItemId: Value(transactionItemId),
+        customerId: Value(customerId),
+        customerNameText: Value(customerNameText),
+        note: Value(note),
+        locallyModified: Value(locallyModified),
+      ));
+
+  Stream<List<BorrowedItem>> watchBorrowedItems(
+          {bool includeFullyReturned = false}) =>
+      (select(borrowedItems)
+            ..where((t) => includeFullyReturned
+                ? const Constant(true)
+                : t.fullyReturnedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .watch();
+
+  /// [qtyReturnedDelta] ditambahkan ke `qtyReturned` yang sudah ada (bisa
+  /// kembali sebagian bertahap). `fullyReturnedAt` di-set otomatis begitu
+  /// total yang kembali >= qty yang dipinjam.
+  Future<void> returnBorrowedItemQty(String id, double qtyReturnedDelta,
+      {bool locallyModified = false}) async {
+    final row =
+        await (select(borrowedItems)..where((t) => t.id.equals(id))).getSingle();
+    final newReturned = row.qtyReturned + qtyReturnedDelta;
+    await (update(borrowedItems)..where((t) => t.id.equals(id))).write(
+      BorrowedItemsCompanion(
+        qtyReturned: Value(newReturned),
+        fullyReturnedAt: Value(newReturned >= row.qty ? DateTime.now() : null),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  // ── Pre-order ──
+
+  Future<void> addPreorderEntry({
+    required String id,
+    required String productId,
+    required String productUnitId,
+    required String customerName,
+    required double qtyOrdered,
+    String? transactionId,
+    String? phone,
+    double depositQty = 0,
+    bool paid = false,
+    String? note,
+    bool locallyModified = false,
+  }) =>
+      into(preorderEntries).insert(PreorderEntriesCompanion.insert(
+        id: id,
+        productId: productId,
+        productUnitId: productUnitId,
+        customerName: customerName,
+        qtyOrdered: qtyOrdered,
+        transactionId: Value(transactionId),
+        phone: Value(phone),
+        depositQty: Value(depositQty),
+        paid: Value(paid),
+        note: Value(note),
+        locallyModified: Value(locallyModified),
+      ));
+
+  /// FIFO MURNI berdasar `createdAt` — `paid` HANYA informatif, TIDAK PERNAH
+  /// ikut menentukan urutan (aturan bisnis Item 52, jangan diubah).
+  Stream<List<PreorderEntry>> watchPreorderEntries(
+          {String? productId, bool includeClosed = false}) =>
+      (select(preorderEntries)
+            ..where((t) {
+              final open = includeClosed
+                  ? const Constant(true)
+                  : t.fulfilledAt.isNull() & t.cancelledAt.isNull();
+              return productId == null
+                  ? open
+                  : open & t.productId.equals(productId);
+            })
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .watch();
+
+  Future<void> fulfillPreorderEntry(String id, {bool locallyModified = false}) =>
+      (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+        PreorderEntriesCompanion(
+          fulfilledAt: Value(DateTime.now()),
+          locallyModified: Value(locallyModified),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> cancelPreorderEntry(String id, {bool locallyModified = false}) =>
+      (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+        PreorderEntriesCompanion(
+          cancelledAt: Value(DateTime.now()),
+          locallyModified: Value(locallyModified),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  /// Badge gabungan 3 kategori utk ikon Kasir (bottom nav) & kartu dashboard.
+  /// Query gabungan tunggal (bukan 3 stream dikombinasi) supaya tidak perlu
+  /// dependency tambahan (mis. rxdart) hanya utk menjumlahkan count — drift
+  /// sudah mendukung `.watch()` di atas raw SQL asal `readsFrom` diisi
+  /// eksplisit dgn tabel yang dibaca.
+  Stream<int> watchLaciMejaOpenCount() {
+    return customSelect(
+      'SELECT '
+      '(SELECT COUNT(*) FROM left_behind_items WHERE collected_at IS NULL) + '
+      '(SELECT COUNT(*) FROM borrowed_items WHERE fully_returned_at IS NULL) + '
+      '(SELECT COUNT(*) FROM preorder_entries '
+      'WHERE fulfilled_at IS NULL AND cancelled_at IS NULL) AS cnt',
+      readsFrom: {leftBehindItems, borrowedItems, preorderEntries},
+    ).watchSingle().map((r) => r.data['cnt'] as int);
+  }
+
+  /// Kumpulkan baris 3 tabel Laci Meja yang ditandai `locallyModified` di
+  /// device ini — dikirim sbg "usulan" ke owner via sync (pola Item 40,
+  /// tapi PARALEL: tidak menyentuh `dumpLocalProposals`/`applyProductProposals`
+  /// milik produk sama sekali, supaya alur usulan produk yang sudah matang
+  /// tidak ikut berisiko).
+  Future<Map<String, List<Map<String, Object?>>>> dumpLaciMejaProposals() async {
+    final result = <String, List<Map<String, Object?>>>{};
+    for (final t in const [
+      'left_behind_items',
+      'borrowed_items',
+      'preorder_entries',
+    ]) {
+      final rows = await customSelect(
+        'SELECT * FROM "$t" WHERE locally_modified = 1',
+      ).get();
+      if (rows.isNotEmpty) result[t] = rows.map((r) => r.data).toList();
+    }
+    return result;
+  }
+
+  /// Terapkan usulan Laci Meja yang DISETUJUI owner — [approvedIds] per
+  /// tabel. `locallyModified` dipaksa false (host jadi sumber kebenaran),
+  /// `updated_at` dicap ulang ke SAAT INI (sama alasan spt
+  /// `applyProductProposals`: supaya baris ini lolos filter watermark
+  /// `dumpSince` pada sync berikutnya, bukan macet tak pernah terkirim
+  /// balik ke klien).
+  Future<int> applyLaciMejaProposals(
+      Map<String, List<Map<String, Object?>>> proposals,
+      Map<String, Set<String>> approvedIds) async {
+    var count = 0;
+    // `customInsert` raw SQL TIDAK memberi tahu Drift tabel mana yang
+    // berubah kecuali param `updates:` disertakan — tanpa ini `.watch()`
+    // (mis. layar dashboard Laci Meja) tidak auto-refresh walau data DB
+    // sudah benar (lihat gotcha yang sama di `mergeRows`/`restoreFromDump`).
+    final tablesByName = {for (final t in allTables) t.entityName: t};
+    await transaction(() async {
+      for (final entry in proposals.entries) {
+        final approved = approvedIds[entry.key] ?? const {};
+        if (approved.isEmpty) continue;
+        final localColumns = (await customSelect(
+                'PRAGMA table_info("${entry.key}")')
+            .get())
+            .map((r) => r.data['name'] as String)
+            .toSet();
+        final table = tablesByName[entry.key];
+        for (final row in entry.value) {
+          if (!approved.contains(row['id'])) continue;
+          var cleaned = Map<String, Object?>.from(row)
+            ..removeWhere((k, _) => !localColumns.contains(k));
+          if (cleaned.isEmpty) continue;
+          cleaned['locally_modified'] = 0;
+          cleaned['updated_at'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          final cols = cleaned.keys.map((k) => '"$k"').join(', ');
+          final placeholders = cleaned.values.map((_) => '?').join(', ');
+          await customInsert(
+            'INSERT OR REPLACE INTO "${entry.key}" ($cols) VALUES ($placeholders)',
+            variables: _rowToVars(cleaned),
+            updates: table == null ? null : {table},
+          );
+          count++;
         }
       }
     });

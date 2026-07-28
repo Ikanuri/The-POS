@@ -64,10 +64,16 @@ void main() {
         reason: 'qty+satuan bold w600');
 
     // Nama produk (fallback ke productId 'P1') tetap w700 — qty+satuan HARUS
-    // lebih tipis (tidak lebih bold dari nama).
-    final nameWeight =
-        tester.widget<Text>(find.text('P1')).style?.fontWeight ??
-            FontWeight.normal;
+    // lebih tipis (tidak lebih bold dari nama). Baris nama sekarang
+    // `Text.rich` (Item 52 redesain, biar penanda Laci Meja/pre-order bisa
+    // disambung rapat) — cari RichText yg plain-text-nya persis 'P1'.
+    // `Text.rich` membungkus TextSpan yg diberikan sbg CHILD dari TextSpan
+    // luar (gaya default) — style yg kita set ada di children.first.
+    final nameRich = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .firstWhere((rt) => rt.text.toPlainText() == 'P1');
+    final ourNameSpan = (nameRich.text as TextSpan).children!.first as TextSpan;
+    final nameWeight = ourNameSpan.style?.fontWeight ?? FontWeight.normal;
     expect(nameWeight, FontWeight.w700);
     expect(FontWeight.w600.index, lessThan(nameWeight.index),
         reason: 'qty+satuan tidak boleh lebih bold dari nama produk');

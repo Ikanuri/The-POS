@@ -143,6 +143,12 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
       ref
           .read(cartMetaProvider(widget.cartId).notifier)
           .setReservedLocalId(result.reservedLocalId);
+      // Catat juga ke `reserved_order_numbers` device INI supaya nomornya
+      // tidak dibagikan lagi ke keranjang lain di sini (bug nyata: bentrok
+      // UNIQUE saat checkout — lihat dok `adoptReservedLocalId`).
+      await ref
+          .read(databaseProvider)
+          .adoptReservedLocalId(result.reservedLocalId!);
     }
 
     if (mounted) {

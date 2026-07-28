@@ -86,6 +86,12 @@ class ProductUnits extends Table {
   /// (stok selalu dianker ke satuan dasar). null = tidak dipantau.
   IntColumn get minStock => integer().nullable()();
 
+  /// Item 52 (Laci Meja/Pre-order): produk model tukar-wadah (LPG, galon,
+  /// dst) — antri stok kosong WAJIB titip wadah fisik sbg jaminan, bukan
+  /// cuma nomor urut. Default false = backorder biasa tanpa syarat fisik.
+  BoolColumn get requiresDeposit =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
