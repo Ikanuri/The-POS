@@ -61,6 +61,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   otomatis hilang setelah pre-order-nya dipenuhi** di dashboard Laci
   Meja — sama seperti keterangan barang titip/ketinggalan, tidak lagi
   menempel selamanya di struk.
+- **Perbaikan: nama pelanggan panjang di bar keranjang tidak lagi
+  terpotong permanen** di HP dengan pengaturan ukuran font besar —
+  sekarang teks berjalan (marquee) tetap aktif sesuai ukuran font yang
+  sedang dipakai, tidak lagi mengira teksnya muat padahal sebenarnya
+  kepotong.
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.

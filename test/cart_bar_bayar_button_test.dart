@@ -40,7 +40,7 @@ void main() {
   }
 
   Future<ProviderContainer> pumpKasir(WidgetTester tester, AppDatabase db,
-      {required String deviceRole}) async {
+      {required String deviceRole, double textScale = 1.0}) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -69,6 +69,13 @@ void main() {
         child: MaterialApp.router(
           theme: AppTheme.light(),
           routerConfig: router,
+          // `textScale` (default 1.0, dipakai regresi textScaler di bawah) —
+          // meniru pengali skala font global yang diterapkan `main.dart`.
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
         ),
       ),
     );
@@ -220,5 +227,50 @@ void main() {
     expect(pelangganW, greaterThan(pegawaiW),
         reason: 'chip Pelanggan dapat porsi lebih besar (flex 4 vs 3) — '
             'permintaan user: porsinya jangan dikurangi');
+  });
+
+  testWidgets(
+      'skala font besar (aksesibilitas) TIDAK bikin nama yg baru overflow di '
+      'skala itu malah dikira muat & terpotong permanen (regresi textScaler, '
+      'laporan user: kata kedua nama pelanggan hilang bukan geser)',
+      (tester) async {
+    final db = await seedDb();
+    addTearDown(() async => db.close());
+
+    // `OverflowBox` HANYA dipakai di jalur marquee overflow (`_MarqueeText`)
+    // di seluruh codebase ini — penanda struktural yg jauh lebih spesifik
+    // drpd `Transform` polos (halaman ini jg punya Transform lain dari
+    // animasi transisi rute Material 3/ZoomPageTransitionsBuilder).
+    bool marqueeActiveFor(String text) => find
+        .ancestor(of: find.text(text), matching: find.byType(OverflowBox))
+        .evaluate()
+        .isNotEmpty;
+
+    // "Karti" (5 huruf) ditentukan EMPIRIS thd widget sungguhan (surface
+    // 420x900, style chip aktif): di skala 1.4x (mis. aksesibilitas font
+    // besar), lebar SUNGGUHAN teks ini SUDAH melebihi porsi chip Pelanggan —
+    // marquee HARUS aktif. Tanpa fix `textScaler` di `_MarqueeText`,
+    // pengukuran overflow-nya tetap memakai skala 1.0 & keliru simpul "masih
+    // muat" (batas tanpa-fix baru overflow mulai 6 huruf, "Kartik") — nama
+    // terjebak di Text terpotong permanen selamanya, persis bug yg
+    // dilaporkan user (kata kedua nama pelanggan hilang, bukan geser).
+    const name = 'Karti';
+    final container =
+        await pumpKasir(tester, db, deviceRole: 'owner', textScale: 1.4);
+    container
+        .read(cartMetaProvider(kMainCartId).notifier)
+        .setCustomer('c1', name);
+    await tester.pump();
+    await tester.pump();
+    expect(marqueeActiveFor(name), isTrue,
+        reason: 'di skala font besar nama sependek ini pun HARUS overflow -> '
+            'marquee aktif, bukan dikira muat lalu terpotong permanen');
+
+    // Drain: marquee AKTIF berarti `_stopTimer` (`Timer` sungguhan, bukan
+    // driven fake clock) masih berjalan — ganti tree ke widget kosong dulu
+    // supaya `dispose()` membatalkannya, jangan biarkan pending saat test
+    // berakhir (lihat gotcha Timer di CLAUDE.md).
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
   });
 }

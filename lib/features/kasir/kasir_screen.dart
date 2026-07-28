@@ -3795,10 +3795,17 @@ class _MarqueeTextState extends State<_MarqueeText>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // `textScaler` WAJIB disamakan dgn ambient (`main.dart` menerapkan
+        // pengali skala font global) — tanpa ini, pengukuran overflow
+        // memakai skala 1.0 sementara `Text` sungguhan dirender lebih besar,
+        // jadi kadang keliru simpul "muat" padahal SEBENARNYA overflow. Efek
+        // nyatanya: marquee tidak pernah jalan, nama malah kepotong permanen
+        // (dilaporkan user — kata kedua nama pelanggan hilang, bukan geser).
         final painter = TextPainter(
           text: TextSpan(text: widget.text, style: widget.style),
           maxLines: 1,
           textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
         )..layout();
         final overflow = painter.width - constraints.maxWidth;
 

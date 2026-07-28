@@ -174,6 +174,34 @@ biasa bukan lewat pilihan). Fix: `getPreorderDepositForTransaction`
 tambah filter `fulfilledAt.isNull() & cancelledAt.isNull()`. Test
 `receipt_borrowed_section_test.dart` dibalik assersinya — revert-verified.
 
+**Bug NYATA ditemukan: `_MarqueeText` terpotong permanen di skala font
+besar (27 Juli)**. User kirim screenshot nama pelanggan "Buk..." yg
+kepotong di kata kedua, BUKAN bergeser seperti seharusnya. Akar: `main.
+dart` menerapkan pengali skala font GLOBAL (`fontScaleProvider` x faktor
+ukuran layar) lewat `MediaQuery.textScaler` di root app — tapi
+`TextPainter` internal `_MarqueeText` (dipakai MENGUKUR apakah nama
+overflow) TIDAK menyertakan `textScaler` itu, jadi mengukur selalu di
+skala 1.0 sementara `Text` sungguhan dirender lebih besar. Kalau device/
+user setting bikin skala gabungan >1, pengukuran keliru simpul "muat"
+padahal SEBENARNYA overflow -> kode jatuh ke cabang `Text` statis
+ber-`overflow: TextOverflow.clip` PERMANEN, marquee tak pernah aktif.
+Fix: tambah `textScaler: MediaQuery.textScalerOf(context)` di
+`TextPainter` pengukur (satu baris, `kasir_screen.dart`).
+
+**Gotcha test BARU ditemukan saat menulis regresinya** (penting kalau
+menyentuh marquee/animasi rute lagi): `find.byType(Transform)` polos utk
+mendeteksi "marquee aktif" MEMBERI FALSE POSITIVE — halaman kasir ini
+navigasi via GoRouter/MaterialPage yg default `ZoomPageTransitionsBuilder`
+(Material 3 di Android) JUGA membungkus konten rute dgn `Transform` saat
+transisi. Fix test: pakai ancestor `OverflowBox` sbg penanda (satu-
+satunya pemakaian `OverflowBox` di seluruh codebase, unik ke jalur
+marquee). Juga: menentukan lebar teks "pas muat" scr MANUAL pakai
+`TextPainter` di file test sendiri TIDAK BISA dipercaya — font ambient
+app (`DefaultTextStyle`/tema Hanken Grotesk) beda dari font default
+`TextPainter` polos tanpa `fontFamily` eksplisit, jadi perhitungan lebar
+meleset. Fix: cari batas EMPIRIS lewat widget sungguhan (`pumpKasir` +
+cek `OverflowBox` ancestor), bukan hitung manual.
+
 ## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
 
 Susulan redesain Pre-order besar (bagian di bawah) — user minta 2
