@@ -3699,14 +3699,24 @@ class _MetaChip extends StatelessWidget {
 /// Kalau teks MUAT, widget ini berperilaku persis `Text` biasa (tidak ada
 /// animasi yang jalan sia-sia & tidak membangunkan frame terus-menerus).
 ///
-/// Jalannya DIBATASI [_maxCycles] putaran lalu berhenti di awal teks, dan
-/// dimulai ULANG tiap teksnya berganti (mis. pelanggan lain dipilih) — bukan
-/// berputar selamanya. Dua alasan, keduanya nyata:
-///   1. Perangkat POS menyala seharian; animasi 60fps abadi di bar bawah
-///      membakar baterai tanpa guna setelah nama sempat terbaca.
-///   2. Animasi tanpa henti bikin `tester.pumpAndSettle()` TIDAK PERNAH
-///      selesai — 10 test kasir yang sudah ada langsung timeout. Dgn dibatasi,
-///      pumpAndSettle tetap bisa dipakai seperti biasa.
+/// Jalannya DIBATASI [_maxCycles] putaran per putaran-nyala, lalu ISTIRAHAT
+/// [_restPause] di awal teks, lalu OTOMATIS ULANG lagi — bukan berhenti
+/// SELAMANYA. (Awalnya berhenti permanen setelah [_maxCycles], tapi user
+/// laporan screenshot: nama yang dipilih beberapa detik sebelum layar
+/// dilihat/di-screenshot terlihat "kepotong permanen" — kasir jarang
+/// menonton terus-menerus tepat saat marquee jalan, jadi berhenti selamanya
+/// terasa sama seperti bug pemotongan yang sudah diperbaiki sebelumnya.)
+/// Dua alasan animasi tetap DIBATASI per putaran-nyala (bukan `repeat()`
+/// tanpa henti), keduanya nyata:
+///   1. Perangkat POS menyala seharian; animasi 60fps ABADI di bar bawah
+///      membakar baterai tanpa guna. Jeda istirahat di antara putaran-nyala
+///      menjaga rerata tetap hemat, sambil memastikan siapa pun yang lihat
+///      layar akan kebagian nama bergerak dalam beberapa detik.
+///   2. Animasi tanpa henti (tak pernah berhenti sama sekali) bikin
+///      `tester.pumpAndSettle()` TIDAK PERNAH selesai — 10 test kasir yang
+///      sudah ada langsung timeout. Dgn dibatasi per putaran-nyala + jeda,
+///      pumpAndSettle tetap bisa dipakai asal tester tidak menunggu MELEWATI
+///      jeda istirahat (yang memang didesain tak terbatas/berulang).
 class _MarqueeText extends StatefulWidget {
   const _MarqueeText({required this.text, required this.style});
 
@@ -3727,24 +3737,32 @@ class _MarqueeTextState extends State<_MarqueeText>
     duration: const Duration(seconds: 3),
   );
 
-  /// 4 = dua kali pergi-pulang; cukup utk membaca nama terpanjang sekalipun.
+  /// 4 = dua kali pergi-pulang per putaran-nyala; cukup utk membaca nama
+  /// terpanjang sekalipun sebelum istirahat.
   static const _maxCycles = 4;
 
-  /// Penghenti otomatis. TIDAK memakai `addStatusListener`: `repeat()` men-
-  /// drive controller lewat simulasi internal dan TIDAK pernah memancarkan
-  /// `completed`/`dismissed`, jadi listener status tak akan pernah terpanggil
-  /// (sudah dicoba — animasi lanjut selamanya & pumpAndSettle tetap timeout).
+  /// Jeda antar putaran-nyala — cukup singkat supaya kasir yang lihat layar
+  /// kapan pun tetap kebagian nama bergerak dalam beberapa detik, tapi tetap
+  /// hemat baterai drpd `repeat()` abadi tanpa jeda sama sekali.
+  static const _restPause = Duration(seconds: 3);
+
+  /// TIDAK memakai `addStatusListener`: `repeat()` men-drive controller lewat
+  /// simulasi internal dan TIDAK pernah memancarkan `completed`/`dismissed`,
+  /// jadi listener status tak akan pernah terpanggil (sudah dicoba — animasi
+  /// lanjut selamanya & pumpAndSettle tetap timeout).
   Timer? _stopTimer;
-  bool _done = false;
+  Timer? _restTimer;
+  double _lastOverflow = 0;
 
   @override
   void didUpdateWidget(_MarqueeText old) {
     super.didUpdateWidget(old);
-    // Nama berganti (pelanggan lain dipilih) -> jalan lagi dari awal.
+    // Nama berganti (mis. pelanggan lain dipilih) -> jalan lagi dari awal.
     if (old.text != widget.text) {
       _stopTimer?.cancel();
       _stopTimer = null;
-      _done = false;
+      _restTimer?.cancel();
+      _restTimer = null;
       _controller.value = 0;
     }
   }
@@ -3752,21 +3770,34 @@ class _MarqueeTextState extends State<_MarqueeText>
   @override
   void dispose() {
     _stopTimer?.cancel();
+    _restTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   /// Jalankan/hentikan animasi sesuai apakah teks benar-benar meluber.
   void _sync(double overflow) {
+    _lastOverflow = overflow;
     if (overflow <= 0) {
       _stopTimer?.cancel();
       _stopTimer = null;
+      _restTimer?.cancel();
+      _restTimer = null;
       if (_controller.isAnimating) _controller.stop();
       if (_controller.value != 0) _controller.value = 0;
       return;
     }
-    // Sudah cukup berputar -> jangan dinyalakan lagi oleh rebuild berikutnya.
-    if (_done || _controller.isAnimating) return;
+    // Sedang jalan ATAU sedang istirahat menunggu putaran-nyala berikutnya
+    // (dijadwalkan sendiri oleh `_startCycle`) -> jangan diinterupsi.
+    if (_controller.isAnimating || _restTimer != null) return;
+    _startCycle(overflow);
+  }
+
+  /// Satu "putaran-nyala": [_maxCycles] kali pergi-pulang, lalu istirahat
+  /// [_restPause] di awal teks, lalu panggil diri sendiri lagi — berulang
+  /// terus selama widget masih hidup & teksnya masih meluber (BUKAN sekali
+  /// lalu berhenti selamanya, lihat dokumentasi kelas ini).
+  void _startCycle(double overflow) {
     // ~28 logical px per detik + jeda baca di tiap ujung (lihat kurva di
     // `_offsetFor`), diklem supaya nama pendek-tapi-meluber tidak berkedip
     // cepat & nama sangat panjang tidak jadi lambat menyiksa.
@@ -3778,7 +3809,12 @@ class _MarqueeTextState extends State<_MarqueeText>
       if (!mounted) return;
       _controller.stop();
       _controller.value = 0; // istirahat memperlihatkan awal nama
-      _done = true;
+      _stopTimer = null;
+      _restTimer = Timer(_restPause, () {
+        if (!mounted) return;
+        _restTimer = null;
+        _startCycle(_lastOverflow);
+      });
     });
   }
 

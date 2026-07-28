@@ -210,6 +210,86 @@ void main() {
   });
 
   testWidgets(
+      'marquee ISTIRAHAT sebentar lalu OTOMATIS ULANG lagi, bukan berhenti '
+      'selamanya (laporan user: nama kelihatan "kepotong" krn layar dilihat '
+      'SETELAH putaran-nyala pertama selesai, bukan sedang berjalan)',
+      (tester) async {
+    final db = await seedDb();
+    addTearDown(() async => db.close());
+    final container = await pumpKasir(tester, db, deviceRole: 'owner');
+
+    // Cari nama yg overflow SEKECIL mungkin (bukan nama sangat panjang) —
+    // overflow kecil -> durasi 1 putaran diklem ke MINIMUM (2 detik), jadi
+    // jeda baca bawaan di titik balik `repeat(reverse:true)` (`2 * 0.18 * 2
+    // detik` ~= 0.72 detik) jauh LEBIH PENDEK drpd `_restPause` (3 detik) —
+    // perbedaan tegas ini penting utk membedakan jeda baca NORMAL (yang
+    // terjadi berulang selama marquee aktif) dari jeda ISTIRAHAT ANTAR
+    // putaran-nyala yg sungguhan sedang diuji di sini.
+    bool marqueeActiveFor(String text) => find
+        .ancestor(of: find.text(text), matching: find.byType(OverflowBox))
+        .evaluate()
+        .isNotEmpty;
+    const base =
+        'Kartika Wulandari Setiawan Pratama Handayani Suherman Aminah';
+    String? name;
+    for (var i = 1; i <= base.length; i++) {
+      final candidate = base.substring(0, i);
+      container
+          .read(cartMetaProvider(kMainCartId).notifier)
+          .setCustomer('c1', candidate);
+      await tester.pump();
+      await tester.pump();
+      if (marqueeActiveFor(candidate)) {
+        name = candidate;
+        break;
+      }
+    }
+    expect(name, isNotNull,
+        reason: 'harus ada prefix yg overflow (marquee aktif) di lebar chip '
+            'Pelanggan');
+
+    Offset offsetOfName() {
+      final t = tester.widget<Transform>(
+          find.ancestor(of: find.text(name!), matching: find.byType(Transform))
+              .first);
+      return Offset(t.transform.getTranslation().x, 0);
+    }
+
+    const step = Duration(milliseconds: 100);
+    const longRestThreshold = 1.5; // detik — di antara jeda baca (~0.72s) & _restPause (3s)
+    var moved = false;
+    var zeroRunSeconds = 0.0;
+    var longRestSeen = false;
+    var resumedAfterLongRest = false;
+    for (var i = 0; i < 200 && !resumedAfterLongRest; i++) {
+      await tester.pump(step);
+      final dx = offsetOfName().dx;
+      if (dx < 0) {
+        if (longRestSeen) resumedAfterLongRest = true;
+        moved = true;
+        zeroRunSeconds = 0;
+      } else if (moved) {
+        zeroRunSeconds += step.inMilliseconds / 1000;
+        if (zeroRunSeconds >= longRestThreshold) longRestSeen = true;
+      }
+    }
+    expect(moved, isTrue, reason: 'marquee harus sempat bergerak (baseline)');
+    expect(longRestSeen, isTrue,
+        reason: 'harus ada jeda diam PANJANG (>= $longRestThreshold detik) — '
+            'kalau tidak pernah diam selama itu, berarti tidak sedang '
+            'menguji jeda istirahat antar-putaran, cuma jeda baca singkat '
+            'biasa');
+    expect(resumedAfterLongRest, isTrue,
+        reason: 'setelah jeda diam PANJANG, marquee HARUS bergerak LAGI '
+            'otomatis — kalau tetap diam selamanya di sini, itu persis bug '
+            'yg dilaporkan user (nama kelihatan kepotong permanen krn '
+            'dilihat setelah putaran-nyala pertama selesai)');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
       'porsi chip Pelanggan TIDAK dikurangi oleh fitur teks berjalan — tetap '
       'segmen terlebar di baris meta', (tester) async {
     final db = await seedDb();

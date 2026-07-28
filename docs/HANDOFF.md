@@ -202,6 +202,35 @@ app (`DefaultTextStyle`/tema Hanken Grotesk) beda dari font default
 meleset. Fix: cari batas EMPIRIS lewat widget sungguhan (`pumpKasir` +
 cek `OverflowBox` ancestor), bukan hitung manual.
 
+**Susulan LANGSUNG (27 Juli): marquee berhenti PERMANEN jadi kelihatan
+"kepotong" lagi.** Setelah fix textScaler di atas, user kirim screenshot
+KEDUA: nama "Bu Khotimah" tetap tampil "Bu" statis. Bukan bug yg sama —
+`_maxCycles=4` SENGAJA didesain berhenti SELAMANYA di posisi awal nama
+stlh 4 putaran (~8-32 detik). Kasir yg baru lihat layar SESUDAH periode
+itu (wajar — tidak nonton terus) melihat hasil yg PERSIS SAMA dgn bug
+pemotongan yg baru "diperbaiki". Fix: `_startCycle` sekarang menjadwalkan
+`_restTimer` (3 detik) setelah tiap putaran-nyala selesai, lalu MEMANGGIL
+DIRINYA SENDIRI LAGI — bukan berhenti sekali lalu diam selamanya (masih
+dibatasi PER putaran-nyala, bukan `repeat()` tanpa henti sama sekali,
+demi alasan baterai + `pumpAndSettle` yg sama).
+
+**Gotcha test PALING RUMIT sesi ini**: membuktikan "istirahat lalu ulang
+lagi" via polling offset itu SULIT krn `repeat(reverse:true)` SENDIRI
+ALAMI menyentuh offset=0 berulang kali SAAT MARQUEE MASIH AKTIF (di titik
+balik antara leg reverse & leg forward berikutnya, ~`2 * jeda(0.18) *
+durasi` detik) — kalau nama yg dites overflow-nya BESAR (durasi diklem
+ke maksimum 8 detik), jeda alami ini bisa sampai ~2.9 detik, HAMPIR SAMA
+dgn `_restPause` (3 detik) yg mau dibuktikan — bikin test SALAH POSITIF
+(lolos walau fix dicabut, krn "jeda alami" itu sendiri disalahartikan
+sbg "istirahat sungguhan"). Fix: pilih nama yg overflow-nya SEMINIMAL
+mungkin (bukan nama sangat panjang) supaya durasinya diklem ke MINIMUM (2
+detik) — jeda alami jadi cuma ~0.72 detik, jauh di bawah ambang deteksi
+1.5 detik yg dipakai test, sementara `_restPause` (3 detik) tetap jelas
+di ATASnya. Revert-verify JUGA harus mensimulasikan ULANG flag `_done`
+(guard "sudah selesai, jangan restart") yg lama — sekadar menghapus baris
+penjadwalan `_restTimer` TIDAK CUKUP mensimulasikan kode lama, krn tanpa
+flag itu `_sync` akan restart lagi begitu widget rebuild krn alasan LAIN.
+
 ## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
 
 Susulan redesain Pre-order besar (bagian di bawah) — user minta 2

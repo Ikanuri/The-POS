@@ -66,6 +66,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sekarang teks berjalan (marquee) tetap aktif sesuai ukuran font yang
   sedang dipakai, tidak lagi mengira teksnya muat padahal sebenarnya
   kepotong.
+- **Teks nama pelanggan yang berjalan (marquee) sekarang berulang terus**
+  — sebelumnya berhenti selamanya setelah beberapa putaran, jadi kalau
+  layar dilihat beberapa detik kemudian nama malah kelihatan seperti
+  kepotong lagi. Sekarang istirahat sebentar lalu jalan lagi otomatis.
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.
