@@ -230,13 +230,24 @@ dibiarkan TIDAK di-dispose eksplisit sama sekali, konsisten dgn
 (GC alami cukup utk `TextEditingController` transien dialog, bukan
 resource native mahal).
 
-## Rilis v3.0.0 — bersih-bersih menjelang rilis resmi (27-28 Juli)
+## Rilis v2.3.0 — bersih-bersih menjelang rilis resmi (27-28 Juli)
 
-Konteks: sebelum bikin tag rilis resmi pertama (`v3.0.0`, sebelumnya semua
-rilis lewat `main`/`claude/**` jadi pre-release `dev-<timestamp>`), user
-minta 4 hal: bump versi, bersihkan file tak terpakai, pastikan codegen
-bersih (tidak ada drift spt `migration_v24_test.dart` yg synthetic schema-nya
-ketinggalan tabel baru), dan sinkronkan dokumentasi.
+Konteks: sebelum bikin tag rilis resmi pertama (sebelumnya semua rilis lewat
+`main`/`claude/**` jadi pre-release `dev-<timestamp>`), user minta 4 hal:
+bump versi, bersihkan file tak terpakai, pastikan codegen bersih (tidak ada
+drift spt `migration_v24_test.dart` yg synthetic schema-nya ketinggalan
+tabel baru), dan sinkronkan dokumentasi.
+
+Versi kerja awal sempat dinaikkan ke `3.0.0+5` (bump MAJOR), tapi setelah
+ditinjau ulang (tidak ada breaking change — semua migrasi backward-compatible),
+diturunkan jadi `2.3.0+5` supaya sesuai semantic versioning (MINOR: tambah
+fungsi cara backward-compatible, bukan MAJOR). Tag `v2.3.0` di-publish
+LEWAT WEB UI GitHub (Releases → New release), BUKAN `git push` tag dari
+CLI — proxy git sesi ini menolak (403) `git push` khusus untuk ref tag
+(push commit/branch biasa tetap jalan normal), jadi utk sesi non-lokal
+murni-GitHub, cara ini yang tervalidasi bekerja: pilih/tulis tag baru di
+kolom "Choose a tag", target commit yang benar, pastikan bukan pre-release,
+Publish — GitHub otomatis membuat tag & memicu `push: tags` event.
 
 **Dependency dihapus dari `pubspec.yaml`** (diverifikasi per-paket via
 `grep -rl "package:$pkg/" lib/` — tiap dependency lain punya ≥1 pemakaian
@@ -283,10 +294,25 @@ Sinkron Harga Antar Toko, update tabel teknologi, diagram arsitektur
 `skema v25`) dan `CLAUDE.md` (hardcode `schemaVersion = 21` yg sudah basi
 diganti jadi pointer ke kode, bukan angka statis).
 
-**Hasil akhir**: versi `3.0.0+5`, full suite 831/832 hijau (1 gagal flaky
-di atas, tidak terkait), `flutter analyze` 0 issue. Tag `v3.0.0` di-push ke
-`main` setelah merge dari `claude/kategori-produk-qty-harga-mqjh21` — ini
-rilis resmi PERTAMA (sebelumnya semua rilis lewat pre-release otomatis).
+**Hasil akhir**: versi `2.3.0+5`, full suite 832/832 hijau, `flutter analyze`
+0 issue. Tag `v2.3.0` dipublish di commit merge `c78c489` (`main`, hasil
+merge dari `claude/kategori-produk-qty-harga-mqjh21`) — ini rilis resmi
+PERTAMA (sebelumnya semua rilis lewat pre-release otomatis). Workflow
+`build-apk.yml` run #405 sukses, APK ter-attach ke release.
+
+**Catatan lisensi (ditemukan pas ditanya user soal rencana private-kan
+repo)**: `license_provider.dart` fetch `revoked.json` via URL RAW
+`raw.githubusercontent.com/Ikanuri/The-POS/main/license/revoked.json` —
+ini SELALU butuh repo PUBLIC (unauthenticated raw fetch 404 di repo
+private). Untungnya desainnya sudah fail-safe: `_checkRevocation()` rutin
+sengaja fail-OPEN (gagal fetch → diam, tidak pernah blokir device yang
+sudah aktif), sementara `activate()` re-aktivasi baru fail-safe-ke-cache
+(gagal fetch → pertahankan status revoked yang sudah tersimpan, bukan
+asumsi aman). Konsekuensi kalau repo private: app TIDAK akan crash/nge-
+block siapa pun, TAPI mekanisme kill-switch revoke jarak jauh jadi tidak
+berfungsi selama repo private (device baru yang aktivasi & fetch gagal
+akan fallback ke cache lokal, bukan status live) — perlu diingat kalau
+suatu saat butuh revoke lisensi mendesak SAAT repo lagi private.
 
 ## ✅ Nama pelanggan terpotong — AKAR SESUNGGUHNYA ketemu (percobaan ke-3)
 
