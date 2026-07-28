@@ -89,11 +89,19 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
   static const _kLastSeen = 'license_last_seen';
   static const _kRevoked = 'license_revoked_cached';
 
-  /// File JSON publik di repo app sendiri (Lapis 3) — daftar sidik jari yang
-  /// dicabut. Dicek opportunistic (timeout pendek, gagal-diam kalau offline)
-  /// — TIDAK PERNAH menahan startup atau memblokir fungsi inti.
+  /// Daftar sidik jari yang dicabut (Lapis 3) — file JSON publik di GitHub
+  /// Gist TERPISAH dari repo app (bukan `raw.githubusercontent.com/.../The-POS/...`
+  /// lagi sejak repo utama direncanakan private permanen — raw fetch tanpa
+  /// auth 404 di repo private, lihat docs/HANDOFF.md). Gist punya visibility
+  /// sendiri, independen dari status private/public repo kode, jadi
+  /// kill-switch ini tetap hidup terus apa pun status repo. WAJIB pakai URL
+  /// raw TANPA hash revisi (`.../raw/<file>`, bukan `.../raw/<commit_sha>/<file>`)
+  /// — versi berhash mengunci ke snapshot lama selamanya, edit gist berikutnya
+  /// tidak akan pernah terlihat app. Dicek opportunistic (timeout pendek,
+  /// gagal-diam kalau offline) — TIDAK PERNAH menahan startup atau
+  /// memblokir fungsi inti.
   static const _revokedListUrl =
-      'https://raw.githubusercontent.com/Ikanuri/The-POS/main/license/revoked.json';
+      'https://gist.githubusercontent.com/Ikanuri/ff6a99c3b1e642c81809b0664c8d681a/raw/revoked.json';
 
   /// Logika murni keputusan revoked dari isi `revoked.json` — diekstrak
   /// dari `_checkRevocation()` supaya testable tanpa mock jaringan.

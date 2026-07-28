@@ -268,8 +268,6 @@ desain pra-implementasi ("Phase 6 Preview"), diverifikasi 0 referensi di
 
 **File yang SENGAJA DIPERTAHANKAN** (jangan dihapus lagi kalau audit
 berikutnya menganggapnya "kelihatan tidak terpakai"):
-- `license/revoked.json` — di-fetch LIVE oleh `license_provider.dart` sbg
-  bagian gerbang lisensi (Item 25c), bukan file statis basi.
 - `docs/reference/*` — sample data asli dari user, tidak bisa dibuat ulang.
 - `docs/PROPOSAL_PERTIMBANGAN_BAROKAH_ORDER.md` — rationale historis
   keputusan desain fitur "Tempel Pesanan", masih relevan sbg konteks.
@@ -300,19 +298,25 @@ merge dari `claude/kategori-produk-qty-harga-mqjh21`) — ini rilis resmi
 PERTAMA (sebelumnya semua rilis lewat pre-release otomatis). Workflow
 `build-apk.yml` run #405 sukses, APK ter-attach ke release.
 
-**Catatan lisensi (ditemukan pas ditanya user soal rencana private-kan
-repo)**: `license_provider.dart` fetch `revoked.json` via URL RAW
-`raw.githubusercontent.com/Ikanuri/The-POS/main/license/revoked.json` —
-ini SELALU butuh repo PUBLIC (unauthenticated raw fetch 404 di repo
-private). Untungnya desainnya sudah fail-safe: `_checkRevocation()` rutin
-sengaja fail-OPEN (gagal fetch → diam, tidak pernah blokir device yang
-sudah aktif), sementara `activate()` re-aktivasi baru fail-safe-ke-cache
-(gagal fetch → pertahankan status revoked yang sudah tersimpan, bukan
-asumsi aman). Konsekuensi kalau repo private: app TIDAK akan crash/nge-
-block siapa pun, TAPI mekanisme kill-switch revoke jarak jauh jadi tidak
-berfungsi selama repo private (device baru yang aktivasi & fetch gagal
-akan fallback ke cache lokal, bukan status live) — perlu diingat kalau
-suatu saat butuh revoke lisensi mendesak SAAT repo lagi private.
+**FIXED — `revoked.json` dipindah ke GitHub Gist terpisah (bukan lagi di
+repo `The-POS`)**: ditemukan pas user tanya soal rencana private-kan repo —
+`license_provider.dart` sebelumnya fetch `revoked.json` via URL RAW
+`raw.githubusercontent.com/Ikanuri/The-POS/main/license/revoked.json`, yang
+SELALU butuh repo PUBLIC (unauthenticated raw fetch 404 di repo private).
+Kill-switch juga cuma fail-safe utk device yang SUDAH pernah ke-cache
+`revoked: true` — device BARU yang belum pernah fetch berhasil default
+`cachedRevoked: false`, jadi tetap lolos aktivasi meski fetch gagal
+(celah nyata, bukan cuma teoretis).
+
+Fix: `_revokedListUrl` sekarang nunjuk ke **GitHub Gist public terpisah**
+(`gist.githubusercontent.com/Ikanuri/ff6a99c3b1e642c81809b0664c8d681a/raw/revoked.json`
+— TANPA hash revisi di URL, supaya selalu ambil versi TERBARU, bukan
+snapshot beku). Gist punya visibility sendiri, independen dari status
+private/public repo `The-POS` — jadi repo boleh private permanen TANPA
+mematikan kill-switch. File `license/revoked.json` di repo DIHAPUS (bukan
+lagi sumber kebenaran, mencegah drift dua-sumber). **Untuk revoke lisensi
+ke depannya: edit Gist itu langsung di gist.github.com, BUKAN file di
+repo** (filenya sudah tidak ada).
 
 ## ✅ Nama pelanggan terpotong — AKAR SESUNGGUHNYA ketemu (percobaan ke-3)
 
