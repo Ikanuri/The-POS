@@ -482,9 +482,21 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text('$qtyStr $productName$depositStr'
-                '${e.paid ? ' · sudah bayar' : ''}',
-                style: TextStyle(fontSize: 13, color: AppTheme.laciFg(isDark))),
+            // Permintaan user: qty & nama produk dibedakan bold dari sisa
+            // baris (jaminan, status bayar).
+            child: Text.rich(
+              TextSpan(
+                style: TextStyle(fontSize: 13, color: AppTheme.laciFg(isDark)),
+                children: [
+                  TextSpan(
+                      text: '$qtyStr $productName',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  TextSpan(
+                      text:
+                          '$depositStr${e.paid ? ' · sudah bayar' : ''}'),
+                ],
+              ),
+            ),
           ),
           IconButton(
             tooltip: 'Batal',
@@ -595,7 +607,7 @@ class _PreorderStats extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg = AppTheme.laciFg(isDark);
     final breakdown = depositByProduct.entries
-        .map((e) => '${e.key}: ${_fmt(e.value)} jaminan')
+        .map((e) => (name: e.key, qty: _fmt(e.value)))
         .toList();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -638,7 +650,7 @@ class _StatTile extends StatelessWidget {
   final String label;
   final String value;
   final String sub;
-  final List<String> breakdown;
+  final List<({String name, String qty})> breakdown;
   final Color fg;
   final bool isDark;
 
@@ -662,8 +674,21 @@ class _StatTile extends StatelessWidget {
           Text(sub,
               style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75))),
           for (final line in breakdown)
-            Text(line,
-                style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75))),
+            Text.rich(
+              TextSpan(
+                style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75)),
+                children: [
+                  TextSpan(
+                      text: line.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const TextSpan(text: ': '),
+                  TextSpan(
+                      text: line.qty,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const TextSpan(text: ' jaminan'),
+                ],
+              ),
+            ),
         ],
       ),
     );

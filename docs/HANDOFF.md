@@ -145,6 +145,20 @@ sekarang menampilkan rincian per produk di bawah angka total (mis.
 yang ikut tersaring). `_StatTile` dapat parameter opsional `breakdown`
 (default kosong, tidak memengaruhi kartu "Total produk").
 
+**Susulan visual (27 Juli)**: user minta nama produk & qty di-bold di 2
+tempat kartu Pre-order — baris rincian item (`_preorderTile`) DAN baris
+rincian jaminan (`_StatTile.breakdown`). Keduanya jadi `Text.rich` (dulu
+`Text` polos) supaya sebagian teks bisa bold sebagian tidak —
+`_StatTile.breakdown` type diganti dari `List<String>` jadi
+`List<({String name, String qty})>` supaya nama & qty bisa jadi span
+terpisah. **Gotcha lama (sudah didokumentasikan di CLAUDE.md) muncul
+lagi**: `find.text`/`find.textContaining` polos TIDAK match `Text.rich` —
+2 assertion existing disesuaikan `findRichText: true`. Test baru dibuat
+via helper `findBoldableSpan` (traversal rekursif `TextSpan.children`,
+krn `Text.rich(span)` selalu membungkus span kita 1 level ke dalam span
+default tema) — revert-verified (bold dicabut sementara, test gagal
+sensible "Expected FontWeight.w700, Actual null").
+
 ## Dashboard Laci Meja: grouping Pre-order (per-nota) & Pinjaman (per-pelanggan)
 
 Susulan redesain Pre-order besar (bagian di bawah) — user minta 2

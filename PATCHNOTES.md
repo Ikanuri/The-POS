@@ -52,7 +52,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   yang perlu dicek ulang.
 - **Statistik jaminan di tab Pre-order sekarang lebih detail** — istilah
   "wadah" diganti "jaminan", dan di bawah angka total jaminan sekarang
-  ada rincian per produk (mis. "LPG: 20 jaminan").
+  ada rincian per produk (mis. "LPG: 20 jaminan"), dengan nama produk &
+  angkanya ditebalkan biar cepat dibaca.
+- **Baris rincian pre-order juga ditebalkan** — nama produk & jumlahnya
+  di kartu Pre-order sekarang bold, sisanya (jaminan, status bayar)
+  tetap teks biasa.
 - **Keterangan Titip/Ketinggalan/jaminan di struk in-app didekatkan ke
   nama barang** — sekarang posisinya persis seperti tanda "Habis" di
   daftar produk kasir, tidak berjarak lagi.

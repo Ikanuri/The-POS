@@ -13,6 +13,32 @@ import 'package:the_pos/features/laci_meja/laci_meja_dashboard_screen.dart';
 /// titip/ketinggalan dari NOTA YANG SAMA harus dikumpulkan jadi SATU
 /// "frame" (Card), bukan baris rata terpisah — dan tiap baris menampilkan
 /// qty + satuan produknya.
+
+/// Cari `TextSpan` dgn teks PERSIS [text] di dalam pohon span (rekursif) —
+/// dipakai utk verifikasi bold parsial di `Text.rich`, krn `Text.rich(span)`
+/// SELALU membungkus [span] jadi child TextSpan luar (gaya default tema),
+/// jadi style span kita ada di kedalaman >=2, bukan di `RichText.text` langsung.
+TextSpan? _findSpanWithText(InlineSpan span, String text) {
+  if (span is TextSpan) {
+    if (span.text == text) return span;
+    if (span.children != null) {
+      for (final child in span.children!) {
+        final found = _findSpanWithText(child, text);
+        if (found != null) return found;
+      }
+    }
+  }
+  return null;
+}
+
+TextSpan? findBoldableSpan(WidgetTester tester, String text) {
+  for (final rt in tester.widgetList<RichText>(find.byType(RichText))) {
+    final found = _findSpanWithText(rt.text, text);
+    if (found != null) return found;
+  }
+  return null;
+}
+
 void main() {
   late AppDatabase db;
 
@@ -211,8 +237,47 @@ void main() {
       final header = tester.widget<Text>(find.text('Bu Artia'));
       expect(header.style?.fontWeight, FontWeight.w700,
           reason: 'header nama pelanggan harus bold');
-      expect(find.textContaining('2 Galon Aqua'), findsOneWidget);
-      expect(find.textContaining('1 Tabung Gas - 1 jaminan'), findsOneWidget);
+      expect(
+          find.textContaining('2 Galon Aqua', findRichText: true),
+          findsOneWidget);
+      expect(
+          find.textContaining('1 Tabung Gas - 1 jaminan', findRichText: true),
+          findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'qty & nama produk di baris rincian item BOLD, sisa baris (jaminan, '
+        'status bayar) TIDAK bold (permintaan user)', (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'P1', name: 'Galon Aqua'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'p1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Bu Artia',
+          qtyOrdered: 2,
+          depositQty: 1,
+          transactionId: 'tx1');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tapPreorderTab(tester);
+
+      final boldSpan = findBoldableSpan(tester, '2 Galon Aqua');
+      expect(boldSpan, isNotNull, reason: 'span "2 Galon Aqua" harus ada');
+      expect(boldSpan!.style?.fontWeight, FontWeight.w700,
+          reason: 'qty & nama produk harus bold');
+
+      final restSpan = findBoldableSpan(tester, ' - 1 jaminan');
+      expect(restSpan, isNotNull);
+      expect(restSpan!.style?.fontWeight, isNot(FontWeight.w700),
+          reason: 'keterangan jaminan/status bayar TIDAK ikut bold');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -278,10 +343,29 @@ void main() {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      expect(find.text('Tabung Gas: 2 jaminan'), findsOneWidget,
+      expect(
+          find.text('Tabung Gas: 2 jaminan', findRichText: true),
+          findsOneWidget,
           reason: 'jaminan Tabung Gas (P1) 2, terpisah dari Galon Aqua');
-      expect(find.text('Galon Aqua: 1 jaminan'), findsOneWidget,
+      expect(
+          find.text('Galon Aqua: 1 jaminan', findRichText: true),
+          findsOneWidget,
           reason: 'jaminan Galon Aqua (P2) 1, terpisah dari Tabung Gas');
+
+      // Permintaan user: nama produk & qty di rincian jaminan BOLD, ": "
+      // dan " jaminan" TIDAK bold.
+      final nameSpan = findBoldableSpan(tester, 'Tabung Gas');
+      expect(nameSpan, isNotNull);
+      expect(nameSpan!.style?.fontWeight, FontWeight.w700,
+          reason: 'nama produk di rincian jaminan harus bold');
+      final qtySpan = findBoldableSpan(tester, '2');
+      expect(qtySpan, isNotNull);
+      expect(qtySpan!.style?.fontWeight, FontWeight.w700,
+          reason: 'qty di rincian jaminan harus bold');
+      final connectorSpan = findBoldableSpan(tester, ' jaminan');
+      expect(connectorSpan, isNotNull);
+      expect(connectorSpan!.style?.fontWeight, isNot(FontWeight.w700),
+          reason: 'kata "jaminan" TIDAK ikut bold');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
