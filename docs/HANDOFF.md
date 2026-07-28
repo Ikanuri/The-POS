@@ -230,6 +230,64 @@ dibiarkan TIDAK di-dispose eksplisit sama sekali, konsisten dgn
 (GC alami cukup utk `TextEditingController` transien dialog, bukan
 resource native mahal).
 
+## Rilis v3.0.0 — bersih-bersih menjelang rilis resmi (27-28 Juli)
+
+Konteks: sebelum bikin tag rilis resmi pertama (`v3.0.0`, sebelumnya semua
+rilis lewat `main`/`claude/**` jadi pre-release `dev-<timestamp>`), user
+minta 4 hal: bump versi, bersihkan file tak terpakai, pastikan codegen
+bersih (tidak ada drift spt `migration_v24_test.dart` yg synthetic schema-nya
+ketinggalan tabel baru), dan sinkronkan dokumentasi.
+
+**Dependency dihapus dari `pubspec.yaml`** (diverifikasi per-paket via
+`grep -rl "package:$pkg/" lib/` — tiap dependency lain punya ≥1 pemakaian
+nyata, HANYA 3 ini yang nol):
+- `riverpod_annotation` + `riverpod_generator` (dev) — TIDAK ADA `@riverpod`
+  ataupun `.g.dart` hasil riverpod codegen di codebase manapun. Semua state
+  memang manual `StateNotifierProvider`/`StateProvider` sejak awal.
+- `printing` — 0 import. Ekspor PDF/Excel sudah lama pindah ke
+  `FilePicker.saveFile` (lihat gotcha CLAUDE.md soal `Printing.sharePdf`
+  OOM/gagal-diam), paket lama ini kepakai lagi.
+- `flutter pub get` setelahnya otomatis drop 9 paket total (termasuk
+  transitive: `analyzer_plugin`, `custom_lint_core`, `custom_lint_visitor`,
+  `freezed_annotation`, `pdf_widget_wrapper`, `riverpod_analyzer_utils`, dst).
+
+**File dihapus**: `preview/index.html` & `preview/phase6.html` — mockup
+desain pra-implementasi ("Phase 6 Preview"), diverifikasi 0 referensi di
+`.dart`/`.md`/`.yml` manapun, sudah lama digantikan app sungguhan.
+
+**File yang SENGAJA DIPERTAHANKAN** (jangan dihapus lagi kalau audit
+berikutnya menganggapnya "kelihatan tidak terpakai"):
+- `license/revoked.json` — di-fetch LIVE oleh `license_provider.dart` sbg
+  bagian gerbang lisensi (Item 25c), bukan file statis basi.
+- `docs/reference/*` — sample data asli dari user, tidak bisa dibuat ulang.
+- `docs/PROPOSAL_PERTIMBANGAN_BAROKAH_ORDER.md` — rationale historis
+  keputusan desain fitur "Tempel Pesanan", masih relevan sbg konteks.
+
+**Verifikasi codegen bersih** (langsung menjawab kekhawatiran user soal
+"codegen yg tidak bisa dijalankan cuma krn kode tidak match"): `rm -rf
+.dart_tool/build` lalu `dart run build_runner build
+--delete-conflicting-outputs` dari NOL — `app_database.g.dart` yang
+dihasilkan cocok BYTE-PER-BYTE dgn yang sudah di-commit. Tidak ada drift.
+
+**Ditemukan (bukan regresi, TIDAK diperbaiki — di luar scope)**: full suite
+`flutter test` kadang gagal di `test/proposal_unchanged_end_to_end_test.dart`
+dgn `SocketException: Address already in use, port 8625` — beberapa file
+test LAN-sync (`lan_sync_slow_transfer_test.dart`,
+`lan_sync_timeout_test.dart`, `sync_screen_proposal_layout_test.dart`) pakai
+port hardcoded yg bisa bentrok saat dijalankan paralel. Dikonfirmasi lolos
+100% saat file itu dijalankan sendirian — murni flakiness test-infra, bukan
+bug produk. Perlu port dinamis per-test kalau mau dibenahi suatu saat.
+
+**Dokumentasi diupdate**: `README.md` (tambah seksi fitur Laci Meja &
+Sinkron Harga Antar Toko, update tabel teknologi, diagram arsitektur
+`skema v25`) dan `CLAUDE.md` (hardcode `schemaVersion = 21` yg sudah basi
+diganti jadi pointer ke kode, bukan angka statis).
+
+**Hasil akhir**: versi `3.0.0+5`, full suite 831/832 hijau (1 gagal flaky
+di atas, tidak terkait), `flutter analyze` 0 issue. Tag `v3.0.0` di-push ke
+`main` setelah merge dari `claude/kategori-produk-qty-harga-mqjh21` — ini
+rilis resmi PERTAMA (sebelumnya semua rilis lewat pre-release otomatis).
+
 ## ✅ Nama pelanggan terpotong — AKAR SESUNGGUHNYA ketemu (percobaan ke-3)
 
 **WAJIB dibaca kalau ada laporan teks terpotong/tak muat lagi.** Tiga

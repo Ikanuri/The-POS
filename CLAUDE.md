@@ -16,8 +16,9 @@ thermal Bluetooth dan barcode scanner. Tanpa backend cloud.
 - **Flutter/Dart**, Material 3.
 - **State:** Riverpod v2.5 — banyak dipakai `StateNotifierProvider.family`.
 - **Routing:** GoRouter v14 — `ShellRoute` untuk shell bottom-nav utama.
-- **DB:** Drift ORM + SQLCipher (`sqlcipher_flutter_libs`). Schema saat ini
-  `schemaVersion = 21` di `lib/core/database/app_database.dart`.
+- **DB:** Drift ORM + SQLCipher (`sqlcipher_flutter_libs`). Lihat
+  `schemaVersion` di `lib/core/database/app_database.dart` utk versi skema
+  terkini (naik tiap migrasi baru — jangan hardcode angkanya di sini).
 - **Ekspor:** `pdf` + `excel`, dikirim lewat `file_picker` (`saveFile`).
 - **Chart:** `fl_chart`. **Scanner:** `mobile_scanner` (kamera) + HID keyboard
   (scanner eksternal). **Printer:** `print_bluetooth_thermal` + native Kotlin RFCOMM.
