@@ -4018,6 +4018,17 @@ class AppDatabase extends _$AppDatabase {
     'transactions',
     'transaction_items',
     'transaction_payments',
+    // Item 52 "Laci Meja" (susulan fix 28 Juli): 3 tabel ini SEBELUMNYA
+    // terlewat di list ini — sync LAN (`dumpSince`/`dumpLaciMejaProposals`)
+    // sudah benar menyertakannya sejak awal, tapi backup penuh/Alihkan Owner
+    // (`dumpAllTables`/`restoreFromDump`, dipakai `DbExportService`) diam-diam
+    // TIDAK membawa serta catatan titip/ketinggalan, pinjaman belum kembali,
+    // & pre-order belum terpenuhi. Ditaruh SETELAH `transactions`/`customers`
+    // (parent-nya via FK) supaya urutan delete (reversed list, children dulu)
+    // & insert (forward, parent dulu) tetap benar.
+    'left_behind_items',
+    'borrowed_items',
+    'preorder_entries',
     'held_orders',
     'reserved_order_numbers',
     'stock_ledger',
