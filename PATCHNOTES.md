@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 30 Juli 2026
+
+### 🛠️ Perbaikan
+- **Retur barang sekarang bisa jumlah desimal** — sebelumnya kalau mau retur
+  produk timbang (mis. minyak kelapa 4.5kg) cuma bisa pakai tombol +/− yang
+  loncat kelipatan 1, jadi mustahil retur sebagian angka desimal (mis. 2.5
+  dari beli 4.5). Sekarang jumlahnya bisa diketik langsung, nominal
+  pengembaliannya otomatis menyesuaikan proporsional.
+
 ## 29 Juli 2026
 
 ### 🆕 Fitur baru
