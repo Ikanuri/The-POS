@@ -1258,6 +1258,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // bukan target retur ulang.
     final returnableItems = _items.where((i) => i.qty > 0).toList();
     final returnQty = <String, double>{for (final i in returnableItems) i.id: 0};
+    // Susulan (permintaan user): retur produk timbang (mis. minyak kelapa
+    // 4.5kg) butuh qty DESIMAL — stepper +/-1 SENDIRIAN tidak bisa mencapai
+    // nilai desimal sembarang (pola identik `_showLeftBehindDialog`).
+    final returnQtyControllers = <String, TextEditingController>{
+      for (final i in returnableItems) i.id: TextEditingController(text: '0'),
+    };
 
     // Nota belum lunas (tempo/kurang_bayar): retur mengedit nota ASLI langsung
     // (kurangi/hapus baris item, hutang berkurang) — tidak ada nota retur
@@ -1332,6 +1338,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         children: returnableItems.map((item) {
                           final maxQty = remainingFor(item);
                           final q = returnQty[item.id] ?? 0;
+                          final qtyCtrl = returnQtyControllers[item.id]!;
+                          // Set nilai qty baru dari AKSI EKSPLISIT (stepper) —
+                          // timpa teks field-nya juga. Ketikan manual TIDAK
+                          // lewat sini (lihat onChanged TextField di bawah)
+                          // supaya kursor/IME kasir tidak diganggu.
+                          void setQty(double v) => setSheet(() {
+                                returnQty[item.id] = v;
+                                qtyCtrl.text = _fmtQtyShort(v);
+                              });
                           return ListTile(
                             dense: true,
                             contentPadding: EdgeInsets.zero,
@@ -1339,7 +1354,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 _productNames[item.productId] ?? item.productId,
                                 style: const TextStyle(fontSize: 13)),
                             subtitle: Text(
-                                'Maks ${maxQty % 1 == 0 ? maxQty.toInt() : maxQty} · ${formatRupiah(item.priceAtSale)}',
+                                'Maks ${_fmtQtyShort(maxQty)} · ${formatRupiah(item.priceAtSale)}',
                                 style: const TextStyle(fontSize: 11)),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -1348,18 +1363,36 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   icon: const Icon(Icons.remove_circle_outline,
                                       size: 20),
                                   visualDensity: VisualDensity.compact,
-                                  onPressed: q <= 0
-                                      ? null
-                                      : () => setSheet(
-                                          () => returnQty[item.id] = q - 1),
+                                  onPressed:
+                                      q <= 0 ? null : () => setQty(q - 1),
                                 ),
                                 SizedBox(
-                                  width: 28,
-                                  child: Text(
-                                    q % 1 == 0 ? q.toInt().toString() : '$q',
+                                  width: 52,
+                                  child: TextField(
+                                    controller: qtyCtrl,
                                     textAlign: TextAlign.center,
+                                    keyboardType: const TextInputType
+                                        .numberWithOptions(decimal: true),
                                     style: const TextStyle(
+                                        fontSize: 13,
                                         fontWeight: FontWeight.w600),
+                                    decoration: const InputDecoration(
+                                        isDense: true,
+                                        contentPadding:
+                                            EdgeInsets.symmetric(vertical: 4)),
+                                    // Ketik bebas (utk qty desimal, mis.
+                                    // "2.5" dari total 4.5) — stepper +/-1
+                                    // SENDIRIAN tidak bisa mencapai nilai
+                                    // desimal sembarang.
+                                    onChanged: (v) {
+                                      final parsed = double.tryParse(v);
+                                      if (parsed != null &&
+                                          parsed >= 0 &&
+                                          parsed <= maxQty) {
+                                        setSheet(
+                                            () => returnQty[item.id] = parsed);
+                                      }
+                                    },
                                   ),
                                 ),
                                 IconButton(
@@ -1368,8 +1401,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   visualDensity: VisualDensity.compact,
                                   onPressed: q >= maxQty
                                       ? null
-                                      : () => setSheet(
-                                          () => returnQty[item.id] = q + 1),
+                                      // Klem ke qty PERSIS (bukan q+1 polos)
+                                      // — kalau sisanya < 1 (mis. maks 4.5,
+                                      // qty skrg 4), tombol terakhir harus
+                                      // mendarat PAS di 4.5, bukan melebihi
+                                      // jadi 5 (bug lama — DB sudah meng-klem
+                                      // otomatis jadi TIDAK ada data rusak,
+                                      // tapi ANGKA DI LAYAR bisa keliru/
+                                      // membingungkan kasir).
+                                      : () => setQty(q + 1 > maxQty
+                                          ? maxQty
+                                          : q + 1),
                                 ),
                               ],
                             ),
