@@ -138,6 +138,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// penanda per-baris produk: nama barangnya diketik bebas (wadah kosong
   /// biasanya BUKAN baris di nota).
   List<BorrowedItem> _borrowedForTx = [];
+
+  /// Susulan (permintaan user) — barang titip/ketinggalan yang BUKAN baris
+  /// nota (mis. barang pelanggan yang tidak dibeli di toko ini, tapi
+  /// tertinggal/sengaja dititipkan). Pola identik `_borrowedForTx`: section
+  /// terpisah di struk, bukan penanda per-baris (tidak ada baris nota utk
+  /// ditaut).
+  List<LeftBehindItem> _leftBehindOtherForTx = [];
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
   Customer? _customer;
@@ -973,6 +980,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         await db.getPreorderDepositForTransaction(widget.transactionId);
     final borrowedForTx =
         await db.getBorrowedForTransaction(widget.transactionId);
+    final leftBehindOtherForTx = await db
+        .getLeftBehindWithoutLineForTransaction(widget.transactionId);
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -996,6 +1005,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _leftBehindMarks = leftBehindMarks;
         _preorderDeposit = preorderDeposit;
         _borrowedForTx = borrowedForTx;
+        _leftBehindOtherForTx = leftBehindOtherForTx;
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customer = customer;
@@ -1689,6 +1699,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // (default qty penuh saat dicentang, bisa diturunkan via stepper/ketik).
     final selectedQty = <String, double>{};
     final qtyControllers = <String, TextEditingController>{};
+    // Susulan (permintaan user): barang LAIN yang bukan baris nota (mis.
+    // barang pelanggan yang tidak dibeli di toko ini tapi tertinggal, atau
+    // sengaja dititipkan) — diketik bebas, pola identik `_showBorrowedDialog`.
+    // Centang produk TETAP fitur utama (tidak dihilangkan); ini pelengkap.
+    final otherNameController = TextEditingController();
+    // Sengaja kosong (BUKAN default '1' spt Pinjaman) — field ini berdampingan
+    // dgn stepper qty checklist DALAM SATU dialog yang sama, default angka
+    // ambient berisiko ambigu (mis. checklist kebetulan jg menampilkan '1').
+    // Wajib diisi eksplisit.
+    final otherQtyController = TextEditingController();
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1701,6 +1721,20 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Toggle jenis DIPINDAH KE ATAS (permintaan user) — kalau
+                  // di bawah daftar produk, staf harus scroll dulu lewati
+                  // banyak baris produk cuma utk atur titip/ketinggalan.
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'titip', label: Text('Titip')),
+                      ButtonSegment(
+                          value: 'ketinggalan', label: Text('Ketinggalan')),
+                    ],
+                    selected: {jenis},
+                    onSelectionChanged: (s) =>
+                        setDialogState(() => jenis = s.first),
+                  ),
+                  const SizedBox(height: 12),
                   const Text('Pilih barang di nota ini',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   if (candidates.isEmpty)
@@ -1812,16 +1846,43 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               ),
                       );
                     }),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 12),
+                  // Susulan (permintaan user): barang LAIN di luar nota —
+                  // pola sama dgn Pinjaman (`_showBorrowedDialog`), diketik
+                  // bebas krn barangnya memang bukan baris nota (mis. barang
+                  // pelanggan yang tidak beli di toko ini, tapi tertinggal
+                  // atau sengaja dititipkan).
+                  const Text('Atau barang lain (di luar nota)',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'titip', label: Text('Titip')),
-                      ButtonSegment(
-                          value: 'ketinggalan', label: Text('Ketinggalan')),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: otherNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nama barang',
+                            hintText: 'Contoh: Payung, tas titipan',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 64,
+                        child: TextField(
+                          controller: otherQtyController,
+                          textAlign: TextAlign.center,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                              labelText: 'Jml', isDense: true),
+                        ),
+                      ),
                     ],
-                    selected: {jenis},
-                    onSelectionChanged: (s) =>
-                        setDialogState(() => jenis = s.first),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -1844,7 +1905,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ),
       ),
     );
-    if (result != true || selectedQty.isEmpty) return;
+    final otherName = otherNameController.text.trim();
+    final otherQty = double.tryParse(otherQtyController.text.trim());
+    final hasOther = otherName.isNotEmpty && otherQty != null && otherQty > 0;
+    if (result != true || (selectedQty.isEmpty && !hasOther)) return;
     final db = ref.read(databaseProvider);
     final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
     final customerName = customerController.text.trim().isEmpty
@@ -1863,11 +1927,33 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         locallyModified: locallyModified,
       );
     }
+    if (hasOther) {
+      await db.addLeftBehindItem(
+        id: const Uuid().v4(),
+        transactionId: transactionId,
+        itemName: otherName,
+        jenis: jenis,
+        // transactionItemId sengaja null — barang ini BUKAN baris nota,
+        // pola identik `_showBorrowedDialog`/Pinjaman.
+        customerId: _customer?.id,
+        customerNameText: customerName,
+        qty: otherQty,
+        locallyModified: locallyModified,
+      );
+    }
     if (!mounted) return;
     // Muat ulang penanda supaya "Dititip"/"Ketinggalan" langsung tampil di
-    // baris barangnya tanpa perlu buka ulang struk.
+    // baris barangnya, dan section "di luar nota" ikut ter-update tanpa
+    // perlu buka ulang struk.
     final marks = await db.getLeftBehindMarksForTransaction(transactionId);
-    if (mounted) setState(() => _leftBehindMarks = marks);
+    final otherItems =
+        await db.getLeftBehindWithoutLineForTransaction(transactionId);
+    if (mounted) {
+      setState(() {
+        _leftBehindMarks = marks;
+        _leftBehindOtherForTx = otherItems;
+      });
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
@@ -2491,6 +2577,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             _buildBorrowedCard(),
           ],
 
+          // Susulan (permintaan user) — barang titip/ketinggalan yang BUKAN
+          // baris nota, pola identik section Pinjaman di atas.
+          if (_leftBehindOtherForTx.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildLeftBehindOtherCard(),
+          ],
+
           // Catatan internal — card terpisah
           if (!isVoid && !isRetur) ...[
             const SizedBox(height: 8),
@@ -2692,6 +2785,45 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 child: Text(
                   '${_fmtQtyShort(b.qty)} ${b.itemName}'
                   '${b.fullyReturnedAt != null ? ' · sudah kembali' : (b.qtyReturned > 0 ? ' · sisa ${_fmtQtyShort(b.qty - b.qtyReturned)}' : ' · belum kembali')}',
+                  style: TextStyle(fontSize: 12, color: fg),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Susulan (permintaan user) — barang titip/ketinggalan yang BUKAN baris
+  /// nota (diketik bebas lewat "Atau barang lain (di luar nota)" di
+  /// `_showLeftBehindDialog`, pola identik `_buildBorrowedCard`/Pinjaman).
+  Widget _buildLeftBehindOtherCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = AppTheme.laciFg(isDark);
+    return Card(
+      color: AppTheme.laciBg(isDark),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 15, color: fg),
+                const SizedBox(width: 6),
+                Text('Titip/Ketinggalan (di luar nota)',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            for (final l in _leftBehindOtherForTx)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '${_fmtQtyShort(l.qty ?? 1)} ${l.itemName}'
+                  '${l.jenis == 'titip' ? ' · Dititip' : ' · Ketinggalan'}'
+                  '${l.collectedAt != null ? ' · sudah diambil' : ''}',
                   style: TextStyle(fontSize: 12, color: fg),
                 ),
               ),
