@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 29 Juli 2026
+
+### 🆕 Fitur baru
+- **Catat Titip/Ketinggalan sekarang bisa untuk barang yang TIDAK dibeli di
+  toko ini** — kadang ada barang pelanggan yang bukan dari toko (tapi
+  tertinggal), atau barang yang memang sengaja dititipkan. Sekarang ada
+  kolom "Atau barang lain (di luar nota)" utk diketik bebas, di samping
+  centang produk yang tetap jadi cara utama. Barang yang diketik bebas ini
+  tampil sbg bagian terpisah di struk, sama seperti Pinjaman Barang.
+- **Pilihan Titip/Ketinggalan dipindah ke atas** — sebelumnya di bawah
+  daftar produk, jadi kalau produk di nota banyak, staf harus scroll dulu.
+  Sekarang langsung terlihat begitu dialog dibuka.
+
 ## 27 Juli 2026
 
 ### 🛠️ Perbaikan

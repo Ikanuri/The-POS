@@ -4990,6 +4990,20 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .get();
 
+  /// Susulan (permintaan user) — barang titip/ketinggalan yang BUKAN baris
+  /// nota (`transactionItemId IS NULL`), mis. barang pelanggan yang tidak
+  /// dibeli di toko ini tapi tertinggal/sengaja dititipkan. Pola identik
+  /// [getBorrowedForTransaction]: dipakai section terpisah di struk (bukan
+  /// penanda per-baris — tidak ada baris nota utk ditaut).
+  Future<List<LeftBehindItem>> getLeftBehindWithoutLineForTransaction(
+          String transactionId) =>
+      (select(leftBehindItems)
+            ..where((t) =>
+                t.transactionId.equals(transactionId) &
+                t.transactionItemId.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+
   /// Ringkasan Laci Meja yang MASIH menggantung utk satu pelanggan —
   /// dipakai pengingat di cart bar & modal checkout (pola sama dgn
   /// pengingat hutang), supaya barang titipan/pinjaman/pre-order tidak

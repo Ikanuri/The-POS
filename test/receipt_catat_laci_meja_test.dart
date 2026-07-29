@@ -313,6 +313,65 @@ void main() {
   });
 
   testWidgets(
+      'susulan (permintaan user): toggle Titip/Ketinggalan ditaruh DI ATAS '
+      'daftar produk, tidak perlu scroll lewati banyak produk dulu',
+      (tester) async {
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.byTooltip('+ Catat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Titip/Ketinggalan'));
+    await tester.pumpAndSettle();
+
+    final toggleY =
+        tester.getTopLeft(find.byType(SegmentedButton<String>)).dy;
+    final listHeadingY =
+        tester.getTopLeft(inDialog('Pilih barang di nota ini')).dy;
+    expect(toggleY, lessThan(listHeadingY),
+        reason: 'toggle jenis harus di ATAS heading daftar produk');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'susulan (permintaan user): opsi "barang lain" diketik bebas — sama '
+      'seperti Pinjaman — TANPA mencentang produk apa pun (produk yg tidak '
+      'dibeli di toko ini tapi tertinggal/dititipkan)', (tester) async {
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.byTooltip('+ Catat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Titip/Ketinggalan'));
+    await tester.pumpAndSettle();
+
+    // TIDAK centang produk apa pun — centang produk TETAP fitur utama,
+    // ini cuma pelengkap utk barang yg BUKAN baris nota.
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Nama barang'), 'Payung pelanggan');
+    await tester.enterText(find.widgetWithText(TextField, 'Jml'), '2');
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.leftBehindItems).get();
+    expect(rows, hasLength(1));
+    expect(rows.single.itemName, 'Payung pelanggan');
+    expect(rows.single.qty, 2);
+    expect(rows.single.transactionItemId, isNull,
+        reason: 'barang lain BUKAN baris nota, tidak boleh ditaut');
+    expect(rows.single.jenis, 'titip');
+
+    // Tampil sbg section terpisah di struk (pola sama "Pinjaman Barang").
+    expect(find.text('Titip/Ketinggalan (di luar nota)'), findsOneWidget);
+    expect(find.textContaining('Payung pelanggan'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
       'device NON-OWNER (kasir) mencatat -> locallyModified=true (menunggu '
       'approve owner, pola sama spt usulan produk Item 40)', (tester) async {
     await pumpWithFakeApp(
