@@ -10,6 +10,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 31 Juli 2026
 
+### 🆕 Fitur baru
+- **Varian sekarang bisa punya Harga Lain sendiri** — dikelola langsung
+  dari dialog Tambah/Edit Varian di Edit Produk, tombol "Tambah Harga
+  Lain" sama seperti di form produk utama.
+- **Status stok varian sekarang terlihat** — di Edit Produk (daftar
+  Varian) maupun saat kasir menambah varian ke keranjang, sekarang tampil
+  "Stok N", "Habis", atau "Non-stok" per varian. Sebelumnya stok varian
+  memang tercatat tapi tidak pernah ditampilkan di mana pun.
+
 ### 🛠️ Perbaikan
 - **Usulan Titip/Ketinggalan dari kasir kadang gagal diterapkan owner**
   ("Gagal menerapkan usulan: FOREIGN KEY constraint failed") — terjadi kalau

@@ -58,6 +58,8 @@ class _VariantOption {
     required this.unitName,
     required this.price,
     required this.costPrice,
+    required this.stock,
+    required this.isNonStock,
     this.barcode,
   });
 
@@ -66,6 +68,14 @@ class _VariantOption {
   final String unitName;
   final int price;
   final int costPrice;
+  // Susulan (permintaan user) — stok varian SUDAH DILACAK di DB (tiap
+  // varian punya stock_ledger sendiri via unitId-nya), tapi sebelumnya
+  // TIDAK PERNAH ditampilkan di mana pun (kasir bisa jual varian kosong
+  // tanpa peringatan sama sekali). `isNonStock` = varian ini tidak
+  // melacak stok sama sekali ("Lacak stok varian" dimatikan di Edit
+  // Produk) — beda dari `stock <= 0` (dilacak, TAPI kosong).
+  final double stock;
+  final bool isNonStock;
   final String? barcode;
 }
 
@@ -184,12 +194,15 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         qty: 1,
       );
       final vBarcodes = await db.getProductBarcodes(base.id);
+      final vStock = base.isNonStock ? 0.0 : await db.currentStock(base.id);
       variants.add(_VariantOption(
         product: vp,
         unitId: base.id,
         unitName: vType?.name ?? 'Satuan',
         price: vResolved.price,
         costPrice: vResolved.costPrice,
+        stock: vStock,
+        isNonStock: base.isNonStock,
         barcode: vBarcodes
             .where((b) => b.isPrimary)
             .map((b) => b.barcode)
@@ -954,6 +967,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               name: v.product.name,
                               unitName: v.unitName,
                               price: v.price,
+                              stock: v.stock,
+                              isNonStock: v.isNonStock,
                               qty: _variantQty[v.product.id] ?? 0,
                               qtyController: _variantQtyCtrls.putIfAbsent(
                                   v.product.id,
@@ -1023,6 +1038,8 @@ class _VariantRow extends StatelessWidget {
     required this.name,
     required this.unitName,
     required this.price,
+    required this.stock,
+    required this.isNonStock,
     required this.qty,
     required this.qtyController,
     required this.onMinus,
@@ -1033,6 +1050,13 @@ class _VariantRow extends StatelessWidget {
   final String name;
   final String unitName;
   final int price;
+  // Susulan (permintaan user) — stok varian sudah dilacak di DB (stok
+  // terpisah per varian via unitId-nya), tapi sebelumnya tidak pernah
+  // ditampilkan sama sekali di sini — kasir bisa jual varian kosong tanpa
+  // peringatan. Ditampilkan APA ADANYA (bukan blokir tambah ke keranjang,
+  // konsisten dgn produk utama yg jg tidak hard-block saat stok habis).
+  final double stock;
+  final bool isNonStock;
   final double qty;
   final TextEditingController qtyController;
   final VoidCallback onMinus;
@@ -1043,6 +1067,7 @@ class _VariantRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final active = qty > 0;
+    final isOutOfStock = !isNonStock && stock <= 0;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1063,14 +1088,33 @@ class _VariantRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w600)),
-                Text('$unitName · ${formatRupiah(price)}',
-                    style: TextStyle(
-                        fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    ),
+                    if (isOutOfStock) ...[
+                      const SizedBox(width: 6),
+                      Text('Habis',
+                          style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.error)),
+                    ],
+                  ],
+                ),
+                Text(
+                  isNonStock
+                      ? '$unitName · ${formatRupiah(price)} · Non-stok'
+                      : '$unitName · ${formatRupiah(price)} · Stok '
+                          '${stock % 1 == 0 ? stock.toInt() : stock}',
+                  style: TextStyle(
+                      fontSize: 10.5, color: scheme.onSurfaceVariant),
+                ),
               ],
             ),
           ),

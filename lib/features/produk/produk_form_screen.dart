@@ -924,12 +924,23 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                                         .subdirectory_arrow_right,
                                                     size: 18),
                                                 title: Text(v.name),
-                                                subtitle: v.kodeProduk != null
-                                                    ? Text(
-                                                        'Kode: ${v.kodeProduk}',
-                                                        style: const TextStyle(
-                                                            fontSize: 11))
-                                                    : null,
+                                                subtitle: Row(
+                                                  children: [
+                                                    if (v.kodeProduk != null)
+                                                      Text(
+                                                          'Kode: ${v.kodeProduk} · ',
+                                                          style:
+                                                              const TextStyle(
+                                                                  fontSize:
+                                                                      11)),
+                                                    Expanded(
+                                                      child:
+                                                          _VariantStockLabel(
+                                                              variantProductId:
+                                                                  v.id),
+                                                    ),
+                                                  ],
+                                                ),
                                                 trailing: _readOnly
                                                     ? null
                                                     : Row(
@@ -1009,72 +1020,156 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
 
   /// Dialog form varian (dipakai Tambah & Edit). Mengembalikan nilai input,
   /// atau null bila dibatalkan.
-  Future<({String name, int price, String? barcode, bool trackStock})?>
-      _variantDialog({
+  ///
+  /// Susulan (permintaan user) — Harga Lain per varian: dikelola sederhana
+  /// (tanpa drag-reorder spt produk utama, urutan ikut urutan tambah) krn
+  /// dialog varian memang sengaja ringkas. Baris label kosong DIABAIKAN saat
+  /// disimpan (bukan error) — biar staf bisa tambah baris lalu batal isi.
+  Future<
+      ({
+        String name,
+        int price,
+        String? barcode,
+        bool trackStock,
+        List<({String label, int price})> altPrices,
+      })?> _variantDialog({
     required String title,
     required String confirmLabel,
     String name = '',
     required int price,
     String? barcode,
     bool trackStock = false,
+    List<({String label, int price})> altPrices = const [],
   }) async {
     final nameCtrl = TextEditingController(text: name);
     final priceCtrl =
         TextEditingController(text: ThousandsSeparatorFormatter.format(price));
     final barcodeCtrl = TextEditingController(text: barcode ?? '');
     var track = trackStock;
+    final altLabelCtrls = [
+      for (final a in altPrices) TextEditingController(text: a.label)
+    ];
+    final altPriceCtrls = [
+      for (final a in altPrices)
+        TextEditingController(text: ThousandsSeparatorFormatter.format(a.price))
+    ];
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) => AlertDialog(
           title: Text(title),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                    labelText: 'Nama Varian *', hintText: 'Contoh: Coklat'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: priceCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: const [ThousandsSeparatorFormatter()],
-                decoration: const InputDecoration(
-                    labelText: 'Harga', prefixText: 'Rp '),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: barcodeCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Barcode (opsional)',
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.qr_code_scanner, size: 20),
-                    tooltip: 'Scan barcode',
-                    onPressed: () async {
-                      final bc = await _scanBarcodeDialog(context);
-                      if (bc != null) barcodeCtrl.text = bc;
-                    },
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                      labelText: 'Nama Varian *', hintText: 'Contoh: Coklat'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: const [ThousandsSeparatorFormatter()],
+                  decoration: const InputDecoration(
+                      labelText: 'Harga', prefixText: 'Rp '),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: barcodeCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Barcode (opsional)',
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.qr_code_scanner, size: 20),
+                      tooltip: 'Scan barcode',
+                      onPressed: () async {
+                        final bc = await _scanBarcodeDialog(context);
+                        if (bc != null) barcodeCtrl.text = bc;
+                      },
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                value: track,
-                onChanged: (v) => setDialog(() => track = v),
-                title: const Text('Lacak stok varian',
-                    style: TextStyle(fontSize: 14)),
-                subtitle: const Text('Aktifkan bila varian punya stok terpisah',
-                    style: TextStyle(fontSize: 11)),
-              ),
-            ],
+                const SizedBox(height: 4),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: track,
+                  onChanged: (v) => setDialog(() => track = v),
+                  title: const Text('Lacak stok varian',
+                      style: TextStyle(fontSize: 14)),
+                  subtitle: const Text(
+                      'Aktifkan bila varian punya stok terpisah',
+                      style: TextStyle(fontSize: 11)),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Harga Lain (opsional)',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                ),
+                const SizedBox(height: 6),
+                for (var i = 0; i < altLabelCtrls.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            controller: altLabelCtrls[i],
+                            decoration: const InputDecoration(
+                                isDense: true, labelText: 'Label'),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: altPriceCtrls[i],
+                            keyboardType: TextInputType.number,
+                            inputFormatters: const [
+                              ThousandsSeparatorFormatter()
+                            ],
+                            decoration: const InputDecoration(
+                                isDense: true,
+                                labelText: 'Harga',
+                                prefixText: 'Rp '),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => setDialog(() {
+                            altLabelCtrls[i].dispose();
+                            altPriceCtrls[i].dispose();
+                            altLabelCtrls.removeAt(i);
+                            altPriceCtrls.removeAt(i);
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => setDialog(() {
+                      altLabelCtrls.add(TextEditingController());
+                      altPriceCtrls.add(TextEditingController());
+                    }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Tambah Harga Lain'),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -1097,6 +1192,15 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
       barcode: barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
       trackStock: track,
+      altPrices: [
+        for (var i = 0; i < altLabelCtrls.length; i++)
+          if (altLabelCtrls[i].text.trim().isNotEmpty)
+            (
+              label: altLabelCtrls[i].text.trim(),
+              price: ThousandsSeparatorFormatter.parseValue(
+                  altPriceCtrls[i].text),
+            ),
+      ],
     );
   }
 
@@ -1126,6 +1230,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         unitTypeId: base.unitTypeId,
         barcode: res.barcode,
         isNonStock: !res.trackStock,
+        altPrices: res.altPrices,
       );
       // Item 40 — usulan harga/produk dari device non-owner (lihat catatan
       // sama di _persistProduct).
@@ -1179,6 +1284,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     var curPrice = 0;
     String? curBarcode;
     var trackStock = false;
+    var curAltPrices = const <({String label, int price})>[];
     if (baseUnit != null) {
       final tiers = await db.getPriceTiers(baseUnit.id);
       curPrice =
@@ -1188,6 +1294,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       curBarcode =
           bcs.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull;
       trackStock = !baseUnit.isNonStock;
+      final alts = await db.getAltPrices(baseUnit.id);
+      curAltPrices = [
+        for (final a in alts) (label: a.label, price: a.price),
+      ];
     }
     if (!mounted) return;
     final res = await _variantDialog(
@@ -1197,6 +1307,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       price: curPrice,
       barcode: curBarcode,
       trackStock: trackStock,
+      altPrices: curAltPrices,
     );
     if (res == null) return;
     try {
@@ -1206,6 +1317,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         price: res.price,
         barcode: res.barcode,
         isNonStock: !res.trackStock,
+        altPrices: res.altPrices,
       );
       // Item 40 — usulan harga/produk dari device non-owner.
       if (!ref.read(deviceProvider).isOwner) {
@@ -2072,6 +2184,51 @@ class _UnitCardState extends State<_UnitCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Susulan (permintaan user) — status stok varian ditampilkan di Edit
+/// Produk. Stok SUDAH dilacak di DB (tiap varian punya `stock_ledger`
+/// sendiri via unitId-nya) sejak awal, tapi sebelumnya TIDAK PERNAH
+/// ditampilkan sama sekali di mana pun — owner tidak bisa tahu varian mana
+/// yang kosong tanpa cek manual ke DB.
+class _VariantStockLabel extends ConsumerWidget {
+  const _VariantStockLabel({required this.variantProductId});
+  final String variantProductId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final db = ref.read(databaseProvider);
+    return FutureBuilder<({double stock, bool isNonStock})>(
+      future: () async {
+        final units = await db.getProductUnits(variantProductId);
+        if (units.isEmpty) return (stock: 0.0, isNonStock: true);
+        final unit =
+            units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+        if (unit.isNonStock) return (stock: 0.0, isNonStock: true);
+        final stock = await db.currentStock(unit.id);
+        return (stock: stock, isNonStock: false);
+      }(),
+      builder: (context, snap) {
+        final data = snap.data;
+        if (data == null) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        if (data.isNonStock) {
+          return Text('Non-stok',
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant));
+        }
+        final habis = data.stock <= 0;
+        final stockText =
+            data.stock % 1 == 0 ? data.stock.toInt().toString() : data.stock;
+        return Text(
+          habis ? 'Habis' : 'Stok $stockText',
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: habis ? FontWeight.w700 : FontWeight.normal,
+              color: habis ? scheme.error : scheme.onSurfaceVariant),
+        );
+      },
     );
   }
 }
