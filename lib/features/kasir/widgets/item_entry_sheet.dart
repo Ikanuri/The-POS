@@ -60,6 +60,7 @@ class _VariantOption {
     required this.costPrice,
     required this.stock,
     required this.isNonStock,
+    this.altPrices = const [],
     this.barcode,
   });
 
@@ -76,6 +77,13 @@ class _VariantOption {
   // Produk) — beda dari `stock <= 0` (dilacak, TAPI kosong).
   final double stock;
   final bool isNonStock;
+  // Susulan (permintaan user) — Harga Lain varian tersimpan sejak putaran
+  // sebelumnya tapi belum bisa DIPAKAI sama sekali saat jual (harga
+  // varian di keranjang selalu harga dasar mentah). Dipilih lewat menu
+  // kecil di `_VariantRow` (bukan chip horizontal spt produk utama — baris
+  // varian sengaja ringkas, chip penuh per varian akan makan tempat
+  // vertikal kalau varian banyak).
+  final List<AltPrice> altPrices;
   final String? barcode;
 }
 
@@ -92,6 +100,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
 
   List<_VariantOption> _variants = [];
   final Map<String, double> _variantQty = {}; // variant productId → qty
+  // Susulan (permintaan user) — "Harga Lain" varian tersimpan tapi sebelumnya
+  // tidak bisa dipakai sama sekali saat jual (selalu harga dasar mentah).
+  // variant productId → harga terpilih (null/tidak ada entri = harga dasar).
+  final Map<String, int> _variantPriceOverride = {};
   // Susulan (permintaan user): samakan format dgn stepper Titip/Ketinggalan
   // — bisa ketik langsung (utk qty desimal, mis. varian produk timbang),
   // bukan cuma stepper +/-1 polos spt sebelumnya.
@@ -195,6 +207,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       );
       final vBarcodes = await db.getProductBarcodes(base.id);
       final vStock = base.isNonStock ? 0.0 : await db.currentStock(base.id);
+      final vAltPrices = await db.getAltPrices(base.id);
       variants.add(_VariantOption(
         product: vp,
         unitId: base.id,
@@ -203,6 +216,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         costPrice: vResolved.costPrice,
         stock: vStock,
         isNonStock: base.isNonStock,
+        altPrices: vAltPrices,
         barcode: vBarcodes
             .where((b) => b.isPrimary)
             .map((b) => b.barcode)
@@ -267,10 +281,17 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     });
   }
 
+  int _variantPrice(_VariantOption v) =>
+      _variantPriceOverride[v.product.id] ?? v.price;
+
+  void _setVariantPrice(String variantId, int price) {
+    setState(() => _variantPriceOverride[variantId] = price);
+  }
+
   int get _variantTotal {
     var total = 0;
     for (final v in _variants) {
-      total += (v.price * (_variantQty[v.product.id] ?? 0)).round();
+      total += (_variantPrice(v) * (_variantQty[v.product.id] ?? 0)).round();
     }
     return total;
   }
@@ -381,7 +402,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         productName: v.product.name,
         unitName: v.unitName,
         qty: vq,
-        price: v.price,
+        price: _variantPrice(v),
         originalPrice: v.price,
         costPrice: v.costPrice,
         barcode: v.barcode,
@@ -966,7 +987,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                             _VariantRow(
                               name: v.product.name,
                               unitName: v.unitName,
-                              price: v.price,
+                              price: _variantPrice(v),
+                              basePrice: v.price,
+                              altPrices: v.altPrices,
+                              onSelectPrice: (p) =>
+                                  _setVariantPrice(v.product.id, p),
                               stock: v.stock,
                               isNonStock: v.isNonStock,
                               qty: _variantQty[v.product.id] ?? 0,
@@ -1038,6 +1063,9 @@ class _VariantRow extends StatelessWidget {
     required this.name,
     required this.unitName,
     required this.price,
+    required this.basePrice,
+    required this.altPrices,
+    required this.onSelectPrice,
     required this.stock,
     required this.isNonStock,
     required this.qty,
@@ -1050,6 +1078,13 @@ class _VariantRow extends StatelessWidget {
   final String name;
   final String unitName;
   final int price;
+  // Susulan (permintaan user) — "Harga Lain" varian, dulu tersimpan tapi
+  // tidak bisa dipakai saat jual. Menu popup ringkas (bukan chip horizontal
+  // spt produk utama) — baris varian sengaja tipis, chip penuh per varian
+  // akan makan tempat vertikal kalau varian banyak.
+  final int basePrice;
+  final List<AltPrice> altPrices;
+  final ValueChanged<int> onSelectPrice;
   // Susulan (permintaan user) — stok varian sudah dilacak di DB (stok
   // terpisah per varian via unitId-nya), tapi sebelumnya tidak pernah
   // ditampilkan sama sekali di sini — kasir bisa jual varian kosong tanpa
@@ -1107,13 +1142,42 @@ class _VariantRow extends StatelessWidget {
                     ],
                   ],
                 ),
-                Text(
-                  isNonStock
-                      ? '$unitName · ${formatRupiah(price)} · Non-stok'
-                      : '$unitName · ${formatRupiah(price)} · Stok '
-                          '${stock % 1 == 0 ? stock.toInt() : stock}',
-                  style: TextStyle(
-                      fontSize: 10.5, color: scheme.onSurfaceVariant),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        isNonStock
+                            ? '$unitName · ${formatRupiah(price)} · Non-stok'
+                            : '$unitName · ${formatRupiah(price)} · Stok '
+                                '${stock % 1 == 0 ? stock.toInt() : stock}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 10.5, color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                    if (altPrices.isNotEmpty)
+                      PopupMenuButton<int>(
+                        tooltip: 'Pilih harga',
+                        padding: EdgeInsets.zero,
+                        icon: Icon(Icons.sell_outlined,
+                            size: 15, color: scheme.primary),
+                        onSelected: onSelectPrice,
+                        itemBuilder: (ctx) => [
+                          PopupMenuItem(
+                            value: basePrice,
+                            child: Text(
+                                'Harga dasar (${formatRupiah(basePrice)})'),
+                          ),
+                          for (final a in altPrices)
+                            PopupMenuItem(
+                              value: a.price,
+                              child:
+                                  Text('${a.label} (${formatRupiah(a.price)})'),
+                            ),
+                        ],
+                      ),
+                  ],
                 ),
               ],
             ),
