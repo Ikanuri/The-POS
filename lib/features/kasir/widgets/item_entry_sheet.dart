@@ -82,6 +82,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
 
   List<_VariantOption> _variants = [];
   final Map<String, double> _variantQty = {}; // variant productId → qty
+  // Susulan (permintaan user): samakan format dgn stepper Titip/Ketinggalan
+  // — bisa ketik langsung (utk qty desimal, mis. varian produk timbang),
+  // bukan cuma stepper +/-1 polos spt sebelumnya.
+  final Map<String, TextEditingController> _variantQtyCtrls = {};
 
   double _qty = 1;
   int _price = 0;
@@ -118,6 +122,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     _qtyCtrl.dispose();
     _noteCtrl.dispose();
     _depositQtyCtrl.dispose();
+    for (final c in _variantQtyCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -240,7 +247,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   }
 
   void _setVariantQty(String variantId, double q) {
-    setState(() => _variantQty[variantId] = q.clamp(0, 9999));
+    final clamped = q.clamp(0, 9999);
+    setState(() {
+      _variantQty[variantId] = clamped.toDouble();
+      _variantQtyCtrls[variantId]?.text = _fmtQty(clamped.toDouble());
+    });
   }
 
   int get _variantTotal {
@@ -944,10 +955,22 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               unitName: v.unitName,
                               price: v.price,
                               qty: _variantQty[v.product.id] ?? 0,
+                              qtyController: _variantQtyCtrls.putIfAbsent(
+                                  v.product.id,
+                                  () => TextEditingController(
+                                      text: _fmtQty(
+                                          _variantQty[v.product.id] ?? 0))),
                               onMinus: () => _setVariantQty(v.product.id,
                                   (_variantQty[v.product.id] ?? 0) - 1),
                               onPlus: () => _setVariantQty(v.product.id,
                                   (_variantQty[v.product.id] ?? 0) + 1),
+                              onChanged: (v2) {
+                                final parsed = double.tryParse(v2);
+                                if (parsed != null && parsed >= 0) {
+                                  setState(() =>
+                                      _variantQty[v.product.id] = parsed);
+                                }
+                              },
                             ),
                         ],
                       ),
@@ -1001,16 +1024,20 @@ class _VariantRow extends StatelessWidget {
     required this.unitName,
     required this.price,
     required this.qty,
+    required this.qtyController,
     required this.onMinus,
     required this.onPlus,
+    required this.onChanged,
   });
 
   final String name;
   final String unitName;
   final int price;
   final double qty;
+  final TextEditingController qtyController;
   final VoidCallback onMinus;
   final VoidCallback onPlus;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1053,11 +1080,20 @@ class _VariantRow extends StatelessWidget {
           ),
           const SizedBox(width: 2),
           SizedBox(
-            width: 24,
-            child: Text(
-              qty % 1 == 0 ? qty.toInt().toString() : qty.toString(),
+            width: 44,
+            child: TextField(
+              controller: qtyController,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 4)),
+              // Ketik bebas (utk qty desimal, mis. varian produk timbang) —
+              // stepper +/-1 SENDIRIAN tidak bisa mencapai nilai desimal
+              // sembarang. Pola identik dialog Titip/Ketinggalan.
+              onChanged: onChanged,
             ),
           ),
           const SizedBox(width: 2),

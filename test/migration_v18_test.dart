@@ -59,7 +59,7 @@ void main() {
     expect(rows.single.fromIp, '192.168.1.5');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 25); // schemaVersion terkini
+    expect(ver.data.values.first, 26); // schemaVersion terkini // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
