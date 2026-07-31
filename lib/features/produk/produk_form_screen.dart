@@ -957,6 +957,26 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                                                 const BoxConstraints(),
                                                             icon: const Icon(
                                                                 Icons
+                                                                    .inventory_2_outlined,
+                                                                size: 19),
+                                                            tooltip:
+                                                                'Sesuaikan stok varian',
+                                                            onPressed: () =>
+                                                                _adjustVariantStock(
+                                                                    v),
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 14),
+                                                          IconButton(
+                                                            visualDensity:
+                                                                VisualDensity
+                                                                    .compact,
+                                                            padding:
+                                                                EdgeInsets.zero,
+                                                            constraints:
+                                                                const BoxConstraints(),
+                                                            icon: const Icon(
+                                                                Icons
                                                                     .edit_outlined,
                                                                 size: 19),
                                                             tooltip:
@@ -1332,6 +1352,35 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       if (mounted) {
         _showBanner(_friendlyBarcodeError(e, res.barcode));
       }
+    }
+  }
+
+  /// Susulan (permintaan user) — "bagaimana cara atur stok varian? Masih
+  /// belum ada UI-nya" — sebelumnya stok varian cuma DITAMPILKAN
+  /// (`_VariantStockLabel`), tidak bisa DIUBAH sama sekali dari layar
+  /// manapun. Reuse `_adjustStockDialog` (persis dialog "Sesuaikan Stok"
+  /// milik satuan produk utama) — cukup butuh unitId+label, tidak
+  /// bergantung ke state `_units` produk utama.
+  Future<void> _adjustVariantStock(Product v) async {
+    final db = ref.read(databaseProvider);
+    final units = await db.getProductUnits(v.id);
+    if (!mounted) return;
+    if (units.isEmpty) {
+      _showBanner('Varian ini belum punya satuan');
+      return;
+    }
+    final unit = units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+    if (unit.isNonStock) {
+      _showBanner(
+          'Varian "${v.name}" tidak melacak stok (aktifkan dulu di Edit Varian)');
+      return;
+    }
+    final adjusted = await _adjustStockDialog(unit.id, v.name);
+    if (adjusted) {
+      // `_VariantStockLabel` pakai FutureBuilder sekali-jalan (bukan
+      // stream) — paksa rebuild list Varian spy angka stok baru langsung
+      // kelihatan tanpa perlu tutup-buka layar.
+      setState(() {});
     }
   }
 

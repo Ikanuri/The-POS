@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-07-31 (lanjutan 2)
+
+- `(belum commit)` — chore: naikkan versi ke 2.7.0+10 utk rilis resmi berikutnya. MINOR bump: 2 fitur baru (sesuaikan stok varian, pakai Harga Lain varian saat jual), tidak ada breaking change/migrasi schema.
+- `(belum commit)` — feat: sesuaikan stok varian + Harga Lain varian bisa dipakai saat jual. Susulan langsung dari commit sebelumnya (`b7744d7`) — waktu itu stok varian & Harga Lain varian baru bisa DILIHAT/DISIMPAN, belum bisa DIPAKAI. (1) Stok varian: ikon "Sesuaikan stok varian" baru di tiap baris varian (`produk_form_screen.dart`) membuka dialog "Sesuaikan Stok" yang sama persis dgn punya satuan produk utama (`_adjustStockDialog`, cukup diberi `unitId`+label varian) — sebelumnya stok varian mustahil diubah dari layar mana pun kecuali lewat Stok Opname/transaksi. Varian non-stok (`isNonStock`) ditolak dgn banner info, bukan dialog kosong. (2) Harga Lain varian: `_VariantOption` (`item_entry_sheet.dart`) diberi field `altPrices` (di-fetch dari `db.getAltPrices` di `_load()`), `_VariantRow` diberi ikon popup kecil (`Icons.sell_outlined`, muncul HANYA bila varian punya Harga Lain) berisi "Harga dasar" + tiap Harga Lain — memilihnya mengubah harga yang benar-benar tersimpan ke `CartItem` saat "Tambah ke Keranjang" (state baru `_variantPriceOverride`, dipakai `_variantTotal` & `_submit`), bukan cuma harga dasar mentah spt sebelumnya. 4 test baru (`produk_form_variant_stock_adjust_test.dart` x2, `item_entry_variant_alt_price_test.dart` x2) — semua revert-verified. Full suite hijau, `flutter analyze` 0 issue.
+
 ## 2026-07-31 (lanjutan)
 
 - `b7744d7` — chore: naikkan versi ke 2.6.0+9 utk rilis resmi berikutnya. MINOR bump: 2 fitur baru (Harga Lain varian, status stok varian), tidak ada breaking change/migrasi schema.

@@ -5,6 +5,36 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Juli 2026 (lanjutan 2) — versi kerja **2.7.0+10**. Susulan
+langsung dari sesi sebelumnya di hari yang sama (`b7744d7`, v2.6.0+9 —
+"Harga Lain per varian + status stok varian DITAMPILKAN"): user tanya 3
+hal soal Pengaturan Produk varian — (1) "jangkar satuan varian" (klaim ada
+pembahasan kemarin — **tidak ditemukan jejaknya sama sekali** di
+PLAN.md/CHANGELOG.md/`git log`; dicatat sbg **Item 52 di PLAN.md**, BELUM
+disentuh, nunggu klarifikasi user), (2) atur stok varian — belum ada UI
+(FIXED sesi ini), (3) pakai Harga Lain varian saat jual — tersimpan tapi
+tak terpakai (FIXED sesi ini). User bilang "Kerjakan semua, hingga
+tuntas" — diinterpretasikan cakup poin 2+3 saja (yang sudah ditawarkan
+konkret), BUKAN poin 1 (jangkar satuan, tak ada dasar klarifikasi).
+
+Fix: (a) ikon "Sesuaikan stok varian" baru di tiap baris varian
+(`produk_form_screen.dart`, method `_adjustVariantStock`) — reuse dialog
+`_adjustStockDialog` yg sudah ada utk satuan produk utama, tinggal
+diberi `unitId`+label varian; ditolak dgn banner kalau varian non-stok.
+(b) `_VariantOption.altPrices` (`item_entry_sheet.dart`) di-fetch di
+`_load()`, `_VariantRow` diberi ikon popup kecil (`Icons.sell_outlined`,
+HANYA muncul kalau varian punya Harga Lain) berisi "Harga dasar" + tiap
+Harga Lain — state baru `_variantPriceOverride` (map productId->harga
+terpilih), dipakai `_variantTotal` & `_submit` saat membangun `CartItem`
+varian (`price:`, bukan lagi selalu `v.price` mentah).
+
+4 test baru (`produk_form_variant_stock_adjust_test.dart` x2,
+`item_entry_variant_alt_price_test.dart` x2) — semua revert-verified
+(stash file produksi, tes gagal "widget not found" sensible, pop lagi).
+Full suite hijau (853 test), `flutter analyze` 0 issue. **Belum di-commit
+per akhir turn ini** — commit + merge ke `main` masih perlu dieksekusi
+turn berikutnya (lihat instruksi commit di CLAUDE.md §Git)._
+
 _Update sesi 28 Juli 2026 — **v2.3.0 SUDAH RESMI DIRILIS** (tag `v2.3.0`,
 non-prerelease, APK ter-attach, lihat "Rilis v2.3.0" di bawah). Proyek
 memasuki fase MAINTENANCE (fitur dianggap selesai per user) — repo

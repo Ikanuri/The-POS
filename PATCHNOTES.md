@@ -11,6 +11,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 31 Juli 2026
 
 ### 🆕 Fitur baru
+- **Stok varian sekarang bisa disesuaikan** — ikon stok baru di tiap
+  baris varian (Edit Produk) membuka dialog "Sesuaikan Stok", sama
+  seperti satuan produk utama. Sebelumnya stok varian cuma bisa dilihat,
+  tidak bisa diubah dari mana pun.
+- **Harga Lain varian sekarang bisa dipakai saat jual** — saat kasir
+  menambah varian yang punya Harga Lain ke keranjang, muncul ikon kecil
+  di baris varian untuk memilih harga mana yang dipakai. Sebelumnya
+  Harga Lain varian cuma bisa disimpan, tidak pernah benar-benar
+  terpakai saat transaksi.
 - **Varian sekarang bisa punya Harga Lain sendiri** — dikelola langsung
   dari dialog Tambah/Edit Varian di Edit Produk, tombol "Tambah Harga
   Lain" sama seperti di form produk utama.
