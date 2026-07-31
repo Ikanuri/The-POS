@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 31 Juli 2026
+
+### 🛠️ Perbaikan
+- **Usulan Titip/Ketinggalan dari kasir kadang gagal diterapkan owner**
+  ("Gagal menerapkan usulan: FOREIGN KEY constraint failed") — terjadi kalau
+  barang itu ditautkan ke pelanggan baru yang belum sempat dikenal di HP
+  owner. Sekarang selalu berhasil diterapkan.
+- **Jumlah varian sekarang bisa diketik langsung** (bukan cuma tombol +/−)
+  — sama seperti Titip/Ketinggalan, berguna untuk varian produk timbang.
+
 ## 30 Juli 2026
 
 ### 🛠️ Perbaikan
