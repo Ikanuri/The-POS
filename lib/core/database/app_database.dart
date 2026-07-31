@@ -1317,6 +1317,11 @@ class AppDatabase extends _$AppDatabase {
     String? barcode,
     String? kodeProduk,
     bool isNonStock = true,
+    // Susulan (permintaan user) — Harga Lain per varian, pola identik
+    // `saveProduct` (selalu ganti seluruh baris, bukan menumpuk). Sah-sah
+    // saja secara data krn `AltPrices` sudah di-key per `productUnitId`,
+    // dan varian sudah punya `ProductUnits` sendiri sejak awal.
+    List<({String label, int price})>? altPrices,
   }) async {
     final now = DateTime.now();
     final productId = const Uuid().v4();
@@ -1354,6 +1359,21 @@ class AppDatabase extends _$AppDatabase {
           isPrimary: const Value(true),
         ));
       }
+      if (altPrices != null && altPrices.isNotEmpty) {
+        await batch((b) => b.insertAll(
+              this.altPrices,
+              [
+                for (var i = 0; i < altPrices.length; i++)
+                  AltPricesCompanion.insert(
+                    id: const Uuid().v4(),
+                    productUnitId: unitId,
+                    label: altPrices[i].label,
+                    price: altPrices[i].price,
+                    sortOrder: Value(i),
+                  ),
+              ],
+            ));
+      }
     });
     return productId;
   }
@@ -1380,6 +1400,10 @@ class AppDatabase extends _$AppDatabase {
     required int price,
     String? barcode,
     bool? isNonStock,
+    // Susulan (permintaan user) — null = tidak disentuh (form lama/tanpa
+    // Harga Lain); list (termasuk kosong) = SELALU ganti seluruh baris,
+    // pola identik `saveProduct`.
+    List<({String label, int price})>? altPrices,
   }) async {
     final now = DateTime.now();
     await transaction(() async {
@@ -1441,6 +1465,27 @@ class AppDatabase extends _$AppDatabase {
           barcode: bc,
           isPrimary: const Value(true),
         ));
+      }
+
+      if (altPrices != null) {
+        await (delete(this.altPrices)
+              ..where((t) => t.productUnitId.equals(unit.id)))
+            .go();
+        if (altPrices.isNotEmpty) {
+          await batch((b) => b.insertAll(
+                this.altPrices,
+                [
+                  for (var i = 0; i < altPrices.length; i++)
+                    AltPricesCompanion.insert(
+                      id: const Uuid().v4(),
+                      productUnitId: unit.id,
+                      label: altPrices[i].label,
+                      price: altPrices[i].price,
+                      sortOrder: Value(i),
+                    ),
+                ],
+              ));
+        }
       }
     });
   }
