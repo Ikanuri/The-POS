@@ -82,7 +82,7 @@ void main() {
     expect(updated.sortOrder, 5);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 25); // schemaVersion terkini
+    expect(ver.data.values.first, 26); // schemaVersion terkini // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

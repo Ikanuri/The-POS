@@ -11744,10 +11744,7 @@ class $LeftBehindItemsTable extends LeftBehindItems
   @override
   late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
       'customer_id', aliasedName, true,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('REFERENCES customers (id)'));
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _customerNameTextMeta =
       const VerificationMeta('customerNameText');
   @override
@@ -11949,6 +11946,15 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
   /// utk entri lama yang dibuat sebelum kolom ini ada.
   final String? transactionItemId;
   final String jenis;
+
+  /// SENGAJA TANPA FK ke `Customers` (beda dari kolom lain di tabel ini yang
+  /// FK ke `Transactions`) — pola identik `Transactions.customerId`. Sebab:
+  /// pelanggan adalah master data yang HANYA mengalir host→klien (lihat
+  /// `dumpSince`), jadi pelanggan ad-hoc yang dibuat di device kasir TIDAK
+  /// PERNAH tersinkron balik ke host. Kalau kolom ini FK ke `Customers`,
+  /// usulan Laci Meja yang menaut pelanggan ad-hoc semacam itu GAGAL
+  /// PERMANEN saat diterapkan di host (`FOREIGN KEY constraint failed`,
+  /// bug nyata dilaporkan user — migrasi v26 menghapus FK ini).
   final String? customerId;
   final String? customerNameText;
   final String? note;
@@ -12417,10 +12423,7 @@ class $BorrowedItemsTable extends BorrowedItems
   @override
   late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
       'customer_id', aliasedName, true,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('REFERENCES customers (id)'));
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _customerNameTextMeta =
       const VerificationMeta('customerNameText');
   @override
@@ -12631,6 +12634,10 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
   /// penanda "Pinjaman" di baris yang benar. Nullable utk entri lama yang
   /// dibuat sebelum kolom ini ada.
   final String? transactionItemId;
+
+  /// SENGAJA TANPA FK ke `Customers` — lihat komentar di
+  /// `LeftBehindItems.customerId` (alasan identik: pelanggan ad-hoc device
+  /// kasir tidak pernah tersinkron balik ke host).
   final String? customerId;
   final String? customerNameText;
   final double qty;
@@ -17179,43 +17186,6 @@ typedef $$CustomersTableUpdateCompanionBuilder = CustomersCompanion Function({
   Value<int> rowid,
 });
 
-final class $$CustomersTableReferences
-    extends BaseReferences<_$AppDatabase, $CustomersTable, Customer> {
-  $$CustomersTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static MultiTypedResultKey<$LeftBehindItemsTable, List<LeftBehindItem>>
-      _leftBehindItemsRefsTable(_$AppDatabase db) =>
-          MultiTypedResultKey.fromTable(db.leftBehindItems,
-              aliasName: $_aliasNameGenerator(
-                  db.customers.id, db.leftBehindItems.customerId));
-
-  $$LeftBehindItemsTableProcessedTableManager get leftBehindItemsRefs {
-    final manager =
-        $$LeftBehindItemsTableTableManager($_db, $_db.leftBehindItems)
-            .filter((f) => f.customerId.id($_item.id));
-
-    final cache =
-        $_typedResult.readTableOrNull(_leftBehindItemsRefsTable($_db));
-    return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: cache));
-  }
-
-  static MultiTypedResultKey<$BorrowedItemsTable, List<BorrowedItem>>
-      _borrowedItemsRefsTable(_$AppDatabase db) =>
-          MultiTypedResultKey.fromTable(db.borrowedItems,
-              aliasName: $_aliasNameGenerator(
-                  db.customers.id, db.borrowedItems.customerId));
-
-  $$BorrowedItemsTableProcessedTableManager get borrowedItemsRefs {
-    final manager = $$BorrowedItemsTableTableManager($_db, $_db.borrowedItems)
-        .filter((f) => f.customerId.id($_item.id));
-
-    final cache = $_typedResult.readTableOrNull(_borrowedItemsRefsTable($_db));
-    return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: cache));
-  }
-}
-
 class $$CustomersTableFilterComposer
     extends Composer<_$AppDatabase, $CustomersTable> {
   $$CustomersTableFilterComposer({
@@ -17262,48 +17232,6 @@ class $$CustomersTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
-
-  Expression<bool> leftBehindItemsRefs(
-      Expression<bool> Function($$LeftBehindItemsTableFilterComposer f) f) {
-    final $$LeftBehindItemsTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.leftBehindItems,
-        getReferencedColumn: (t) => t.customerId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$LeftBehindItemsTableFilterComposer(
-              $db: $db,
-              $table: $db.leftBehindItems,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return f(composer);
-  }
-
-  Expression<bool> borrowedItemsRefs(
-      Expression<bool> Function($$BorrowedItemsTableFilterComposer f) f) {
-    final $$BorrowedItemsTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.borrowedItems,
-        getReferencedColumn: (t) => t.customerId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$BorrowedItemsTableFilterComposer(
-              $db: $db,
-              $table: $db.borrowedItems,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return f(composer);
-  }
 }
 
 class $$CustomersTableOrderingComposer
@@ -17399,48 +17327,6 @@ class $$CustomersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-
-  Expression<T> leftBehindItemsRefs<T extends Object>(
-      Expression<T> Function($$LeftBehindItemsTableAnnotationComposer a) f) {
-    final $$LeftBehindItemsTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.leftBehindItems,
-        getReferencedColumn: (t) => t.customerId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$LeftBehindItemsTableAnnotationComposer(
-              $db: $db,
-              $table: $db.leftBehindItems,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return f(composer);
-  }
-
-  Expression<T> borrowedItemsRefs<T extends Object>(
-      Expression<T> Function($$BorrowedItemsTableAnnotationComposer a) f) {
-    final $$BorrowedItemsTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.borrowedItems,
-        getReferencedColumn: (t) => t.customerId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$BorrowedItemsTableAnnotationComposer(
-              $db: $db,
-              $table: $db.borrowedItems,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return f(composer);
-  }
 }
 
 class $$CustomersTableTableManager extends RootTableManager<
@@ -17452,10 +17338,9 @@ class $$CustomersTableTableManager extends RootTableManager<
     $$CustomersTableAnnotationComposer,
     $$CustomersTableCreateCompanionBuilder,
     $$CustomersTableUpdateCompanionBuilder,
-    (Customer, $$CustomersTableReferences),
+    (Customer, BaseReferences<_$AppDatabase, $CustomersTable, Customer>),
     Customer,
-    PrefetchHooks Function(
-        {bool leftBehindItemsRefs, bool borrowedItemsRefs})> {
+    PrefetchHooks Function()> {
   $$CustomersTableTableManager(_$AppDatabase db, $CustomersTable table)
       : super(TableManagerState(
           db: db,
@@ -17527,50 +17412,9 @@ class $$CustomersTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable(table),
-                    $$CustomersTableReferences(db, table, e)
-                  ))
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: (
-              {leftBehindItemsRefs = false, borrowedItemsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [
-                if (leftBehindItemsRefs) db.leftBehindItems,
-                if (borrowedItemsRefs) db.borrowedItems
-              ],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (leftBehindItemsRefs)
-                    await $_getPrefetchedData(
-                        currentTable: table,
-                        referencedTable: $$CustomersTableReferences
-                            ._leftBehindItemsRefsTable(db),
-                        managerFromTypedResult: (p0) =>
-                            $$CustomersTableReferences(db, table, p0)
-                                .leftBehindItemsRefs,
-                        referencedItemsForCurrentItem:
-                            (item, referencedItems) => referencedItems
-                                .where((e) => e.customerId == item.id),
-                        typedResults: items),
-                  if (borrowedItemsRefs)
-                    await $_getPrefetchedData(
-                        currentTable: table,
-                        referencedTable: $$CustomersTableReferences
-                            ._borrowedItemsRefsTable(db),
-                        managerFromTypedResult: (p0) =>
-                            $$CustomersTableReferences(db, table, p0)
-                                .borrowedItemsRefs,
-                        referencedItemsForCurrentItem:
-                            (item, referencedItems) => referencedItems
-                                .where((e) => e.customerId == item.id),
-                        typedResults: items)
-                ];
-              },
-            );
-          },
+          prefetchHooksCallback: null,
         ));
 }
 
@@ -17583,9 +17427,9 @@ typedef $$CustomersTableProcessedTableManager = ProcessedTableManager<
     $$CustomersTableAnnotationComposer,
     $$CustomersTableCreateCompanionBuilder,
     $$CustomersTableUpdateCompanionBuilder,
-    (Customer, $$CustomersTableReferences),
+    (Customer, BaseReferences<_$AppDatabase, $CustomersTable, Customer>),
     Customer,
-    PrefetchHooks Function({bool leftBehindItemsRefs, bool borrowedItemsRefs})>;
+    PrefetchHooks Function()>;
 typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
     Function({
   required String id,
@@ -22196,20 +22040,6 @@ final class $$LeftBehindItemsTableReferences extends BaseReferences<
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: [item]));
   }
-
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-          $_aliasNameGenerator(db.leftBehindItems.customerId, db.customers.id));
-
-  $$CustomersTableProcessedTableManager? get customerId {
-    if ($_item.customerId == null) return null;
-    final manager = $$CustomersTableTableManager($_db, $_db.customers)
-        .filter((f) => f.id($_item.customerId!));
-    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: [item]));
-  }
 }
 
 class $$LeftBehindItemsTableFilterComposer
@@ -22233,6 +22063,9 @@ class $$LeftBehindItemsTableFilterComposer
 
   ColumnFilters<String> get jenis => $composableBuilder(
       column: $table.jenis, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText,
@@ -22276,26 +22109,6 @@ class $$LeftBehindItemsTableFilterComposer
             ));
     return composer;
   }
-
-  $$CustomersTableFilterComposer get customerId {
-    final $$CustomersTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.customerId,
-        referencedTable: $db.customers,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomersTableFilterComposer(
-              $db: $db,
-              $table: $db.customers,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$LeftBehindItemsTableOrderingComposer
@@ -22319,6 +22132,9 @@ class $$LeftBehindItemsTableOrderingComposer
 
   ColumnOrderings<String> get jenis => $composableBuilder(
       column: $table.jenis, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText,
@@ -22362,26 +22178,6 @@ class $$LeftBehindItemsTableOrderingComposer
             ));
     return composer;
   }
-
-  $$CustomersTableOrderingComposer get customerId {
-    final $$CustomersTableOrderingComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.customerId,
-        referencedTable: $db.customers,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomersTableOrderingComposer(
-              $db: $db,
-              $table: $db.customers,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$LeftBehindItemsTableAnnotationComposer
@@ -22404,6 +22200,9 @@ class $$LeftBehindItemsTableAnnotationComposer
 
   GeneratedColumn<String> get jenis =>
       $composableBuilder(column: $table.jenis, builder: (column) => column);
+
+  GeneratedColumn<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => column);
 
   GeneratedColumn<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText, builder: (column) => column);
@@ -22445,26 +22244,6 @@ class $$LeftBehindItemsTableAnnotationComposer
             ));
     return composer;
   }
-
-  $$CustomersTableAnnotationComposer get customerId {
-    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.customerId,
-        referencedTable: $db.customers,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomersTableAnnotationComposer(
-              $db: $db,
-              $table: $db.customers,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$LeftBehindItemsTableTableManager extends RootTableManager<
@@ -22478,7 +22257,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
     $$LeftBehindItemsTableUpdateCompanionBuilder,
     (LeftBehindItem, $$LeftBehindItemsTableReferences),
     LeftBehindItem,
-    PrefetchHooks Function({bool transactionId, bool customerId})> {
+    PrefetchHooks Function({bool transactionId})> {
   $$LeftBehindItemsTableTableManager(
       _$AppDatabase db, $LeftBehindItemsTable table)
       : super(TableManagerState(
@@ -22560,7 +22339,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
                     $$LeftBehindItemsTableReferences(db, table, e)
                   ))
               .toList(),
-          prefetchHooksCallback: ({transactionId = false, customerId = false}) {
+          prefetchHooksCallback: ({transactionId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -22588,17 +22367,6 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
                         .id,
                   ) as T;
                 }
-                if (customerId) {
-                  state = state.withJoin(
-                    currentTable: table,
-                    currentColumn: table.customerId,
-                    referencedTable:
-                        $$LeftBehindItemsTableReferences._customerIdTable(db),
-                    referencedColumn: $$LeftBehindItemsTableReferences
-                        ._customerIdTable(db)
-                        .id,
-                  ) as T;
-                }
 
                 return state;
               },
@@ -22621,7 +22389,7 @@ typedef $$LeftBehindItemsTableProcessedTableManager = ProcessedTableManager<
     $$LeftBehindItemsTableUpdateCompanionBuilder,
     (LeftBehindItem, $$LeftBehindItemsTableReferences),
     LeftBehindItem,
-    PrefetchHooks Function({bool transactionId, bool customerId})>;
+    PrefetchHooks Function({bool transactionId})>;
 typedef $$BorrowedItemsTableCreateCompanionBuilder = BorrowedItemsCompanion
     Function({
   required String id,
@@ -22674,20 +22442,6 @@ final class $$BorrowedItemsTableReferences
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: [item]));
   }
-
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-          $_aliasNameGenerator(db.borrowedItems.customerId, db.customers.id));
-
-  $$CustomersTableProcessedTableManager? get customerId {
-    if ($_item.customerId == null) return null;
-    final manager = $$CustomersTableTableManager($_db, $_db.customers)
-        .filter((f) => f.id($_item.customerId!));
-    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: [item]));
-  }
 }
 
 class $$BorrowedItemsTableFilterComposer
@@ -22708,6 +22462,9 @@ class $$BorrowedItemsTableFilterComposer
   ColumnFilters<String> get transactionItemId => $composableBuilder(
       column: $table.transactionItemId,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText,
@@ -22755,26 +22512,6 @@ class $$BorrowedItemsTableFilterComposer
             ));
     return composer;
   }
-
-  $$CustomersTableFilterComposer get customerId {
-    final $$CustomersTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.customerId,
-        referencedTable: $db.customers,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomersTableFilterComposer(
-              $db: $db,
-              $table: $db.customers,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$BorrowedItemsTableOrderingComposer
@@ -22795,6 +22532,9 @@ class $$BorrowedItemsTableOrderingComposer
   ColumnOrderings<String> get transactionItemId => $composableBuilder(
       column: $table.transactionItemId,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText,
@@ -22842,26 +22582,6 @@ class $$BorrowedItemsTableOrderingComposer
             ));
     return composer;
   }
-
-  $$CustomersTableOrderingComposer get customerId {
-    final $$CustomersTableOrderingComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.customerId,
-        referencedTable: $db.customers,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomersTableOrderingComposer(
-              $db: $db,
-              $table: $db.customers,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$BorrowedItemsTableAnnotationComposer
@@ -22881,6 +22601,9 @@ class $$BorrowedItemsTableAnnotationComposer
 
   GeneratedColumn<String> get transactionItemId => $composableBuilder(
       column: $table.transactionItemId, builder: (column) => column);
+
+  GeneratedColumn<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => column);
 
   GeneratedColumn<String> get customerNameText => $composableBuilder(
       column: $table.customerNameText, builder: (column) => column);
@@ -22925,26 +22648,6 @@ class $$BorrowedItemsTableAnnotationComposer
             ));
     return composer;
   }
-
-  $$CustomersTableAnnotationComposer get customerId {
-    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.customerId,
-        referencedTable: $db.customers,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomersTableAnnotationComposer(
-              $db: $db,
-              $table: $db.customers,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$BorrowedItemsTableTableManager extends RootTableManager<
@@ -22958,7 +22661,7 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
     $$BorrowedItemsTableUpdateCompanionBuilder,
     (BorrowedItem, $$BorrowedItemsTableReferences),
     BorrowedItem,
-    PrefetchHooks Function({bool transactionId, bool customerId})> {
+    PrefetchHooks Function({bool transactionId})> {
   $$BorrowedItemsTableTableManager(_$AppDatabase db, $BorrowedItemsTable table)
       : super(TableManagerState(
           db: db,
@@ -23039,7 +22742,7 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
                     $$BorrowedItemsTableReferences(db, table, e)
                   ))
               .toList(),
-          prefetchHooksCallback: ({transactionId = false, customerId = false}) {
+          prefetchHooksCallback: ({transactionId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -23067,16 +22770,6 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
                         .id,
                   ) as T;
                 }
-                if (customerId) {
-                  state = state.withJoin(
-                    currentTable: table,
-                    currentColumn: table.customerId,
-                    referencedTable:
-                        $$BorrowedItemsTableReferences._customerIdTable(db),
-                    referencedColumn:
-                        $$BorrowedItemsTableReferences._customerIdTable(db).id,
-                  ) as T;
-                }
 
                 return state;
               },
@@ -23099,7 +22792,7 @@ typedef $$BorrowedItemsTableProcessedTableManager = ProcessedTableManager<
     $$BorrowedItemsTableUpdateCompanionBuilder,
     (BorrowedItem, $$BorrowedItemsTableReferences),
     BorrowedItem,
-    PrefetchHooks Function({bool transactionId, bool customerId})>;
+    PrefetchHooks Function({bool transactionId})>;
 typedef $$PreorderEntriesTableCreateCompanionBuilder = PreorderEntriesCompanion
     Function({
   required String id,

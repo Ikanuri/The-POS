@@ -205,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -394,6 +394,19 @@ class AppDatabase extends _$AppDatabase {
             // sebagian dari qty baris nota), pola guard identik v23/v24 di
             // atas.
             await m.addColumn(leftBehindItems, leftBehindItems.qty);
+          }
+          if (from < 26) {
+            // Bug nyata dilaporkan user: FK `customerId -> Customers` di
+            // `left_behind_items`/`borrowed_items` bikin usulan Laci Meja yang
+            // menaut pelanggan AD-HOC (dibuat di device kasir, tidak pernah
+            // tersinkron balik ke host — pelanggan itu master data satu-arah
+            // host->klien) GAGAL PERMANEN saat diterapkan di host (FOREIGN
+            // KEY constraint failed). `alterTable` merekonstruksi tabel dari
+            // definisi Dart TERKINI (sudah tanpa FK itu, lihat
+            // laci_meja_tables.dart) — data lama ikut disalin apa adanya,
+            // tidak ada yang hilang.
+            await m.alterTable(TableMigration(leftBehindItems));
+            await m.alterTable(TableMigration(borrowedItems));
           }
         },
         beforeOpen: (details) async {

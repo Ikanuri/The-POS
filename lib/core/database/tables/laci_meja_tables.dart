@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 
-import 'customer_tables.dart';
 import 'transaction_tables.dart';
 
 /// Item 52 ("Laci Meja") — 3 kategori catatan operasional harian toko:
@@ -25,7 +24,15 @@ class LeftBehindItems extends Table {
   /// utk entri lama yang dibuat sebelum kolom ini ada.
   TextColumn get transactionItemId => text().nullable()();
   TextColumn get jenis => text()(); // 'ketinggalan' | 'titip'
-  TextColumn get customerId => text().nullable().references(Customers, #id)();
+  /// SENGAJA TANPA FK ke `Customers` (beda dari kolom lain di tabel ini yang
+  /// FK ke `Transactions`) — pola identik `Transactions.customerId`. Sebab:
+  /// pelanggan adalah master data yang HANYA mengalir host→klien (lihat
+  /// `dumpSince`), jadi pelanggan ad-hoc yang dibuat di device kasir TIDAK
+  /// PERNAH tersinkron balik ke host. Kalau kolom ini FK ke `Customers`,
+  /// usulan Laci Meja yang menaut pelanggan ad-hoc semacam itu GAGAL
+  /// PERMANEN saat diterapkan di host (`FOREIGN KEY constraint failed`,
+  /// bug nyata dilaporkan user — migrasi v26 menghapus FK ini).
+  TextColumn get customerId => text().nullable()();
   TextColumn get customerNameText => text().nullable()();
   TextColumn get note => text().nullable()();
 
@@ -62,7 +69,10 @@ class BorrowedItems extends Table {
   /// penanda "Pinjaman" di baris yang benar. Nullable utk entri lama yang
   /// dibuat sebelum kolom ini ada.
   TextColumn get transactionItemId => text().nullable()();
-  TextColumn get customerId => text().nullable().references(Customers, #id)();
+  /// SENGAJA TANPA FK ke `Customers` — lihat komentar di
+  /// `LeftBehindItems.customerId` (alasan identik: pelanggan ad-hoc device
+  /// kasir tidak pernah tersinkron balik ke host).
+  TextColumn get customerId => text().nullable()();
   TextColumn get customerNameText => text().nullable()();
   RealColumn get qty => real()();
   RealColumn get qtyReturned => real().withDefault(const Constant(0))();
