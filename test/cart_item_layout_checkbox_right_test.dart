@@ -45,6 +45,22 @@ void main() {
       surfaceSize: const Size(360, 800),
       child: const CartSheet());
 
+  testWidgets(
+      'jarak ke tepi layar diperlebar di kedua sisi (dulu terlalu mepet)',
+      (tester) async {
+    await pumpCart(tester);
+
+    final nameLeft = tester.getTopLeft(find.text('Beras 5kg')).dx;
+    final stepperRight = tester.getTopRight(find.byType(AddControl)).dx;
+    const screenWidth = 360.0;
+
+    expect(nameLeft, greaterThanOrEqualTo(14),
+        reason: 'nama produk (sisi kiri) tidak boleh mepet ke tepi kiri layar');
+    expect(screenWidth - stepperRight, greaterThanOrEqualTo(14),
+        reason: 'stepper (sisi kanan) tidak boleh mepet ke tepi kanan layar, '
+            'perlu ruang utk jari');
+  });
+
   testWidgets('checkbox berada di KANAN (setelah nama produk) & KIRI stepper',
       (tester) async {
     await pumpCart(tester);

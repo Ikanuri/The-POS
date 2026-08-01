@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-01 (lanjutan 4)
+
+- `5266dcd` — fix: baris keranjang terlalu mepet ke tepi layar di kedua sisi — jarak ke tepi diperlebar (8/4px -> 16/16px, varian 32px -> 40px), memberi ruang jari lebih leluasa di sekitar checkbox/stepper (sisi kanan) & nama/nominal (sisi kiri). Tidak ada bump versi (permintaan eksplisit user). 1 test baru — revert-verified. Full suite 883 hijau (1 kegagalan `proposal_unchanged_end_to_end_test.dart` dikonfirmasi flaky pre-existing/tidak terkait — port conflict, lolos 100% saat dijalankan sendirian), `flutter analyze` 0 issue.
+
 ## 2026-08-01 (lanjutan 3)
 
 - `c006f44` — chore: naikkan versi ke 2.9.1+14. PATCH: melengkapi jalur sync utk fitur yg baru dirilis di commit sebelumnya, bukan fitur baru.

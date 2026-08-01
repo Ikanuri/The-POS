@@ -352,7 +352,10 @@ class _CartItemTile extends ConsumerWidget {
           Navigator.of(context).pop(targetId);
         },
         child: Padding(
-          padding: EdgeInsets.fromLTRB(isVariant ? 32 : 8, 4, 4, 4),
+          // Susulan (permintaan user): jarak ke tepi layar diperlebar di
+          // KEDUA sisi (dulu 8/4px — terlalu mepet, checklist+stepper nyaris
+          // menempel tepi kanan, nama+nominal nyaris menempel tepi kiri).
+          padding: EdgeInsets.fromLTRB(isVariant ? 40 : 16, 4, 16, 4),
           child: Row(
             children: [
               // Item 44 — badge jumlah qty di KIRI item (selain angka di
