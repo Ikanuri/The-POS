@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-01 (lanjutan 3)
+
+- `(belum commit)` — chore: naikkan versi ke 2.9.1+14. PATCH: melengkapi jalur sync utk fitur yg baru dirilis di commit sebelumnya, bukan fitur baru.
+- `(belum commit)` — fix: saklar "Ikut harga satuan dasar" varian sekarang ikut tersambung ke jalur approve usulan sync (`applyProductProposals`), bukan cuma `saveProduct` (form Edit Produk biasa). User bertanya eksplisit "Apakah bisa dibuat sync juga?" menindaklanjuti gap yang dicatat di PLAN.md Item 53. Selama memproses `product_units` & `price_tiers` dari usulan yang di-approve, dikumpulkan (productId -> satuan dasarnya + harga tier barunya kalau ikut ter-approve); SETELAH `transaction()` commit, dipanggil `_cascadeVariantPricesForUnit` yang sama persis dgn yang dipakai `saveProduct` — scope ketat per `parentProductId` (usulan produk lain yg diapprove bersamaan tidak ikut mencascade). Cascade cuma terpicu kalau tier dasar (`minQty=1`) satuan dasar produk itu benar-benar ada di batch usulan yang diterapkan (bukan setiap approve produk apa pun). 3 test baru (`variant_follow_price_proposal_sync_test.dart`) — revert-verified. Full suite 883 hijau, `flutter analyze` 0 issue.
+
 ## 2026-08-01 (lanjutan 2)
 
 - `9ec58d5` — chore: naikkan versi ke 2.9.0+13 (schemaVersion 26->27, additive/backward-compatible). MINOR: fitur baru (saklar "ikut harga satuan dasar" varian, harga varian bisa diketik manual + chip Harga Lain langsung), tidak ada breaking change.

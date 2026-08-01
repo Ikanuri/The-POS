@@ -5,25 +5,38 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 1 Agustus 2026 (lanjutan 2) — versi kerja **2.9.0+13**,
-schemaVersion 27. Setelah sempat diusulkan redesain varian jadi "atribut"
-(bukan entity terpisah) — user AKHIRNYA memutuskan **pertahankan skema
-varian sekarang** (Item 53 PLAN.md, keputusan final), sebagai gantinya
-minta 2 perbaikan: (1) saklar "Ikut harga satuan dasar" per satuan jual
-varian — kolom baru `product_units.follows_parent_price` (migrasi
-additive, default false), cascade lewat `AppDatabase.
-_cascadeVariantPricesForUnit` dipanggil dari `saveProduct` SETIAP kali
-harga satuan dasar produk induk disimpan ulang (bukan cuma saat benar2
-berubah — cascade selalu menegakkan invariant harga×isi, bukan listen ke
-diff). **BELUM disambungkan ke `applyProductProposals`** (jalur approve
-usulan sync) — gap diketahui, dicatat di PLAN.md Item 53. (2) UX harga
-varian di `ItemEntrySheet`: ikon popup "Pilih harga" DIGANTI field harga
-manual + chip Harga Lain (`_MiniPriceChip`) tampil langsung, TAPI cuma
-muncul saat variannya qty>0 — supaya modal tidak penuh sesak kalau
-variannya banyak. Kedua desain dirancang via mockup HTML+Playwright (2x
-revisi visual sebelum sentuh kode Flutter — permintaan eksplisit user
-"takutnya salah lagi" setelah 2 percobaan layout keranjang sebelumnya
-meleset). 12 test baru, semua revert-verified. Full suite 880 hijau.
+_Update sesi 1 Agustus 2026 (lanjutan 3) — versi kerja **2.9.1+14**,
+schemaVersion 27. **Item 53 PLAN.md SEKARANG BENAR-BENAR SELESAI TOTAL**
+(dihapus dari PLAN.md) — user tanya susulan "Apakah bisa dibuat sync
+juga?" menutup gap yang sempat dicatat: saklar "Ikut harga satuan dasar"
+varian sekarang cascade lewat DUA jalur — `saveProduct` (form Edit Produk
+biasa, sudah ada) DAN `applyProductProposals` (owner approve usulan harga
+dari device lain via sync, baru ditambahkan). Pola: kumpulkan
+`(productId -> satuan dasarnya)` sambil proses tabel `product_units`,
+harga barunya sambil proses `price_tiers`, lalu panggil
+`_cascadeVariantPricesForUnit` yang SAMA PERSIS SETELAH `transaction()`
+commit — scope ketat per `parentProductId` (usulan produk lain yg
+diapprove bersamaan tidak ikut mencascade). 3 test baru
+(`variant_follow_price_proposal_sync_test.dart`), revert-verified. Full
+suite 883 hijau.
+
+_Riwayat sesi 1 Agustus 2026 (lanjutan 2) — versi kerja **2.9.0+13**.
+Setelah sempat diusulkan redesain varian jadi "atribut" (bukan entity
+terpisah) — user memutuskan **pertahankan skema varian sekarang**
+(keputusan final), sebagai gantinya minta 2 perbaikan: (1) saklar "Ikut
+harga satuan dasar" per satuan jual varian — kolom baru `product_units.
+follows_parent_price` (migrasi additive, default false), cascade lewat
+`AppDatabase._cascadeVariantPricesForUnit` dipanggil dari `saveProduct`
+SETIAP kali harga satuan dasar produk induk disimpan ulang (bukan cuma
+saat benar2 berubah — cascade selalu menegakkan invariant harga×isi,
+bukan listen ke diff). (2) UX harga varian di `ItemEntrySheet`: ikon
+popup "Pilih harga" DIGANTI field harga manual + chip Harga Lain
+(`_MiniPriceChip`) tampil langsung, TAPI cuma muncul saat variannya
+qty>0 — supaya modal tidak penuh sesak kalau variannya banyak. Kedua
+desain dirancang via mockup HTML+Playwright (2x revisi visual sebelum
+sentuh kode Flutter — permintaan eksplisit user "takutnya salah lagi"
+setelah 2 percobaan layout keranjang sebelumnya meleset). 12 test baru,
+semua revert-verified. Full suite 880 hijau._
 
 **Gotcha migrasi kena LAGI, PERSIS seperti yang sudah didokumentasikan**:
 step migrasi baru (`addColumn` ke `product_units`, TANPA syarat versi

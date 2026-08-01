@@ -1,7 +1,7 @@
 name: the_pos
 description: "The POS — Aplikasi kasir offline-first untuk toko grosir."
 publish_to: 'none'
-version: 2.9.0+13
+version: 2.9.1+14
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
