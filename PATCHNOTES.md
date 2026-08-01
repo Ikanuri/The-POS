@@ -18,10 +18,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Renteng. Kalau isinya dibiarkan 1, varian bekerja persis seperti sebelumnya.
 
 ### ✨ Penyesuaian tampilan
-- **Nominal per barang di keranjang pindah ke bawah tombol jumlah** — dulu
-  sebaris di sampingnya, sehingga tombol +/− ikut bergeser tiap kali diketuk
-  (nominalnya melebar). Sekarang tombolnya diam di tempat.
-- **Kotak centang di keranjang pindah ke kanan**, tepat di kiri tombol −.
+- **Nominal per barang di keranjang pindah ke bawah baris satuan & harga**
+  (mis. di bawah "Karung · Rp 65.000") — dulu sebaris dengan tombol +/−,
+  sehingga tombolnya ikut bergeser tiap kali diketuk (nominalnya melebar).
+  Sekarang tombolnya diam di tempat.
+- **Kotak centang di keranjang pindah ke kanan** (agak renggang dari tombol
+  −), tepat di kiri stepper.
 - **Ikon tab Ringkasan** diganti jadi ikon kertas & pensil.
 
 ### 🛠️ Perbaikan
