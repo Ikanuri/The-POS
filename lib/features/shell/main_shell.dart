@@ -18,7 +18,10 @@ class _TabItem {
 }
 
 const _allTabs = [
-  _TabItem('/ringkasan', 'Ringkasan', Icons.grid_view_outlined, Icons.grid_view),
+  // Susulan (permintaan user) — ikon Ringkasan dulu `grid_view` (kotak-kotak,
+  // tidak menggambarkan "ringkasan" apa pun); diganti ikon kertas+pensil
+  // (`note_alt`) yang lazim dipakai untuk ringkasan/catatan.
+  _TabItem('/ringkasan', 'Ringkasan', Icons.note_alt_outlined, Icons.note_alt),
   _TabItem('/kasir', 'Kasir', Icons.point_of_sale_outlined, Icons.point_of_sale),
   _TabItem('/produk', 'Produk', Icons.inventory_2_outlined, Icons.inventory_2),
   _TabItem('/pelanggan', 'Pelanggan', Icons.people_outline, Icons.people),

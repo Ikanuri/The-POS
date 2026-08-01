@@ -458,22 +458,3 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 6. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
-7. **Item 52 (jangkar satuan varian)** — user menyebut "kemarin ada
-   pembahasan untuk jangkar ke satuan yang mana untuk varian", tapi
-   ditelusuri (PLAN.md/CHANGELOG.md/docs/HANDOFF.md/`git log`) **tidak
-   ditemukan jejak diskusi tsb sama sekali**. Perilaku kode SAAT INI
-   (dikonfirmasi baca `_addVariant`/`_editVariant` di
-   `produk_form_screen.dart` & `ItemEntrySheet`): varian SELALU jangkar
-   ke satuan DASAR (`isBaseUnit == true`) produk induk saat dibuat —
-   bukan ke satuan yang sedang aktif/dipilih di form. Varian juga SELALU
-   mono-unit (satu `ProductUnit` sendiri, `ratioToBase: 1.0`, tidak
-   mendukung multi-satuan spt produk biasa) dan saat dijual di kasir,
-   qty/harga varian SEPENUHNYA independen dari satuan induk yang sedang
-   dipilih di chip "Pilih satuan" (ganti "Lusin"->"Pcs" di induk TIDAK
-   mempengaruhi varian sama sekali). Item 2 & 3 dari permintaan yang sama
-   (atur stok varian, pakai Harga Lain varian saat jual) sudah dieksekusi
-   (lihat CHANGELOG). **Item ini (jangkar satuan) BELUM disentuh** —
-   perlu klarifikasi user: apakah dimaksud (a) varian seharusnya bisa
-   jangkar ke satuan lain (bukan cuma dasar), (b) varian seharusnya ikut
-   scaling qty/harga saat satuan induk di kasir diganti, atau (c) hal
-   lain yang tidak tertangkap dari deskripsi kode di atas.

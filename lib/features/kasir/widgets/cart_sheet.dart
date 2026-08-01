@@ -330,40 +330,52 @@ class _CartItemTile extends ConsumerWidget {
     final isZeroed = !isVariant && effectiveQty == 0;
     final subtotal = (item.price * effectiveQty).round();
 
+    // Susulan (permintaan user): baris keranjang TIDAK lagi memakai
+    // `ListTile`. Alasannya konkret — `ListTile` mengunci tinggi
+    // leading/trailing-nya ke 48px (dense) apa pun tinggi barisnya, jadi
+    // nominal subtotal MUSTAHIL ditumpuk di bawah stepper di dalam
+    // `trailing` tanpa overflow (kena persis saat perubahan ini dibuat:
+    // "RenderFlex overflowed by 14 pixels"). Disusun manual dengan `Row`
+    // supaya blok kanan (centang + stepper + subtotal) bebas tinggi dan
+    // tetap aman saat skala font sistem dibesarkan.
     return Opacity(
       opacity: isZeroed ? 0.45 : 1.0,
-      child: ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.only(left: isVariant ? 32 : 8, right: 4),
-        // Checklist verifikasi barang sebelum bayar — independen dari tap
-        // baris (yang membuka modal edit). Leading widget eksplisit (bukan
-        // CheckboxListTile) supaya kedua gesture ini tidak tumpang tindih.
-        // Item 44 — badge jumlah qty di KIRI item (selain angka di stepper
-        // kanan), supaya qty langsung kebaca tanpa lihat ke stepper. Hanya
-        // tampil bila qty > 0 (baris "via varian" qty 0 tidak diberi badge).
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              value: item.checked,
-              visualDensity: VisualDensity.compact,
-              onChanged: (v) =>
-                  notifier.setChecked(item.productUnitId, v ?? false),
-            ),
-            if (effectiveQty > 0)
-              Padding(
-                padding: const EdgeInsets.only(left: 2, right: 2),
-                child: Text(
-                  '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}×',
-                  style: AppTheme.numStyle(context,
-                      size: 13,
-                      weight: FontWeight.w600,
-                      color: scheme.onSurfaceVariant),
+      child: InkWell(
+        // Tap item keranjang → tutup sheet keranjang sambil mengembalikan id
+        // produk yang akan diedit. Kasir akan membuka modal entri item di atas
+        // layar (bukan bertumpuk di atas DraggableScrollableSheet, yang
+        // memutus koneksi input keyboard). Untuk varian, kirim id induk.
+        onTap: () {
+          final targetId = (item.isVariant && item.parentProductId != null)
+              ? item.parentProductId!
+              : item.productId;
+          Navigator.of(context).pop(targetId);
+        },
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(isVariant ? 32 : 8, 4, 4, 4),
+          child: Row(
+            children: [
+              // Item 44 — badge jumlah qty di KIRI item (selain angka di
+              // stepper kanan), supaya qty langsung kebaca tanpa lihat ke
+              // stepper. Hanya tampil bila qty > 0 (baris "via varian" qty 0
+              // tidak diberi badge).
+              if (effectiveQty > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Text(
+                    '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}\u00d7',
+                    style: AppTheme.numStyle(context,
+                        size: 13,
+                        weight: FontWeight.w600,
+                        color: scheme.onSurfaceVariant),
+                  ),
                 ),
-              ),
-          ],
-        ),
-        title: Row(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
           children: [
             if (isVariant)
               Padding(
@@ -415,8 +427,9 @@ class _CartItemTile extends ConsumerWidget {
             ),
           ],
         ),
-        subtitle: Column(
+                    Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
@@ -474,42 +487,68 @@ class _CartItemTile extends ConsumerWidget {
               ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Item 4 (usulan user) — stepper disamakan persis dgn gaya
-            // stepper produk di halaman kasir (`AddControl`, shared widget),
-            // menggantikan tombol ±/field qty lama.
-            AddControl(
-              qty: effectiveQty,
-              size: 30,
-              onTap: () => notifier.setEffectiveQty(
-                  item.productUnitId, effectiveQty + 1),
-              onMinus: isZeroed
-                  ? null
-                  : () => notifier.setEffectiveQty(
-                      item.productUnitId, effectiveQty - 1),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              formatRupiah(subtotal),
-              style: AppTheme.numStyle(context,
-                  size: 15,
-                  weight: FontWeight.w600,
-                  color: isZeroed ? scheme.onSurfaceVariant : scheme.primary),
-            ),
-          ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Susulan (permintaan user), 2 perubahan sekaligus di blok ini:
+              // 1. Nominal subtotal DIPINDAH ke BAWAH baris qty (dulu sebaris
+              //    di kanan stepper). Lebar teks rupiah berubah tiap qty
+              //    diubah ("Rp 5.000" -> "Rp 10.000"), jadi dulu stepper ikut
+              //    BERGESER tiap kali diketuk — tombol +/- pindah tempat di
+              //    bawah jari. Ditumpuk vertikal & rata kanan, jadi stepper
+              //    diam di tempat berapa pun lebar nominalnya.
+              // 2. Checkbox verifikasi dipindah dari kiri baris ke sini,
+              //    PERSIS di kiri tombol minus (permintaan user: stepper
+              //    paling kanan, centang di kirinya).
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Checklist verifikasi barang sebelum bayar — independen
+                      // dari tap baris (yang membuka modal edit). Widget
+                      // eksplisit (bukan CheckboxListTile) supaya kedua
+                      // gesture ini tidak tumpang tindih.
+                      Checkbox(
+                        value: item.checked,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (v) =>
+                            notifier.setChecked(item.productUnitId, v ?? false),
+                      ),
+                      const SizedBox(width: 4),
+                      // Item 4 (usulan user) — stepper disamakan persis dgn
+                      // gaya stepper produk di halaman kasir (`AddControl`,
+                      // shared widget), menggantikan tombol ±/field qty lama.
+                      AddControl(
+                        qty: effectiveQty,
+                        size: 30,
+                        onTap: () => notifier.setEffectiveQty(
+                            item.productUnitId, effectiveQty + 1),
+                        onMinus: isZeroed
+                            ? null
+                            : () => notifier.setEffectiveQty(
+                                item.productUnitId, effectiveQty - 1),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    formatRupiah(subtotal),
+                    style: AppTheme.numStyle(context,
+                        size: 15,
+                        weight: FontWeight.w600,
+                        color:
+                            isZeroed ? scheme.onSurfaceVariant : scheme.primary),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        // Tap item keranjang → tutup sheet keranjang sambil mengembalikan id
-        // produk yang akan diedit. Kasir akan membuka modal entri item di atas
-        // layar (bukan bertumpuk di atas DraggableScrollableSheet, yang
-        // memutus koneksi input keyboard). Untuk varian, kirim id induk.
-        onTap: () {
-          final targetId = (item.isVariant && item.parentProductId != null)
-              ? item.parentProductId!
-              : item.productId;
-          Navigator.of(context).pop(targetId);
-        },
       ),
     );
   }

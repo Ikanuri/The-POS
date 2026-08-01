@@ -196,8 +196,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     for (final vp in variantProducts) {
       final vUnits = await db.getProductUnits(vp.id);
       if (vUnits.isEmpty) continue;
-      final base =
-          vUnits.firstWhere((u) => u.isBaseUnit, orElse: () => vUnits.first);
+      // Satuan JUAL varian (bisa satuan non-dasar yang berisi N satuan
+      // dasar, mis. Renteng isi 10) — harga/barcode/Harga Lain/stok yang
+      // dilihat kasir semuanya menempel di satuan ini.
+      final base = AppDatabase.variantSaleUnit(vUnits)!;
       final vType = await (db.select(db.unitTypes)
             ..where((t) => t.id.equals(base.unitTypeId ?? 1)))
           .getSingleOrNull();

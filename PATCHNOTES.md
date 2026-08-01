@@ -8,6 +8,28 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 1 Agustus 2026
+
+### 🆕 Fitur baru
+- **Varian sekarang bisa punya satuan sendiri + isi per satuan** — di dialog
+  Tambah/Edit Varian ada pilihan "Jenis Satuan" (mis. Renteng, Dus) dan
+  "Isi per Satuan". Contoh: varian dijual per Renteng yang berisi 10 pcs —
+  stoknya tetap dihitung dalam satuan dasar, tapi ditampilkan & dijual per
+  Renteng. Kalau isinya dibiarkan 1, varian bekerja persis seperti sebelumnya.
+
+### ✨ Penyesuaian tampilan
+- **Nominal per barang di keranjang pindah ke bawah tombol jumlah** — dulu
+  sebaris di sampingnya, sehingga tombol +/− ikut bergeser tiap kali diketuk
+  (nominalnya melebar). Sekarang tombolnya diam di tempat.
+- **Kotak centang di keranjang pindah ke kanan**, tepat di kiri tombol −.
+- **Ikon tab Ringkasan** diganti jadi ikon kertas & pensil.
+
+### 🛠️ Perbaikan
+- **Centang barang hilang saat "Tambah Belanjaan"** — barang yang sudah
+  dicentang di keranjang muncul tanpa centang di struk saat ditambahkan ke
+  nota yang sudah lunas/tempo. Sekarang ikut tercentang, dan centang barang
+  lama di nota itu tidak hilang.
+
 ## 31 Juli 2026
 
 ### 🆕 Fitur baru
