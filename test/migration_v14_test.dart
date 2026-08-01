@@ -74,7 +74,7 @@ void main() {
     expect(p.name, 'Sedap Goreng', reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 26); // schemaVersion terkini // schemaVersion terkini
+    expect(ver.data.values.first, 27); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

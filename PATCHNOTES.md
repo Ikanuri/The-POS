@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 1 Agustus 2026 (lanjutan)
+
+### 🆕 Fitur baru
+- **Varian bisa "ikut harga satuan dasar" otomatis** — saklar baru di
+  dialog Tambah/Edit Varian. Kalau dinyalakan, harga varian otomatis ikut
+  berubah tiap kali harga satuan dasar produk induk diubah (dikalikan isi
+  per satuan), jadi tidak perlu update manual satu-satu.
+- **Harga varian sekarang bisa diketik langsung saat jual** — di modal
+  tambah item kasir, begitu varian ditambah jumlahnya, muncul kotak harga
+  yang bisa diedit manual, plus pilihan Harga Lain langsung tampil sebagai
+  kotak kecil (tidak perlu buka menu pop-up lagi).
+
 ## 1 Agustus 2026
 
 ### 🆕 Fitur baru

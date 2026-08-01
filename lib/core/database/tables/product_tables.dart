@@ -92,6 +92,17 @@ class ProductUnits extends Table {
   BoolColumn get requiresDeposit =>
       boolean().withDefault(const Constant(false))();
 
+  /// Item 53 (permintaan user) — HANYA relevan untuk satuan JUAL varian
+  /// (lihat `AppDatabase.variantSaleUnit`). true = harga dasar (tier
+  /// minQty=1) varian ini otomatis ikut disesuaikan setiap kali harga
+  /// satuan dasar PRODUK INDUK (dgn `unitTypeId` yg sama, lihat
+  /// `baseUnitTypeId` di `createVariant`/`updateVariant`) berubah — hasil
+  /// = harga_induk_baru × `ratioToBase` satuan jual ini. Default false =
+  /// harga varian sepenuhnya independen spt sebelumnya. HANYA memengaruhi
+  /// harga DASAR (bukan tier grosir/Harga Lain — itu tetap manual).
+  BoolColumn get followsParentPrice =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
