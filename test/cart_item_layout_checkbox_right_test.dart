@@ -11,12 +11,14 @@ import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
 
 import 'helpers/pump_app.dart';
 
-/// Susulan (permintaan user), 2 perubahan tata letak baris keranjang:
-/// 1. Nominal subtotal pindah ke BAWAH baris qty — dulu sebaris di kanan
-///    stepper, sehingga lebar teks rupiah yang berubah tiap qty diketuk
-///    ("Rp 65.000" -> "Rp 130.000") MENGGESER stepper di bawah jari.
+/// Susulan (permintaan user), tata letak baris keranjang:
+/// 1. Nominal subtotal taruh PERSIS di bawah baris satuan+harga
+///    ("Karung · Rp 65.000") — BUKAN di bawah qty badge kiri (percobaan
+///    pertama, ditolak user) atau di bawah stepper (percobaan kedua,
+///    juga ditolak — keduanya membuat stepper harus dibungkus ulang).
 /// 2. Checkbox verifikasi pindah dari kiri baris ke kanan, persis di kiri
-///    tombol minus stepper.
+///    tombol minus, dengan jarak DIRENGGANGKAN dari stepper.
+/// 3. Desain stepper (`AddControl`) sendiri TIDAK diubah sama sekali.
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -57,22 +59,38 @@ void main() {
         reason: 'checkbox harus persis di KIRI stepper (tombol minus)');
   });
 
-  testWidgets('nominal subtotal berada DI BAWAH baris stepper, bukan sebaris',
+  testWidgets(
+      'jarak checkbox ke stepper direnggangkan (bukan mepet spt sebelumnya)',
       (tester) async {
     await pumpCart(tester);
 
-    // Subtotal baris item (qty 1 x 65.000). Nominal yang sama juga muncul di
-    // ringkasan Total cart bar, jadi diambil yang paling atas (baris item).
+    final checkboxRight = tester.getTopRight(find.byType(Checkbox)).dx;
+    final stepperLeft = tester.getTopLeft(find.byType(AddControl)).dx;
+
+    expect(stepperLeft - checkboxRight, greaterThanOrEqualTo(12),
+        reason: 'jarak checkbox->stepper harus renggang (>=12px), bukan '
+            'mepet 4px seperti sebelumnya');
+  });
+
+  testWidgets(
+      'nominal subtotal PERSIS di bawah baris "Karung · Rp 65.000", bukan di '
+      'bawah qty badge atau di blok kanan (stepper)', (tester) async {
+    await pumpCart(tester);
+
+    final meta = find.textContaining('Karung');
     final subtotal = find.text(formatRupiah(65000)).first;
     final stepper = find.byType(AddControl);
 
-    expect(tester.getCenter(subtotal).dy,
-        greaterThan(tester.getBottomLeft(stepper).dy - 1),
-        reason: 'nominal harus di bawah baris qty, bukan sejajar di sampingnya');
-    expect(tester.getCenter(subtotal).dx,
-        closeTo(tester.getCenter(stepper).dx, 60),
-        reason: 'tetap di blok kanan yang sama (rata kanan), bukan pindah '
-            'jauh ke kiri baris');
+    // Di bawah baris satuan+harga (bukan sejajar/di atasnya).
+    expect(tester.getCenter(subtotal).dy, greaterThan(tester.getCenter(meta).dy),
+        reason: 'nominal harus di bawah baris "satuan · harga"');
+    // Rata kiri sejajar nama/meta (blok kiri), BUKAN di blok kanan (stepper).
+    expect(tester.getTopLeft(subtotal).dx,
+        closeTo(tester.getTopLeft(meta).dx, 2),
+        reason: 'nominal harus rata-kiri sejajar nama & meta, bukan pindah '
+            'ke blok kanan (stepper)');
+    expect(tester.getCenter(subtotal).dx, lessThan(tester.getCenter(stepper).dx),
+        reason: 'nominal tidak boleh berada di blok kanan (stepper)');
   });
 
   testWidgets(
@@ -89,7 +107,6 @@ void main() {
     expect(find.text(formatRupiah(130000)), findsWidgets,
         reason: 'prasyarat: qty benar-benar naik jadi 2 (nominal 2x lipat)');
     expect(tester.getRect(find.byType(AddControl)), before,
-        reason: 'stepper harus tetap di kotak yang sama persis — inilah '
-            'alasan nominal dipindah ke baris bawah');
+        reason: 'stepper harus tetap di kotak yang sama persis');
   });
 }

@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-01 (lanjutan)
+
+- `ecf3bdd` — chore: naikkan versi ke 2.8.1+12. PATCH: koreksi posisi UI, bukan fitur baru.
+- `ecf3bdd` — fix: posisi nominal baris keranjang & jarak checkbox-stepper. Dua percobaan sebelumnya (di bawah qty badge kiri, lalu di bawah stepper kanan) SALAH — user klarifikasi lewat mockup HTML+Playwright (dibuat sengaja sebelum sentuh kode Flutter, supaya tidak salah arah 3x): nominal seharusnya PERSIS di bawah baris "satuan · harga" (mis. "Karung · Rp 65.000"), rata kiri sejajar nama produk — bukan di blok kanan (stepper) sama sekali. `_CartItemTile` (`cart_sheet.dart`): `Text(formatRupiah(subtotal))` dipindah ke dalam kolom kiri (setelah Row satuan+harga, sebelum itemNote), blok kanan disederhanakan jadi cuma `Checkbox` + `AddControl` langsung di `Row` utama (tidak perlu dibungkus `Column` lagi krn tidak ada lagi teks yang ditumpuk di situ). Jarak checkbox->stepper diperlebar dari 4px ke 14px sesuai permintaan ("agak renggang"). Desain `AddControl` (stepper) sendiri sama sekali tidak disentuh. 1 test lama disesuaikan total (`cart_item_layout_checkbox_right_test.dart`, 4 kasus) — revert-verified. Full suite hijau, `flutter analyze` 0 issue.
+
 ## 2026-08-01
 
 - `6c0463d` — chore: naikkan versi ke 2.8.0+11 utk rilis resmi berikutnya. MINOR bump: fitur baru (satuan jual + isi per satuan untuk varian) + 4 penyesuaian UI/bugfix, tidak ada breaking change/migrasi schema.

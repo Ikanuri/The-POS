@@ -461,6 +461,20 @@ class _CartItemTile extends ConsumerWidget {
                 ],
               ],
             ),
+            // Susulan (permintaan user): nominal subtotal taruh PERSIS di
+            // bawah baris satuan+harga ("Karung · Rp 65.000") — bukan di
+            // blok kanan (dulu sempat dicoba di bawah qty badge kiri, lalu
+            // di bawah stepper; keduanya BUKAN yang dimaksud user).
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                formatRupiah(subtotal),
+                style: AppTheme.numStyle(context,
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: isZeroed ? scheme.onSurfaceVariant : scheme.primary),
+              ),
+            ),
             if (item.itemNote != null && item.itemNote!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -491,60 +505,30 @@ class _CartItemTile extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              // Susulan (permintaan user), 2 perubahan sekaligus di blok ini:
-              // 1. Nominal subtotal DIPINDAH ke BAWAH baris qty (dulu sebaris
-              //    di kanan stepper). Lebar teks rupiah berubah tiap qty
-              //    diubah ("Rp 5.000" -> "Rp 10.000"), jadi dulu stepper ikut
-              //    BERGESER tiap kali diketuk — tombol +/- pindah tempat di
-              //    bawah jari. Ditumpuk vertikal & rata kanan, jadi stepper
-              //    diam di tempat berapa pun lebar nominalnya.
-              // 2. Checkbox verifikasi dipindah dari kiri baris ke sini,
-              //    PERSIS di kiri tombol minus (permintaan user: stepper
-              //    paling kanan, centang di kirinya).
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Checklist verifikasi barang sebelum bayar — independen
-                      // dari tap baris (yang membuka modal edit). Widget
-                      // eksplisit (bukan CheckboxListTile) supaya kedua
-                      // gesture ini tidak tumpang tindih.
-                      Checkbox(
-                        value: item.checked,
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        onChanged: (v) =>
-                            notifier.setChecked(item.productUnitId, v ?? false),
-                      ),
-                      const SizedBox(width: 4),
-                      // Item 4 (usulan user) — stepper disamakan persis dgn
-                      // gaya stepper produk di halaman kasir (`AddControl`,
-                      // shared widget), menggantikan tombol ±/field qty lama.
-                      AddControl(
-                        qty: effectiveQty,
-                        size: 30,
-                        onTap: () => notifier.setEffectiveQty(
-                            item.productUnitId, effectiveQty + 1),
-                        onMinus: isZeroed
-                            ? null
-                            : () => notifier.setEffectiveQty(
-                                item.productUnitId, effectiveQty - 1),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    formatRupiah(subtotal),
-                    style: AppTheme.numStyle(context,
-                        size: 15,
-                        weight: FontWeight.w600,
-                        color:
-                            isZeroed ? scheme.onSurfaceVariant : scheme.primary),
-                  ),
-                ],
+              // Susulan (permintaan user): nominal PINDAH ke bawah baris
+              // satuan+harga (lihat blok kiri di atas) — blok kanan sekarang
+              // cuma checkbox + stepper, tidak ada lagi teks yang ditumpuk di
+              // sini. Checkbox verifikasi ada di sini (kiri stepper, sesuai
+              // permintaan: stepper paling kanan, centang di kirinya), jarak
+              // ke stepper DIRENGGANGKAN (permintaan user) — stepper (widget
+              // `AddControl`) sendiri TIDAK diubah desainnya.
+              Checkbox(
+                value: item.checked,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (v) =>
+                    notifier.setChecked(item.productUnitId, v ?? false),
+              ),
+              const SizedBox(width: 14),
+              AddControl(
+                qty: effectiveQty,
+                size: 30,
+                onTap: () => notifier.setEffectiveQty(
+                    item.productUnitId, effectiveQty + 1),
+                onMinus: isZeroed
+                    ? null
+                    : () => notifier.setEffectiveQty(
+                        item.productUnitId, effectiveQty - 1),
               ),
             ],
           ),
