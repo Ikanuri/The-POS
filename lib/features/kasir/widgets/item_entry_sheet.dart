@@ -108,6 +108,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   // — bisa ketik langsung (utk qty desimal, mis. varian produk timbang),
   // bukan cuma stepper +/-1 polos spt sebelumnya.
   final Map<String, TextEditingController> _variantQtyCtrls = {};
+  // Susulan (permintaan user): field harga varian bisa diketik manual
+  // langsung (persis field harga produk utama), bukan cuma lewat popup —
+  // dibuat sekali per varian spy caret/selection tidak reset tiap rebuild.
+  final Map<String, TextEditingController> _variantPriceCtrls = {};
 
   double _qty = 1;
   int _price = 0;
@@ -145,6 +149,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     _noteCtrl.dispose();
     _depositQtyCtrl.dispose();
     for (final c in _variantQtyCtrls.values) {
+      c.dispose();
+    }
+    for (final c in _variantPriceCtrls.values) {
       c.dispose();
     }
     super.dispose();
@@ -287,7 +294,19 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _variantPriceOverride[v.product.id] ?? v.price;
 
   void _setVariantPrice(String variantId, int price) {
-    setState(() => _variantPriceOverride[variantId] = price);
+    setState(() {
+      _variantPriceOverride[variantId] = price;
+      _variantPriceCtrls[variantId]?.text =
+          ThousandsSeparatorFormatter.format(price);
+    });
+  }
+
+  /// Diketik manual di field harga varian (bukan lewat chip) — cuma
+  /// override sekali pakai utk transaksi ini (persis override harga produk
+  /// utama), TIDAK ditulis balik ke data varian tersimpan.
+  void _onVariantPriceTyped(String variantId, String text) {
+    final parsed = ThousandsSeparatorFormatter.parseValue(text);
+    setState(() => _variantPriceOverride[variantId] = parsed);
   }
 
   int get _variantTotal {
@@ -994,6 +1013,13 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               altPrices: v.altPrices,
                               onSelectPrice: (p) =>
                                   _setVariantPrice(v.product.id, p),
+                              priceController: _variantPriceCtrls.putIfAbsent(
+                                  v.product.id,
+                                  () => TextEditingController(
+                                      text: ThousandsSeparatorFormatter.format(
+                                          _variantPrice(v)))),
+                              onPriceTyped: (text) =>
+                                  _onVariantPriceTyped(v.product.id, text),
                               stock: v.stock,
                               isNonStock: v.isNonStock,
                               qty: _variantQty[v.product.id] ?? 0,
@@ -1068,6 +1094,8 @@ class _VariantRow extends StatelessWidget {
     required this.basePrice,
     required this.altPrices,
     required this.onSelectPrice,
+    required this.priceController,
+    required this.onPriceTyped,
     required this.stock,
     required this.isNonStock,
     required this.qty,
@@ -1080,13 +1108,19 @@ class _VariantRow extends StatelessWidget {
   final String name;
   final String unitName;
   final int price;
-  // Susulan (permintaan user) — "Harga Lain" varian, dulu tersimpan tapi
-  // tidak bisa dipakai saat jual. Menu popup ringkas (bukan chip horizontal
-  // spt produk utama) — baris varian sengaja tipis, chip penuh per varian
-  // akan makan tempat vertikal kalau varian banyak.
+  // Susulan (permintaan user) — field harga & chip Harga Lain HANYA muncul
+  // saat varian ini sedang qty>0 (sedang dibeli), supaya varian yg banyak
+  // (mis. 8 rasa) tidak bikin layar penuh sesak/scroll panjang kalau
+  // semuanya menampilkan kontrol harga sekaligus — cuma yg benar-benar
+  // dibeli yang perlu diatur.
   final int basePrice;
   final List<AltPrice> altPrices;
   final ValueChanged<int> onSelectPrice;
+  // Field harga bisa diketik manual langsung (persis field harga produk
+  // utama) — override SEKALI PAKAI utk transaksi ini, tidak mengubah data
+  // varian tersimpan (konsisten dgn override harga produk utama).
+  final TextEditingController priceController;
+  final ValueChanged<String> onPriceTyped;
   // Susulan (permintaan user) — stok varian sudah dilacak di DB (stok
   // terpisah per varian via unitId-nya), tapi sebelumnya tidak pernah
   // ditampilkan sama sekali di sini — kasir bisa jual varian kosong tanpa
@@ -1144,43 +1178,66 @@ class _VariantRow extends StatelessWidget {
                     ],
                   ],
                 ),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        isNonStock
-                            ? '$unitName · ${formatRupiah(price)} · Non-stok'
-                            : '$unitName · ${formatRupiah(price)} · Stok '
-                                '${stock % 1 == 0 ? stock.toInt() : stock}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 10.5, color: scheme.onSurfaceVariant),
-                      ),
-                    ),
-                    if (altPrices.isNotEmpty)
-                      PopupMenuButton<int>(
-                        tooltip: 'Pilih harga',
-                        padding: EdgeInsets.zero,
-                        icon: Icon(Icons.sell_outlined,
-                            size: 15, color: scheme.primary),
-                        onSelected: onSelectPrice,
-                        itemBuilder: (ctx) => [
-                          PopupMenuItem(
-                            value: basePrice,
-                            child: Text(
-                                'Harga dasar (${formatRupiah(basePrice)})'),
-                          ),
-                          for (final a in altPrices)
-                            PopupMenuItem(
-                              value: a.price,
-                              child:
-                                  Text('${a.label} (${formatRupiah(a.price)})'),
-                            ),
-                        ],
-                      ),
-                  ],
+                Text(
+                  isNonStock
+                      ? '$unitName · Non-stok'
+                      : '$unitName · Stok '
+                          '${stock % 1 == 0 ? stock.toInt() : stock}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
                 ),
+                // Susulan (permintaan user) — field harga bisa diketik
+                // manual + chip Harga Lain langsung (bukan popup lagi),
+                // persis pengalaman produk utama, TAPI cuma muncul kalau
+                // varian ini qty>0 (sedang dibeli) — supaya varian yg
+                // banyak tidak bikin baris jadi panjang semua sekaligus.
+                if (active) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: 100,
+                    height: 32,
+                    child: TextField(
+                      controller: priceController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: const [ThousandsSeparatorFormatter()],
+                      style: AppTheme.numStyle(context,
+                          size: 12, weight: FontWeight.w700),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        prefixText: 'Rp ',
+                        prefixStyle: TextStyle(fontSize: 11),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: onPriceTyped,
+                    ),
+                  ),
+                  if (altPrices.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        _MiniPriceChip(
+                          label: 'Harga dasar',
+                          price: basePrice,
+                          selected: price == basePrice,
+                          onTap: () => onSelectPrice(basePrice),
+                        ),
+                        for (final a in altPrices)
+                          _MiniPriceChip(
+                            label: a.label,
+                            price: a.price,
+                            selected: price == a.price,
+                            onTap: () => onSelectPrice(a.price),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
               ],
             ),
           ),
@@ -1212,6 +1269,62 @@ class _VariantRow extends StatelessWidget {
             onPressed: onPlus,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Versi mini `_PriceChip` khusus baris varian — dipakai `Wrap` (bukan
+/// `ListView` horizontal) krn ruang per baris varian sengaja sempit; padding
+/// lebih kecil supaya beberapa chip muat sebaris tanpa scroll tambahan.
+class _MiniPriceChip extends StatelessWidget {
+  const _MiniPriceChip({
+    required this.label,
+    required this.price,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int price;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.primary.withOpacity(0.12)
+              : scheme.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? scheme.primary : scheme.outlineVariant,
+            width: selected ? 1.2 : 0.75,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? scheme.primary : scheme.onSurface)),
+            Text(
+              formatRupiah(price),
+              style: AppTheme.numStyle(context,
+                  size: 11,
+                  weight: FontWeight.w700,
+                  color: selected ? scheme.primary : scheme.onSurface),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -205,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -407,6 +407,11 @@ class AppDatabase extends _$AppDatabase {
             // tidak ada yang hilang.
             await m.alterTable(TableMigration(leftBehindItems));
             await m.alterTable(TableMigration(borrowedItems));
+          }
+          if (from < 27) {
+            // Item 53 (permintaan user) — saklar "ikut harga satuan dasar"
+            // per satuan jual varian.
+            await m.addColumn(productUnits, productUnits.followsParentPrice);
           }
         },
         beforeOpen: (details) async {
@@ -1352,6 +1357,11 @@ class AppDatabase extends _$AppDatabase {
     /// 1.0 (default) = varian dijual dalam satuan dasarnya sendiri, cukup
     /// SATU baris `product_units` persis seperti varian sebelum fitur ini.
     double contentPerUnit = 1.0,
+    /// Item 53 (permintaan user) — true = harga dasar varian ini otomatis
+    /// ikut berubah setiap kali harga satuan dasar produk induk (yg
+    /// jenisnya sama dgn [baseUnitTypeId]/[unitTypeId]) diubah. Lihat
+    /// `_cascadeVariantPricesForUnit`.
+    bool followsParentPrice = false,
   }) async {
     final now = DateTime.now();
     final productId = const Uuid().v4();
@@ -1377,6 +1387,7 @@ class AppDatabase extends _$AppDatabase {
         isBaseUnit: const Value(true),
         ratioToBase: const Value(1.0),
         isNonStock: Value(isNonStock),
+        followsParentPrice: Value(!hasSaleUnit && followsParentPrice),
       ));
       if (hasSaleUnit) {
         await into(productUnits).insert(ProductUnitsCompanion.insert(
@@ -1386,6 +1397,7 @@ class AppDatabase extends _$AppDatabase {
           isBaseUnit: const Value(false),
           ratioToBase: Value(contentPerUnit),
           isNonStock: Value(isNonStock),
+          followsParentPrice: Value(followsParentPrice),
         ));
       }
       await into(priceTiers).insert(PriceTiersCompanion.insert(
@@ -1453,6 +1465,8 @@ class AppDatabase extends _$AppDatabase {
     int? unitTypeId,
     /// Isi satu satuan jual dalam satuan dasar varian. Null = tidak disentuh.
     double? contentPerUnit,
+    /// Item 53 — null = tidak disentuh.
+    bool? followsParentPrice,
   }) async {
     final now = DateTime.now();
     await transaction(() async {
@@ -1505,6 +1519,11 @@ class AppDatabase extends _$AppDatabase {
           await (update(productUnits)..where((t) => t.id.equals(unitId)))
               .write(ProductUnitsCompanion(ratioToBase: Value(ratio)));
         }
+      }
+      if (followsParentPrice != null) {
+        await (update(productUnits)..where((t) => t.id.equals(unitId)))
+            .write(ProductUnitsCompanion(
+                followsParentPrice: Value(followsParentPrice)));
       }
       if (unitTypeId != null) {
         await (update(productUnits)..where((t) => t.id.equals(unitId)))
@@ -1998,9 +2017,66 @@ class AppDatabase extends _$AppDatabase {
           await _claimBarcodeFor(productId, bc.barcode.value);
           await into(productBarcodes).insert(bc);
         }
+
+        // Item 53 (permintaan user) — varian yg "ikut harga satuan dasar"
+        // (`followsParentPrice`) disesuaikan otomatis di sini, begitu harga
+        // dasar SATUAN INDUK yg jadi jangkarnya berubah. Cuma relevan utk
+        // satuan dasar (base unit selalu satuan yg dipegang stok/jangkar
+        // varian, lihat `createVariant`'s `baseUnitTypeId`).
+        if (unit.isBaseUnit.present && unit.isBaseUnit.value) {
+          final baseTierPrice = tiers
+              .where((t) => t.minQty.present && t.minQty.value == 1)
+              .map((t) => t.price.value)
+              .firstOrNull;
+          final unitTypeId =
+              unit.unitTypeId.present ? unit.unitTypeId.value : null;
+          if (baseTierPrice != null && unitTypeId != null) {
+            await _cascadeVariantPricesForUnit(
+              parentProductId: productId,
+              anchorUnitTypeId: unitTypeId,
+              newBasePrice: baseTierPrice,
+            );
+          }
+        }
       }
       return productId;
     });
+  }
+
+  /// Item 53 (permintaan user) — "ikut harga satuan dasar": begitu harga
+  /// dasar (tier `minQty=1`) satuan [anchorUnitTypeId] milik produk INDUK
+  /// [parentProductId] berubah jadi [newBasePrice], semua varian anaknya yg
+  /// (a) jangkarnya (satuan dasar varian) berjenis SAMA dgn
+  /// [anchorUnitTypeId], DAN (b) satuan jualnya (`variantSaleUnit`) diberi
+  /// `followsParentPrice=true`, ikut disesuaikan: harga baru = harga induk
+  /// baru × isi-per-satuan varian itu (`ratioToBase`). Dipanggil dari
+  /// [saveProduct] — BELUM dipanggil dari `applyProductProposals` (jalur
+  /// approve usulan sync), lihat catatan Item 53 di PLAN.md.
+  Future<void> _cascadeVariantPricesForUnit({
+    required String parentProductId,
+    required int anchorUnitTypeId,
+    required int newBasePrice,
+  }) async {
+    final variants = await getVariants(parentProductId);
+    for (final v in variants) {
+      final vUnits = await getProductUnits(v.id);
+      if (vUnits.isEmpty) continue;
+      final vBase = vUnits.firstWhere((u) => u.isBaseUnit,
+          orElse: () => vUnits.first);
+      if (vBase.unitTypeId != anchorUnitTypeId) continue;
+      final saleUnit = variantSaleUnit(vUnits)!;
+      if (!saleUnit.followsParentPrice) continue;
+      final ratio = saleUnit.ratioToBase > 0 ? saleUnit.ratioToBase : 1.0;
+      final newPrice = (newBasePrice * ratio).round();
+      final baseTier = await (select(priceTiers)
+            ..where((t) =>
+                t.productUnitId.equals(saleUnit.id) & t.minQty.equals(1)))
+          .getSingleOrNull();
+      if (baseTier != null) {
+        await (update(priceTiers)..where((t) => t.id.equals(baseTier.id)))
+            .write(PriceTiersCompanion(price: Value(newPrice)));
+      }
+    }
   }
 
   /// Nonaktifkan produk (soft-delete — TIDAK PERNAH ada hard-delete utk

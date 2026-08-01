@@ -5,9 +5,41 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 1 Agustus 2026 — versi kerja **2.8.0+11**. **Pertanyaan
-"jangkar satuan varian" AKHIRNYA TERJAWAB & DIEKSEKUSI** (Item 52 PLAN.md
-dihapus). Keputusan final user: varian TETAP jangkar ke satuan dasar, TAPI
+_Update sesi 1 Agustus 2026 (lanjutan 2) — versi kerja **2.9.0+13**,
+schemaVersion 27. Setelah sempat diusulkan redesain varian jadi "atribut"
+(bukan entity terpisah) — user AKHIRNYA memutuskan **pertahankan skema
+varian sekarang** (Item 53 PLAN.md, keputusan final), sebagai gantinya
+minta 2 perbaikan: (1) saklar "Ikut harga satuan dasar" per satuan jual
+varian — kolom baru `product_units.follows_parent_price` (migrasi
+additive, default false), cascade lewat `AppDatabase.
+_cascadeVariantPricesForUnit` dipanggil dari `saveProduct` SETIAP kali
+harga satuan dasar produk induk disimpan ulang (bukan cuma saat benar2
+berubah — cascade selalu menegakkan invariant harga×isi, bukan listen ke
+diff). **BELUM disambungkan ke `applyProductProposals`** (jalur approve
+usulan sync) — gap diketahui, dicatat di PLAN.md Item 53. (2) UX harga
+varian di `ItemEntrySheet`: ikon popup "Pilih harga" DIGANTI field harga
+manual + chip Harga Lain (`_MiniPriceChip`) tampil langsung, TAPI cuma
+muncul saat variannya qty>0 — supaya modal tidak penuh sesak kalau
+variannya banyak. Kedua desain dirancang via mockup HTML+Playwright (2x
+revisi visual sebelum sentuh kode Flutter — permintaan eksplisit user
+"takutnya salah lagi" setelah 2 percobaan layout keranjang sebelumnya
+meleset). 12 test baru, semua revert-verified. Full suite 880 hijau.
+
+**Gotcha migrasi kena LAGI, PERSIS seperti yang sudah didokumentasikan**:
+step migrasi baru (`addColumn` ke `product_units`, TANPA syarat versi
+awal) mematahkan 3 test migrasi lama (`migration_v23/24/26_test.dart`)
+yang skema sintetisnya sengaja tidak menyertakan tabel `product_units` —
+fix: tambahkan `CREATE TABLE product_units` (skema PERSIS pra-migrasi
+ini) ke setup sintetis ketiganya. Ini kejadian BERULANG (sudah 2x
+didokumentasikan sebelumnya di CLAUDE.md) — WAJIB cek SEMUA test migrasi
+lama (bukan cuma yang terasa relevan) tiap kali menambah migration step
+baru yang menyentuh tabel yang sudah ada sejak versi lama.
+
+_Riwayat sesi 1 Agustus 2026 (lanjutan) — versi kerja **2.8.0+11**.
+**Pertanyaan "jangkar satuan varian" AKHIRNYA TERJAWAB & DIEKSEKUSI**
+(Item 52 PLAN.md dihapus, lalu jadi Item 53 setelah revisi lanjutan sesi
+ini). Keputusan final user (saat itu): varian TETAP jangkar ke satuan
+dasar, TAPI
 diberi pilihan satuan jual sendiri (Ret/Dus/dll) + "isi per satuan" yang
 mengonversi balik ke satuan dasar. Implementasinya SENGAJA tanpa migrasi
 schema: varian yang isinya != 1 mendapat SATU baris `product_units`

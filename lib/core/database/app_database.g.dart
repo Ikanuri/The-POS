@@ -1528,6 +1528,16 @@ class $ProductUnitsTable extends ProductUnits
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("requires_deposit" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _followsParentPriceMeta =
+      const VerificationMeta('followsParentPrice');
+  @override
+  late final GeneratedColumn<bool> followsParentPrice = GeneratedColumn<bool>(
+      'follows_parent_price', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("follows_parent_price" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -1537,7 +1547,8 @@ class $ProductUnitsTable extends ProductUnits
         ratioToBase,
         isNonStock,
         minStock,
-        requiresDeposit
+        requiresDeposit,
+        followsParentPrice
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1594,6 +1605,12 @@ class $ProductUnitsTable extends ProductUnits
           requiresDeposit.isAcceptableOrUnknown(
               data['requires_deposit']!, _requiresDepositMeta));
     }
+    if (data.containsKey('follows_parent_price')) {
+      context.handle(
+          _followsParentPriceMeta,
+          followsParentPrice.isAcceptableOrUnknown(
+              data['follows_parent_price']!, _followsParentPriceMeta));
+    }
     return context;
   }
 
@@ -1619,6 +1636,8 @@ class $ProductUnitsTable extends ProductUnits
           .read(DriftSqlType.int, data['${effectivePrefix}min_stock']),
       requiresDeposit: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}requires_deposit'])!,
+      followsParentPrice: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}follows_parent_price'])!,
     );
   }
 
@@ -1644,6 +1663,16 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
   /// dst) — antri stok kosong WAJIB titip wadah fisik sbg jaminan, bukan
   /// cuma nomor urut. Default false = backorder biasa tanpa syarat fisik.
   final bool requiresDeposit;
+
+  /// Item 53 (permintaan user) — HANYA relevan untuk satuan JUAL varian
+  /// (lihat `AppDatabase.variantSaleUnit`). true = harga dasar (tier
+  /// minQty=1) varian ini otomatis ikut disesuaikan setiap kali harga
+  /// satuan dasar PRODUK INDUK (dgn `unitTypeId` yg sama, lihat
+  /// `baseUnitTypeId` di `createVariant`/`updateVariant`) berubah — hasil
+  /// = harga_induk_baru × `ratioToBase` satuan jual ini. Default false =
+  /// harga varian sepenuhnya independen spt sebelumnya. HANYA memengaruhi
+  /// harga DASAR (bukan tier grosir/Harga Lain — itu tetap manual).
+  final bool followsParentPrice;
   const ProductUnit(
       {required this.id,
       required this.productId,
@@ -1652,7 +1681,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       required this.ratioToBase,
       required this.isNonStock,
       this.minStock,
-      required this.requiresDeposit});
+      required this.requiresDeposit,
+      required this.followsParentPrice});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1668,6 +1698,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       map['min_stock'] = Variable<int>(minStock);
     }
     map['requires_deposit'] = Variable<bool>(requiresDeposit);
+    map['follows_parent_price'] = Variable<bool>(followsParentPrice);
     return map;
   }
 
@@ -1685,6 +1716,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           ? const Value.absent()
           : Value(minStock),
       requiresDeposit: Value(requiresDeposit),
+      followsParentPrice: Value(followsParentPrice),
     );
   }
 
@@ -1700,6 +1732,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       isNonStock: serializer.fromJson<bool>(json['isNonStock']),
       minStock: serializer.fromJson<int?>(json['minStock']),
       requiresDeposit: serializer.fromJson<bool>(json['requiresDeposit']),
+      followsParentPrice: serializer.fromJson<bool>(json['followsParentPrice']),
     );
   }
   @override
@@ -1714,6 +1747,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       'isNonStock': serializer.toJson<bool>(isNonStock),
       'minStock': serializer.toJson<int?>(minStock),
       'requiresDeposit': serializer.toJson<bool>(requiresDeposit),
+      'followsParentPrice': serializer.toJson<bool>(followsParentPrice),
     };
   }
 
@@ -1725,7 +1759,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           double? ratioToBase,
           bool? isNonStock,
           Value<int?> minStock = const Value.absent(),
-          bool? requiresDeposit}) =>
+          bool? requiresDeposit,
+          bool? followsParentPrice}) =>
       ProductUnit(
         id: id ?? this.id,
         productId: productId ?? this.productId,
@@ -1735,6 +1770,7 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
         isNonStock: isNonStock ?? this.isNonStock,
         minStock: minStock.present ? minStock.value : this.minStock,
         requiresDeposit: requiresDeposit ?? this.requiresDeposit,
+        followsParentPrice: followsParentPrice ?? this.followsParentPrice,
       );
   ProductUnit copyWithCompanion(ProductUnitsCompanion data) {
     return ProductUnit(
@@ -1752,6 +1788,9 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
       requiresDeposit: data.requiresDeposit.present
           ? data.requiresDeposit.value
           : this.requiresDeposit,
+      followsParentPrice: data.followsParentPrice.present
+          ? data.followsParentPrice.value
+          : this.followsParentPrice,
     );
   }
 
@@ -1765,14 +1804,15 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           ..write('ratioToBase: $ratioToBase, ')
           ..write('isNonStock: $isNonStock, ')
           ..write('minStock: $minStock, ')
-          ..write('requiresDeposit: $requiresDeposit')
+          ..write('requiresDeposit: $requiresDeposit, ')
+          ..write('followsParentPrice: $followsParentPrice')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, productId, unitTypeId, isBaseUnit,
-      ratioToBase, isNonStock, minStock, requiresDeposit);
+      ratioToBase, isNonStock, minStock, requiresDeposit, followsParentPrice);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1784,7 +1824,8 @@ class ProductUnit extends DataClass implements Insertable<ProductUnit> {
           other.ratioToBase == this.ratioToBase &&
           other.isNonStock == this.isNonStock &&
           other.minStock == this.minStock &&
-          other.requiresDeposit == this.requiresDeposit);
+          other.requiresDeposit == this.requiresDeposit &&
+          other.followsParentPrice == this.followsParentPrice);
 }
 
 class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
@@ -1796,6 +1837,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
   final Value<bool> isNonStock;
   final Value<int?> minStock;
   final Value<bool> requiresDeposit;
+  final Value<bool> followsParentPrice;
   final Value<int> rowid;
   const ProductUnitsCompanion({
     this.id = const Value.absent(),
@@ -1806,6 +1848,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.isNonStock = const Value.absent(),
     this.minStock = const Value.absent(),
     this.requiresDeposit = const Value.absent(),
+    this.followsParentPrice = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProductUnitsCompanion.insert({
@@ -1817,6 +1860,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     this.isNonStock = const Value.absent(),
     this.minStock = const Value.absent(),
     this.requiresDeposit = const Value.absent(),
+    this.followsParentPrice = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         productId = Value(productId);
@@ -1829,6 +1873,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     Expression<bool>? isNonStock,
     Expression<int>? minStock,
     Expression<bool>? requiresDeposit,
+    Expression<bool>? followsParentPrice,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1840,6 +1885,8 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       if (isNonStock != null) 'is_non_stock': isNonStock,
       if (minStock != null) 'min_stock': minStock,
       if (requiresDeposit != null) 'requires_deposit': requiresDeposit,
+      if (followsParentPrice != null)
+        'follows_parent_price': followsParentPrice,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1853,6 +1900,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       Value<bool>? isNonStock,
       Value<int?>? minStock,
       Value<bool>? requiresDeposit,
+      Value<bool>? followsParentPrice,
       Value<int>? rowid}) {
     return ProductUnitsCompanion(
       id: id ?? this.id,
@@ -1863,6 +1911,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
       isNonStock: isNonStock ?? this.isNonStock,
       minStock: minStock ?? this.minStock,
       requiresDeposit: requiresDeposit ?? this.requiresDeposit,
+      followsParentPrice: followsParentPrice ?? this.followsParentPrice,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1894,6 +1943,9 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
     if (requiresDeposit.present) {
       map['requires_deposit'] = Variable<bool>(requiresDeposit.value);
     }
+    if (followsParentPrice.present) {
+      map['follows_parent_price'] = Variable<bool>(followsParentPrice.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1911,6 +1963,7 @@ class ProductUnitsCompanion extends UpdateCompanion<ProductUnit> {
           ..write('isNonStock: $isNonStock, ')
           ..write('minStock: $minStock, ')
           ..write('requiresDeposit: $requiresDeposit, ')
+          ..write('followsParentPrice: $followsParentPrice, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -15121,6 +15174,7 @@ typedef $$ProductUnitsTableCreateCompanionBuilder = ProductUnitsCompanion
   Value<bool> isNonStock,
   Value<int?> minStock,
   Value<bool> requiresDeposit,
+  Value<bool> followsParentPrice,
   Value<int> rowid,
 });
 typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
@@ -15133,6 +15187,7 @@ typedef $$ProductUnitsTableUpdateCompanionBuilder = ProductUnitsCompanion
   Value<bool> isNonStock,
   Value<int?> minStock,
   Value<bool> requiresDeposit,
+  Value<bool> followsParentPrice,
   Value<int> rowid,
 });
 
@@ -15248,6 +15303,10 @@ class $$ProductUnitsTableFilterComposer
 
   ColumnFilters<bool> get requiresDeposit => $composableBuilder(
       column: $table.requiresDeposit,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get followsParentPrice => $composableBuilder(
+      column: $table.followsParentPrice,
       builder: (column) => ColumnFilters(column));
 
   $$ProductsTableFilterComposer get productId {
@@ -15386,6 +15445,10 @@ class $$ProductUnitsTableOrderingComposer
       column: $table.requiresDeposit,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get followsParentPrice => $composableBuilder(
+      column: $table.followsParentPrice,
+      builder: (column) => ColumnOrderings(column));
+
   $$ProductsTableOrderingComposer get productId {
     final $$ProductsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -15436,6 +15499,9 @@ class $$ProductUnitsTableAnnotationComposer
 
   GeneratedColumn<bool> get requiresDeposit => $composableBuilder(
       column: $table.requiresDeposit, builder: (column) => column);
+
+  GeneratedColumn<bool> get followsParentPrice => $composableBuilder(
+      column: $table.followsParentPrice, builder: (column) => column);
 
   $$ProductsTableAnnotationComposer get productId {
     final $$ProductsTableAnnotationComposer composer = $composerBuilder(
@@ -15580,6 +15646,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<bool> isNonStock = const Value.absent(),
             Value<int?> minStock = const Value.absent(),
             Value<bool> requiresDeposit = const Value.absent(),
+            Value<bool> followsParentPrice = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion(
@@ -15591,6 +15658,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             isNonStock: isNonStock,
             minStock: minStock,
             requiresDeposit: requiresDeposit,
+            followsParentPrice: followsParentPrice,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -15602,6 +15670,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             Value<bool> isNonStock = const Value.absent(),
             Value<int?> minStock = const Value.absent(),
             Value<bool> requiresDeposit = const Value.absent(),
+            Value<bool> followsParentPrice = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProductUnitsCompanion.insert(
@@ -15613,6 +15682,7 @@ class $$ProductUnitsTableTableManager extends RootTableManager<
             isNonStock: isNonStock,
             minStock: minStock,
             requiresDeposit: requiresDeposit,
+            followsParentPrice: followsParentPrice,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

@@ -88,6 +88,21 @@ void main() {
         cancelled_at INTEGER
       );
     ''');
+    // `product_units` juga harus ada — DB ini diupgrade TERUS sampai
+    // schemaVersion terkini, yang step v27-nya (`follows_parent_price`)
+    // menyentuh tabel ini via `ALTER TABLE ADD COLUMN` tanpa syarat versi.
+    v25.execute('''
+      CREATE TABLE product_units (
+        id TEXT NOT NULL PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        unit_type_id INTEGER,
+        is_base_unit INTEGER NOT NULL DEFAULT 0,
+        ratio_to_base REAL NOT NULL DEFAULT 1.0,
+        is_non_stock INTEGER NOT NULL DEFAULT 0,
+        min_stock INTEGER,
+        requires_deposit INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
     v25.execute('''
       INSERT INTO transactions (id) VALUES ('tx-lama');
     ''');
@@ -138,7 +153,7 @@ void main() {
     expect(borrowedRows.single.itemName, 'Galon Lama');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 26);
+    expect(ver.data.values.first, 27);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

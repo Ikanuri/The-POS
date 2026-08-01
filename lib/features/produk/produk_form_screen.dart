@@ -1054,6 +1054,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         List<({String label, int price})> altPrices,
         int unitTypeId,
         double contentPerUnit,
+        bool followsParentPrice,
       })?> _variantDialog({
     required String title,
     required String confirmLabel,
@@ -1064,6 +1065,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     List<({String label, int price})> altPrices = const [],
     required int unitTypeId,
     double contentPerUnit = 1.0,
+    // Item 53 (permintaan user) — saklar "ikut harga satuan dasar". Harga
+    // satuan dasar produk INDUK (`parentBasePrice`) dibutuhkan utk pratinjau
+    // hasil kali (harga_induk × isi-per-satuan) saat saklar aktif.
+    bool followsParentPrice = false,
+    required int parentBasePrice,
   }) async {
     final nameCtrl = TextEditingController(text: name);
     final priceCtrl =
@@ -1078,6 +1084,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             ? contentPerUnit.toInt().toString()
             : contentPerUnit.toString());
     var track = trackStock;
+    var follow = followsParentPrice;
     final altLabelCtrls = [
       for (final a in altPrices) TextEditingController(text: a.label)
     ];
@@ -1105,10 +1112,16 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: priceCtrl,
+                  readOnly: follow,
                   keyboardType: TextInputType.number,
                   inputFormatters: const [ThousandsSeparatorFormatter()],
-                  decoration: const InputDecoration(
-                      labelText: 'Harga', prefixText: 'Rp '),
+                  decoration: InputDecoration(
+                    labelText: 'Harga',
+                    prefixText: 'Rp ',
+                    helperText: follow
+                        ? 'Otomatis: harga satuan dasar × isi per satuan'
+                        : null,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -1141,6 +1154,14 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                           isDense: true,
                           hintText: 'Contoh: 10',
                         ),
+                        onChanged: (_) {
+                          if (follow) {
+                            setDialog(() => priceCtrl.text =
+                                ThousandsSeparatorFormatter.format(
+                                    _followPreviewPrice(
+                                        parentBasePrice, contentCtrl.text)));
+                          }
+                        },
                       ),
                     ),
                   ],
@@ -1156,7 +1177,32 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                         color: Theme.of(ctx).colorScheme.onSurfaceVariant),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 4),
+                // Item 53 (permintaan user) — begitu dinyalakan, harga
+                // satuan dasar produk INDUK (yang jenisnya jadi jangkar
+                // varian ini) berubah, harga varian ikut disesuaikan
+                // otomatis (dikali isi per satuan) — tidak perlu buka
+                // dialog ini lagi tiap kali harga induk berubah.
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: follow,
+                  onChanged: (v) => setDialog(() {
+                    follow = v;
+                    if (v) {
+                      priceCtrl.text = ThousandsSeparatorFormatter.format(
+                          _followPreviewPrice(
+                              parentBasePrice, contentCtrl.text));
+                    }
+                  }),
+                  title: const Text('Ikut harga satuan dasar',
+                      style: TextStyle(fontSize: 14)),
+                  subtitle: const Text(
+                      'Harga varian ikut berubah otomatis kalau harga '
+                      'satuan dasar produk diubah',
+                      style: TextStyle(fontSize: 11)),
+                ),
+                const SizedBox(height: 6),
                 TextField(
                   controller: barcodeCtrl,
                   keyboardType: TextInputType.number,
@@ -1276,6 +1322,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       // Kosong/tidak valid/<= 0 → 1 (varian dijual dalam satuan dasarnya
       // sendiri), bukan error — biar staf tidak terhalang saat tidak peduli.
       contentPerUnit: (content == null || content <= 0) ? 1.0 : content,
+      followsParentPrice: follow,
       altPrices: [
         for (var i = 0; i < altLabelCtrls.length; i++)
           if (altLabelCtrls[i].text.trim().isNotEmpty)
@@ -1286,6 +1333,16 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             ),
       ],
     );
+  }
+
+  /// Item 53 — pratinjau harga hasil kali "harga satuan dasar induk" ×
+  /// "isi per satuan" (dipakai saat saklar "Ikut harga satuan dasar"
+  /// aktif). Isi tidak valid/<=0 diperlakukan sbg 1 (persis aturan simpan).
+  int _followPreviewPrice(int parentBasePrice, String contentText) {
+    final content =
+        double.tryParse(contentText.trim().replaceAll(',', '.'));
+    final ratio = (content == null || content <= 0) ? 1.0 : content;
+    return (parentBasePrice * ratio).round();
   }
 
   Future<void> _addVariant() async {
@@ -1303,6 +1360,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       confirmLabel: 'Tambah',
       price: base.price,
       unitTypeId: base.unitTypeId,
+      parentBasePrice: base.price,
     );
     if (res == null) return;
     final db = ref.read(databaseProvider);
@@ -1317,6 +1375,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         // baru terpakai kalau varian dijual dalam satuan lain (isi != 1).
         baseUnitTypeId: base.unitTypeId,
         contentPerUnit: res.contentPerUnit,
+        followsParentPrice: res.followsParentPrice,
         barcode: res.barcode,
         isNonStock: !res.trackStock,
         altPrices: res.altPrices,
@@ -1380,11 +1439,13 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
             .unitTypeId
         : 1;
     var curContent = 1.0;
+    var curFollow = false;
     if (baseUnit != null) {
       curUnitTypeId = baseUnit.unitTypeId ?? curUnitTypeId;
       // Satuan dasar selalu rasio 1 (dan `_baseUnitOf` memang mengabaikan
       // nilai kolomnya) — hanya satuan jual non-dasar yang punya isi nyata.
       curContent = baseUnit.isBaseUnit ? 1.0 : baseUnit.ratioToBase;
+      curFollow = baseUnit.followsParentPrice;
       final tiers = await db.getPriceTiers(baseUnit.id);
       curPrice =
           tiers.where((t) => t.minQty == 1).map((t) => t.price).firstOrNull ??
@@ -1399,6 +1460,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       ];
     }
     if (!mounted) return;
+    final parentBase = _units.isNotEmpty
+        ? _units.firstWhere((u) => u.isBaseUnit, orElse: () => _units.first)
+            .price
+        : 0;
     final res = await _variantDialog(
       title: 'Edit Varian',
       confirmLabel: 'Simpan',
@@ -1409,6 +1474,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       altPrices: curAltPrices,
       unitTypeId: curUnitTypeId,
       contentPerUnit: curContent,
+      followsParentPrice: curFollow,
+      parentBasePrice: parentBase,
     );
     if (res == null) return;
     try {
@@ -1421,6 +1488,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         altPrices: res.altPrices,
         unitTypeId: res.unitTypeId,
         contentPerUnit: res.contentPerUnit,
+        followsParentPrice: res.followsParentPrice,
       );
       // Item 40 — usulan harga/produk dari device non-owner.
       if (!ref.read(deviceProvider).isOwner) {

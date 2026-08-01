@@ -62,6 +62,21 @@ void main() {
         collected_at INTEGER
       );
     ''');
+    // `product_units` juga harus ada — DB ini diupgrade TERUS sampai
+    // schemaVersion terkini, yang step v27-nya (`follows_parent_price`)
+    // menyentuh tabel ini via `ALTER TABLE ADD COLUMN` tanpa syarat versi.
+    v23.execute('''
+      CREATE TABLE product_units (
+        id TEXT NOT NULL PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        unit_type_id INTEGER,
+        is_base_unit INTEGER NOT NULL DEFAULT 0,
+        ratio_to_base REAL NOT NULL DEFAULT 1.0,
+        is_non_stock INTEGER NOT NULL DEFAULT 0,
+        min_stock INTEGER,
+        requires_deposit INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
     final preCols = v23
         .select("PRAGMA table_info('borrowed_items')")
         .map((r) => r['name'] as String)
@@ -88,7 +103,7 @@ void main() {
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
     // schemaVersion TERKINI (25, bukan cuma 24) — migrasi berjalan
     // berurutan s.d. versi terbaru, bukan berhenti di step fokus test ini.
-    expect(ver.data.values.first, 26); // schemaVersion terkini
+    expect(ver.data.values.first, 27); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
