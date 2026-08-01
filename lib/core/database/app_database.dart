@@ -1304,10 +1304,32 @@ class AppDatabase extends _$AppDatabase {
     return {for (final r in rows) r.id: r.parentProductId!};
   }
 
-  /// Buat varian baru: produk anak + satu satuan dasar + tier harga + barcode
-  /// opsional. Harga default mengikuti induk (di-pass oleh pemanggil).
-  /// Buat varian (produk anak). Mengembalikan id produk varian baru agar
-  /// pemanggil bisa melacaknya (mis. untuk undo bila edit dibatalkan).
+  /// Satuan JUAL sebuah varian, dipilih dari seluruh satuannya.
+  ///
+  /// Varian SELALU punya satu satuan DASAR (jangkar ke satuan dasar produk
+  /// induk, `ratioToBase` 1.0) — satuan itulah yang memegang stok, karena
+  /// seluruh `stock_ledger` di app ini ditulis dalam satuan dasar (lihat
+  /// [_baseUnitOf]). Susulan (permintaan user): varian sekarang boleh DIJUAL
+  /// dalam satuan lain yang berisi N satuan dasar (mis. "Renteng" berisi 10) —
+  /// diwakili SATU satuan non-dasar tambahan, dan satuan ITU-lah yang
+  /// memegang harga, barcode, Harga Lain, serta label satuan yang dilihat
+  /// kasir. Varian lama (satu satuan saja) otomatis jatuh ke satuan dasarnya,
+  /// jadi tidak ada migrasi data yang dibutuhkan.
+  static ProductUnit? variantSaleUnit(List<ProductUnit> units) {
+    if (units.isEmpty) return null;
+    for (final u in units) {
+      if (!u.isBaseUnit) return u;
+    }
+    for (final u in units) {
+      if (u.isBaseUnit) return u;
+    }
+    return units.first;
+  }
+
+  /// Buat varian baru: produk anak + satuan dasar (+ satuan jual bila
+  /// [contentPerUnit] != 1) + tier harga + barcode opsional. Harga default
+  /// mengikuti induk (di-pass oleh pemanggil). Mengembalikan id produk varian
+  /// baru agar pemanggil bisa melacaknya (mis. untuk undo bila edit dibatalkan).
   Future<String> createVariant({
     required String parentProductId,
     required String name,
@@ -1322,10 +1344,22 @@ class AppDatabase extends _$AppDatabase {
     // saja secara data krn `AltPrices` sudah di-key per `productUnitId`,
     // dan varian sudah punya `ProductUnits` sendiri sejak awal.
     List<({String label, int price})>? altPrices,
+    /// Jenis satuan DASAR varian (jangkar, pemegang stok). Hanya dipakai
+    /// bila [contentPerUnit] != 1 — selain itu satuan dasar sekaligus satuan
+    /// jual, jadi jenisnya = [unitTypeId]. Null → ikut [unitTypeId].
+    int? baseUnitTypeId,
+    /// Isi satu satuan jual dalam satuan dasar varian (mis. 1 Renteng = 10).
+    /// 1.0 (default) = varian dijual dalam satuan dasarnya sendiri, cukup
+    /// SATU baris `product_units` persis seperti varian sebelum fitur ini.
+    double contentPerUnit = 1.0,
   }) async {
     final now = DateTime.now();
     final productId = const Uuid().v4();
-    final unitId = const Uuid().v4();
+    final baseUnitId = const Uuid().v4();
+    // Rasio <= 0 tidak masuk akal (dan bikin `currentStock` fallback tanpa
+    // konversi) — diperlakukan sama seperti 1, yaitu tanpa satuan jual.
+    final hasSaleUnit = contentPerUnit > 0 && contentPerUnit != 1.0;
+    final unitId = hasSaleUnit ? const Uuid().v4() : baseUnitId;
     await transaction(() async {
       await into(products).insert(ProductsCompanion.insert(
         id: productId,
@@ -1336,13 +1370,24 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: Value(now),
       ));
       await into(productUnits).insert(ProductUnitsCompanion.insert(
-        id: unitId,
+        id: baseUnitId,
         productId: productId,
-        unitTypeId: Value(unitTypeId),
+        unitTypeId:
+            Value(hasSaleUnit ? (baseUnitTypeId ?? unitTypeId) : unitTypeId),
         isBaseUnit: const Value(true),
         ratioToBase: const Value(1.0),
         isNonStock: Value(isNonStock),
       ));
+      if (hasSaleUnit) {
+        await into(productUnits).insert(ProductUnitsCompanion.insert(
+          id: unitId,
+          productId: productId,
+          unitTypeId: Value(unitTypeId),
+          isBaseUnit: const Value(false),
+          ratioToBase: Value(contentPerUnit),
+          isNonStock: Value(isNonStock),
+        ));
+      }
       await into(priceTiers).insert(PriceTiersCompanion.insert(
         id: const Uuid().v4(),
         productUnitId: unitId,
@@ -1404,6 +1449,10 @@ class AppDatabase extends _$AppDatabase {
     // Harga Lain); list (termasuk kosong) = SELALU ganti seluruh baris,
     // pola identik `saveProduct`.
     List<({String label, int price})>? altPrices,
+    /// Jenis satuan JUAL varian (mis. Renteng/Dus). Null = tidak disentuh.
+    int? unitTypeId,
+    /// Isi satu satuan jual dalam satuan dasar varian. Null = tidak disentuh.
+    double? contentPerUnit,
   }) async {
     final now = DateTime.now();
     await transaction(() async {
@@ -1417,18 +1466,62 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.productId.equals(variantProductId)))
           .get();
       if (units.isEmpty) return;
-      final unit =
+      final baseUnit =
           units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+      var unitId = variantSaleUnit(units)!.id;
+
+      // Susulan (permintaan user) — varian bisa dijual dalam satuan lain yang
+      // berisi N satuan dasar. Satuan jual dibuat MALAS (baru saat isi per
+      // satuan pertama kali != 1); setelah ada, TIDAK PERNAH dihapus lagi
+      // walau isinya dikembalikan ke 1 — `transaction_items` nota lama
+      // menunjuk ke id satuan, menghapusnya memutus riwayat nota.
+      if (contentPerUnit != null) {
+        final ratio = contentPerUnit > 0 ? contentPerUnit : 1.0;
+        if (unitId == baseUnit.id && ratio != 1.0) {
+          final newId = const Uuid().v4();
+          await into(productUnits).insert(ProductUnitsCompanion.insert(
+            id: newId,
+            productId: variantProductId,
+            unitTypeId: Value(unitTypeId ?? baseUnit.unitTypeId),
+            isBaseUnit: const Value(false),
+            ratioToBase: Value(ratio),
+            isNonStock: Value(isNonStock ?? baseUnit.isNonStock),
+          ));
+          // Harga/barcode/Harga Lain PINDAH ke satuan jual — stok sengaja
+          // tetap di satuan dasar (semua ledger app ini memang ditulis dalam
+          // satuan dasar, lihat `_baseUnitOf`), jadi stok yang sudah tercatat
+          // tidak berubah sama sekali, hanya cara membacanya (dibagi rasio).
+          await (update(priceTiers)
+                ..where((t) => t.productUnitId.equals(baseUnit.id)))
+              .write(PriceTiersCompanion(productUnitId: Value(newId)));
+          await (update(productBarcodes)
+                ..where((t) => t.productUnitId.equals(baseUnit.id)))
+              .write(ProductBarcodesCompanion(productUnitId: Value(newId)));
+          await (update(this.altPrices)
+                ..where((t) => t.productUnitId.equals(baseUnit.id)))
+              .write(AltPricesCompanion(productUnitId: Value(newId)));
+          unitId = newId;
+        } else if (unitId != baseUnit.id) {
+          await (update(productUnits)..where((t) => t.id.equals(unitId)))
+              .write(ProductUnitsCompanion(ratioToBase: Value(ratio)));
+        }
+      }
+      if (unitTypeId != null) {
+        await (update(productUnits)..where((t) => t.id.equals(unitId)))
+            .write(ProductUnitsCompanion(unitTypeId: Value(unitTypeId)));
+      }
 
       if (isNonStock != null) {
-        await (update(productUnits)..where((t) => t.id.equals(unit.id)))
+        // Ditulis ke SEMUA satuan varian: stoknya memang dilacak di satuan
+        // dasar, tapi UI kasir membaca flag ini dari satuan JUAL.
+        await (update(productUnits)
+              ..where((t) => t.productId.equals(variantProductId)))
             .write(ProductUnitsCompanion(isNonStock: Value(isNonStock)));
       }
 
       // Tier harga dasar (minQty == 1): update bila ada, selainnya buat baru.
       final baseTier = await (select(priceTiers)
-            ..where(
-                (t) => t.productUnitId.equals(unit.id) & t.minQty.equals(1)))
+            ..where((t) => t.productUnitId.equals(unitId) & t.minQty.equals(1)))
           .getSingleOrNull();
       if (baseTier != null) {
         await (update(priceTiers)..where((t) => t.id.equals(baseTier.id)))
@@ -1436,7 +1529,7 @@ class AppDatabase extends _$AppDatabase {
       } else {
         await into(priceTiers).insert(PriceTiersCompanion.insert(
           id: const Uuid().v4(),
-          productUnitId: unit.id,
+          productUnitId: unitId,
           minQty: const Value(1),
           price: price,
           createdAt: Value(now),
@@ -1446,7 +1539,7 @@ class AppDatabase extends _$AppDatabase {
       // Barcode utama: update / hapus / buat sesuai input.
       final existing = await (select(productBarcodes)
             ..where((t) =>
-                t.productUnitId.equals(unit.id) & t.isPrimary.equals(true)))
+                t.productUnitId.equals(unitId) & t.isPrimary.equals(true)))
           .getSingleOrNull();
       final bc = barcode?.trim() ?? '';
       if (bc.isEmpty) {
@@ -1461,7 +1554,7 @@ class AppDatabase extends _$AppDatabase {
       } else {
         await into(productBarcodes).insert(ProductBarcodesCompanion.insert(
           id: const Uuid().v4(),
-          productUnitId: unit.id,
+          productUnitId: unitId,
           barcode: bc,
           isPrimary: const Value(true),
         ));
@@ -1469,7 +1562,7 @@ class AppDatabase extends _$AppDatabase {
 
       if (altPrices != null) {
         await (delete(this.altPrices)
-              ..where((t) => t.productUnitId.equals(unit.id)))
+              ..where((t) => t.productUnitId.equals(unitId)))
             .go();
         if (altPrices.isNotEmpty) {
           await batch((b) => b.insertAll(
@@ -1478,7 +1571,7 @@ class AppDatabase extends _$AppDatabase {
                   for (var i = 0; i < altPrices.length; i++)
                     AltPricesCompanion.insert(
                       id: const Uuid().v4(),
-                      productUnitId: unit.id,
+                      productUnitId: unitId,
                       label: altPrices[i].label,
                       price: altPrices[i].price,
                       sortOrder: Value(i),
@@ -2139,6 +2232,11 @@ class AppDatabase extends _$AppDatabase {
     required List<({String productUnitId, double qty, String note})> stockItems,
     TransactionPaymentsCompanion? payment,
     String? kasirId,
+    /// Id `transaction_items` (dari [items]) yang sudah dicentang kasir di
+    /// keranjang. Di-GABUNG (union) dengan `transactions.checkedItemIds` yang
+    /// sudah ada, BUKAN menimpa — barang nota lama yang sudah dicentang di
+    /// struk tidak boleh ikut hilang gara-gara ada tambahan belanjaan.
+    List<String> checkedItemIds = const [],
   }) async {
     final now = DateTime.now();
     await transaction(() async {
@@ -2153,6 +2251,23 @@ class AppDatabase extends _$AppDatabase {
           items.map((c) => c.copyWith(addedAt: Value(now))),
         );
       });
+
+      if (checkedItemIds.isNotEmpty) {
+        final merged = <String>{};
+        if (tx.checkedItemIds != null && tx.checkedItemIds!.isNotEmpty) {
+          try {
+            merged.addAll(
+                (jsonDecode(tx.checkedItemIds!) as List).cast<String>());
+          } catch (_) {
+            // JSON rusak/format lama — abaikan, mulai dari daftar baru saja.
+          }
+        }
+        merged.addAll(checkedItemIds);
+        await (update(transactions)..where((t) => t.id.equals(txId)))
+            .write(TransactionsCompanion(
+          checkedItemIds: Value(jsonEncode(merged.toList())),
+        ));
+      }
 
       if (payment != null) {
         // Total SETELAH item susulan ini tapi SEBELUM _reconcileTransactionTotals

@@ -691,21 +691,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       cartTotal: _cartTotal,
     );
 
+    // Susulan (permintaan user): status centang keranjang DULU hilang di
+    // jalur "tambah belanjaan" ini — `_confirmPayment` (nota baru) sudah
+    // meneruskannya ke `transactions.checkedItemIds` sejak lama, tapi di
+    // sini tidak sama sekali, jadi barang yang sudah dicentang kasir di
+    // cart bar muncul TANPA centang di struk in-app.
+    final checkedTxItemIds = <String>[];
     final itemCompanions = <TransactionItemsCompanion>[
       for (final l in allocatedLines)
-        TransactionItemsCompanion.insert(
-          id: _uuid.v4(),
-          transactionId: txId,
-          productId: l.item.productId,
-          productUnitId: l.item.productUnitId,
-          qty: l.effectiveQty,
-          priceAtSale: l.unitPrice,
-          originalPrice: l.item.originalPrice,
-          priceOverridden: Value(l.priceOverridden),
-          costAtSale: Value(l.item.costPrice),
-          itemNote: Value(l.item.itemNote),
-          subtotal: l.subtotal,
-        ),
+        () {
+          final id = _uuid.v4();
+          if (l.item.checked) checkedTxItemIds.add(id);
+          return TransactionItemsCompanion.insert(
+            id: id,
+            transactionId: txId,
+            productId: l.item.productId,
+            productUnitId: l.item.productUnitId,
+            qty: l.effectiveQty,
+            priceAtSale: l.unitPrice,
+            originalPrice: l.item.originalPrice,
+            priceOverridden: Value(l.priceOverridden),
+            costAtSale: Value(l.item.costPrice),
+            itemNote: Value(l.item.itemNote),
+            subtotal: l.subtotal,
+          );
+        }(),
     ];
 
     // Item 52 redesain pre-order — sama spt checkout normal: item pre-order
@@ -737,6 +747,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       stockItems: stockItems,
       payment: payment,
       kasirId: device.deviceCode,
+      checkedItemIds: checkedTxItemIds,
     );
 
     // Bug dilaporkan user: poin loyalitas tidak ikut bertambah saat tambah

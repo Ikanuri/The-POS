@@ -1052,6 +1052,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         String? barcode,
         bool trackStock,
         List<({String label, int price})> altPrices,
+        int unitTypeId,
+        double contentPerUnit,
       })?> _variantDialog({
     required String title,
     required String confirmLabel,
@@ -1060,11 +1062,21 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     String? barcode,
     bool trackStock = false,
     List<({String label, int price})> altPrices = const [],
+    required int unitTypeId,
+    double contentPerUnit = 1.0,
   }) async {
     final nameCtrl = TextEditingController(text: name);
     final priceCtrl =
         TextEditingController(text: ThousandsSeparatorFormatter.format(price));
     final barcodeCtrl = TextEditingController(text: barcode ?? '');
+    // Susulan (permintaan user): varian ikut punya pilihan satuan (mis. Ret,
+    // Dus) + isi per satuan — jangkarnya TETAP satuan dasar produk induk,
+    // yang diisi di sini adalah berapa satuan dasar per satu satuan jual.
+    var unitType = unitTypeId;
+    final contentCtrl = TextEditingController(
+        text: contentPerUnit % 1 == 0
+            ? contentPerUnit.toInt().toString()
+            : contentPerUnit.toString());
     var track = trackStock;
     final altLabelCtrls = [
       for (final a in altPrices) TextEditingController(text: a.label)
@@ -1097,6 +1109,52 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                   inputFormatters: const [ThousandsSeparatorFormatter()],
                   decoration: const InputDecoration(
                       labelText: 'Harga', prefixText: 'Rp '),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        value: _unitTypes.any((t) => t.id == unitType)
+                            ? unitType
+                            : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: 'Jenis Satuan', isDense: true),
+                        items: _unitTypes
+                            .map((t) => DropdownMenuItem(
+                                value: t.id, child: Text(t.name)))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setDialog(() => unitType = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: contentCtrl,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Isi per Satuan',
+                          isDense: true,
+                          hintText: 'Contoh: 10',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Isi = berapa satuan dasar induk dalam 1 satuan varian '
+                    '(1 = sama dengan satuan dasar).',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -1207,11 +1265,17 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       ),
     );
     if (ok != true) return null;
+    final content =
+        double.tryParse(contentCtrl.text.trim().replaceAll(',', '.'));
     return (
       name: nameCtrl.text.trim(),
       price: ThousandsSeparatorFormatter.parseValue(priceCtrl.text),
       barcode: barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
       trackStock: track,
+      unitTypeId: unitType,
+      // Kosong/tidak valid/<= 0 → 1 (varian dijual dalam satuan dasarnya
+      // sendiri), bukan error — biar staf tidak terhalang saat tidak peduli.
+      contentPerUnit: (content == null || content <= 0) ? 1.0 : content,
       altPrices: [
         for (var i = 0; i < altLabelCtrls.length; i++)
           if (altLabelCtrls[i].text.trim().isNotEmpty)
@@ -1238,6 +1302,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       title: 'Tambah Varian',
       confirmLabel: 'Tambah',
       price: base.price,
+      unitTypeId: base.unitTypeId,
     );
     if (res == null) return;
     final db = ref.read(databaseProvider);
@@ -1247,7 +1312,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         name: res.name,
         price: res.price,
         costPrice: base.costPrice,
-        unitTypeId: base.unitTypeId,
+        unitTypeId: res.unitTypeId,
+        // Jangkar: satuan dasar varian selalu ikut satuan dasar induk —
+        // baru terpakai kalau varian dijual dalam satuan lain (isi != 1).
+        baseUnitTypeId: base.unitTypeId,
+        contentPerUnit: res.contentPerUnit,
         barcode: res.barcode,
         isNonStock: !res.trackStock,
         altPrices: res.altPrices,
@@ -1299,13 +1368,23 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     final db = ref.read(databaseProvider);
     // Ambil nilai varian saat ini untuk pra-isi dialog.
     final units = await db.getProductUnits(v.id);
-    final baseUnit =
-        units.where((u) => u.isBaseUnit).firstOrNull ?? units.firstOrNull;
+    // Satuan JUAL varian (lihat `AppDatabase.variantSaleUnit`) — harga,
+    // barcode & Harga Lain menempel di situ, bukan di satuan dasar.
+    final baseUnit = AppDatabase.variantSaleUnit(units);
     var curPrice = 0;
     String? curBarcode;
     var trackStock = false;
     var curAltPrices = const <({String label, int price})>[];
+    var curUnitTypeId = _units.isNotEmpty
+        ? _units.firstWhere((u) => u.isBaseUnit, orElse: () => _units.first)
+            .unitTypeId
+        : 1;
+    var curContent = 1.0;
     if (baseUnit != null) {
+      curUnitTypeId = baseUnit.unitTypeId ?? curUnitTypeId;
+      // Satuan dasar selalu rasio 1 (dan `_baseUnitOf` memang mengabaikan
+      // nilai kolomnya) — hanya satuan jual non-dasar yang punya isi nyata.
+      curContent = baseUnit.isBaseUnit ? 1.0 : baseUnit.ratioToBase;
       final tiers = await db.getPriceTiers(baseUnit.id);
       curPrice =
           tiers.where((t) => t.minQty == 1).map((t) => t.price).firstOrNull ??
@@ -1328,6 +1407,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       barcode: curBarcode,
       trackStock: trackStock,
       altPrices: curAltPrices,
+      unitTypeId: curUnitTypeId,
+      contentPerUnit: curContent,
     );
     if (res == null) return;
     try {
@@ -1338,6 +1419,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         barcode: res.barcode,
         isNonStock: !res.trackStock,
         altPrices: res.altPrices,
+        unitTypeId: res.unitTypeId,
+        contentPerUnit: res.contentPerUnit,
       );
       // Item 40 — usulan harga/produk dari device non-owner.
       if (!ref.read(deviceProvider).isOwner) {
@@ -1369,7 +1452,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       _showBanner('Varian ini belum punya satuan');
       return;
     }
-    final unit = units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+    final unit = AppDatabase.variantSaleUnit(units)!;
     if (unit.isNonStock) {
       _showBanner(
           'Varian "${v.name}" tidak melacak stok (aktifkan dulu di Edit Varian)');
@@ -2253,8 +2336,9 @@ class _VariantStockLabel extends ConsumerWidget {
       future: () async {
         final units = await db.getProductUnits(variantProductId);
         if (units.isEmpty) return (stock: 0.0, isNonStock: true);
-        final unit =
-            units.firstWhere((u) => u.isBaseUnit, orElse: () => units.first);
+        // Satuan JUAL, bukan satuan dasar — stok ditampilkan dalam satuan
+        // yang dipakai jual (mis. "Stok 3" renteng, bukan 30 pcs).
+        final unit = AppDatabase.variantSaleUnit(units)!;
         if (unit.isNonStock) return (stock: 0.0, isNonStock: true);
         final stock = await db.currentStock(unit.id);
         return (stock: stock, isNonStock: false);

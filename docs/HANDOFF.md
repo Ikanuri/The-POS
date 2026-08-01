@@ -5,7 +5,35 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 31 Juli 2026 (lanjutan 2) — versi kerja **2.7.0+10**. Susulan
+_Update sesi 1 Agustus 2026 — versi kerja **2.8.0+11**. **Pertanyaan
+"jangkar satuan varian" AKHIRNYA TERJAWAB & DIEKSEKUSI** (Item 52 PLAN.md
+dihapus). Keputusan final user: varian TETAP jangkar ke satuan dasar, TAPI
+diberi pilihan satuan jual sendiri (Ret/Dus/dll) + "isi per satuan" yang
+mengonversi balik ke satuan dasar. Implementasinya SENGAJA tanpa migrasi
+schema: varian yang isinya != 1 mendapat SATU baris `product_units`
+non-dasar tambahan sebagai satuan JUAL; satuan dasar tetap jadi jangkar &
+pemegang stok (semua `stock_ledger` app ini memang ditulis dalam satuan
+dasar). Aturan pemilihan disatukan di `AppDatabase.variantSaleUnit(units)`
+("prefer non-dasar") — kalau menambah konsumen baru yang membaca satuan
+varian, WAJIB lewat helper itu, jangan `firstWhere(isBaseUnit)` lagi.
+Satuan jual dibuat MALAS (baru saat isi pertama kali != 1) dan setelah ada
+TIDAK PERNAH dihapus walau isi dikembalikan ke 1 — `transaction_items`
+nota lama menunjuk ke id satuan itu.
+
+Plus 4 penyesuaian dari user di sesi yang sama: nominal subtotal keranjang
+pindah ke bawah baris qty (dulu stepper bergeser tiap diketuk krn lebar
+teks rupiah berubah), checkbox keranjang pindah ke kanan (kiri tombol
+minus), ikon tab Ringkasan `grid_view` -> `note_alt`, dan bugfix status
+centang keranjang yang hilang di jalur "Tambah Belanjaan".
+
+**Gotcha BARU yang layak diingat**: `ListTile` mengunci tinggi
+`leading`/`trailing` ke 48px (dense; 56px non-dense) APA PUN tinggi
+barisnya — menumpuk 2 baris konten di `trailing` PASTI overflow. Baris
+keranjang (`_CartItemTile`) karena itu tidak lagi memakai `ListTile`,
+diganti `InkWell`+`Row` manual. 15 test baru, semua revert-verified. Full
+suite hijau, `flutter analyze` 0 issue._
+
+_Riwayat sesi 31 Juli 2026 (lanjutan 2) — versi kerja **2.7.0+10**. Susulan
 langsung dari sesi sebelumnya di hari yang sama (`b7744d7`, v2.6.0+9 —
 "Harga Lain per varian + status stok varian DITAMPILKAN"): user tanya 3
 hal soal Pengaturan Produk varian — (1) "jangkar satuan varian" (klaim ada
