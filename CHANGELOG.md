@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-08-01 (lanjutan 4)
 
-- `(belum commit)` — fix: baris keranjang terlalu mepet ke tepi layar di kedua sisi — jarak ke tepi diperlebar (8/4px -> 16/16px, varian 32px -> 40px), memberi ruang jari lebih leluasa di sekitar checkbox/stepper (sisi kanan) & nama/nominal (sisi kiri). Tidak ada bump versi (permintaan eksplisit user). 1 test baru — revert-verified. Full suite 883 hijau (1 kegagalan `proposal_unchanged_end_to_end_test.dart` dikonfirmasi flaky pre-existing/tidak terkait — port conflict, lolos 100% saat dijalankan sendirian), `flutter analyze` 0 issue.
+- `5266dcd` — fix: baris keranjang terlalu mepet ke tepi layar di kedua sisi — jarak ke tepi diperlebar (8/4px -> 16/16px, varian 32px -> 40px), memberi ruang jari lebih leluasa di sekitar checkbox/stepper (sisi kanan) & nama/nominal (sisi kiri). Tidak ada bump versi (permintaan eksplisit user). 1 test baru — revert-verified. Full suite 883 hijau (1 kegagalan `proposal_unchanged_end_to_end_test.dart` dikonfirmasi flaky pre-existing/tidak terkait — port conflict, lolos 100% saat dijalankan sendirian), `flutter analyze` 0 issue.
 
 ## 2026-08-01 (lanjutan 3)
 
