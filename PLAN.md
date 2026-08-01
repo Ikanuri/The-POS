@@ -458,20 +458,3 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 6. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
-7. **Item 53 — KEPUTUSAN FINAL: skema varian SEKARANG dipertahankan**
-   (sempat diusulkan redesain jadi "atribut" bukan entity terpisah, tapi
-   user memutuskan "Mungkin pertahankan skema varian sekarang" — jadi
-   arsitektur `Product` anak + `ProductUnit`/`PriceTiers`/`AltPrices`
-   sendiri per varian TIDAK direvisi). Sebagai gantinya, 2 perbaikan
-   dieksekusi & SELESAI (lihat CHANGELOG 2026-08-01 lanjutan 2): saklar
-   "ikut harga satuan dasar" (`product_units.follows_parent_price`) +
-   revisi UX harga varian di kasir (field manual + chip Harga Lain,
-   gated qty>0, bukan popup lagi).
-
-   **Sisa gap yang diketahui, belum dieksekusi**: cascade "ikut harga
-   satuan dasar" cuma disambungkan ke `saveProduct` (form Edit Produk
-   biasa) — BELUM ke `applyProductProposals` (jalur owner approve usulan
-   harga dari device lain via sync). Kalau owner approve usulan yang
-   mengubah harga satuan dasar produk induk lewat jalur itu, varian yang
-   followsParentPrice=true TIDAK ikut ter-cascade. Perlu keputusan/
-   implementasi terpisah kalau mau ditutup.

@@ -4538,6 +4538,16 @@ class AppDatabase extends _$AppDatabase {
       Set<String> approvedProductIds) async {
     if (approvedProductIds.isEmpty) return 0;
     var count = 0;
+    // Item 53 (permintaan user) — "ikut harga satuan dasar" sebelumnya
+    // cuma tersambung ke `saveProduct` (form Edit Produk biasa), TIDAK ke
+    // jalur approve-usulan-sync ini. Ditemukan (productId -> satuan DASAR-
+    // nya) sambil memproses `product_units`, harga barunya (kalau ikut
+    // di-approve) sambil memproses `price_tiers` — cascade ke varian
+    // dijalankan SETELAH transaction() commit (butuh state akhir yg utuh,
+    // termasuk kemungkinan varian itu sendiri baru di-approve di batch yg
+    // sama).
+    final baseUnitOfProduct = <String, ({String unitId, int? unitTypeId})>{};
+    final baseUnitNewPrice = <String, int>{};
     // Urutan TETAP (bukan `proposals.entries` mentah — urutan Map hasil
     // decode JSON tidak boleh diasumsikan): product_units WAJIB diproses
     // sebelum tabel anak-satuan, supaya `approvedUnitIds` sudah terisi.
@@ -4582,6 +4592,13 @@ class AppDatabase extends _$AppDatabase {
           } else if (table == 'product_units') {
             if (!approvedProductIds.contains(row['product_id'])) continue;
             approvedUnitIds.add(row['id'] as String);
+            final isBase = row['is_base_unit'] == 1 || row['is_base_unit'] == true;
+            if (isBase) {
+              baseUnitOfProduct[row['product_id'] as String] = (
+                unitId: row['id'] as String,
+                unitTypeId: row['unit_type_id'] as int?,
+              );
+            }
           } else {
             if (!approvedUnitIds.contains(row['product_unit_id'])) continue;
           }
@@ -4608,6 +4625,13 @@ class AppDatabase extends _$AppDatabase {
             cleaned['updated_at'] =
                 DateTime.now().millisecondsSinceEpoch ~/ 1000;
           }
+          if (table == 'price_tiers') {
+            final minQty = cleaned['min_qty'];
+            if (minQty == 1) {
+              baseUnitNewPrice[cleaned['product_unit_id'] as String] =
+                  cleaned['price'] as int;
+            }
+          }
           final cols = cleaned.keys.map((k) => '"$k"').join(', ');
           final placeholders = cleaned.values.map((_) => '?').join(', ');
           await customInsert(
@@ -4618,6 +4642,23 @@ class AppDatabase extends _$AppDatabase {
         }
       }
     });
+
+    // Item 53 — cascade "ikut harga satuan dasar" ke varian, SETELAH commit
+    // (butuh state akhir yg utuh). Hanya produk yg SATUAN DASARNYA benar²
+    // ikut ter-approve DAN harga tier dasarnya (minQty=1) ada di batch ini —
+    // usulan yg sama sekali tidak menyentuh harga satuan dasar (mis. cuma
+    // ganti barcode) tidak memicu cascade apa pun.
+    for (final entry in baseUnitOfProduct.entries) {
+      final newPrice = baseUnitNewPrice[entry.value.unitId];
+      final unitTypeId = entry.value.unitTypeId;
+      if (newPrice != null && unitTypeId != null) {
+        await _cascadeVariantPricesForUnit(
+          parentProductId: entry.key,
+          anchorUnitTypeId: unitTypeId,
+          newBasePrice: newPrice,
+        );
+      }
+    }
     return count;
   }
 
