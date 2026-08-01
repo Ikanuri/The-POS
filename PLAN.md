@@ -458,3 +458,33 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 6. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
+7. **Item 53 (redesain varian jadi "atribut", bukan entity terpisah)** —
+   usulan user (1 Agustus): varian TIDAK lagi jadi `Product` anak sendiri
+   dengan `ProductUnit`/`PriceTiers`/`AltPrices` sendiri (arsitektur
+   sekarang, termasuk fitur "satuan jual per varian" yang baru selesai
+   di v2.8.0 — usulan ini akan MEMBALIK fitur itu). Sebagai gantinya:
+   centang varian di modal Tambah Item cukup MENGGANTI nama produk yang
+   ditampilkan (mis. "Sedap Goreng" -> "Sedap Goreng Pedas"), tetap pakai
+   satuan/harga/tier grosir/Harga Lain milik INDUK yang sedang aktif
+   dipilih (tidak ada lagi stepper/harga terpisah per varian). Stok tetap
+   dilacak terpisah per varian PER SATUAN (mis. "Pedas" di satuan biji
+   py stok sendiri, beda dari stok biji milik "Original" atau produk
+   polos) — ini butuh dimensi baru di data stok (variant × productUnit)
+   yang TIDAK bisa direpresentasikan skema `stock_ledger` saat ini (keyed
+   murni per `productUnitId` milik SATU `Product` row), jadi perlu
+   migrasi schema baru.
+
+   **BELUM DIEKSEKUSI — user eksplisit minta ditahan dulu untuk
+   didiskusikan lebih lanjut** (dijawab "Tahan perubahan dulu, saya ingin
+   diskusikan terlebih jauh" saat ditanya soal pilihan varian tunggal vs
+   banyak sekaligus). Pertanyaan yang masih menggantung sebelum eksekusi:
+   - **Pilihan varian**: bisa centang BANYAK varian sekaligus dalam satu
+     modal (tiap varian qty sendiri, spt sekarang, tapi semua pakai
+     harga/satuan induk) — ATAU centang jadi TUNGGAL (radio-like, ganti
+     identitas seluruh entri, mau 2 rasa sekaligus = buka modal 2x)?
+   - **Barcode varian**: tetap dipertahankan per varian (bisa di-scan
+     langsung utk auto-pilih rasa), atau dihilangkan (barcode cukup di
+     induk, varian selalu dipilih manual)?
+   - User belum menjawab dua poin ini (jawaban "[No preference]" untuk
+     pertanyaan barcode & konfirmasi scope) — perlu ditanya ulang atau
+     didiskusikan lebih dulu, JANGAN diasumsikan sebelum user menjawab.
