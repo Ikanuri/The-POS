@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
@@ -86,7 +87,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetCtx) => _HandoffQrSheet(
+      builder: (_) => _HandoffQrSheet(
         // Judul beda konteks: pegawai TANPA izin SELALU melempar ke
         // owner/asisten (satu arah pasti); transfer bebas (Item 56) bisa
         // ke device manapun, judul generik.
@@ -94,26 +95,6 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         qrText: qrText,
         itemCount: cart.where((c) => !c.isVariant).length,
         total: cart.fold<int>(0, (s, c) => s + (c.price * c.qty).round()),
-        // QR (bukan network) adalah SATU-SATUNYA jalur transport — antrian
-        // `held_orders` ditulis di device PENERIMA saat MEREKA scan QR ini
-        // (lihat `_handleOrderCode` di kasir_screen.dart), BUKAN di device
-        // pengirim sendiri. Di sisi pengirim, "selesai" cuma berarti
-        // membersihkan keranjang lokal (dianggap sudah terkirim/diserahkan)
-        // — termasuk melepas reservasi nomor nota (Item 55), krn nomor itu
-        // sekarang jadi tanggung jawab device penerima. Cuma tutup sheet
-        // QR-nya sendiri (bukan CartSheet di baliknya sekalian) — dua pop
-        // beruntun di frame yang sama pernah bikin animasi Navigator macet
-        // tak pernah selesai di widget test.
-        onDone: () async {
-          if (meta.reservedLocalId != null) {
-            await ref
-                .read(databaseProvider)
-                .releaseLocalId(meta.reservedLocalId!);
-          }
-          ref.read(cartProvider(widget.cartId).notifier).clear();
-          ref.read(cartMetaProvider(widget.cartId).notifier).clear();
-          if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
-        },
       ),
     );
   }
@@ -541,24 +522,25 @@ class _CartItemTile extends ConsumerWidget {
   }
 }
 
-/// Item 24d — QR handoff pesanan pegawai. `onDone` dipanggil saat pegawai
-/// menandai sudah menunjukkan/discan owner — barulah keranjang lokal
-/// dibersihkan (bukan otomatis saat sheet dibuka, supaya QR tetap bisa
-/// ditunjukkan ulang kalau scan pertama gagal).
+/// Item 24d — QR handoff pesanan pegawai. Sheet ini murni menampilkan QR +
+/// jalur cadangan (salin teks/share) — TIDAK ada tombol yang mengosongkan
+/// keranjang di sini lagi (susulan: tombol "Sudah Dikirim, Kosongkan
+/// Keranjang" persis di atas "Tutup" sering ke-misclick, menghapus
+/// keranjang yang sebenarnya belum terkirim). Mengosongkan keranjang tetap
+/// bisa lewat ikon tempat sampah di header `CartSheet` (`_confirmClear`,
+/// ada dialog konfirmasi).
 class _HandoffQrSheet extends StatelessWidget {
   const _HandoffQrSheet({
     required this.title,
     required this.qrText,
     required this.itemCount,
     required this.total,
-    required this.onDone,
   });
 
   final String title;
   final String qrText;
   final int itemCount;
   final int total;
-  final Future<void> Function() onDone;
 
   @override
   Widget build(BuildContext context) {
@@ -606,12 +588,20 @@ class _HandoffQrSheet extends StatelessWidget {
               label: const Text('Salin Teks Pesanan'),
             ),
             const SizedBox(height: 20),
+            // Susulan (permintaan user): tombol "Sudah Dikirim, Kosongkan
+            // Keranjang" di sini (persis di atas "Tutup") sering ke-misclick
+            // — akibatnya keranjang yang SEBENARNYA belum terkirim malah
+            // terhapus. Diganti tombol Share (kirim teks pesanan lewat
+            // WhatsApp/dst) yang aman diklik — mengosongkan keranjang tetap
+            // bisa lewat ikon tempat sampah di header (`_confirmClear`),
+            // aksi destruktif jadi butuh langkah terpisah yang disengaja.
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: FilledButton(
-                onPressed: onDone,
-                child: const Text('Sudah Dikirim, Kosongkan Keranjang'),
+              child: FilledButton.icon(
+                onPressed: () => Share.share(qrText),
+                icon: const Icon(Icons.ios_share, size: 18),
+                label: const Text('Share Pesanan'),
               ),
             ),
             const SizedBox(height: 8),

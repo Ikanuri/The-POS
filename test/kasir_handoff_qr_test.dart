@@ -96,7 +96,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(QrImageView), findsOneWidget);
-    expect(find.text('Sudah Dikirim, Kosongkan Keranjang'), findsOneWidget);
+    expect(find.text('Share Pesanan'), findsOneWidget);
   });
 
   testWidgets(
@@ -131,31 +131,35 @@ void main() {
   });
 
   testWidgets(
-      'tap "Sudah Dikirim, Kosongkan Keranjang" mengosongkan keranjang '
-      'lokal pegawai (TIDAK menulis held_orders di device sendiri)',
-      (tester) async {
+      'susulan: tombol "Share Pesanan" TIDAK mengosongkan keranjang sendiri '
+      '(dulu "Sudah Dikirim, Kosongkan Keranjang" persis di atas "Tutup" '
+      'sering ke-misclick, menghapus keranjang yang belum benar-benar '
+      'terkirim) — mengosongkan cuma lewat ikon tempat sampah di header, '
+      'lihat cart_sheet_transfer_icon_test.dart', (tester) async {
     final db = await pumpCartSheetOpen(tester,
         deviceRole: 'kasir', terimaPembayaran: false);
     addTearDown(() async => db.close());
 
+    final container = ProviderScope.containerOf(
+        tester.element(find.byType(CartSheet)),
+        listen: false);
+
     await tester.tap(find.text('Kirim ke Owner/Asisten'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sudah Dikirim, Kosongkan Keranjang'));
+
+    expect(find.text('Share Pesanan'), findsOneWidget);
+    // TIDAK ditekan sampai tuntas — memanggil plugin native `Share.share`
+    // yg tak ada mock method channel-nya di codebase ini (lihat pola sama
+    // di backup_share_option_test.dart). Cukup buktikan keranjang MASIH
+    // utuh sebelum ditekan (tombol ini tidak lagi mengosongkan apa pun).
+    expect(container.read(cartProvider(kMainCartId)), isNotEmpty);
+
+    await tester.tap(find.text('Tutup'));
     await tester.pumpAndSettle();
 
-    // Query one-shot (BUKAN watchHeldOrders().first) — subscribe ke Stream
-    // drift baru di tengah widget test bisa macet selamanya di synthetic
-    // clock testWidgets (gotcha yang sama dgn StreamProvider, lihat
-    // CLAUDE.md §Gotcha), walau cuma dibaca sekali.
-    final rows = await db.select(db.heldOrders).get();
-    expect(rows, isEmpty,
-        reason: 'antrian held_orders SEHARUSNYA ditulis di device OWNER '
-            'saat scan, bukan di device pegawai sendiri');
-
-    // Sheet QR tertutup, CartSheet di baliknya sudah kosong (TIDAK ikut
-    // ditutup otomatis — cuma sheet QR-nya sendiri).
-    expect(find.text('Sudah Dikirim, Kosongkan Keranjang'), findsNothing);
-    expect(find.text('Keranjang kosong'), findsOneWidget);
+    expect(container.read(cartProvider(kMainCartId)), isNotEmpty,
+        reason: 'menutup sheet QR tanpa share tidak boleh menghapus '
+            'keranjang');
   });
 
   testWidgets(
