@@ -10,6 +10,26 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 3 Agustus 2026
 
+### 🆕 Fitur baru
+- **"Tempel Pesanan" sekarang bisa langsung dari keranjang** — ada ikon
+  baru di pojok atas keranjang, kapan saja (walau keranjang masih kosong).
+  Berguna kalau ada pesanan tambahan dari pelanggan (lewat Katalog HTML)
+  atau pegawai yang mau menambah pesanan, sebelum keranjang di-checkout.
+  Tombol yang sama juga sekarang muncul di layar "Tambah Belanjaan" (nota
+  yang sudah dibayar tempo/lunas) — dulu disembunyikan di sana.
+- **Scan QR "Transfer" sekarang bisa langsung nambah ke keranjang yang
+  sedang dibuka** — kalau kasir sedang melayani transaksi (keranjang
+  sudah ada isinya) lalu scan QR pesanan tambahan dari pegawai lain,
+  barangnya langsung masuk ke keranjang yang sama, tidak perlu buka
+  antrian terpisah dulu.
+- **Usulan pelanggan dari kasir/asisten sekarang bisa disetujui owner** —
+  kalau kasir/asisten (bukan owner) menambah atau mengubah data
+  pelanggan, perubahan itu sekarang terkirim sebagai "usulan" saat sync
+  ke owner (mirip usulan harga produk yang sudah ada), muncul di layar
+  Sync untuk ditinjau & disetujui. Sebelumnya perubahan pelanggan dari
+  device kasir/asisten tidak pernah sampai ke perangkat owner sama
+  sekali.
+
 ### 🔧 Perbaikan
 - **Tombol di layar kirim QR keranjang diganti** — dulu ada tombol "Sudah
   Dikirim, Kosongkan Keranjang" persis di atas tombol "Tutup", jadi rawan

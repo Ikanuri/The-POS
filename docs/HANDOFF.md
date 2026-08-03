@@ -5,10 +5,11 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 3 Agustus 2026 — versi kerja **masih 2.9.1+14** (TIDAK
-di-bump — user eksplisit minta "jangan naikkan bump versi jika tidak
-diminta", berlaku utk semua commit sesi ini & seterusnya sampai user minta
-lagi), schemaVersion 27. Dua hal dikerjakan sesi ini:
+_Update sesi 3 Agustus 2026 (lanjutan) — versi kerja **masih 2.9.1+14**
+(TIDAK di-bump — user eksplisit minta "jangan naikkan bump versi jika
+tidak diminta", berlaku utk semua commit sesi ini & seterusnya sampai user
+minta lagi), **schemaVersion NAIK ke 28** (kolom `customers.locally_modified`,
+lihat poin 4). Lima hal dikerjakan sesi ini:
 1. **Jarak baris keranjang ke tepi layar diperlebar di kedua sisi**
    (`5266dcd`) — dulu 8/4px, terlalu mepet, checkbox+stepper nyaris
    nempel tepi kanan & nama+nominal nyaris nempel tepi kiri. Sekarang
@@ -22,7 +23,65 @@ lagi), schemaVersion 27. Dua hal dikerjakan sesi ini:
    `CartSheet` (`_confirmClear`, sudah ada, tidak berubah). `onDone`
    callback lama & plumbing terkait (`releaseLocalId`, dsb di
    `_showHandoffQr`) DIHAPUS karena tidak ada lagi pemanggil. Selesai &
-   di-commit. Full suite 884 hijau, `flutter analyze` 0 issue.
+   di-commit.
+3. **"Tempel Pesanan" langsung dari `CartSheet` + diaktifkan di mode
+   Tambah Belanjaan + QR scan merge ke keranjang aktif** (`c690329`) —
+   tiga penyempurnaan terkait: (a) ikon baru di header `CartSheet` yang
+   membuka `PasteOrderSheet(cartId: widget.cartId)` — widget itu SUDAH
+   generik per-cartId & sudah merge ke cart yang ada, tidak perlu logika
+   baru; (b) tombol yang sama diizinkan tampil juga saat
+   `KasirScreen(addToTxId:)` (dulu sengaja `null`-kan kondisinya di
+   `kasir_screen.dart:1783`, sekarang cuma exclude mode Katalog); (c)
+   `_handleOrderCode` (`kasir_screen.dart`) sekarang cek
+   `ref.read(cartProvider(_cartId))` SEBELUM memutuskan
+   `db.holdOrder(...)` — kalau keranjang aktif TIDAK kosong, item hasil
+   scan QR handoff di-merge langsung ke situ (pola sama persis dgn
+   `PasteOrderSheet._addToCart`, pakai `_ensureParentInCart` versi
+   `kasir_screen.dart` yang sudah ada, BUKAN duplikat baru) alih-alih
+   selalu ke antrian `held_orders`. Selesai & di-commit.
+4. **Usulan sync pelanggan dari device non-owner** (`d196ccd`,
+   schemaVersion 27→28) — pola SAMA PERSIS dgn usulan produk (Item 40) &
+   Laci Meja (Item 52): kolom `customers.locally_modified` (migrasi
+   additive — 15 file test migrasi lama v7-v26 disentuh, tambah
+   `CREATE TABLE customers(id TEXT PRIMARY KEY)` minimal ke synthetic
+   schema masing² + update assertion `PRAGMA user_version` dari 27→28,
+   pola SAMA PERSIS dgn gotcha `product_units` yg sudah didokumentasikan
+   di CLAUDE.md §Gotcha), `markCustomerLocallyModified`/
+   `dumpLocalCustomerProposals`/`applyCustomerProposals` di
+   `AppDatabase`, dipanggil `pelanggan_form_screen.dart` gated
+   `!device.isOwner`. Antrian usulan PARALEL (`PendingCustomerProposal`)
+   di `LanSyncService`, field payload `customerProposals` — TIDAK
+   menyentuh `proposals`/`laciMejaProposals` sama sekali. Layar review
+   baru `CustomerProposalReviewScreen` + kartu "Usulan Pelanggan" di
+   `SyncScreen`. Sebelumnya pelanggan yang ditambah/diubah di device
+   kasir/asisten TIDAK PERNAH sampai ke host (customers = master data,
+   sengaja tidak diupload klien→host) — sekarang lewat jalur usulan yang
+   sama seperti produk. Selesai & di-commit.
+5. **Gotcha baru ditemukan & DIDOKUMENTASIKAN di CLAUDE.md §Gotcha
+   (susulan poin di atas)**: widget test yang pump `KasirScreen` (drift
+   `StreamProvider`, mis. antrian held orders) via top-level
+   `setUp()`/`tearDown(() async => db.close())` bisa membuat `flutter
+   test` tampak HANG TANPA BATAS (bukan cuma lambat) — beda dari pola
+   lama yg sudah didokumentasikan (test yg pakai `final db =` lokal +
+   `await db.close()` di akhir body TIDAK kena). Fix: `drain()` manual
+   di akhir tiap `testWidgets` (`pumpWidget(SizedBox())` +
+   `pump(Duration(milliseconds: 10))`) SEBELUM `tearDown` global
+   sempat jalan. Reproduksi persis: `test/kasir_add_mode_paste_order_
+   test.dart` sebelum fix vs sesudah.
+
+Full suite hijau (900+ test, termasuk semua test baru sesi ini),
+`flutter analyze` 0 issue.
+
+**MENGGANTUNG — Item 52 PLAN.md, bug sinkron harga antar toko (BELUM
+diselesaikan, masih terputus di titik yang sama)**: user laporkan kasus
+nyata — barcode sama, harga sudah sama di kedua toko ("Rinso cair 500",
+5000), tapi sync tetap usulkan harga beda (4400). Analisis mendalam SUDAH
+dilakukan (baca detail lengkap di PLAN.md Item 52 & CLAUDE.md), root
+cause PALING MUNGKIN sudah diidentifikasi: asimetri dedup di
+`price_sync_service.dart` (query ekspor katalog dedup barcode via
+`GROUP BY` tapi TIDAK dedup JOIN `price_tiers WHERE min_qty=1` — kalau
+toko sumber punya tier duplikat `minQty=1`, 1 barcode bisa muncul 2x di
+katalog dgn harga beda). **BELUM diverifikasi ke kasus nyata** — user
 
 **MENGGANTUNG — Item 52 PLAN.md, bug sinkron harga antar toko (belum
 diselesaikan, terputus di titik ini)**: user laporkan kasus nyata —
