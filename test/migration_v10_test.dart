@@ -42,6 +42,8 @@ void main() {
     v9.execute('CREATE TABLE products(id TEXT PRIMARY KEY);');
     // transactions diperlukan agar migrasi v15 (addColumn checked_item_ids) tak gagal.
     v9.execute('CREATE TABLE transactions(id TEXT PRIMARY KEY);');
+    // customers diperlukan agar migrasi v28 (addColumn locally_modified) tak gagal.
+    v9.execute('CREATE TABLE customers(id TEXT PRIMARY KEY);');
     // transaction_items diperlukan agar migrasi v17 (addColumn returned_at)
     // tak gagal — Item 49g.
     v9.execute('CREATE TABLE transaction_items(id TEXT PRIMARY KEY);');
@@ -82,7 +84,7 @@ void main() {
     expect(updated.sortOrder, 5);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 27); // schemaVersion terkini
+    expect(ver.data.values.first, 28); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

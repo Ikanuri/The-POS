@@ -205,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -412,6 +412,11 @@ class AppDatabase extends _$AppDatabase {
             // Item 53 (permintaan user) — saklar "ikut harga satuan dasar"
             // per satuan jual varian.
             await m.addColumn(productUnits, productUnits.followsParentPrice);
+          }
+          if (from < 28) {
+            // Susulan (permintaan user) — usulan sync pelanggan, pola SAMA
+            // PERSIS dgn `products.locallyModified` (Item 40).
+            await m.addColumn(customers, customers.locallyModified);
           }
         },
         beforeOpen: (details) async {
@@ -5579,6 +5584,72 @@ class AppDatabase extends _$AppDatabase {
           );
           count++;
         }
+      }
+    });
+    return count;
+  }
+
+  // ───────────────────────── Usulan Pelanggan ─────────────────────────
+  //
+  // Susulan (permintaan user) — pola SAMA PERSIS dgn Laci Meja di atas
+  // (yang sendiri PARALEL dari usulan produk Item 40): `locallyModified`
+  // di `customers`, UI yang memanggil create/update WAJIB set true kalau
+  // device BUKAN owner (lihat `device.isOwner`). Sengaja 1 tabel saja
+  // (bukan gabungan banyak tabel spt Laci Meja) — pelanggan tidak punya
+  // sub-tabel terkait yang perlu ikut diusulkan.
+
+  /// Set pelanggan sbg "diedit lokal" — dipanggil UI setelah simpan
+  /// pelanggan (baru/ubah) di device yang BUKAN owner.
+  Future<void> markCustomerLocallyModified(String customerId) async {
+    await (update(customers)..where((t) => t.id.equals(customerId))).write(
+      CustomersCompanion(
+        locallyModified: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Kumpulkan baris `customers` yang ditandai `locallyModified` di device
+  /// ini — dikirim sbg "usulan" ke owner via sync. TIDAK menghapus flag di
+  /// sini (sama pola dgn `dumpLocalProposals` produk) — flag baru hilang
+  /// otomatis saat baris ini ditimpa push resmi dari host.
+  Future<List<Map<String, Object?>>> dumpLocalCustomerProposals() async {
+    final rows = await customSelect(
+      'SELECT * FROM "customers" WHERE locally_modified = 1',
+    ).get();
+    return rows.map((r) => r.data).toList();
+  }
+
+  /// Terapkan pelanggan yang DISETUJUI owner (subset [approvedIds] dari
+  /// [rows]) ke tabel `customers` host. `locallyModified` DIPAKSA false
+  /// (host jadi sumber kebenaran), `updated_at` dicap ulang ke SAAT INI
+  /// (sama alasan spt `applyProductProposals`: supaya baris ini lolos
+  /// filter watermark `dumpSince` pada sync berikutnya, bukan macet tak
+  /// pernah terkirim balik ke klien).
+  Future<int> applyCustomerProposals(
+      List<Map<String, Object?>> rows, Set<String> approvedIds) async {
+    if (approvedIds.isEmpty) return 0;
+    var count = 0;
+    final localColumns = (await customSelect('PRAGMA table_info("customers")')
+            .get())
+        .map((r) => r.data['name'] as String)
+        .toSet();
+    await transaction(() async {
+      for (final row in rows) {
+        if (!approvedIds.contains(row['id'])) continue;
+        var cleaned = Map<String, Object?>.from(row)
+          ..removeWhere((k, _) => !localColumns.contains(k));
+        if (cleaned.isEmpty) continue;
+        cleaned['locally_modified'] = 0;
+        cleaned['updated_at'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final cols = cleaned.keys.map((k) => '"$k"').join(', ');
+        final placeholders = cleaned.values.map((_) => '?').join(', ');
+        await customInsert(
+          'INSERT OR REPLACE INTO "customers" ($cols) VALUES ($placeholders)',
+          variables: _rowToVars(cleaned),
+          updates: {customers},
+        );
+        count++;
       }
     });
     return count;

@@ -27,6 +27,8 @@ void main() {
     v8.execute('CREATE TABLE product_units(id TEXT PRIMARY KEY, product_id TEXT, unit_type_id INTEGER, is_base_unit INTEGER, ratio_to_base REAL, is_non_stock INTEGER);');
     // products diperlukan agar migrasi v14 (addColumn marked_out_of_stock) tak gagal.
     v8.execute('CREATE TABLE products(id TEXT PRIMARY KEY);');
+    // customers diperlukan agar migrasi v28 (addColumn locally_modified) tak gagal.
+    v8.execute('CREATE TABLE customers(id TEXT PRIMARY KEY);');
     v8.execute('''
       CREATE TABLE transactions(
         id TEXT PRIMARY KEY, local_id TEXT UNIQUE, kasir_id TEXT, customer_id TEXT,
@@ -85,7 +87,7 @@ void main() {
     expect(updated.changeTaken, isTrue);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 27); // schemaVersion terkini
+    expect(ver.data.values.first, 28); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
