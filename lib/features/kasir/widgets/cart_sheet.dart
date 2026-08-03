@@ -14,6 +14,7 @@ import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 import 'add_control.dart';
+import 'paste_order_sheet.dart';
 
 class CartSheet extends ConsumerStatefulWidget {
   const CartSheet({
@@ -186,6 +187,25 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             color: scheme.onSurfaceVariant)),
                   ],
                   const Spacer(),
+                  // Susulan (permintaan user): "Tempel Pesanan" juga bisa
+                  // dipakai LANGSUNG dari keranjang yang sedang terbuka —
+                  // berguna kalau ada pesanan tambahan (dari pelanggan via
+                  // katalog HTML, atau pegawai tanpa izin terima_pembayaran
+                  // yang mau menambah pesanan) sebelum keranjang ini
+                  // di-checkout. Tidak tersedia di mode Katalog (bukan
+                  // transaksi sungguhan). `PasteOrderSheet` sudah generik
+                  // per-cartId & langsung merge ke keranjang ini (bukan
+                  // bikin held_order baru) — tidak perlu logika baru.
+                  if (widget.cartId != kCatalogCartId)
+                    IconButton(
+                      tooltip: 'Tempel Pesanan',
+                      onPressed: () => showModalBottomSheet(
+                        context: ctx,
+                        isScrollControlled: true,
+                        builder: (_) => PasteOrderSheet(cartId: widget.cartId),
+                      ),
+                      icon: const Icon(Icons.content_paste_go),
+                    ),
                   if (canTransfer)
                     IconButton(
                       tooltip: 'Transfer via QR',

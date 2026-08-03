@@ -1306,6 +1306,40 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       if (parsed.reservedLocalId != null) {
         await db.adoptReservedLocalId(parsed.reservedLocalId!);
       }
+
+      // Susulan (permintaan user): kalau device ini SEDANG punya keranjang
+      // aktif (bukan kosong) — biasanya pegawai tanpa izin terima_pembayaran
+      // yang mau menambah pesanan ke transaksi yang sedang ia layani (poin
+      // 1/2 di atas) — masukkan LANGSUNG ke keranjang aktif itu, bukan ke
+      // antrian `held_orders` terpisah (yg dimaksudkan utk transaksi BARU).
+      // Pola merge SAMA PERSIS dgn `PasteOrderSheet._addToCart` (induk dulu
+      // baru varian via `_ensureParentInCart`, sengaja tidak dibagi dari
+      // sana — lihat dok di sana).
+      final activeCart = ref.read(cartProvider(_cartId));
+      if (activeCart.isNotEmpty) {
+        final notifier = ref.read(cartProvider(_cartId).notifier);
+        for (final item in parsed.items.where((i) => !i.isVariant)) {
+          notifier.addItem(item.toCartItem());
+        }
+        for (final item in parsed.items.where((i) => i.isVariant)) {
+          await _ensureParentInCart(item.toCartItem());
+          if (!mounted) return;
+          ref.read(cartProvider(_cartId).notifier).addItem(item.toCartItem());
+        }
+        if (customerName != null &&
+            customerName.isNotEmpty &&
+            !ref.read(cartMetaProvider(_cartId)).hasCustomer) {
+          ref
+              .read(cartMetaProvider(_cartId).notifier)
+              .setCustomer(parsed.customerId, customerName);
+        }
+        if (!mounted) return;
+        if (_scannerOpen) _closeScanner();
+        _showBanner('Pesanan dari $employeeName ditambahkan ke keranjang aktif',
+            InlineBannerType.success);
+        return;
+      }
+
       final payload = jsonEncode({
         'items': parsed.items.map((i) => i.toCartItem().toJson()).toList(),
         'meta': meta.toJson(),
@@ -1777,10 +1811,12 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
               isScrollControlled: true,
               builder: (_) => const TxHistorySheet(),
             ),
-            // Tempel Pesanan (Katalog Pesanan). Hanya di mode kasir biasa
-            // (bukan katalog/tambah-belanjaan) agar tidak menambah
-            // kebingungan di alur yang sudah ada.
-            onPasteOrder: (!_isCatalogMode && !_isAddMode)
+            // Tempel Pesanan (Katalog Pesanan). Tersedia di mode kasir
+            // biasa MAUPUN tambah-belanjaan (susulan: nota yang sudah
+            // checkout, tempo/lunas, bisa ditambah pesanan susulan lewat
+            // kode pesanan yang sama) — hanya disembunyikan di mode
+            // Katalog (bukan transaksi sungguhan).
+            onPasteOrder: !_isCatalogMode
                 ? () => showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,

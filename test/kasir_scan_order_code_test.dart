@@ -9,8 +9,10 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:mobile_scanner/src/mobile_scanner_view_attributes.dart';
 import 'package:mobile_scanner/src/objects/start_options.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/kasir_screen.dart';
 
 /// Item 24d — scan kode `#PSN:` (bukan barcode produk biasa) lewat scanner
@@ -277,6 +279,79 @@ void main() {
 
     expect(find.text('Tanpa Nama'), findsOneWidget);
     expect(find.textContaining('Budi ·'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'susulan: scan #PSN: dgn "Pegawai:" saat keranjang device ini SUDAH '
+      'ada isi → item ditambahkan LANGSUNG ke keranjang aktif (bukan '
+      'antrian held_orders terpisah) — berguna utk pegawai tanpa izin '
+      'terima_pembayaran yg mau menambah pesanan ke transaksi yg sedang '
+      'ia layani', (tester) async {
+    final db = await seedProduct();
+    addTearDown(() async => db.close());
+
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const fakeDevice = DeviceIdentity(
+      storeUuid: 's',
+      storeKey: 'k',
+      storeName: 'Toko',
+      deviceName: 'Owner',
+      deviceCode: 'K1',
+      deviceRole: 'owner',
+    );
+
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider
+          .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+    ]);
+    addTearDown(container.dispose);
+
+    container.read(cartProvider(kMainCartId).notifier).addItem(const CartItem(
+          productId: 'sudahAda',
+          productUnitId: 'uSudahAda',
+          productName: 'Teh Botol',
+          unitName: 'Botol',
+          qty: 1,
+          price: 4000,
+          originalPrice: 4000,
+          costPrice: 3000,
+        ));
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(body: KasirScreen()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.qr_code_scanner_rounded));
+    await tester.pumpAndSettle();
+
+    fake.emitBarcode('#PSN:u1=2;\nPegawai: Budi');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('ditambahkan ke keranjang aktif'),
+        findsOneWidget);
+
+    final rows = await db.select(db.heldOrders).get();
+    expect(rows, isEmpty,
+        reason: 'keranjang aktif tidak kosong → merge langsung, TIDAK bikin '
+            'antrian held_orders baru');
+
+    final cart = container.read(cartProvider(kMainCartId));
+    expect(cart, hasLength(2),
+        reason: 'item lama (Teh Botol) + item hasil scan (Sedap Goreng)');
+    expect(cart.any((c) => c.productName == 'Teh Botol'), isTrue,
+        reason: 'item lama tidak boleh hilang/tertimpa');
+    expect(cart.any((c) => c.productName == 'Sedap Goreng'), isTrue);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
