@@ -9,7 +9,11 @@ _Update sesi 3 Agustus 2026 (lanjutan) — versi kerja **masih 2.9.1+14**
 (TIDAK di-bump — user eksplisit minta "jangan naikkan bump versi jika
 tidak diminta", berlaku utk semua commit sesi ini & seterusnya sampai user
 minta lagi), **schemaVersion NAIK ke 28** (kolom `customers.locally_modified`,
-lihat poin 4). Lima hal dikerjakan sesi ini:
+lihat poin 4). Enam hal dikerjakan sesi ini:
+0. **Highlight soft utk item keranjang yang sudah dicentang** (`f606428`)
+   — `_CartItemTile` dibungkus `Container` baru (di dalam `InkWell`, di
+   luar `Padding`), warna `scheme.primary.withOpacity(0.08)` saat
+   `item.checked`, transparan kalau belum. Selesai & di-commit.
 1. **Jarak baris keranjang ke tepi layar diperlebar di kedua sisi**
    (`5266dcd`) — dulu 8/4px, terlalu mepet, checkbox+stepper nyaris
    nempel tepi kanan & nama+nominal nyaris nempel tepi kiri. Sekarang

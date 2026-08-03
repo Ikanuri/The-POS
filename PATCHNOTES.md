@@ -11,6 +11,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 3 Agustus 2026
 
 ### 🆕 Fitur baru
+- **Item keranjang yang sudah dicentang kini dapat highlight lembut** —
+  warna latar tipis di baris itemnya, jadi sekilas kelihatan barang mana
+  yang sudah diverifikasi/dicek saat serah-terima, tanpa perlu lihat
+  kotak centangnya satu-satu.
 - **"Tempel Pesanan" sekarang bisa langsung dari keranjang** — ada ikon
   baru di pojok atas keranjang, kapan saja (walau keranjang masih kosong).
   Berguna kalau ada pesanan tambahan dari pelanggan (lewat Katalog HTML)
