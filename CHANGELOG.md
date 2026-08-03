@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-03
+
+- `31c9b26` — fix: ganti tombol "Sudah Dikirim, Kosongkan Keranjang" di sheet QR handoff (`_HandoffQrSheet`, `cart_sheet.dart`) dengan tombol "Share Pesanan" (`Share.share`). Tombol lama persis di atas "Tutup" rawan ke-misclick, menghapus keranjang yang sebenarnya belum terkirim. Mengosongkan keranjang tetap tersedia lewat ikon tempat sampah di header `CartSheet` (dialog konfirmasi sudah ada, tidak berubah). `onDone` callback & plumbing terkait dihapus (tidak ada lagi pemanggil). Test `kasir_handoff_qr_test.dart` diperbarui. Tidak ada bump versi (permintaan eksplisit user). Full suite 884 hijau, `flutter analyze` 0 issue.
+
 ## 2026-08-01 (lanjutan 4)
 
 - `5266dcd` — fix: baris keranjang terlalu mepet ke tepi layar di kedua sisi — jarak ke tepi diperlebar (8/4px -> 16/16px, varian 32px -> 40px), memberi ruang jari lebih leluasa di sekitar checkbox/stepper (sisi kanan) & nama/nominal (sisi kiri). Tidak ada bump versi (permintaan eksplisit user). 1 test baru — revert-verified. Full suite 883 hijau (1 kegagalan `proposal_unchanged_end_to_end_test.dart` dikonfirmasi flaky pre-existing/tidak terkait — port conflict, lolos 100% saat dijalankan sendirian), `flutter analyze` 0 issue.

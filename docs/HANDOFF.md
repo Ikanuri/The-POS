@@ -5,7 +5,45 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 1 Agustus 2026 (lanjutan 3) — versi kerja **2.9.1+14**,
+_Update sesi 3 Agustus 2026 — versi kerja **masih 2.9.1+14** (TIDAK
+di-bump — user eksplisit minta "jangan naikkan bump versi jika tidak
+diminta", berlaku utk semua commit sesi ini & seterusnya sampai user minta
+lagi), schemaVersion 27. Dua hal dikerjakan sesi ini:
+1. **Jarak baris keranjang ke tepi layar diperlebar di kedua sisi**
+   (`5266dcd`) — dulu 8/4px, terlalu mepet, checkbox+stepper nyaris
+   nempel tepi kanan & nama+nominal nyaris nempel tepi kiri. Sekarang
+   16/16px (varian 40px). Selesai & di-commit.
+2. **Tombol "Sudah Dikirim, Kosongkan Keranjang" di sheet QR handoff
+   (`_HandoffQrSheet`) diganti tombol "Share Pesanan"** (`31c9b26`) —
+   tombol lama persis di atas "Tutup", rawan ke-misclick & menghapus
+   keranjang yang sebenarnya belum terkirim. `Share.share(qrText)`
+   dipanggil, TIDAK ada lagi aksi yang mengosongkan keranjang di sheet
+   ini. Mengosongkan keranjang tetap lewat ikon tempat sampah di header
+   `CartSheet` (`_confirmClear`, sudah ada, tidak berubah). `onDone`
+   callback lama & plumbing terkait (`releaseLocalId`, dsb di
+   `_showHandoffQr`) DIHAPUS karena tidak ada lagi pemanggil. Selesai &
+   di-commit. Full suite 884 hijau, `flutter analyze` 0 issue.
+
+**MENGGANTUNG — Item 52 PLAN.md, bug sinkron harga antar toko (belum
+diselesaikan, terputus di titik ini)**: user laporkan kasus nyata —
+barcode sama, harga sudah sama di kedua toko ("Rinso cair 500", 5000),
+tapi sync tetap usulkan harga beda (4400). Analisis mendalam SUDAH
+dilakukan (baca detail lengkap di PLAN.md Item 52 & CLAUDE.md), root
+cause PALING MUNGKIN sudah diidentifikasi: asimetri dedup di
+`price_sync_service.dart` (query ekspor katalog dedup barcode via
+`GROUP BY` tapi TIDAK dedup JOIN `price_tiers WHERE min_qty=1` — kalau
+toko sumber punya tier duplikat `minQty=1`, 1 barcode bisa muncul 2x di
+katalog dgn harga beda). **BELUM diverifikasi ke kasus nyata** — user
+diminta kirim baris log `unit=...`/verdict harga khusus utk "Rinso cair
+500", atau cek manual Edit Produk di kedua toko (tier harga duplikat?
+produk nonaktif dgn nama/barcode sama?) — user belum sempat balas
+sebelum sesi ini terputus/di-compact. **Next action begitu sesi
+lanjut**: tunggu/minta detail itu dari user, baru eksekusi fix (dedup
+query + one-time cleanup data tier duplikat). Pertanyaan terpisah yang
+juga menunggu keputusan user: apakah field pencarian kasir perlu bisa
+cari-by-barcode juga (sekarang cuma nama/`kode_produk`).
+
+_Riwayat sesi 1 Agustus 2026 (lanjutan 3) — versi kerja **2.9.1+14**,
 schemaVersion 27. **Item 53 PLAN.md SEKARANG BENAR-BENAR SELESAI TOTAL**
 (dihapus dari PLAN.md) — user tanya susulan "Apakah bisa dibuat sync
 juga?" menutup gap yang sempat dicatat: saklar "Ikut harga satuan dasar"

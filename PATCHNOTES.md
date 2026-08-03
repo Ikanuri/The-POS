@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 3 Agustus 2026
+
+### 🔧 Perbaikan
+- **Tombol di layar kirim QR keranjang diganti** — dulu ada tombol "Sudah
+  Dikirim, Kosongkan Keranjang" persis di atas tombol "Tutup", jadi rawan
+  salah pencet dan keranjang yang sebenarnya BELUM terkirim ikut terhapus.
+  Sekarang tombol itu diganti "Share Pesanan" (kirim teks pesanan lewat
+  WhatsApp/dll). Mengosongkan keranjang tetap bisa lewat ikon tempat sampah
+  di pojok atas keranjang seperti biasa.
+
 ## 1 Agustus 2026 (lanjutan)
 
 ### 🆕 Fitur baru

@@ -458,3 +458,44 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
 6. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
    — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
    file terpisah). Detail opini di Item 51 di atas.
+7. **Item 52 — bug sinkron harga antar toko: barcode sama, harga sudah
+   sama, tapi sync tetap usulkan harga beda** (kasus konkret user: "Rinso
+   cair 500", 5000 → diusulkan 4400). Analisis mendalam (`PriceMatchService`
+   dkk) SUDAH dilakukan, **root cause paling mungkin SUDAH diidentifikasi
+   tapi BELUM diverifikasi ke kasus nyata** (user belum sempat kirim detail
+   log/DB utk "Rinso cair 500" spesifik — sesi terputus di titik ini).
+   - **Root cause kandidat #1 (paling mungkin)**: asimetri dedup di
+     `price_sync_service.dart` query ekspor katalog (~baris 177-198) —
+     subquery barcode DI-dedup (`GROUP BY product_unit_id`), tapi JOIN
+     `price_tiers WHERE min_qty = 1` TIDAK di-dedup. Kalau toko SUMBER
+     (yang ekspor) punya 2 baris tier harga dgn `minQty=1` utk 1 unit yg
+     sama (kelas bug lama yg sudah pernah kejadian — sudah ada guard
+     `_upsertBaseTier` di `price_preview_screen.dart` tapi cuma mencegah
+     ke depan, tidak membersihkan data lama), query ini menghasilkan 2
+     baris katalog barcode SAMA dgn harga BEDA → `PriceMatchService.match`
+     tidak dedup input katalog → 1 diusulkan "unchanged", 1 lagi
+     "changed" utk unit lokal yg sama persis. Ini yg paling cocok dgn
+     laporan user (barcode+harga lokal sudah sama, tapi tetap diusulkan
+     beda).
+   - Kandidat lain (lebih lemah, lihat riwayat percakapan sesi ini utk
+     detail lengkap): duplikat tier serupa di sisi LOKAL (bukan sumber);
+     Tier 3/4 (match nama, bukan barcode) ke-alias permanen ke satuan
+     yang salah lewat fallback unit dasar; barcode "nyangkut" di produk
+     nonaktif yang belum di-release (`_releaseBarcodesForProduct`) —
+     ini TIDAK bikin harga ghost terpakai langsung (sudah dicek aman,
+     `allProducts` filter aktif-saja), tapi BISA memblokir alias barcode
+     ke Tier 1 selamanya via `_linkBarcode` "sudah terdaftar → dilewati".
+   - **Langkah berikut**: minta user kirim salah satu — (a) bagian log
+     sync utk "Rinso cair 500" khususnya baris `unit=...` & verdict
+     harga (bukan cuma fase match), atau (b) buka Edit Produk "Rinso
+     cair 500" di KEDUA toko, cek apakah ada 2 tier harga `min 1` di
+     satuan yang sama (di toko manapun) atau ada produk lain/nonaktif
+     dgn nama/barcode sama. Setelah kandidat #1 terverifikasi, fix-nya:
+     tambah `GROUP BY`/subquery dedup pada JOIN `price_tiers` di
+     `price_sync_service.dart`, plus one-time cleanup query utk baris
+     tier duplikat `minQty=1` yang sudah terlanjur ada di data user.
+   - **Terpisah, belum diputuskan user**: apakah search produk di input
+     field kasir perlu ditambah kemampuan cari-by-barcode juga (sekarang
+     hanya cari nama/`kode_produk`, lihat `watchProductsForKasir` di
+     `app_database.dart` — barcode scan sepenuhnya jalur lain, kamera/HID,
+     terpisah dari field pencarian). Ditawarkan, belum dikonfirmasi user.
