@@ -10,6 +10,7 @@ import '../../features/laci_meja/laci_meja_dashboard_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
+import '../../features/pengaturan/about_screen.dart';
 import '../../features/pengaturan/alih_owner_screen.dart';
 import '../../features/pengaturan/arsip_screen.dart';
 import '../../features/pengaturan/backup_screen.dart';
@@ -29,6 +30,7 @@ import '../../features/pengaturan/tutup_kasir_screen.dart';
 import '../../features/pengaturan/printer_screen.dart';
 import '../../features/pengaturan/store_info_screen.dart';
 import '../../features/pengaturan/sync_screen.dart';
+import '../../features/pengaturan/tutorial_list_screen.dart';
 import '../../features/pengaturan/tutup_buku_screen.dart';
 import '../services/price_match_service.dart';
 import '../../features/produk/cek_stok_screen.dart';
@@ -267,6 +269,14 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: 'lisensi',
                   builder: (_, __) => const DeviceLicenseScreen()),
+              GoRoute(
+                  path: 'tentang',
+                  builder: (_, __) => const AboutScreen(),
+                  routes: [
+                    GoRoute(
+                        path: 'tutorial',
+                        builder: (_, __) => const TutorialListScreen()),
+                  ]),
               GoRoute(
                   path: 'import-csv',
                   builder: (_, __) => const CsvImportScreen()),
