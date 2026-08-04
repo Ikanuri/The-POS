@@ -27,18 +27,34 @@ Future<void> _pump(WidgetTester tester, {required LicenseState license}) async {
 }
 
 void main() {
-  testWidgets('menampilkan wordmark "The POS" dan ikon aplikasi',
+  testWidgets('hero: wordmark "The POS", ikon besar, lalu tagline',
       (tester) async {
     await _pump(tester, license: const LicenseState(fingerprint: 'fp'));
     expect(find.text('The POS'), findsOneWidget);
-    expect(find.byType(Image), findsOneWidget);
+    expect(find.textContaining('Aplikasi kasir offline-first'), findsOneWidget);
+
+    // Ikon SENGAJA besar & dominan (mockup: 178px) — pernah salah dibuat
+    // kecil (108px) sehingga wordmark yang mendominasi, bukan ikonnya.
+    final img = tester.widget<Image>(find.byType(Image));
+    expect(img.width, 178);
+
+    // Urutan mockup: wordmark DI ATAS ikon (bukan sebaliknya).
+    expect(tester.getCenter(find.text('The POS')).dy,
+        lessThan(tester.getCenter(find.byType(Image)).dy));
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
 
-  testWidgets(
-      'lisensi sudah aktif -> kartu "Info Lisensi & Serial" tampil',
+  testWidgets('footer: versi + kredit "made with ♥️ by Dre"', (tester) async {
+    await _pump(tester, license: const LicenseState(fingerprint: 'fp'));
+    expect(find.text('made with ♥️ by Dre'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets('lisensi sudah aktif -> chip status lisensi tampil di kanan atas',
       (tester) async {
     await _pump(
       tester,
@@ -47,17 +63,20 @@ void main() {
         exp: DateTime.now().add(const Duration(days: 10)).toIso8601String(),
       ),
     );
-    expect(find.text('Info Lisensi & Serial'), findsOneWidget);
+    expect(find.text('Lisensi'), findsOneWidget);
+    expect(find.textContaining('hari lagi'), findsOneWidget);
+
+    // Chip ada DI ATAS hero (posisi chip "ID device" di mockup).
+    expect(tester.getCenter(find.text('Lisensi')).dy,
+        lessThan(tester.getCenter(find.text('The POS')).dy));
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
 
-  testWidgets(
-      'belum aktivasi -> kartu "Info Lisensi & Serial" TIDAK tampil',
-      (tester) async {
+  testWidgets('belum aktivasi -> chip lisensi TIDAK tampil', (tester) async {
     await _pump(tester, license: const LicenseState(fingerprint: 'fp'));
-    expect(find.text('Info Lisensi & Serial'), findsNothing);
+    expect(find.text('Lisensi'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

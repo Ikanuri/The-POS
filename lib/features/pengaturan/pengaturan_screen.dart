@@ -432,15 +432,28 @@ class PengaturanScreen extends ConsumerWidget {
                           onTap: () =>
                               context.push('/pengaturan/duplikat-data'),
                         ),
-                      ListTile(
-                        leading: const Icon(Icons.info_outline),
-                        title: const Text('Tentang Aplikasi'),
-                        subtitle: const Text(
-                            'Versi, panduan & tips, info lisensi & serial'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.push('/pengaturan/tentang'),
-                      ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const _SectionHeader('Lainnya'),
+                // Baris ber-aksen (mockup): satu-satunya entri di Pengaturan
+                // yang diberi tint aksen — pintu masuk ke identitas app
+                // (versi, panduan, lisensi), bukan setelan yang diubah-ubah.
+                Card(
+                  color: scheme.primary.withOpacity(0.06),
+                  child: ListTile(
+                    leading: Icon(Icons.info_outline, color: scheme.primary),
+                    title: Text(
+                      'Tentang Aplikasi',
+                      style: TextStyle(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text('Versi, panduan & tips, lisensi'),
+                    trailing: Icon(Icons.chevron_right, color: scheme.primary),
+                    onTap: () => context.push('/pengaturan/tentang'),
                   ),
                 ),
               ],
