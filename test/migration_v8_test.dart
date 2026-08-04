@@ -29,6 +29,7 @@ void main() {
         id TEXT PRIMARY KEY, product_id TEXT, unit_type_id INTEGER,
         is_base_unit INTEGER NOT NULL DEFAULT 0, ratio_to_base REAL NOT NULL DEFAULT 1,
         is_non_stock INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE customers(id TEXT PRIMARY KEY);
       CREATE TABLE transaction_payments(
         id TEXT PRIMARY KEY, transaction_id TEXT, amount INTEGER, method TEXT,
         paid_at INTEGER, kasir_id TEXT, note TEXT);
@@ -94,7 +95,7 @@ void main() {
     // Versi schema benar-benar naik ke skema terkini (10 — migrasi lanjutan
     // menambah change_taken & sort_order, tapi test ini fokus ke migrasi 7->8).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 27); // schemaVersion terkini
+    expect(ver.data.values.first, 28); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

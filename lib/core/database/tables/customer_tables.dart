@@ -23,6 +23,15 @@ class Customers extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// Item 40 utk pelanggan (susulan permintaan user) — pola SAMA PERSIS dgn
+  /// `Products.locallyModified`: device non-owner yang tambah/ubah pelanggan
+  /// menandai baris ini `true` (lihat `markCustomerLocallyModified`), lalu
+  /// dikirim sbg "usulan" ke host via sync (`dumpLocalCustomerProposals`) utk
+  /// ditinjau/disetujui owner (`applyCustomerProposals`) — BUKAN otomatis
+  /// menimpa data pelanggan di host. Device owner TIDAK PERNAH set true.
+  BoolColumn get locallyModified =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

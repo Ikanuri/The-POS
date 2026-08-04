@@ -30,6 +30,7 @@ class SyncState {
     this.queue = const [],
     this.proposals = const [],
     this.laciMejaProposals = const [],
+    this.customerProposals = const [],
     this.timeoutProfile = SyncTimeoutProfile.normal,
     this.clientPhase = ClientSyncPhase.idle,
     this.clientResultMessage,
@@ -46,6 +47,9 @@ class SyncState {
   /// Item 52 ("Laci Meja") — antrian usulan PARALEL dari [proposals],
   /// lihat dok `PendingLaciMejaProposal`.
   final List<PendingLaciMejaProposal> laciMejaProposals;
+  /// Susulan (permintaan user) — antrian usulan pelanggan PARALEL, lihat
+  /// dok `PendingCustomerProposal`.
+  final List<PendingCustomerProposal> customerProposals;
   final SyncTimeoutProfile timeoutProfile;
   final ClientSyncPhase clientPhase;
   final String? clientResultMessage;
@@ -80,6 +84,7 @@ class SyncState {
       queue.isNotEmpty ||
       proposals.isNotEmpty ||
       laciMejaProposals.isNotEmpty ||
+      customerProposals.isNotEmpty ||
       clientSyncing;
 
   /// true bila ADA sesuatu yang layak ditampilkan sbg banner shell (ongoing
@@ -95,6 +100,7 @@ class SyncState {
     List<PendingSyncItem>? queue,
     List<PendingProductProposal>? proposals,
     List<PendingLaciMejaProposal>? laciMejaProposals,
+    List<PendingCustomerProposal>? customerProposals,
     SyncTimeoutProfile? timeoutProfile,
     ClientSyncPhase? clientPhase,
     Object? clientResultMessage = _sentinel,
@@ -109,6 +115,7 @@ class SyncState {
       queue: queue ?? this.queue,
       proposals: proposals ?? this.proposals,
       laciMejaProposals: laciMejaProposals ?? this.laciMejaProposals,
+      customerProposals: customerProposals ?? this.customerProposals,
       timeoutProfile: timeoutProfile ?? this.timeoutProfile,
       clientPhase: clientPhase ?? this.clientPhase,
       clientResultMessage: identical(clientResultMessage, _sentinel)
@@ -145,6 +152,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
           // Fase 2 — hanya antrian data append-only yang dipersist).
           proposals: LanSyncService.pendingProposals.toList(),
           laciMejaProposals: LanSyncService.pendingLaciMejaProposals.toList(),
+          customerProposals: LanSyncService.pendingCustomerProposals.toList(),
         )) {
     LanSyncService.onQueueChanged = () {
       unawaited(_refreshQueue());
@@ -156,6 +164,11 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     LanSyncService.onLaciMejaProposalsChanged = () {
       state = state.copyWith(
           laciMejaProposals: LanSyncService.pendingLaciMejaProposals.toList());
+    };
+    LanSyncService.onCustomerProposalsChanged = () {
+      state = state.copyWith(
+          customerProposals:
+              LanSyncService.pendingCustomerProposals.toList());
     };
     // Pasang `_db` SEGERA (bukan menunggu owner tap "Mulai Sebagai Host") —
     // antrian `sync_upload_queue` adalah data DB persisten, independen dari
@@ -321,6 +334,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     LanSyncService.onQueueChanged = null;
     LanSyncService.onProposalsChanged = null;
     LanSyncService.onLaciMejaProposalsChanged = null;
+    LanSyncService.onCustomerProposalsChanged = null;
     super.dispose();
   }
 }

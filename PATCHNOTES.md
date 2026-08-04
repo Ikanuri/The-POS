@@ -8,6 +8,57 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 4 Agustus 2026
+
+### 🆕 Fitur baru
+- **Keranjang sekarang ingat posisi scroll terakhir** — kalau sedang
+  mencentang barang di keranjang yang panjang lalu tidak sengaja kepencet
+  item (kembali ke layar kasir), begitu buka keranjang lagi posisinya
+  langsung di tempat yang sama seperti sebelum ditutup, tidak perlu
+  scroll ulang dari atas.
+
+### 🔧 Perbaikan
+- **Layar review usulan dari kasir/asisten sekarang tampilkan SEMUA yang
+  berubah, bukan cuma harga** — dulu kalau yang diubah bukan harga
+  (misalnya satuan produk, isi kemasan, barcode, nama produk), layarnya
+  tetap bilang "Tidak ada perubahan harga" padahal usulannya memang sah,
+  bikin bingung/nyaris ke-skip padahal ada perubahan nyata yang perlu
+  ditinjau.
+
+## 3 Agustus 2026
+
+### 🆕 Fitur baru
+- **Item keranjang yang sudah dicentang kini dapat highlight lembut** —
+  warna latar tipis di baris itemnya, jadi sekilas kelihatan barang mana
+  yang sudah diverifikasi/dicek saat serah-terima, tanpa perlu lihat
+  kotak centangnya satu-satu.
+- **"Tempel Pesanan" sekarang bisa langsung dari keranjang** — ada ikon
+  baru di pojok atas keranjang, kapan saja (walau keranjang masih kosong).
+  Berguna kalau ada pesanan tambahan dari pelanggan (lewat Katalog HTML)
+  atau pegawai yang mau menambah pesanan, sebelum keranjang di-checkout.
+  Tombol yang sama juga sekarang muncul di layar "Tambah Belanjaan" (nota
+  yang sudah dibayar tempo/lunas) — dulu disembunyikan di sana.
+- **Scan QR "Transfer" sekarang bisa langsung nambah ke keranjang yang
+  sedang dibuka** — kalau kasir sedang melayani transaksi (keranjang
+  sudah ada isinya) lalu scan QR pesanan tambahan dari pegawai lain,
+  barangnya langsung masuk ke keranjang yang sama, tidak perlu buka
+  antrian terpisah dulu.
+- **Usulan pelanggan dari kasir/asisten sekarang bisa disetujui owner** —
+  kalau kasir/asisten (bukan owner) menambah atau mengubah data
+  pelanggan, perubahan itu sekarang terkirim sebagai "usulan" saat sync
+  ke owner (mirip usulan harga produk yang sudah ada), muncul di layar
+  Sync untuk ditinjau & disetujui. Sebelumnya perubahan pelanggan dari
+  device kasir/asisten tidak pernah sampai ke perangkat owner sama
+  sekali.
+
+### 🔧 Perbaikan
+- **Tombol di layar kirim QR keranjang diganti** — dulu ada tombol "Sudah
+  Dikirim, Kosongkan Keranjang" persis di atas tombol "Tutup", jadi rawan
+  salah pencet dan keranjang yang sebenarnya BELUM terkirim ikut terhapus.
+  Sekarang tombol itu diganti "Share Pesanan" (kirim teks pesanan lewat
+  WhatsApp/dll). Mengosongkan keranjang tetap bisa lewat ikon tempat sampah
+  di pojok atas keranjang seperti biasa.
+
 ## 1 Agustus 2026 (lanjutan)
 
 ### 🆕 Fitur baru

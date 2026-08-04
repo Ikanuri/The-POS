@@ -149,6 +149,28 @@ class PendingLaciMejaProposal {
   final int entryCount;
 }
 
+/// Susulan (permintaan user) — usulan client->host utk tabel `customers`,
+/// PARALEL dari [PendingProductProposal]/[PendingLaciMejaProposal] (antrian
+/// & slotKey sendiri, tidak menyentuh keduanya). [rows] berisi baris
+/// `customers` dari `AppDatabase.dumpLocalCustomerProposals`.
+class PendingCustomerProposal {
+  PendingCustomerProposal({
+    required this.id,
+    required this.fromIp,
+    String? slotKey,
+    required this.arrivedAt,
+    required this.rows,
+    required this.customerCount,
+  }) : slotKey = slotKey ?? fromIp;
+
+  final String id;
+  final String fromIp;
+  final String slotKey;
+  final DateTime arrivedAt;
+  final List<Map<String, Object?>> rows;
+  final int customerCount;
+}
+
 class LanSyncService {
   LanSyncService._();
 
@@ -285,6 +307,38 @@ class LanSyncService {
     final item = _pendingLaciMejaProposals.removeAt(idx);
     onLaciMejaProposalsChanged?.call();
     return _db!.applyLaciMejaProposals(item.rows, approvedIds);
+  }
+
+  // Susulan (permintaan user) — antrian usulan PARALEL utk pelanggan, sama
+  // pola persis dgn _pendingLaciMejaProposals di atas tapi 1 tabel saja.
+  static final _pendingCustomerProposals = <PendingCustomerProposal>[];
+  static void Function()? onCustomerProposalsChanged;
+
+  static List<PendingCustomerProposal> get pendingCustomerProposals =>
+      List.unmodifiable(_pendingCustomerProposals);
+
+  @visibleForTesting
+  static void debugAddCustomerProposal(PendingCustomerProposal p) {
+    _pendingCustomerProposals.add(p);
+  }
+
+  @visibleForTesting
+  static void debugClearCustomerProposals() =>
+      _pendingCustomerProposals.clear();
+
+  static void dismissCustomerProposal(String id) {
+    _pendingCustomerProposals.removeWhere((p) => p.id == id);
+    onCustomerProposalsChanged?.call();
+  }
+
+  /// [approvedIds] — subset id pelanggan yang disetujui owner.
+  static Future<int> applyCustomerProposal(
+      String id, Set<String> approvedIds) async {
+    final idx = _pendingCustomerProposals.indexWhere((p) => p.id == id);
+    if (idx < 0) return 0;
+    final item = _pendingCustomerProposals.removeAt(idx);
+    onCustomerProposalsChanged?.call();
+    return _db!.applyCustomerProposals(item.rows, approvedIds);
   }
 
   /// Tabel append-only yang boleh diunggah klien ke host. Master data tidak
@@ -894,6 +948,31 @@ class LanSyncService {
         onLaciMejaProposalsChanged?.call();
       }
 
+      // Susulan (permintaan user) — usulan PARALEL utk pelanggan, antrian &
+      // slotKey terpisah dari usulan produk/Laci Meja (lihat dok
+      // PendingCustomerProposal).
+      final rawCustomerProposals =
+          payload['customerProposals'] as List<dynamic>? ?? const [];
+      final customerProposalRows = rawCustomerProposals
+          .cast<Map<String, dynamic>>()
+          .map((r) => r.map<String, Object?>((rk, rv) => MapEntry(rk, rv)))
+          .toList();
+      if (customerProposalRows.isNotEmpty) {
+        _pendingCustomerProposals.removeWhere((p) => p.slotKey == slotKey);
+        _pendingCustomerProposals.add(PendingCustomerProposal(
+          id: _generateNonce(),
+          fromIp: ip,
+          slotKey: slotKey,
+          arrivedAt: DateTime.now(),
+          rows: customerProposalRows,
+          customerCount: customerProposalRows.length,
+        ));
+        onCustomerProposalsChanged?.call();
+      } else if (_pendingCustomerProposals.any((p) => p.slotKey == slotKey)) {
+        _pendingCustomerProposals.removeWhere((p) => p.slotKey == slotKey);
+        onCustomerProposalsChanged?.call();
+      }
+
       // Immediately send back the host's data since the client's timestamp.
       // The client receives host updates even before their data is approved.
       final outDump = await _db!.dumpSince(since);
@@ -1084,12 +1163,17 @@ class LanSyncService {
     // Item 52 ("Laci Meja") — usulan PARALEL, field payload terpisah dari
     // 'proposals' (produk) supaya kedua jalur review independen di host.
     final laciMejaProposals = await db.dumpLaciMejaProposals();
+    // Susulan (permintaan user) — usulan pelanggan, field payload terpisah
+    // dari 'proposals' (produk) & 'laciMejaProposals' supaya review
+    // independen di host. Kosong (`[]`) di device owner.
+    final customerProposals = await db.dumpLocalCustomerProposals();
     final payload = {
       // Item 41 A.2 — UTC eksplisit, lihat catatan di atas.
       'since': downloadSince.toUtc().toIso8601String(),
       'tables': outDump,
       'proposals': proposals,
       'laciMejaProposals': laciMejaProposals,
+      'customerProposals': customerProposals,
       if (deviceCode != null && deviceCode.isNotEmpty)
         'deviceCode': deviceCode,
     };

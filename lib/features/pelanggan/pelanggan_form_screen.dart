@@ -98,6 +98,13 @@ class _PelangganFormScreenState
         updatedAt: Value(now),
       );
       await db.into(db.customers).insertOnConflictUpdate(companion);
+      // Susulan (permintaan user) — usulan sync pelanggan, pola SAMA
+      // PERSIS dgn produk (Item 40): device BUKAN owner menandai baris ini
+      // sbg "diedit lokal" supaya dikirim sbg usulan ke host via sync,
+      // ditinjau/disetujui owner (bukan otomatis menimpa data host).
+      if (!ref.read(deviceProvider).isOwner) {
+        await db.markCustomerLocallyModified(custId);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

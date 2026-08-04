@@ -3600,6 +3600,16 @@ class $CustomersTable extends Customers
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _locallyModifiedMeta =
+      const VerificationMeta('locallyModified');
+  @override
+  late final GeneratedColumn<bool> locallyModified = GeneratedColumn<bool>(
+      'locally_modified', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("locally_modified" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -3613,7 +3623,8 @@ class $CustomersTable extends Customers
         notes,
         isActive,
         createdAt,
-        updatedAt
+        updatedAt,
+        locallyModified
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3684,6 +3695,12 @@ class $CustomersTable extends Customers
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     }
+    if (data.containsKey('locally_modified')) {
+      context.handle(
+          _locallyModifiedMeta,
+          locallyModified.isAcceptableOrUnknown(
+              data['locally_modified']!, _locallyModifiedMeta));
+    }
     return context;
   }
 
@@ -3717,6 +3734,8 @@ class $CustomersTable extends Customers
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      locallyModified: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
     );
   }
 
@@ -3739,6 +3758,14 @@ class Customer extends DataClass implements Insertable<Customer> {
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Item 40 utk pelanggan (susulan permintaan user) — pola SAMA PERSIS dgn
+  /// `Products.locallyModified`: device non-owner yang tambah/ubah pelanggan
+  /// menandai baris ini `true` (lihat `markCustomerLocallyModified`), lalu
+  /// dikirim sbg "usulan" ke host via sync (`dumpLocalCustomerProposals`) utk
+  /// ditinjau/disetujui owner (`applyCustomerProposals`) — BUKAN otomatis
+  /// menimpa data pelanggan di host. Device owner TIDAK PERNAH set true.
+  final bool locallyModified;
   const Customer(
       {required this.id,
       required this.name,
@@ -3751,7 +3778,8 @@ class Customer extends DataClass implements Insertable<Customer> {
       this.notes,
       required this.isActive,
       required this.createdAt,
-      required this.updatedAt});
+      required this.updatedAt,
+      required this.locallyModified});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -3775,6 +3803,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     map['is_active'] = Variable<bool>(isActive);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['locally_modified'] = Variable<bool>(locallyModified);
     return map;
   }
 
@@ -3798,6 +3827,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       isActive: Value(isActive),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      locallyModified: Value(locallyModified),
     );
   }
 
@@ -3817,6 +3847,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      locallyModified: serializer.fromJson<bool>(json['locallyModified']),
     );
   }
   @override
@@ -3835,6 +3866,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'locallyModified': serializer.toJson<bool>(locallyModified),
     };
   }
 
@@ -3850,7 +3882,8 @@ class Customer extends DataClass implements Insertable<Customer> {
           Value<String?> notes = const Value.absent(),
           bool? isActive,
           DateTime? createdAt,
-          DateTime? updatedAt}) =>
+          DateTime? updatedAt,
+          bool? locallyModified}) =>
       Customer(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -3866,6 +3899,7 @@ class Customer extends DataClass implements Insertable<Customer> {
         isActive: isActive ?? this.isActive,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        locallyModified: locallyModified ?? this.locallyModified,
       );
   Customer copyWithCompanion(CustomersCompanion data) {
     return Customer(
@@ -3888,6 +3922,9 @@ class Customer extends DataClass implements Insertable<Customer> {
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      locallyModified: data.locallyModified.present
+          ? data.locallyModified.value
+          : this.locallyModified,
     );
   }
 
@@ -3905,7 +3942,8 @@ class Customer extends DataClass implements Insertable<Customer> {
           ..write('notes: $notes, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('locallyModified: $locallyModified')
           ..write(')'))
         .toString();
   }
@@ -3923,7 +3961,8 @@ class Customer extends DataClass implements Insertable<Customer> {
       notes,
       isActive,
       createdAt,
-      updatedAt);
+      updatedAt,
+      locallyModified);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3939,7 +3978,8 @@ class Customer extends DataClass implements Insertable<Customer> {
           other.notes == this.notes &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.locallyModified == this.locallyModified);
 }
 
 class CustomersCompanion extends UpdateCompanion<Customer> {
@@ -3955,6 +3995,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<bool> locallyModified;
   final Value<int> rowid;
   const CustomersCompanion({
     this.id = const Value.absent(),
@@ -3969,6 +4010,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.locallyModified = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CustomersCompanion.insert({
@@ -3984,6 +4026,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.locallyModified = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         name = Value(name);
@@ -4000,6 +4043,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<bool>? locallyModified,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4015,6 +4059,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (locallyModified != null) 'locally_modified': locallyModified,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4032,6 +4077,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       Value<bool>? isActive,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
+      Value<bool>? locallyModified,
       Value<int>? rowid}) {
     return CustomersCompanion(
       id: id ?? this.id,
@@ -4046,6 +4092,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      locallyModified: locallyModified ?? this.locallyModified,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4089,6 +4136,9 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (locallyModified.present) {
+      map['locally_modified'] = Variable<bool>(locallyModified.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4110,6 +4160,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('locallyModified: $locallyModified, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -17238,6 +17289,7 @@ typedef $$CustomersTableCreateCompanionBuilder = CustomersCompanion Function({
   Value<bool> isActive,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<bool> locallyModified,
   Value<int> rowid,
 });
 typedef $$CustomersTableUpdateCompanionBuilder = CustomersCompanion Function({
@@ -17253,6 +17305,7 @@ typedef $$CustomersTableUpdateCompanionBuilder = CustomersCompanion Function({
   Value<bool> isActive,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<bool> locallyModified,
   Value<int> rowid,
 });
 
@@ -17302,6 +17355,10 @@ class $$CustomersTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnFilters(column));
 }
 
 class $$CustomersTableOrderingComposer
@@ -17351,6 +17408,10 @@ class $$CustomersTableOrderingComposer
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$CustomersTableAnnotationComposer
@@ -17397,6 +17458,9 @@ class $$CustomersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified, builder: (column) => column);
 }
 
 class $$CustomersTableTableManager extends RootTableManager<
@@ -17434,6 +17498,7 @@ class $$CustomersTableTableManager extends RootTableManager<
             Value<bool> isActive = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CustomersCompanion(
@@ -17449,6 +17514,7 @@ class $$CustomersTableTableManager extends RootTableManager<
             isActive: isActive,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            locallyModified: locallyModified,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -17464,6 +17530,7 @@ class $$CustomersTableTableManager extends RootTableManager<
             Value<bool> isActive = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CustomersCompanion.insert(
@@ -17479,6 +17546,7 @@ class $$CustomersTableTableManager extends RootTableManager<
             isActive: isActive,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            locallyModified: locallyModified,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

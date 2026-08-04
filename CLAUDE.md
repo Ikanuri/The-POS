@@ -112,7 +112,15 @@ lib/
   disposal — berlaku walau test-nya cuma BACA (tidak memutasi DB sama
   sekali). Selalu tutup test dengan `drain()`: `await tester.pumpWidget(const
   SizedBox()); await tester.pump(const Duration(milliseconds: 10));` (lihat
-  `test/payment_method_edit_delete_test.dart`).
+  `test/payment_method_edit_delete_test.dart`). Kena juga di layar yang
+  belum ketahuan dulu punya `StreamProvider` (mis. `KasirScreen`, antrian
+  held orders) — kalau `AppDatabase` dibuka lewat top-level
+  `setUp()`/`tearDown(() async => db.close())` (bukan `final db =` lokal +
+  `await db.close()` di akhir body test), hang-nya jadi TERLIHAT TANPA
+  BATAS (bukan cuma lambat 10 menit) karena `tearDown` menutup DB SAAT
+  widget masih mounted & subscribe — WAJIB `drain()` di akhir tiap
+  `testWidgets` yang pump `KasirScreen`/layar serupa, apa pun pola
+  setUp/tearDown-nya (lihat `test/kasir_add_mode_paste_order_test.dart`).
 - **`OutlinedButton`/`FilledButton` di `AppTheme` default `minimumSize` LEBAR
   PENUH.** Taruh 2+ tombol begini dalam satu `Row` (pola umum di app ini)
   WAJIB override `minimumSize` sempit di masing-masing `style`, kalau tidak

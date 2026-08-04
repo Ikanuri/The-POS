@@ -8,6 +8,7 @@ import '../../core/services/lan_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/qr_sync_widgets.dart';
 import '../laci_meja/laci_meja_proposal_review_screen.dart';
+import '../pelanggan/customer_proposal_review_screen.dart';
 import 'product_proposal_review_screen.dart';
 
 class SyncScreen extends ConsumerStatefulWidget {
@@ -514,6 +515,49 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                         MaterialPageRoute(
                           builder: (_) =>
                               LaciMejaProposalReviewScreen(proposal: p),
+                        ),
+                      ),
+                      child: const Text('Tinjau'),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
+
+            // Susulan (permintaan user) — antrian usulan pelanggan PARALEL,
+            // TERPISAH dari usulan produk & Laci Meja di atas (lihat dok
+            // `PendingCustomerProposal`).
+            if (sync.customerProposals.isNotEmpty) ...[
+              Row(children: [
+                Icon(Icons.person_outline, color: scheme.tertiary, size: 18),
+                const SizedBox(width: 6),
+                Text('Usulan Pelanggan (${sync.customerProposals.length})',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ]),
+              const SizedBox(height: 6),
+              ...sync.customerProposals.map((p) {
+                final mins =
+                    DateTime.now().difference(p.arrivedAt).inMinutes;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading:
+                        Icon(Icons.person_outline, color: scheme.tertiary),
+                    title: Text(p.fromIp,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                        '${p.customerCount} pelanggan diusulkan · '
+                        '${mins == 0 ? 'Baru saja' : '$mins menit lalu'}',
+                        style: const TextStyle(fontSize: 12)),
+                    trailing: FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                      ),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              CustomerProposalReviewScreen(proposal: p),
                         ),
                       ),
                       child: const Text('Tinjau'),

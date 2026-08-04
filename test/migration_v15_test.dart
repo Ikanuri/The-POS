@@ -71,6 +71,8 @@ void main() {
     v14.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     // product_units diperlukan agar migrasi v22 (addColumn requires_deposit) tak gagal.
     v14.execute('CREATE TABLE product_units(id TEXT PRIMARY KEY);');
+    // customers diperlukan agar migrasi v28 (addColumn locally_modified) tak gagal.
+    v14.execute('CREATE TABLE customers(id TEXT PRIMARY KEY);');
     v14.dispose();
 
     // ── 2. Buka via AppDatabase (schemaVersion 15) → onUpgrade(14,15) jalan.
@@ -91,7 +93,7 @@ void main() {
     expect(pay.amount, 10000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 27); // schemaVersion terkini
+    expect(ver.data.values.first, 28); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
