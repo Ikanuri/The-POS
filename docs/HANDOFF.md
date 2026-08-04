@@ -36,11 +36,23 @@ kegagalan `product_proposal_review_screen_test.dart` saat run PARALEL
 dikonfirmasi flaky pre-existing — lolos 100% saat file itu dijalankan
 sendirian, sama sekali tidak tersentuh perubahan sesi ini).
 
-**MENGGANTUNG dari sesi ini** — bagian "Tentang Aplikasi" (wordmark+ikon
-+versi+"made with ♥️ by Dre", tutorial searchable+pro-tips) masih di
-tahap mockup/insight (`scratchpad/mockup/about.html`, BELUM di-commit ke
-app), belum diprioritaskan lagi sesi ini krn fokus pindah ke QR
-serial+alat lisensi di atas.
+**"Tentang Aplikasi" SEKARANG SUDAH DIEKSEKUSI** (`b97a0e8`, susulan
+LANGSUNG stlh QR serial di atas — user tanya "masih belum dieksekusi ya?"
+lalu minta dikerjakan + "Lisensi" di Device Ini dipindah ke sana):
+`AboutScreen` (`/pengaturan/tentang`) — wordmark + ikon launcher asli
+(`assets/icon/app_icon.png`, disalin dari mipmap Android krn belum ada
+sumber ikon Flutter-asset), versi via `package_info_plus` (dependency
+baru), "made with ♥️ by Dre". Tombol "?" -> `TutorialListScreen`
+(`/pengaturan/tentang/tutorial`) — daftar bab searchable, tiap bab punya
+Pro Tips (paste-pesanan-merge-cart-aktif cuma SATU contoh, ada jg QR
+handoff merge/sync harga antar toko/dll — 7 bab total, isi dari inventaris
+fitur nyata di CLAUDE.md/riwayat sesi, bukan dikarang). "Info Lisensi &
+Serial" DIPINDAH dari kartu "Device Ini" Pengaturan ke `AboutScreen` —
+ListTile+navigasi lamanya DIHAPUS dari `pengaturan_screen.dart` (bukan
+cuma ditambah alternatif), entry point "Tentang Aplikasi" baru ditaruh di
+kartu Diagnostik. Route `/pengaturan/lisensi` sendiri TIDAK dipindah
+(tetap ada, cuma titik masuknya yang berubah). 6 test baru, revert-
+verified.
 
 _Riwayat sesi 4 Agustus 2026 (awal) — versi kerja **2.10.0+15** (naik dari
 2.9.1+14, MINOR bump eksplisit diminta user — lihat poin 6), schemaVersion
