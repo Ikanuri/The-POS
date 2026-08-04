@@ -17,6 +17,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   langsung di tempat yang sama seperti sebelum ditutup, tidak perlu
   scroll ulang dari atas.
 
+### 🔧 Perbaikan
+- **Layar review usulan dari kasir/asisten sekarang tampilkan SEMUA yang
+  berubah, bukan cuma harga** — dulu kalau yang diubah bukan harga
+  (misalnya satuan produk, isi kemasan, barcode, nama produk), layarnya
+  tetap bilang "Tidak ada perubahan harga" padahal usulannya memang sah,
+  bikin bingung/nyaris ke-skip padahal ada perubahan nyata yang perlu
+  ditinjau.
+
 ## 3 Agustus 2026
 
 ### 🆕 Fitur baru

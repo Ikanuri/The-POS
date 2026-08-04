@@ -5,11 +5,11 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 4 Agustus 2026 — versi kerja **masih 2.9.1+14** (TIDAK
-di-bump — user eksplisit minta "jangan naikkan bump versi jika tidak
-diminta", masih berlaku), schemaVersion **28** (naik sesi 3 Agustus, lihat
-riwayat di bawah). Sesi ini murni jawab 4 pertanyaan/insight user (3 dari
-4 analisis, 1 dieksekusi ringan):
+_Update sesi 4 Agustus 2026 — versi kerja **2.10.0+15** (naik dari
+2.9.1+14, MINOR bump eksplisit diminta user — lihat poin 6), schemaVersion
+**28** (naik sesi 3 Agustus, tidak berubah sesi ini). Sesi ini jawab 4
+pertanyaan/insight user (poin 1-4) + 1 fix susulan (poin 5) + rilis resmi
+(poin 6):
 1. **Percepat input harga modal/stok dari nota supplier** — user minta
    PENDING dulu (bukan dieksekusi). Insight tercatat di **PLAN.md Item
    53** (`ddbe65c`): manfaatkan CSV import yang sudah ada (sudah dukung
@@ -42,6 +42,29 @@ riwayat di bawah). Sesi ini murni jawab 4 pertanyaan/insight user (3 dari
    mengirim baris utk produk yg belum ia terima. Test baru
    `product_new_client_survives_host_sync_test.dart` membuktikan
    KEDUANYA sekaligus dalam 1 skenario. Tidak ada perubahan kode produksi.
+5. **Layar review usulan produk (`ProductProposalReviewScreen`) tampilkan
+   SEMUA perubahan terdeteksi, bukan cuma harga** (`eefb4b0`) — laporan
+   user: mengubah SATUAN produk di client, harga tetap sama, layar review
+   di owner tetap bilang "Tidak ada perubahan harga" (nyaris di-dismiss
+   krn dikira glitch). `_diffProduct` baru bandingkan proposal vs data
+   host per-aspek: nama, satuan (tipe/isi-rasio/lacak-stok, dicocokkan by
+   id — stabil lintas edit), satuan ditambah/dihapus, harga satuan
+   NON-dasar, jumlah tier grosir, barcode & harga alternatif (dibanding
+   sbg SET nilai — id-nya diregenerasi tiap simpan form produk). Harga
+   satuan DASAR tetap RichText strikethrough seperti sebelumnya (TIDAK
+   diubah tampilannya), cuma ditambah baris lain di bawahnya kalau ada.
+   `filterUnchangedProposals` (host) sudah benar sejak awal — bug murni
+   di tampilan review, bukan logika filter usulan. Selesai & di-commit.
+6. **Rilis resmi v2.10.0** — user minta audit semver dari commit pertama
+   (lihat CHANGELOG utk histori lengkap; ringkas: proses versioning sudah
+   benar sejak `2.3.0+5` [28 Juli], tapi angka MINOR jauh understate
+   histori Juni-Juli yang batch-bump — user putuskan BIARKAN, terus dgn
+   `2.10.0` sesuai rencana). Bump MINOR: 4 `feat:` sejak `2.9.1+14`
+   (Tempel Pesanan di keranjang + tambah belanjaan + QR merge, usulan
+   sync pelanggan, highlight item tercentang, scroll-restore keranjang),
+   tidak ada breaking change (schemaVersion 28 additive). Branch
+   `claude/kategori-produk-qty-harga-mqjh21` di-merge ke `main` —
+   user akan tag rilis manual di GitHub.
 
 Full suite 908 hijau, `flutter analyze` 0 issue.
 
