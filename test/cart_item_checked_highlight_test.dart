@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
-import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
 
 import 'helpers/pump_app.dart';

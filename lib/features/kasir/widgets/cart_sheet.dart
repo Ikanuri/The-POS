@@ -16,6 +16,28 @@ import '../handoff_gate_provider.dart';
 import 'add_control.dart';
 import 'paste_order_sheet.dart';
 
+/// Susulan (permintaan user): posisi scroll TERAKHIR per keranjang (key:
+/// `cartId`) — supaya kalau sheet ditutup (mis. misclick tap item yang
+/// membuka modal entri, lalu balik lagi) & dibuka ulang, user tidak perlu
+/// scroll ulang ke posisi semula, terutama saat belanjaan banyak & sedang
+/// mencentang barang satu-satu. In-memory saja (bukan disimpan ke disk) —
+/// cukup bertahan selama app berjalan, otomatis reset saat app ditutup total
+/// (sama seperti keranjang itu sendiri secara konsep, walau keranjangnya
+/// sendiri disimpan persisten di SharedPreferences terpisah).
+final Map<String, double> _cartScrollMemory = {};
+
+/// Test-only seam utk `_cartScrollMemory` (private ke file ini) — supaya
+/// widget test bisa baca/tulis/bersihkan tanpa akses private, sama pola
+/// dgn `debugAddProposal`/`debugClearProposals` di `LanSyncService`.
+@visibleForTesting
+class CartSheetScrollTestSeam {
+  CartSheetScrollTestSeam._();
+  static double? get(String cartId) => _cartScrollMemory[cartId];
+  static void set(String cartId, double offset) =>
+      _cartScrollMemory[cartId] = offset;
+  static void clear() => _cartScrollMemory.clear();
+}
+
 class CartSheet extends ConsumerStatefulWidget {
   const CartSheet({
     super.key,
@@ -34,6 +56,7 @@ class CartSheet extends ConsumerStatefulWidget {
 class _CartSheetState extends ConsumerState<CartSheet> {
   int _prevCount = 0;
   bool _needsInitialScroll = false;
+  bool _scrollRestoreAttached = false;
 
   @override
   void initState() {
@@ -153,6 +176,28 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       maxChildSize: 0.95,
       expand: false,
       builder: (ctx, scrollCtrl) {
+        // Susulan (permintaan user) — pulihkan posisi scroll terakhir SEKALI
+        // saja per instance sheet (builder ini bisa dipanggil ulang tiap
+        // rebuild, mis. tiap kali cart berubah — listener/restore ganda
+        // harus dihindari). Prioritas: `scrollToBottom` eksplisit (item baru
+        // ditambah) MENANG dari posisi tersimpan — user jelas ingin lihat
+        // item baru, bukan posisi lama.
+        if (!_scrollRestoreAttached) {
+          _scrollRestoreAttached = true;
+          final saved = _cartScrollMemory[widget.cartId];
+          if (saved != null && !_needsInitialScroll) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted || !scrollCtrl.hasClients) return;
+              scrollCtrl.jumpTo(
+                  saved.clamp(0.0, scrollCtrl.position.maxScrollExtent));
+            });
+          }
+          scrollCtrl.addListener(() {
+            if (scrollCtrl.hasClients) {
+              _cartScrollMemory[widget.cartId] = scrollCtrl.offset;
+            }
+          });
+        }
         if (_needsInitialScroll && cart.isNotEmpty) {
           _needsInitialScroll = false;
           _scheduleScroll(scrollCtrl);
