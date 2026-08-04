@@ -68,18 +68,7 @@ class DeviceLicenseScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  SelectableText(
-                    formatted,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.1,
-                      height: 1.6,
-                      color: scheme.onSurface,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
+                  _SerialField(formatted: formatted),
                   const SizedBox(height: 14),
                   OutlinedButton.icon(
                     onPressed: () async {
@@ -137,26 +126,6 @@ class DeviceLicenseScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const _SectionLabel('Segera Hadir'),
-          const _Panel(
-            child: Column(
-              children: [
-                _InfoRow(
-                  icon: Icons.qr_code_scanner_outlined,
-                  label: 'Perpanjang via scan',
-                  value: 'Scan QR kode aktivasi baru langsung dari kamera',
-                  dimmed: true,
-                ),
-                _InfoRow(
-                  icon: Icons.history_outlined,
-                  label: 'Riwayat perpanjangan',
-                  value: 'Catatan tanggal & durasi tiap perpanjangan',
-                  dimmed: true,
-                  isLast: true,
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -185,6 +154,104 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+/// Nomor serial disamarkan (spoiler pola titik-titik, ala mockup awal)
+/// sampai diketuk — mencegah orang lewat/mengintip layar membaca sidik
+/// jari device begitu saja. QR di atasnya SENGAJA TIDAK ikut disamarkan:
+/// sudah kelihatan seperti kebisingan visual bagi mata telanjang, beda
+/// dari teks yang gamblang terbaca.
+class _SerialField extends StatefulWidget {
+  const _SerialField({required this.formatted});
+
+  final String formatted;
+
+  @override
+  State<_SerialField> createState() => _SerialFieldState();
+}
+
+class _SerialFieldState extends State<_SerialField> {
+  bool _revealed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        GestureDetector(
+          key: const Key('serial-spoiler-tap'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _revealed = !_revealed),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    widget.formatted,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
+                      height: 1.6,
+                      color: scheme.onSurface,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                if (!_revealed)
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _DotPatternPainter(
+                        background: scheme.surfaceContainerHighest,
+                        dot: scheme.outline,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _revealed ? 'Ketuk untuk sembunyikan lagi' : 'Ketuk untuk lihat nomor serial',
+          style: TextStyle(
+            fontSize: 11,
+            fontStyle: FontStyle.italic,
+            color: scheme.outline,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DotPatternPainter extends CustomPainter {
+  const _DotPatternPainter({required this.background, required this.dot});
+
+  final Color background;
+  final Color dot;
+
+  static const _spacing = 6.0;
+  static const _radius = 1.3;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = background);
+    final paint = Paint()..color = dot;
+    for (double y = _spacing / 2; y < size.height; y += _spacing) {
+      for (double x = _spacing / 2; x < size.width; x += _spacing) {
+        canvas.drawCircle(Offset(x, y), _radius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DotPatternPainter oldDelegate) =>
+      oldDelegate.background != background || oldDelegate.dot != dot;
+}
+
 class _Panel extends StatelessWidget {
   const _Panel({required this.child});
 
@@ -204,20 +271,17 @@ class _InfoRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    this.dimmed = false,
     this.isLast = false,
   });
 
   final IconData icon;
   final String label;
   final String value;
-  final bool dimmed;
   final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final fg = dimmed ? scheme.outline : scheme.onSurface;
     return Container(
       decoration: isLast
           ? null
@@ -230,7 +294,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: dimmed ? scheme.outline : scheme.onSurfaceVariant),
+          Icon(icon, size: 20, color: scheme.onSurfaceVariant),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -241,7 +305,7 @@ class _InfoRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
-                    color: fg,
+                    color: scheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),

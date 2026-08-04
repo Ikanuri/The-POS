@@ -64,4 +64,47 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  testWidgets('nomor serial disamarkan (spoiler) sampai diketuk', (tester) async {
+    await _pump(
+      tester,
+      license: const LicenseState(
+        fingerprint: '9f3a1b2277ce804aa1f09c3e5b7d2e41',
+        exp: 'selamanya',
+      ),
+    );
+
+    expect(find.text('Ketuk untuk lihat nomor serial'), findsOneWidget);
+    expect(find.text('Ketuk untuk sembunyikan lagi'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('serial-spoiler-tap')));
+    await tester.pump();
+
+    expect(find.text('Ketuk untuk sembunyikan lagi'), findsOneWidget);
+    expect(find.text('Ketuk untuk lihat nomor serial'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('serial-spoiler-tap')));
+    await tester.pump();
+    expect(find.text('Ketuk untuk lihat nomor serial'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets('tidak ada lagi seksi "Segera Hadir" (dihapus atas permintaan user)',
+      (tester) async {
+    await _pump(
+      tester,
+      license: const LicenseState(
+        fingerprint: '9f3a1b2277ce804aa1f09c3e5b7d2e41',
+        exp: 'selamanya',
+      ),
+    );
+
+    expect(find.textContaining('Segera Hadir'), findsNothing);
+    expect(find.textContaining('Perpanjang via scan'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }

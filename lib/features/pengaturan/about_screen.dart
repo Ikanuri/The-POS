@@ -45,7 +45,7 @@ class AboutScreen extends ConsumerWidget {
           children: [
             if (showLicense) ...[
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: _LicenseChip(
@@ -104,6 +104,15 @@ class AboutScreen extends ConsumerWidget {
                             width: 178,
                             height: 178,
                             fit: BoxFit.cover,
+                            // Sumber cuma 192x192 (mipmap-xxxhdpi, resolusi
+                            // TERBESAR yang ada di repo — lihat catatan di
+                            // HANDOFF.md) diperbesar ke 178 logis, yang di
+                            // device DPI tinggi jadi >300px fisik — filter
+                            // default (low) bikin tepi bulat kelihatan
+                            // patah-patah. `high` pakai interpolasi lebih
+                            // halus saat upscale.
+                            filterQuality: FilterQuality.high,
+                            isAntiAlias: true,
                           ),
                         ),
                       ),
