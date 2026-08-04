@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 4 Agustus 2026
 
 ### 🆕 Fitur baru
+- **Halaman baru "Info Lisensi & Serial"** (Pengaturan → Device Ini →
+  Lisensi) — menampilkan nomor serial device dalam bentuk QR (bisa
+  langsung discan developer, tidak perlu ketik manual), tanggal
+  diaktifkan, dan tanggal berlaku sampai. QR serial juga tampil di
+  layar aktivasi device baru.
 - **Keranjang sekarang ingat posisi scroll terakhir** — kalau sedang
   mencentang barang di keranjang yang panjang lalu tidak sengaja kepencet
   item (kembali ke layar kasir), begitu buka keranjang lagi posisinya

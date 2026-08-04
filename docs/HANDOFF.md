@@ -5,9 +5,46 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 4 Agustus 2026 — versi kerja **2.10.0+15** (naik dari
+_Update sesi 4 Agustus 2026 (lanjutan) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28 (tidak ada migrasi baru sesi ini). Fitur baru: (1)
+**QR sidik jari device** ditambahkan di `AktivasiScreen` (gerbang
+aktivasi/welcome device baru) DAN halaman baru **"Info Lisensi & Serial"**
+(`DeviceLicenseScreen`, `/pengaturan/lisensi`, dari kartu "Device Ini" di
+Pengaturan) — QR pakai `qr_flutter` (sudah dependency lama), data = hex
+fingerprint MENTAH (bukan versi berkelompok/uppercase) supaya cocok
+persis dgn yang dibaca alat scanner developer. Halaman baru juga simpan &
+tampilkan `LicenseState.activatedAt` (SharedPreferences key baru
+`license_activated_at`, dicatat SEKALI saat aktivasi PERTAMA — TIDAK
+tertimpa saat renewal berikutnya, beda dari `lastSeen` yg terus maju tiap
+app dibuka) + tanggal berlaku sampai + placeholder "Segera Hadir"
+(perpanjang via scan, riwayat perpanjangan). (2) **Redesain total
+`scripts/license-generator.html`** (alat dev-only, tidak disentuh dari
+app) mengikuti referensi desain HTML "Toko Berkah — All-in-One" yg
+di-attach user (ivory/charcoal + aksen crail-orange `#D97757`, TANPA font
+CDN — tetap 100% offline satu file) + **QR encode** kode aktivasi
+(vendored `qrcode.js` — Kazuhiko Arase, MIT, inline bukan CDN) + kartu
+**"Scan Serial dari HP"** pakai `BarcodeDetector` NATIVE browser (mesin ML
+Kit sama dgn `mobile_scanner` Flutter di Chrome Android, sesuai
+permintaan user "sekelas mesin flutter") utk isi kolom sidik jari otomatis
+dari kamera. **TIDAK ada integrasi GitHub API** (user eksplisit: "Tidak
+perlu github API") — remote-terminate device TETAP manual lewat
+`revoked.json` di Gist seperti sebelumnya, tidak ada perubahan di titik
+itu. Diverifikasi via Playwright headless (generate keypair → unduh
+cadangan → build kode → render QR non-kosong) krn alat ini di luar
+`flutter test`. `flutter analyze` 0 issue, full suite tetap hijau (2
+kegagalan `product_proposal_review_screen_test.dart` saat run PARALEL
+dikonfirmasi flaky pre-existing — lolos 100% saat file itu dijalankan
+sendirian, sama sekali tidak tersentuh perubahan sesi ini).
+
+**MENGGANTUNG dari sesi ini** — bagian "Tentang Aplikasi" (wordmark+ikon
++versi+"made with ♥️ by Dre", tutorial searchable+pro-tips) masih di
+tahap mockup/insight (`scratchpad/mockup/about.html`, BELUM di-commit ke
+app), belum diprioritaskan lagi sesi ini krn fokus pindah ke QR
+serial+alat lisensi di atas.
+
+_Riwayat sesi 4 Agustus 2026 (awal) — versi kerja **2.10.0+15** (naik dari
 2.9.1+14, MINOR bump eksplisit diminta user — lihat poin 6), schemaVersion
-**28** (naik sesi 3 Agustus, tidak berubah sesi ini). Sesi ini jawab 4
+**28** (naik sesi 3 Agustus). Sesi itu jawab 4
 pertanyaan/insight user (poin 1-4) + 1 fix susulan (poin 5) + rilis resmi
 (poin 6):
 1. **Percepat input harga modal/stok dari nota supplier** — user minta
