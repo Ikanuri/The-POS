@@ -16,6 +16,7 @@ import '../../features/pengaturan/backup_screen.dart';
 import '../../features/pengaturan/crash_log_screen.dart';
 import '../../features/pengaturan/duplicate_data_screen.dart';
 import '../../features/pengaturan/csv_import_screen.dart';
+import '../../features/pengaturan/device_license_screen.dart';
 import '../../features/pengaturan/asisten_permissions_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
 import '../../features/pengaturan/order_share_screen.dart';
@@ -263,6 +264,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   builder: (_, __) => const AlihOwnerScreen()),
               GoRoute(
                   path: 'printer', builder: (_, __) => const PrinterScreen()),
+              GoRoute(
+                  path: 'lisensi',
+                  builder: (_, __) => const DeviceLicenseScreen()),
               GoRoute(
                   path: 'import-csv',
                   builder: (_, __) => const CsvImportScreen()),

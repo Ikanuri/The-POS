@@ -18,12 +18,17 @@ class LicenseState {
     this.exp,
     this.lastSeen,
     this.revoked = false,
+    this.activatedAt,
   });
 
   final String fingerprint;
   final String? exp; // null = belum pernah aktivasi.
   final DateTime? lastSeen;
   final bool revoked;
+  // Item 25c/susulan — kapan device INI PERTAMA KALI aktivasi (ditampilkan
+  // di halaman info lisensi). Tidak berubah saat renewal/reaktivasi berikutnya
+  // — beda dari lastSeen yang terus maju tiap app dibuka.
+  final DateTime? activatedAt;
 
   bool get isActivated => exp != null;
 
@@ -88,6 +93,7 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
   static const _kExp = 'license_exp';
   static const _kLastSeen = 'license_last_seen';
   static const _kRevoked = 'license_revoked_cached';
+  static const _kActivatedAt = 'license_activated_at';
 
   /// Daftar sidik jari yang dicabut (Lapis 3) — file JSON publik di GitHub
   /// Gist TERPISAH dari repo app (bukan `raw.githubusercontent.com/.../The-POS/...`
@@ -138,11 +144,14 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
     }
 
     final lastSeenRaw = prefs.getString(_kLastSeen);
+    final activatedAtRaw = prefs.getString(_kActivatedAt);
     state = LicenseState(
       fingerprint: fingerprint,
       exp: prefs.getString(_kExp),
       lastSeen: lastSeenRaw == null ? null : DateTime.tryParse(lastSeenRaw),
       revoked: prefs.getBool(_kRevoked) ?? false,
+      activatedAt:
+          activatedAtRaw == null ? null : DateTime.tryParse(activatedAtRaw),
     );
 
     // Ratchet: majukan "waktu terakhir terlihat" tiap app dibuka wajar
@@ -162,6 +171,7 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
       exp: state.exp,
       lastSeen: now,
       revoked: state.revoked,
+      activatedAt: state.activatedAt,
     );
   }
 
@@ -197,11 +207,20 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
     await prefs.setString(_kExp, result.payload!.exp);
     await prefs.setString(_kLastSeen, now.toIso8601String());
     await prefs.setBool(_kRevoked, false);
+    // Hanya dicatat sekali (aktivasi PERTAMA) — renewal/reaktivasi berikutnya
+    // tidak menimpa tanggal ini, supaya "tanggal diaktifkan" tetap bermakna
+    // histori device, bukan histori kode terbaru.
+    var activatedAt = state.activatedAt;
+    if (activatedAt == null) {
+      activatedAt = now;
+      await prefs.setString(_kActivatedAt, now.toIso8601String());
+    }
     state = LicenseState(
       fingerprint: state.fingerprint,
       exp: result.payload!.exp,
       lastSeen: now,
       revoked: false,
+      activatedAt: activatedAt,
     );
     return result;
   }
@@ -245,6 +264,7 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
       exp: state.exp,
       lastSeen: state.lastSeen,
       revoked: revoked,
+      activatedAt: state.activatedAt,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers/license_provider.dart';
@@ -103,6 +104,24 @@ class _AktivasiScreenState extends ConsumerState<AktivasiScreen> {
                 ),
                 child: Column(
                   children: [
+                    // Item 25c susulan — QR berisi fingerprint mentah (bukan
+                    // versi berkelompok/uppercase) supaya alat scanner
+                    // developer bisa baca langsung, tanpa perlu transkrip
+                    // manual yang rawan typo.
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: QrImageView(
+                        data: fingerprint,
+                        version: QrVersions.auto,
+                        size: 160,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     SelectableText(
                       formatted,
                       textAlign: TextAlign.center,

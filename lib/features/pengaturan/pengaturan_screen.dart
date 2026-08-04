@@ -135,6 +135,8 @@ class PengaturanScreen extends ConsumerWidget {
                             leading: const Icon(Icons.verified_user_outlined),
                             title: const Text('Lisensi'),
                             subtitle: Text(status),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => context.push('/pengaturan/lisensi'),
                           );
                         }),
                     ],
