@@ -7,6 +7,12 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-04
+
+- `512aae9` — test: buktikan produk baru client aman dari sync host & deaktivasi owner tetap propagasi ke client, dalam satu skenario sekaligus (`product_new_client_survives_host_sync_test.dart`). Bukan trade-off yang perlu dipilih salah satu — sudah terpenuhi keduanya oleh desain sync yang ada (`mergeRows` cuma memproses baris yang benar-benar ada di payload host). Tidak ada perubahan kode produksi. Full suite hijau, `flutter analyze` 0 issue.
+- `ef18cdd` — feat: pulihkan posisi scroll `CartSheet` saat sheet dibuka ulang (`_cartScrollMemory`, top-level map per-`cartId` di `cart_sheet.dart`, listener pada scroll controller + `jumpTo` saat dibuka lagi, kalah dari `scrollToBottom` eksplisit). Sebelum ini sheet selalu mulai dari atas tiap dibuka, merepotkan saat keranjang panjang & sering misclick tap item (konsekuensi yang sudah diterima, debounce sempat dicoba lalu direvert krn bikin stepper kurang sensitif). Tidak ada bump versi (permintaan eksplisit user). 2 test baru — revert-verified. Full suite 908 hijau, `flutter analyze` 0 issue.
+- `ddbe65c` — docs: catat rencana percepatan input harga modal/stok dari nota supplier (Item 53 PLAN.md, PENDING atas permintaan eksplisit user — insight didiskusikan, belum dieksekusi).
+
 ## 2026-08-03
 
 - `f606428` — feat: highlight soft (`scheme.primary` opacity 0.08) untuk baris item keranjang yang sudah dicentang (`_CartItemTile`, dibungkus `Container` baru) — sekilas membedakan barang yang sudah/belum diverifikasi. Tidak ada bump versi (permintaan eksplisit user). 2 test baru — revert-verified. Full suite 905 hijau, `flutter analyze` 0 issue.

@@ -5,106 +5,80 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 3 Agustus 2026 (lanjutan) — versi kerja **masih 2.9.1+14**
-(TIDAK di-bump — user eksplisit minta "jangan naikkan bump versi jika
-tidak diminta", berlaku utk semua commit sesi ini & seterusnya sampai user
-minta lagi), **schemaVersion NAIK ke 28** (kolom `customers.locally_modified`,
-lihat poin 4). Enam hal dikerjakan sesi ini:
-0. **Highlight soft utk item keranjang yang sudah dicentang** (`f606428`)
-   — `_CartItemTile` dibungkus `Container` baru (di dalam `InkWell`, di
-   luar `Padding`), warna `scheme.primary.withOpacity(0.08)` saat
-   `item.checked`, transparan kalau belum. Selesai & di-commit.
-1. **Jarak baris keranjang ke tepi layar diperlebar di kedua sisi**
-   (`5266dcd`) — dulu 8/4px, terlalu mepet, checkbox+stepper nyaris
-   nempel tepi kanan & nama+nominal nyaris nempel tepi kiri. Sekarang
-   16/16px (varian 40px). Selesai & di-commit.
-2. **Tombol "Sudah Dikirim, Kosongkan Keranjang" di sheet QR handoff
-   (`_HandoffQrSheet`) diganti tombol "Share Pesanan"** (`31c9b26`) —
-   tombol lama persis di atas "Tutup", rawan ke-misclick & menghapus
-   keranjang yang sebenarnya belum terkirim. `Share.share(qrText)`
-   dipanggil, TIDAK ada lagi aksi yang mengosongkan keranjang di sheet
-   ini. Mengosongkan keranjang tetap lewat ikon tempat sampah di header
-   `CartSheet` (`_confirmClear`, sudah ada, tidak berubah). `onDone`
-   callback lama & plumbing terkait (`releaseLocalId`, dsb di
-   `_showHandoffQr`) DIHAPUS karena tidak ada lagi pemanggil. Selesai &
-   di-commit.
-3. **"Tempel Pesanan" langsung dari `CartSheet` + diaktifkan di mode
-   Tambah Belanjaan + QR scan merge ke keranjang aktif** (`c690329`) —
-   tiga penyempurnaan terkait: (a) ikon baru di header `CartSheet` yang
-   membuka `PasteOrderSheet(cartId: widget.cartId)` — widget itu SUDAH
-   generik per-cartId & sudah merge ke cart yang ada, tidak perlu logika
-   baru; (b) tombol yang sama diizinkan tampil juga saat
-   `KasirScreen(addToTxId:)` (dulu sengaja `null`-kan kondisinya di
-   `kasir_screen.dart:1783`, sekarang cuma exclude mode Katalog); (c)
-   `_handleOrderCode` (`kasir_screen.dart`) sekarang cek
-   `ref.read(cartProvider(_cartId))` SEBELUM memutuskan
-   `db.holdOrder(...)` — kalau keranjang aktif TIDAK kosong, item hasil
-   scan QR handoff di-merge langsung ke situ (pola sama persis dgn
-   `PasteOrderSheet._addToCart`, pakai `_ensureParentInCart` versi
-   `kasir_screen.dart` yang sudah ada, BUKAN duplikat baru) alih-alih
-   selalu ke antrian `held_orders`. Selesai & di-commit.
-4. **Usulan sync pelanggan dari device non-owner** (`d196ccd`,
-   schemaVersion 27→28) — pola SAMA PERSIS dgn usulan produk (Item 40) &
-   Laci Meja (Item 52): kolom `customers.locally_modified` (migrasi
-   additive — 15 file test migrasi lama v7-v26 disentuh, tambah
-   `CREATE TABLE customers(id TEXT PRIMARY KEY)` minimal ke synthetic
-   schema masing² + update assertion `PRAGMA user_version` dari 27→28,
-   pola SAMA PERSIS dgn gotcha `product_units` yg sudah didokumentasikan
-   di CLAUDE.md §Gotcha), `markCustomerLocallyModified`/
-   `dumpLocalCustomerProposals`/`applyCustomerProposals` di
-   `AppDatabase`, dipanggil `pelanggan_form_screen.dart` gated
-   `!device.isOwner`. Antrian usulan PARALEL (`PendingCustomerProposal`)
-   di `LanSyncService`, field payload `customerProposals` — TIDAK
-   menyentuh `proposals`/`laciMejaProposals` sama sekali. Layar review
-   baru `CustomerProposalReviewScreen` + kartu "Usulan Pelanggan" di
-   `SyncScreen`. Sebelumnya pelanggan yang ditambah/diubah di device
-   kasir/asisten TIDAK PERNAH sampai ke host (customers = master data,
-   sengaja tidak diupload klien→host) — sekarang lewat jalur usulan yang
-   sama seperti produk. Selesai & di-commit.
-5. **Gotcha baru ditemukan & DIDOKUMENTASIKAN di CLAUDE.md §Gotcha
-   (susulan poin di atas)**: widget test yang pump `KasirScreen` (drift
-   `StreamProvider`, mis. antrian held orders) via top-level
-   `setUp()`/`tearDown(() async => db.close())` bisa membuat `flutter
-   test` tampak HANG TANPA BATAS (bukan cuma lambat) — beda dari pola
-   lama yg sudah didokumentasikan (test yg pakai `final db =` lokal +
-   `await db.close()` di akhir body TIDAK kena). Fix: `drain()` manual
-   di akhir tiap `testWidgets` (`pumpWidget(SizedBox())` +
-   `pump(Duration(milliseconds: 10))`) SEBELUM `tearDown` global
-   sempat jalan. Reproduksi persis: `test/kasir_add_mode_paste_order_
-   test.dart` sebelum fix vs sesudah.
+_Update sesi 4 Agustus 2026 — versi kerja **masih 2.9.1+14** (TIDAK
+di-bump — user eksplisit minta "jangan naikkan bump versi jika tidak
+diminta", masih berlaku), schemaVersion **28** (naik sesi 3 Agustus, lihat
+riwayat di bawah). Sesi ini murni jawab 4 pertanyaan/insight user (3 dari
+4 analisis, 1 dieksekusi ringan):
+1. **Percepat input harga modal/stok dari nota supplier** — user minta
+   PENDING dulu (bukan dieksekusi). Insight tercatat di **PLAN.md Item
+   53** (`ddbe65c`): manfaatkan CSV import yang sudah ada (sudah dukung
+   `harga_beli`/`stok` + update produk existing), mode "restock" ala
+   `StockOpnameScreen`, OCR dinilai ROI rendah, plus keputusan desain yg
+   menggantung (harga modal "terakhir" vs rata-rata tertimbang).
+2. **Posisi scroll `CartSheet` dipulihkan saat sheet dibuka ulang**
+   (`ef18cdd`) — `_cartScrollMemory` (top-level `Map<String,double>` per-
+   `cartId` di `cart_sheet.dart`), listener pada scroll controller +
+   `jumpTo` (di-clamp ke `maxScrollExtent`) saat sheet dibuka lagi, kalah
+   dari `scrollToBottom` eksplisit. Gotcha test ditemukan saat menulis
+   test-nya: `DraggableScrollableSheet` — drag PERTAMA cuma membesarkan
+   tinggi sheet (initialChildSize→maxChildSize), scroll konten baru
+   bergerak di drag KEDUA (lihat komentar di
+   `test/cart_sheet_scroll_restore_test.dart`). Selesai & di-commit.
+3. **QR scan merge ke keranjang aktif di mode Tambah Belanjaan** —
+   dikonfirmasi SUDAH otomatis jalan dari fix sesi 3 Agustus (`c690329`,
+   lihat riwayat di bawah) — `_handleOrderCode` pakai `_cartId` yang
+   sudah resolve ke `addToTxId`, scanner tidak digembok mode ini. TIDAK
+   ada tindakan lebih lanjut (dikonfirmasi user).
+4. **Produk nonaktif owner ikut ke client TANPA menghapus produk baru
+   client** (`512aae9`, test-only) — riset kode membuktikan KEDUA hal
+   yang diminta user SUDAH terpenuhi SEKALIGUS oleh desain sync yang ada
+   (bukan trade-off pilih salah satu): `dumpSince`/`mergeRows` untuk
+   `products` delta by `updated_at` TANPA filter `is_active` (deaktivasi
+   owner sudah otomatis propagate — dibuktikan test LAMA
+   `product_deactivate_sync_test.dart`), DAN `mergeRows` cuma memproses
+   baris yang benar-benar ADA di payload host — produk baru client yang
+   belum di-approve tidak PERNAH tersentuh krn host tidak pernah
+   mengirim baris utk produk yg belum ia terima. Test baru
+   `product_new_client_survives_host_sync_test.dart` membuktikan
+   KEDUANYA sekaligus dalam 1 skenario. Tidak ada perubahan kode produksi.
 
-Full suite hijau (900+ test, termasuk semua test baru sesi ini),
-`flutter analyze` 0 issue.
+Full suite 908 hijau, `flutter analyze` 0 issue.
 
 **MENGGANTUNG — Item 52 PLAN.md, bug sinkron harga antar toko (BELUM
-diselesaikan, masih terputus di titik yang sama)**: user laporkan kasus
-nyata — barcode sama, harga sudah sama di kedua toko ("Rinso cair 500",
-5000), tapi sync tetap usulkan harga beda (4400). Analisis mendalam SUDAH
-dilakukan (baca detail lengkap di PLAN.md Item 52 & CLAUDE.md), root
-cause PALING MUNGKIN sudah diidentifikasi: asimetri dedup di
-`price_sync_service.dart` (query ekspor katalog dedup barcode via
-`GROUP BY` tapi TIDAK dedup JOIN `price_tiers WHERE min_qty=1` — kalau
-toko sumber punya tier duplikat `minQty=1`, 1 barcode bisa muncul 2x di
-katalog dgn harga beda). **BELUM diverifikasi ke kasus nyata** — user
+diselesaikan, masih terputus di titik yang sama, TIDAK disentuh sesi
+ini)**: user laporkan kasus nyata — barcode sama, harga sudah sama di
+kedua toko ("Rinso cair 500", 5000), tapi sync tetap usulkan harga beda
+(4400). Analisis mendalam SUDAH dilakukan (baca detail lengkap di PLAN.md
+Item 52 & CLAUDE.md), root cause PALING MUNGKIN sudah diidentifikasi:
+asimetri dedup di `price_sync_service.dart` (query ekspor katalog dedup
+barcode via `GROUP BY` tapi TIDAK dedup JOIN `price_tiers WHERE
+min_qty=1` — kalau toko sumber punya tier duplikat `minQty=1`, 1 barcode
+bisa muncul 2x di katalog dgn harga beda). **BELUM diverifikasi ke kasus
+nyata** — user diminta kirim baris log `unit=...`/verdict harga khusus
+utk "Rinso cair 500", atau cek manual Edit Produk di kedua toko (tier
+harga duplikat? produk nonaktif dgn nama/barcode sama?) — user belum
+sempat balas. **Next action begitu sesi lanjut**: tunggu/minta detail itu
+dari user, baru eksekusi fix (dedup query + one-time cleanup data tier
+duplikat). Pertanyaan terpisah yang juga menunggu keputusan user: apakah
+field pencarian kasir perlu bisa cari-by-barcode juga (sekarang cuma
+nama/`kode_produk`).
 
-**MENGGANTUNG — Item 52 PLAN.md, bug sinkron harga antar toko (belum
-diselesaikan, terputus di titik ini)**: user laporkan kasus nyata —
-barcode sama, harga sudah sama di kedua toko ("Rinso cair 500", 5000),
-tapi sync tetap usulkan harga beda (4400). Analisis mendalam SUDAH
-dilakukan (baca detail lengkap di PLAN.md Item 52 & CLAUDE.md), root
-cause PALING MUNGKIN sudah diidentifikasi: asimetri dedup di
-`price_sync_service.dart` (query ekspor katalog dedup barcode via
-`GROUP BY` tapi TIDAK dedup JOIN `price_tiers WHERE min_qty=1` — kalau
-toko sumber punya tier duplikat `minQty=1`, 1 barcode bisa muncul 2x di
-katalog dgn harga beda). **BELUM diverifikasi ke kasus nyata** — user
-diminta kirim baris log `unit=...`/verdict harga khusus utk "Rinso cair
-500", atau cek manual Edit Produk di kedua toko (tier harga duplikat?
-produk nonaktif dgn nama/barcode sama?) — user belum sempat balas
-sebelum sesi ini terputus/di-compact. **Next action begitu sesi
-lanjut**: tunggu/minta detail itu dari user, baru eksekusi fix (dedup
-query + one-time cleanup data tier duplikat). Pertanyaan terpisah yang
-juga menunggu keputusan user: apakah field pencarian kasir perlu bisa
-cari-by-barcode juga (sekarang cuma nama/`kode_produk`).
+_Riwayat sesi 3 Agustus 2026 (lanjutan) — schemaVersion naik 27→28._
+Enam hal: highlight soft item keranjang tercentang (`f606428`); jarak
+baris keranjang ke tepi layar diperlebar (`5266dcd`); tombol QR handoff
+"Sudah Dikirim, Kosongkan Keranjang" diganti "Share Pesanan" (`31c9b26`,
+`onDone` callback lama dihapus); "Tempel Pesanan" langsung dari
+`CartSheet` + diaktifkan di mode Tambah Belanjaan + QR scan merge ke
+keranjang aktif (`c690329`, 3 penyempurnaan terkait — `_handleOrderCode`
+cek `cartProvider(_cartId)` sebelum `db.holdOrder(...)`); usulan sync
+pelanggan dari device non-owner (`d196ccd`, kolom
+`customers.locally_modified`, pola sama persis usulan produk Item 40 &
+Laci Meja Item 52, `CustomerProposalReviewScreen` baru); gotcha baru
+didokumentasikan di CLAUDE.md §Gotcha soal widget test `KasirScreen` yang
+bisa hang tanpa batas kalau `AppDatabase` dibuka lewat top-level
+`setUp()`/`tearDown()` tanpa `drain()` manual. Detail lengkap tiap poin:
+lihat CHANGELOG.md tanggal yang sama.
 
 _Riwayat sesi 1 Agustus 2026 (lanjutan 3) — versi kerja **2.9.1+14**,
 schemaVersion 27. **Item 53 PLAN.md SEKARANG BENAR-BENAR SELESAI TOTAL**
