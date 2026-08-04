@@ -54,6 +54,29 @@ kartu Diagnostik. Route `/pengaturan/lisensi` sendiri TIDAK dipindah
 (tetap ada, cuma titik masuknya yang berubah). 6 test baru, revert-
 verified.
 
+**KOREKSI BESAR SETELAHNYA (`dcf7bf8`) — WAJIB dibaca**: versi pertama
+(`b97a0e8`) dibangun TANPA membuka ulang mockup yang sudah dikonfirmasi,
+hasilnya melenceng jauh & user menegur ("Design melenceng jauh dari
+rencana... baca mockup yang anda buat sendiri"). Yang salah: ikon ditaruh
+DI ATAS wordmark & cuma 108px (mockup: wordmark DULU, ikon **178px**
+radius-40 + shadow — "ikon dominan" itu justru permintaan intinya),
+AppBar diberi judul + `IconButton` biasa (mockup: AppBar POLOS + tombol
+"?" BULAT ber-outline), dan entri lisensi jadi kartu besar di tengah
+(mockup: chip kecil rata-kanan di bawah AppBar, mewarisi posisi chip "ID
+device"). `DeviceLicenseScreen` juga masih `ListTile` Material generik,
+belum ikut bahasa desain app. **Pelajaran**: mockup yang sudah dibuat &
+dikonfirmasi WAJIB dibuka lagi saat implementasi — jangan dibangun ulang
+dari ingatan/deskripsi teks.
+
+**Bug nyata yang ikut ketemu saat koreksi itu**: `DeviceLicenseScreen`
+sempat pakai `DateFormat(..., 'id_ID')` → `LocaleDataException`, SELURUH
+layar gagal render (layar merah) di app asli, bukan cuma tanggalnya salah
+format. App ini TIDAK PERNAH memanggil `initializeDateFormatting` —
+konvensinya format nama bulan MANUAL (sudah didokumentasikan di
+`expenses_screen.dart`, terlewat). Sekarang ada test regresinya
+(`device_license_screen_test.dart`, revert-verified). **Cek pola ini tiap
+menulis layar baru yang menampilkan tanggal berbahasa Indonesia.**
+
 _Riwayat sesi 4 Agustus 2026 (awal) — versi kerja **2.10.0+15** (naik dari
 2.9.1+14, MINOR bump eksplisit diminta user — lihat poin 6), schemaVersion
 **28** (naik sesi 3 Agustus). Sesi itu jawab 4

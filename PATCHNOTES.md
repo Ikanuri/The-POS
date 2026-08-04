@@ -11,7 +11,7 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 4 Agustus 2026
 
 ### 🆕 Fitur baru
-- **Halaman baru "Tentang Aplikasi"** (Pengaturan → Diagnostik → Tentang
+- **Halaman baru "Tentang Aplikasi"** (Pengaturan → Lainnya → Tentang
   Aplikasi) — nomor versi, dan tombol "?" untuk buka "Panduan & Tips":
   daftar panduan yang bisa dicari (mis. ketik "izin" atau "tempel
   pesanan"), tiap panduan disertai tips fitur yang mungkin belum
