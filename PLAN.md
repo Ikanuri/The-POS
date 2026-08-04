@@ -499,3 +499,33 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
      hanya cari nama/`kode_produk`, lihat `watchProductsForKasir` di
      `app_database.dart` — barcode scan sepenuhnya jalur lain, kamera/HID,
      terpisah dari field pencarian). Ditawarkan, belum dikonfirmasi user.
+
+8. **Item 53 — percepat alur input harga modal + stok dari nota supplier
+   (PENDING, user eksplisit "pending dulu poin ini")**. Konteks: toko
+   cabang belum pakai fitur ini secara penuh, tapi diperkirakan perlu ke
+   depan — keluhan user: tidak selalu ada waktu hitung manual dari nota
+   sampai input satu-satu di form Edit Produk. Insight yang sudah
+   didiskusikan (belum ada keputusan/eksekusi):
+   - **CSV import yang SUDAH ADA** (`csv_import_service.dart`) sudah
+     mendukung kolom `harga_beli`/`cost` & `stok`/`qty`, dan sudah bisa
+     UPDATE produk existing (cocok barcode → kode_produk → nama+satuan),
+     bukan cuma bikin produk baru — opsi termurah, tinggal dibiasakan
+     jadi alur kerja (isi template Excel sekali per nota, import),
+     tanpa perlu kode baru sama sekali.
+   - **Mode "restock" ala `StockOpnameScreen`** (scan barcode → sesuaikan)
+     — pola UX serupa bisa dipakai utk terima barang: scan barcode tiap
+     item nota → tampilkan harga modal terakhir sbg default (tinggal
+     koreksi) → qty DITAMBAHKAN (bukan di-replace spt opname). Belum
+     didesain detail, kandidat termurah kalau mau dibangun sbg fitur baru.
+   - **OCR nota supplier** — dinilai ROI rendah utk kasus toko grosir
+     (nota tulisan tangan/thermal print supplier tidak konsisten
+     formatnya, OCR sering salah baca angka terutama kolom harga, tetap
+     butuh verifikasi manual per baris). Rekomendasi: skip kecuali
+     supplier kirim nota digital berformat tetap (PDF/Excel) — baru
+     worth bikin parser CSV-import khusus format itu.
+   - **Keputusan desain yang MENGGANTUNG** (perlu diputuskan SEBELUM
+     bangun alur import manapun di atas, supaya tidak bongkar ulang):
+     harga modal pakai "harga terakhir" (skema sekarang, `costPrice`
+     1 angka) atau mulai hitung rata-rata tertimbang (lebih akurat kalau
+     harga modal sering naik-turun antar pembelian, tapi perlu simpan
+     riwayat per-batch pembelian, bukan cuma 1 kolom).
