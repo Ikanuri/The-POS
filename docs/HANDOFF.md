@@ -21,7 +21,19 @@ Serial" yang dibangun sesi 4 Agustus (ringkasan lengkap ada di bawah):
    direnggangkan; seksi "Segera Hadir" di halaman Lisensi DIHAPUS TOTAL;
    nomor serial jadi **spoiler** (pola titik-titik, tap utk reveal — QR di
    atasnya SENGAJA tidak ikut disamarkan, sudah spt noise visual).
-3. **Ikon HD asli + tutorial dilengkapi + bug garis ExpansionTile**
+3. **`license-generator.html`: pesan error kamera scan QR** (`4fa815d`) —
+   user laporkan "Permission denied" polos. Dugaan awal soal "secure
+   context" TERBUKTI SALAH (Playwright: `isSecureContext==true` utk
+   `file://` di Chromium) — akar sebenarnya banyak browser (Chrome Android
+   khususnya) auto-tolak izin kamera TANPA dialog sama sekali kalau HTML
+   dibuka langsung dari file manager (bukan lewat alamat web), muncul sbg
+   `NotAllowedError`/`NotFoundError`. Fix: deteksi error itu, kasih
+   panduan `python3 -m http.server`/`npx serve .` + buka via localhost.
+   Diverifikasi via Playwright dgn BarcodeDetector+getUserMedia PALSU yg
+   disuntik utk mensimulasikan persis skenario itu (Chromium bundelan
+   Playwright sendiri tidak support BarcodeDetector sama sekali, jadi
+   tidak bisa dites lewat klik tombol sungguhan — harus disuntik manual).
+4. **Ikon HD asli + tutorial dilengkapi + bug garis ExpansionTile**
    (`0f70fc8`): user kirim file emoji resmi 512x512 ber-alpha (`Image` di
    pesan chat, DIEKSTRAK dari base64 transcript JSONL sesi ini — bukan
    dari upload folder biasa, krn gambar terkirim inline via clipboard/
