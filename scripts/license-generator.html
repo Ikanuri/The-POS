@@ -187,6 +187,16 @@
         </div>
         <div id="scanUnsupported" class="hint hidden">Browser ini belum mendukung pemindaian QR native
         (BarcodeDetector). Coba Chrome/Edge terbaru di Android, atau ketik sidik jari manual di bawah.</div>
+        <div id="scanInsecure" class="hint hidden" style="color:var(--red);">
+          Browser menolak izin kamera — bukan bug alat ini. Banyak browser (terutama Chrome di Android)
+          menolak otomatis TANPA menampilkan dialog izin sama sekali kalau halaman HTML dibuka langsung
+          dari file manager/Downloads (<code>file://</code>), bukan lewat alamat web.<br><br>
+          <b>Cara paling andal</b> (sekali jalan, dari folder tempat file ini disimpan):<br>
+          <span class="mono">python3 -m http.server 8000</span> (kalau ada Python) atau
+          <span class="mono">npx serve .</span> (kalau ada Node.js) — lalu buka
+          <span class="mono">http://localhost:8000/</span> di browser yang sama.<br><br>
+          Tanpa itu, ketik sidik jari manual saja di kolom bawah — tetap berfungsi normal.
+        </div>
       </div>
     </div>
 
@@ -2800,6 +2810,19 @@ async function startScan() {
     $('scanUnsupported').classList.remove('hidden');
     return;
   }
+  // Kamera (getUserMedia) cuma diizinkan browser di "secure context"
+  // (https:// atau http://localhost) — file:// SELALU ditolak walau
+  // BarcodeDetector-nya sendiri didukung. Dicek DULU, sebelum minta izin,
+  // supaya errornya jelas ("dibuka lewat file, bukan bug") — bukan cuma
+  // "Permission denied" mentah dari browser yang membingungkan.
+  if (!window.isSecureContext) {
+    $('scanInsecure').classList.remove('hidden');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    $('scanInsecure').classList.remove('hidden');
+    return;
+  }
   try {
     const formats = await window.BarcodeDetector.getSupportedFormats();
     if (!formats.includes('qr_code')) {
@@ -2835,7 +2858,17 @@ async function startScan() {
     };
     _scanRAF = requestAnimationFrame(tick);
   } catch (err) {
-    showToast('Gagal buka kamera: ' + err.message);
+    // "NotAllowedError" di sini SERING BUKAN berarti user menolak izin
+    // lewat dialog — banyak browser (terutama Chrome Android) menolak
+    // otomatis TANPA pernah menampilkan dialog izin sama sekali kalau
+    // halamannya dibuka lewat file:// langsung dari file manager/Downloads.
+    // Arahkan ke fix praktis (localhost) alih-alih toast generik yang
+    // bikin bingung ("kok padahal saya belum sempat menolak apa-apa").
+    if (err.name === 'NotAllowedError' || err.name === 'NotFoundError') {
+      $('scanInsecure').classList.remove('hidden');
+    } else {
+      showToast('Gagal buka kamera: ' + err.message);
+    }
     await stopScan();
   }
 }
