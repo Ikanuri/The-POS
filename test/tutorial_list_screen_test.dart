@@ -47,4 +47,37 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  testWidgets(
+      'regresi: tidak ada garis divider bawaan ExpansionTile saat expanded',
+      (tester) async {
+    await pump(tester);
+    final tiles = tester.widgetList<ExpansionTile>(find.byType(ExpansionTile));
+    for (final t in tiles) {
+      expect(t.shape, isA<Border>().having((b) => b.top.width, 'top width', 0));
+      expect(t.collapsedShape,
+          isA<Border>().having((b) => b.top.width, 'top width', 0));
+    }
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets('bab baru (printer, backup, loyalitas, retur, tutup, katalog) ada',
+      (tester) async {
+    await pump(tester);
+    for (final title in [
+      'Printer Bluetooth',
+      'Backup & Restore, Alihkan Owner',
+      'Poin Loyalitas Pelanggan',
+      'Retur & Edit Transaksi Lunas',
+      'Tutup Kasir vs Tutup Buku',
+      'Katalog Pesanan (pelanggan pesan sendiri)',
+    ]) {
+      expect(find.text(title), findsOneWidget, reason: 'bab "$title" hilang');
+    }
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }

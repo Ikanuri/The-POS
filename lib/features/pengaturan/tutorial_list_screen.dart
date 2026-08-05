@@ -134,6 +134,100 @@ const _chapters = <_TutorialChapter>[
     ],
     keywords: ['stok', 'pause', 'non-stok'],
   ),
+  _TutorialChapter(
+    title: 'Printer Bluetooth',
+    body: 'Pilih printer thermal di Pengaturan → Printer Bluetooth. Setelah '
+        'dipasangkan sekali, struk bisa langsung dicetak dari layar '
+        'Pembayaran maupun Riwayat Nota.',
+    proTips: [
+      'Barcode produk otomatis dicetak pakai format CODE128 (bukan '
+          'EAN-13) kalau kodenya bukan barcode resmi 13-digit — struk '
+          'tetap bisa dipindai ulang dengan benar walau barcode asalnya '
+          'cuma angka asal tempel dari toko.',
+      'Isi struk bisa diatur detail lewat "Format Nota" (ukuran kertas '
+          '58/80mm, tampil-tidaknya nomor transaksi/nama pelanggan/'
+          'detail pembayaran/status lunas) — tidak harus ikut format '
+          'bawaan kalau ada yang dirasa kurang perlu.',
+    ],
+    keywords: ['printer', 'bluetooth', 'cetak', 'struk', 'thermal'],
+  ),
+  _TutorialChapter(
+    title: 'Backup & Restore, Alihkan Owner',
+    body: 'Dua fitur beda tujuan yang sering tertukar. "Backup & Restore" '
+        '(Pengaturan → Sinkronisasi) untuk menyalin SELURUH data toko ini '
+        'ke file — dipakai kalau mau pindah HP atau sebagai cadangan rutin. '
+        '"Alihkan Owner" untuk memindahkan IDENTITAS kepemilikan toko '
+        '(bukan sekadar salinan data) ke device lain, mis. saat owner '
+        'ganti HP permanen atau menyerahkan toko ke pemilik baru.',
+    proTips: [
+      '"Alihkan Owner" MENIMPA TOTAL data & identitas device penerima '
+          '(boleh device baru atau device yang sudah aktif dipakai toko '
+          'lain) — beda dari Backup & Restore biasa yang lebih ringan, '
+          'makanya alurnya sengaja pakai peringatan + centang konfirmasi '
+          'lebih ketat sebelum lanjut.',
+    ],
+    keywords: ['backup', 'restore', 'alih owner', 'pindah hp', 'berkahpos'],
+  ),
+  _TutorialChapter(
+    title: 'Poin Loyalitas Pelanggan',
+    body: 'Pelanggan terdaftar bisa otomatis dapat poin tiap transaksi '
+        'lunas — atur aturannya di Pengaturan → Toko → Poin Loyalitas '
+        '("setiap belanja Rp sekian, dapat sekian poin").',
+    proTips: [
+      'Kosongkan nominal ambang batas kalau mau menonaktifkan poin '
+          'otomatis sama sekali — tidak perlu menghapus data pelanggan '
+          'atau poin yang sudah terkumpul sebelumnya.',
+      'Retur/pembatalan transaksi lunas otomatis mengurangi poin yang '
+          'sudah didapat SECARA PROPORSIONAL terhadap nilai refund, bukan '
+          'membiarkan poin "nyangkut" walau transaksinya sudah dibatalkan.',
+    ],
+    keywords: ['loyalitas', 'poin', 'membership', 'pelanggan setia'],
+  ),
+  _TutorialChapter(
+    title: 'Retur & Edit Transaksi Lunas',
+    body: 'Nota yang sudah lunas masih bisa diretur (sebagian/seluruh '
+        'barang) atau diedit qty-nya langsung dari Riwayat Nota — tidak '
+        'perlu buat transaksi pembatalan manual terpisah.',
+    proTips: [
+      'Menurunkan qty item di nota lunas otomatis menghitung refund '
+          'tunai negatif & memperbarui item itu DI TEMPAT (bukan '
+          'menambah baris retur terpisah) — riwayat nota tetap ringkas '
+          'dibaca.',
+      'Tidak bisa retur melebihi qty yang benar-benar pernah dibeli di '
+          'nota itu (dicegah otomatis) — mencegah double-retur yang '
+          'bikin stok/kas tercatat salah kalau tombol retur tak sengaja '
+          'ditekan berulang.',
+    ],
+    keywords: ['retur', 'edit nota', 'refund', 'batalkan transaksi'],
+  ),
+  _TutorialChapter(
+    title: 'Tutup Kasir vs Tutup Buku',
+    body: '"Tutup Kasir" (Pengaturan → Manajemen Data) itu rekap kas '
+        'HARIAN — bandingkan uang tunai sistem vs uang fisik di laci, '
+        'biasanya dilakukan tiap akhir shift/hari. "Tutup Buku" itu '
+        'mengarsipkan SELURUH transaksi tahun lalu supaya laporan tahun '
+        'berjalan tetap ringan — jarang dipakai, biasanya sekali setahun.',
+    proTips: [
+      'Transaksi yang sudah diarsipkan lewat Tutup Buku masih bisa '
+          'dilihat lagi lewat "Buka Arsip" — arsip bukan penghapusan '
+          'permanen, cuma dipindahkan keluar dari laporan tahun aktif.',
+    ],
+    keywords: ['tutup kasir', 'tutup buku', 'arsip', 'rekap kas'],
+  ),
+  _TutorialChapter(
+    title: 'Katalog Pesanan (pelanggan pesan sendiri)',
+    body: 'Bagikan katalog produk berbentuk halaman HTML (Pengaturan → '
+        'Katalog Pesanan) ke pelanggan lewat WhatsApp/link — pelanggan '
+        'bisa pilih barang & kirim balik pesanannya sendiri tanpa perlu '
+        'ditelepon atau dicatat manual dulu.',
+    proTips: [
+      'Pesanan yang pelanggan kirim balik dari katalog ini bisa langsung '
+          'ditempel ke keranjang kasir lewat "Tempel Pesanan" (lihat bab '
+          'Keranjang & Tempel Pesanan) — item yang namanya cocok otomatis '
+          'terisi, tidak perlu ketik ulang.',
+    ],
+    keywords: ['katalog', 'pesan sendiri', 'link produk', 'whatsapp'],
+  ),
 ];
 
 class TutorialListScreen extends StatefulWidget {
@@ -204,6 +298,18 @@ class _ChapterCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: ExpansionTile(
+        // Bug visual dilaporkan user (screenshot): garis tipis nongol di
+        // atas konten begitu card di-expand. `ExpansionTile` bawaan Flutter
+        // menggambar border atas+bawah pakai warna divider tema SAAT
+        // expanded — nempel aneh di dalam `Card` yang sudah punya
+        // batas/elevation sendiri. `Border()` kosong menonaktifkannya.
+        shape: const Border(),
+        collapsedShape: const Border(),
+        // Bug visual dilaporkan user (screenshot): garis tipis nongol di
+        // atas konten begitu card di-expand. `ExpansionTile` bawaan Flutter
+        // menggambar border atas+bawah pakai warna divider tema SAAT
+        // expanded — nempel aneh di dalam `Card` yang sudah punya
+        // batas/elevation sendiri. `Border()` kosong menonaktifkannya.
         title: Text(
           chapter.title,
           style: const TextStyle(fontWeight: FontWeight.w700),

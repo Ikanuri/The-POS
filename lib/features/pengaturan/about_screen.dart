@@ -88,6 +88,12 @@ class AboutScreen extends ConsumerWidget {
                       const SizedBox(height: 26),
                       Container(
                         decoration: BoxDecoration(
+                          // Sumber (emoji resmi, transparan) tidak mengisi
+                          // penuh kotak persegi — backdrop peachy ini
+                          // mengembalikan tampilan "squircle" spt launcher
+                          // Android asli (yang emoji-nya di-flatten di atas
+                          // warna solid ini saat build APK).
+                          color: const Color(0xFFFFC896),
                           borderRadius: BorderRadius.circular(40),
                           boxShadow: [
                             BoxShadow(
@@ -104,13 +110,6 @@ class AboutScreen extends ConsumerWidget {
                             width: 178,
                             height: 178,
                             fit: BoxFit.cover,
-                            // Sumber cuma 192x192 (mipmap-xxxhdpi, resolusi
-                            // TERBESAR yang ada di repo — lihat catatan di
-                            // HANDOFF.md) diperbesar ke 178 logis, yang di
-                            // device DPI tinggi jadi >300px fisik — filter
-                            // default (low) bikin tepi bulat kelihatan
-                            // patah-patah. `high` pakai interpolasi lebih
-                            // halus saat upscale.
                             filterQuality: FilterQuality.high,
                             isAntiAlias: true,
                           ),
