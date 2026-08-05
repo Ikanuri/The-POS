@@ -53,6 +53,22 @@ Serial" yang dibangun sesi 4 Agustus (ringkasan lengkap ada di bawah):
    expanded, nempel aneh di dalam `Card` — fix `shape`/`collapsedShape:
    const Border()`.
 
+5. **Redesain keranjang katalog HTML** (`0577fef`) — mockup Playwright
+   JPG (3 frame: sheet, konfirmasi hapus-item, konfirmasi kosongkan-semua)
+   dikonfirmasi user DULU, termasuk cek eksplisit kompatibilitas dark mode
+   (disuntik `data-theme=dark` + toggle asli via tombol tema, discreenshot
+   ulang) sebelum eksekusi ke `order_page_service.dart`. Perubahan: (a)
+   ikon 🗑 hapus per-baris keranjang, terpisah dari stepper qty (dulu
+   cuma bisa hapus dgn tekan − sampai 0, tanpa konfirmasi); (b) modal
+   konfirmasi custom (`showConfirm`/`hideConfirm`, ikut tema — GANTI
+   `confirm()` bawaan browser) utk hapus-satu-barang MAUPUN
+   kosongkan-semua; (c) tombol "Kosongkan" (teks polos) jadi pill ikon+
+   "Kosongkan Keranjang" aksen merah di kanan-atas header. Token
+   `--danger`/`--danger-bg` baru, dgn varian dark (pola sama persis
+   `--ok`/`--warn` yg sudah ada). Test baru (`order_page_service_cart_
+   delete_test.dart`) — revert-verified via python patch+restore (bukan
+   sed) krn JS-dalam-Dart-raw-string rawan escaping kalau pakai sed.
+
 Full suite 925 hijau tiap commit (1 flaky pre-existing
 `proposal_unchanged_end_to_end_test.dart`, port-conflict paralel, lolos
 sendirian — TIDAK terkait perubahan manapun sesi ini). `flutter analyze`

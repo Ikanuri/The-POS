@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 5 Agustus 2026
 
 ### 🆕 Fitur baru
+- **Katalog HTML (pesan sendiri via WhatsApp): keranjang pelanggan bisa
+  hapus barang langsung** — tiap baris ada ikon tempat sampah sendiri
+  (dulu cuma bisa turunkan jumlah sampai 0), lengkap dengan konfirmasi
+  sebelum benar-benar terhapus. Tombol "Kosongkan" juga diperjelas jadi
+  "Kosongkan Keranjang" dengan ikon merah di pojok kanan atas.
 - **Nomor serial device sekarang disamarkan (spoiler)** di halaman
   Lisensi & Serial — tersembunyi di balik pola titik-titik sampai
   diketuk, mencegah orang lewat membaca sidik jari device sekilas.
