@@ -5,77 +5,69 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 4 Agustus 2026 (lanjutan) — versi kerja tetap **2.10.0+15**,
-schemaVersion tetap 28 (tidak ada migrasi baru sesi ini). Fitur baru: (1)
-**QR sidik jari device** ditambahkan di `AktivasiScreen` (gerbang
-aktivasi/welcome device baru) DAN halaman baru **"Info Lisensi & Serial"**
-(`DeviceLicenseScreen`, `/pengaturan/lisensi`, dari kartu "Device Ini" di
-Pengaturan) — QR pakai `qr_flutter` (sudah dependency lama), data = hex
-fingerprint MENTAH (bukan versi berkelompok/uppercase) supaya cocok
-persis dgn yang dibaca alat scanner developer. Halaman baru juga simpan &
-tampilkan `LicenseState.activatedAt` (SharedPreferences key baru
-`license_activated_at`, dicatat SEKALI saat aktivasi PERTAMA — TIDAK
-tertimpa saat renewal berikutnya, beda dari `lastSeen` yg terus maju tiap
-app dibuka) + tanggal berlaku sampai + placeholder "Segera Hadir"
-(perpanjang via scan, riwayat perpanjangan). (2) **Redesain total
-`scripts/license-generator.html`** (alat dev-only, tidak disentuh dari
-app) mengikuti referensi desain HTML "Toko Berkah — All-in-One" yg
-di-attach user (ivory/charcoal + aksen crail-orange `#D97757`, TANPA font
-CDN — tetap 100% offline satu file) + **QR encode** kode aktivasi
-(vendored `qrcode.js` — Kazuhiko Arase, MIT, inline bukan CDN) + kartu
-**"Scan Serial dari HP"** pakai `BarcodeDetector` NATIVE browser (mesin ML
-Kit sama dgn `mobile_scanner` Flutter di Chrome Android, sesuai
-permintaan user "sekelas mesin flutter") utk isi kolom sidik jari otomatis
-dari kamera. **TIDAK ada integrasi GitHub API** (user eksplisit: "Tidak
-perlu github API") — remote-terminate device TETAP manual lewat
-`revoked.json` di Gist seperti sebelumnya, tidak ada perubahan di titik
-itu. Diverifikasi via Playwright headless (generate keypair → unduh
-cadangan → build kode → render QR non-kosong) krn alat ini di luar
-`flutter test`. `flutter analyze` 0 issue, full suite tetap hijau (2
-kegagalan `product_proposal_review_screen_test.dart` saat run PARALEL
-dikonfirmasi flaky pre-existing — lolos 100% saat file itu dijalankan
-sendirian, sama sekali tidak tersentuh perubahan sesi ini).
+_Update sesi 5 Agustus 2026 — versi kerja tetap **2.10.0+15**, schemaVersion
+tetap 28. Susulan langsung dari fitur "Tentang Aplikasi"/"Info Lisensi &
+Serial" yang dibangun sesi 4 Agustus (ringkasan lengkap ada di bawah):
 
-**"Tentang Aplikasi" SEKARANG SUDAH DIEKSEKUSI** (`b97a0e8`, susulan
-LANGSUNG stlh QR serial di atas — user tanya "masih belum dieksekusi ya?"
-lalu minta dikerjakan + "Lisensi" di Device Ini dipindah ke sana):
-`AboutScreen` (`/pengaturan/tentang`) — wordmark + ikon launcher asli
-(`assets/icon/app_icon.png`, disalin dari mipmap Android krn belum ada
-sumber ikon Flutter-asset), versi via `package_info_plus` (dependency
-baru), "made with ♥️ by Dre". Tombol "?" -> `TutorialListScreen`
-(`/pengaturan/tentang/tutorial`) — daftar bab searchable, tiap bab punya
-Pro Tips (paste-pesanan-merge-cart-aktif cuma SATU contoh, ada jg QR
-handoff merge/sync harga antar toko/dll — 7 bab total, isi dari inventaris
-fitur nyata di CLAUDE.md/riwayat sesi, bukan dikarang). "Info Lisensi &
-Serial" DIPINDAH dari kartu "Device Ini" Pengaturan ke `AboutScreen` —
-ListTile+navigasi lamanya DIHAPUS dari `pengaturan_screen.dart` (bukan
-cuma ditambah alternatif), entry point "Tentang Aplikasi" baru ditaruh di
-kartu Diagnostik. Route `/pengaturan/lisensi` sendiri TIDAK dipindah
-(tetap ada, cuma titik masuknya yang berubah). 6 test baru, revert-
-verified.
+1. **CI**: `build-apk.yml` sempat gagal total (`3485f42`) padahal APK-nya
+   sendiri sukses dibuild — `gh release create` kena HTTP 503 (hiccup API
+   GitHub sesaat), langkah itu dulu tanpa retry sama sekali padahal jalan
+   di SETIAP push branch. Fix (`09927d1`): retry 4x (jeda 0/5/15/30 detik)
+   + fallback `gh release upload --clobber` kalau rilisnya ternyata sudah
+   terbuat di percobaan sebelumnya (hindari rilis dobel). API yang
+   benar-benar down terus TETAP menggagalkan build (bukan lolos diam-diam).
+2. **5 penyesuaian About/Lisensi** (`ead32f8`) dari feedback user: ikon
+   pakai `filterQuality: high`+`isAntiAlias`; jarak chip Lisensi–AppBar
+   direnggangkan; seksi "Segera Hadir" di halaman Lisensi DIHAPUS TOTAL;
+   nomor serial jadi **spoiler** (pola titik-titik, tap utk reveal — QR di
+   atasnya SENGAJA tidak ikut disamarkan, sudah spt noise visual).
+3. **Ikon HD asli + tutorial dilengkapi + bug garis ExpansionTile**
+   (`0f70fc8`): user kirim file emoji resmi 512x512 ber-alpha (`Image` di
+   pesan chat, DIEKSTRAK dari base64 transcript JSONL sesi ini — bukan
+   dari upload folder biasa, krn gambar terkirim inline via clipboard/
+   paste, cek `message.content[].source.data` di `.jsonl` kalau kejadian
+   lagi). Source lama (192x192, mipmap-xxxhdpi) adalah resolusi TERBESAR
+   yang ADA di repo, sengaja diganti total. Source baru TRANSPARAN (emoji
+   mentah, bukan squircle solid spt mipmap Android) — backdrop `#FFC896`
+   (disampel dari pixel pojok mipmap lama via Pillow) ditambahkan di
+   belakang `Image` supaya bentuk squircle tetap identik dgn launcher asli.
+   Tutorial +6 bab (Printer Bluetooth, Backup&Restore+Alihkan Owner, Poin
+   Loyalitas, Retur&Edit Transaksi Lunas, Tutup Kasir vs Tutup Buku,
+   Katalog Pesanan) — SEMUA Pro Tip di-grep-verifikasi ke kode/nama-test
+   nyata dulu sebelum ditulis (2 draft awal dicoret krn spekulatif, tidak
+   ada dasar di kode — soal pairing Bluetooth "remembers" lama, dan klaim
+   "device asal tak lagi owner" stlh Alihkan Owner). Bug visual dari
+   screenshot user: `ExpansionTile` bawaan Flutter gambar border tema saat
+   expanded, nempel aneh di dalam `Card` — fix `shape`/`collapsedShape:
+   const Border()`.
 
-**KOREKSI BESAR SETELAHNYA (`dcf7bf8`) — WAJIB dibaca**: versi pertama
-(`b97a0e8`) dibangun TANPA membuka ulang mockup yang sudah dikonfirmasi,
-hasilnya melenceng jauh & user menegur ("Design melenceng jauh dari
-rencana... baca mockup yang anda buat sendiri"). Yang salah: ikon ditaruh
-DI ATAS wordmark & cuma 108px (mockup: wordmark DULU, ikon **178px**
-radius-40 + shadow — "ikon dominan" itu justru permintaan intinya),
-AppBar diberi judul + `IconButton` biasa (mockup: AppBar POLOS + tombol
-"?" BULAT ber-outline), dan entri lisensi jadi kartu besar di tengah
-(mockup: chip kecil rata-kanan di bawah AppBar, mewarisi posisi chip "ID
-device"). `DeviceLicenseScreen` juga masih `ListTile` Material generik,
-belum ikut bahasa desain app. **Pelajaran**: mockup yang sudah dibuat &
-dikonfirmasi WAJIB dibuka lagi saat implementasi — jangan dibangun ulang
-dari ingatan/deskripsi teks.
+Full suite 925 hijau tiap commit (1 flaky pre-existing
+`proposal_unchanged_end_to_end_test.dart`, port-conflict paralel, lolos
+sendirian — TIDAK terkait perubahan manapun sesi ini). `flutter analyze`
+0 issue di semua commit.
 
-**Bug nyata yang ikut ketemu saat koreksi itu**: `DeviceLicenseScreen`
-sempat pakai `DateFormat(..., 'id_ID')` → `LocaleDataException`, SELURUH
-layar gagal render (layar merah) di app asli, bukan cuma tanggalnya salah
-format. App ini TIDAK PERNAH memanggil `initializeDateFormatting` —
-konvensinya format nama bulan MANUAL (sudah didokumentasikan di
-`expenses_screen.dart`, terlewat). Sekarang ada test regresinya
-(`device_license_screen_test.dart`, revert-verified). **Cek pola ini tiap
-menulis layar baru yang menampilkan tanggal berbahasa Indonesia.**
+_Riwayat sesi 4 Agustus 2026 (lanjutan) — QR sidik jari device + "Tentang
+Aplikasi"/"Info Lisensi & Serial" dibangun dari nol, lalu DIKOREKSI BESAR
+sekali krn versi pertama (`b97a0e8`) dibangun TANPA membuka ulang mockup
+yang sudah dikonfirmasi (ikon 108px di ATAS wordmark bukannya 178px
+DI BAWAH wordmark, AppBar berjudul bukannya polos+tombol "?" bulat, entri
+lisensi jadi kartu besar bukannya chip rata-kanan) — user menegur ("Design
+melenceng jauh... baca mockup yang anda buat sendiri"), dikoreksi total di
+`dcf7bf8`. **Pelajaran WAJIB diingat**: mockup yang sudah dibuat &
+dikonfirmasi WAJIB dibuka lagi saat implementasi, jangan dibangun ulang
+dari ingatan/deskripsi teks. Bug nyata ikut ketemu saat koreksi itu:
+`DeviceLicenseScreen` sempat pakai `DateFormat(..., 'id_ID')` →
+`LocaleDataException`, app TIDAK PERNAH `initializeDateFormatting` (sudah
+didokumentasikan di CLAUDE.md §Gotcha & `expenses_screen.dart`, terlewat
+saat menulis layar baru ini) — format nama bulan manual, ada test
+regresinya sekarang. Hasil akhir arsitektur: `AboutScreen`
+(`/pengaturan/tentang`, wordmark+ikon+versi+"made with ♥️ by Dre"+chip
+Lisensi rata-kanan) → tombol "?" ke `TutorialListScreen`
+(`/pengaturan/tentang/tutorial`, searchable+Pro Tips) & chip Lisensi ke
+`DeviceLicenseScreen` (`/pengaturan/lisensi`, QR+serial+tanggal
+aktivasi/berlaku). Entri "Info Lisensi & Serial" lama di kartu "Device
+Ini" Pengaturan SUDAH DIHAPUS (bukan cuma ditambah alternatif), diganti
+"Tentang Aplikasi" di kartu Diagnostik.
 
 _Riwayat sesi 4 Agustus 2026 (awal) — versi kerja **2.10.0+15** (naik dari
 2.9.1+14, MINOR bump eksplisit diminta user — lihat poin 6), schemaVersion

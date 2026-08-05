@@ -8,6 +8,24 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 Agustus 2026
+
+### 🆕 Fitur baru
+- **Nomor serial device sekarang disamarkan (spoiler)** di halaman
+  Lisensi & Serial — tersembunyi di balik pola titik-titik sampai
+  diketuk, mencegah orang lewat membaca sidik jari device sekilas.
+- **Panduan & Tips ditambah 6 bab baru**: Printer Bluetooth, Backup &
+  Restore + Alihkan Owner, Poin Loyalitas, Retur & Edit Transaksi
+  Lunas, Tutup Kasir vs Tutup Buku, dan Katalog Pesanan.
+
+### 🔧 Perbaikan
+- **Ikon di halaman Tentang Aplikasi diganti gambar resolusi lebih
+  tinggi** — tidak lagi terlihat patah-patah/pecah di HP layar tajam.
+- Garis tipis yang sempat muncul di atas isi panduan saat dibuka
+  (Panduan & Tips) sudah dihilangkan.
+- Seksi "Segera Hadir" di halaman Lisensi & Serial dihapus (belum ada
+  isinya, cuma tempat kosong).
+
 ## 4 Agustus 2026
 
 ### 🆕 Fitur baru
