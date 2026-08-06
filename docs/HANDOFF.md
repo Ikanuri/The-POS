@@ -5,8 +5,48 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 6 Agustus 2026 — versi kerja tetap **2.10.0+15**, schemaVersion
-tetap 28. Satu susulan kecil: checkbox verifikasi baris keranjang
+_Update sesi 6 Agustus 2026 (lanjutan) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
+(screenshot bug Laci Meja + 2 laporan bug lain + 1 ide fitur baru):
+
+1. **fix (`62d739d`)**: usulan Laci Meja (client->host) gagal total
+   `SqliteException 787 FOREIGN KEY constraint failed` saat transaksi
+   terkaitnya SENDIRI belum tersync ke host (screenshot user: pre-order
+   "Bu Diah"). Akar: usulan Laci Meja & usulan sync "Transaksi" adalah
+   DUA ANTRIAN INDEPENDEN tanpa jaminan urutan (arsitektur sengaja
+   paralel, lihat CLAUDE.md). Fix: `applyLaciMejaProposals` cek dulu
+   `transaction_id` ada di host sebelum insert — kalau belum, baris itu
+   DILEWATI (bukan gagalkan seluruh batch), tampil alasan ke owner, baris
+   otomatis diusulkan lagi begitu transaksinya tersync. Test end-to-end
+   HTTP loopback ASLI (FK enforcement ON) mereproduksi persis bug di
+   screenshot — revert-verified. **Efek samping ketemu**: 2 widget test
+   lama (`laci_meja_proposal_review_test.dart`) jadi gagal krn hostDb-nya
+   TIDAK pernah seed transaksi (sebelumnya lolos cuma krn FK OFF di DB
+   test biasa) — disesuaikan seed transaksi di hostDb juga, sesuai
+   skenario legitimate (transaksi sudah tersync duluan).
+2. **fix (`4d5c170`)**: handoff QR keranjang antar device (scan kamera)
+   kehilangan harga override/Harga Lain/checklist verifikasi — penerima
+   selalu resolve harga fresh dari DB seolah pesanan katalog HTML biasa.
+   Fix: `encodeHandoff()`/`parse()` di `order_parser_service.dart` sekarang
+   membawa segmen opsional `|p=/|o=/|k=/|v=/|c=/|pr=/|pd=/|dq=` setelah
+   qty tiap item — HANYA diisi jalur handoff antar-device (kode katalog
+   HTML pelanggan TETAP tanpa segmen ini, perilaku lama utuh). 2 test
+   baru, revert-verified.
+3. **BELUM DIKERJAKAN (lanjutkan sesi berikutnya)**: fitur baru — tombol
+   settings di samping ikon "Tempel Pesanan" di keranjang, isinya
+   pengaturan POSISI checkbox verifikasi (4 opsi: kiri-depan-qty/default,
+   kanan-belakang-stepper, kiri-stepper-minus, kanan-nama-item). Perlu
+   provider persisted (SharedPreferences, pola mirip `fontScaleProvider`)
+   + dialog pilihan + render `_CartItemTile` 4 variasi layout sesuai
+   value provider. BELUM ada file/provider/UI yang dibuat sama sekali.
+
+Full suite 32/32 hijau utk semua test yang disentuh sesi ini + full
+`flutter test` (2 kegagalan `proposal_unchanged_end_to_end_test.dart`
+flaky pre-existing/port-conflict — TIDAK terkait). `flutter analyze` 0
+issue.
+
+_Riwayat sesi 6 Agustus 2026 (awal) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. Satu susulan kecil: checkbox verifikasi baris keranjang
 (`_CartItemTile`, `cart_sheet.dart`) DIKEMBALIKAN ke paling KIRI baris
 (`bd2ee9b`) — membalik keputusan sesi 1 Agustus yg memindahkannya ke kanan
 (kiri stepper). Test posisi di-rename & disesuaikan (revert-verified).

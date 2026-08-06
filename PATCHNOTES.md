@@ -11,6 +11,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 6 Agustus 2026
 
 ### 🔧 Perbaikan
+- **Transfer keranjang lewat scan QR antar HP sekarang membawa semua
+  detail** — harga yang sudah diubah manual, satuan Harga Lain, dan
+  centang verifikasi item sekarang ikut terbawa ke penerima. Sebelumnya
+  detail ini hilang dan harga dihitung ulang dari awal di HP penerima.
+- **Usulan Laci Meja (Titip/Ketinggalan/Pinjaman/Pre-order) dari kasir
+  ke pemilik toko tidak lagi gagal total** saat transaksi terkaitnya
+  belum sempat tersinkron ke perangkat pemilik — sekarang baris itu
+  ditunda otomatis dan akan muncul lagi begitu transaksinya sampai.
 - **Checkbox verifikasi di baris keranjang kembali ke sisi kiri** (sempat
   dipindah ke kanan di update sebelumnya).
 
