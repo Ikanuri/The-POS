@@ -317,6 +317,99 @@ void main() {
   });
 
   test(
+      'Bug nyata dilaporkan user: handoff QR sekarang bawa SEMUA atribut '
+      'keranjang (harga override, checklist verifikasi, status pre-order) '
+      'ke penerima — bukan cuma nama barang+qty yang di-harga-ulang',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    // Harga produk di DB PENERIMA sengaja BEDA dari harga di keranjang
+    // pengirim (mis. baru saja diubah, atau pengirim override manual) —
+    // sebelum fix, parse() SELALU resolve fresh dari sini, menimpa harga
+    // asli pengirim diam-diam.
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 30000);
+    final u1 = await _unitIdOf(db, p1);
+    final p2 = await _addProduct(db, name: 'Galon Aqua', price: 5000);
+    final u2 = await _unitIdOf(db, p2);
+
+    final cart = [
+      CartItem(
+        productId: p1,
+        productUnitId: u1,
+        productName: 'Ayam Potong',
+        unitName: 'Kg',
+        qty: 2,
+        price: 27000, // Override manual pengirim, BEDA dari 30000 di DB.
+        originalPrice: 30000,
+        costPrice: 22000,
+        priceOverridden: true,
+        checked: true, // Sudah diverifikasi fisik oleh pengirim.
+      ),
+      CartItem(
+        productId: p2,
+        productUnitId: u2,
+        productName: 'Galon Aqua',
+        unitName: 'Galon',
+        qty: 1,
+        price: 0, // Pre-order belum dibayar — harga sengaja 0.
+        originalPrice: 5000,
+        costPrice: 4000,
+        isPreorder: true,
+        preorderPaid: false,
+        depositQty: 1,
+      ),
+    ];
+
+    final encoded =
+        OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+    final result = await OrderParserService.parse(db: db, text: encoded);
+    expect(result.items, hasLength(2));
+
+    final ayam = result.items.firstWhere((i) => i.productId == p1);
+    expect(ayam.price, 27000,
+        reason: 'harga override pengirim harus ikut, BUKAN di-resolve '
+            'ulang jadi 30000 (harga terkini DB penerima)');
+    expect(ayam.originalPrice, 30000);
+    expect(ayam.priceOverridden, isTrue);
+    expect(ayam.checked, isTrue,
+        reason: 'checklist verifikasi pengirim harus ikut ke penerima');
+    expect(ayam.toCartItem().priceOverridden, isTrue);
+    expect(ayam.toCartItem().checked, isTrue);
+
+    final galon = result.items.firstWhere((i) => i.productId == p2);
+    expect(galon.price, 0);
+    expect(galon.originalPrice, 5000);
+    expect(galon.isPreorder, isTrue);
+    expect(galon.preorderPaid, isFalse);
+    expect(galon.depositQty, 1);
+    final galonCart = galon.toCartItem();
+    expect(galonCart.isPreorder, isTrue);
+    expect(galonCart.depositQty, 1);
+
+    await db.close();
+  });
+
+  test(
+      'Kode dari katalog HTML pelanggan (TANPA flag |p=/|c=/dst.) tetap '
+      'resolve harga fresh dari DB — perilaku lama TIDAK berubah', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+    final u1 = await _unitIdOf(db, p1);
+
+    // Format lama polos, PERSIS output buildOrderText() katalog HTML —
+    // tidak ada segmen '|' apa pun setelah qty.
+    final text = '#PSN:$u1=2';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    final ayam = result.items.single;
+    expect(ayam.price, 25000, reason: 'tetap resolve fresh dari DB lokal');
+    expect(ayam.originalPrice, 25000);
+    expect(ayam.priceOverridden, isFalse);
+    expect(ayam.checked, isFalse);
+    expect(ayam.isPreorder, isFalse);
+    await db.close();
+  });
+
+  test(
       'encodeHandoff() dgn customerName ikut baris "Nama:" — round-trip '
       'balik ke customerName (bukan cuma employeeName)', () async {
     final db = AppDatabase(NativeDatabase.memory());

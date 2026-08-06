@@ -116,15 +116,31 @@ class OrderParserService {
       }
       final unitId = pair.substring(0, eq).trim();
       final rest = pair.substring(eq + 1).trim();
-      // Item 26a — segmen catatan opsional setelah qty: "qty:catatan"
+      // Item 26a — segmen catatan opsional setelah qty: "qty[|flags]:catatan"
       // (catatan ter-encodeURIComponent di sisi HTML, jadi TIDAK pernah
       // mengandung ':' mentah — aman split di ':' PERTAMA).
       final colonIdx = rest.indexOf(':');
-      final qtyStr = colonIdx == -1 ? rest : rest.substring(0, colonIdx);
+      final qtyAndFlags = colonIdx == -1 ? rest : rest.substring(0, colonIdx);
+      // Susulan (bug ditemukan user, "atribut keranjang tidak ikut lewat
+      // handoff QR") — segmen opsional `|key=value` SETELAH qty, HANYA
+      // diisi oleh [encodeHandoff] (transfer antar device toko sendiri),
+      // TIDAK PERNAH oleh katalog HTML pelanggan. `encodeURIComponent` di
+      // HTML/`Uri.encodeComponent` di Dart selalu meng-escape '|' mentah
+      // jadi '%7C', jadi split di '|' di sini TIDAK PERNAH salah potong
+      // catatan yang kebetulan berisi karakter itu.
+      final flagParts = qtyAndFlags.split('|');
+      final qtyStr = flagParts.first;
       final qty = double.tryParse(qtyStr);
       if (qty == null || qty <= 0) {
         notFound.add(pair);
         continue;
+      }
+      final flags = <String, String>{};
+      for (var i = 1; i < flagParts.length; i++) {
+        final eqIdx = flagParts[i].indexOf('=');
+        if (eqIdx <= 0) continue;
+        flags[flagParts[i].substring(0, eqIdx)] =
+            flagParts[i].substring(eqIdx + 1);
       }
       String? itemNote;
       if (colonIdx != -1 && colonIdx + 1 < rest.length) {
@@ -150,6 +166,19 @@ class OrderParserService {
         continue;
       }
 
+      // Susulan — flag `p=`/`o=`/`k=` (dari [encodeHandoff]) HANYA dipakai
+      // kalau ADA; kalau tidak (katalog HTML pelanggan), perilaku lama
+      // dipertahankan PERSIS: selalu resolve fresh dari DB lokal (harga
+      // katalog yang sudah beberapa hari TIDAK BOLEH dipakai mentah).
+      final price = int.tryParse(flags['p'] ?? '');
+      final originalPrice = int.tryParse(flags['o'] ?? '');
+      final costPriceOverride = int.tryParse(flags['k'] ?? '');
+      final priceOverridden = flags['v'] == '1';
+      final checked = flags['c'] == '1';
+      final isPreorder = flags['pr'] == '1';
+      final preorderPaid = flags['pd'] == '1';
+      final depositQty = double.tryParse(flags['dq'] ?? '');
+
       if (seenAt.containsKey(unitId)) {
         final idx = seenAt[unitId]!;
         final prev = items[idx];
@@ -162,13 +191,19 @@ class OrderParserService {
           productName: prev.productName,
           unitName: prev.unitName,
           qty: newQty,
-          price: reResolved.price,
-          costPrice: reResolved.costPrice,
+          price: price ?? reResolved.price,
+          originalPrice: originalPrice ?? price ?? reResolved.price,
+          costPrice: costPriceOverride ?? reResolved.costPrice,
+          priceOverridden: priceOverridden,
           isVariant: prev.isVariant,
           parentProductId: prev.parentProductId,
           // Baris sama muncul dobel (tempel 2x) — catatan dari kemunculan
           // TERAKHIR yang dipakai (bukan digabung, ambigu kalau beda).
           itemNote: itemNote,
+          checked: checked,
+          isPreorder: isPreorder,
+          preorderPaid: preorderPaid,
+          depositQty: depositQty,
         );
         continue;
       }
@@ -186,11 +221,17 @@ class OrderParserService {
         productName: product.name,
         unitName: unitType?.name ?? 'Satuan',
         qty: qty,
-        price: resolved.price,
-        costPrice: resolved.costPrice,
+        price: price ?? resolved.price,
+        originalPrice: originalPrice ?? price ?? resolved.price,
+        costPrice: costPriceOverride ?? resolved.costPrice,
+        priceOverridden: priceOverridden,
         isVariant: product.parentProductId != null,
         parentProductId: product.parentProductId,
         itemNote: itemNote,
+        checked: checked,
+        isPreorder: isPreorder,
+        preorderPaid: preorderPaid,
+        depositQty: depositQty,
       ));
     }
 
@@ -245,6 +286,14 @@ class OrderParserService {
   /// [reservedLocalId] (Item 55) membawa nomor nota yang SUDAH direservasi
   /// pengirim, supaya "urutan pelanggan yang harus dilayani" tetap SAMA
   /// di penerima (bukan reservasi baru).
+  ///
+  /// Susulan (bug ditemukan user): harga/HPP/status override/checklist
+  /// verifikasi/status pre-order pengirim SEBELUMNYA hilang total di
+  /// penerima (selalu di-resolve ulang fresh dari DB, seolah-olah ini
+  /// pesanan katalog pelanggan biasa) — sekarang dibawa EKSPLISIT lewat
+  /// segmen `|key=value` setelah qty tiap item (lihat [parse]), supaya
+  /// keranjang penerima jadi salinan PERSIS keranjang pengirim, bukan
+  /// cuma daftar barang+qty yang di-harga-ulang.
   static String encodeHandoff({
     required List<CartItem> items,
     required String employeeName,
@@ -253,11 +302,20 @@ class OrderParserService {
     String? reservedLocalId,
   }) {
     final codeParts = items.map((c) {
+      final flags = StringBuffer()
+        ..write('|p=${c.price}')
+        ..write('|o=${c.originalPrice}')
+        ..write('|k=${c.costPrice}');
+      if (c.priceOverridden) flags.write('|v=1');
+      if (c.checked) flags.write('|c=1');
+      if (c.isPreorder) flags.write('|pr=1');
+      if (c.preorderPaid) flags.write('|pd=1');
+      if (c.depositQty != null) flags.write('|dq=${_fmtQty(c.depositQty!)}');
       final note = c.itemNote?.trim();
       final noteSeg = (note != null && note.isNotEmpty)
           ? ':${Uri.encodeComponent(note)}'
           : '';
-      return '${c.productUnitId}=${_fmtQty(c.qty)}$noteSeg';
+      return '${c.productUnitId}=${_fmtQty(c.qty)}$flags$noteSeg';
     }).join(';');
     final buf = StringBuffer('${OrderPageService.machineCodePrefix}$codeParts\n')
       ..write('Pegawai: $employeeName');
@@ -291,7 +349,13 @@ class ParsedOrderItem {
     required this.isVariant,
     this.parentProductId,
     this.itemNote,
-  });
+    int? originalPrice,
+    this.priceOverridden = false,
+    this.checked = false,
+    this.isPreorder = false,
+    this.preorderPaid = false,
+    this.depositQty,
+  }) : originalPrice = originalPrice ?? price;
 
   final String productId;
   final String productUnitId;
@@ -306,6 +370,23 @@ class ParsedOrderItem {
   /// Catatan per-produk dari pelanggan (Item 26a), mis. "yang matang".
   final String? itemNote;
 
+  /// Susulan (bug ditemukan user): 5 field di bawah HANYA terisi dari
+  /// atribut asli kalau kode `#PSN:` berasal dari [OrderParserService.
+  /// encodeHandoff] (transfer QR ANTAR DEVICE TOKO SENDIRI, lihat flag
+  /// `p=`/`o=`/`k=`/`v=`/`c=`/`pr=`/`pd=`/`dq=` di [OrderParserService.parse])
+  /// — DEFAULT (flag tidak ada, mis. dari katalog HTML pelanggan) tetap
+  /// SAMA PERSIS spt sebelumnya: [originalPrice] = [price] hasil resolve
+  /// fresh, sisanya false/null. Katalog HTML pelanggan SENGAJA TIDAK
+  /// pernah mengisi flag ini (harga HARUS selalu di-resolve ulang dari DB
+  /// terkini, bukan dibekukan dari kapan katalog dibuat — lihat dok kelas
+  /// di atas), jadi field ini tidak relevan sama sekali utk jalur itu.
+  final int originalPrice;
+  final bool priceOverridden;
+  final bool checked;
+  final bool isPreorder;
+  final bool preorderPaid;
+  final double? depositQty;
+
   int get subtotal => (price * qty).round();
 
   /// Konversi ke [CartItem] siap masuk `cartProvider`. `barcode` sengaja
@@ -317,11 +398,16 @@ class ParsedOrderItem {
         unitName: unitName,
         qty: qty,
         price: price,
-        originalPrice: price,
+        originalPrice: originalPrice,
         costPrice: costPrice,
+        priceOverridden: priceOverridden,
         parentProductId: parentProductId,
         isVariant: isVariant,
         itemNote: itemNote,
+        checked: checked,
+        isPreorder: isPreorder,
+        preorderPaid: preorderPaid,
+        depositQty: depositQty,
       );
 }
 
