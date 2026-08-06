@@ -42,6 +42,21 @@ schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
    bayar → flag harga (p=/o=/k=/v=) TIDAK disertakan, `parse()` resolve
    fresh dari DB penerima (perilaku lama). Atribut NON-harga (checklist,
    status pre-order) TETAP dibawa apa pun izinnya — bukan concern-nya.
+5b. **feat (`d99e4b1`) — susulan LANGSUNG dari poin 5**: user kadang butuh
+   tekan minus BERKALI-KALI beruntun tanpa pindah jempol — jendela waktu
+   tetap 1.5 detik (poin 5 di bawah) bikin tap terlambat (walau jempol
+   MASIH di stepper) salah dianggap tap pertama lagi. **Timer dihapus
+   total**, diganti: "bersenjata" berlaku SELAMA stepper baris ini masih
+   membesar (`AddControl.activeStepper` — mekanisme "pijakan jempol" yg
+   SUDAH ADA sebelumnya, tidak disentuh) — lepas HANYA kalau stepper
+   baris LAIN jadi aktif (jempol pindah) atau scroll, TIDAK PERNAH krn
+   lewat waktu. Tap beruntun selama bersenjata langsung mengurangi qty
+   tiap kali (persis stepper biasa setelah "terkonfirmasi" sekali).
+   Implementasi: `GlobalKey<State<AddControl>>` per baris dibandingkan
+   `identical()` thd `AddControl.activeStepper.value` tiap listener
+   terpicu. Test diganti (skenario jeda lama tanpa pindah jempol tetap
+   confirm; tap beruntun; pindah jempol ke baris lain BENAR melepas
+   status) — revert-verified.
 5. **feat (`cdde036`) → REDESAIN LANGSUNG (`5740203`) — SELESAI**: user
    minta 1 lagi di dialog "Pengaturan Keranjang" yang sama — toggle
    "Konfirmasi sebelum kurangi qty" (`cartMinusConfirmProvider`, default
