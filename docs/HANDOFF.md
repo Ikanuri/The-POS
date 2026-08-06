@@ -42,13 +42,27 @@ schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
    bayar → flag harga (p=/o=/k=/v=) TIDAK disertakan, `parse()` resolve
    fresh dari DB penerima (perilaku lama). Atribut NON-harga (checklist,
    status pre-order) TETAP dibawa apa pun izinnya — bukan concern-nya.
-5. **feat (`cdde036`) — SELESAI, susulan LANGSUNG**: user minta 1 lagi di
-   dialog "Pengaturan Keranjang" yang sama — toggle "Konfirmasi sebelum
-   kurangi qty" (`cartMinusConfirmProvider`, default OFF/opt-in). Aktif
-   → tap tombol minus stepper baris keranjang munculkan dialog "Kurangi
-   Qty?" dulu, qty baru berkurang setelah user pilih "Kurangi" (Batal
-   membiarkan qty tetap) — mencegah missclick. 4 test baru — revert-
-   verified.
+5. **feat (`cdde036`) → REDESAIN LANGSUNG (`5740203`) — SELESAI**: user
+   minta 1 lagi di dialog "Pengaturan Keranjang" yang sama — toggle
+   "Konfirmasi sebelum kurangi qty" (`cartMinusConfirmProvider`, default
+   OFF/opt-in). Versi AWAL pakai `AlertDialog` "Kurangi Qty?" — user
+   SENDIRI sadar itu kurang pas (jempol biasanya sudah menutupi tombol
+   minus itu sendiri saat menekannya, jadi warning visual yang cuma di
+   situ tak kentara; fokus mata pun kadang di bagian lain baris, bukan
+   stepper). **Redesain total**: tap PERTAMA tombol minus bikin SELURUH
+   BARIS item bergetar (warning, qty BELUM berkurang) — tap KEDUA yang
+   jatuh dalam ~1.5 detik baru benar-benar mengurangi qty; lewat jendela
+   itu tanpa tap kedua, kembali netral (tap berikutnya = tap pertama
+   lagi, harus getar ulang). Lebih cepat dari dialog utk aksi yg sering
+   diulang (kurangi qty satu-satu), tidak perlu tap ekstra "Kurangi"+
+   tutup popup. Implementasi: `_CartItemTile` diubah `ConsumerWidget` →
+   `ConsumerStatefulWidget` (`AnimationController` getar + `Timer`
+   jendela per-item) — `ValueKey(item.productUnitId)` WAJIB ditambah di
+   `itemBuilder` supaya state "bersenjata"/timer TIDAK bocor ke baris
+   lain kalau urutan keranjang berubah (mis. qty item lain diubah, ikut
+   memanggil `orderCartItems` ulang). 5 test baru menggantikan test
+   dialog versi awal — revert-verified (3 test terbukti gagal sensible
+   saat mekanisme dilepas).
 4. **feat (`3ef3019`) — SELESAI**: tombol "Pengaturan Keranjang" (ikon
    gerigi) di samping ikon "Tempel Pesanan" — dialog 4 opsi letak
    checkbox verifikasi (`CartCheckboxPosition` di `theme_provider.dart`,

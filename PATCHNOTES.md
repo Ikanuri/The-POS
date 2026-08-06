@@ -18,8 +18,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   nama barang.
 - **Opsi konfirmasi sebelum tombol minus mengurangi qty** — di dialog
   pengaturan yang sama, cegah qty berkurang tanpa sengaja kalau jari
-  tergelincir menekan tombol minus. Mati secara default, bisa
-  diaktifkan sendiri.
+  tergelincir menekan tombol minus. Kalau aktif, tap pertama tombol
+  minus membuat baris item bergetar sebagai peringatan (belum
+  mengurangi apa pun) — tap kedua yang cepat baru benar-benar
+  mengurangi qty. Mati secara default, bisa diaktifkan sendiri.
 
 ### 🔧 Perbaikan
 - **Transfer keranjang lewat scan QR antar HP sekarang membawa semua
