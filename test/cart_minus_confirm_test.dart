@@ -16,6 +16,14 @@ import 'helpers/pump_app.dart';
 /// OFF (opt-in) — tanpa diaktifkan, tap minus tetap langsung mengurangi qty
 /// persis seperti sebelumnya (dibuktikan file test lain, mis.
 /// `cart_checklist_test.dart`).
+///
+/// Desain AWAL fitur ini pakai dialog konfirmasi (AlertDialog "Kurangi
+/// Qty?") — DIGANTI TOTAL atas permintaan user (jempol biasanya menutupi
+/// tombol minus itu sendiri, jadi warning yang cuma di tombol/stepper tidak
+/// kentara). Sekarang: tap PERTAMA membuat SELURUH baris bergetar (warning),
+/// TANPA mengurangi qty — tap KEDUA yang jatuh dalam ~1.5 detik baru
+/// benar-benar mengurangi qty. Lewat jendela itu tanpa tap kedua, kembali
+/// netral (harus getar ulang).
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -44,53 +52,74 @@ void main() {
           surfaceSize: const Size(360, 800),
           child: const CartSheet());
 
-  testWidgets(
-      'toggle OFF (default): tap minus langsung kurangi qty tanpa dialog',
+  Future<void> tapMinus(WidgetTester tester) => tester.tap(find.descendant(
+      of: find.byType(AddControl), matching: find.byIcon(Icons.remove_rounded)));
+
+  testWidgets('toggle OFF (default): tap minus langsung kurangi qty',
       (tester) async {
     await pumpCart(tester);
 
-    await tester.tap(find.descendant(
-        of: find.byType(AddControl), matching: find.byIcon(Icons.remove_rounded)));
-    await tester.pumpAndSettle();
+    await tapMinus(tester);
+    await tester.pump();
 
-    expect(find.text('Kurangi Qty?'), findsNothing,
-        reason: 'default OFF — tidak boleh ada dialog konfirmasi');
     expect(find.text('1×'), findsOneWidget,
-        reason: 'qty harus langsung berkurang jadi 1 tanpa perlu konfirmasi');
+        reason: 'qty harus langsung berkurang tanpa perlu tap kedua');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets(
-      'toggle ON: tap minus munculkan dialog konfirmasi, Batal TIDAK '
-      'mengurangi qty', (tester) async {
+      'toggle ON: tap PERTAMA TIDAK mengurangi qty (cuma warning getar)',
+      (tester) async {
     await pumpCart(tester, minusConfirmOn: true);
 
-    await tester.tap(find.descendant(
-        of: find.byType(AddControl), matching: find.byIcon(Icons.remove_rounded)));
-    await tester.pumpAndSettle();
+    await tapMinus(tester);
+    await tester.pump();
+    // Biarkan animasi getar berjalan sebagian, tapi belum tap kedua.
+    await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Kurangi Qty?'), findsOneWidget);
-    expect(find.textContaining('Beras 5kg'), findsWidgets);
+    expect(find.text('2×'), findsOneWidget,
+        reason: 'tap pertama cuma warning, qty belum boleh berkurang');
 
-    await tester.tap(find.text('Batal'));
-    await tester.pumpAndSettle();
-
-    // Qty tidak berubah — masih tampil "2" di badge kiri.
-    expect(find.text('2×'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets(
-      'toggle ON: tap minus lalu konfirmasi "Kurangi" -> qty benar-benar '
-      'berkurang', (tester) async {
+      'toggle ON: tap KEDUA yang cepat (dalam jendela waktu) baru benar-'
+      'benar mengurangi qty', (tester) async {
     await pumpCart(tester, minusConfirmOn: true);
 
-    await tester.tap(find.descendant(
-        of: find.byType(AddControl), matching: find.byIcon(Icons.remove_rounded)));
-    await tester.pumpAndSettle();
+    await tapMinus(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tapMinus(tester);
+    await tester.pump();
 
-    await tester.tap(find.text('Kurangi'));
-    await tester.pumpAndSettle();
+    expect(find.text('1×'), findsOneWidget,
+        reason: 'tap kedua dalam jendela waktu harus benar-benar mengurangi qty');
 
-    expect(find.text('1×'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets(
+      'toggle ON: tap kedua SETELAH jendela waktu habis dianggap tap '
+      'PERTAMA lagi (tidak mengurangi, harus getar ulang)', (tester) async {
+    await pumpCart(tester, minusConfirmOn: true);
+
+    await tapMinus(tester);
+    // Lewati jendela ~1.5 detik tanpa tap kedua.
+    await tester.pump(const Duration(seconds: 2));
+    await tapMinus(tester);
+    await tester.pump();
+
+    expect(find.text('2×'), findsOneWidget,
+        reason: 'tap setelah jendela habis dianggap tap PERTAMA lagi, '
+            'bukan konfirmasi');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets(
