@@ -32,18 +32,20 @@ schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
    qty tiap item — HANYA diisi jalur handoff antar-device (kode katalog
    HTML pelanggan TETAP tanpa segmen ini, perilaku lama utuh). 2 test
    baru, revert-verified.
-3. **BELUM DIKERJAKAN (lanjutkan sesi berikutnya)**: fitur baru — tombol
-   settings di samping ikon "Tempel Pesanan" di keranjang, isinya
-   pengaturan POSISI checkbox verifikasi (4 opsi: kiri-depan-qty/default,
-   kanan-belakang-stepper, kiri-stepper-minus, kanan-nama-item). Perlu
-   provider persisted (SharedPreferences, pola mirip `fontScaleProvider`)
-   + dialog pilihan + render `_CartItemTile` 4 variasi layout sesuai
-   value provider. BELUM ada file/provider/UI yang dibuat sama sekali.
+3. **feat (`3ef3019`) — SELESAI**: tombol "Pengaturan Keranjang" (ikon
+   gerigi) di samping ikon "Tempel Pesanan" — dialog 4 opsi letak
+   checkbox verifikasi (`CartCheckboxPosition` di `theme_provider.dart`,
+   persisted SharedPreferences pola sama `fontScaleProvider`): depan
+   qty/kiri (default), belakang stepper/kanan, kiri stepper minus, kanan
+   nama item (baris nama `Expanded`→`Flexible` supaya checkbox menempel
+   PAS setelah nama pendek, bukan terdorong ke ujung kanan). Jawaban
+   PERMANEN atas posisi checkbox yang sudah 2x dibalik bolak-balik sesi
+   sebelumnya — sekarang user pilih sendiri, tidak perlu kode diubah lagi
+   kalau minta ganti posisi. 4 test baru — revert-verified.
 
-Full suite 32/32 hijau utk semua test yang disentuh sesi ini + full
-`flutter test` (2 kegagalan `proposal_unchanged_end_to_end_test.dart`
-flaky pre-existing/port-conflict — TIDAK terkait). `flutter analyze` 0
-issue.
+Full suite 920 hijau (2 kegagalan `proposal_unchanged_end_to_end_test.dart`
+flaky pre-existing/port-conflict — TIDAK terkait perubahan sesi ini).
+`flutter analyze` 0 issue di semua 3 commit sesi ini.
 
 _Riwayat sesi 6 Agustus 2026 (awal) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. Satu susulan kecil: checkbox verifikasi baris keranjang

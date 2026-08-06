@@ -10,6 +10,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 6 Agustus 2026
 
+### 🆕 Fitur baru
+- **Letak checkbox verifikasi di baris keranjang sekarang bisa diatur
+  sendiri** — tombol pengaturan (ikon gerigi) baru di samping ikon
+  "Tempel Pesanan" di keranjang, dengan 4 pilihan posisi: depan qty
+  (default), belakang tombol +/-, kiri tombol minus, atau di sebelah
+  nama barang.
+
 ### 🔧 Perbaikan
 - **Transfer keranjang lewat scan QR antar HP sekarang membawa semua
   detail** — harga yang sudah diubah manual, satuan Harga Lain, dan
