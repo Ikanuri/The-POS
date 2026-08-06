@@ -412,6 +412,16 @@ class _CartItemTile extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(isVariant ? 40 : 16, 4, 16, 4),
             child: Row(
               children: [
+                // Susulan (permintaan user): checkbox verifikasi DIKEMBALIKAN
+                // ke paling kiri baris (sempat dipindah ke kanan, kiri stepper
+                // — dibalik lagi ke posisi semula).
+                Checkbox(
+                  value: item.checked,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onChanged: (v) =>
+                      notifier.setChecked(item.productUnitId, v ?? false),
+                ),
                 // Item 44 — badge jumlah qty di KIRI item (selain angka di
                 // stepper kanan), supaya qty langsung kebaca tanpa lihat ke
                 // stepper. Hanya tampil bila qty > 0 (baris "via varian" qty 0
@@ -579,19 +589,8 @@ class _CartItemTile extends ConsumerWidget {
                 const SizedBox(width: 4),
                 // Susulan (permintaan user): nominal PINDAH ke bawah baris
                 // satuan+harga (lihat blok kiri di atas) — blok kanan sekarang
-                // cuma checkbox + stepper, tidak ada lagi teks yang ditumpuk di
-                // sini. Checkbox verifikasi ada di sini (kiri stepper, sesuai
-                // permintaan: stepper paling kanan, centang di kirinya), jarak
-                // ke stepper DIRENGGANGKAN (permintaan user) — stepper (widget
-                // `AddControl`) sendiri TIDAK diubah desainnya.
-                Checkbox(
-                  value: item.checked,
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  onChanged: (v) =>
-                      notifier.setChecked(item.productUnitId, v ?? false),
-                ),
-                const SizedBox(width: 14),
+                // cuma stepper, checkbox verifikasi sudah dikembalikan ke
+                // paling kiri baris (lihat awal Row).
                 AddControl(
                   qty: effectiveQty,
                   size: 30,

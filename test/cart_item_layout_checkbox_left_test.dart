@@ -16,8 +16,10 @@ import 'helpers/pump_app.dart';
 ///    ("Karung · Rp 65.000") — BUKAN di bawah qty badge kiri (percobaan
 ///    pertama, ditolak user) atau di bawah stepper (percobaan kedua,
 ///    juga ditolak — keduanya membuat stepper harus dibungkus ulang).
-/// 2. Checkbox verifikasi pindah dari kiri baris ke kanan, persis di kiri
-///    tombol minus, dengan jarak DIRENGGANGKAN dari stepper.
+/// 2. Checkbox verifikasi: sempat dipindah ke kanan (persis kiri tombol
+///    minus) di sesi sebelumnya, lalu DIBALIK LAGI ke paling kiri baris
+///    atas permintaan user berikutnya — file ini & assersinya mengikuti
+///    keputusan TERAKHIR (kiri).
 /// 3. Desain stepper (`AddControl`) sendiri TIDAK diubah sama sekali.
 void main() {
   late AppDatabase db;
@@ -61,7 +63,7 @@ void main() {
             'perlu ruang utk jari');
   });
 
-  testWidgets('checkbox berada di KANAN (setelah nama produk) & KIRI stepper',
+  testWidgets('checkbox berada di paling KIRI baris (sebelum nama produk)',
       (tester) async {
     await pumpCart(tester);
 
@@ -69,23 +71,11 @@ void main() {
     final name = tester.getCenter(find.text('Beras 5kg'));
     final stepperLeft = tester.getTopLeft(find.byType(AddControl)).dx;
 
-    expect(checkbox.dx, greaterThan(name.dx),
-        reason: 'checkbox tidak lagi di kiri baris — pindah ke sisi kanan');
+    expect(checkbox.dx, lessThan(name.dx),
+        reason: 'checkbox harus di kiri nama produk (paling kiri baris)');
     expect(checkbox.dx, lessThan(stepperLeft),
-        reason: 'checkbox harus persis di KIRI stepper (tombol minus)');
-  });
-
-  testWidgets(
-      'jarak checkbox ke stepper direnggangkan (bukan mepet spt sebelumnya)',
-      (tester) async {
-    await pumpCart(tester);
-
-    final checkboxRight = tester.getTopRight(find.byType(Checkbox)).dx;
-    final stepperLeft = tester.getTopLeft(find.byType(AddControl)).dx;
-
-    expect(stepperLeft - checkboxRight, greaterThanOrEqualTo(12),
-        reason: 'jarak checkbox->stepper harus renggang (>=12px), bukan '
-            'mepet 4px seperti sebelumnya');
+        reason: 'checkbox tetap di kiri stepper (jauh di kiri, bukan '
+            'nempel kanan)');
   });
 
   testWidgets(
