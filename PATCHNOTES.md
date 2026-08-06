@@ -16,6 +16,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   "Tempel Pesanan" di keranjang, dengan 4 pilihan posisi: depan qty
   (default), belakang tombol +/-, kiri tombol minus, atau di sebelah
   nama barang.
+- **Opsi konfirmasi sebelum tombol minus mengurangi qty** — di dialog
+  pengaturan yang sama, cegah qty berkurang tanpa sengaja kalau jari
+  tergelincir menekan tombol minus. Mati secara default, bisa
+  diaktifkan sendiri.
 
 ### 🔧 Perbaikan
 - **Transfer keranjang lewat scan QR antar HP sekarang membawa semua

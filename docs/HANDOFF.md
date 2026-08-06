@@ -42,6 +42,13 @@ schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
    bayar → flag harga (p=/o=/k=/v=) TIDAK disertakan, `parse()` resolve
    fresh dari DB penerima (perilaku lama). Atribut NON-harga (checklist,
    status pre-order) TETAP dibawa apa pun izinnya — bukan concern-nya.
+5. **feat (`cdde036`) — SELESAI, susulan LANGSUNG**: user minta 1 lagi di
+   dialog "Pengaturan Keranjang" yang sama — toggle "Konfirmasi sebelum
+   kurangi qty" (`cartMinusConfirmProvider`, default OFF/opt-in). Aktif
+   → tap tombol minus stepper baris keranjang munculkan dialog "Kurangi
+   Qty?" dulu, qty baru berkurang setelah user pilih "Kurangi" (Batal
+   membiarkan qty tetap) — mencegah missclick. 4 test baru — revert-
+   verified.
 4. **feat (`3ef3019`) — SELESAI**: tombol "Pengaturan Keranjang" (ikon
    gerigi) di samping ikon "Tempel Pesanan" — dialog 4 opsi letak
    checkbox verifikasi (`CartCheckboxPosition` di `theme_provider.dart`,
