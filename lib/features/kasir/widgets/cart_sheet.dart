@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -214,8 +213,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     title: const Text('Konfirmasi sebelum kurangi qty'),
                     subtitle: const Text(
                         'Tap pertama tombol minus cuma bergetar sbg '
-                        'peringatan; tap kedua yang cepat baru benar-benar '
-                        'mengurangi qty'),
+                        'peringatan; tap berikutnya (selama stepper masih '
+                        'membesar) baru benar-benar mengurangi qty'),
                     onChanged: (v) => dialogRef
                         .read(cartMinusConfirmProvider.notifier)
                         .set(v),
@@ -459,16 +458,6 @@ class _CartSheetState extends ConsumerState<CartSheet> {
 /// "Konfirmasi sebelum kurangi qty" aktif.
 const _kMinusShakeDuration = Duration(milliseconds: 400);
 
-/// Susulan (perubahan desain, permintaan user — versi awal dialog
-/// konfirmasi diganti total): jendela waktu setelah tap PERTAMA tombol
-/// minus (baris ikut bergetar sbg warning) di mana tap KEDUA dianggap
-/// "konfirmasi cepat" & benar-benar mengurangi qty. Lewat jendela ini
-/// tanpa tap kedua → kembali netral, tap berikutnya dianggap tap PERTAMA
-/// lagi (harus getar ulang). User sengaja pilih getar+tap-lagi daripada
-/// dialog — dialog butuh 1 tap ekstra ("Kurangi") + menutup popup, lebih
-/// lambat utk aksi yang sering diulang (kurangi qty satu-satu).
-const _kMinusArmWindow = Duration(milliseconds: 1500);
-
 class _CartItemTile extends ConsumerStatefulWidget {
   const _CartItemTile({
     super.key,
@@ -491,12 +480,16 @@ class _CartItemTile extends ConsumerStatefulWidget {
 class _CartItemTileState extends ConsumerState<_CartItemTile>
     with SingleTickerProviderStateMixin {
   late final AnimationController _shakeController;
-  Timer? _armTimer;
-  // Susulan (perubahan desain, permintaan user): true di antara tap PERTAMA
-  // (baris bergetar sbg warning) dan tap KEDUA/timeout — dipakai `build`
-  // HANYA sbg gate logika (tap kedua vs tap pertama), BUKAN utk indikator
-  // visual tambahan (user hanya minta getar, tidak minta warna/highlight
-  // lain selagi "bersenjata").
+  // Susulan (perubahan desain KEDUA, permintaan user — jendela waktu tetap
+  // 1.5 detik DIHAPUS TOTAL): "bersenjata" sekarang berlaku SELAMA stepper
+  // baris ini masih membesar (`AddControl.activeStepper`, mekanisme
+  // "pijakan jempol" yang SUDAH ADA — stepper tetap besar sampai user tap
+  // AREA LAIN/scroll, lihat dok di `add_control.dart`), BUKAN sampai timer
+  // habis. Alasan user: kadang butuh menekan minus berkali-kali TANPA
+  // pindah jempol — jendela waktu tetap bikin tap kedua/ketiga/dst yang
+  // terlambat (tapi jempol MASIH di situ) dianggap tap pertama lagi
+  // (getar ulang, bukan mengurangi).
+  final GlobalKey<State<AddControl>> _stepperKey = GlobalKey();
   bool _armed = false;
 
   @override
@@ -504,36 +497,46 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
     super.initState();
     _shakeController =
         AnimationController(vsync: this, duration: _kMinusShakeDuration);
+    AddControl.activeStepper.addListener(_handleActiveStepperChanged);
   }
 
   @override
   void dispose() {
-    _armTimer?.cancel();
+    AddControl.activeStepper.removeListener(_handleActiveStepperChanged);
     _shakeController.dispose();
     super.dispose();
   }
 
+  /// Dipanggil setiap kali stepper YANG SEDANG MEMBESAR di seluruh layar
+  /// berganti (mis. user tap stepper baris LAIN, tap area kosong, atau
+  /// scroll — lihat `StepperActiveScope`/`AddControl.clearActive`). Kalau
+  /// baris KITA tadinya bersenjata & TERNYATA bukan lagi stepper yang aktif
+  /// (jempol sudah pindah), lepas status bersenjata.
+  void _handleActiveStepperChanged() {
+    if (_armed &&
+        !identical(AddControl.activeStepper.value, _stepperKey.currentState)) {
+      _disarm();
+    }
+  }
+
   void _disarm() {
-    _armTimer?.cancel();
-    _armTimer = null;
     if (_armed && mounted) setState(() => _armed = false);
   }
 
-  /// Tap PERTAMA (belum `_armed`): getarkan baris sbg warning & mulai
-  /// jendela `_kMinusArmWindow` — TIDAK mengurangi qty sama sekali. Tap
-  /// KEDUA yang jatuh SEBELUM jendela habis (`_armed` masih true): baru
-  /// benar-benar mengurangi qty, jendela langsung ditutup.
+  /// Tap PERTAMA (belum `_armed`): getarkan baris sbg warning — TIDAK
+  /// mengurangi qty sama sekali. Tap KEDUA/ketiga/dst yang jatuh SELAMA
+  /// stepper baris ini masih membesar (`_armed` masih true, lihat
+  /// `_handleActiveStepperChanged`): benar-benar mengurangi qty tanpa
+  /// dilepas statusnya — jempol boleh menekan minus berkali-kali beruntun
+  /// tanpa perlu getar ulang tiap kali, PERSIS spt stepper `+` biasa.
   void _handleMinusTap(CartNotifier notifier) {
     if (_armed) {
-      _disarm();
       notifier.setEffectiveQty(
           widget.item.productUnitId, widget.effectiveQty - 1);
       return;
     }
     setState(() => _armed = true);
     _shakeController.forward(from: 0);
-    _armTimer?.cancel();
-    _armTimer = Timer(_kMinusArmWindow, _disarm);
   }
 
   @override
@@ -807,6 +810,7 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                     const SizedBox(width: 6),
                   ],
                   AddControl(
+                    key: _stepperKey,
                     qty: effectiveQty,
                     size: 30,
                     onTap: () => notifier.setEffectiveQty(
