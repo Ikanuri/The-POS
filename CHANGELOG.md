@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-06
+
+- `bd2ee9b` — fix: kembalikan checkbox verifikasi baris keranjang (`_CartItemTile`, `cart_sheet.dart`) ke paling KIRI baris — membalik keputusan sesi sebelumnya (sempat dipindah ke kanan, kiri tombol minus stepper, atas permintaan user saat itu). Checkbox sekarang jadi child PERTAMA di `Row`, sebelum badge qty & nama produk. Test `cart_item_layout_checkbox_right_test.dart` di-rename `_checkbox_left_test.dart`, 2 assersi posisi disesuaikan — revert-verified. Test lain (highlight, checklist checkedItemIds, jarak tepi, posisi nominal, stabilitas stepper) tidak diubah, tetap hijau. `flutter analyze` 0 issue, full suite 925 hijau.
+
 ## 2026-08-05
 
 - `0577fef` — feat: redesain keranjang katalog HTML (`order_page_service.dart`) — mockup Playwright JPG dikonfirmasi user dulu (termasuk kompatibilitas dark mode) sebelum eksekusi. (1) Tiap baris keranjang dapat ikon 🗑 hapus TERPISAH dari stepper qty (dulu satu-satunya cara hapus: tekan − berulang sampai 0, tanpa konfirmasi). (2) Modal konfirmasi custom (`showConfirm`/`hideConfirm`, ikut tema app — ganti `confirm()` bawaan browser) utk KEDUA tindakan destruktif: hapus satu barang & kosongkan semua (jumlah item disebutkan). (3) Tombol "Kosongkan" (teks polos bergaris bawah) diganti pill ikon tempat sampah + "Kosongkan Keranjang", aksen merah, tetap di kanan-atas header sheet. Token `--danger`/`--danger-bg` ditambah ke `:root` + varian `data-theme="dark"`/`"light"`, pola sama dgn `--ok`/`--warn` yg sudah ada. Test baru — revert-verified. `flutter analyze` 0 issue, full suite 925 hijau.

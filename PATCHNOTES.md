@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 Agustus 2026
+
+### 🔧 Perbaikan
+- **Checkbox verifikasi di baris keranjang kembali ke sisi kiri** (sempat
+  dipindah ke kanan di update sebelumnya).
+
 ## 5 Agustus 2026
 
 ### 🆕 Fitur baru

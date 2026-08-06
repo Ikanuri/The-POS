@@ -5,9 +5,19 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 5 Agustus 2026 — versi kerja tetap **2.10.0+15**, schemaVersion
-tetap 28. Susulan langsung dari fitur "Tentang Aplikasi"/"Info Lisensi &
-Serial" yang dibangun sesi 4 Agustus (ringkasan lengkap ada di bawah):
+_Update sesi 6 Agustus 2026 — versi kerja tetap **2.10.0+15**, schemaVersion
+tetap 28. Satu susulan kecil: checkbox verifikasi baris keranjang
+(`_CartItemTile`, `cart_sheet.dart`) DIKEMBALIKAN ke paling KIRI baris
+(`bd2ee9b`) — membalik keputusan sesi 1 Agustus yg memindahkannya ke kanan
+(kiri stepper). Test posisi di-rename & disesuaikan (revert-verified).
+Ini kemungkinan BUKAN keputusan final selamanya — sudah 2x bolak-balik
+posisi checkbox ini dalam beberapa sesi terakhir, kalau user minta ubah
+lagi jangan heran/protes, cukup eksekusi & catat di sini lagi.
+
+_Riwayat sesi 5 Agustus 2026 — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. Susulan langsung dari fitur "Tentang Aplikasi"/
+"Info Lisensi & Serial" yang dibangun sesi 4 Agustus (ringkasan lengkap
+ada di bawah):
 
 1. **CI**: `build-apk.yml` sempat gagal total (`3485f42`) padahal APK-nya
    sendiri sukses dibuild — `gh release create` kena HTTP 503 (hiccup API
