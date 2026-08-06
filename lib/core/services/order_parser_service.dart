@@ -294,19 +294,38 @@ class OrderParserService {
   /// segmen `|key=value` setelah qty tiap item (lihat [parse]), supaya
   /// keranjang penerima jadi salinan PERSIS keranjang pengirim, bukan
   /// cuma daftar barang+qty yang di-harga-ulang.
+  ///
+  /// [trustPrices] (default true) — susulan LANGSUNG dari bug di atas:
+  /// device TANPA izin `terima_pembayaran` (pegawai yg tombol Bayar-nya
+  /// otomatis jadi "Kirim ke Owner/Asisten", lihat `needsGate` di
+  /// `cart_sheet.dart`) bisa mengatur Harga Lain/override manual di
+  /// keranjangnya SENDIRI (tidak digerbang izin apa pun di
+  /// `item_entry_sheet.dart`) — kalau harga itu ikut dibawa APA ADANYA,
+  /// owner/asisten penerima menerima harga yang TIDAK PERNAH divalidasi
+  /// ulang dari device tanpa izin bayar. Untuk pengirim seperti itu,
+  /// [trustPrices]=false — flag `p=`/`o=`/`k=`/`v=` (harga) SENGAJA
+  /// tidak disertakan sama sekali, supaya [parse] jatuh ke jalur lama
+  /// (resolve fresh dari DB penerima, sama seperti pesanan katalog HTML).
+  /// Atribut NON-harga (checklist verifikasi, status pre-order, qty
+  /// deposit, catatan) TETAP dibawa apa pun nilai [trustPrices] — bukan
+  /// itu yang jadi concern (uang), dan tidak digerbang izin di manapun.
   static String encodeHandoff({
     required List<CartItem> items,
     required String employeeName,
     String? customerName,
     String? customerId,
     String? reservedLocalId,
+    bool trustPrices = true,
   }) {
     final codeParts = items.map((c) {
-      final flags = StringBuffer()
-        ..write('|p=${c.price}')
-        ..write('|o=${c.originalPrice}')
-        ..write('|k=${c.costPrice}');
-      if (c.priceOverridden) flags.write('|v=1');
+      final flags = StringBuffer();
+      if (trustPrices) {
+        flags
+          ..write('|p=${c.price}')
+          ..write('|o=${c.originalPrice}')
+          ..write('|k=${c.costPrice}');
+        if (c.priceOverridden) flags.write('|v=1');
+      }
       if (c.checked) flags.write('|c=1');
       if (c.isPreorder) flags.write('|pr=1');
       if (c.preorderPaid) flags.write('|pd=1');

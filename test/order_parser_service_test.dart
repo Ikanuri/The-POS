@@ -389,6 +389,59 @@ void main() {
   });
 
   test(
+      'Susulan (kekhawatiran user, valid): encodeHandoff(trustPrices: false) '
+      'utk device TANPA izin terima_pembayaran — harga TIDAK ikut dibawa '
+      '(resolve fresh dari DB penerima), tapi checklist/status pre-order '
+      'TETAP ikut (bukan itu yang jadi concern)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    // Harga DB penerima BEDA dari harga di keranjang pengirim — kalau
+    // trustPrices:false TIDAK bekerja, test ini akan salah expect harga
+    // override (27000) alih-alih harga live DB (30000).
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 30000);
+    final u1 = await _unitIdOf(db, p1);
+
+    final cart = [
+      CartItem(
+        productId: p1,
+        productUnitId: u1,
+        productName: 'Ayam Potong',
+        unitName: 'Kg',
+        qty: 2,
+        // Pegawai TANPA izin bayar bisa saja mengatur Harga Lain/override
+        // manual di keranjangnya sendiri (tidak digerbang izin apa pun di
+        // item_entry_sheet.dart) — kalau ini ikut dibawa mentah-mentah,
+        // owner menerima harga yang belum pernah divalidasi.
+        price: 27000,
+        originalPrice: 30000,
+        costPrice: 22000,
+        priceOverridden: true,
+        checked: true,
+      ),
+    ];
+
+    final encoded = OrderParserService.encodeHandoff(
+        items: cart, employeeName: 'Budi', trustPrices: false);
+    // Segmen harga TIDAK ADA sama sekali di kode mesin.
+    expect(encoded, isNot(contains('|p=')));
+    expect(encoded, isNot(contains('|o=')));
+    expect(encoded, isNot(contains('|k=')));
+    expect(encoded, isNot(contains('|v=')));
+    // Tapi checklist verifikasi TETAP ada (bukan concern-nya harga).
+    expect(encoded, contains('|c=1'));
+
+    final result = await OrderParserService.parse(db: db, text: encoded);
+    final ayam = result.items.single;
+    expect(ayam.price, 30000,
+        reason: 'harga override pengirim tak berizin TIDAK boleh dipakai — '
+            'harus resolve fresh dari DB penerima');
+    expect(ayam.priceOverridden, isFalse);
+    expect(ayam.checked, isTrue,
+        reason: 'checklist verifikasi TETAP ikut walau trustPrices:false');
+
+    await db.close();
+  });
+
+  test(
       'Kode dari katalog HTML pelanggan (TANPA flag |p=/|c=/dst.) tetap '
       'resolve harga fresh dari DB — perilaku lama TIDAK berubah', () async {
     final db = AppDatabase(NativeDatabase.memory());

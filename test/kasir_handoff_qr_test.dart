@@ -210,11 +210,15 @@ void main() {
     // QrImageView tidak expose data-nya lewat getter publik — bangun ulang
     // teks yang SEHARUSNYA sama persis dgn cara `_showHandoffQr` membuatnya
     // (device tanpa pegawai/pelanggan terpilih di meta → employeeName =
-    // nama device sendiri, customerName null).
+    // nama device sendiri, customerName null). Device ini `terimaPembayaran:
+    // false` (needsGate true) — susulan (kekhawatiran user, valid): harga
+    // TIDAK ikut dibawa dari device tanpa izin bayar (`trustPrices: false`),
+    // supaya owner tidak menerima harga yang belum pernah divalidasi.
     final expectedText = OrderParserService.encodeHandoff(
       items: [item],
       employeeName: 'HP Kasir 2',
       customerName: null,
+      trustPrices: false,
     );
 
     // Sengaja `pump()` biasa (bukan `pumpAndSettle`) — SnackBar punya timer

@@ -95,6 +95,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final meta = ref.read(cartMetaProvider(widget.cartId));
     final employeeName =
         meta.hasEmployee ? meta.employeeName! : device.deviceName;
+    final needsGate = ref.read(needsPaymentGateProvider).valueOrNull ?? false;
     final qrText = OrderParserService.encodeHandoff(
       items: cart,
       employeeName: employeeName,
@@ -106,8 +107,17 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       // dibawa utuh, supaya "urutan pelanggan yang harus dilayani" tetap
       // sama di penerima (bukan reservasi baru).
       reservedLocalId: meta.reservedLocalId,
+      // Susulan (kekhawatiran user, valid): device TANPA izin
+      // terima_pembayaran (needsGate true — tombol Bayar-nya otomatis
+      // jadi "Kirim ke Owner/Asisten") bisa menyetel Harga Lain/override
+      // manual di keranjangnya sendiri TANPA gerbang izin apa pun. Kalau
+      // harga itu dipercaya mentah-mentah, owner menerima harga yang
+      // belum pernah divalidasi dari device tak berizin. Untuk pengirim
+      // begini, harga TETAP di-resolve ulang fresh dari DB penerima
+      // (perilaku lama) — hanya device BERIZIN (owner/asisten/pegawai
+      // terima_pembayaran) yang harganya dipercaya penuh.
+      trustPrices: !needsGate,
     );
-    final needsGate = ref.read(needsPaymentGateProvider).valueOrNull ?? false;
 
     await showModalBottomSheet<void>(
       context: context,
