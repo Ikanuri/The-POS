@@ -163,16 +163,19 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     if (ctx.mounted) Navigator.of(ctx).pop();
   }
 
-  /// Susulan (permintaan user): dialog "Pengaturan Keranjang" — untuk
-  /// sekarang cuma berisi posisi checkbox verifikasi (`CartCheckboxPosition`),
-  /// tersimpan persisten (SharedPreferences via `cartCheckboxPositionProvider`)
-  /// jadi berlaku global utk semua keranjang, bukan per-`cartId`.
+  /// Susulan (permintaan user): dialog "Pengaturan Keranjang" — berisi
+  /// posisi checkbox verifikasi (`CartCheckboxPosition`) DAN toggle
+  /// konfirmasi tombol minus stepper (`cartMinusConfirmProvider`, mencegah
+  /// missclick qty berkurang tanpa sengaja) — keduanya persisten
+  /// (SharedPreferences), berlaku global utk semua keranjang, bukan
+  /// per-`cartId`.
   void _showCartSettingsDialog(BuildContext ctx) {
     showDialog<void>(
       context: ctx,
       builder: (dCtx) => Consumer(
         builder: (context, dialogRef, _) {
           final current = dialogRef.watch(cartCheckboxPositionProvider);
+          final minusConfirm = dialogRef.watch(cartMinusConfirmProvider);
           return AlertDialog(
             title: const Text('Pengaturan Keranjang'),
             content: SingleChildScrollView(
@@ -200,6 +203,18 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         }
                       },
                     ),
+                  const Divider(height: 24),
+                  SwitchListTile(
+                    value: minusConfirm,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Konfirmasi sebelum kurangi qty'),
+                    subtitle: const Text(
+                        'Cegah qty berkurang tanpa sengaja (missclick) saat '
+                        'menekan tombol minus'),
+                    onChanged: (v) =>
+                        dialogRef.read(cartMinusConfirmProvider.notifier).set(v),
+                  ),
                 ],
               ),
             ),
@@ -428,6 +443,35 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   }
 }
 
+/// Susulan (permintaan user): tombol minus stepper baris keranjang bisa
+/// diatur menampilkan dialog konfirmasi dulu (toggle "Konfirmasi sebelum
+/// kurangi qty" di "Pengaturan Keranjang") sebelum benar-benar mengurangi
+/// qty — mencegah missclick (mis. jari tergelincir dari checkbox/tombol
+/// plus di sebelahnya). Default OFF: kalau [needsConfirm] false, perilaku
+/// PERSIS sama seperti sebelumnya (langsung kurangi, tanpa dialog).
+Future<void> _handleMinusTap(BuildContext context, CartNotifier notifier,
+    CartItem item, double effectiveQty, bool needsConfirm) async {
+  if (needsConfirm) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        title: const Text('Kurangi Qty?'),
+        content: Text('Kurangi qty "${item.productName}" sebanyak 1?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dCtx).pop(false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.of(dCtx).pop(true),
+              child: const Text('Kurangi')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+  }
+  notifier.setEffectiveQty(item.productUnitId, effectiveQty - 1);
+}
+
 class _CartItemTile extends ConsumerWidget {
   const _CartItemTile({
     required this.index,
@@ -454,6 +498,10 @@ class _CartItemTile extends ConsumerWidget {
     // ditaruh di salah satu dari 4 posisi berbeda di bawah (mutually
     // exclusive, cuma satu cabang `if` yang aktif per build).
     final position = ref.watch(cartCheckboxPositionProvider);
+    // Susulan (permintaan user): toggle "Konfirmasi sebelum kurangi qty" di
+    // dialog "Pengaturan Keranjang" — mencegah qty berkurang tanpa sengaja
+    // (missclick) saat menekan tombol minus stepper. Default OFF.
+    final minusConfirm = ref.watch(cartMinusConfirmProvider);
     final checkbox = Checkbox(
       value: item.checked,
       visualDensity: VisualDensity.compact,
@@ -694,8 +742,8 @@ class _CartItemTile extends ConsumerWidget {
                       item.productUnitId, effectiveQty + 1),
                   onMinus: isZeroed
                       ? null
-                      : () => notifier.setEffectiveQty(
-                          item.productUnitId, effectiveQty - 1),
+                      : () => _handleMinusTap(
+                          context, notifier, item, effectiveQty, minusConfirm),
                 ),
                 if (position == CartCheckboxPosition.belakangStepper) ...[
                   // Jarak supaya checkbox tidak ikut terpencet saat menekan

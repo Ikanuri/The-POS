@@ -126,3 +126,31 @@ final cartCheckboxPositionProvider = StateNotifierProvider<
     CartCheckboxPositionNotifier, CartCheckboxPosition>((ref) {
   return CartCheckboxPositionNotifier();
 });
+
+/// Permintaan user: opsi konfirmasi sebelum tombol minus stepper baris
+/// keranjang benar-benar mengurangi qty — mencegah missclick (mis. jari
+/// tergelincir dari tombol plus/checkbox di sebelahnya). Default OFF (opt-in,
+/// tidak mengubah perilaku lama tanpa user aktifkan sendiri).
+class CartMinusConfirmNotifier extends StateNotifier<bool> {
+  CartMinusConfirmNotifier() : super(false) {
+    _load();
+  }
+
+  static const _prefKey = 'cart_minus_confirm';
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(_prefKey) ?? false;
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey, value);
+  }
+}
+
+final cartMinusConfirmProvider =
+    StateNotifierProvider<CartMinusConfirmNotifier, bool>((ref) {
+  return CartMinusConfirmNotifier();
+});
