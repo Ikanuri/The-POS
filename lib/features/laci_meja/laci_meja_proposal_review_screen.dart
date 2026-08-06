@@ -36,12 +36,55 @@ class _LaciMejaProposalReviewScreenState
     if (_totalSelected == 0) return;
     setState(() => _applying = true);
     try {
-      final applied = await LanSyncService.applyLaciMejaProposal(
+      final result = await LanSyncService.applyLaciMejaProposal(
           widget.proposal.id, _selected);
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$applied baris diterapkan ke Laci Meja')));
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(SnackBar(
+        content: Text('${result.applied} baris diterapkan ke Laci Meja'),
+      ));
+      // Susulan (bug ditemukan user) — baris yang transaksi terkaitnya
+      // belum tersinkron ke host DILEWATI (bukan menggagalkan seluruh
+      // batch), tapi owner WAJIB tahu supaya tidak mengira usulannya
+      // sudah tuntas padahal masih ada sisa yang menunggu. Baris itu
+      // akan otomatis diusulkan ulang begitu transaksinya sendiri sudah
+      // tersinkron — tidak hilang, cukup ditunggu/diulang.
+      if (result.skippedReasons.isNotEmpty) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Sebagian Baris Ditunda'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${result.skippedReasons.length} baris belum bisa diterapkan '
+                    '— transaksi terkaitnya belum tersinkron ke perangkat ini. '
+                    'Baris ini akan otomatis diusulkan lagi begitu transaksinya '
+                    'sudah masuk (mis. setelah usulan sync "Transaksi" dari '
+                    'device yang sama diterima):',
+                  ),
+                  const SizedBox(height: 10),
+                  for (final reason in result.skippedReasons)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('• $reason', style: const TextStyle(fontSize: 13)),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Mengerti'),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _applying = false);

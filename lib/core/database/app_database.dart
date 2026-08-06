@@ -5543,16 +5543,49 @@ class AppDatabase extends _$AppDatabase {
     return result;
   }
 
+  /// Label ringkas satu baris Laci Meja utk pesan "dilewati" — dipakai
+  /// [applyLaciMejaProposals] saat baris gagal diterapkan (transaksi
+  /// terkait belum tersinkron).
+  String _laciMejaRowLabel(String table, Map<String, Object?> row) {
+    switch (table) {
+      case 'preorder_entries':
+        return 'Pre-order "${row['customer_name'] ?? '?'}"';
+      case 'borrowed_items':
+      case 'left_behind_items':
+        return '"${row['item_name'] ?? '?'}"';
+      default:
+        return table;
+    }
+  }
+
   /// Terapkan usulan Laci Meja yang DISETUJUI owner — [approvedIds] per
   /// tabel. `locallyModified` dipaksa false (host jadi sumber kebenaran),
   /// `updated_at` dicap ulang ke SAAT INI (sama alasan spt
   /// `applyProductProposals`: supaya baris ini lolos filter watermark
   /// `dumpSince` pada sync berikutnya, bukan macet tak pernah terkirim
   /// balik ke klien).
-  Future<int> applyLaciMejaProposals(
+  ///
+  /// Susulan (bug ditemukan user, `SqliteException FOREIGN KEY constraint
+  /// failed` saat Terapkan): ketiga tabel Laci Meja (`left_behind_items`/
+  /// `borrowed_items`/`preorder_entries`) punya kolom `transaction_id`
+  /// yang ber-FK ke `transactions.id` — tapi antrian usulan Laci Meja ini
+  /// SAMA SEKALI TERPISAH dari antrian sync kategori "Transaksi"
+  /// (`LanSyncService.syncCategories`/`approveSync`), tidak ada jaminan
+  /// urutan penerapan. Kalau owner menerapkan usulan Laci Meja SEBELUM
+  /// transaksi terkaitnya sendiri tersinkron ke host, insert PASTI gagal
+  /// FK — dan karena baris-baris lain sebelumnya sudah dieksekusi di
+  /// `transaction()` yang SAMA, seluruh batch ikut rollback (bukan cuma
+  /// baris yang bermasalah). Fix: cek existensi `transaction_id` di host
+  /// SEBELUM insert per-baris — kalau belum ada, SKIP baris itu saja
+  /// (lanjut ke baris lain, JANGAN gagalkan seluruh batch). Baris yang
+  /// di-skip TETAP `locallyModified=1` di device asalnya (tidak disentuh
+  /// di sini sama sekali), jadi otomatis diusulkan ulang sync berikutnya
+  /// begitu transaksinya sendiri sudah masuk ke host — bukan hilang.
+  Future<({int applied, List<String> skippedReasons})> applyLaciMejaProposals(
       Map<String, List<Map<String, Object?>>> proposals,
       Map<String, Set<String>> approvedIds) async {
     var count = 0;
+    final skippedReasons = <String>[];
     // `customInsert` raw SQL TIDAK memberi tahu Drift tabel mana yang
     // berubah kecuali param `updates:` disertakan — tanpa ini `.watch()`
     // (mis. layar dashboard Laci Meja) tidak auto-refresh walau data DB
@@ -5573,6 +5606,20 @@ class AppDatabase extends _$AppDatabase {
           var cleaned = Map<String, Object?>.from(row)
             ..removeWhere((k, _) => !localColumns.contains(k));
           if (cleaned.isEmpty) continue;
+
+          final txId = cleaned['transaction_id'];
+          if (txId is String && txId.isNotEmpty) {
+            final found = await customSelect(
+              'SELECT 1 FROM transactions WHERE id = ? LIMIT 1',
+              variables: [Variable.withString(txId)],
+            ).get();
+            if (found.isEmpty) {
+              skippedReasons.add(
+                  '${_laciMejaRowLabel(entry.key, row)}: transaksi terkait belum tersinkron ke perangkat ini');
+              continue;
+            }
+          }
+
           cleaned['locally_modified'] = 0;
           cleaned['updated_at'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
           final cols = cleaned.keys.map((k) => '"$k"').join(', ');
@@ -5586,7 +5633,7 @@ class AppDatabase extends _$AppDatabase {
         }
       }
     });
-    return count;
+    return (applied: count, skippedReasons: skippedReasons);
   }
 
   // ───────────────────────── Usulan Pelanggan ─────────────────────────

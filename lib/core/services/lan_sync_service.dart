@@ -299,11 +299,15 @@ class LanSyncService {
   }
 
   /// [approvedIds] per tabel (`left_behind_items`/`borrowed_items`/
-  /// `preorder_entries`) — subset id yang disetujui owner.
-  static Future<int> applyLaciMejaProposal(
-      String id, Map<String, Set<String>> approvedIds) async {
+  /// `preorder_entries`) — subset id yang disetujui owner. Sebagian baris
+  /// bisa saja DILEWATI (bukan gagal total) kalau transaksi terkaitnya
+  /// belum tersinkron ke host — lihat dok `AppDatabase.
+  /// applyLaciMejaProposals`.
+  static Future<({int applied, List<String> skippedReasons})>
+      applyLaciMejaProposal(
+          String id, Map<String, Set<String>> approvedIds) async {
     final idx = _pendingLaciMejaProposals.indexWhere((p) => p.id == id);
-    if (idx < 0) return 0;
+    if (idx < 0) return (applied: 0, skippedReasons: <String>[]);
     final item = _pendingLaciMejaProposals.removeAt(idx);
     onLaciMejaProposalsChanged?.call();
     return _db!.applyLaciMejaProposals(item.rows, approvedIds);
