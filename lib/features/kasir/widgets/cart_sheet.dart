@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
+import '../../../core/providers/theme_provider.dart';
 import '../../../core/services/order_parser_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
@@ -152,6 +153,58 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     if (ctx.mounted) Navigator.of(ctx).pop();
   }
 
+  /// Susulan (permintaan user): dialog "Pengaturan Keranjang" — untuk
+  /// sekarang cuma berisi posisi checkbox verifikasi (`CartCheckboxPosition`),
+  /// tersimpan persisten (SharedPreferences via `cartCheckboxPositionProvider`)
+  /// jadi berlaku global utk semua keranjang, bukan per-`cartId`.
+  void _showCartSettingsDialog(BuildContext ctx) {
+    showDialog<void>(
+      context: ctx,
+      builder: (dCtx) => Consumer(
+        builder: (context, dialogRef, _) {
+          final current = dialogRef.watch(cartCheckboxPositionProvider);
+          return AlertDialog(
+            title: const Text('Pengaturan Keranjang'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('Letak checkbox verifikasi',
+                        style: Theme.of(context).textTheme.labelLarge),
+                  ),
+                  for (final pos in CartCheckboxPosition.values)
+                    RadioListTile<CartCheckboxPosition>(
+                      value: pos,
+                      groupValue: current,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(pos.label),
+                      onChanged: (v) {
+                        if (v != null) {
+                          dialogRef
+                              .read(cartCheckboxPositionProvider.notifier)
+                              .set(v);
+                        }
+                      },
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dCtx).pop(),
+                child: const Text('Tutup'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider(widget.cartId));
@@ -251,6 +304,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       ),
                       icon: const Icon(Icons.content_paste_go),
                     ),
+                  // Susulan (permintaan user): tombol pengaturan keranjang —
+                  // untuk sekarang isinya cuma posisi checkbox verifikasi
+                  // (lihat `CartCheckboxPosition`), tapi dibuat generik
+                  // ("Pengaturan Keranjang") supaya opsi lain bisa ditambah
+                  // ke dialog yang sama nanti tanpa tombol baru lagi.
+                  IconButton(
+                    tooltip: 'Pengaturan Keranjang',
+                    onPressed: () => _showCartSettingsDialog(ctx),
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
                   if (canTransfer)
                     IconButton(
                       tooltip: 'Transfer via QR',
@@ -375,6 +438,18 @@ class _CartItemTile extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final isZeroed = !isVariant && effectiveQty == 0;
     final subtotal = (item.price * effectiveQty).round();
+    // Susulan (permintaan user): letak checkbox verifikasi sekarang bisa
+    // diatur (dialog "Pengaturan Keranjang" di header `CartSheet`) — 4 opsi,
+    // lihat `CartCheckboxPosition`. Widget-nya dibangun sekali di sini lalu
+    // ditaruh di salah satu dari 4 posisi berbeda di bawah (mutually
+    // exclusive, cuma satu cabang `if` yang aktif per build).
+    final position = ref.watch(cartCheckboxPositionProvider);
+    final checkbox = Checkbox(
+      value: item.checked,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      onChanged: (v) => notifier.setChecked(item.productUnitId, v ?? false),
+    );
 
     // Susulan (permintaan user): baris keranjang TIDAK lagi memakai
     // `ListTile`. Alasannya konkret — `ListTile` mengunci tinggi
@@ -412,16 +487,10 @@ class _CartItemTile extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(isVariant ? 40 : 16, 4, 16, 4),
             child: Row(
               children: [
-                // Susulan (permintaan user): checkbox verifikasi DIKEMBALIKAN
-                // ke paling kiri baris (sempat dipindah ke kanan, kiri stepper
-                // — dibalik lagi ke posisi semula).
-                Checkbox(
-                  value: item.checked,
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  onChanged: (v) =>
-                      notifier.setChecked(item.productUnitId, v ?? false),
-                ),
+                // Susulan (permintaan user): checkbox verifikasi posisi
+                // "depan qty, paling kiri" — DEFAULT, tapi sekarang cuma satu
+                // dari 4 opsi yang bisa dipilih (lihat `position` di atas).
+                if (position == CartCheckboxPosition.depanQty) checkbox,
                 // Item 44 — badge jumlah qty di KIRI item (selain angka di
                 // stepper kanan), supaya qty langsung kebaca tanpa lihat ke
                 // stepper. Hanya tampil bila qty > 0 (baris "via varian" qty 0
@@ -450,7 +519,7 @@ class _CartItemTile extends ConsumerWidget {
                               child: Icon(Icons.subdirectory_arrow_right,
                                   size: 15, color: scheme.onSurfaceVariant),
                             ),
-                          Expanded(
+                          Flexible(
                             // Permintaan user — nama produk panjang dulu terpotong 1 baris
                             // (ellipsis); sekarang auto-tumbuh sampai 2 baris. `ListTile`
                             // menyesuaikan tinggi baris ke title/subtitle-nya sendiri,
@@ -462,6 +531,13 @@ class _CartItemTile extends ConsumerWidget {
                             // terpisah dgn jarak sendiri) — pola PERSIS badge "Habis" di
                             // katalog kasir (`'${product.name} · Habis'`), supaya
                             // keterangannya menempel rapat ke nama, bukan berjarak.
+                            //
+                            // Susulan (permintaan user): `Expanded` diganti `Flexible` —
+                            // dibutuhkan supaya opsi checkbox "kanan nama" bisa menempel
+                            // PAS setelah nama (bukan terdorong ke ujung kanan baris);
+                            // `Flexible` (loose fit) membiarkan Text menyusut ke lebar
+                            // aslinya, beda dari `Expanded` (tight fit) yang MEMAKSA lebar
+                            // penuh ruang tersisa walau namanya pendek.
                             child: (item.depositQty != null &&
                                     item.depositQty! > 0)
                                 ? Text.rich(
@@ -498,6 +574,10 @@ class _CartItemTile extends ConsumerWidget {
                                             ? scheme.onSurfaceVariant
                                             : null)),
                           ),
+                          if (position == CartCheckboxPosition.kananNama) ...[
+                            const SizedBox(width: 2),
+                            checkbox,
+                          ],
                         ],
                       ),
                       Column(
@@ -589,8 +669,14 @@ class _CartItemTile extends ConsumerWidget {
                 const SizedBox(width: 4),
                 // Susulan (permintaan user): nominal PINDAH ke bawah baris
                 // satuan+harga (lihat blok kiri di atas) — blok kanan sekarang
-                // cuma stepper, checkbox verifikasi sudah dikembalikan ke
-                // paling kiri baris (lihat awal Row).
+                // cuma stepper, KECUALI kalau posisi checkbox diatur ke
+                // "kiri stepper"/"belakang stepper" (lihat 2 cabang di bawah).
+                if (position == CartCheckboxPosition.kiriStepper) ...[
+                  checkbox,
+                  // Jarak supaya checkbox tidak ikut terpencet saat menekan
+                  // tombol minus stepper (permintaan eksplisit user).
+                  const SizedBox(width: 6),
+                ],
                 AddControl(
                   qty: effectiveQty,
                   size: 30,
@@ -601,6 +687,12 @@ class _CartItemTile extends ConsumerWidget {
                       : () => notifier.setEffectiveQty(
                           item.productUnitId, effectiveQty - 1),
                 ),
+                if (position == CartCheckboxPosition.belakangStepper) ...[
+                  // Jarak supaya checkbox tidak ikut terpencet saat menekan
+                  // tombol plus stepper (permintaan eksplisit user).
+                  const SizedBox(width: 6),
+                  checkbox,
+                ],
               ],
             ),
           ),

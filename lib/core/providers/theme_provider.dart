@@ -75,3 +75,54 @@ final fontScaleProvider =
     StateNotifierProvider<FontScaleNotifier, FontScale>((ref) {
   return FontScaleNotifier();
 });
+
+/// Permintaan user — posisi checkbox verifikasi baris keranjang
+/// (`_CartItemTile`, `cart_sheet.dart`) bisa diatur, bukan cuma satu posisi
+/// tetap (sudah 2x bolak-balik antara kiri/kanan di sesi-sesi sebelumnya).
+enum CartCheckboxPosition {
+  /// Default — di depan badge qty, paling kiri baris.
+  depanQty('Di depan qty, paling kiri'),
+
+  /// Di belakang stepper +/-, paling kanan baris.
+  belakangStepper('Di belakang stepper, paling kanan'),
+
+  /// Di kiri stepper minus (tapi masih di blok kanan, terpisah dari qty).
+  kiriStepper('Di kiri stepper minus'),
+
+  /// Di sebelah kanan nama item, menempel ke panjang teks nama.
+  kananNama('Di sebelah kanan nama item');
+
+  const CartCheckboxPosition(this.label);
+  final String label;
+}
+
+class CartCheckboxPositionNotifier
+    extends StateNotifier<CartCheckboxPosition> {
+  CartCheckboxPositionNotifier() : super(CartCheckboxPosition.depanQty) {
+    _load();
+  }
+
+  static const _prefKey = 'cart_checkbox_position';
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_prefKey);
+    if (saved != null) {
+      state = CartCheckboxPosition.values.firstWhere(
+        (p) => p.name == saved,
+        orElse: () => CartCheckboxPosition.depanQty,
+      );
+    }
+  }
+
+  Future<void> set(CartCheckboxPosition position) async {
+    state = position;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKey, position.name);
+  }
+}
+
+final cartCheckboxPositionProvider = StateNotifierProvider<
+    CartCheckboxPositionNotifier, CartCheckboxPosition>((ref) {
+  return CartCheckboxPositionNotifier();
+});
