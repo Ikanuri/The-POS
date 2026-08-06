@@ -22,6 +22,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   detail** — harga yang sudah diubah manual, satuan Harga Lain, dan
   centang verifikasi item sekarang ikut terbawa ke penerima. Sebelumnya
   detail ini hilang dan harga dihitung ulang dari awal di HP penerima.
+  **Kecuali** untuk pegawai tanpa izin "Terima Pembayaran" — harga dari
+  device mereka tetap dihitung ulang otomatis di HP penerima (bukan
+  dipercaya mentah-mentah), supaya owner tidak menerima harga yang belum
+  divalidasi.
 - **Usulan Laci Meja (Titip/Ketinggalan/Pinjaman/Pre-order) dari kasir
   ke pemilik toko tidak lagi gagal total** saat transaksi terkaitnya
   belum sempat tersinkron ke perangkat pemilik — sekarang baris itu

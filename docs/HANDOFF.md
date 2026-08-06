@@ -32,7 +32,17 @@ schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
    qty tiap item — HANYA diisi jalur handoff antar-device (kode katalog
    HTML pelanggan TETAP tanpa segmen ini, perilaku lama utuh). 2 test
    baru, revert-verified.
-3. **feat (`3ef3019`) — SELESAI**: tombol "Pengaturan Keranjang" (ikon
+3b. **fix (`70089e7`) — susulan langsung dari poin 2 di atas**: user
+   sendiri menyadari konsekuensi fix handoff QR — pegawai TANPA izin
+   `terima_pembayaran` bisa setel Harga Lain/override manual TANPA
+   digerbang izin apa pun di `item_entry_sheet.dart`, jadi kalau harga
+   itu ikut dibawa apa adanya, owner menerima harga tak tervalidasi dari
+   device tak berizin. Fix: `encodeHandoff(trustPrices: bool)` — dipanggil
+   `trustPrices: !needsGate` dari `cart_sheet.dart`. Device tanpa izin
+   bayar → flag harga (p=/o=/k=/v=) TIDAK disertakan, `parse()` resolve
+   fresh dari DB penerima (perilaku lama). Atribut NON-harga (checklist,
+   status pre-order) TETAP dibawa apa pun izinnya — bukan concern-nya.
+4. **feat (`3ef3019`) — SELESAI**: tombol "Pengaturan Keranjang" (ikon
    gerigi) di samping ikon "Tempel Pesanan" — dialog 4 opsi letak
    checkbox verifikasi (`CartCheckboxPosition` di `theme_provider.dart`,
    persisted SharedPreferences pola sama `fontScaleProvider`): depan
