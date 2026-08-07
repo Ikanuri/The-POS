@@ -5,6 +5,25 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang
+masih terikut sync meski sudah dipenuhi — apakah sudah diperbaiki?" —
+DICEK, TERNYATA BELUM (beda dari fix `81f3b66` yang cuma soal tampilan
+struk). **fix (`f0c5ea5`) — SEKARANG SUDAH**: `dumpLaciMejaProposals`
+(client->host) cuma filter `locally_modified=1`, TANPA banding ke data
+host — flag itu cuma reset kalau baris resmi host ter-merge BALIK ke
+klien (lihat dok `AppDatabase.dumpLaciMejaProposals`), jadi sebelum itu
+kejadian (owner belum sempat approve, atau klien sync lagi duluan),
+baris pre-order/titip/pinjaman yang SUDAH SELESAI terus dikirim ulang
+sbg "usulan baru" — pola bug SAMA PERSIS dgn produk Item 40 yang sudah
+diperbaiki `filterUnchangedProposals`, tapi Laci Meja tidak pernah dapat
+perbaikan setara. Fix: `filterUnchangedLaciMejaProposals` (pola sama,
+lebih sederhana — record datar tanpa nested tier/unit), dipanggil host
+sebelum baris masuk `_pendingLaciMejaProposals`, buang baris identik dgn
+host (kecuali `locally_modified`/`updated_at`). 5 test baru (3 unit DB +
+2 end-to-end HTTP sungguhan, pola sama `proposal_unchanged_end_to_end_
+test.dart`) — revert-verified.
+
 _Update sesi 6 Agustus 2026 (lanjutan) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
 (screenshot bug Laci Meja + 2 laporan bug lain + 1 ide fitur baru):

@@ -26,6 +26,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   bisa diaktifkan sendiri.
 
 ### 🔧 Perbaikan
+- **Pre-order/titip/pinjaman yang sudah selesai (Dipenuhi/Dibatalkan/
+  Diambil/Dikembalikan) tidak lagi terus-menerus muncul sebagai usulan
+  baru** di layar Sync pemilik toko — sebelumnya bisa terus diusulkan
+  ulang walau sudah pernah disetujui.
 - **Transfer keranjang lewat scan QR antar HP sekarang membawa semua
   detail** — harga yang sudah diubah manual, satuan Harga Lain, dan
   centang verifikasi item sekarang ikut terbawa ke penerima. Sebelumnya
