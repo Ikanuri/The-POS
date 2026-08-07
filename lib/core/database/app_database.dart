@@ -5543,6 +5543,65 @@ class AppDatabase extends _$AppDatabase {
     return result;
   }
 
+  /// Buang baris Laci Meja (left_behind_items/borrowed_items/preorder_entries)
+  /// dari usulan [rows] (payload `dumpLaciMejaProposals` klien) yang isinya
+  /// SUDAH IDENTIK dgn data HOST saat ini — dipanggil host SEBELUM baris itu
+  /// masuk antrian `_pendingLaciMejaProposals`. Pola SAMA PERSIS dgn
+  /// [filterUnchangedProposals] (produk, Item 40) tapi lebih sederhana
+  /// (satu baris = satu record datar, tanpa nested tier/unit).
+  ///
+  /// Bug nyata dilaporkan user: pre-order yang sudah "Dipenuhi" TETAP
+  /// terus-menerus muncul sbg usulan baru tiap sync walau ownernya SUDAH
+  /// menerapkan usulan itu sebelumnya. Akar: `locally_modified` di klien
+  /// TIDAK PERNAH direset manual — cuma direset kalau baris resmi dari host
+  /// (locally_modified=0) berhasil ter-merge BALIK ke klien lewat
+  /// `mergeRows` (host->klien). Sebelum itu terjadi (mis. owner belum
+  /// sempat approve, atau klien sync lagi SEBELUM sempat menerima baris
+  /// balik), baris yang SAMA terus dikirim ulang sbg "usulan baru" —
+  /// owner melihat pre-order yang sudah "Dipenuhi" seolah masih perlu
+  /// ditinjau. Fix: bandingkan tiap baris usulan thd baris HOST saat ini
+  /// per-kolom (kecuali `locally_modified`/`updated_at`, yang MEMANG selalu
+  /// beda antar device) — kalau identik, baris itu DIBUANG dari usulan
+  /// (host sudah tahu, tidak ada apa pun yang perlu diputuskan owner).
+  /// Baris yang belum ADA di host (pre-order/titip/pinjaman baru) SELALU
+  /// lolos filter (tidak ada pembanding).
+  Future<Map<String, List<Map<String, Object?>>>>
+      filterUnchangedLaciMejaProposals(
+          Map<String, List<Map<String, Object?>>> rows) async {
+    final result = <String, List<Map<String, Object?>>>{};
+    for (final entry in rows.entries) {
+      final table = entry.key;
+      final kept = <Map<String, Object?>>[];
+      for (final row in entry.value) {
+        final id = row['id'];
+        if (id is! String) {
+          kept.add(row);
+          continue;
+        }
+        final existingRows = await customSelect(
+          'SELECT * FROM "$table" WHERE id = ?',
+          variables: [Variable.withString(id)],
+        ).get();
+        if (existingRows.isEmpty) {
+          kept.add(row); // Baris baru — tidak ada pembanding di host.
+          continue;
+        }
+        final existing = existingRows.single.data;
+        var changed = false;
+        for (final key in row.keys) {
+          if (key == 'locally_modified' || key == 'updated_at') continue;
+          if (existing[key] != row[key]) {
+            changed = true;
+            break;
+          }
+        }
+        if (changed) kept.add(row);
+      }
+      if (kept.isNotEmpty) result[table] = kept;
+    }
+    return result;
+  }
+
   /// Label ringkas satu baris Laci Meja utk pesan "dilewati" — dipakai
   /// [applyLaciMejaProposals] saat baris gagal diterapkan (transaksi
   /// terkait belum tersinkron).

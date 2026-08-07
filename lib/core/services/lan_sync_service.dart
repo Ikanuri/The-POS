@@ -934,8 +934,17 @@ class LanSyncService {
         }).toList();
         return MapEntry(k, rows);
       });
+      var filteredLaciMejaRows = laciMejaProposalRows;
+      if (laciMejaProposalRows.values.any((v) => v.isNotEmpty)) {
+        // Buang baris Laci Meja (mis. pre-order yang sudah "Dipenuhi") yang
+        // isinya SUDAH IDENTIK dgn data owner saat ini — laporan nyata user:
+        // pre-order yang sudah dipenuhi tetap terus diusulkan ulang tiap
+        // sync. Lihat dok `AppDatabase.filterUnchangedLaciMejaProposals`.
+        filteredLaciMejaRows =
+            await _db!.filterUnchangedLaciMejaProposals(laciMejaProposalRows);
+      }
       final laciMejaEntryCount =
-          laciMejaProposalRows.values.fold<int>(0, (a, b) => a + b.length);
+          filteredLaciMejaRows.values.fold<int>(0, (a, b) => a + b.length);
       if (laciMejaEntryCount > 0) {
         _pendingLaciMejaProposals.removeWhere((p) => p.slotKey == slotKey);
         _pendingLaciMejaProposals.add(PendingLaciMejaProposal(
@@ -943,7 +952,7 @@ class LanSyncService {
           fromIp: ip,
           slotKey: slotKey,
           arrivedAt: DateTime.now(),
-          rows: laciMejaProposalRows,
+          rows: filteredLaciMejaRows,
           entryCount: laciMejaEntryCount,
         ));
         onLaciMejaProposalsChanged?.call();
