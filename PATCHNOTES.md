@@ -11,6 +11,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 8 Agustus 2026
 
 ### 🔧 Perbaikan
+- **Penghapusan pengeluaran sekarang ikut tersinkron ke perangkat
+  lain** — sebelumnya, pengeluaran yang dihapus di satu perangkat
+  bisa tetap muncul di perangkat lain yang sudah menerimanya lebih
+  dulu, bikin laba bersih beda antar perangkat.
+- **Dialog terima data sync**: kategori "Stok" sekarang otomatis
+  ikut tercentang & tidak bisa dilepas selama kategori "Transaksi"
+  dipilih — mencegah penjualan tercatat tanpa stoknya ikut berkurang.
+- **"Sync Ulang Penuh" sekarang benar-benar penuh** — dulu cuma
+  mereset satu arah (data yang dikirim), sekarang mereset kedua arah
+  sekaligus. Membantu kalau jam salah satu perangkat pernah salah
+  setel dan sinkron jadi macet.
 - **Pelunasan/cicilan/tambahan belanja pada nota yang sudah pernah
   disinkron sekarang selalu sampai ke pemilik toko.** Sebelumnya,
   kalau nota itu headernya sudah lebih dulu tersinkron, pelunasan atau

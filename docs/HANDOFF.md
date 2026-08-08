@@ -5,55 +5,46 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 8 Agustus 2026 (lanjutan 7) — versi kerja tetap
-**2.10.0+15**, schemaVersion tetap 28. User minta kerjakan semua
-temuan sync sesi lalu (PLAN.md Item 56-61) sesuai urutan prioritas,
+_Update sesi 8 Agustus 2026 (lanjutan 8) — versi kerja tetap
+**2.10.0+15**, schemaVersion SEKARANG **29** (naik dari 28 — Item
+61.5 nambah `Expenses.deletedAt`). User minta kerjakan semua temuan
+sync sesi lalu (PLAN.md Item 56-61) sesuai urutan prioritas,
 kecualikan backlog lama (47/48/23/17/21/28/41/51). Urutan yg
 disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
 
-- **Item 58 (KRITIS) — SELESAI, commit `8897298`.** Sync kedua client
-  sebelum owner approve/reject sync pertama tidak lagi menghapus
-  permanen batch upload sebelumnya — `LanSyncService._handleRequest`
-  sekarang GABUNGKAN (union, dedup by `id`) payload baru dgn item
-  antrian lama yg masih menunggu approve utk slot yg sama, via
-  `AppDatabase.getSyncUploadQueueItemForSlot` (baru) +
-  `_unionSyncTables`/`_decodeTablesJson` (baru). Test baru di
-  `lan_sync_upload_queue_test.dart` — revert-verified.
-- **Item 59 (KRITIS) — SELESAI, commit `3de2358`.** Tutup Buku sekarang
-  SELALU sisipkan baris carry-forward per satuan yg punya baris
-  terhapus (`deletedSum != 0`), ditanggal di batas akhir periode
-  (bukan `DateTime.now()`) — sebelumnya dilewati kalau unit itu punya
-  sisa riwayat, yg diam-diam merusak `rebuildStockAfterForUnits` di
-  sync pertama pasca-Tutup Buku. Test baru
-  `tutup_buku_stock_carry_forward_test.dart` — revert-verified.
-- **Item 60 (KRITIS) — SELESAI, commit `219bf7f`.** Poin loyalti
-  client tidak lagi bisa hilang tertimpa LWW `customers` —
-  `AppDatabase.rebuildLoyaltyPointsForCustomers` baru (pola
-  `rebuildStockAfterForUnits`) dipanggil setelah merge di host
-  (`approveSync`) & client (`syncToHost`), rekonstruksi
-  `loyalty_points` dari SUM `loyalty_point_ledger`. Test baru
-  `lan_sync_loyalty_points_rebuild_test.dart` — revert-verified.
-- **Item 56 — SELESAI, commit `5b2029f`.** Buku Hutang tidak lagi bisa
-  kehilangan nota tempo pelanggan — `getDebtBook`/`getUnpaidTxDetails`/
-  `getCustomerOutstandingDebt`/`settleMergedDebt` sekarang pakai pola
-  `netRemainingOwed` (net dari `change_given`, bukan `total-paid`
-  mentah). Test baru `debt_book_net_change_given_test.dart` +
-  tambahan di `transaction_lifecycle_test.dart` — revert-verified.
-- **Item 57 — SELESAI, commit `b76b923`.** Pembayaran/item susulan ke
-  transaksi yg sudah sync sekarang selalu sampai ke host —
-  `sync_screen.dart` hitung count kategori dari SEMUA tabel (bukan
-  cuma tabel pertama), diekstrak jadi fungsi murni
-  `computeAvailableSyncCategories` (testable tanpa widget). Test baru
-  `sync_payment_only_category_test.dart` — revert-verified.
-- Item 61 (BELUM): 5 temuan menengah (clock skew watermark tanpa
-  reset, reconcile tanpa guard item kosong, tie-break `stock_after`
-  beda pembaca/penulis-ulang, approval per-kategori bisa pisah
-  transaksi dari stok, hapus expense tidak propagate).
-- Item 55 (BELUM): logging diagnostik in-app (BUKAN Downloads) utk bug
-  Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner.
-- Item 54 (BELUM): QR Share bawa keterangan item.
+**SELESAI (commit, ringkas)**:
+- Item 58 (KRITIS, `8897298`) — sync kedua client tidak lagi hapus
+  permanen batch upload lama yg belum di-approve (union, bukan
+  replace, di `enqueueSyncUpload`/`_handleRequest`).
+- Item 59 (KRITIS, `3de2358`) — Tutup Buku selalu carry-forward saldo
+  stok, dulu dilewati kalau unit masih punya sisa riwayat →
+  `rebuildStockAfterForUnits` pasca-sync jadi salah.
+- Item 60 (KRITIS, `219bf7f`) — `rebuildLoyaltyPointsForCustomers`
+  baru, poin loyalti tidak lagi bisa ketimpa LWW `customers`.
+- Item 56 (`5b2029f`) — Buku Hutang pakai net `change_given`
+  (`netRemainingOwed`), bukan `total-paid` mentah.
+- Item 57 (`b76b923`) — hitung kategori sync dari SEMUA tabel
+  (`computeAvailableSyncCategories`), bukan cuma tabel pertama.
+- Item 61 (`b3d1588`) — 5 temuan menengah: reset watermark download
+  (baru, disatukan ke "Sync Ulang Penuh"), guard `reconcileTransactionsByIds`
+  thd item kosong pasca-sync (SCOPED ke path sync saja — sempat blanket
+  & merusak `returnUnpaidTransactionItems`, sudah dikoreksi), tie-break
+  `rowid` `rebuildStockAfterForUnits`, checkbox "Stok" wajib ikut
+  "Transaksi" di dialog approve, `Expenses.deletedAt` (migrasi v29)
+  + soft-delete penuh (dumpSince/mergeRows khusus expenses).
 
-Lanjut Item 61 berikutnya.
+**BELUM** (sisa 2 dari 8, prioritas berikutnya):
+- Item 55 — logging diagnostik in-app (BUKAN Downloads) utk bug
+  Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner. Teori
+  kode SUDAH MENTOK (4 ronde investigasi) — butuh log runtime
+  sungguhan dari device pegawai utk lanjut, lihat detail lengkap di
+  PLAN.md Item 55 (rencana logging: `OrderParseDiagnostics` in-memory
+  + `ParseDiagnosticsScreen` sementara, WAJIB dicabut setelah root
+  cause ketemu).
+- Item 54 — QR Share bawa keterangan item (bukan cuma kode), + adjust
+  parser Tempel Pesanan supaya kompatibel/ignore kalau formatnya beda.
+
+Lanjut Item 55 berikutnya.
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang
