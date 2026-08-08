@@ -11,6 +11,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 8 Agustus 2026
 
 ### 🔧 Perbaikan
+- **Poin loyalti pelanggan tidak lagi bisa "hilang" setelah sinkron
+  antar-perangkat.** Sebelumnya, kalau pegawai/kasir mencatat poin
+  baru untuk pelanggan, lalu perangkat itu sinkron dengan pemilik
+  toko, poin barunya kadang bisa tertimpa balik ke angka lama.
+  Sekarang poin selalu dihitung ulang dari riwayat lengkap
+  (transaksi masuk/keluar poin) setelah sinkron, jadi tidak akan
+  pernah salah atau hilang.
 - **Saldo stok tidak lagi bisa berubah salah setelah Tutup Buku** —
   kalau sebuah barang punya riwayat stok sebelum DAN sesudah periode
   yang baru diarsipkan (bukan cuma di periode yang diarsipkan itu

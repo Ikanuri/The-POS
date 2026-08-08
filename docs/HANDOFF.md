@@ -26,8 +26,13 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   sisa riwayat, yg diam-diam merusak `rebuildStockAfterForUnits` di
   sync pertama pasca-Tutup Buku. Test baru
   `tutup_buku_stock_carry_forward_test.dart` — revert-verified.
-- Item 60 (KRITIS, BELUM): poin loyalti client bisa hilang, tidak
-  pernah benar-benar tersinkron.
+- **Item 60 (KRITIS) — SELESAI, commit `219bf7f`.** Poin loyalti
+  client tidak lagi bisa hilang tertimpa LWW `customers` —
+  `AppDatabase.rebuildLoyaltyPointsForCustomers` baru (pola
+  `rebuildStockAfterForUnits`) dipanggil setelah merge di host
+  (`approveSync`) & client (`syncToHost`), rekonstruksi
+  `loyalty_points` dari SUM `loyalty_point_ledger`. Test baru
+  `lan_sync_loyalty_points_rebuild_test.dart` — revert-verified.
 - Item 56 (BELUM): Buku Hutang `total-paid` mentah (akar bug nota
   tempo hilang dari laporan).
 - Item 57 (BELUM): pembayaran/item susulan ke transaksi yg sudah sync
@@ -40,7 +45,7 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner.
 - Item 54 (BELUM): QR Share bawa keterangan item.
 
-Lanjut Item 60 berikutnya.
+Lanjut Item 56 berikutnya.
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang

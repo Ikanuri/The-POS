@@ -751,40 +751,6 @@ kosong) — pastikan kategori "Transaksi" tetap terhitung & masuk
 `allowed` saat di-approve, baris pembayaran benar-benar ter-merge ke
 host. Revert-verified.
 
-## Item 60 — Poin loyalti dari client bisa hilang, tidak pernah benar-benar tersinkron (6 Agustus, siap eksekusi — KRITIS)
-
-**Akar masalah**: SEMUA 7 tempat tulis `customers.loyalty_points`
-(`app_database.dart:2293,2581,2618,2696,2719,2827,3187`) pakai UPDATE
-RELATIF mentah (`loyalty_points + ?`/`- ?`) ke DB LOKAL device itu
-saja — dan TIDAK menyentuh `updated_at` sama sekali. Karena `customers`
-adalah master data yang sync-nya last-write-wins berdasar `updated_at`
-(`app_database.dart:5010-5019`), poin yang baru didapat client BISA
-LANGSUNG KETIMPA BALIK begitu host push versi lama pelanggan itu (mis.
-tidak ada perubahan lain di pelanggan itu sejak lama, jadi `updated_at`
-host kebetulan >= punya klien). TIDAK ADA mekanisme rebuild dari
-`loyalty_point_ledger` (beda dari stok yang sudah punya
-`rebuildStockAfterForUnits`) — ledger-nya sendiri sinkron dgn benar
-(append-only, PK dedup), tapi kolom saldo yang dipakai di layar sama
-sekali tidak diturunkan darinya.
-
-**Metode perbaikan**: bikin fungsi baru `rebuildLoyaltyPointsForCustomers
-(Set<String> customerIds)` (pola PERSIS `rebuildStockAfterForUnits`) —
-`customers.loyalty_points = SUM(loyalty_point_ledger.points) WHERE
-customer_id = ?` per customer yg disentuh. Kumpulkan `touchedCustomerIds`
-dari baris `loyalty_point_ledger` yg ter-merge (analog
-`_collectStockUnitIds`/`touchedStockUnitIds` di `lan_sync_service.dart`
-utk stock_ledger), panggil rebuild ini setelah merge — di KEDUA titik
-yg sudah manggil `rebuildStockAfterForUnits` sekarang (`approveSync`
-host `:632`, `syncToHost` response klien `:~1339`). 7 tempat tulis
-mentah yang ADA SEKARANG tidak perlu diubah (itu tetap valid utk
-device ASAL yang baru saja mencatat sendiri poinnya, ditulis atomik
-bareng baris ledger-nya di transaksi lokal yang sama) — rebuild ini
-HANYA utk pasca-merge sync, memastikan device LAIN dapat angka yang
-benar. **Test**: 2 device beri poin ke pelanggan yg SAMA scr independen
-sebelum sync, sync-kan, pastikan SETELAH merge kedua device sepakat ke
-angka yg sama (SUM ledger, bukan salah satu device menang scr
-kebetulan lewat LWW `customers`).
-
 ## Item 61 — Temuan sync lain (menengah, dampak lebih sempit — 6 Agustus, siap eksekusi kalau ada waktu)
 
 Lima temuan tambahan dari audit sync sesi ini, dampak lebih sempit dari
