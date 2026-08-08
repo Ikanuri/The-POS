@@ -1,6 +1,7 @@
 import '../database/app_database.dart';
 import '../models/cart_item.dart';
 import 'order_page_service.dart';
+import 'order_parse_diagnostics.dart';
 import 'price_service.dart';
 
 /// Parser sisi kasir untuk teks pesanan pelanggan yang dihasilkan oleh
@@ -85,7 +86,13 @@ class OrderParserService {
   }) async {
     text = _normalizeMetaLineBreaks(text);
     final match = _machineLine.firstMatch(text);
+    // Item 55 — catat teks MENTAH persis yang diterima parser, supaya
+    // kelihatan apakah ada korupsi/potongan karakter dari scanner/clipboard
+    // SEBELUM ke logika parse apa pun.
+    OrderParseDiagnostics.add('[parse] raw text: ${text.replaceAll('\n', '\\n')}');
     if (match == null) {
+      OrderParseDiagnostics.add('[parse] TIDAK ADA kode mesin (#PSN:) '
+          'ditemukan di teks — hasMachineCode=false');
       return const ParsedOrder(
         items: [],
         notFound: [],
@@ -155,6 +162,10 @@ class OrderParserService {
             ..where((t) => t.id.equals(unitId)))
           .getSingleOrNull();
       if (unit == null) {
+        // Item 55 — titik gagal #1: unitId dari kode TIDAK ketemu sama
+        // sekali di product_units lokal device ini.
+        OrderParseDiagnostics.add('[parse] unitId=$unitId -> product_units: '
+            'TIDAK KETEMU -> notFound');
         notFound.add(unitId);
         continue;
       }
@@ -162,9 +173,18 @@ class OrderParserService {
             ..where((t) => t.id.equals(unit.productId)))
           .getSingleOrNull();
       if (product == null || !product.isActive) {
+        // Item 55 — titik gagal #2: unit ketemu, tapi product induknya
+        // tidak ketemu ATAU sudah nonaktif (is_active=false).
+        OrderParseDiagnostics.add('[parse] unitId=$unitId -> product_units: '
+            'KETEMU (productId=${unit.productId}) -> products: '
+            '${product == null ? 'TIDAK KETEMU' : 'KETEMU tapi is_active=false'} '
+            '-> notFound');
         notFound.add(unitId);
         continue;
       }
+      OrderParseDiagnostics.add('[parse] unitId=$unitId -> product_units: '
+          'KETEMU (productId=${unit.productId}) -> products: KETEMU '
+          '(name=${product.name}, is_active=true) -> items');
 
       // Susulan — flag `p=`/`o=`/`k=` (dari [encodeHandoff]) HANYA dipakai
       // kalau ADA; kalau tidak (katalog HTML pelanggan), perilaku lama
