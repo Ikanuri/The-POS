@@ -616,44 +616,304 @@ kasar — sudah dibaca file:line-nya langsung):
 DIAGNOSTIK supaya reproduksi berikutnya kasih bukti runtime langsung,
 bukan teori lagi.**
 
-**Rencana implementasi logging** (di `OrderParserService.parse()`,
-`order_parser_service.dart` sekitar baris 108-167 — loop per-pasangan
-item):
-1. Di AWAL `parse()` (setelah cek `hasMachineCode`): log teks MENTAH
-   yang diterima (raw `text` parameter) — supaya bisa lihat PERSIS apa
-   yang benar-benar ter-scan/ter-paste di device pegawai (verifikasi
-   tidak ada korupsi/potongan karakter dari scanner/clipboard).
-2. Untuk SETIAP pasangan `unitId=qty...` yang diproses, log:
-   - `unitId` mentah yang di-parse dari kode.
-   - Hasil `SELECT * FROM product_units WHERE id = ?` — ADA/TIDAK, dan
-     kalau ada, `product_id`-nya apa.
-   - Kalau unit ketemu: hasil `SELECT * FROM products WHERE id = ?`
-     (pakai `unit.productId`) — ADA/TIDAK, dan `is_active`-nya apa
-     kalau ada.
-   - Kesimpulan baris ini: masuk `items` atau `notFound` (dan alasan
-     spesifik yang mana dari 2 kondisi gagal itu).
-3. Tulis log ini via `CrashLogService.record()` (`crash_log_service.
-   dart:66`, sudah ada & sudah nulis ke file publik `Downloads/the_pos_
-   crash_log.jsonl` yang gampang diambil user) — bikin objek
-   `Exception('DIAGNOSTIK parse(): ...')` sintetis berisi ringkasan di
-   atas per pasangan (atau satu entry gabungan per panggilan `parse()`
-   kalau lebih ringkas), context string jelas mis. `'order_parser_
-   diagnostic'` — BUKAN exception sungguhan, cuma pinjam mekanisme
-   logging yang sudah ada & sudah terbukti reachable oleh user biasa
-   (tidak perlu USB debug/logcat).
-4. **WAJIB**: logging ini SEMENTARA/instrumentasi debug, bukan fitur
-   permanen — begitu root cause ketemu & fix-nya jelas, cabut lagi
-   (atau turunkan jadi kondisional `kDebugMode` saja) supaya tidak
-   membebani `parse()` produksi selamanya & tidak menumpahkan
-   `productUnitId` mentah ke file log publik tanpa alasan jangka
-   panjang.
+**Revisi user (JANGAN tulis ke Downloads)**: logging TIDAK boleh nulis
+ke file publik `Downloads/`. Sebagai gantinya, bikin **halaman debug
+dedicated di dalam app** — layar sementara yang gampang dibuang lagi
+setelah bug ini kelar, cukup dilihat langsung di layar HP (tidak perlu
+ambil file/USB debug sama sekali).
+
+**Rencana implementasi**:
+1. **Penyimpanan diagnostik** — kelas statis sementara baru, mis.
+   `OrderParseDiagnostics` (bisa taruh di file baru
+   `lib/core/services/order_parse_diagnostics.dart`, atau cukup
+   top-level di `order_parser_service.dart` sendiri) — `static final
+   List<String> entries = []` (in-memory saja, cukup utk satu sesi
+   reproduksi; TIDAK perlu persist ke DB/SharedPreferences, sengaja
+   simpel krn throwaway). Batasi mis. 200 entry terakhir (buang yg
+   paling lama) biar tidak membengkak kalau lupa dicabut.
+2. **Titik logging** — di `OrderParserService.parse()`
+   (`order_parser_service.dart` sekitar baris 108-167, loop per-pasangan
+   item):
+   - Di AWAL (setelah cek `hasMachineCode`): catat teks MENTAH yang
+     diterima (raw `text` parameter) — supaya kelihatan PERSIS apa yang
+     benar-benar ter-scan/ter-paste (verifikasi tidak ada korupsi/
+     potongan karakter dari scanner/clipboard).
+   - Untuk SETIAP pasangan `unitId=qty...`: `unitId` mentah, hasil
+     `SELECT * FROM product_units WHERE id = ?` (ADA/TIDAK + `product_
+     id` kalau ada), hasil `SELECT * FROM products WHERE id = ?` pakai
+     `unit.productId` (ADA/TIDAK + `is_active` kalau ada), dan
+     kesimpulan baris ini (masuk `items` atau `notFound`, alasan
+     spesifik yang mana dari 2 kondisi gagal).
+   - Tiap baris hasil `.add()` ke `OrderParseDiagnostics.entries`
+     (bukan `print()`/`debugPrint` — supaya tetap kebaca di build
+     release, bukan cuma pas `flutter run` USB-tethered).
+3. **Halaman debug** — widget baru sederhana, mis.
+   `ParseDiagnosticsScreen` (`StatelessWidget`, `ListView` isi
+   `SelectableText`/`Text` per entry terbaru dulu, + tombol "Salin
+   Semua" ke clipboard biar gampang dikirim balik ke sesi ini via chat
+   — TANPA nulis/baca file apa pun). Entry point-nya SEMENTARA saja,
+   paling praktis: tombol/ikon kecil TAMBAHAN di `PasteOrderSheet`
+   (`paste_order_sheet.dart`, dekat tombol proses) yang cuma tampil
+   selama fitur ini masih aktif dipakai investigasi — push route ke
+   `ParseDiagnosticsScreen` biasa (`Navigator.push`, tidak perlu
+   didaftarkan ke GoRouter permanen).
+4. **WAJIB dicabut setelah kelar**: seluruh 3 bagian di atas
+   (`OrderParseDiagnostics`, titik `.add()` di `parse()`, halaman +
+   tombol akses) SEMENTARA murni utk investigasi — begitu root cause
+   ketemu & fix-nya dieksekusi, hapus total (bukan cuma dimatikan via
+   flag), supaya tidak nyangkut selamanya di produksi.
 
 **Langkah setelah logging terpasang**: minta user build APK debug,
 reproduksi bug persis skenario di atas (owner buat produk baru → share
-→ pegawai tempel, GAGAL lagi), lalu ambil file
-`Downloads/the_pos_crash_log.jsonl` dari device pegawai & kirim isi
-entry `order_parser_diagnostic` terbarunya. Dari situ akan langsung
+→ pegawai tempel, GAGAL lagi), buka halaman debug baru itu di device
+pegawai, salin isinya, kirim balik ke sesi ini. Dari situ akan langsung
 ketahuan PERSIS di titik mana rantai `unitId → unit → product` putus
 (unit tidak ketemu / product tidak ketemu / product tidak aktif) —
 baru eksekusi fix yang benar-benar menyasar akar masalahnya, bukan
 tebakan lagi.
+
+## Item 56 — Buku Hutang: `total-paid` mentah bikin hutang pelanggan hilang dari laporan (6 Agustus, siap eksekusi)
+
+**Bug dilaporkan user**: nota tempo ADA di riwayat transaksi & tetap
+tampil di cart bar (`getCustomerOutstandingDebt`), TAPI hilang dari
+Laporan → Buku Hutang. Diinvestigasi tuntas sesi ini (lihat CHANGELOG
+sesi 6 Agustus utk detail transkrip lengkap kalau perlu re-baca).
+
+**Akar masalah**: `getDebtBook`/`getUnpaidTxDetails`/
+`getCustomerOutstandingDebt`/`settleMergedDebt` (`app_database.dart:
+3307,3345,3363,3623`) semua pakai `total - paid` MENTAH — padahal
+`paid` SENGAJA boleh melebihi `total` (kembalian dipakai ulang, lihat
+dok `app_database.dart:3402`). `getDebtBook` GROUP BY customer lalu
+`HAVING SUM(total-paid) > 0` — kalau pelanggan yang sama punya nota
+LAIN yang ke-overpay (mis. kembalian dipakai ulang lewat Tambah
+Belanjaan, `total` naik tapi `paid` lama tetap lebih besar),
+kontribusinya ke SUM jadi NEGATIF, bisa menutupi nota tempo asli →
+`HAVING` gagal → SELURUH pelanggan hilang dari Buku Hutang, walau tiap
+nota individual `status`-nya tetap benar `tempo`/`kurang_bayar` (cart
+bar TIDAK kena krn gerbangnya `COUNT(*)`, bukan `SUM`). Sudah
+diprediksi persis di PLAN.md lama (item ini menggantikan catatan lama
+itu). **Hipotesis user "status sempat salah lunas lalu sync balikin"
+sudah DINEGASIKAN** — cart & Buku Hutang pakai filter `status IN
+('kurang_bayar','tempo')` yang PERSIS sama.
+
+**Metode perbaikan**: pola `netRemainingOwed()`/`netPaidDisplay()`
+sudah ada & sudah dipakai di struk (`receipt_screen.dart:41,52`) —
+`sisa = total - (paid - Σ changeGiven)`. Terapkan versi SQL-nya:
+- `getDebtBook`/`getCustomerOutstandingDebt`: ganti `SUM(t.total -
+  t.paid)` jadi `SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0))`,
+  di mana `cg` adalah subquery/LEFT JOIN `(SELECT transaction_id,
+  SUM(change_given) AS total_cg FROM transaction_payments WHERE NOT
+  voided GROUP BY transaction_id)` — identik dgn `netPaidForStatus`
+  yang sudah dipakai `_reconcileTransactionTotals` (`app_database.dart:
+  2470-2477`), cuma diformulasikan ulang jadi SQL agregat per-nota,
+  BUKAN per-transaksi single row.
+- `getUnpaidTxDetails`: field `sisa` per nota (`app_database.dart:
+  3357`) — sama, ganti ke net.
+- `settleMergedDebt`: variabel `sisa` (`app_database.dart:3623`) — sama.
+- **Test**: skenario overpay+Tambah-Belanjaan (persis pola bug
+  `87cdaf0` yang sudah pernah diperbaiki di struk) yang menghasilkan
+  nota kontribusi negatif ke SUM, pastikan customer TETAP muncul di
+  Buku Hutang dgn nominal benar. Revert-verified spt biasa.
+
+## Item 57 — Pembayaran/item susulan ke transaksi yang sudah sync TIDAK PERNAH sampai ke host (6 Agustus, siap eksekusi)
+
+**Bug ditemukan sekalian** (bukan penyebab Item 56, tapi nyata &
+serius, berlaku SEMUA role non-owner): pelunasan/cicilan/item susulan
+("Tambah Belanjaan") ke transaksi yang HEADER-nya sudah lebih dulu
+tersinkron TIDAK PERNAH sampai ke host.
+
+**Akar masalah**: `dumpSince` filter tabel `transactions` cuma `WHERE
+created_at >= since` (`app_database.dart:4435`) — melunasi TIDAK
+mengubah `created_at`, jadi header lama tidak ikut re-dump, cuma baris
+`transaction_payments`/`transaction_items` baru yang ikut. Di
+`sync_screen.dart:_approve()` (baris 71-74), jumlah kategori
+"Transaksi" dihitung HANYA dari `item.tables['transactions'].length`
+(tabel PERTAMA `syncCategories['Transaksi']`) — kalau itu KOSONG,
+kategori "Transaksi" tidak pernah masuk `available`, walau
+`transaction_payments`-nya ADA isi. Kalau itu satu-satunya isi payload
+→ `available.isEmpty` → OTOMATIS `rejectSync` (PERMANEN, tidak retry)
+dgn pesan salah "tidak ada data baru". Kalau digabung kategori lain →
+checkbox "Transaksi" sama sekali tidak muncul di dialog approve.
+
+**Metode perbaikan**: ganti hitungan count di `_approve()`
+(`sync_screen.dart:71-74`) dari:
+```dart
+final count = item.tables[tables.first]?.length ?? 0;
+```
+jadi jumlahkan SEMUA tabel dalam kategori itu:
+```dart
+final count = tables.fold<int>(0, (s, t) => s + (item.tables[t]?.length ?? 0));
+```
+supaya kategori muncul & ke-include di `allowed` selama ADA salah satu
+tabelnya berisi baris, bukan cuma tabel pertama. **Test**: payload
+sync yang HANYA berisi `transaction_payments` baru (header `transactions`
+kosong) — pastikan kategori "Transaksi" tetap terhitung & masuk
+`allowed` saat di-approve, baris pembayaran benar-benar ter-merge ke
+host. Revert-verified.
+
+## Item 58 — Sync kedua client bisa MENGHAPUS batch upload sebelumnya yang belum di-approve, PERMANEN (6 Agustus, siap eksekusi — KRITIS)
+
+**Akar masalah**: `enqueueSyncUpload` (`app_database.dart:4197-4223`)
+selalu DELETE+INSERT slot pengirim (`sync_upload_queue`) tanpa cek
+apakah payload baru itu superset dari yang lama — sementara watermark
+upload client dimajukan begitu HTTP 200+HMAC lolos
+(`lan_sync_service.dart:1354`), BUKAN setelah owner approve (cuma
+"tersimpan durable di antrian", lihat komentar `:1348-1353`). Kasir
+sync 2x berturut-turut (kebiasaan umum, atau sync otomatis kepicu lagi
+sebelum owner sempat approve) → payload kedua cuma delta kecil/kosong
+→ antrian pertama (bisa puluhan transaksi) KETIMPA & hilang tanpa
+jejak. Klaim komentar lama "AMAN menimpa krn payload klien per-sync
+selalu superset" (`lan_sync_service.dart:858-865`) **TERBUKTI SALAH**
+sejak watermark upload diperkenalkan (Item 17 Fase 2) — payload
+berikutnya adalah DELTA, bukan superset. Cuma bisa pulih via "Sync
+Ulang Penuh" manual (`resetUploadWatermark`), yang tidak ada
+indikasi/nudge apa pun ke user bahwa itu perlu dipakai.
+
+**Metode perbaikan**: `enqueueSyncUpload` jangan lagi DELETE+INSERT
+polos — kalau SUDAH ADA item lama utk slot itu (belum di-approve/
+ditolak owner), GABUNGKAN (union) tabel-tabel baru ke tabel-tabel lama
+per baris (dedup by primary key — `transactions`/`transaction_items`/
+`transaction_payments`/dll semua append-only dgn PK `id`, jadi union
+set sederhana: baris dgn id yg sudah ada di batch lama TIDAK perlu
+diduplikasi, baris baru ditambahkan), baru simpan gabungannya sbg
+`tablesJson` yang baru — BUKAN mengganti begitu saja. `tablesSummary`
+juga perlu dihitung ulang dari hasil gabungan. **Alternatif lebih
+simpel** (kalau union dianggap terlalu rumit utk 1 putaran fix): jangan
+timpa kalau item lama BELUM di-approve DAN payload baru bukan superset
+murni (bandingkan set id per tabel) — tolak `enqueueSyncUpload` baru,
+biarkan versi lama tetap di antrian sampai di-approve/ditolak dulu,
+klien retry otomatis di sync berikutnya (aman krn upload-nya idempotent,
+append-only PK dedup). **Test**: simulasikan 2 kali `syncToHost`
+berurutan sebelum `approveSync`/`rejectSync` — assert baris dari sync
+PERTAMA tidak hilang dari antrian setelah sync KEDUA.
+
+## Item 59 — Sync pertama pasca-Tutup Buku bisa menghancurkan saldo stok (6 Agustus, siap eksekusi — KRITIS)
+
+**Akar masalah**: `tutup_buku_service.dart:199-215` skip carry-forward
+saldo kalau MASIH ada baris `stock_ledger` tersisa utk unit itu
+(`if (remain != null) continue;`) — beralasan "saldo tetap benar" krn
+PEMBACA (`_rawBaseStock`, `app_database.dart:562-581`) baca `stock_
+after` baris TERAKHIR langsung, yang memang sudah benar dihitung SAAT
+histori lama masih ada. TAPI `rebuildStockAfterForUnits`
+(`app_database.dart:4855-4880`) — otomatis jalan di HOST *dan* KLIEN
+tiap kali ada baris `stock_ledger` yang ter-merge dari sync manapun —
+menghitung ulang `stock_after` dari NOL, cuma menjumlahkan baris yang
+MASIH ADA. Opening balance dari histori yang sudah diarsip (encoded di
+`stock_after` baris pertama yang tersisa) HILANG dari perhitungan ulang
+ini. Kena SEMUA produk yang ada pergerakan di periode berjalan, di
+sync pertama pasca-Tutup Buku manapun yg menyentuh unit itu.
+
+**Metode perbaikan**: `tutup_buku_service.dart` HARUS selalu insert
+baris carry-forward "adjustment" (bukan cuma saat `remain == null`) —
+tapi dgn `created_at` di-set PAS DI BATAS periode arsip
+(`periodEndExclusiveSec` atau `periodEndExclusiveSec - 1`), BUKAN
+`DateTime.now()` seperti sekarang (`app_database.dart` bagian yg sama,
+variabel `nowSec`) — supaya baris ini SELALU jadi baris PALING AWAL
+scr kronologis saat `rebuildStockAfterForUnits` sort `ORDER BY
+created_at ASC, id ASC`, jadi baseline yang benar sebelum baris² yang
+masih tersisa dijumlahkan di atasnya. Hapus kondisi `if (remain !=
+null) continue;` — insert unconditional slama `entry.value != 0`.
+**Test**: unit dgn histori CAMPURAN (sebagian diarsip, sebagian
+tersisa) — jalankan Tutup Buku, LALU panggil `rebuildStockAfterForUnits`
+(simulasikan efek sync) utk unit itu, pastikan `stock_after` baris
+TERAKHIR tetap sama dgn SEBELUM rebuild dijalankan (invariant: rebuild
+tidak boleh mengubah saldo akhir yang sudah benar).
+
+## Item 60 — Poin loyalti dari client bisa hilang, tidak pernah benar-benar tersinkron (6 Agustus, siap eksekusi — KRITIS)
+
+**Akar masalah**: SEMUA 7 tempat tulis `customers.loyalty_points`
+(`app_database.dart:2293,2581,2618,2696,2719,2827,3187`) pakai UPDATE
+RELATIF mentah (`loyalty_points + ?`/`- ?`) ke DB LOKAL device itu
+saja — dan TIDAK menyentuh `updated_at` sama sekali. Karena `customers`
+adalah master data yang sync-nya last-write-wins berdasar `updated_at`
+(`app_database.dart:5010-5019`), poin yang baru didapat client BISA
+LANGSUNG KETIMPA BALIK begitu host push versi lama pelanggan itu (mis.
+tidak ada perubahan lain di pelanggan itu sejak lama, jadi `updated_at`
+host kebetulan >= punya klien). TIDAK ADA mekanisme rebuild dari
+`loyalty_point_ledger` (beda dari stok yang sudah punya
+`rebuildStockAfterForUnits`) — ledger-nya sendiri sinkron dgn benar
+(append-only, PK dedup), tapi kolom saldo yang dipakai di layar sama
+sekali tidak diturunkan darinya.
+
+**Metode perbaikan**: bikin fungsi baru `rebuildLoyaltyPointsForCustomers
+(Set<String> customerIds)` (pola PERSIS `rebuildStockAfterForUnits`) —
+`customers.loyalty_points = SUM(loyalty_point_ledger.points) WHERE
+customer_id = ?` per customer yg disentuh. Kumpulkan `touchedCustomerIds`
+dari baris `loyalty_point_ledger` yg ter-merge (analog
+`_collectStockUnitIds`/`touchedStockUnitIds` di `lan_sync_service.dart`
+utk stock_ledger), panggil rebuild ini setelah merge — di KEDUA titik
+yg sudah manggil `rebuildStockAfterForUnits` sekarang (`approveSync`
+host `:632`, `syncToHost` response klien `:~1339`). 7 tempat tulis
+mentah yang ADA SEKARANG tidak perlu diubah (itu tetap valid utk
+device ASAL yang baru saja mencatat sendiri poinnya, ditulis atomik
+bareng baris ledger-nya di transaksi lokal yang sama) — rebuild ini
+HANYA utk pasca-merge sync, memastikan device LAIN dapat angka yang
+benar. **Test**: 2 device beri poin ke pelanggan yg SAMA scr independen
+sebelum sync, sync-kan, pastikan SETELAH merge kedua device sepakat ke
+angka yg sama (SUM ledger, bukan salah satu device menang scr
+kebetulan lewat LWW `customers`).
+
+## Item 61 — Temuan sync lain (menengah, dampak lebih sempit — 6 Agustus, siap eksekusi kalau ada waktu)
+
+Lima temuan tambahan dari audit sync sesi ini, dampak lebih sempit dari
+Item 58-60 tapi tetap nyata:
+
+1. **Selisih jam device (clock skew) bikin data host hilang dari
+   window download, diam-diam & permanen.** Watermark download
+   (`downloadSyncStartedAt`, `lan_sync_service.dart:1157`) pakai jam
+   KLIEN, dipakai memfilter baris berdasar jam HOST — toleransi skew
+   cuma 5 menit (`:815-822`) tanpa validasi/klem apa pun. TIDAK ADA
+   `resetDownloadWatermark` di mana pun (beda dari upload yg punya
+   "Sync Ulang Penuh") — sekali watermark klien "lebih maju" dari jam
+   host, macet PERMANEN tanpa cara reset dari UI sama sekali.
+   **Metode perbaikan**: (a) tambah `resetDownloadWatermark` +
+   tombol/opsi di Sync screen (bisa disatukan dgn "Sync Ulang Penuh"
+   supaya reset KEDUA watermark sekaligus, lebih aman drpd biarkan user
+   pilih salah satu tanpa paham bedanya); (b) pertimbangkan jangka
+   panjang: watermark idealnya berbasis timestamp SERVER (host kirim
+   balik "jam sekarang menurut saya" di response, klien simpan itu
+   sbg watermark next round) bukan jam klien sendiri — pola ini
+   menghilangkan skew SAMA SEKALI drpd cuma menoleransi sampai 5 menit.
+2. **`_reconcileTransactionTotals` tanpa guard item kosong**
+   (`app_database.dart:2452` `newTotal` vs `:2463` `newPaid` — cuma
+   `newPaid` yg ada guard `allPayRows.isEmpty ? tx.paid : sumPay`).
+   Trigger nyata: item transaksi yg parent header-nya sempat DITOLAK
+   PERMANEN (`rejectSync`) di antrian lama, baru dapat item susulan
+   belakangan → FK gagal (parent tidak ada), baris di-skip selamanya
+   (`app_database.dart:5063-5075`, error di-swallow ke CrashLog),
+   `newTotal` jadi 0 tanpa item yg genuinely hilang. **Metode
+   perbaikan**: tambah guard sama spt `newPaid` — `final newTotal =
+   itemRows.isEmpty ? tx.total : itemRows.fold(...)`, supaya baris
+   TANPA item (bukan genuinely 0) tidak menimpa total lama jadi 0.
+3. **Tie-break urutan `stock_after` beda antara pembaca & penulis
+   ulang** — `_rawBaseStock` order `created_at DESC, rowid DESC`
+   (`:568-578`), `rebuildStockAfterForUnits` order `created_at ASC, id
+   ASC` (UUID acak, bukan `rowid`) — utk baris di detik yg SAMA, host
+   & klien bisa pilih baris "terakhir" yg BEDA stlh sync, bikin saldo
+   stok berbeda permanen antar device. **Metode perbaikan**: samakan
+   tie-break KEDUANYA — opsi termudah: `rebuildStockAfterForUnits`
+   ikut pakai `rowid` sbg tie-break kedua (bukan `id`/UUID), identik
+   dgn `_rawBaseStock`, supaya urutan interpretasi SELALU konsisten dgn
+   cara baca stok yg sudah ada.
+4. **Approval per-kategori bisa memisah penjualan dari pergerakan
+   stoknya.** Owner approve "Transaksi" tanpa "Stok" (checkbox
+   terpisah per kategori, `sync_screen.dart` dialog approve) →
+   transaksi tercatat tapi stok tidak pernah berkurang, PERMANEN (baris
+   `stock_ledger` yg di-skip tidak pernah dikirim ulang scr delta).
+   **Metode perbaikan**: PALING AMAN — kalau kategori "Transaksi"
+   dipilih, kategori "Stok" WAJIB ikut ter-approve otomatis (tidak bisa
+   dipisah lewat UI sama sekali, disable checkbox-nya atau digabung jadi
+   1 kategori) — penjualan & pergerakan stok SECARA BISNIS tidak boleh
+   pernah terpisah.
+5. **Penghapusan `expenses` tidak pernah propagate ke device lain.**
+   `deleteExpense` (`app_database.dart:3521-3522`) hard DELETE, padahal
+   `expenses` sync-nya append-only (cuma kirim baris BARU, tidak pernah
+   kirim "baris ini dihapus") — expense yg dihapus di 1 device TETAP
+   ada di device lain yg sudah menerimanya, laba bersih antar-device
+   beda permanen. **Metode perbaikan**: expense butuh soft-delete (kolom
+   `deleted_at`/`is_active` spt pola tabel lain), filter query TOTAL
+   pengeluaran (`getNetProfitExpenseTotal` dkk) exclude yg soft-deleted
+   — dijadikan UPDATE (append-only-compatible, bukan DELETE) supaya
+   status "dihapus" ikut ter-sync sbg baris baru yg diupdate, konsisten
+   dgn pola tabel lain di app ini (produk/pelanggan pakai `is_active`,
+   bukan hard delete).
