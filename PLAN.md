@@ -580,10 +580,26 @@ utk menyisipkan baris item+Total, lalu **WAJIB tes ulang** seluruh test
 `kasir_handoff_qr_test.dart`) utk pastikan tidak ada tabrakan (mis. nama
 produk yang kebetulan diawali kata kunci baris meta seperti "Nama:").
 
-## Item 55 — Bug "Tempel Pesanan" pegawai (non terima_pembayaran) tidak dapat produk dari QR/teks owner — BUTUH LOGGING DIAGNOSTIK, teori kode SUDAH MENTOK (6 Agustus, siap eksekusi)
+## Item 55 — Bug "Tempel Pesanan" pegawai (non terima_pembayaran) tidak dapat produk dari QR/teks owner — LOGGING DIAGNOSTIK SUDAH TERPASANG (commit `0919f0d`), MENUNGGU reproduksi user
 
-**Konteks lengkap** (ringkas dari investigasi panjang sesi ini — jangan
-ulangi dari nol): owner input beberapa produk baru → share via QR atau
+**STATUS TERKINI (8 Agustus)**: Instrumentasi logging sudah terpasang &
+di-commit (`OrderParseDiagnostics`, titik `.add()` di
+`OrderParserService.parse()`, `ParseDiagnosticsScreen` + tombol akses
+sementara di `PasteOrderSheet`). **Langkah selanjutnya BUKAN eksekusi
+kode lagi** — minta user build APK debug, reproduksi bug ini persis
+(owner buat produk baru → share → pegawai tempel, gagal lagi), buka
+halaman debug (ikon bug_report di `PasteOrderSheet`) di device
+pegawai, salin isinya via tombol "Salin Semua", kirim balik ke sesi
+ini. Dari situ baru bisa ditentukan fix yang benar-benar menyasar
+akar masalahnya. **WAJIB**: setelah root cause ketemu & fix
+dieksekusi, cabut TOTAL seluruh instrumentasi Item 55 (`order_parse_
+diagnostics.dart`, `parse_diagnostics_screen.dart`, titik `.add()` di
+`order_parser_service.dart`, tombol akses di `paste_order_sheet.
+dart`, `order_parse_diagnostics_test.dart`) — bukan cuma dimatikan
+via flag.
+
+**Konteks lengkap bug** (ringkas dari investigasi sebelum logging
+dipasang — jangan ulangi dari nol): owner input beberapa produk baru → share via QR atau
 "Salin Teks Pesanan" → di-tempel pegawai (kasir role, TANPA izin
 `terima_pembayaran`) via "Tempel Pesanan" → **TIDAK ADA produk masuk
 keranjang**, error "Kode pesanan tidak valid / tidak ada barang
@@ -622,52 +638,3 @@ dedicated di dalam app** — layar sementara yang gampang dibuang lagi
 setelah bug ini kelar, cukup dilihat langsung di layar HP (tidak perlu
 ambil file/USB debug sama sekali).
 
-**Rencana implementasi**:
-1. **Penyimpanan diagnostik** — kelas statis sementara baru, mis.
-   `OrderParseDiagnostics` (bisa taruh di file baru
-   `lib/core/services/order_parse_diagnostics.dart`, atau cukup
-   top-level di `order_parser_service.dart` sendiri) — `static final
-   List<String> entries = []` (in-memory saja, cukup utk satu sesi
-   reproduksi; TIDAK perlu persist ke DB/SharedPreferences, sengaja
-   simpel krn throwaway). Batasi mis. 200 entry terakhir (buang yg
-   paling lama) biar tidak membengkak kalau lupa dicabut.
-2. **Titik logging** — di `OrderParserService.parse()`
-   (`order_parser_service.dart` sekitar baris 108-167, loop per-pasangan
-   item):
-   - Di AWAL (setelah cek `hasMachineCode`): catat teks MENTAH yang
-     diterima (raw `text` parameter) — supaya kelihatan PERSIS apa yang
-     benar-benar ter-scan/ter-paste (verifikasi tidak ada korupsi/
-     potongan karakter dari scanner/clipboard).
-   - Untuk SETIAP pasangan `unitId=qty...`: `unitId` mentah, hasil
-     `SELECT * FROM product_units WHERE id = ?` (ADA/TIDAK + `product_
-     id` kalau ada), hasil `SELECT * FROM products WHERE id = ?` pakai
-     `unit.productId` (ADA/TIDAK + `is_active` kalau ada), dan
-     kesimpulan baris ini (masuk `items` atau `notFound`, alasan
-     spesifik yang mana dari 2 kondisi gagal).
-   - Tiap baris hasil `.add()` ke `OrderParseDiagnostics.entries`
-     (bukan `print()`/`debugPrint` — supaya tetap kebaca di build
-     release, bukan cuma pas `flutter run` USB-tethered).
-3. **Halaman debug** — widget baru sederhana, mis.
-   `ParseDiagnosticsScreen` (`StatelessWidget`, `ListView` isi
-   `SelectableText`/`Text` per entry terbaru dulu, + tombol "Salin
-   Semua" ke clipboard biar gampang dikirim balik ke sesi ini via chat
-   — TANPA nulis/baca file apa pun). Entry point-nya SEMENTARA saja,
-   paling praktis: tombol/ikon kecil TAMBAHAN di `PasteOrderSheet`
-   (`paste_order_sheet.dart`, dekat tombol proses) yang cuma tampil
-   selama fitur ini masih aktif dipakai investigasi — push route ke
-   `ParseDiagnosticsScreen` biasa (`Navigator.push`, tidak perlu
-   didaftarkan ke GoRouter permanen).
-4. **WAJIB dicabut setelah kelar**: seluruh 3 bagian di atas
-   (`OrderParseDiagnostics`, titik `.add()` di `parse()`, halaman +
-   tombol akses) SEMENTARA murni utk investigasi — begitu root cause
-   ketemu & fix-nya dieksekusi, hapus total (bukan cuma dimatikan via
-   flag), supaya tidak nyangkut selamanya di produksi.
-
-**Langkah setelah logging terpasang**: minta user build APK debug,
-reproduksi bug persis skenario di atas (owner buat produk baru → share
-→ pegawai tempel, GAGAL lagi), buka halaman debug baru itu di device
-pegawai, salin isinya, kirim balik ke sesi ini. Dari situ akan langsung
-ketahuan PERSIS di titik mana rantai `unitId → unit → product` putus
-(unit tidak ketemu / product tidak ketemu / product tidak aktif) —
-baru eksekusi fix yang benar-benar menyasar akar masalahnya, bukan
-tebakan lagi.

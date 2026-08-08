@@ -33,18 +33,22 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   "Transaksi" di dialog approve, `Expenses.deletedAt` (migrasi v29)
   + soft-delete penuh (dumpSince/mergeRows khusus expenses).
 
-**BELUM** (sisa 2 dari 8, prioritas berikutnya):
-- Item 55 — logging diagnostik in-app (BUKAN Downloads) utk bug
-  Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner. Teori
-  kode SUDAH MENTOK (4 ronde investigasi) — butuh log runtime
-  sungguhan dari device pegawai utk lanjut, lihat detail lengkap di
-  PLAN.md Item 55 (rencana logging: `OrderParseDiagnostics` in-memory
-  + `ParseDiagnosticsScreen` sementara, WAJIB dicabut setelah root
-  cause ketemu).
+- Item 55 (`0919f0d`) — logging diagnostik in-app TERPASANG
+  (`OrderParseDiagnostics` in-memory maks 200 entry + titik `.add()`
+  di `OrderParserService.parse()` + `ParseDiagnosticsScreen` via
+  tombol bug_report sementara di `PasteOrderSheet`). **MENUNGGU user**:
+  minta build APK debug, reproduksi bug (owner buat produk baru →
+  share → pegawai tempel, gagal lagi), salin isi halaman debug dari
+  device pegawai, kirim balik ke sesi berikutnya. WAJIB cabut total
+  instrumentasi ini begitu root cause ketemu & fix dieksekusi (lihat
+  daftar file di PLAN.md Item 55).
+
+**BELUM** (sisa 1 dari 8):
 - Item 54 — QR Share bawa keterangan item (bukan cuma kode), + adjust
   parser Tempel Pesanan supaya kompatibel/ignore kalau formatnya beda.
 
-Lanjut Item 55 berikutnya.
+Lanjut Item 54 berikutnya (Item 55 menunggu balasan reproduksi user,
+tidak bisa dilanjut tanpa itu).
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang
