@@ -19,8 +19,13 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   `AppDatabase.getSyncUploadQueueItemForSlot` (baru) +
   `_unionSyncTables`/`_decodeTablesJson` (baru). Test baru di
   `lan_sync_upload_queue_test.dart` — revert-verified.
-- Item 59 (KRITIS, BELUM): sync pasca-Tutup Buku bisa hancurkan saldo
-  stok.
+- **Item 59 (KRITIS) — SELESAI, commit `3de2358`.** Tutup Buku sekarang
+  SELALU sisipkan baris carry-forward per satuan yg punya baris
+  terhapus (`deletedSum != 0`), ditanggal di batas akhir periode
+  (bukan `DateTime.now()`) — sebelumnya dilewati kalau unit itu punya
+  sisa riwayat, yg diam-diam merusak `rebuildStockAfterForUnits` di
+  sync pertama pasca-Tutup Buku. Test baru
+  `tutup_buku_stock_carry_forward_test.dart` — revert-verified.
 - Item 60 (KRITIS, BELUM): poin loyalti client bisa hilang, tidak
   pernah benar-benar tersinkron.
 - Item 56 (BELUM): Buku Hutang `total-paid` mentah (akar bug nota
@@ -35,7 +40,7 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner.
 - Item 54 (BELUM): QR Share bawa keterangan item.
 
-Lanjut Item 59 berikutnya.
+Lanjut Item 60 berikutnya.
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang

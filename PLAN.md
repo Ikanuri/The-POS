@@ -751,38 +751,6 @@ kosong) — pastikan kategori "Transaksi" tetap terhitung & masuk
 `allowed` saat di-approve, baris pembayaran benar-benar ter-merge ke
 host. Revert-verified.
 
-## Item 59 — Sync pertama pasca-Tutup Buku bisa menghancurkan saldo stok (6 Agustus, siap eksekusi — KRITIS)
-
-**Akar masalah**: `tutup_buku_service.dart:199-215` skip carry-forward
-saldo kalau MASIH ada baris `stock_ledger` tersisa utk unit itu
-(`if (remain != null) continue;`) — beralasan "saldo tetap benar" krn
-PEMBACA (`_rawBaseStock`, `app_database.dart:562-581`) baca `stock_
-after` baris TERAKHIR langsung, yang memang sudah benar dihitung SAAT
-histori lama masih ada. TAPI `rebuildStockAfterForUnits`
-(`app_database.dart:4855-4880`) — otomatis jalan di HOST *dan* KLIEN
-tiap kali ada baris `stock_ledger` yang ter-merge dari sync manapun —
-menghitung ulang `stock_after` dari NOL, cuma menjumlahkan baris yang
-MASIH ADA. Opening balance dari histori yang sudah diarsip (encoded di
-`stock_after` baris pertama yang tersisa) HILANG dari perhitungan ulang
-ini. Kena SEMUA produk yang ada pergerakan di periode berjalan, di
-sync pertama pasca-Tutup Buku manapun yg menyentuh unit itu.
-
-**Metode perbaikan**: `tutup_buku_service.dart` HARUS selalu insert
-baris carry-forward "adjustment" (bukan cuma saat `remain == null`) —
-tapi dgn `created_at` di-set PAS DI BATAS periode arsip
-(`periodEndExclusiveSec` atau `periodEndExclusiveSec - 1`), BUKAN
-`DateTime.now()` seperti sekarang (`app_database.dart` bagian yg sama,
-variabel `nowSec`) — supaya baris ini SELALU jadi baris PALING AWAL
-scr kronologis saat `rebuildStockAfterForUnits` sort `ORDER BY
-created_at ASC, id ASC`, jadi baseline yang benar sebelum baris² yang
-masih tersisa dijumlahkan di atasnya. Hapus kondisi `if (remain !=
-null) continue;` — insert unconditional slama `entry.value != 0`.
-**Test**: unit dgn histori CAMPURAN (sebagian diarsip, sebagian
-tersisa) — jalankan Tutup Buku, LALU panggil `rebuildStockAfterForUnits`
-(simulasikan efek sync) utk unit itu, pastikan `stock_after` baris
-TERAKHIR tetap sama dgn SEBELUM rebuild dijalankan (invariant: rebuild
-tidak boleh mengubah saldo akhir yang sudah benar).
-
 ## Item 60 — Poin loyalti dari client bisa hilang, tidak pernah benar-benar tersinkron (6 Agustus, siap eksekusi — KRITIS)
 
 **Akar masalah**: SEMUA 7 tempat tulis `customers.loyalty_points`

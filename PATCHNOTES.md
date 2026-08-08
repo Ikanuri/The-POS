@@ -11,6 +11,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 8 Agustus 2026
 
 ### 🔧 Perbaikan
+- **Saldo stok tidak lagi bisa berubah salah setelah Tutup Buku** —
+  kalau sebuah barang punya riwayat stok sebelum DAN sesudah periode
+  yang baru diarsipkan (bukan cuma di periode yang diarsipkan itu
+  sendiri), sebelumnya saldo barang tersebut bisa jadi salah begitu
+  sinkron dengan perangkat lain pertama kali dilakukan pasca Tutup
+  Buku. Sekarang saldo dijamin tetap benar.
 - **Data yang dikirim kasir/pegawai untuk disetujui pemilik toko tidak
   lagi bisa hilang tanpa jejak** kalau perangkat itu sinkron dua kali
   berturut-turut sebelum sempat disetujui (misal tap tombol sync 2x,
