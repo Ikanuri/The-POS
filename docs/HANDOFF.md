@@ -33,8 +33,12 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   (`approveSync`) & client (`syncToHost`), rekonstruksi
   `loyalty_points` dari SUM `loyalty_point_ledger`. Test baru
   `lan_sync_loyalty_points_rebuild_test.dart` — revert-verified.
-- Item 56 (BELUM): Buku Hutang `total-paid` mentah (akar bug nota
-  tempo hilang dari laporan).
+- **Item 56 — SELESAI, commit `5b2029f`.** Buku Hutang tidak lagi bisa
+  kehilangan nota tempo pelanggan — `getDebtBook`/`getUnpaidTxDetails`/
+  `getCustomerOutstandingDebt`/`settleMergedDebt` sekarang pakai pola
+  `netRemainingOwed` (net dari `change_given`, bukan `total-paid`
+  mentah). Test baru `debt_book_net_change_given_test.dart` +
+  tambahan di `transaction_lifecycle_test.dart` — revert-verified.
 - Item 57 (BELUM): pembayaran/item susulan ke transaksi yg sudah sync
   tidak sampai ke host.
 - Item 61 (BELUM): 5 temuan menengah (clock skew watermark tanpa
@@ -45,7 +49,7 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner.
 - Item 54 (BELUM): QR Share bawa keterangan item.
 
-Lanjut Item 56 berikutnya.
+Lanjut Item 57 berikutnya.
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang

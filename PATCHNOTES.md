@@ -11,6 +11,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 8 Agustus 2026
 
 ### 🔧 Perbaikan
+- **Nota tempo yang belum lunas tidak lagi bisa "hilang" dari Laporan
+  → Buku Hutang.** Sebelumnya, kalau pelanggan yang sama punya nota
+  lain yang pernah kelebihan bayar (kembalian dari nota itu dipakai
+  ulang untuk belanja tambahan), nota tempo-nya yang genuinely belum
+  lunas bisa hilang sama sekali dari daftar Buku Hutang — padahal
+  tetap muncul normal di riwayat transaksi. Sekarang perhitungannya
+  benar, nota tempo selalu tampil.
 - **Poin loyalti pelanggan tidak lagi bisa "hilang" setelah sinkron
   antar-perangkat.** Sebelumnya, kalau pegawai/kasir mencatat poin
   baru untuk pelanggan, lalu perangkat itu sinkron dengan pemilik

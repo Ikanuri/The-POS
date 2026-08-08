@@ -672,49 +672,6 @@ ketahuan PERSIS di titik mana rantai `unitId → unit → product` putus
 baru eksekusi fix yang benar-benar menyasar akar masalahnya, bukan
 tebakan lagi.
 
-## Item 56 — Buku Hutang: `total-paid` mentah bikin hutang pelanggan hilang dari laporan (6 Agustus, siap eksekusi)
-
-**Bug dilaporkan user**: nota tempo ADA di riwayat transaksi & tetap
-tampil di cart bar (`getCustomerOutstandingDebt`), TAPI hilang dari
-Laporan → Buku Hutang. Diinvestigasi tuntas sesi ini (lihat CHANGELOG
-sesi 6 Agustus utk detail transkrip lengkap kalau perlu re-baca).
-
-**Akar masalah**: `getDebtBook`/`getUnpaidTxDetails`/
-`getCustomerOutstandingDebt`/`settleMergedDebt` (`app_database.dart:
-3307,3345,3363,3623`) semua pakai `total - paid` MENTAH — padahal
-`paid` SENGAJA boleh melebihi `total` (kembalian dipakai ulang, lihat
-dok `app_database.dart:3402`). `getDebtBook` GROUP BY customer lalu
-`HAVING SUM(total-paid) > 0` — kalau pelanggan yang sama punya nota
-LAIN yang ke-overpay (mis. kembalian dipakai ulang lewat Tambah
-Belanjaan, `total` naik tapi `paid` lama tetap lebih besar),
-kontribusinya ke SUM jadi NEGATIF, bisa menutupi nota tempo asli →
-`HAVING` gagal → SELURUH pelanggan hilang dari Buku Hutang, walau tiap
-nota individual `status`-nya tetap benar `tempo`/`kurang_bayar` (cart
-bar TIDAK kena krn gerbangnya `COUNT(*)`, bukan `SUM`). Sudah
-diprediksi persis di PLAN.md lama (item ini menggantikan catatan lama
-itu). **Hipotesis user "status sempat salah lunas lalu sync balikin"
-sudah DINEGASIKAN** — cart & Buku Hutang pakai filter `status IN
-('kurang_bayar','tempo')` yang PERSIS sama.
-
-**Metode perbaikan**: pola `netRemainingOwed()`/`netPaidDisplay()`
-sudah ada & sudah dipakai di struk (`receipt_screen.dart:41,52`) —
-`sisa = total - (paid - Σ changeGiven)`. Terapkan versi SQL-nya:
-- `getDebtBook`/`getCustomerOutstandingDebt`: ganti `SUM(t.total -
-  t.paid)` jadi `SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0))`,
-  di mana `cg` adalah subquery/LEFT JOIN `(SELECT transaction_id,
-  SUM(change_given) AS total_cg FROM transaction_payments WHERE NOT
-  voided GROUP BY transaction_id)` — identik dgn `netPaidForStatus`
-  yang sudah dipakai `_reconcileTransactionTotals` (`app_database.dart:
-  2470-2477`), cuma diformulasikan ulang jadi SQL agregat per-nota,
-  BUKAN per-transaksi single row.
-- `getUnpaidTxDetails`: field `sisa` per nota (`app_database.dart:
-  3357`) — sama, ganti ke net.
-- `settleMergedDebt`: variabel `sisa` (`app_database.dart:3623`) — sama.
-- **Test**: skenario overpay+Tambah-Belanjaan (persis pola bug
-  `87cdaf0` yang sudah pernah diperbaiki di struk) yang menghasilkan
-  nota kontribusi negatif ke SUM, pastikan customer TETAP muncul di
-  Buku Hutang dgn nominal benar. Revert-verified spt biasa.
-
 ## Item 57 — Pembayaran/item susulan ke transaksi yang sudah sync TIDAK PERNAH sampai ke host (6 Agustus, siap eksekusi)
 
 **Bug ditemukan sekalian** (bukan penyebab Item 56, tapi nyata &
