@@ -3304,15 +3304,27 @@ class AppDatabase extends _$AppDatabase {
   /// Buku hutang: pelanggan dengan nota belum lunas, diurut dari yang paling
   /// lama menunggak (nota tertua yang belum lunas). Diturunkan dari tabel
   /// transactions (lebih akurat dari kolom cache `customers.outstandingDebt`).
+  ///
+  /// Item 56 — `total - paid` MENTAH salah: `paid` SENGAJA boleh melebihi
+  /// `total` (kembalian dipakai ulang, lihat dok `netRemainingOwed` di
+  /// `receipt_screen.dart`). `SUM(total-paid)` per pelanggan bisa jadi
+  /// NEGATIF kalau ada nota LAIN milik pelanggan yang sama yang overpay
+  /// begitu — menutupi nota tempo asli, `HAVING debt > 0` gagal, SELURUH
+  /// pelanggan hilang dari Buku Hutang walau tiap nota individual
+  /// `status`-nya tetap benar. Fix: net dari `change_given` (LEFT JOIN
+  /// subquery per transaksi), pola SQL sepadan `netRemainingOwed`.
   Future<List<DebtBookEntry>> getDebtBook() async {
     final rows = await customSelect(
       'SELECT c.id AS cid, c.name AS name, c.phone AS phone, '
-      'SUM(t.total - t.paid) AS debt, MIN(t.created_at) AS oldest, '
-      'COUNT(*) AS cnt '
+      'SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0)) AS debt, '
+      'MIN(t.created_at) AS oldest, COUNT(*) AS cnt '
       'FROM transactions t JOIN customers c ON c.id = t.customer_id '
+      'LEFT JOIN (SELECT transaction_id, SUM(change_given) AS total_cg '
+      '  FROM transaction_payments WHERE NOT voided GROUP BY transaction_id) cg '
+      '  ON cg.transaction_id = t.id '
       "WHERE t.status IN ('kurang_bayar', 'tempo') "
       'GROUP BY c.id HAVING debt > 0 ORDER BY oldest ASC',
-      readsFrom: {transactions, customers},
+      readsFrom: {transactions, customers, transactionPayments},
     ).get();
     return rows.map((r) {
       final oldest = r.data['oldest'] as int;
@@ -3342,6 +3354,9 @@ class AppDatabase extends _$AppDatabase {
   /// Nota belum lunas milik pelanggan, LENGKAP (nomor, tanggal, sisa),
   /// terlama dulu — dipakai Buku Hutang untuk menampilkan daftar nota
   /// individual (Item baru: "lihat nota mana saja yang belum lunas").
+  ///
+  /// Item 56 — `sisa` net dari `change_given` (pola sama `netRemainingOwed`
+  /// di `receipt_screen.dart`), bukan `total - paid` mentah.
   Future<List<UnpaidTxEntry>> getUnpaidTxDetails(String customerId) async {
     final rows = await (select(transactions)
           ..where((t) =>
@@ -3349,24 +3364,38 @@ class AppDatabase extends _$AppDatabase {
               t.status.isIn(['kurang_bayar', 'tempo']))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
-    return rows
-        .map((t) => UnpaidTxEntry(
-              id: t.id,
-              localId: t.localId,
-              createdAt: t.createdAt,
-              sisa: t.total - t.paid,
-            ))
-        .toList();
+    final paymentsByTx = await getPaymentsForTxs(rows.map((t) => t.id).toList());
+    return rows.map((t) {
+      final sumChangeGiven = (paymentsByTx[t.id] ?? const [])
+          .where((p) => !p.voided)
+          .fold<int>(0, (s, p) => s + p.changeGiven);
+      final sisa = t.total - t.paid + sumChangeGiven;
+      return UnpaidTxEntry(
+        id: t.id,
+        localId: t.localId,
+        createdAt: t.createdAt,
+        sisa: sisa > 0 ? sisa : 0,
+      );
+    }).toList();
   }
 
   /// Total hutang akumulatif pelanggan + jumlah nota yang belum lunas.
+  ///
+  /// Item 56 — net dari `change_given`, pola sama [getDebtBook]/
+  /// `netRemainingOwed`, walau `debtCount` (gerbang tampil cart bar) tidak
+  /// kena bug lama krn `COUNT(*)`, bukan `SUM`.
   Future<(int debtTotal, int debtCount)> getCustomerOutstandingDebt(
       String customerId) async {
     final row = await customSelect(
-      'SELECT COALESCE(SUM(total - paid), 0) AS total, COUNT(*) AS cnt '
-      "FROM transactions WHERE customer_id = ? AND status IN ('kurang_bayar', 'tempo')",
+      'SELECT COALESCE(SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0)), 0) '
+      '  AS total, COUNT(*) AS cnt '
+      'FROM transactions t '
+      'LEFT JOIN (SELECT transaction_id, SUM(change_given) AS total_cg '
+      '  FROM transaction_payments WHERE NOT voided GROUP BY transaction_id) cg '
+      '  ON cg.transaction_id = t.id '
+      "WHERE t.customer_id = ? AND t.status IN ('kurang_bayar', 'tempo')",
       variables: [Variable.withString(customerId)],
-      readsFrom: {transactions},
+      readsFrom: {transactions, transactionPayments},
     ).getSingleOrNull();
     final total = (row?.data['total'] as int?) ?? 0;
     final cnt = (row?.data['cnt'] as int?) ?? 0;
@@ -3609,6 +3638,11 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.id.isIn(txIds))
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .get();
+      // Item 56 — `sisa` net dari `change_given` (pola `netRemainingOwed`),
+      // bukan `total - paid` mentah: nota di batch ini bisa saja sudah
+      // pernah overpay sebagian (kembalian dipakai ulang), jadi `paid`
+      // mentahnya BUKAN sisa hutang yang sebenarnya.
+      final paymentsByTx = await getPaymentsForTxs(txIds);
       final now = DateTime.now();
       final label = txs.map((t) => t.localId).join(', ');
       var remaining = amount;
@@ -3620,7 +3654,10 @@ class AppDatabase extends _$AppDatabase {
       String? lastPaymentId;
       for (final tx in txs) {
         if (remaining <= 0) break;
-        final sisa = tx.total - tx.paid;
+        final sumChangeGiven = (paymentsByTx[tx.id] ?? const [])
+            .where((p) => !p.voided)
+            .fold<int>(0, (s, p) => s + p.changeGiven);
+        final sisa = tx.total - tx.paid + sumChangeGiven;
         if (sisa <= 0) continue; // sudah lunas → lewati
         final applied = remaining < sisa ? remaining : sisa;
         final paymentId = const Uuid().v4();
@@ -3637,10 +3674,12 @@ class AppDatabase extends _$AppDatabase {
         );
         lastPaymentId = paymentId;
         final newPaid = tx.paid + applied;
+        final netPaidForStatus = newPaid - sumChangeGiven;
         await (update(transactions)..where((t) => t.id.equals(tx.id))).write(
           TransactionsCompanion(
             paid: Value(newPaid),
-            status: Value(newPaid >= tx.total ? 'lunas' : 'kurang_bayar'),
+            status:
+                Value(netPaidForStatus >= tx.total ? 'lunas' : 'kurang_bayar'),
           ),
         );
         remaining -= applied;

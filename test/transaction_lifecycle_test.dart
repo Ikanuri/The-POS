@@ -434,6 +434,51 @@ void main() {
       await db.close();
     });
 
+    test(
+        'Item 56: nota dgn kembalian dipakai ulang (paid > total tapi net '
+        'masih owed) — sisa dihitung NET, bukan total-paid mentah', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      // tx1: raw paid(40000) > total(15000), tapi 30000 dari paid itu
+      // adalah kembalian yg dipakai ulang -> net sisa sebenarnya 5000.
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            id: 'tx1',
+            localId: 'K1-1',
+            status: 'kurang_bayar',
+            total: 15000,
+            paid: 40000,
+            changeAmount: 0,
+            paymentMethod: 'tunai',
+            createdAt: Value(DateTime(2026, 7, 1)),
+          ));
+      await db.into(db.transactionPayments).insert(
+          TransactionPaymentsCompanion.insert(
+            id: 'pay1',
+            transactionId: 'tx1',
+            amount: 40000,
+            method: 'tunai',
+            paidAt: Value(DateTime(2026, 7, 1)),
+            changeGiven: const Value(30000),
+          ));
+
+      final (applied, change) = await db.settleMergedDebt(
+        txIds: ['tx1'],
+        amount: 5000,
+        method: 'tunai',
+        kasirId: 'K1',
+      );
+
+      expect(applied, 5000,
+          reason: 'sisa NET tx1 cuma 5000 (bukan raw total-paid yg negatif, '
+              'yg kalau dipakai salah akan bikin sisa<=0 & dilewati)');
+      expect(change, 0);
+      final tx1 = await (db.select(db.transactions)..where((t) => t.id.equals('tx1'))).getSingle();
+      expect(tx1.status, 'lunas',
+          reason: 'setelah 5000 tambahan, net paid = (40000+5000)-30000=15000 '
+              '= total -> lunas');
+
+      await db.close();
+    });
+
     test('nota yang sudah lunas di dalam daftar dilewati, tidak ikut dialokasikan',
         () async {
       final db = await dbWithTwoDebts();
