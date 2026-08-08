@@ -4194,6 +4194,20 @@ class AppDatabase extends _$AppDatabase {
   /// menimpa antrian satu sama lain sebelum owner sempat approve. Kunci
   /// slot sekarang preferensi [deviceCode] (dikirim klien via
   /// `syncToHost`), fallback ke [fromIp] kalau klien lama belum kirim itu.
+  ///
+  /// Susulan (bug KRITIS lain, dilaporkan lewat audit sesi ini): DELETE+
+  /// INSERT ini SENGAJA masih menimpa isi slot lama, TAPI [tablesJson] yang
+  /// dioper ke sini WAJIB SUDAH di-gabung (union) oleh pemanggil
+  /// (`LanSyncService._handleRequest`, lihat `_unionSyncTables`) dgn isi
+  /// slot lama kalau ada — BUKAN payload delta mentah dari klien. Dulu
+  /// asumsinya "payload klien per-sync selalu superset dari watermark
+  /// upload klien" — TERBUKTI SALAH sejak watermark upload dimajukan
+  /// begitu HTTP 200 diterima (Item 17 Fase 2), BUKAN setelah owner
+  /// approve: sync kedua yang menyusul cepat (kebiasaan umum kasir tap
+  /// sync 2x, atau sync otomatis) cuma bawa DELTA kecil/kosong, dan tanpa
+  /// union, slot lama yang bisa berisi puluhan transaksi BELUM di-approve
+  /// hilang permanen tanpa jejak — cuma bisa pulih via "Sync Ulang Penuh"
+  /// manual yang tidak ada yang tahu harus dipakai.
   Future<void> enqueueSyncUpload({
     required String id,
     required String fromIp,
@@ -4226,6 +4240,20 @@ class AppDatabase extends _$AppDatabase {
       (select(syncUploadQueue)
             ..orderBy([(t) => OrderingTerm.asc(t.arrivedAt)]))
           .get();
+
+  /// Cari item antrian upload yang MASIH menunggu approve owner utk slot
+  /// pengirim ini (kunci sama persis dgn `enqueueSyncUpload`) — dipakai
+  /// `LanSyncService._handleRequest` utk GABUNGKAN (union) payload baru dgn
+  /// yang lama, bukan menimpanya. Lihat dok panjang di `enqueueSyncUpload`.
+  Future<SyncUploadQueueData?> getSyncUploadQueueItemForSlot({
+    required String fromIp,
+    String? deviceCode,
+  }) =>
+      (select(syncUploadQueue)
+            ..where((t) => (deviceCode != null && deviceCode.isNotEmpty
+                ? t.deviceCode.equals(deviceCode)
+                : t.fromIp.equals(fromIp) & t.deviceCode.isNull())))
+          .getSingleOrNull();
 
   Future<SyncUploadQueueData?> getSyncUploadQueueItem(String id) =>
       (select(syncUploadQueue)..where((t) => t.id.equals(id)))

@@ -220,21 +220,57 @@ class LanSyncService {
   }
 
   static PendingSyncItem _pendingSyncItemFromRow(SyncUploadQueueData row) {
-    final rawTables = jsonDecode(row.tablesJson) as Map<String, dynamic>;
-    final tables = rawTables.map((k, v) {
+    return PendingSyncItem(
+      id: row.id,
+      fromIp: row.fromIp,
+      arrivedAt: row.arrivedAt,
+      tables: _decodeTablesJson(row.tablesJson),
+      since: row.since,
+      tablesSummary: row.tablesSummary,
+    );
+  }
+
+  /// Decode `tablesJson` (`sync_upload_queue`/payload mentah) jadi Map yang
+  /// dipakai di seluruh kelas ini — dipisah dari `_pendingSyncItemFromRow`
+  /// supaya bisa dipakai ulang oleh `_unionSyncTables` (lihat dok di sana).
+  static Map<String, List<Map<String, Object?>>> _decodeTablesJson(
+      String json) {
+    final rawTables = jsonDecode(json) as Map<String, dynamic>;
+    return rawTables.map((k, v) {
       final rows = (v as List).cast<Map<String, dynamic>>().map((r) {
         return r.map<String, Object?>((rk, rv) => MapEntry(rk, rv));
       }).toList();
       return MapEntry(k, rows);
     });
-    return PendingSyncItem(
-      id: row.id,
-      fromIp: row.fromIp,
-      arrivedAt: row.arrivedAt,
-      tables: tables,
-      since: row.since,
-      tablesSummary: row.tablesSummary,
-    );
+  }
+
+  /// Gabungkan (union) baris tabel append-only dari upload BARU dgn upload
+  /// LAMA yang MASIH menunggu approve owner (kalau ada) — mencegah bug
+  /// kritis dilaporkan lewat audit sesi ini: watermark upload klien
+  /// dimajukan begitu HTTP 200 diterima, BUKAN setelah owner approve, jadi
+  /// sync KEDUA yang menyusul cepat (kasir tap sync 2x, atau sync otomatis)
+  /// cuma bawa DELTA kecil/kosong — TANPA union, `enqueueSyncUpload` yang
+  /// DELETE+INSERT slot lama akan MENGHAPUS PERMANEN data lama yang belum
+  /// sempat di-approve. Dedup per baris berdasar kolom `id` (primary key
+  /// SEMUA tabel append-only) — baris yang identik di kedua sisi tidak
+  /// diduplikasi; baris LAMA yang tidak ada lagi di payload baru TETAP
+  /// dipertahankan (union, bukan replace).
+  static Map<String, List<Map<String, Object?>>> _unionSyncTables(
+    Map<String, List<Map<String, Object?>>> oldTables,
+    Map<String, List<Map<String, Object?>>> newTables,
+  ) {
+    final result = <String, List<Map<String, Object?>>>{};
+    for (final table in {...oldTables.keys, ...newTables.keys}) {
+      final seenIds = <Object?>{};
+      final merged = <Map<String, Object?>>[];
+      for (final row in [...?oldTables[table], ...?newTables[table]]) {
+        final id = row['id'];
+        if (id != null && !seenIds.add(id)) continue;
+        merged.add(row);
+      }
+      result[table] = merged;
+    }
+    return result;
   }
 
   // Item 40 — antrian usulan harga/produk (terpisah dari _pendingQueue).
@@ -841,9 +877,27 @@ class LanSyncService {
         return MapEntry(k, rows);
       });
 
-      // Build a human-readable summary for the approval UI.
+      // Item 58 — GABUNGKAN (union) dgn item antrian LAMA yang MASIH
+      // menunggu approve owner utk slot pengirim ini, bukan menimpanya.
+      // Watermark upload klien maju begitu HTTP 200 diterima (BUKAN setelah
+      // owner approve) — sync KEDUA yang menyusul cepat (tap sync 2x, atau
+      // auto-sync) cuma bawa DELTA kecil/kosong. Delete+insert lama (lihat
+      // dok panjang di `enqueueSyncUpload`) akan MENGHAPUS PERMANEN data
+      // lama yang belum sempat di-approve owner kalau tidak digabung dulu.
+      final existingItem = await _db!.getSyncUploadQueueItemForSlot(
+        fromIp: ip,
+        deviceCode: rawDeviceCode,
+      );
+      final finalTables = existingItem == null
+          ? tables
+          : _unionSyncTables(
+              _decodeTablesJson(existingItem.tablesJson),
+              tables,
+            );
+
+      // Build a human-readable summary for the approval UI (dari hasil union).
       final parts = <String>[];
-      for (final e in tables.entries) {
+      for (final e in finalTables.entries) {
         if (e.value.isNotEmpty) {
           final label = _tableLabel(e.key);
           parts.add('${e.value.length} $label');
@@ -860,15 +914,15 @@ class LanSyncService {
       // kirim ulang di percobaan berikutnya (aman, tidak ada data hilang).
       // "1 slot per pengirim" (Item 41 A.3, cegah RAM/DB menumpuk saat
       // klien nge-sync berulang sebelum owner approve) dipertahankan di
-      // dalam `enqueueSyncUpload` (delete+insert 1 transaksi) — AMAN
-      // menimpa item lama krn payload klien per-sync selalu superset dari
-      // watermark upload klien saat itu.
+      // dalam `enqueueSyncUpload` (delete+insert 1 transaksi) — payload yang
+      // di-insert di sini SUDAH hasil union (lihat Item 58 di atas), jadi
+      // delete+insert-nya aman walau payload klien per-sync bukan superset.
       final itemId = _generateNonce();
       await _db!.enqueueSyncUpload(
         id: itemId,
         fromIp: ip,
         deviceCode: rawDeviceCode,
-        tablesJson: jsonEncode(tables),
+        tablesJson: jsonEncode(finalTables),
         since: since,
         tablesSummary: summary,
       );

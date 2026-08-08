@@ -235,6 +235,56 @@ void main() {
   });
 
   test(
+      'Item 58 — sync KEDUA dari klien yang sama SEBELUM owner approve/reject '
+      'sync pertama tidak boleh menghapus data sync pertama dari antrian '
+      '(union, bukan replace)', () async {
+    final hostDb = AppDatabase(NativeDatabase.memory());
+    final clientDb = AppDatabase(NativeDatabase.memory());
+    addTearDown(hostDb.close);
+    addTearDown(clientDb.close);
+
+    await clientDb.into(clientDb.transactions).insert(
+        _tx('tx-pertama', 'A1-1', DateTime(2026, 1, 1)));
+
+    final (_, token) =
+        await LanSyncService.startHost(db: hostDb, storeKey: 'shared-store-key');
+
+    // Sync #1: tx-pertama terkirim, masuk antrian, TAPI owner belum sempat
+    // approve/reject.
+    await _withRealHttp(() => LanSyncService.syncToHost(
+          db: clientDb,
+          storeKey: 'shared-store-key',
+          hostIp: '127.0.0.1',
+          syncToken: token,
+        ));
+    final queue1 = await hostDb.listSyncUploadQueue();
+    expect(queue1.single.tablesJson, contains('tx-pertama'));
+
+    // Klien buat transaksi BARU lagi lalu sync KEDUA — watermark upload
+    // klien sudah maju melewati tx-pertama (HTTP 200 sync #1 sudah
+    // diterima), jadi sync #2 ini cuma bawa tx-kedua (delta), BUKAN
+    // superset dari sync #1.
+    await clientDb.into(clientDb.transactions).insert(
+        _tx('tx-kedua', 'A1-2', DateTime.now()));
+    await _withRealHttp(() => LanSyncService.syncToHost(
+          db: clientDb,
+          storeKey: 'shared-store-key',
+          hostIp: '127.0.0.1',
+          syncToken: token,
+        ));
+
+    final queue2 = await hostDb.listSyncUploadQueue();
+    expect(queue2, hasLength(1));
+    expect(queue2.single.tablesJson, contains('tx-pertama'),
+        reason: 'tx-pertama HARUS tetap ada di antrian setelah sync kedua — '
+            'belum pernah di-approve/reject owner, jadi tidak boleh hilang '
+            'permanen hanya karena payload sync kedua tidak superset');
+    expect(queue2.single.tablesJson, contains('tx-kedua'),
+        reason: 'tx-kedua (data baru dari sync kedua) juga harus ada — '
+            'union, bukan salah satu menang');
+  });
+
+  test(
       'watermark upload klien TIDAK maju kalau request gagal (host tidak '
       'bisa dihubungi) — sync berikutnya otomatis retry data yang sama',
       () async {
