@@ -579,3 +579,81 @@ utk menyisipkan baris item+Total, lalu **WAJIB tes ulang** seluruh test
 `encodeHandoff`/`parse` roundtrip (`order_parser_service_test.dart`,
 `kasir_handoff_qr_test.dart`) utk pastikan tidak ada tabrakan (mis. nama
 produk yang kebetulan diawali kata kunci baris meta seperti "Nama:").
+
+## Item 55 — Bug "Tempel Pesanan" pegawai (non terima_pembayaran) tidak dapat produk dari QR/teks owner — BUTUH LOGGING DIAGNOSTIK, teori kode SUDAH MENTOK (6 Agustus, siap eksekusi)
+
+**Konteks lengkap** (ringkas dari investigasi panjang sesi ini — jangan
+ulangi dari nol): owner input beberapa produk baru → share via QR atau
+"Salin Teks Pesanan" → di-tempel pegawai (kasir role, TANPA izin
+`terima_pembayaran`) via "Tempel Pesanan" → **TIDAK ADA produk masuk
+keranjang**, error "Kode pesanan tidak valid / tidak ada barang
+dikenali" (`kasir_screen.dart:1279`, dari `!parsed.hasMachineCode ||
+parsed.items.isEmpty`). **Detail penentu**: QR/teks yang PERSIS SAMA,
+kalau diterima ASISTEN (yang punya izin bayar), **BERHASIL**.
+
+**Tiga hipotesis SUDAH DISINGKIRKAN via pembacaan kode** (bukan dugaan
+kasar — sudah dibaca file:line-nya langsung):
+- ID salah/berubah di sisi owner sendiri (RUANG LINGKUP: `produk_form_
+  screen.dart`, `saveProduct`) — RUNTUH karena asisten yg terima data
+  SAMA PERSIS berhasil; kalau ID-nya salah dari sumbernya, asisten juga
+  harusnya gagal.
+- Bug encode multi-item di `encodeHandoff`/split `;` — dicek baris per
+  baris, tidak ada celah.
+- Percabangan kode berdasar role di jalur scan/paste/parse — dicek
+  berulang kali, TIDAK ADA percabangan role di `kasir_screen.dart`/
+  `paste_order_sheet.dart`/`order_parser_service.dart` sama sekali.
+- **Hipotesis watermark download (`products` delta-sync + `product_
+  units` full-dump + FK silent-drop) SEMPAT jadi kandidat kuat** — tapi
+  **user sudah verifikasi produk itu ADA & ketemu di pencarian Produk
+  pegawai**, jadi baris `products`-nya TIDAK hilang. Ini melemahkan
+  (mungkin menyingkirkan) teori itu juga — TAPI belum 100% pasti,
+  karena "ketemu di pencarian" belum tentu berarti `product_units`-nya
+  (satuan spesifik yang dirujuk kode `#PSN:`) juga utuh & `id`-nya
+  PERSIS sama dgn yang dirujuk di kode — belum diverifikasi granular
+  sampai level itu.
+
+**Keputusan user: STOP menebak dari pembacaan kode statis — pasang LOG
+DIAGNOSTIK supaya reproduksi berikutnya kasih bukti runtime langsung,
+bukan teori lagi.**
+
+**Rencana implementasi logging** (di `OrderParserService.parse()`,
+`order_parser_service.dart` sekitar baris 108-167 — loop per-pasangan
+item):
+1. Di AWAL `parse()` (setelah cek `hasMachineCode`): log teks MENTAH
+   yang diterima (raw `text` parameter) — supaya bisa lihat PERSIS apa
+   yang benar-benar ter-scan/ter-paste di device pegawai (verifikasi
+   tidak ada korupsi/potongan karakter dari scanner/clipboard).
+2. Untuk SETIAP pasangan `unitId=qty...` yang diproses, log:
+   - `unitId` mentah yang di-parse dari kode.
+   - Hasil `SELECT * FROM product_units WHERE id = ?` — ADA/TIDAK, dan
+     kalau ada, `product_id`-nya apa.
+   - Kalau unit ketemu: hasil `SELECT * FROM products WHERE id = ?`
+     (pakai `unit.productId`) — ADA/TIDAK, dan `is_active`-nya apa
+     kalau ada.
+   - Kesimpulan baris ini: masuk `items` atau `notFound` (dan alasan
+     spesifik yang mana dari 2 kondisi gagal itu).
+3. Tulis log ini via `CrashLogService.record()` (`crash_log_service.
+   dart:66`, sudah ada & sudah nulis ke file publik `Downloads/the_pos_
+   crash_log.jsonl` yang gampang diambil user) — bikin objek
+   `Exception('DIAGNOSTIK parse(): ...')` sintetis berisi ringkasan di
+   atas per pasangan (atau satu entry gabungan per panggilan `parse()`
+   kalau lebih ringkas), context string jelas mis. `'order_parser_
+   diagnostic'` — BUKAN exception sungguhan, cuma pinjam mekanisme
+   logging yang sudah ada & sudah terbukti reachable oleh user biasa
+   (tidak perlu USB debug/logcat).
+4. **WAJIB**: logging ini SEMENTARA/instrumentasi debug, bukan fitur
+   permanen — begitu root cause ketemu & fix-nya jelas, cabut lagi
+   (atau turunkan jadi kondisional `kDebugMode` saja) supaya tidak
+   membebani `parse()` produksi selamanya & tidak menumpahkan
+   `productUnitId` mentah ke file log publik tanpa alasan jangka
+   panjang.
+
+**Langkah setelah logging terpasang**: minta user build APK debug,
+reproduksi bug persis skenario di atas (owner buat produk baru → share
+→ pegawai tempel, GAGAL lagi), lalu ambil file
+`Downloads/the_pos_crash_log.jsonl` dari device pegawai & kirim isi
+entry `order_parser_diagnostic` terbarunya. Dari situ akan langsung
+ketahuan PERSIS di titik mana rantai `unitId → unit → product` putus
+(unit tidak ketemu / product tidak ketemu / product tidak aktif) —
+baru eksekusi fix yang benar-benar menyasar akar masalahnya, bukan
+tebakan lagi.
