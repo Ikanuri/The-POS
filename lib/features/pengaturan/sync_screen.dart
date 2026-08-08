@@ -11,6 +11,33 @@ import '../laci_meja/laci_meja_proposal_review_screen.dart';
 import '../pelanggan/customer_proposal_review_screen.dart';
 import 'product_proposal_review_screen.dart';
 
+/// Kategori yang tersedia di payload sync (yang ada datanya), beserta
+/// jumlah baris. Dipisah jadi fungsi murni supaya bisa diuji langsung tanpa
+/// widget (`approveSync` yang dipanggil sesudahnya butuh DB nyata, tidak
+/// selalu bisa diuji lewat tap widget — lihat dok test terkait).
+///
+/// Item 57 — HARUS jumlahkan SEMUA tabel dalam kategori, bukan cuma tabel
+/// PERTAMA (`tables.first`, spt sebelumnya): pelunasan/cicilan/item susulan
+/// ("Tambah Belanjaan") ke transaksi yang HEADER-nya (`transactions`) sudah
+/// lebih dulu tersinkron TIDAK PERNAH kirim ulang header itu (`dumpSince`
+/// filter `created_at`, tidak berubah saat melunasi) — payload sync bisa
+/// HANYA berisi `transaction_payments`/`transaction_items` baru dgn
+/// `transactions` kosong. Kalau cuma hitung tabel pertama, kategori
+/// "Transaksi" dianggap kosong (`count == 0`) walau ada isi pembayaran —
+/// kalau itu satu-satunya isi payload, `available.isEmpty` → otomatis
+/// `rejectSync` PERMANEN dgn pesan salah "tidak ada data baru".
+@visibleForTesting
+Map<String, ({List<String> tables, int count})> computeAvailableSyncCategories(
+    PendingSyncItem item) {
+  final available = <String, ({List<String> tables, int count})>{};
+  LanSyncService.syncCategories.forEach((label, tables) {
+    final count =
+        tables.fold<int>(0, (s, t) => s + (item.tables[t]?.length ?? 0));
+    if (count > 0) available[label] = (tables: tables, count: count);
+  });
+  return available;
+}
+
 class SyncScreen extends ConsumerStatefulWidget {
   const SyncScreen({super.key});
 
@@ -69,12 +96,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   }
 
   Future<void> _approve(PendingSyncItem item) async {
-    // Kategori yang tersedia di payload ini (yang ada datanya), beserta jumlah.
-    final available = <String, ({List<String> tables, int count})>{};
-    LanSyncService.syncCategories.forEach((label, tables) {
-      final count = item.tables[tables.first]?.length ?? 0;
-      if (count > 0) available[label] = (tables: tables, count: count);
-    });
+    final available = computeAvailableSyncCategories(item);
 
     final notifier = ref.read(syncStateProvider.notifier);
     if (available.isEmpty) {
