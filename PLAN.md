@@ -672,42 +672,6 @@ ketahuan PERSIS di titik mana rantai `unitId → unit → product` putus
 baru eksekusi fix yang benar-benar menyasar akar masalahnya, bukan
 tebakan lagi.
 
-## Item 57 — Pembayaran/item susulan ke transaksi yang sudah sync TIDAK PERNAH sampai ke host (6 Agustus, siap eksekusi)
-
-**Bug ditemukan sekalian** (bukan penyebab Item 56, tapi nyata &
-serius, berlaku SEMUA role non-owner): pelunasan/cicilan/item susulan
-("Tambah Belanjaan") ke transaksi yang HEADER-nya sudah lebih dulu
-tersinkron TIDAK PERNAH sampai ke host.
-
-**Akar masalah**: `dumpSince` filter tabel `transactions` cuma `WHERE
-created_at >= since` (`app_database.dart:4435`) — melunasi TIDAK
-mengubah `created_at`, jadi header lama tidak ikut re-dump, cuma baris
-`transaction_payments`/`transaction_items` baru yang ikut. Di
-`sync_screen.dart:_approve()` (baris 71-74), jumlah kategori
-"Transaksi" dihitung HANYA dari `item.tables['transactions'].length`
-(tabel PERTAMA `syncCategories['Transaksi']`) — kalau itu KOSONG,
-kategori "Transaksi" tidak pernah masuk `available`, walau
-`transaction_payments`-nya ADA isi. Kalau itu satu-satunya isi payload
-→ `available.isEmpty` → OTOMATIS `rejectSync` (PERMANEN, tidak retry)
-dgn pesan salah "tidak ada data baru". Kalau digabung kategori lain →
-checkbox "Transaksi" sama sekali tidak muncul di dialog approve.
-
-**Metode perbaikan**: ganti hitungan count di `_approve()`
-(`sync_screen.dart:71-74`) dari:
-```dart
-final count = item.tables[tables.first]?.length ?? 0;
-```
-jadi jumlahkan SEMUA tabel dalam kategori itu:
-```dart
-final count = tables.fold<int>(0, (s, t) => s + (item.tables[t]?.length ?? 0));
-```
-supaya kategori muncul & ke-include di `allowed` selama ADA salah satu
-tabelnya berisi baris, bukan cuma tabel pertama. **Test**: payload
-sync yang HANYA berisi `transaction_payments` baru (header `transactions`
-kosong) — pastikan kategori "Transaksi" tetap terhitung & masuk
-`allowed` saat di-approve, baris pembayaran benar-benar ter-merge ke
-host. Revert-verified.
-
 ## Item 61 — Temuan sync lain (menengah, dampak lebih sempit — 6 Agustus, siap eksekusi kalau ada waktu)
 
 Lima temuan tambahan dari audit sync sesi ini, dampak lebih sempit dari

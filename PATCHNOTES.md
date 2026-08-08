@@ -11,6 +11,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 8 Agustus 2026
 
 ### 🔧 Perbaikan
+- **Pelunasan/cicilan/tambahan belanja pada nota yang sudah pernah
+  disinkron sekarang selalu sampai ke pemilik toko.** Sebelumnya,
+  kalau nota itu headernya sudah lebih dulu tersinkron, pelunasan atau
+  penambahan barang belakangan padanya bisa gagal terkirim sama
+  sekali dan otomatis ditolak dengan pesan "tidak ada data baru" —
+  padahal ada.
 - **Nota tempo yang belum lunas tidak lagi bisa "hilang" dari Laporan
   → Buku Hutang.** Sebelumnya, kalau pelanggan yang sama punya nota
   lain yang pernah kelebihan bayar (kembalian dari nota itu dipakai

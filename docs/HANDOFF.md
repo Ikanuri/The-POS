@@ -39,8 +39,12 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   `netRemainingOwed` (net dari `change_given`, bukan `total-paid`
   mentah). Test baru `debt_book_net_change_given_test.dart` +
   tambahan di `transaction_lifecycle_test.dart` — revert-verified.
-- Item 57 (BELUM): pembayaran/item susulan ke transaksi yg sudah sync
-  tidak sampai ke host.
+- **Item 57 — SELESAI, commit `b76b923`.** Pembayaran/item susulan ke
+  transaksi yg sudah sync sekarang selalu sampai ke host —
+  `sync_screen.dart` hitung count kategori dari SEMUA tabel (bukan
+  cuma tabel pertama), diekstrak jadi fungsi murni
+  `computeAvailableSyncCategories` (testable tanpa widget). Test baru
+  `sync_payment_only_category_test.dart` — revert-verified.
 - Item 61 (BELUM): 5 temuan menengah (clock skew watermark tanpa
   reset, reconcile tanpa guard item kosong, tie-break `stock_after`
   beda pembaca/penulis-ulang, approval per-kategori bisa pisah
@@ -49,7 +53,7 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner.
 - Item 54 (BELUM): QR Share bawa keterangan item.
 
-Lanjut Item 57 berikutnya.
+Lanjut Item 61 berikutnya.
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang
