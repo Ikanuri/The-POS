@@ -60,6 +60,22 @@ void main() {
     expect(preTables, isNot(contains('alt_prices')),
         reason: 'prakondisi: DB v7 belum punya tabel alt_prices');
     v7.execute('PRAGMA user_version = 7;');
+    // Item 61.5 (fix baru) migrasi ALTER TABLE expenses ADD COLUMN
+    // deleted_at berlaku TANPA syarat versi — tabel ini WAJIB ada di
+    // fixture manapun yang diupgrade sampai schemaVersion terkini.
+    v7.execute('''
+      CREATE TABLE expenses (
+        id TEXT NOT NULL PRIMARY KEY,
+        local_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        note TEXT,
+        reference_id TEXT,
+        kasir_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT 0,
+        synced_at INTEGER
+      );
+    ''');
     // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
     v7.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     v7.dispose();
@@ -95,7 +111,7 @@ void main() {
     // Versi schema benar-benar naik ke skema terkini (10 — migrasi lanjutan
     // menambah change_taken & sort_order, tapi test ini fokus ke migrasi 7->8).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 28); // schemaVersion terkini
+    expect(ver.data.values.first, 29); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

@@ -1186,6 +1186,18 @@ class LanSyncService {
       // tanpa perlu method delete-setting baru.
       db.setSetting(_kUploadWatermarkKey, '');
 
+  /// Item 61.1 — escape hatch manual utk watermark DOWNLOAD (klien→host),
+  /// pasangan [resetUploadWatermark] yang SEBELUMNYA tidak ada sama sekali.
+  /// `downloadSyncStartedAt` (dipakai memfilter baris berdasar jam HOST)
+  /// pakai jam KLIEN sendiri — kalau jam klien "lebih maju" dari jam host
+  /// (selisih di luar toleransi 5 menit, atau device pernah salah setel
+  /// tanggal), window download bisa macet PERMANEN (baris baru host
+  /// dianggap "sudah lama", tidak pernah di-dump lagi) TANPA cara reset
+  /// dari UI sama sekali sebelum ini — beda dari upload yang sudah punya
+  /// "Sync Ulang Penuh". Sama pola: string kosong, bukan hapus baris.
+  static Future<void> resetDownloadWatermark(AppDatabase db) =>
+      db.setSetting(_kDownloadWatermarkKey, '');
+
   static Future<SyncResult> syncToHost({
     required AppDatabase db,
     required String storeKey,

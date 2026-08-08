@@ -121,15 +121,37 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                 style: const TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 4),
-              ...available.entries.map((e) => CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text('${e.key} (${e.value.count})'),
-                    value: selected[e.key],
-                    onChanged: (v) =>
-                        setSt(() => selected[e.key] = v ?? false),
-                  )),
+              // Item 61.4 — "Stok" WAJIB ikut ter-approve tiap kali
+              // "Transaksi" dipilih, tidak bisa dipisah lewat UI sama
+              // sekali: penjualan tanpa pergerakan stoknya bikin transaksi
+              // tercatat tapi stok TIDAK PERNAH berkurang, PERMANEN (baris
+              // `stock_ledger` yang di-skip tidak pernah dikirim ulang scr
+              // delta). Checkbox "Stok" disabled (dipaksa true) selama
+              // "Transaksi" masih tercentang.
+              ...available.entries.map((e) {
+                final forcedByTransaksi = e.key == 'Stok' &&
+                    available.containsKey('Transaksi') &&
+                    selected['Transaksi'] == true;
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(forcedByTransaksi
+                      ? '${e.key} (${e.value.count}) — wajib ikut Transaksi'
+                      : '${e.key} (${e.value.count})'),
+                  value: forcedByTransaksi ? true : selected[e.key],
+                  onChanged: forcedByTransaksi
+                      ? null
+                      : (v) => setSt(() {
+                            selected[e.key] = v ?? false;
+                            if (e.key == 'Transaksi' &&
+                                v == true &&
+                                available.containsKey('Stok')) {
+                              selected['Stok'] = true;
+                            }
+                          }),
+                );
+              }),
             ],
           ),
           actions: [

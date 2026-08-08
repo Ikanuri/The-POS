@@ -7297,6 +7297,12 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
   late final GeneratedColumn<DateTime> syncedAt = GeneratedColumn<DateTime>(
       'synced_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -7307,7 +7313,8 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
         referenceId,
         kasirId,
         createdAt,
-        syncedAt
+        syncedAt,
+        deletedAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7364,6 +7371,10 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
       context.handle(_syncedAtMeta,
           syncedAt.isAcceptableOrUnknown(data['synced_at']!, _syncedAtMeta));
     }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
     return context;
   }
 
@@ -7391,6 +7402,8 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       syncedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}synced_at']),
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
     );
   }
 
@@ -7410,6 +7423,16 @@ class Expense extends DataClass implements Insertable<Expense> {
   final String? kasirId;
   final DateTime createdAt;
   final DateTime? syncedAt;
+
+  /// Item 61.5 — soft-delete (bukan hard DELETE): `expenses` sync-nya
+  /// append-only (cuma kirim baris BARU, tidak pernah kirim "baris ini
+  /// dihapus") — hard DELETE di 1 device TIDAK PERNAH propagate, expense
+  /// yang dihapus TETAP ada di device lain yang sudah menerimanya, laba
+  /// bersih antar-device beda permanen. Null = aktif (belum dihapus); diisi
+  /// = dihapus pada waktu itu. Ditulis sbg UPDATE (append-only-compatible,
+  /// baris "diupdate" ikut ter-sync sbg baris baru), konsisten dgn pola
+  /// tabel lain di app ini (produk/pelanggan pakai `is_active`).
+  final DateTime? deletedAt;
   const Expense(
       {required this.id,
       required this.localId,
@@ -7419,7 +7442,8 @@ class Expense extends DataClass implements Insertable<Expense> {
       this.referenceId,
       this.kasirId,
       required this.createdAt,
-      this.syncedAt});
+      this.syncedAt,
+      this.deletedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -7439,6 +7463,9 @@ class Expense extends DataClass implements Insertable<Expense> {
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || syncedAt != null) {
       map['synced_at'] = Variable<DateTime>(syncedAt);
+    }
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     return map;
   }
@@ -7460,6 +7487,9 @@ class Expense extends DataClass implements Insertable<Expense> {
       syncedAt: syncedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(syncedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
     );
   }
 
@@ -7476,6 +7506,7 @@ class Expense extends DataClass implements Insertable<Expense> {
       kasirId: serializer.fromJson<String?>(json['kasirId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
   @override
@@ -7491,6 +7522,7 @@ class Expense extends DataClass implements Insertable<Expense> {
       'kasirId': serializer.toJson<String?>(kasirId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
 
@@ -7503,7 +7535,8 @@ class Expense extends DataClass implements Insertable<Expense> {
           Value<String?> referenceId = const Value.absent(),
           Value<String?> kasirId = const Value.absent(),
           DateTime? createdAt,
-          Value<DateTime?> syncedAt = const Value.absent()}) =>
+          Value<DateTime?> syncedAt = const Value.absent(),
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
       Expense(
         id: id ?? this.id,
         localId: localId ?? this.localId,
@@ -7514,6 +7547,7 @@ class Expense extends DataClass implements Insertable<Expense> {
         kasirId: kasirId.present ? kasirId.value : this.kasirId,
         createdAt: createdAt ?? this.createdAt,
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
       );
   Expense copyWithCompanion(ExpensesCompanion data) {
     return Expense(
@@ -7527,6 +7561,7 @@ class Expense extends DataClass implements Insertable<Expense> {
       kasirId: data.kasirId.present ? data.kasirId.value : this.kasirId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
 
@@ -7541,14 +7576,15 @@ class Expense extends DataClass implements Insertable<Expense> {
           ..write('referenceId: $referenceId, ')
           ..write('kasirId: $kasirId, ')
           ..write('createdAt: $createdAt, ')
-          ..write('syncedAt: $syncedAt')
+          ..write('syncedAt: $syncedAt, ')
+          ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, localId, type, amount, note, referenceId,
-      kasirId, createdAt, syncedAt);
+      kasirId, createdAt, syncedAt, deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7561,7 +7597,8 @@ class Expense extends DataClass implements Insertable<Expense> {
           other.referenceId == this.referenceId &&
           other.kasirId == this.kasirId &&
           other.createdAt == this.createdAt &&
-          other.syncedAt == this.syncedAt);
+          other.syncedAt == this.syncedAt &&
+          other.deletedAt == this.deletedAt);
 }
 
 class ExpensesCompanion extends UpdateCompanion<Expense> {
@@ -7574,6 +7611,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
   final Value<String?> kasirId;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
+  final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const ExpensesCompanion({
     this.id = const Value.absent(),
@@ -7585,6 +7623,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     this.kasirId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ExpensesCompanion.insert({
@@ -7597,6 +7636,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     this.kasirId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         localId = Value(localId),
@@ -7612,6 +7652,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     Expression<String>? kasirId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
+    Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7624,6 +7665,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
       if (kasirId != null) 'kasir_id': kasirId,
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7638,6 +7680,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
       Value<String?>? kasirId,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt,
+      Value<DateTime?>? deletedAt,
       Value<int>? rowid}) {
     return ExpensesCompanion(
       id: id ?? this.id,
@@ -7649,6 +7692,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
       kasirId: kasirId ?? this.kasirId,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7683,6 +7727,9 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     if (syncedAt.present) {
       map['synced_at'] = Variable<DateTime>(syncedAt.value);
     }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7701,6 +7748,7 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
           ..write('kasirId: $kasirId, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -19629,6 +19677,7 @@ typedef $$ExpensesTableCreateCompanionBuilder = ExpensesCompanion Function({
   Value<String?> kasirId,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
+  Value<DateTime?> deletedAt,
   Value<int> rowid,
 });
 typedef $$ExpensesTableUpdateCompanionBuilder = ExpensesCompanion Function({
@@ -19641,6 +19690,7 @@ typedef $$ExpensesTableUpdateCompanionBuilder = ExpensesCompanion Function({
   Value<String?> kasirId,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
+  Value<DateTime?> deletedAt,
   Value<int> rowid,
 });
 
@@ -19679,6 +19729,9 @@ class $$ExpensesTableFilterComposer
 
   ColumnFilters<DateTime> get syncedAt => $composableBuilder(
       column: $table.syncedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$ExpensesTableOrderingComposer
@@ -19716,6 +19769,9 @@ class $$ExpensesTableOrderingComposer
 
   ColumnOrderings<DateTime> get syncedAt => $composableBuilder(
       column: $table.syncedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ExpensesTableAnnotationComposer
@@ -19753,6 +19809,9 @@ class $$ExpensesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get syncedAt =>
       $composableBuilder(column: $table.syncedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 }
 
 class $$ExpensesTableTableManager extends RootTableManager<
@@ -19787,6 +19846,7 @@ class $$ExpensesTableTableManager extends RootTableManager<
             Value<String?> kasirId = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ExpensesCompanion(
@@ -19799,6 +19859,7 @@ class $$ExpensesTableTableManager extends RootTableManager<
             kasirId: kasirId,
             createdAt: createdAt,
             syncedAt: syncedAt,
+            deletedAt: deletedAt,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -19811,6 +19872,7 @@ class $$ExpensesTableTableManager extends RootTableManager<
             Value<String?> kasirId = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ExpensesCompanion.insert(
@@ -19823,6 +19885,7 @@ class $$ExpensesTableTableManager extends RootTableManager<
             kasirId: kasirId,
             createdAt: createdAt,
             syncedAt: syncedAt,
+            deletedAt: deletedAt,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

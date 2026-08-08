@@ -30,6 +30,16 @@ class Expenses extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
 
+  /// Item 61.5 — soft-delete (bukan hard DELETE): `expenses` sync-nya
+  /// append-only (cuma kirim baris BARU, tidak pernah kirim "baris ini
+  /// dihapus") — hard DELETE di 1 device TIDAK PERNAH propagate, expense
+  /// yang dihapus TETAP ada di device lain yang sudah menerimanya, laba
+  /// bersih antar-device beda permanen. Null = aktif (belum dihapus); diisi
+  /// = dihapus pada waktu itu. Ditulis sbg UPDATE (append-only-compatible,
+  /// baris "diupdate" ikut ter-sync sbg baris baru), konsisten dgn pola
+  /// tabel lain di app ini (produk/pelanggan pakai `is_active`).
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

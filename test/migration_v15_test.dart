@@ -67,6 +67,22 @@ void main() {
     expect(prePayCols, isNot(contains('voided')),
         reason: 'prakondisi: DB v14 belum punya kolom voided');
     v14.execute('PRAGMA user_version = 14;');
+    // Item 61.5 (fix baru) migrasi ALTER TABLE expenses ADD COLUMN
+    // deleted_at berlaku TANPA syarat versi — tabel ini WAJIB ada di
+    // fixture manapun yang diupgrade sampai schemaVersion terkini.
+    v14.execute('''
+      CREATE TABLE expenses (
+        id TEXT NOT NULL PRIMARY KEY,
+        local_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        note TEXT,
+        reference_id TEXT,
+        kasir_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT 0,
+        synced_at INTEGER
+      );
+    ''');
     // product_groups diperlukan agar migrasi v19 (addColumn sort_order) tak gagal.
     v14.execute('CREATE TABLE product_groups(id INTEGER PRIMARY KEY, name TEXT);');
     // product_units diperlukan agar migrasi v22 (addColumn requires_deposit) tak gagal.
@@ -93,7 +109,7 @@ void main() {
     expect(pay.amount, 10000, reason: 'data lama tetap utuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 28); // schemaVersion terkini
+    expect(ver.data.values.first, 29); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

@@ -205,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -417,6 +417,10 @@ class AppDatabase extends _$AppDatabase {
             // Susulan (permintaan user) — usulan sync pelanggan, pola SAMA
             // PERSIS dgn `products.locallyModified` (Item 40).
             await m.addColumn(customers, customers.locallyModified);
+          }
+          if (from < 29) {
+            // Item 61.5 — soft-delete expenses (lihat dok `Expenses.deletedAt`).
+            await m.addColumn(expenses, expenses.deletedAt);
           }
         },
         beforeOpen: (details) async {
@@ -2439,7 +2443,21 @@ class AppDatabase extends _$AppDatabase {
   ///            (transaksi legacy/tempo), pakai kolom header `paid` apa adanya.
   /// Keduanya hanya bergantung pada child rows yang menyebar via sync sebagai
   /// baris baru → hasil identik di semua perangkat & idempoten.
-  Future<void> _reconcileTransactionTotals(String txId) async {
+  /// [guardEmptyItems] — Item 61.2: kalau `true`, transaksi TANPA baris item
+  /// sama sekali TIDAK dianggap genuinely bertotal 0 — total LAMA
+  /// dipertahankan. Dipakai KHUSUS oleh path rekonsiliasi PASCA-SYNC
+  /// ([reconcileTransactionsByIds]), di mana item kosong bisa berarti item
+  /// susulan via sync di-skip permanen (mis. header parent-nya sempat
+  /// DITOLAK di antrian lama lalu di-reject, FK gagal saat item baru datang
+  /// belakangan, `mergeRows` skip baris itu diam-diam — lihat dok
+  /// error-swallow FK) — BUKAN genuinely nota kosong. Default `false`
+  /// (perilaku lama, tanpa guard) utk semua path mutasi LOKAL langsung (mis.
+  /// `returnUnpaidTransactionItems`/`editUnpaidTransactionItem` menghapus
+  /// SEMUA item nota dgn sengaja, dalam transaksi DB yang sama, item
+  /// kosong di situ SELALU genuine, guard di sini justru akan salah
+  /// mempertahankan total lama yang seharusnya jadi 0).
+  Future<void> _reconcileTransactionTotals(String txId,
+      {bool guardEmptyItems = false}) async {
     final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
         .getSingleOrNull();
     if (tx == null || tx.status == 'void') return;
@@ -2449,7 +2467,9 @@ class AppDatabase extends _$AppDatabase {
     final itemRows = await (select(transactionItems)
           ..where((t) => t.transactionId.equals(txId)))
         .get();
-    final newTotal = itemRows.fold<int>(0, (s, i) => s + i.subtotal);
+    final newTotal = (guardEmptyItems && itemRows.isEmpty)
+        ? tx.total
+        : itemRows.fold<int>(0, (s, i) => s + i.subtotal);
 
     final allPayRows = await (select(transactionPayments)
           ..where((t) => t.transactionId.equals(txId)))
@@ -2502,12 +2522,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Rekonsiliasi total/paid/status untuk sekumpulan id transaksi.
-  /// Id yang tidak ada di DB lokal dilewati dengan aman.
+  /// Id yang tidak ada di DB lokal dilewati dengan aman. HANYA dipakai path
+  /// pasca-sync (`LanSyncService.approveSync`/`syncToHost`) — `guardEmptyItems`
+  /// diaktifkan (Item 61.2), lihat dok `_reconcileTransactionTotals`.
   Future<void> reconcileTransactionsByIds(Set<String> ids) async {
     if (ids.isEmpty) return;
     await transaction(() async {
       for (final id in ids) {
-        await _reconcileTransactionTotals(id);
+        await _reconcileTransactionTotals(id, guardEmptyItems: true);
       }
     });
   }
@@ -3547,28 +3569,37 @@ class AppDatabase extends _$AppDatabase {
     ));
   }
 
+  /// Item 61.5 — soft-delete (UPDATE `deleted_at`, bukan hard DELETE):
+  /// `expenses` sync-nya append-only (cuma kirim baris BARU) — hard DELETE
+  /// TIDAK PERNAH propagate ke device lain yang sudah menerima baris itu,
+  /// laba bersih antar-device beda permanen. UPDATE ini ikut ter-sync sbg
+  /// baris "diupdate" (lihat dok `dumpSince`/`mergeRows` bagian `expenses`).
   Future<void> deleteExpense(String id) =>
-      (delete(expenses)..where((t) => t.id.equals(id))).go();
+      (update(expenses)..where((t) => t.id.equals(id)))
+          .write(ExpensesCompanion(deletedAt: Value(DateTime.now())));
 
-  /// Semua pengeluaran dalam rentang [from]..[to], terbaru dulu.
+  /// Semua pengeluaran dalam rentang [from]..[to], terbaru dulu. Yang
+  /// soft-deleted (Item 61.5) tidak ikut tampil.
   Stream<List<Expense>> watchExpenses(DateTime from, DateTime to) {
     return (select(expenses)
           ..where((t) =>
               t.createdAt.isBiggerOrEqualValue(from) &
-              t.createdAt.isSmallerOrEqualValue(to))
+              t.createdAt.isSmallerOrEqualValue(to) &
+              t.deletedAt.isNull())
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }
 
   /// Total pengeluaran yang mengurangi Laba Bersih (daily_expense +
-  /// change_given) dalam rentang.
+  /// change_given) dalam rentang. Yang soft-deleted dikecualikan.
   Future<int> getNetProfitExpenseTotal(DateTime from, DateTime to) async {
     final amountSum = expenses.amount.sum();
     final row = await (selectOnly(expenses)
           ..addColumns([amountSum])
           ..where(expenses.type.isIn(netProfitExpenseTypes) &
               expenses.createdAt.isBiggerOrEqualValue(from) &
-              expenses.createdAt.isSmallerOrEqualValue(to)))
+              expenses.createdAt.isSmallerOrEqualValue(to) &
+              expenses.deletedAt.isNull()))
         .getSingle();
     return row.read(amountSum) ?? 0;
   }
@@ -3578,14 +3609,15 @@ class AppDatabase extends _$AppDatabase {
   /// owner_withdrawal/supplier_payment/change_given) — beda dari
   /// [getNetProfitExpenseTotal] yang cuma hitung subset [netProfitExpenseTypes]
   /// yang mengurangi Laba Bersih. Tab ini murni "ke mana saja uang mengalir",
-  /// bukan P&L.
+  /// bukan P&L. Yang soft-deleted dikecualikan.
   Future<Map<String, int>> getExpenseBreakdownByType(
       DateTime from, DateTime to) async {
     final amountSum = expenses.amount.sum();
     final rows = await (selectOnly(expenses)
           ..addColumns([expenses.type, amountSum])
           ..where(expenses.createdAt.isBiggerOrEqualValue(from) &
-              expenses.createdAt.isSmallerOrEqualValue(to))
+              expenses.createdAt.isSmallerOrEqualValue(to) &
+              expenses.deletedAt.isNull())
           ..groupBy([expenses.type]))
         .get();
     return {
@@ -3595,7 +3627,8 @@ class AppDatabase extends _$AppDatabase {
 
   /// Item 49d — total pengeluaran (SEMUA jenis digabung) per HARI (lokal)
   /// dalam rentang, utk grafik tren tab Laporan Pengeluaran. Pola query sama
-  /// dgn `rebuildStaleSummariesInRange` (strftime unixepoch→localtime).
+  /// dgn `rebuildStaleSummariesInRange` (strftime unixepoch→localtime). Yang
+  /// soft-deleted dikecualikan.
   Future<Map<DateTime, int>> getExpenseDailyTotals(
       DateTime from, DateTime to) async {
     final fromSec = from.millisecondsSinceEpoch ~/ 1000;
@@ -3603,7 +3636,8 @@ class AppDatabase extends _$AppDatabase {
     final rows = await customSelect(
       "SELECT strftime('%Y-%m-%d', datetime(created_at,'unixepoch','localtime')) AS d, "
       'COALESCE(SUM(amount),0) AS total '
-      'FROM expenses WHERE created_at >= ? AND created_at <= ? GROUP BY d',
+      'FROM expenses WHERE created_at >= ? AND created_at <= ? '
+      'AND deleted_at IS NULL GROUP BY d',
       variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
       readsFrom: {expenses},
     ).get();
@@ -4498,6 +4532,15 @@ class AppDatabase extends _$AppDatabase {
           varCount = 2;
         case 'transaction_payments':
           sql = 'SELECT * FROM "transaction_payments" WHERE paid_at >= ?';
+        case 'expenses':
+          // Item 61.5 — soft-delete (`deleted_at`) ditulis via UPDATE,
+          // TIDAK mengubah `created_at` — tanpa OR ini, baris yang baru
+          // dihapus tidak akan pernah ikut re-dump, penghapusannya tidak
+          // pernah sampai ke device lain (persis bug Item 57 tapi utk
+          // delete, bukan pelunasan/item susulan).
+          sql = 'SELECT * FROM "expenses" WHERE created_at >= ? '
+              'OR deleted_at >= ?';
+          varCount = 2;
         default:
           sql = 'SELECT * FROM "$t" WHERE created_at >= ?';
       }
@@ -4923,9 +4966,17 @@ class AppDatabase extends _$AppDatabase {
     if (unitIds.isEmpty) return;
     await transaction(() async {
       for (final uid in unitIds) {
+        // Item 61.3 — tie-break kedua HARUS `rowid` (bukan `id`/UUID acak),
+        // SAMA PERSIS dgn `_rawBaseStock` (yang order DESC) — kalau tidak,
+        // utk baris² pada detik yang SAMA, pembaca (`_rawBaseStock`, ambil
+        // baris "terakhir") & penulis-ulang saldo (fungsi ini) bisa memilih
+        // baris "terakhir" yang BERBEDA, bikin saldo stok berbeda permanen
+        // antar host/client stlh sync (total akhir sama krn penjumlahan
+        // komutatif, tapi baris mana yang dianggap "terbaru" oleh
+        // `_rawBaseStock` bisa beda dari urutan yang dipakai di sini).
         final rows = await customSelect(
           'SELECT id, qty_change, stock_after FROM stock_ledger '
-          'WHERE product_unit_id = ? ORDER BY created_at ASC, id ASC',
+          'WHERE product_unit_id = ? ORDER BY created_at ASC, rowid ASC',
           variables: [Variable.withString(uid)],
         ).get();
         var running = 0.0;
@@ -5062,11 +5113,32 @@ class AppDatabase extends _$AppDatabase {
           // Append-only: skip if PK already exists.
           final pkVal = row['id'];
           if (pkVal != null) {
+            final selectCols = tableName == 'expenses' ? 'deleted_at' : '1';
             final exists = await customSelect(
-              'SELECT 1 FROM "$tableName" WHERE id = ?',
+              'SELECT $selectCols FROM "$tableName" WHERE id = ?',
               variables: [Variable<Object>(pkVal)],
             ).getSingleOrNull();
-            if (exists != null) continue;
+            if (exists != null) {
+              // Item 61.5 — `expenses` KHUSUS: baris yang isinya sendiri
+              // tidak pernah berubah (append-only-nya sungguhan), TAPI
+              // status soft-delete (`deleted_at`) satu-arah aktif→dihapus
+              // WAJIB tetap bisa propagate walau PK sudah ada di sisi ini —
+              // beda dari tabel append-only lain yang genuinely skip total.
+              if (tableName == 'expenses' &&
+                  row['deleted_at'] != null &&
+                  exists.data['deleted_at'] == null) {
+                await customUpdate(
+                  'UPDATE expenses SET deleted_at = ? WHERE id = ?',
+                  variables: [
+                    Variable<Object>(row['deleted_at']!),
+                    Variable<Object>(pkVal),
+                  ],
+                  updates: {expenses},
+                  updateKind: UpdateKind.update,
+                );
+              }
+              continue;
+            }
           }
           // Transactions & expenses have UNIQUE(local_id). Two devices with
           // the same kasir code produce identical local_ids for different
