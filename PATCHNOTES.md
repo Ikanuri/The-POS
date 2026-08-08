@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Agustus 2026
+
+### 🔧 Perbaikan
+- **Data yang dikirim kasir/pegawai untuk disetujui pemilik toko tidak
+  lagi bisa hilang tanpa jejak** kalau perangkat itu sinkron dua kali
+  berturut-turut sebelum sempat disetujui (misal tap tombol sync 2x,
+  atau sinkron otomatis kepicu lagi). Sebelumnya, sinkron kedua bisa
+  menimpa & menghapus permanen data dari sinkron pertama yang belum
+  sempat ditinjau pemilik toko — sekarang data digabung, tidak ada yang
+  hilang.
+
 ## 6 Agustus 2026
 
 ### 🆕 Fitur baru

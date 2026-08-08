@@ -751,42 +751,6 @@ kosong) — pastikan kategori "Transaksi" tetap terhitung & masuk
 `allowed` saat di-approve, baris pembayaran benar-benar ter-merge ke
 host. Revert-verified.
 
-## Item 58 — Sync kedua client bisa MENGHAPUS batch upload sebelumnya yang belum di-approve, PERMANEN (6 Agustus, siap eksekusi — KRITIS)
-
-**Akar masalah**: `enqueueSyncUpload` (`app_database.dart:4197-4223`)
-selalu DELETE+INSERT slot pengirim (`sync_upload_queue`) tanpa cek
-apakah payload baru itu superset dari yang lama — sementara watermark
-upload client dimajukan begitu HTTP 200+HMAC lolos
-(`lan_sync_service.dart:1354`), BUKAN setelah owner approve (cuma
-"tersimpan durable di antrian", lihat komentar `:1348-1353`). Kasir
-sync 2x berturut-turut (kebiasaan umum, atau sync otomatis kepicu lagi
-sebelum owner sempat approve) → payload kedua cuma delta kecil/kosong
-→ antrian pertama (bisa puluhan transaksi) KETIMPA & hilang tanpa
-jejak. Klaim komentar lama "AMAN menimpa krn payload klien per-sync
-selalu superset" (`lan_sync_service.dart:858-865`) **TERBUKTI SALAH**
-sejak watermark upload diperkenalkan (Item 17 Fase 2) — payload
-berikutnya adalah DELTA, bukan superset. Cuma bisa pulih via "Sync
-Ulang Penuh" manual (`resetUploadWatermark`), yang tidak ada
-indikasi/nudge apa pun ke user bahwa itu perlu dipakai.
-
-**Metode perbaikan**: `enqueueSyncUpload` jangan lagi DELETE+INSERT
-polos — kalau SUDAH ADA item lama utk slot itu (belum di-approve/
-ditolak owner), GABUNGKAN (union) tabel-tabel baru ke tabel-tabel lama
-per baris (dedup by primary key — `transactions`/`transaction_items`/
-`transaction_payments`/dll semua append-only dgn PK `id`, jadi union
-set sederhana: baris dgn id yg sudah ada di batch lama TIDAK perlu
-diduplikasi, baris baru ditambahkan), baru simpan gabungannya sbg
-`tablesJson` yang baru — BUKAN mengganti begitu saja. `tablesSummary`
-juga perlu dihitung ulang dari hasil gabungan. **Alternatif lebih
-simpel** (kalau union dianggap terlalu rumit utk 1 putaran fix): jangan
-timpa kalau item lama BELUM di-approve DAN payload baru bukan superset
-murni (bandingkan set id per tabel) — tolak `enqueueSyncUpload` baru,
-biarkan versi lama tetap di antrian sampai di-approve/ditolak dulu,
-klien retry otomatis di sync berikutnya (aman krn upload-nya idempotent,
-append-only PK dedup). **Test**: simulasikan 2 kali `syncToHost`
-berurutan sebelum `approveSync`/`rejectSync` — assert baris dari sync
-PERTAMA tidak hilang dari antrian setelah sync KEDUA.
-
 ## Item 59 — Sync pertama pasca-Tutup Buku bisa menghancurkan saldo stok (6 Agustus, siap eksekusi — KRITIS)
 
 **Akar masalah**: `tutup_buku_service.dart:199-215` skip carry-forward

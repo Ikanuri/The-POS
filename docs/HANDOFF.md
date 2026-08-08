@@ -5,27 +5,37 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 6 Agustus 2026 (lanjutan 6) — versi kerja tetap
-**2.10.0+15**, schemaVersion tetap 28. **Semua temuan investigasi
-sync sesi ini (Buku Hutang + audit kritis lebih luas) DIPINDAH ke
-PLAN.md** atas permintaan user, lengkap dgn metode rencana perbaikan
-masing-masing — **PLAN.md Item 56-61**:
-- Item 56: Buku Hutang `total-paid` mentah (akar bug nota tempo hilang
-  dari laporan).
-- Item 57: pembayaran/item susulan ke transaksi yg sudah sync tidak
-  sampai ke host (bug `sync_screen.dart:_approve()` hitung kategori).
-- Item 58 (KRITIS): sync kedua client bisa hapus batch upload
-  sebelumnya yg belum di-approve, permanen.
-- Item 59 (KRITIS): sync pasca-Tutup Buku bisa hancurkan saldo stok.
-- Item 60 (KRITIS): poin loyalti client bisa hilang, tidak pernah
-  benar-benar tersinkron.
-- Item 61: 5 temuan menengah (clock skew watermark tanpa reset,
-  reconcile tanpa guard item kosong, tie-break `stock_after` beda
-  pembaca/penulis-ulang, approval per-kategori bisa pisah transaksi
-  dari stok, hapus expense tidak propagate).
+_Update sesi 8 Agustus 2026 (lanjutan 7) — versi kerja tetap
+**2.10.0+15**, schemaVersion tetap 28. User minta kerjakan semua
+temuan sync sesi lalu (PLAN.md Item 56-61) sesuai urutan prioritas,
+kecualikan backlog lama (47/48/23/17/21/28/41/51). Urutan yg
+disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
 
-Belum satu pun dieksekusi — semua masih status "siap eksekusi" di
-PLAN.md, tunggu keputusan user prioritas mana dulu.
+- **Item 58 (KRITIS) — SELESAI, commit `8897298`.** Sync kedua client
+  sebelum owner approve/reject sync pertama tidak lagi menghapus
+  permanen batch upload sebelumnya — `LanSyncService._handleRequest`
+  sekarang GABUNGKAN (union, dedup by `id`) payload baru dgn item
+  antrian lama yg masih menunggu approve utk slot yg sama, via
+  `AppDatabase.getSyncUploadQueueItemForSlot` (baru) +
+  `_unionSyncTables`/`_decodeTablesJson` (baru). Test baru di
+  `lan_sync_upload_queue_test.dart` — revert-verified.
+- Item 59 (KRITIS, BELUM): sync pasca-Tutup Buku bisa hancurkan saldo
+  stok.
+- Item 60 (KRITIS, BELUM): poin loyalti client bisa hilang, tidak
+  pernah benar-benar tersinkron.
+- Item 56 (BELUM): Buku Hutang `total-paid` mentah (akar bug nota
+  tempo hilang dari laporan).
+- Item 57 (BELUM): pembayaran/item susulan ke transaksi yg sudah sync
+  tidak sampai ke host.
+- Item 61 (BELUM): 5 temuan menengah (clock skew watermark tanpa
+  reset, reconcile tanpa guard item kosong, tie-break `stock_after`
+  beda pembaca/penulis-ulang, approval per-kategori bisa pisah
+  transaksi dari stok, hapus expense tidak propagate).
+- Item 55 (BELUM): logging diagnostik in-app (BUKAN Downloads) utk bug
+  Tempel Pesanan pegawai tidak dapat produk dari QR/teks owner.
+- Item 54 (BELUM): QR Share bawa keterangan item.
+
+Lanjut Item 59 berikutnya.
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang

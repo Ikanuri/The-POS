@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-08
+
+- `8897298` — fix: sync kedua dari client sebelum owner approve/reject sync pertama bisa MENGHAPUS PERMANEN batch upload sebelumnya (PLAN.md Item 58, KRITIS). Akar: `enqueueSyncUpload` DELETE+INSERT slot pengirim tanpa cek apakah payload baru superset dari yang lama — sejak watermark upload client dimajukan begitu HTTP 200 diterima (bukan setelah owner approve, Item 17 Fase 2), sync kedua yang menyusul cepat cuma bawa delta kecil/kosong, menimpa & menghilangkan batch pertama tanpa jejak. Fix: `LanSyncService._handleRequest` sekarang GABUNGKAN (union, dedup by `id`) payload baru dgn item antrian lama yang masih menunggu approve utk slot yg sama (`AppDatabase.getSyncUploadQueueItemForSlot` baru + `_unionSyncTables`/`_decodeTablesJson` helper), sebelum diteruskan ke `enqueueSyncUpload`. 1 test baru (`lan_sync_upload_queue_test.dart`, 2x `syncToHost` berurutan sebelum approve) — revert-verified.
+
 ## 2026-08-06
 
 - `f0c5ea5` — fix: pre-order/titip/pinjaman yang SUDAH SELESAI (Dipenuhi/Dibatalkan/Diambil/Dikembalikan) tidak lagi terus diusulkan ulang ke owner — bug dilaporkan user (pola sama bug produk Item 40 yang sudah diperbaiki `filterUnchangedProposals`, tapi Laci Meja tidak pernah dapat perbaikan setara). Akar: `dumpLaciMejaProposals` cuma filter `locally_modified=1` klien, tanpa banding ke data host — flag itu cuma reset kalau baris resmi host ter-merge balik ke klien, jadi sebelum itu terjadi baris identik terus dikirim ulang sbg "usulan baru". Fix: `filterUnchangedLaciMejaProposals` (pola sama produk, lebih sederhana — record datar) dipanggil host sebelum masuk antrian, buang baris identik dgn host (kecuali `locally_modified`/`updated_at`). 5 test baru (3 unit DB + 2 end-to-end HTTP) — revert-verified.
