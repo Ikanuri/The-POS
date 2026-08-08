@@ -5,6 +5,61 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 6 Agustus 2026 (lanjutan 5) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. Susulan PLAN.md: **Item 54** ditambahkan (QR
+Share/handoff bawa keterangan item spt katalog HTML, cek kompatibilitas
+"Tempel Pesanan" cart & Tambah Belanjaan — BELUM dieksekusi, lihat
+PLAN.md utk detail lengkap).
+
+_Update sesi 6 Agustus 2026 (lanjutan 4) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. User minta audit lebih luas: "apa juga ada bug
+kritis lain di aspek sync?" **DIINVESTIGASI, BELUM DIPERBAIKI SATU PUN**
+(masih tahap catat, sama spt investigasi Buku Hutang di atas — JANGAN
+masuk PLAN.md dulu). Tiga temuan dikonfirmasi LANGSUNG baca kode
+(bukan dugaan agent, sudah di-spot-check manual):
+
+1. **KRITIS — sync kedua client bisa MENGHAPUS batch upload sebelumnya
+   yang belum di-approve owner, PERMANEN.** `enqueueSyncUpload`
+   (`app_database.dart:4197-4223`) selalu DELETE+INSERT slot pengirim
+   tanpa cek superset — sementara watermark upload client dimajukan
+   begitu HTTP 200+HMAC lolos (`lan_sync_service.dart:1354`), BUKAN
+   setelah owner approve (cuma "tersimpan durable di antrian"). Kasir
+   sync 2x berturut-turut (kebiasaan umum) → payload kedua cuma delta
+   kecil/kosong → antrian pertama (bisa puluhan transaksi) KETIMPA
+   & hilang tanpa jejak. Cuma bisa pulih via "Sync Ulang Penuh" manual,
+   yang tidak ada yang tahu harus dipakai.
+2. **KRITIS — sync pertama pasca-Tutup Buku bisa menghancurkan saldo
+   stok.** `tutup_buku_service.dart:199-215` skip carry-forward saldo
+   kalau MASIH ada baris stock_ledger tersisa (`if (remain != null)
+   continue`) — benar utk pembaca (`_rawBaseStock` baca baris terakhir
+   langsung), TAPI `rebuildStockAfterForUnits` (`app_database.dart:
+   4855-4880`, otomatis jalan tiap sync stock_ledger apa pun) hitung
+   ulang dari NOL cuma dari baris yg tersisa — opening balance dari
+   histori yang sudah diarsip HILANG. Kena semua produk yang ada
+   pergerakan di periode berjalan, di sync pertama pasca-Tutup Buku.
+3. **KRITIS — poin loyalti dari client bisa hilang, tidak pernah
+   benar-benar tersinkron.** SEMUA 7 tempat tulis `customers.
+   loyalty_points` (`app_database.dart:2293,2581,2618,2696,2719,2827,
+   3187`) pakai UPDATE relatif mentah, TIDAK menyentuh `updated_at`.
+   Karena `customers` LWW berdasar `updated_at`, poin yg baru didapat
+   client bisa langsung ketimpa balik begitu host push versi lama
+   pelanggan itu — TIDAK ADA mekanisme rebuild dari `loyalty_point_
+   ledger` (beda dari stok yang punya `rebuildStockAfterForUnits`).
+
+Temuan tambahan (menengah, dampak lebih sempit — lihat transkrip sesi
+utk detail file:line lengkap kalau perlu eksekusi nanti): selisih jam
+device bikin data host hilang dari download window (toleransi skew 5
+menit tanpa validasi); `_reconcileTransactionTotals` tanpa guard item
+kosong (trigger nyata: item transaksi yg header-nya sempat DITOLAK
+PERMANEN di antrian lama); tie-break urutan `stock_after` beda antara
+pembaca & penulis ulang (host/client bisa beda stok permanen); approval
+per-kategori bisa pisah penjualan dari pergerakan stoknya; penghapusan
+`expenses` tidak pernah propagate ke device lain.
+
+Next action: tunggu user putuskan prioritas perbaikan (kemungkinan
+besar bareng dgn 2 bug Buku Hutang di atas — semuanya di area sync yang
+sama, `app_database.dart`/`lan_sync_service.dart`).
+
 _Update sesi 6 Agustus 2026 (lanjutan 3) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User laporkan: "nota tempo ada di riwayat
 transaksi & tetap muncul di cart bar, TAPI hilang dari Laporan → Buku
