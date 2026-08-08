@@ -5,6 +5,64 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 6 Agustus 2026 (lanjutan 3) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. User laporkan: "nota tempo ada di riwayat
+transaksi & tetap muncul di cart bar, TAPI hilang dari Laporan → Buku
+Hutang." **DIINVESTIGASI, BELUM DIPERBAIKI** (user minta dicatat dulu,
+JANGAN masuk PLAN.md — masih tahap analisis, belum disetujui eksekusi).
+Dua bug NYATA ditemukan lewat pembacaan kode langsung (bukan dugaan),
+keduanya independen satu sama lain:
+
+1. **Akar gejala yang dilaporkan user** — `getDebtBook`/`getUnpaidTxDetails`/
+   `settleMergedDebt` (`app_database.dart:3307,3345,3623`) pakai
+   `total - paid` MENTAH, padahal `paid` SENGAJA boleh melebihi `total`
+   (kembalian, lihat dok `app_database.dart:3402`). `getDebtBook` GROUP BY
+   customer lalu `HAVING SUM(total-paid) > 0` — kalau pelanggan yang sama
+   punya nota LAIN yang ke-overpay (mis. kembalian dipakai ulang lewat
+   Tambah Belanjaan, `total` naik tapi `paid` lama masih lebih besar),
+   kontribusinya ke SUM jadi NEGATIF, bisa menutupi nota tempo asli →
+   `HAVING` gagal → SELURUH pelanggan hilang dari Buku Hutang, walau tiap
+   nota individual `status`-nya tetap benar `tempo`/`kurang_bayar` (itu
+   sebabnya cart bar — `getCustomerOutstandingDebt`, gerbangnya `COUNT(*)`
+   bukan `SUM`, jadi TIDAK kena — tetap menampilkan hutangnya, PERSIS
+   gejala yang dilaporkan). **Sudah diprediksi persis di PLAN.md lama**
+   ("Buku Hutang ... angka hutang pelanggan bisa understated dengan pola
+   bug yang SAMA, belum diverifikasi/diperbaiki") — laporan user ini
+   adalah bug lanjutan yang diramalkan situ. Fix idealnya: pola
+   `netRemainingOwed()`/`netPaidDisplay()` (sudah dipakai struk, lihat
+   `receipt_screen.dart:41,52`) diterapkan ke query-query ini.
+   **Hipotesis user "status sempat salah lunas lalu sync balikin" SUDAH
+   DINEGASIKAN** — cart & Buku Hutang pakai filter `status IN
+   ('kurang_bayar','tempo')` yang PERSIS SAMA, jadi kalau status salah
+   ke-'lunas' harusnya hilang dari KEDUANYA sekaligus, bukan cuma satu.
+
+2. **Bug TERPISAH ditemukan sekalian (bukan penyebab gejala user, tapi
+   nyata & serius)** — pembayaran/cicilan/pelunasan susulan ke transaksi
+   yang HEADER-nya sudah lebih dulu tersinkron TIDAK PERNAH sampai ke
+   host. Akar: `dumpSince` filter tabel `transactions` cuma
+   `WHERE created_at >= since` (`app_database.dart:4435`) — melunasi
+   TIDAK mengubah `created_at`, jadi header lama tidak ikut re-dump,
+   cuma baris `transaction_payments` baru yang ikut. Di
+   `sync_screen.dart:_approve()` (baris 71-74), jumlah kategori
+   "Transaksi" dihitung HANYA dari `item.tables['transactions'].length`
+   (tabel PERTAMA `syncCategories['Transaksi']`) — kalau itu KOSONG
+   (skenario di atas), kategori "Transaksi" tidak pernah masuk
+   `available`, walau `transaction_payments`-nya ADA isi. Kalau itu
+   satu-satunya isi payload → `available.isEmpty` → OTOMATIS
+   `rejectSync` (PERMANEN, tidak retry) dgn pesan salah "tidak ada data
+   baru" — pembayaran hilang selamanya dari sisi host. Kalau digabung
+   kategori lain → checkbox "Transaksi" sama sekali tidak muncul di
+   dialog approve, walau owner tap "Terima" utk kategori lain.
+   **Berlaku utk SEMUA role non-owner** (asisten maupun pegawai), bukan
+   soal izin — murni soal transaksi yang header-nya sudah lama
+   tersinkron lalu dapat pembayaran/item susulan belakangan (termasuk
+   "Tambah Belanjaan" ke nota lama, bukan cuma pelunasan tempo).
+
+**Belum ada kode yang diubah sama sekali** — investigasi murni baca
+kode. Next action: tunggu user setuju eksekusi (kemungkinan sekaligus
+menutup 2 bug ini + verifikasi ada tidaknya bug kritis lain di aspek
+sync yang belum ketemu).
+
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang
 masih terikut sync meski sudah dipenuhi — apakah sudah diperbaiki?" —
