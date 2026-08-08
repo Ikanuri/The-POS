@@ -530,56 +530,6 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
      harga modal sering naik-turun antar pembelian, tapi perlu simpan
      riwayat per-batch pembelian, bukan cuma 1 kolom).
 
-## Item 54 — QR Share (handoff antar-device) bawa keterangan item, bukan cuma kode (6 Agustus, BELUM dieksekusi)
-
-**Permintaan user**: teks QR handoff (`OrderParserService.encodeHandoff`,
-dipakai `_showHandoffQr`/tombol "Bagikan" `Share.share(qrText)` di
-`cart_sheet.dart:918`) sekarang cuma berisi baris kode mesin `#PSN:...`
-+ baris meta (`Pegawai:`/`Nama:`/`PelangganId:`/`Nota:`) — TANPA daftar
-item yang manusia bisa baca. Minta ditambah keterangan item (nama
-produk, satuan, qty — mungkin juga Total), **format SAMA PERSIS** dgn
-`buildOrderText()` di katalog HTML (`order_page_service.dart:1066-1109`)
-yang SUDAH begini:
-```
-PESANAN — <toko>
-━━━━━━━━━━━━━━━
-Ayam Potong Kg × 2
-Galon Aqua Galon × 1
-━━━━━━━━━━━━━━━
-Total: Rp ...
-
-Nama: ...
-HP: ...
-Catatan: ...
-
-#PSN:U1=2;U2=1
-```
-— daftar item + Total tampil DULU (manusia baca sekilas isi pesanan di
-WhatsApp/preview sebelum scan), baris meta & kode mesin tetap di bawah.
-
-**Kompatibilitas parser** — user minta dicek: kalau "Tempel Pesanan" (di
-cart utama MAUPUN di state "Tambah Belanjaan" pasca-checkout) tidak
-kompatibel dgn format baru ini, sesuaikan supaya BISA terima ATAU
-sengaja abaikan baris tambahan itu (cukup baca baris kode `#PSN:` saja)
-— **teknis sama persis dgn cara parser sudah menangani teks dari
-katalog HTML pelanggan** (yang sudah lebih dulu berformat begini).
-
-**Sudah dicek (belum dieksekusi)**: `PasteOrderSheet` dipakai generik
-lewat `cartId` di KEDUA konteks (cart utama `cart_sheet.dart:332`, DAN
-scan/tempel di `kasir_screen.dart:1368,1823` — termasuk alur "Tambah
-Belanjaan", cukup beda `cartId` yg dioper) — SATU pemanggilan
-`OrderParserService.parse()` (`paste_order_sheet.dart:59`) menangani
-keduanya, jadi cukup satu titik verifikasi/perbaikan, bukan dua.
-`_machineLine`/baris meta di `parse()` sudah regex per-baris (`^Nama:`
-dst, `#PSN:(.+)$` multiline) — SUDAH mentolerir baris tambahan
-apa pun di sekitarnya (persis kenapa teks katalog HTML yang jauh lebih
-panjang dari itu sudah bisa di-parse sekarang), jadi kemungkinan besar
-TIDAK perlu ubah `parse()` sama sekali — cukup ubah `encodeHandoff()`
-utk menyisipkan baris item+Total, lalu **WAJIB tes ulang** seluruh test
-`encodeHandoff`/`parse` roundtrip (`order_parser_service_test.dart`,
-`kasir_handoff_qr_test.dart`) utk pastikan tidak ada tabrakan (mis. nama
-produk yang kebetulan diawali kata kunci baris meta seperti "Nama:").
-
 ## Item 55 — Bug "Tempel Pesanan" pegawai (non terima_pembayaran) tidak dapat produk dari QR/teks owner — LOGGING DIAGNOSTIK SUDAH TERPASANG (commit `0919f0d`), MENUNGGU reproduksi user
 
 **STATUS TERKINI (8 Agustus)**: Instrumentasi logging sudah terpasang &

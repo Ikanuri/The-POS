@@ -5,14 +5,16 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 8 Agustus 2026 (lanjutan 8) — versi kerja tetap
-**2.10.0+15**, schemaVersion SEKARANG **29** (naik dari 28 — Item
-61.5 nambah `Expenses.deletedAt`). User minta kerjakan semua temuan
-sync sesi lalu (PLAN.md Item 56-61) sesuai urutan prioritas,
-kecualikan backlog lama (47/48/23/17/21/28/41/51). Urutan yg
-disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
+_Update sesi 8 Agustus 2026 (lanjutan 9, SESI SELESAI) — versi kerja
+tetap **2.10.0+15**, schemaVersion **29** (naik dari 28 — Item 61.5
+nambah `Expenses.deletedAt`). User minta kerjakan semua temuan sync
+sesi lalu (PLAN.md Item 56-61 + 54/55) sesuai urutan prioritas,
+kecualikan backlog lama (47/48/23/17/21/28/41/51). Urutan disepakati:
+**58, 59, 60, 56, 57, 61, 55, 54** — **SEMUA 8 SELESAI dikerjakan**
+(7 dieksekusi tuntas, 1 — Item 55 — infrastrukturnya terpasang tapi
+fix sebenarnya menunggu data dari user).
 
-**SELESAI (commit, ringkas)**:
+**SELESAI (commit, ringkas — urut sesi)**:
 - Item 58 (KRITIS, `8897298`) — sync kedua client tidak lagi hapus
   permanen batch upload lama yg belum di-approve (union, bukan
   replace, di `enqueueSyncUpload`/`_handleRequest`).
@@ -32,23 +34,30 @@ disepakati: **58, 59, 60, 56, 57, 61, 55, 54**.
   `rowid` `rebuildStockAfterForUnits`, checkbox "Stok" wajib ikut
   "Transaksi" di dialog approve, `Expenses.deletedAt` (migrasi v29)
   + soft-delete penuh (dumpSince/mergeRows khusus expenses).
+- Item 54 (`fb0acd5`) — QR Share handoff bawa keterangan item + Total
+  (format sama `buildOrderText()` katalog HTML), lewat param baru
+  `encodeHandoff(storeName:)`. Parser TIDAK perlu diubah (sudah
+  tolerir baris tambahan).
+- **Item 55 (`0919f0d`) — SETENGAH JALAN, PERLU TINDAK LANJUT.**
+  Logging diagnostik in-app TERPASANG (`OrderParseDiagnostics`
+  in-memory maks 200 entry + titik `.add()` di `OrderParserService.
+  parse()` + `ParseDiagnosticsScreen` via tombol bug_report sementara
+  di `PasteOrderSheet`), tapi bug aslinya ("Tempel Pesanan" pegawai
+  non `terima_pembayaran` tidak dapat produk dari QR/teks owner)
+  BELUM diperbaiki — 4 ronde investigasi kode statis mentok, butuh
+  bukti runtime. **Langkah selanjutnya**: minta user build APK debug,
+  reproduksi bug (owner buat produk baru → share → pegawai tempel,
+  gagal lagi), buka halaman debug (ikon bug_report di
+  `PasteOrderSheet`) di device pegawai, salin & kirim balik isinya.
+  Dari situ baru bisa fix akar masalahnya. **WAJIB** cabut total
+  instrumentasi (daftar file lengkap di PLAN.md Item 55) begitu fix
+  itu dieksekusi.
 
-- Item 55 (`0919f0d`) — logging diagnostik in-app TERPASANG
-  (`OrderParseDiagnostics` in-memory maks 200 entry + titik `.add()`
-  di `OrderParserService.parse()` + `ParseDiagnosticsScreen` via
-  tombol bug_report sementara di `PasteOrderSheet`). **MENUNGGU user**:
-  minta build APK debug, reproduksi bug (owner buat produk baru →
-  share → pegawai tempel, gagal lagi), salin isi halaman debug dari
-  device pegawai, kirim balik ke sesi berikutnya. WAJIB cabut total
-  instrumentasi ini begitu root cause ketemu & fix dieksekusi (lihat
-  daftar file di PLAN.md Item 55).
-
-**BELUM** (sisa 1 dari 8):
-- Item 54 — QR Share bawa keterangan item (bukan cuma kode), + adjust
-  parser Tempel Pesanan supaya kompatibel/ignore kalau formatnya beda.
-
-Lanjut Item 54 berikutnya (Item 55 menunggu balasan reproduksi user,
-tidak bisa dilanjut tanpa itu).
+Semua commit di atas sudah di-push ke
+`claude/kategori-produk-qty-harga-mqjh21`. `flutter analyze` bersih +
+full `flutter test` hijau di tiap commit (revert-verified tiap fix).
+Tidak ada lagi item PLAN.md yang "siap eksekusi" tersisa — cuma
+Item 55 yang menggantung menunggu user.
 
 _Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang

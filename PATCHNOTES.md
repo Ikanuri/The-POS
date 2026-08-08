@@ -10,6 +10,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 8 Agustus 2026
 
+### 🆕 Fitur baru
+- **QR/teks transfer keranjang antar-perangkat sekarang menampilkan
+  daftar barang & totalnya**, bukan cuma kode acak — jadi sebelum
+  scan, penerima (atau siapa pun yang lihat pesannya di WhatsApp)
+  bisa langsung baca sekilas isi pesanannya.
+
 ### 🔧 Perbaikan
 - **Penghapusan pengeluaran sekarang ikut tersinkron ke perangkat
   lain** — sebelumnya, pengeluaran yang dihapus di satu perangkat
