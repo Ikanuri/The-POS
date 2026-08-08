@@ -219,6 +219,8 @@ void main() {
       employeeName: 'HP Kasir 2',
       customerName: null,
       trustPrices: false,
+      // Item 54 — `_showHandoffQr` sekarang selalu kirim storeName device.
+      storeName: 'Toko Uji',
     );
 
     // Sengaja `pump()` biasa (bukan `pumpAndSettle`) — SnackBar punya timer

@@ -1,5 +1,6 @@
 import '../database/app_database.dart';
 import '../models/cart_item.dart';
+import '../theme/app_theme.dart' show formatRupiah;
 import 'order_page_service.dart';
 import 'order_parse_diagnostics.dart';
 import 'price_service.dart';
@@ -329,6 +330,13 @@ class OrderParserService {
   /// Atribut NON-harga (checklist verifikasi, status pre-order, qty
   /// deposit, catatan) TETAP dibawa apa pun nilai [trustPrices] — bukan
   /// itu yang jadi concern (uang), dan tidak digerbang izin di manapun.
+  /// Item 54 — [storeName] (opsional) memicu keterangan item + Total
+  /// manusia-bisa-baca DI DEPAN baris kode mesin/meta, format SAMA PERSIS
+  /// dgn `buildOrderText()` di katalog HTML (`order_page_service.dart`) —
+  /// supaya penerima QR/teks bisa baca sekilas isi pesanan di preview
+  /// WhatsApp/chat SEBELUM scan, bukan cuma baris kode mentah. Null/kosong
+  /// (default lama) skip bagian ini sepenuhnya — dipakai test lama yang
+  /// tidak butuh header ini.
   static String encodeHandoff({
     required List<CartItem> items,
     required String employeeName,
@@ -336,6 +344,7 @@ class OrderParserService {
     String? customerId,
     String? reservedLocalId,
     bool trustPrices = true,
+    String? storeName,
   }) {
     final codeParts = items.map((c) {
       final flags = StringBuffer();
@@ -356,7 +365,20 @@ class OrderParserService {
           : '';
       return '${c.productUnitId}=${_fmtQty(c.qty)}$flags$noteSeg';
     }).join(';');
-    final buf = StringBuffer('${OrderPageService.machineCodePrefix}$codeParts\n')
+
+    final buf = StringBuffer();
+    final store = storeName?.trim();
+    if (store != null && store.isNotEmpty) {
+      buf
+        ..writeln('PESANAN — $store')
+        ..writeln('━━━━━━━━━━━━━━━')
+        ..write(_buildItemLines(items))
+        ..writeln('━━━━━━━━━━━━━━━')
+        ..writeln('Total: ${formatRupiah(_handoffTotal(items))}')
+        ..writeln();
+    }
+    buf
+      ..write('${OrderPageService.machineCodePrefix}$codeParts\n')
       ..write('Pegawai: $employeeName');
     final name = customerName?.trim();
     if (name != null && name.isNotEmpty) {
@@ -369,6 +391,63 @@ class OrderParserService {
       buf.write('\nNota: $reservedLocalId');
     }
     return buf.toString();
+  }
+
+  /// Keterangan item manusia-bisa-baca (Item 54), format sepadan
+  /// `buildOrderText()` di katalog HTML — induk+varian dikelompokkan
+  /// (header nama induk, baris varian diberi indentasi "  > "), item
+  /// tunggal tanpa varian tampil 1 baris datar. Baris qty=0 (placeholder
+  /// induk murni struktur grouping, bukan barang yg benar-benar dibeli)
+  /// DILEWATI dari daftar, tapi namanya tetap dipakai sbg header grup.
+  static String _buildItemLines(List<CartItem> items) {
+    final nameOf = <String, String>{
+      for (final c in items) c.productId: c.productName,
+    };
+    final byGroup = <String, List<CartItem>>{};
+    final order = <String>[];
+    for (final c in items) {
+      if (c.qty <= 0) continue;
+      final key = c.parentProductId ?? c.productId;
+      if (!byGroup.containsKey(key)) order.add(key);
+      (byGroup[key] ??= []).add(c);
+    }
+    final lines = StringBuffer();
+    for (final key in order) {
+      final rows = byGroup[key]!;
+      if (rows.length == 1 && rows.single.parentProductId == null) {
+        final r = rows.single;
+        lines.writeln('${r.productName} ${r.unitName} × ${_fmtQty(r.qty)}');
+      } else {
+        lines.writeln(nameOf[key] ?? key);
+        for (final r in rows) {
+          lines.writeln('  > ${r.productName} ${r.unitName} × ${_fmtQty(r.qty)}');
+        }
+      }
+    }
+    return lines.toString();
+  }
+
+  /// Total belanja — pola sama `cartTotalOf` (`cart_provider.dart`, tidak
+  /// diimpor langsung dari sini krn layering core/services tidak boleh
+  /// bergantung ke features/*): induk yg punya varian, qty EFEKTIFnya =
+  /// qty tersimpan dikurangi total qty semua variannya (varian tersimpan
+  /// sbg pengurang stok induk, bukan baris independen), supaya tidak
+  /// terhitung dobel.
+  static int _handoffTotal(List<CartItem> items) {
+    var sum = 0;
+    for (final it in items) {
+      final double eff;
+      if (it.isVariant) {
+        eff = it.qty;
+      } else {
+        final variantTotal = items
+            .where((c) => c.belongsToParent(it))
+            .fold(0.0, (s, c) => s + c.qty);
+        eff = (it.qty - variantTotal).clamp(0.0, double.infinity);
+      }
+      sum += (it.price * eff).round();
+    }
+    return sum;
   }
 
   static String _fmtQty(double qty) =>

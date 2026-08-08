@@ -119,6 +119,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       // (perilaku lama) — hanya device BERIZIN (owner/asisten/pegawai
       // terima_pembayaran) yang harganya dipercaya penuh.
       trustPrices: !needsGate,
+      // Item 54 — keterangan item + Total manusia-bisa-baca di depan kode
+      // mesin, format sama dgn katalog HTML (`buildOrderText`).
+      storeName: device.storeName,
     );
 
     await showModalBottomSheet<void>(

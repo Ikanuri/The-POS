@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/services/order_parser_service.dart';
+import 'package:the_pos/core/theme/app_theme.dart' show formatRupiah;
 
 /// Test Tier 1 (DB murni) untuk fitur eksperimental "Tempel Pesanan" —
 /// sisi kasir yang membaca teks pesanan hasil Katalog Pesanan (HTML) dan
@@ -524,5 +525,145 @@ void main() {
     final result = await OrderParserService.parse(db: db, text: encoded);
     expect(result.customerName, isNull);
     await db.close();
+  });
+
+  group('Item 54 — encodeHandoff(storeName:) bawa keterangan item', () {
+    test(
+        'dgn storeName: keterangan item + Total tampil DI DEPAN kode mesin, '
+        'format sama pola dgn buildOrderText() katalog HTML', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+      final u1 = await _unitIdOf(db, p1);
+      final p2 = await _addProduct(db, name: 'Beras', price: 12000);
+      final u2 = await _unitIdOf(db, p2);
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Ayam Potong',
+          unitName: 'Kg',
+          qty: 2,
+          price: 25000,
+          originalPrice: 25000,
+          costPrice: 18000,
+        ),
+        CartItem(
+          productId: p2,
+          productUnitId: u2,
+          productName: 'Beras',
+          unitName: 'Kg',
+          qty: 1,
+          price: 12000,
+          originalPrice: 12000,
+          costPrice: 10000,
+        ),
+      ];
+
+      final encoded = OrderParserService.encodeHandoff(
+        items: cart,
+        employeeName: 'Budi',
+        storeName: 'Toko Segar',
+      );
+
+      expect(encoded, startsWith('PESANAN — Toko Segar\n'));
+      expect(encoded, contains('Ayam Potong Kg × 2'));
+      expect(encoded, contains('Beras Kg × 1'));
+      expect(encoded, contains('Total: ${formatRupiah(62000)}'));
+      // Kode mesin & baris meta tetap di BAWAH, urutan sama persis
+      // buildOrderText() (manusia baca isi pesanan dulu, kode di akhir).
+      expect(encoded.indexOf('#PSN:'), greaterThan(encoded.indexOf('Total:')));
+      expect(encoded, contains('Pegawai: Budi'));
+
+      final result = await OrderParserService.parse(db: db, text: encoded);
+      expect(result.items, hasLength(2),
+          reason: 'parse() harus tetap berhasil walau ada header baru di '
+              'depan kode mesin — regex per-baris sudah mentolerir baris '
+              'tambahan apa pun, sama seperti teks katalog HTML');
+      expect(result.employeeName, 'Budi');
+      await db.close();
+    });
+
+    test('TANPA storeName (default lama): tidak ada header "PESANAN —" sama '
+        'sekali, perilaku lama utuh', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+      final u1 = await _unitIdOf(db, p1);
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Ayam Potong',
+          unitName: 'Kg',
+          qty: 1,
+          price: 25000,
+          originalPrice: 25000,
+          costPrice: 18000,
+        ),
+      ];
+
+      final encoded =
+          OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+      expect(encoded, isNot(contains('PESANAN —')));
+      expect(encoded, startsWith('#PSN:'));
+
+      final result = await OrderParserService.parse(db: db, text: encoded);
+      expect(result.items, hasLength(1));
+      await db.close();
+    });
+
+    test('varian (induk+anak): baris induk jadi header, anak diberi '
+        'indentasi "  > ", baris qty=0 murni placeholder DILEWATI', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final parentId = await _addProduct(db, name: 'Kaos', price: 50000);
+      final parentUnitId = await _unitIdOf(db, parentId);
+      final childId =
+          await _addProduct(db, name: 'Merah', price: 50000, parentProductId: parentId);
+      final childUnitId = await _unitIdOf(db, childId);
+
+      final cart = [
+        // Placeholder induk (qty 0) — hanya penanda struktur grouping,
+        // dibuat otomatis saat varian pertama ditambahkan (lihat
+        // kasir_screen.dart), BUKAN barang yang dibeli.
+        CartItem(
+          productId: parentId,
+          productUnitId: parentUnitId,
+          productName: 'Kaos',
+          unitName: 'Pcs',
+          qty: 0,
+          price: 50000,
+          originalPrice: 50000,
+          costPrice: 30000,
+        ),
+        CartItem(
+          productId: childId,
+          productUnitId: childUnitId,
+          productName: 'Merah',
+          unitName: 'Pcs',
+          qty: 3,
+          price: 50000,
+          originalPrice: 50000,
+          costPrice: 30000,
+          parentProductId: parentId,
+          isVariant: true,
+        ),
+      ];
+
+      final encoded = OrderParserService.encodeHandoff(
+        items: cart,
+        employeeName: 'Budi',
+        storeName: 'Toko Segar',
+      );
+
+      expect(encoded, contains('Kaos\n  > Merah Pcs × 3'),
+          reason: 'header induk lalu baris varian berindentasi, baris '
+              'placeholder qty=0 sendiri TIDAK ikut tampil sbg baris '
+              'terpisah');
+      expect(encoded, contains('Total: ${formatRupiah(150000)}'));
+
+      final result = await OrderParserService.parse(db: db, text: encoded);
+      expect(result.items, hasLength(1));
+      expect(result.items.single.qty, 3);
+      await db.close();
+    });
   });
 }
