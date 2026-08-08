@@ -4908,6 +4908,38 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Item 60 — hitung ulang `customers.loyalty_points` per pelanggan dari
+  /// SUM `loyalty_point_ledger.points` (pola PERSIS `rebuildStockAfterForUnits`
+  /// di atas). WAJIB dipanggil setelah merge `loyalty_point_ledger` dari
+  /// device lain (sync LAN, kedua arah): `customers` adalah master data yang
+  /// sync-nya last-write-wins berdasar `updated_at`, sementara 7 tempat tulis
+  /// `loyalty_points` yang ada (increment/decrement mentah, ditulis atomik
+  /// bareng baris ledger di device ASAL) TIDAK menyentuh `updated_at` sama
+  /// sekali — poin yang baru didapat device lain bisa KETIMPA BALIK begitu
+  /// host push versi lama pelanggan itu. Ledger-nya sendiri sinkron dengan
+  /// benar (append-only, PK dedup); rebuild ini menurunkan kolom saldo yang
+  /// dipakai di layar langsung dari ledger, bukan dari `updated_at` LWW.
+  Future<void> rebuildLoyaltyPointsForCustomers(
+      Set<String> customerIds) async {
+    if (customerIds.isEmpty) return;
+    await transaction(() async {
+      for (final cid in customerIds) {
+        final row = await customSelect(
+          'SELECT COALESCE(SUM(points), 0) AS total FROM loyalty_point_ledger '
+          'WHERE customer_id = ?',
+          variables: [Variable.withString(cid)],
+        ).getSingle();
+        final total = (row.data['total'] as num?)?.toInt() ?? 0;
+        await customUpdate(
+          'UPDATE customers SET loyalty_points = ? WHERE id = ?',
+          variables: [Variable.withInt(total), Variable.withString(cid)],
+          updates: {customers},
+          updateKind: UpdateKind.update,
+        );
+      }
+    });
+  }
+
   /// Merge rows from sync payload (INSERT OR IGNORE for ledger, last-write-wins for master).
   Future<int> mergeRows(String tableName, List<Map<String, Object?>> rows,
       bool isAppendOnly) async {

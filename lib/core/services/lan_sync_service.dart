@@ -646,6 +646,7 @@ class LanSyncService {
     int received = 0;
     final touchedTxIds = <String>{};
     final touchedStockUnitIds = <String>{};
+    final touchedLoyaltyCustomerIds = <String>{};
     for (final entry in tables.entries) {
       // Guard satu arah: hanya tabel append-only yang boleh dari klien.
       if (!appendOnlyTables.contains(entry.key)) continue;
@@ -654,6 +655,8 @@ class LanSyncService {
       received += await _db!.mergeRows(entry.key, entry.value, true);
       _collectTxIds(entry.key, entry.value, touchedTxIds);
       _collectStockUnitIds(entry.key, entry.value, touchedStockUnitIds);
+      _collectLoyaltyCustomerIds(
+          entry.key, entry.value, touchedLoyaltyCustomerIds);
     }
     // Rekonsiliasi total/paid dari child rows sebelum membangun ringkasan.
     // Id diambil juga dari item/pembayaran, sehingga transaksi lama yang hanya
@@ -666,6 +669,11 @@ class LanSyncService {
     // baris "terbaru" milik device lain menimpa pandangan saldo host
     // secara diam-diam (lihat rebuildStockAfterForUnits).
     await _db!.rebuildStockAfterForUnits(touchedStockUnitIds);
+    // Item 60 — poin loyalti WAJIB dihitung ulang setelah merge, alasan
+    // sama dgn saldo stok di atas: `customers.loyalty_points` di-LWW via
+    // `updated_at`, bisa ketimpa balik walau ledgernya sendiri sudah benar
+    // (lihat dok panjang di `rebuildLoyaltyPointsForCustomers`).
+    await _db!.rebuildLoyaltyPointsForCustomers(touchedLoyaltyCustomerIds);
     // Item 17 Fase 2 — item ini SUDAH resmi diproses, hapus dari antrian
     // durable (bukan cuma dari tampilan) supaya tidak pernah diproses ulang
     // walau host restart.
@@ -701,6 +709,18 @@ class LanSyncService {
     for (final r in rows) {
       final uid = r['product_unit_id'];
       if (uid is String && uid.isNotEmpty) out.add(uid);
+    }
+  }
+
+  /// Kumpulkan customer_id dari baris `loyalty_point_ledger` sebuah payload
+  /// — untuk [AppDatabase.rebuildLoyaltyPointsForCustomers] setelah merge
+  /// (Item 60), pola sama persis dgn [_collectStockUnitIds].
+  static void _collectLoyaltyCustomerIds(
+      String table, List<Map<String, Object?>> rows, Set<String> out) {
+    if (table != 'loyalty_point_ledger') return;
+    for (final r in rows) {
+      final cid = r['customer_id'];
+      if (cid is String && cid.isNotEmpty) out.add(cid);
     }
   }
 
@@ -1368,6 +1388,7 @@ class LanSyncService {
       final tables = respPayload['tables'] as Map<String, dynamic>? ?? {};
       final touchedTxIds = <String>{};
       final touchedStockUnitIds = <String>{};
+      final touchedLoyaltyCustomerIds = <String>{};
       for (final entry in tables.entries) {
         // Item 41 B.3 — hanya tabel yang memang disinkronkan (allowlist);
         // nama tak dikenal dilewati, bukan diteruskan mentah ke merge.
@@ -1382,6 +1403,7 @@ class LanSyncService {
             entry.key, rows, appendOnlyTables.contains(entry.key));
         _collectTxIds(entry.key, rows, touchedTxIds);
         _collectStockUnitIds(entry.key, rows, touchedStockUnitIds);
+        _collectLoyaltyCustomerIds(entry.key, rows, touchedLoyaltyCustomerIds);
       }
       // Rekonsiliasi total/paid dari child rows, lalu refresh ringkasan harian
       // untuk tanggal yang tersentuh — termasuk transaksi lama yang hanya
@@ -1391,6 +1413,9 @@ class LanSyncService {
       // Item 41 A.1 — hitung ulang saldo stok utk unit yang tersentuh merge
       // (alasan sama dgn approveSync di sisi host).
       await db.rebuildStockAfterForUnits(touchedStockUnitIds);
+      // Item 60 — hitung ulang poin loyalti utk pelanggan yang tersentuh
+      // merge (alasan sama dgn approveSync di sisi host).
+      await db.rebuildLoyaltyPointsForCustomers(touchedLoyaltyCustomerIds);
 
       // Watermark HANYA disimpan setelah data host benar-benar ter-merge
       // permanen ke DB lokal (baris di atas ini) — kalau ada exception di
