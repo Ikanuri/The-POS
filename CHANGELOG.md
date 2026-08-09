@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-08-09
+
+- `0becd9c` — fix: Riwayat Transaksi tampilkan Sisa mentah, beda dari struk. Dilaporkan user (tangkapan layar): nota `A1-20260809-0030` tampil "Sisa -Rp 300" di Riwayat Transaksi, tapi struk-nya sendiri bilang "Sisa Tagihan Rp 6.600" untuk nota yang sama. Akar sama dgn Item 56 (Buku Hutang): `tx_history_sheet.dart` pakai `total - paid` MENTAH, padahal `paid` boleh melebihi `total` saat kembalian dipakai ulang sbg pembayaran baru (lihat dok `netRemainingOwed` di `receipt_screen.dart`). Fix: `AppDatabase.getNetSisaForTxIds` baru (pola SQL sama `getDebtBook`/`getCustomerOutstandingDebt`, batched hindari N+1) dipakai di SEMUA titik `tx_history_sheet.dart` yang sebelumnya pakai raw `total-paid`: ringkasan multi-pilih, baris daftar, detail baris, dan `_lunasi` (fetch fresh dari DB, bukan provider yang bisa basi/race, krn jumlah ini yang benar-benar tercatat sbg pembayaran). Test baru (`tx_history_net_sisa_test.dart`, 6 test: 4 DB + 2 widget) — revert-verified.
+
 ## 2026-08-08
 
 - `fb0acd5` — feat: QR Share handoff antar-device bawa keterangan item, bukan cuma kode (PLAN.md Item 54). `OrderParserService.encodeHandoff` dapat param baru `storeName` (opsional, backward-compatible) — kalau diisi, tampilkan daftar item (induk+varian dikelompokkan, format sama `buildOrderText()` katalog HTML) + Total DI DEPAN baris kode mesin `#PSN:`/meta, supaya penerima bisa baca isi pesanan di preview chat sebelum scan. `_buildItemLines`/`_handoffTotal` baru. Parser (`parse()`) TIDAK perlu diubah — regex per-baris sudah mentolerir baris tambahan apa pun. `cart_sheet.dart:_showHandoffQr` kirim `device.storeName`. Test baru (3) + `kasir_handoff_qr_test.dart` diupdate — revert-verified.

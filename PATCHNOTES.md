@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Agustus 2026
+
+### 🔧 Perbaikan
+- **Angka "Sisa" di Riwayat Transaksi sekarang selalu sama dengan
+  "Sisa Tagihan" di struk** — sebelumnya, untuk nota yang kembaliannya
+  dipakai ulang sebagai pembayaran, Riwayat Transaksi bisa menampilkan
+  angka yang salah (bahkan minus), padahal struknya sendiri sudah
+  benar. Tombol "Lunasi" juga ikut dibetulkan supaya jumlah yang
+  tercatat sebagai pembayaran selalu akurat.
+
 ## 8 Agustus 2026
 
 ### 🆕 Fitur baru

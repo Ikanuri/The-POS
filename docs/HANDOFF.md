@@ -5,6 +5,26 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 9 Agustus 2026 — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap **29**. User laporkan (screenshot) nota
+`A1-20260809-0030`: "Sisa" di Riwayat Transaksi (`-Rp 300`) beda dari
+"Sisa Tagihan" di struk (`Rp 6.600`) untuk nota yang SAMA. Root cause
+sama persis dgn Item 56 (Buku Hutang) yg sudah diperbaiki sesi
+sebelumnya, tapi di lokasi lain yg belum kena: `tx_history_sheet.dart`
+pakai `total - paid` MENTAH, bukan net dari `change_given`. **Fix
+(`0becd9c`)**: `AppDatabase.getNetSisaForTxIds` baru (pola SQL sama
+`getDebtBook`, batched) dipakai di SEMUA titik `tx_history_sheet.dart`
+— ringkasan multi-pilih, baris daftar, detail baris, dan `_lunasi`
+(fetch fresh dari DB langsung, bukan provider yg bisa basi/race, krn
+jumlah ini yg tercatat sbg pembayaran). Test baru
+`tx_history_net_sisa_test.dart` (6 test: 4 DB + 2 widget) —
+revert-verified. Full suite hijau (2 kegagalan
+`proposal_unchanged_end_to_end_test.dart` — flaky pre-existing, sama
+seperti sesi-sesi sebelumnya, tidak terkait perubahan ini),
+`flutter analyze` 0 issue. Sudah di-push. Tidak ada pekerjaan
+menggantung dari sesi ini — item PLAN.md yang masih terbuka tetap
+cuma Item 55 (lihat riwayat sesi 8 Agustus di bawah).
+
 _Update sesi 8 Agustus 2026 (lanjutan 9, SESI SELESAI) — versi kerja
 tetap **2.10.0+15**, schemaVersion **29** (naik dari 28 — Item 61.5
 nambah `Expenses.deletedAt`). User minta kerjakan semua temuan sync
