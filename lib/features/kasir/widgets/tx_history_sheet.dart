@@ -85,6 +85,21 @@ final _custNamesProvider = FutureProvider<Map<String, String>>((ref) async {
   return db.getAllCustomerNamesIncludingInactive();
 });
 
+/// Sisa tagihan NET (dikurangi `change_given`) per transaksi belum lunas
+/// dari hasil [_txHistoryProvider] — bug dilaporkan user: layar ini dulu
+/// tampilkan `tx.total - tx.paid` mentah, beda dari struk yang sudah net
+/// (lihat dok panjang di `AppDatabase.getNetSisaForTxIds`). Di-batch
+/// (1 query utk semua baris hutang yang termuat) bukan per-baris (N+1).
+final _netSisaProvider =
+    FutureProvider.family<Map<String, int>, _HistoryQuery>((ref, q) async {
+  final db = ref.watch(databaseProvider);
+  final txs = await ref.watch(_txHistoryProvider(q).future);
+  final hutangIds = txs
+      .where((t) => t.status == 'kurang_bayar' || t.status == 'tempo')
+      .map((t) => t.id);
+  return db.getNetSisaForTxIds(hutangIds);
+});
+
 /// Detail produk yang cocok per transaksi saat filter produk aktif.
 final _productMatchProvider = FutureProvider.family<
     Map<String, List<({String name, double qty, int price})>>,
@@ -216,6 +231,9 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
     final namesAsync = ref.watch(_custNamesProvider);
     final names = namesAsync.valueOrNull ?? const <String, String>{};
     final scheme = Theme.of(context).colorScheme;
+    // Bug dilaporkan user — lihat dok `_netSisaProvider`/`getNetSisaForTxIds`.
+    final netSisaMap =
+        ref.watch(_netSisaProvider(query)).valueOrNull ?? const <String, int>{};
 
     // Produk yang cocok per transaksi (hanya saat filter produk aktif).
     final productMatches = _productQuery.isNotEmpty
@@ -229,7 +247,8 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
         loadedTxs.where((t) => _selectedIds.contains(t.id)).toList();
     final sumTotal = selectedTxs.fold<int>(0, (s, t) => s + t.total);
     final sumPaid = selectedTxs.fold<int>(0, (s, t) => s + t.paid);
-    final sumSisa = sumTotal - sumPaid;
+    final sumSisa = selectedTxs.fold<int>(
+        0, (s, t) => s + (netSisaMap[t.id] ?? (t.total - t.paid)));
 
     return DraggableScrollableSheet(
       initialChildSize: 0.8,
@@ -400,6 +419,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                         _TxRow(
                           tx: t,
                           names: names,
+                          netSisa: netSisaMap[t.id],
                           expanded: !_selectMode && _expandedId == t.id,
                           selectMode: _selectMode,
                           selected: _selectedIds.contains(t.id),
@@ -619,11 +639,17 @@ class _TxRow extends ConsumerWidget {
     required this.expanded,
     required this.onToggle,
     required this.onChanged,
+    this.netSisa,
     this.selectMode = false,
     this.selected = false,
     this.selectable = true,
     this.productMatches,
   });
+
+  /// Sisa tagihan NET (dikurangi `change_given`) — null selagi
+  /// `_netSisaProvider` masih loading, fallback ke raw `total-paid` di
+  /// pemakaian (lihat dok `_netSisaProvider`).
+  final int? netSisa;
 
   final Transaction tx;
   final Map<String, String> names;
@@ -762,7 +788,7 @@ class _TxRow extends ConsumerWidget {
               // dalam tinggi trailing ListTile(dense:true) yang sudah 2 baris.
               if (!_isRetur && isHutang)
                 Text(
-                  'Sisa ${formatRupiah(tx.total - tx.paid)}',
+                  'Sisa ${formatRupiah(netSisa ?? (tx.total - tx.paid))}',
                   style: TextStyle(
                       fontSize: 9,
                       height: 1.2,
@@ -783,7 +809,8 @@ class _TxRow extends ConsumerWidget {
           onTap: onToggle,
         ),
         if (expanded)
-          _TxDetail(tx: tx, isRetur: _isRetur, onChanged: onChanged),
+          _TxDetail(
+              tx: tx, isRetur: _isRetur, netSisa: netSisa, onChanged: onChanged),
       ],
     );
   }
@@ -800,10 +827,15 @@ class _TxDetail extends ConsumerWidget {
     required this.tx,
     required this.isRetur,
     required this.onChanged,
+    this.netSisa,
   });
   final Transaction tx;
   final bool isRetur;
   final VoidCallback onChanged;
+
+  /// Sisa tagihan NET dari `_netSisaProvider` (lihat dok `_TxRow.netSisa`) —
+  /// null selagi loading, fallback raw `total-paid` di pemakaian.
+  final int? netSisa;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -854,7 +886,8 @@ class _TxDetail extends ConsumerWidget {
                   Text('Dibayar: ${formatRupiah(tx.paid)}',
                       style: TextStyle(
                           fontSize: 12, color: scheme.onSurfaceVariant)),
-                  Text('Sisa ${formatRupiah(tx.total - tx.paid)}',
+                  Text(
+                      'Sisa ${formatRupiah(netSisa ?? (tx.total - tx.paid))}',
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -1031,9 +1064,14 @@ class _TxDetail extends ConsumerWidget {
   }
 
   Future<void> _lunasi(BuildContext context, WidgetRef ref) async {
-    final remaining = tx.total - tx.paid;
-    if (remaining <= 0) return;
     final db = ref.read(databaseProvider);
+    // Fetch FRESH (bukan `netSisa` dari provider yang bisa basi/race) —
+    // sama akar bug dgn dok `AppDatabase.getNetSisaForTxIds`: raw
+    // `tx.total - tx.paid` bisa salah kalau kembalian sebelumnya dipakai
+    // ulang sbg pembayaran baru.
+    final remaining = (await db.getNetSisaForTxIds([tx.id]))[tx.id] ?? 0;
+    if (remaining <= 0) return;
+    if (!context.mounted) return;
     final result = await showDebtPaymentDialog(context, db,
         remaining: remaining, title: 'Lunasi Transaksi');
     if (result == null || result.amount <= 0 || !context.mounted) return;
@@ -1048,15 +1086,15 @@ class _TxDetail extends ConsumerWidget {
       method: result.method,
       kasirId: device.deviceCode,
     );
-    final newPaid = tx.paid + result.amount;
-    final lunas = newPaid >= tx.total;
+    final newRemaining = (await db.getNetSisaForTxIds([tx.id]))[tx.id] ?? 0;
+    final lunas = newRemaining <= 0;
     onChanged();
     if (context.mounted) {
       final msg = lunas
           ? (change > 0
               ? '${tx.localId} lunas · kembalian ${formatRupiah(change)}'
               : '${tx.localId} lunas')
-          : 'Pembayaran dicatat, sisa ${formatRupiah(tx.total - newPaid)}';
+          : 'Pembayaran dicatat, sisa ${formatRupiah(newRemaining)}';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }

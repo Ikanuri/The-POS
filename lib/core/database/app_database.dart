@@ -3424,6 +3424,44 @@ class AppDatabase extends _$AppDatabase {
     return (total, cnt);
   }
 
+  /// Sisa tagihan NET per transaksi (dikurangi kembalian yang sudah
+  /// diberikan/dipakai ulang) — pola SQL sama persis [getDebtBook]/
+  /// [getCustomerOutstandingDebt], batched (hindari N+1) supaya aman dipakai
+  /// utk daftar (Riwayat Transaksi) yang bisa berisi puluhan/ratusan baris
+  /// hutang sekaligus.
+  ///
+  /// Bug dilaporkan user: layar Riwayat Transaksi (`tx_history_sheet.dart`)
+  /// menampilkan "Sisa" dari `tx.total - tx.paid` MENTAH — beda dari struk
+  /// (`receipt_screen.dart`'s `netRemainingOwed`) yang sudah benar net dari
+  /// `change_given`. Kalau kembalian dari pembayaran sebelumnya dipakai ulang
+  /// sbg pembayaran baru (`paid` naik lagi tanpa pernah dikurangi saat keluar
+  /// sbg kembalian), raw `total-paid` bisa NEGATIF padahal net-nya masih
+  /// positif (nota masih ada sisa) — sama akar dgn Item 56 (Buku Hutang),
+  /// beda lokasi (Buku Hutang sudah dibenerin, Riwayat Transaksi belum).
+  Future<Map<String, int>> getNetSisaForTxIds(Iterable<String> txIds) async {
+    final ids = txIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT t.id AS id, '
+      '  (t.total - t.paid + COALESCE(cg.total_cg, 0)) AS sisa '
+      'FROM transactions t '
+      'LEFT JOIN (SELECT transaction_id, SUM(change_given) AS total_cg '
+      '  FROM transaction_payments WHERE NOT voided GROUP BY transaction_id) cg '
+      '  ON cg.transaction_id = t.id '
+      'WHERE t.id IN ($placeholders)',
+      variables: [for (final id in ids) Variable.withString(id)],
+      readsFrom: {transactions, transactionPayments},
+    ).get();
+    return {
+      for (final r in rows)
+        r.data['id'] as String: () {
+          final raw = ((r.data['sisa'] as num?) ?? 0).toInt();
+          return raw > 0 ? raw : 0;
+        }(),
+    };
+  }
+
   // ───────────────────────── Pembayaran (buku pembayaran) ─────────────────────────
 
   /// Riwayat pembayaran satu transaksi, urut waktu (terlama dulu). Sumber
