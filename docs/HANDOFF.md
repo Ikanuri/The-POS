@@ -18,12 +18,36 @@ pakai `total - paid` MENTAH, bukan net dari `change_given`. **Fix
 (fetch fresh dari DB langsung, bukan provider yg bisa basi/race, krn
 jumlah ini yg tercatat sbg pembayaran). Test baru
 `tx_history_net_sisa_test.dart` (6 test: 4 DB + 2 widget) —
-revert-verified. Full suite hijau (2 kegagalan
-`proposal_unchanged_end_to_end_test.dart` — flaky pre-existing, sama
-seperti sesi-sesi sebelumnya, tidak terkait perubahan ini),
-`flutter analyze` 0 issue. Sudah di-push. Tidak ada pekerjaan
-menggantung dari sesi ini — item PLAN.md yang masih terbuka tetap
-cuma Item 55 (lihat riwayat sesi 8 Agustus di bawah).
+revert-verified.
+
+**Susulan langsung, sesi sama**: user tanya balik soal bug Item 55
+("Tempel Pesanan pegawai") — ternyata SUDAH TIDAK TERJADI LAGI menurut
+user, walau belum sempat dibuka log diagnostiknya (tidak ada error
+yg tertangkap). Investigasi: diff commit `0919f0d` dibaca ulang —
+SEMUA perubahannya cuma `OrderParseDiagnostics.add(...)` pasif, TIDAK
+menyentuh logic/urutan eksekusi sama sekali, jadi logging itu sendiri
+BUKAN penyebab hilangnya bug. Titik gagal yg diinstrumentasi (`unitId`
+tak ketemu di `product_units`, atau produk induk tak ketemu/nonaktif)
+justru menunjuk ke masalah KETERSEDIAAN DATA (produk baru owner belum
+sampai ke DB lokal pegawai), bukan bug logika parser — sejalan dgn 4
+ronde investigasi kode statis sebelumnya yg sudah menyingkirkan hipotesis
+parser. Dugaan kuat (TIDAK terkonfirmasi via log runtime): tertutup
+sbg efek samping salah satu fix sync KRITIS di sesi yg sama — kandidat
+paling plausibel Item 58 (union queue upload, cegah kehilangan batch),
+Item 61.1 (reset watermark download yg bisa macet), atau Item 60
+(loyalty points ketimpa LWW, pola bug serupa). **Ditanya ke user**
+mau instrumentasi dicabut sekarang atau disimpan dulu — user pilih
+**cabut sekarang** (`19c635e`): `OrderParseDiagnostics`, titik `.add()`
+di `parse()`, `ParseDiagnosticsScreen`, tombol bug_report di
+`PasteOrderSheet`, dan `order_parse_diagnostics_test.dart` — dihapus
+total. Full suite hijau (1 kegagalan `proposal_unchanged_end_to_end_test.
+dart` — flaky pre-existing, sama seperti sesi-sesi sebelumnya, tidak
+terkait perubahan ini), `flutter analyze` 0 issue.
+
+Kedua perubahan sudah di-push. **Item 55 PLAN.md kini bisa dianggap
+selesai** (walau root cause pastinya tidak pernah terkonfirmasi via
+log — cuma penalaran dari pola gejala + kebetulan waktu). Tidak ada
+pekerjaan menggantung dari sesi ini.
 
 _Update sesi 8 Agustus 2026 (lanjutan 9, SESI SELESAI) — versi kerja
 tetap **2.10.0+15**, schemaVersion **29** (naik dari 28 — Item 61.5

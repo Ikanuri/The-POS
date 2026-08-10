@@ -11,6 +11,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 9 Agustus 2026
 
 ### 🔧 Perbaikan
+- **Tombol debug sementara di "Tempel Pesanan" (ikon kutu) sudah
+  dicabut** — dipasang untuk investigasi bug pegawai tidak bisa tempel
+  pesanan, bug-nya sudah tidak lagi terjadi jadi tombolnya tidak
+  diperlukan lagi.
 - **Angka "Sisa" di Riwayat Transaksi sekarang selalu sama dengan
   "Sisa Tagihan" di struk** — sebelumnya, untuk nota yang kembaliannya
   dipakai ulang sebagai pembayaran, Riwayat Transaksi bisa menampilkan
