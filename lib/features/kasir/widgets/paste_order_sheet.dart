@@ -8,7 +8,6 @@ import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
-import 'parse_diagnostics_screen.dart';
 
 /// Sheet "Tempel Pesanan": kasir menempel teks pesanan yang dikirim balik
 /// pelanggan (hasil Katalog Pesanan, lihat `OrderPageService`) lalu semua
@@ -205,18 +204,6 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
                     Text('Tempel Pesanan',
                         style: Theme.of(context).textTheme.titleMedium),
                     const Spacer(),
-                    // Item 55 — tombol SEMENTARA khusus investigasi bug
-                    // "Tempel Pesanan pegawai tidak dapat produk". WAJIB
-                    // dicabut begitu root cause-nya ketemu & fix dieksekusi.
-                    IconButton(
-                      icon: const Icon(Icons.bug_report_outlined, size: 20),
-                      tooltip: 'Debug: Log Tempel Pesanan',
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const ParseDiagnosticsScreen(),
-                        ),
-                      ),
-                    ),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.of(ctx).pop(),
