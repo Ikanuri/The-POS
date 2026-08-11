@@ -5,6 +5,61 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 11 Agustus 2026 — versi kerja tetap **2.10.0+15**,
+schemaVersion **30** (naik dari 29 — indeks baru, lihat poin 2 di
+bawah). User minta "audit efisiensi data penyimpanan" (audit-only
+dulu, baru "perbaiki semua, metode paling efisien & ampuh menurut
+saya" di giliran berikutnya). 4 temuan, semua di-fix commit `49b2834`:
+
+1. **KRITIS — Tutup Buku bisa gagal total.** `TutupBukuService.execute`
+   menghapus `transactions` dalam periode yang diarsipkan, TAPI tidak
+   pernah menyentuh `left_behind_items`/`borrowed_items`/
+   `preorder_entries` (Laci Meja) sama sekali — ketiganya FK ke
+   `transactions` TANPA cascade, `PRAGMA foreign_keys = ON` aktif. Kalau
+   ADA nota dalam periode itu yang masih punya baris Laci Meja (bahkan
+   yang sudah SELESAI sekalipun — baris itu tidak pernah dihapus
+   seumur hidup DB), `DELETE FROM transactions` menabrak "FOREIGN KEY
+   constraint failed" dan SELURUH Tutup Buku rollback/gagal. Tidak ada
+   test lama yang menyentuh kombinasi ini sama sekali. Fix: guard baru
+   di awal `execute()` — BLOKIR (`TutupBukuException`, pesan jelas)
+   kalau ada baris Laci Meja BELUM SELESAI (titip/pinjaman/pre-order
+   aktif — jangan diam-diam buang tugas operasional aktif); hapus baris
+   yang SUDAH SELESAI bersama notanya di langkah delete (riwayatnya
+   tetap ada di `archive_YYYY.db` yang sudah disalin duluan).
+2. Indeks baru (schemaVersion 30) utk 5 tabel yang sebelumnya tidak
+   terindeks sama sekali (`product_units.product_id`, `price_tiers.
+   product_unit_id`, `alt_prices.product_unit_id`, `product_barcodes.
+   product_unit_id`, `loyalty_point_ledger.customer_id`) + `transaction_id`
+   di 3 tabel Laci Meja (dipakai guard poin 1). Migrasinya
+   (`_createIndexesIfTableExists`) SENGAJA defensif thd tabel/kolom
+   belum ada — 14 dari 15 fixture test migrasi lama (`migration_v7`
+   s/d `v26`) TIDAK replika skema penuh (cuma tabel relevan ke migrasi
+   yang diuji), jadi kalau step-nya tidak defensif, hampir semua
+   fixture lama gagal "no such table"/"no such column". Di DB PRODUKSI
+   nyata semua tabel targetnya sudah ada sejak v1, jadi ini tidak
+   pernah skip apa pun di real world.
+3. `PRAGMA auto_vacuum = INCREMENTAL` (sebelumnya `NONE`) — ruang bekas
+   baris terhapus di luar Tutup Buku (void transaksi, dst.) sebelumnya
+   tidak pernah dikembalikan ke OS di luar `VACUUM` manual (setahun
+   sekali). DB baru langsung aktif; DB lama aktif otomatis setelah
+   `VACUUM` berikutnya (Tutup Buku tahunan) — SQLite mensyaratkan itu,
+   tidak ada tindakan tambahan yang perlu dilakukan.
+4. `CatalogStore.add()` dibatasi 30 katalog tersimpan TERBARU — blob
+   JSON `saved_catalogs` (AppSettings) sebelumnya tidak punya batas
+   jumlah sama sekali.
+
+Test baru: `tutup_buku_laci_meja_guard_test.dart` (5),
+`migration_v30_indexes_test.dart` (1), `catalog_store_cap_test.dart`
+(2) — semua revert-verified. 15 test migrasi lama (`migration_v7`..
+`v26`) diupdate assersi `PRAGMA user_version` 29→30 (bump schemaVersion
+rutin, pola sama tiap kali ada migrasi baru). Full suite hijau (1
+kegagalan `proposal_unchanged_end_to_end_test.dart` — flaky
+pre-existing, tidak terkait), `flutter analyze` 0 issue. Sudah
+di-push. **Temuan sekunder dari audit yang TIDAK di-fix (dianggap
+cukup aman/rendah-risiko utk dibiarkan)**: tidak ada — 4 temuan di
+atas mencakup SEMUA yang dilaporkan di audit. Tidak ada pekerjaan
+menggantung dari sesi ini.
+
 _Update sesi 9 Agustus 2026 — versi kerja tetap **2.10.0+15**,
 schemaVersion tetap **29**. User laporkan (screenshot) nota
 `A1-20260809-0030`: "Sisa" di Riwayat Transaksi (`-Rp 300`) beda dari
