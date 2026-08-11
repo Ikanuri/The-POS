@@ -205,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -227,11 +227,60 @@ class AppDatabase extends _$AppDatabase {
     'CREATE INDEX IF NOT EXISTS idx_stock_ledger_created ON stock_ledger(created_at DESC)',
   ];
 
+  /// Indeks tambahan (v30, dari audit efisiensi storage) — tabel pricing/
+  /// produk/loyalti yang belum terindeks sebelumnya (bisa jadi besar seiring
+  /// katalog produk bertambah), plus `transaction_id` di 3 tabel Laci Meja
+  /// (dipakai guard baru [TutupBukuService.execute] yang JOIN ke sini).
+  static const _v30Indexes = <String>[
+    'CREATE INDEX IF NOT EXISTS idx_pu_product ON product_units(product_id)',
+    'CREATE INDEX IF NOT EXISTS idx_pt_unit ON price_tiers(product_unit_id)',
+    'CREATE INDEX IF NOT EXISTS idx_ap_unit ON alt_prices(product_unit_id)',
+    'CREATE INDEX IF NOT EXISTS idx_pb_unit ON product_barcodes(product_unit_id)',
+    'CREATE INDEX IF NOT EXISTS idx_lpl_customer ON loyalty_point_ledger(customer_id)',
+    'CREATE INDEX IF NOT EXISTS idx_lbi_tx ON left_behind_items(transaction_id)',
+    'CREATE INDEX IF NOT EXISTS idx_bi_tx ON borrowed_items(transaction_id)',
+    'CREATE INDEX IF NOT EXISTS idx_pe_tx ON preorder_entries(transaction_id)',
+  ];
+
+  /// Jalankan tiap `CREATE INDEX ... ON <table>(<col>[, <col>...])` di
+  /// [statements], SKIP diam-diam kalau `<table>`-nya belum ada ATAU salah
+  /// satu kolomnya belum ada (lihat dok pemanggil — fixture test migrasi
+  /// lama sering pakai stub tabel MINIMAL, mis. cuma kolom `id`). Idempoten
+  /// & aman (index hilang cuma berarti query itu sedikit lebih lambat,
+  /// BUKAN salah data) — tidak menyembunyikan bug produksi karena
+  /// tabel+kolom yang ditarget di sini semuanya sudah ada sejak
+  /// schemaVersion 1 di DB produksi nyata manapun.
+  Future<void> _createIndexesIfTableExists(List<String> statements) async {
+    final existingTables = (await customSelect(
+            "SELECT name FROM sqlite_master WHERE type='table'")
+        .get())
+        .map((r) => r.data['name'] as String)
+        .toSet();
+    for (final stmt in statements) {
+      final match =
+          RegExp(r'\sON\s+(\w+)\s*\(([^)]+)\)').firstMatch(stmt);
+      final table = match?.group(1);
+      if (table == null || !existingTables.contains(table)) continue;
+      final cols = (await customSelect("PRAGMA table_info('$table')").get())
+          .map((r) => r.data['name'] as String)
+          .toSet();
+      final wantedCols = match!
+          .group(2)!
+          .split(',')
+          .map((c) => c.trim().split(' ').first);
+      if (wantedCols.any((c) => !cols.contains(c))) continue;
+      await customStatement(stmt);
+    }
+  }
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
           for (final stmt in _performanceIndexes) {
+            await customStatement(stmt);
+          }
+          for (final stmt in _v30Indexes) {
             await customStatement(stmt);
           }
           await _seedDefaults();
@@ -421,6 +470,16 @@ class AppDatabase extends _$AppDatabase {
           if (from < 29) {
             // Item 61.5 — soft-delete expenses (lihat dok `Expenses.deletedAt`).
             await m.addColumn(expenses, expenses.deletedAt);
+          }
+          if (from < 30) {
+            // Audit efisiensi storage — indeks yang belum ada sebelumnya.
+            // Tabel targetnya (price_tiers/product_barcodes/loyalty_point_
+            // ledger/dkk) sudah ada sejak schemaVersion 1 di DB PRODUKSI
+            // manapun (tidak pernah disentuh migrasi lain) — defensif thd
+            // tabel belum ada murni utk fixture test migrasi lama yang
+            // sengaja minimal (cuma tabel relevan ke migrasi yang diuji),
+            // bukan replika skema penuh.
+            await _createIndexesIfTableExists(_v30Indexes);
           }
         },
         beforeOpen: (details) async {
@@ -6079,6 +6138,14 @@ QueryExecutor _openConnection(String encryptionKey) {
         rawDb.execute('PRAGMA mmap_size = 134217728;'); // 128 MB mmap
         rawDb.execute('PRAGMA temp_store = MEMORY;');
         rawDb.execute('PRAGMA foreign_keys = ON;');
+        // Audit efisiensi storage — tanpa ini, ruang bekas baris yang
+        // dihapus (void transaksi, dsb.) TIDAK otomatis dikembalikan ke OS
+        // di luar `VACUUM` manual (cuma dipanggil Tutup Buku, setahun
+        // sekali). Pada DB BARU berlaku langsung; pada DB LAMA (auto_vacuum
+        // masih NONE) baru benar-benar aktif setelah `VACUUM` berikutnya
+        // (SQLite mensyaratkan itu) — otomatis kepakai di Tutup Buku
+        // berikutnya, tidak perlu tindakan tambahan.
+        rawDb.execute('PRAGMA auto_vacuum = INCREMENTAL;');
       },
     );
   });

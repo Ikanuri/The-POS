@@ -135,6 +135,48 @@ class TutupBukuService {
     final periodEndExclusiveSec =
         end.add(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
 
+    // 2b. Guard KRITIS (ditemukan lewat audit efisiensi storage) — Laci Meja
+    // (`left_behind_items`/`borrowed_items`/`preorder_entries`) punya kolom
+    // `transaction_id` yang FK ke `transactions.id` TANPA `ON DELETE CASCADE`,
+    // dan `PRAGMA foreign_keys = ON` aktif. Kalau ADA nota dalam periode yang
+    // diarsipkan yang masih punya baris Laci Meja BELUM SELESAI (titip/
+    // ketinggalan belum diambil, pinjaman belum kembali penuh, pre-order
+    // belum dipenuhi/dibatalkan), menghapus `transactions`-nya akan
+    // menabrak "FOREIGN KEY constraint failed" DAN diam-diam membuang jejak
+    // tugas operasional yang masih aktif. Blokir dulu, minta owner
+    // menyelesaikan/membatalkannya — baris yang SUDAH selesai aman dihapus
+    // bersama notanya di langkah 4 (riwayatnya tetap ada di file arsip, yang
+    // sudah disalin utuh SEBELUM baris apa pun dihapus).
+    final openLaciMejaRow = await db.customSelect(
+      'SELECT '
+      '(SELECT COUNT(*) FROM left_behind_items lbi '
+      '  JOIN transactions t ON t.id = lbi.transaction_id '
+      '  WHERE t.created_at >= $periodStartSec AND t.created_at < $periodEndExclusiveSec '
+      '  AND lbi.collected_at IS NULL) AS titip, '
+      '(SELECT COUNT(*) FROM borrowed_items bi '
+      '  JOIN transactions t ON t.id = bi.transaction_id '
+      '  WHERE t.created_at >= $periodStartSec AND t.created_at < $periodEndExclusiveSec '
+      '  AND bi.fully_returned_at IS NULL) AS pinjaman, '
+      '(SELECT COUNT(*) FROM preorder_entries pe '
+      '  JOIN transactions t ON t.id = pe.transaction_id '
+      '  WHERE t.created_at >= $periodStartSec AND t.created_at < $periodEndExclusiveSec '
+      '  AND pe.fulfilled_at IS NULL AND pe.cancelled_at IS NULL) AS preorder',
+    ).getSingle();
+    final openTitip = (openLaciMejaRow.data['titip'] as int?) ?? 0;
+    final openPinjaman = (openLaciMejaRow.data['pinjaman'] as int?) ?? 0;
+    final openPreorder = (openLaciMejaRow.data['preorder'] as int?) ?? 0;
+    if (openTitip + openPinjaman + openPreorder > 0) {
+      final parts = <String>[
+        if (openTitip > 0) '$openTitip titip/ketinggalan',
+        if (openPinjaman > 0) '$openPinjaman pinjaman belum kembali',
+        if (openPreorder > 0) '$openPreorder pre-order belum dipenuhi',
+      ];
+      throw TutupBukuException(
+          'Ada nota dalam periode ini yang masih punya catatan Laci Meja '
+          'belum selesai (${parts.join(', ')}). Selesaikan atau batalkan '
+          'dulu di Laci Meja sebelum tutup buku periode ini.');
+    }
+
     final countRow = await db.customSelect(
       'SELECT COUNT(*) AS cnt FROM transactions '
       'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec',
@@ -192,7 +234,24 @@ class TutupBukuService {
           r.data['uid'] as String: (r.data['bal'] as num?)?.toDouble() ?? 0,
       };
 
-      // Hapus child tables dulu (FK).
+      // Hapus child tables dulu (FK). Laci Meja SELALU aman dihapus di sini
+      // — guard di langkah 2b sudah memastikan TIDAK ADA baris yang masih
+      // terbuka (belum selesai) di antara nota-nota periode ini.
+      await db.customUpdate(
+        'DELETE FROM left_behind_items WHERE transaction_id IN '
+        '(SELECT id FROM transactions '
+        ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+      );
+      await db.customUpdate(
+        'DELETE FROM borrowed_items WHERE transaction_id IN '
+        '(SELECT id FROM transactions '
+        ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+      );
+      await db.customUpdate(
+        'DELETE FROM preorder_entries WHERE transaction_id IN '
+        '(SELECT id FROM transactions '
+        ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+      );
       await db.customUpdate(
         'DELETE FROM transaction_items WHERE transaction_id IN '
         '(SELECT id FROM transactions '

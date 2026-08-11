@@ -121,7 +121,7 @@ void main() {
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
     // schemaVersion TERKINI (25, bukan cuma 24) — migrasi berjalan
     // berurutan s.d. versi terbaru, bukan berhenti di step fokus test ini.
-    expect(ver.data.values.first, 29); // schemaVersion terkini
+    expect(ver.data.values.first, 30); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

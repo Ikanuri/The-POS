@@ -17,6 +17,12 @@ class CatalogStore extends StateNotifier<List<SavedCatalog>> {
   final AppDatabase _db;
   static const _key = 'saved_catalogs';
 
+  /// Audit efisiensi storage — blob JSON ini sebelumnya tidak punya batas
+  /// jumlah sama sekali. Katalog memang biasanya sedikit (sesekali untuk
+  /// pengumuman harga), tapi tanpa batas eksplisit, asumsi itu bisa meleset
+  /// diam-diam seiring waktu. Batasi ke yang TERBARU saja.
+  static const _maxSaved = 30;
+
   Future<void> _load() async {
     final raw = await _db.getSetting(_key);
     if (raw == null || raw.isEmpty) return;
@@ -41,7 +47,10 @@ class CatalogStore extends StateNotifier<List<SavedCatalog>> {
   }
 
   Future<void> add(SavedCatalog catalog) async {
-    state = [catalog, ...state];
+    final combined = [catalog, ...state];
+    state = combined.length > _maxSaved
+        ? combined.sublist(0, _maxSaved)
+        : combined;
     await _persist();
   }
 
