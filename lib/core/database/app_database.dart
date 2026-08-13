@@ -4289,6 +4289,182 @@ class AppDatabase extends _$AppDatabase {
     }).toList();
   }
 
+  // ─────────── Statistik detail per produk / per pelanggan (drill-down) ───────────
+  //
+  // Permintaan user: tab Produk & Pelanggan di Laporan sebelumnya BUNTU
+  // (barisnya tidak bisa diketuk). Query di bawah menyuplai layar detail
+  // yang bisa dibuka dari sana + dari layar pelanggan. Semua menerima
+  // rentang tanggal & memfilter `status != 'void'` — konsisten dgn
+  // [getTopProductsByRevenue]/[getTopCustomersByRevenue] yang jadi
+  // pintu masuknya, supaya angka ringkas & detail tidak pernah berbeda.
+
+  /// Ringkasan satu produk dalam rentang: qty terjual, omzet, HPP, dan
+  /// jumlah NOTA yang memuatnya (bukan jumlah baris — satu nota bisa punya
+  /// beberapa baris produk yang sama dgn satuan berbeda).
+  Future<ProductStatsSummary> getProductStatsSummary(
+      String productId, DateTime from, DateTime to) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(ti.qty),0) AS qty, '
+      '  COALESCE(SUM(ti.subtotal),0) AS revenue, '
+      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs, '
+      '  COUNT(DISTINCT ti.transaction_id) AS tx_count '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      "WHERE ti.product_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ?',
+      variables: [
+        Variable.withString(productId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions},
+    ).getSingle();
+    return (
+      qtySold: (row.data['qty'] as num).toDouble(),
+      revenue: (row.data['revenue'] as num).toInt(),
+      cogs: (row.data['cogs'] as num).round(),
+      txCount: (row.data['tx_count'] as num).toInt(),
+    );
+  }
+
+  /// Tren harian satu produk (qty & omzet per tanggal LOKAL) — pola strftime
+  /// sama [getExpenseDailyTotals].
+  Future<List<ProductDailySales>> getProductDailySales(
+      String productId, DateTime from, DateTime to) async {
+    final rows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(t.created_at,'unixepoch','localtime')) AS d, "
+      '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      "WHERE ti.product_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ? '
+      'GROUP BY d ORDER BY d',
+      variables: [
+        Variable.withString(productId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions},
+    ).get();
+    return rows.map((r) {
+      final p = (r.data['d'] as String).split('-').map(int.parse).toList();
+      return (
+        date: DateTime(p[0], p[1], p[2]),
+        qty: (r.data['qty'] as num).toDouble(),
+        revenue: (r.data['revenue'] as num).toInt(),
+      );
+    }).toList();
+  }
+
+  /// Pembeli teratas satu produk. HANYA pelanggan TERDAFTAR (`customer_id`
+  /// tidak null) — keputusan user: pembeli umum/ad-hoc diabaikan, karena
+  /// nota begitu cuma menyimpan nama bebas yang tidak bisa dijamin merujuk
+  /// orang yang sama.
+  Future<List<ProductBuyerStat>> getProductTopBuyers(
+      String productId, DateTime from, DateTime to,
+      {int limit = 20}) async {
+    final rows = await customSelect(
+      'SELECT c.id AS cid, c.name AS cname, '
+      '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN customers c ON c.id = t.customer_id '
+      "WHERE ti.product_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ? '
+      'GROUP BY c.id ORDER BY revenue DESC LIMIT $limit',
+      variables: [
+        Variable.withString(productId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions, customers},
+    ).get();
+    return rows
+        .map((r) => (
+              customerId: r.data['cid'] as String,
+              name: r.data['cname'] as String,
+              qty: (r.data['qty'] as num).toDouble(),
+              revenue: (r.data['revenue'] as num).toInt(),
+            ))
+        .toList();
+  }
+
+  /// Ringkasan belanja satu pelanggan dalam rentang. `totalSpent` dari
+  /// `transactions.total` (nilai nota), BUKAN `paid` — nota tempo yang belum
+  /// dibayar TETAP dihitung sbg belanja, konsisten dgn
+  /// [getTopCustomersByRevenue] yang jadi pintu masuknya.
+  Future<CustomerStatsSummary> getCustomerStatsSummary(
+      String customerId, DateTime from, DateTime to) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(t.total),0) AS spent, COUNT(*) AS tx_count, '
+      '  COALESCE(SUM((SELECT COALESCE(SUM(ti.qty),0) FROM transaction_items ti '
+      '     WHERE ti.transaction_id = t.id)),0) AS item_qty '
+      "FROM transactions t WHERE t.customer_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ?',
+      variables: [
+        Variable.withString(customerId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactions, transactionItems},
+    ).getSingle();
+    final txCount = (row.data['tx_count'] as num).toInt();
+    final spent = (row.data['spent'] as num).toInt();
+    return (
+      totalSpent: spent,
+      txCount: txCount,
+      itemQty: (row.data['item_qty'] as num).toDouble(),
+      avgPerTx: txCount == 0 ? 0 : (spent / txCount).round(),
+    );
+  }
+
+  /// Produk yang paling sering/banyak dibeli satu pelanggan dalam rentang.
+  Future<List<ProductRevenueStat>> getCustomerTopProducts(
+      String customerId, DateTime from, DateTime to,
+      {int limit = 20}) async {
+    final rows = await customSelect(
+      'SELECT p.id AS pid, p.name AS pname, '
+      '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue, '
+      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN products p ON p.id = ti.product_id '
+      "WHERE t.customer_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ? '
+      'GROUP BY p.id ORDER BY revenue DESC LIMIT $limit',
+      variables: [
+        Variable.withString(customerId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions, products},
+    ).get();
+    return rows
+        .map((r) => ProductRevenueStat(
+              productId: r.data['pid'] as String,
+              name: r.data['pname'] as String,
+              revenue: (r.data['revenue'] as num).toInt(),
+              qtySold: (r.data['qty'] as num).toDouble(),
+              cogs: (r.data['cogs'] as num).round(),
+            ))
+        .toList();
+  }
+
+  /// Daftar nota satu pelanggan dalam rentang (terbaru dulu) — dipakai
+  /// layar statistik pelanggan supaya bisa langsung dibuka ke struknya.
+  Future<List<Transaction>> getCustomerTransactions(
+      String customerId, DateTime from, DateTime to,
+      {int limit = 200}) =>
+      (select(transactions)
+            ..where((t) =>
+                t.customerId.equals(customerId) &
+                t.status.isNotValue('void') &
+                t.createdAt.isBiggerOrEqualValue(from) &
+                t.createdAt.isSmallerOrEqualValue(to))
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+            ..limit(limit))
+          .get();
+
   /// Total ringkas laporan (revenue, COGS, jumlah transaksi) dalam rentang —
   /// query agregat satu-baris, tidak memuat seluruh transaksi/item ke memori
   /// (mencegah Out of Memory saat ekspor periode besar).
@@ -6128,6 +6304,39 @@ class AppDatabase extends _$AppDatabase {
 }
 
 /// Hasil agregat top-produk untuk laporan (JOIN query).
+/// Ringkasan statistik satu produk dalam rentang tanggal (layar detail
+/// produk, dibuka dari tab Produk di Laporan).
+typedef ProductStatsSummary = ({
+  double qtySold,
+  int revenue,
+  int cogs,
+
+  /// Jumlah NOTA yang memuat produk ini (DISTINCT transaction_id), bukan
+  /// jumlah baris — satu nota bisa memuat produk yang sama beberapa kali
+  /// dgn satuan berbeda (pola lazim di data toko ini, lihat dok
+  /// `LeftBehindItems.transactionItemId`).
+  int txCount,
+});
+
+/// Satu titik tren harian penjualan produk.
+typedef ProductDailySales = ({DateTime date, double qty, int revenue});
+
+/// Pembeli (pelanggan TERDAFTAR) satu produk.
+typedef ProductBuyerStat = ({
+  String customerId,
+  String name,
+  double qty,
+  int revenue,
+});
+
+/// Ringkasan belanja satu pelanggan dalam rentang tanggal.
+typedef CustomerStatsSummary = ({
+  int totalSpent,
+  int txCount,
+  double itemQty,
+  int avgPerTx,
+});
+
 class ProductRevenueStat {
   const ProductRevenueStat({
     required this.productId,

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../stats/product_stats_screen.dart';
 
 final _produkTabProvider = FutureProvider.family<List<ProductRevenueStat>,
     DateTimeRange>((ref, range) async {
@@ -81,6 +82,18 @@ class ProdukTab extends ConsumerWidget {
       trailing: Text(
         formatRupiah(s.revenue),
         style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
+      ),
+      // Baris ini dulu BUNTU (tidak bisa diketuk sama sekali) — sekarang
+      // membuka statistik detail produknya, rentang tanggal tab ikut
+      // terbawa sbg rentang awal.
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ProductStatsScreen(
+            productId: s.productId,
+            productName: s.name.isNotEmpty ? s.name : s.productId,
+            initialRange: range,
+          ),
+        ),
       ),
     );
   }

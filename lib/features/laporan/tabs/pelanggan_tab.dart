@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../stats/customer_stats_screen.dart';
 
 final _pelangganTabProvider = FutureProvider.family<List<CustomerRevenueStat>,
     DateTimeRange>((ref, range) async {
@@ -47,7 +48,7 @@ class PelangganTab extends ConsumerWidget {
               ),
             for (var i = 0; i < stats.length; i++) ...[
               if (i > 0) const Divider(height: 1, indent: 60),
-              _row(scheme, stats[i], i),
+              _row(context, scheme, stats[i], i),
             ],
           ],
         );
@@ -57,7 +58,8 @@ class PelangganTab extends ConsumerWidget {
     );
   }
 
-  Widget _row(ColorScheme scheme, CustomerRevenueStat s, int i) {
+  Widget _row(BuildContext context, ColorScheme scheme,
+      CustomerRevenueStat s, int i) {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: i == 0 ? scheme.primary : scheme.primaryContainer,
@@ -77,6 +79,17 @@ class PelangganTab extends ConsumerWidget {
       trailing: Text(
         formatRupiah(s.totalSpent),
         style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
+      ),
+      // Baris ini dulu BUNTU — sekarang membuka statistik belanja
+      // pelanggannya, rentang tanggal tab ikut terbawa sbg rentang awal.
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CustomerStatsScreen(
+            customerId: s.customerId,
+            customerName: s.name.isNotEmpty ? s.name : s.customerId,
+            initialRange: range,
+          ),
+        ),
       ),
     );
   }
