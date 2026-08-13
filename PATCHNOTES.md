@@ -8,6 +8,25 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 13 Agustus 2026
+
+### 🆕 Fitur baru
+- **Riwayat Pembayaran lebih detail** (di struk in-app, saat lihat
+  kembali sebuah nota): setiap kali ada **retur atau edit barang**,
+  sekarang tampil rincian barang apa saja yang diretur/diedit — nama
+  barang, jumlah, harga satuan, dan totalnya — tanpa perlu menghitung
+  ulang manual. Untuk **nota tempo/kurang bayar**, tiap kali kasir
+  menerima sebagian pembayaran, langsung tampil juga baris "Sisa" di
+  bawahnya (contoh: total belanja Rp 193.000, dibayar Tunai Rp 192.000,
+  Sisa Rp 1.000) — persis seperti baris "Kembalian" yang sudah ada,
+  tapi tanpa perlu dicentang karena sisa tempo tidak akan dipakai
+  ulang. Kembalian atau sisa yang muncul TEPAT pada momen retur/edit
+  itu sendiri juga langsung terlihat di situ. Fitur ini murni untuk
+  membantu kasir & audit — struk yang dibagikan (share/cetak) tidak
+  berubah.
+
+---
+
 ## 11 Agustus 2026
 
 ### 🆕 Fitur baru

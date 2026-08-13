@@ -5,6 +5,74 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 13 Agustus 2026 — Riwayat Pembayaran: rincian per-produk
+retur/edit + Sisa per sesi bayar (`5c46846`), schemaVersion **32**
+(naik dari 31). Permintaan user: kartu "Riwayat Pembayaran" in-app WAJIB
+menampilkan (1) rincian per-produk tiap momen retur/edit — nama +
+`qty satuan x harga  total` (keduanya bold), beberapa produk dalam satu
+momen tampil berurutan; (2) baris "Sisa" per sesi bayar pada nota
+tempo/kurang_bayar (pola sama "Kembalian" tapi TANPA centang); (3)
+kembalian/sisa yang berlaku PERSIS pada momen retur/edit itu SENDIRI
+(klarifikasi user eksplisit: "poin 3 'tersebut' refer ke poin 1", bukan
+poin 2). **Scope eksplisit user: HANYA in-app** — nota share
+(`_ReceiptPaper`) & cetak (`printer_service.dart`) TIDAK disentuh sama
+sekali.
+
+Dua keputusan desain lewat `AskUserQuestion` (kedua "Recommended" dipilih):
+kembalian/sisa historis harus per-momen (bukan cuma kondisi terkini), dan
+boleh bikin tabel audit baru. Implementasi AKHIRNYA jauh lebih sederhana
+dari rencana awal (draft sempat merencanakan "rekonstruksi mundur dari
+total terkini" — DIBATALKAN, tidak jadi dipakai): karena `changeGiven`
+sudah lama disimpan IMMUTABLE per baris `transaction_payments` saat baris
+itu dibuat, cukup tambah kolom SIMETRIS `sisaAfter` yang dihitung &
+disimpan permanen dgn pola SAMA persis (`_computePaymentDelta`,
+menggantikan `_computePaymentChangeGiven` lama) — tidak perlu rekonstruksi
+apa pun belakangan. **Gotcha BARU yang sempat lolos ke test** (perlu
+diwaspadai kalau ada formula simetris serupa di masa depan): `sisaAfter`
+WAJIB dihitung dari `thisChange` (SUDAH dikurangi `priorChangeSum`), BUKAN
+`aggregateChange` mentah — kembalian lama yang dipakai ulang sbg
+pembayaran baru (mis. tambah belanjaan) harus dinetkan di KEDUA sisi
+formula, sama alasannya dgn kenapa `changeGiven` sendiri sudah lama
+mengurangi `priorChangeSum`. Bug ini lolos ke `flutter analyze` + semua
+test BARU (yg kebetulan tidak menyentuh skenario kembalian-dipakai-ulang)
+tapi ketangkap `receipt_sisa_tagihan_net_test.dart` (test LAMA) di full
+suite — pelajaran: full suite WAJIB dijalankan sebelum yakin selesai,
+tidak cukup test file baru saja.
+
+Rincian per-produk: tabel BARU insert-only `transaction_adjustment_lines`
+(snapshot nama produk/satuan, supaya tetap benar walau produk diedit/
+dihapus belakangan), ditaut ke `transaction_payments` via `paymentId`.
+Diisi di titik yang TEPAT di 4 fungsi mutasi (`returnUnpaidTransactionItems`/
+`editUnpaidTransactionItem`/`returnPaidTransactionItems`/
+`editPaidTransactionItem`) — utk 2 fungsi retur nilainya EKSAK langsung
+dari data yg ada, utk 2 fungsi edit (qty & harga BISA berubah bersamaan
+dlm 1 aksi) dipakai formula derivasi supaya `qty×harga≈subtotal` tetap
+konsisten (subtotal-nya sendiri selalu eksak, cuma pemecahan qty/harga
+per-baris yg didekati). Edit yg CUMA ubah catatan (qty & harga persis
+sama) sengaja TIDAK menghasilkan baris rincian (dicek eksplisit,
+revert-verified).
+
+Sync LAN: tabel baru + kolom baru diwire penuh ke 3 tempat
+(`lan_sync_service.dart`: `appendOnlyTables`/`syncCategories`/
+`childTables`/`_collectTxIds`/label; `app_database.dart`: `_allTables`/
+`dumpSince` appendOnly list) — kalau lupa salah satu, gejalanya BUKAN
+error nyata, cuma data diam-diam tidak pernah nyampai device lain (pola
+gotcha lama di CLAUDE.md).
+
+Test `adjustment_lines_sisa_test.dart` (8, DB murni — 4 fungsi mutasi +
+`addPaymentToTransaction` + `settleMergedDebt`) — revert-verified 2x.
+16 test migrasi lama (v7 s/d v31) diperbarui: SEMUANYA sekarang
+diupgrade sampai schemaVersion terkini (32) krn migrasi v32 tanpa syarat
+versi awal (`m.addColumn(transactionPayments, ...)`) — 9 fixture yg
+sebelumnya tidak pernah membuat tabel `transaction_payments` sama sekali
+(tidak dibutuhkan migrasi manapun sebelum ini) sekarang WAJIB
+menyertakannya, assersi `PRAGMA user_version` akhir dinaikkan 31→32 di
+semua 16 file. Full suite 1066 hijau, `flutter analyze` 0 issue.
+
+**Tercatat di task manager (belum dikerjakan)**: tidak ada baru sesi ini.
+Item lama yang masih SENGAJA ditunda user ("tidak perlu dulu"):
+rotasi/pemangkasan `CrashLogService` & `HeldOrders` tanpa kedaluwarsa.
+
 _Update sesi 11 Agustus 2026 (lanjutan lagi — chart interaktif,
 `5115832`) — user kirim screenshot: statistik produk dgn rentang
 setahun (~365 titik harian) label sumbu-X-nya PECAH jadi tumpukan
