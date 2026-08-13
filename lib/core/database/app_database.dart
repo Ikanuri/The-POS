@@ -4289,6 +4289,122 @@ class AppDatabase extends _$AppDatabase {
     }).toList();
   }
 
+  // ───────────────────────── Arus Kas ─────────────────────────
+  //
+  // BEDA MENDASAR dari "Selisih Kas Operasional" di tab Ringkasan (Omzet -
+  // Pengeluaran), yang bukan arus kas sungguhan karena:
+  //   (a) Omzet memuat nota TEMPO yang belum dibayar sepeser pun, dan
+  //   (b) pelunasan hutang nota lama TIDAK terhitung sbg kas masuk di
+  //       periode uangnya benar-benar diterima (omzetnya sudah tercatat di
+  //       periode nota dibuat).
+  // Query di bawah memakai `transaction_payments` (kapan uang BENAR-BENAR
+  // berpindah) sbg sumber kas masuk, bukan `transactions` — sehingga kedua
+  // masalah di atas hilang sekaligus, dan cicilan/pelunasan susulan
+  // otomatis jatuh di tanggal yang benar.
+
+  /// Kas MASUK per metode bayar dalam rentang (berdasar `paid_at`).
+  ///
+  /// NET dari `change_given`: uang yang diserahkan balik ke pembeli
+  /// (kembalian, termasuk kelebihan bayar akibat retur nota belum lunas)
+  /// tidak pernah benar-benar mengendap di laci. Baris pembayaran yang
+  /// DIBATALKAN (`voided`) dilewati, dan refund retur nota lunas otomatis
+  /// ikut terhitung karena `amount`-nya memang NEGATIF.
+  Future<Map<String, int>> getCashInByMethod(DateTime from, DateTime to) async {
+    final rows = await customSelect(
+      'SELECT method, COALESCE(SUM(amount),0) AS amt, '
+      '  COALESCE(SUM(change_given),0) AS chg '
+      'FROM transaction_payments '
+      'WHERE NOT voided AND paid_at >= ? AND paid_at <= ? '
+      'GROUP BY method',
+      variables: [
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionPayments},
+    ).get();
+    final out = <String, int>{};
+    for (final r in rows) {
+      final net = (r.data['amt'] as num).toInt() - (r.data['chg'] as num).toInt();
+      if (net == 0) continue;
+      out[r.data['method'] as String] = net;
+    }
+    return out;
+  }
+
+  /// Tren harian arus kas: kas masuk & kas keluar per tanggal LOKAL.
+  /// Dua query terpisah (pembayaran & pengeluaran) digabung di Dart —
+  /// UNION di SQL akan menyulitkan pembacaan tanpa keuntungan berarti pada
+  /// ukuran data app ini.
+  Future<List<CashFlowDaily>> getCashFlowDaily(
+      DateTime from, DateTime to) async {
+    final fromSec = from.millisecondsSinceEpoch ~/ 1000;
+    final toSec = to.millisecondsSinceEpoch ~/ 1000;
+    final inRows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(paid_at,'unixepoch','localtime')) AS d, "
+      '  COALESCE(SUM(amount),0) - COALESCE(SUM(change_given),0) AS net '
+      'FROM transaction_payments '
+      'WHERE NOT voided AND paid_at >= ? AND paid_at <= ? GROUP BY d',
+      variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
+      readsFrom: {transactionPayments},
+    ).get();
+    final outRows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(created_at,'unixepoch','localtime')) AS d, "
+      '  COALESCE(SUM(amount),0) AS total '
+      'FROM expenses WHERE created_at >= ? AND created_at <= ? '
+      'AND deleted_at IS NULL GROUP BY d',
+      variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
+      readsFrom: {expenses},
+    ).get();
+
+    DateTime parse(String s) {
+      final p = s.split('-').map(int.parse).toList();
+      return DateTime(p[0], p[1], p[2]);
+    }
+
+    final cashIn = <DateTime, int>{
+      for (final r in inRows) parse(r.data['d'] as String): (r.data['net'] as num).toInt(),
+    };
+    final cashOut = <DateTime, int>{
+      for (final r in outRows)
+        parse(r.data['d'] as String): (r.data['total'] as num).toInt(),
+    };
+    final days = {...cashIn.keys, ...cashOut.keys}.toList()..sort();
+    return [
+      for (final d in days)
+        (date: d, cashIn: cashIn[d] ?? 0, cashOut: cashOut[d] ?? 0),
+    ];
+  }
+
+  /// Ringkasan arus kas satu rentang: kas masuk (dipecah tunai vs non-tunai)
+  /// dan kas keluar (dari `expenses`, semua jenis — ini "ke mana uang
+  /// mengalir", bukan P&L, jadi TIDAK memakai [netProfitExpenseTypes]).
+  Future<CashFlowSummary> getCashFlowSummary(
+      DateTime from, DateTime to) async {
+    final byMethod = await getCashInByMethod(from, to);
+    // 'tempo' = penanda nota berhutang, BUKAN uang yang berpindah. Kalau
+    // pun muncul sbg method di baris pembayaran, nilainya tidak boleh
+    // dianggap kas masuk.
+    var cash = 0;
+    var nonCash = 0;
+    byMethod.forEach((method, net) {
+      if (method == 'tempo') return;
+      if (method == 'tunai') {
+        cash += net;
+      } else {
+        nonCash += net;
+      }
+    });
+    final outByType = await getExpenseBreakdownByType(from, to);
+    final totalOut = outByType.values.fold<int>(0, (s, v) => s + v);
+    return (
+      cashIn: cash,
+      nonCashIn: nonCash,
+      cashOut: totalOut,
+      outByType: outByType,
+      inByMethod: byMethod,
+    );
+  }
+
   // ─────────── Statistik detail per produk / per pelanggan (drill-down) ───────────
   //
   // Permintaan user: tab Produk & Pelanggan di Laporan sebelumnya BUNTU
@@ -6304,6 +6420,29 @@ class AppDatabase extends _$AppDatabase {
 }
 
 /// Hasil agregat top-produk untuk laporan (JOIN query).
+/// Satu titik tren harian arus kas.
+typedef CashFlowDaily = ({DateTime date, int cashIn, int cashOut});
+
+/// Ringkasan arus kas satu rentang tanggal.
+typedef CashFlowSummary = ({
+  /// Kas masuk TUNAI, net dari kembalian yang diserahkan.
+  int cashIn,
+
+  /// Kas masuk NON-tunai (transfer/QRIS/e-wallet/dst), net dari kembalian.
+  int nonCashIn,
+
+  /// Total uang keluar (`expenses`, semua jenis).
+  int cashOut,
+
+  /// Rincian uang keluar per jenis pengeluaran.
+  Map<String, int> outByType,
+
+  /// Rincian uang masuk per metode bayar (termasuk metode non-tunai
+  /// masing-masing, supaya bisa dipecah lebih detail dari sekadar
+  /// tunai/non-tunai).
+  Map<String, int> inByMethod,
+});
+
 /// Ringkasan statistik satu produk dalam rentang tanggal (layar detail
 /// produk, dibuka dari tab Produk di Laporan).
 typedef ProductStatsSummary = ({
