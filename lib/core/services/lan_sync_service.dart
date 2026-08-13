@@ -429,6 +429,12 @@ class LanSyncService {
     'left_behind_items',
     'borrowed_items',
     'preorder_entries',
+    // Master data owner yang selama ini tidak pernah menyebar.
+    'payment_methods',
+    'employees',
+    // Setting toko — key-nya sendiri masih disaring `syncableSettingKeys`
+    // di `AppDatabase.mergeRows` (identitas device TIDAK ikut).
+    'app_settings',
   };
 
   /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi
@@ -440,6 +446,7 @@ class LanSyncService {
     'Poin Loyalti': ['loyalty_point_ledger'],
     'Pengeluaran': ['expenses'],
     'Kamus Produk': ['product_aliases'],
+    'Pengaturan Toko': ['app_settings', 'payment_methods', 'employees'],
   };
 
   // ─── Host (server) side ──────────────────────────────────────────────────

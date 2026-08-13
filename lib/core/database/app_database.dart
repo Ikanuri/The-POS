@@ -228,6 +228,43 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 31;
 
+  /// Key `app_settings` yang BOLEH ikut sync host->klien.
+  ///
+  /// ALLOWLIST, bukan blacklist — dan tabel `app_settings` TIDAK BOLEH
+  /// di-dump bulat-bulat. Isinya bercampur antara setting TOKO (harus
+  /// seragam di semua device) dgn IDENTITAS/STATE DEVICE
+  /// (`store_uuid`, `store_key`, `device_code`, `device_role`, watermark
+  /// sync, `last_archive_date`). Kalau semua ikut, device klien akan
+  /// tertimpa identitasnya sendiri — kerusakan parah & sulit dipulihkan.
+  ///
+  /// Dipakai di DUA sisi: saat MEMBUAT dump (host) dan saat MENERIMA
+  /// (klien, di [mergeRows]) — supaya payload yang menyelundupkan key lain
+  /// tetap ditolak walau dump-nya tidak lagi bisa dipercaya.
+  static const syncableSettingKeys = {
+    // Aturan poin loyalti — dibaca SAAT CHECKOUT. Tanpa disinkron, nota
+    // bernilai sama dapat poin BERBEDA tergantung device yang melayani,
+    // padahal `loyalty_point_ledger`-nya sendiri ikut tersync (jadi
+    // inkonsistensinya masuk ke data bersama).
+    'loyalty_point_threshold',
+    'loyalty_points_per',
+    // Kebijakan stok minus — ditetapkan owner, dibaca kasir saat checkout.
+    'allow_negative_stock',
+    // Identitas toko yang tercetak di struk. `store_name` selama ini cuma
+    // ikut SEKALI saat pairing (payload QR); perubahan setelahnya tidak
+    // pernah menyebar, jadi struk antar device bisa beda alamat/nomor.
+    'store_name',
+    'store_address',
+    'store_phone',
+    'store_whatsapp',
+    'store_telegram',
+    // Tampilan struk.
+    'receipt_header',
+    'receipt_note',
+    'receipt_show_employee',
+    // Perilaku katalog pesanan.
+    'katalog_wa_direct',
+  };
+
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
   /// onUpgrade.
@@ -5156,6 +5193,11 @@ class AppDatabase extends _$AppDatabase {
       'left_behind_items',
       'borrowed_items',
       'preorder_entries',
+      // Metode bayar & pegawai: master data owner yang selama ini TIDAK
+      // pernah menyebar — owner menambah rekening/QRIS atau pegawai baru,
+      // device kasir tidak pernah mendapatkannya.
+      'payment_methods',
+      'employees',
     ];
     // Tabel yang mengalir DUA ARAH (klien->host maupun host->klien),
     // last-write-wins by `updated_at`. Beda dari [masterData] yang sengaja
@@ -5215,7 +5257,8 @@ class AppDatabase extends _$AppDatabase {
             t == 'customers' ||
             t == 'left_behind_items' ||
             t == 'borrowed_items' ||
-            t == 'preorder_entries';
+            t == 'preorder_entries' ||
+            t == 'employees';
         if (hasUpdated) {
           final rows = await customSelect(
             'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
@@ -5235,6 +5278,20 @@ class AppDatabase extends _$AppDatabase {
         variables: [Variable.withInt(sinceSec)],
       ).get();
       dump['kasir_permissions'] = rows.map((r) => r.data).toList();
+
+      // Setting toko — HANYA key di [syncableSettingKeys]. Lihat dok di
+      // sana kenapa tabel ini tidak boleh di-dump bulat-bulat.
+      final keyPlaceholders =
+          List.filled(syncableSettingKeys.length, '?').join(',');
+      final settingRows = await customSelect(
+        'SELECT * FROM "app_settings" WHERE updated_at >= ? '
+        'AND key IN ($keyPlaceholders)',
+        variables: [
+          Variable.withInt(sinceSec),
+          for (final k in syncableSettingKeys) Variable.withString(k),
+        ],
+      ).get();
+      dump['app_settings'] = settingRows.map((r) => r.data).toList();
     }
     // SELALU disertakan — termasuk saat klien mengirim ke atas
     // (`includeMasterData: false`), justru itu tujuannya.
@@ -5703,6 +5760,18 @@ class AppDatabase extends _$AppDatabase {
     // Pemanggil sah selalu lolos (semua nama tabel app berpola ini).
     if (!RegExp(r'^[a-z_][a-z0-9_]*$').hasMatch(tableName)) {
       throw ArgumentError('Nama tabel sync tidak valid: $tableName');
+    }
+    // Guard KEY-level utk `app_settings`: tabel ini bercampur setting toko
+    // (boleh seragam) dgn identitas/state device (`store_uuid`, `store_key`,
+    // `device_code`, watermark sync...). Disaring di SINI — titik masuk data
+    // dari luar device — supaya payload yang menyelundupkan key lain tetap
+    // ditolak walau dump pengirimnya tidak bisa dipercaya. Lihat dok
+    // [syncableSettingKeys].
+    if (tableName == 'app_settings') {
+      rows = rows
+          .where((r) => syncableSettingKeys.contains(r['key']))
+          .toList();
+      if (rows.isEmpty) return 0;
     }
     // customStatement/customInsert lewat raw SQL tidak diketahui Drift tabel
     // mana yang berubah, jadi StreamProvider (mis. daftar produk/pelanggan)
