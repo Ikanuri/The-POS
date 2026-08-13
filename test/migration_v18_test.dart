@@ -22,6 +22,22 @@ void main() {
     // (tabel baru, bukan addColumn — jadi tidak perlu stub tabel lain).
     final v17 = raw.sqlite3.open(path);
     v17.execute('PRAGMA user_version = 17;');
+    // transaction_payments diperlukan agar migrasi v32 (addColumn
+    // sisa_after) tak gagal — riwayat pembayaran rincian retur/edit.
+    v17.execute('''
+      CREATE TABLE transaction_payments (
+        id TEXT NOT NULL PRIMARY KEY,
+        transaction_id TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        method TEXT NOT NULL,
+        paid_at INTEGER NOT NULL DEFAULT 0,
+        kasir_id TEXT,
+        note TEXT,
+        change_given INTEGER NOT NULL DEFAULT 0,
+        change_taken INTEGER NOT NULL DEFAULT 0,
+        voided INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
     // Item 61.5 (fix baru) migrasi ALTER TABLE expenses ADD COLUMN
     // deleted_at berlaku TANPA syarat versi — tabel ini WAJIB ada di
     // fixture manapun yang diupgrade sampai schemaVersion terkini.
@@ -77,7 +93,7 @@ void main() {
     expect(rows.single.fromIp, '192.168.1.5');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 31); // schemaVersion terkini
+    expect(ver.data.values.first, 32); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

@@ -114,6 +114,19 @@ class TransactionPayments extends Table {
   /// baris pembayaran, item & stok tidak tersentuh.
   BoolColumn get voided => boolean().withDefault(const Constant(false))();
 
+  /// Sisa hutang tempo TEPAT SETELAH momen pembayaran/retur/edit INI —
+  /// dihitung & disimpan SEKALI saat baris ini dibuat, pola sama persis
+  /// dgn [changeGiven] tapi utk sisi sebaliknya (kurang bayar, bukan
+  /// lebih bayar): `max(0, currentTotal - (Σ pembayaran sebelumnya +
+  /// pembayaran ini))`. Immutable setelahnya — fakta historis "saat itu
+  /// sisanya segini" tidak boleh berubah walau total nota berubah
+  /// belakangan (mis. retur/edit susulan), beda dari
+  /// `netRemainingOwed(tx, payments)` yang selalu representasi TERKINI.
+  /// Dipakai kartu "Riwayat Pembayaran" in-app utk baris "Sisa" per sesi
+  /// bayar pada nota tempo (mirip [changeGiven] tapi tanpa centang, krn
+  /// sisa tempo tidak akan "dipakai ulang").
+  IntColumn get sisaAfter => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

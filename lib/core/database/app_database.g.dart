@@ -5803,6 +5803,14 @@ class $TransactionPaymentsTable extends TransactionPayments
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("voided" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _sisaAfterMeta =
+      const VerificationMeta('sisaAfter');
+  @override
+  late final GeneratedColumn<int> sisaAfter = GeneratedColumn<int>(
+      'sisa_after', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -5814,7 +5822,8 @@ class $TransactionPaymentsTable extends TransactionPayments
         note,
         changeGiven,
         changeTaken,
-        voided
+        voided,
+        sisaAfter
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5879,6 +5888,10 @@ class $TransactionPaymentsTable extends TransactionPayments
       context.handle(_voidedMeta,
           voided.isAcceptableOrUnknown(data['voided']!, _voidedMeta));
     }
+    if (data.containsKey('sisa_after')) {
+      context.handle(_sisaAfterMeta,
+          sisaAfter.isAcceptableOrUnknown(data['sisa_after']!, _sisaAfterMeta));
+    }
     return context;
   }
 
@@ -5908,6 +5921,8 @@ class $TransactionPaymentsTable extends TransactionPayments
           .read(DriftSqlType.bool, data['${effectivePrefix}change_taken'])!,
       voided: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}voided'])!,
+      sisaAfter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sisa_after'])!,
     );
   }
 
@@ -5950,6 +5965,19 @@ class TransactionPayment extends DataClass
   /// membatalkan SELURUH nota + stok + poin) — ini murni membatalkan SATU
   /// baris pembayaran, item & stok tidak tersentuh.
   final bool voided;
+
+  /// Sisa hutang tempo TEPAT SETELAH momen pembayaran/retur/edit INI —
+  /// dihitung & disimpan SEKALI saat baris ini dibuat, pola sama persis
+  /// dgn [changeGiven] tapi utk sisi sebaliknya (kurang bayar, bukan
+  /// lebih bayar): `max(0, currentTotal - (Σ pembayaran sebelumnya +
+  /// pembayaran ini))`. Immutable setelahnya — fakta historis "saat itu
+  /// sisanya segini" tidak boleh berubah walau total nota berubah
+  /// belakangan (mis. retur/edit susulan), beda dari
+  /// `netRemainingOwed(tx, payments)` yang selalu representasi TERKINI.
+  /// Dipakai kartu "Riwayat Pembayaran" in-app utk baris "Sisa" per sesi
+  /// bayar pada nota tempo (mirip [changeGiven] tapi tanpa centang, krn
+  /// sisa tempo tidak akan "dipakai ulang").
+  final int sisaAfter;
   const TransactionPayment(
       {required this.id,
       required this.transactionId,
@@ -5960,7 +5988,8 @@ class TransactionPayment extends DataClass
       this.note,
       required this.changeGiven,
       required this.changeTaken,
-      required this.voided});
+      required this.voided,
+      required this.sisaAfter});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -5978,6 +6007,7 @@ class TransactionPayment extends DataClass
     map['change_given'] = Variable<int>(changeGiven);
     map['change_taken'] = Variable<bool>(changeTaken);
     map['voided'] = Variable<bool>(voided);
+    map['sisa_after'] = Variable<int>(sisaAfter);
     return map;
   }
 
@@ -5995,6 +6025,7 @@ class TransactionPayment extends DataClass
       changeGiven: Value(changeGiven),
       changeTaken: Value(changeTaken),
       voided: Value(voided),
+      sisaAfter: Value(sisaAfter),
     );
   }
 
@@ -6012,6 +6043,7 @@ class TransactionPayment extends DataClass
       changeGiven: serializer.fromJson<int>(json['changeGiven']),
       changeTaken: serializer.fromJson<bool>(json['changeTaken']),
       voided: serializer.fromJson<bool>(json['voided']),
+      sisaAfter: serializer.fromJson<int>(json['sisaAfter']),
     );
   }
   @override
@@ -6028,6 +6060,7 @@ class TransactionPayment extends DataClass
       'changeGiven': serializer.toJson<int>(changeGiven),
       'changeTaken': serializer.toJson<bool>(changeTaken),
       'voided': serializer.toJson<bool>(voided),
+      'sisaAfter': serializer.toJson<int>(sisaAfter),
     };
   }
 
@@ -6041,7 +6074,8 @@ class TransactionPayment extends DataClass
           Value<String?> note = const Value.absent(),
           int? changeGiven,
           bool? changeTaken,
-          bool? voided}) =>
+          bool? voided,
+          int? sisaAfter}) =>
       TransactionPayment(
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
@@ -6053,6 +6087,7 @@ class TransactionPayment extends DataClass
         changeGiven: changeGiven ?? this.changeGiven,
         changeTaken: changeTaken ?? this.changeTaken,
         voided: voided ?? this.voided,
+        sisaAfter: sisaAfter ?? this.sisaAfter,
       );
   TransactionPayment copyWithCompanion(TransactionPaymentsCompanion data) {
     return TransactionPayment(
@@ -6070,6 +6105,7 @@ class TransactionPayment extends DataClass
       changeTaken:
           data.changeTaken.present ? data.changeTaken.value : this.changeTaken,
       voided: data.voided.present ? data.voided.value : this.voided,
+      sisaAfter: data.sisaAfter.present ? data.sisaAfter.value : this.sisaAfter,
     );
   }
 
@@ -6085,14 +6121,15 @@ class TransactionPayment extends DataClass
           ..write('note: $note, ')
           ..write('changeGiven: $changeGiven, ')
           ..write('changeTaken: $changeTaken, ')
-          ..write('voided: $voided')
+          ..write('voided: $voided, ')
+          ..write('sisaAfter: $sisaAfter')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, transactionId, amount, method, paidAt,
-      kasirId, note, changeGiven, changeTaken, voided);
+      kasirId, note, changeGiven, changeTaken, voided, sisaAfter);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6106,7 +6143,8 @@ class TransactionPayment extends DataClass
           other.note == this.note &&
           other.changeGiven == this.changeGiven &&
           other.changeTaken == this.changeTaken &&
-          other.voided == this.voided);
+          other.voided == this.voided &&
+          other.sisaAfter == this.sisaAfter);
 }
 
 class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
@@ -6120,6 +6158,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
   final Value<int> changeGiven;
   final Value<bool> changeTaken;
   final Value<bool> voided;
+  final Value<int> sisaAfter;
   final Value<int> rowid;
   const TransactionPaymentsCompanion({
     this.id = const Value.absent(),
@@ -6132,6 +6171,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.changeGiven = const Value.absent(),
     this.changeTaken = const Value.absent(),
     this.voided = const Value.absent(),
+    this.sisaAfter = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionPaymentsCompanion.insert({
@@ -6145,6 +6185,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.changeGiven = const Value.absent(),
     this.changeTaken = const Value.absent(),
     this.voided = const Value.absent(),
+    this.sisaAfter = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         transactionId = Value(transactionId),
@@ -6161,6 +6202,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     Expression<int>? changeGiven,
     Expression<bool>? changeTaken,
     Expression<bool>? voided,
+    Expression<int>? sisaAfter,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -6174,6 +6216,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       if (changeGiven != null) 'change_given': changeGiven,
       if (changeTaken != null) 'change_taken': changeTaken,
       if (voided != null) 'voided': voided,
+      if (sisaAfter != null) 'sisa_after': sisaAfter,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -6189,6 +6232,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       Value<int>? changeGiven,
       Value<bool>? changeTaken,
       Value<bool>? voided,
+      Value<int>? sisaAfter,
       Value<int>? rowid}) {
     return TransactionPaymentsCompanion(
       id: id ?? this.id,
@@ -6201,6 +6245,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       changeGiven: changeGiven ?? this.changeGiven,
       changeTaken: changeTaken ?? this.changeTaken,
       voided: voided ?? this.voided,
+      sisaAfter: sisaAfter ?? this.sisaAfter,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -6238,6 +6283,9 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     if (voided.present) {
       map['voided'] = Variable<bool>(voided.value);
     }
+    if (sisaAfter.present) {
+      map['sisa_after'] = Variable<int>(sisaAfter.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -6257,6 +6305,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
           ..write('changeGiven: $changeGiven, ')
           ..write('changeTaken: $changeTaken, ')
           ..write('voided: $voided, ')
+          ..write('sisaAfter: $sisaAfter, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -14337,6 +14386,581 @@ class ProductAliasesCompanion extends UpdateCompanion<ProductAliase> {
   }
 }
 
+class $TransactionAdjustmentLinesTable extends TransactionAdjustmentLines
+    with
+        TableInfo<$TransactionAdjustmentLinesTable, TransactionAdjustmentLine> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransactionAdjustmentLinesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _paymentIdMeta =
+      const VerificationMeta('paymentId');
+  @override
+  late final GeneratedColumn<String> paymentId = GeneratedColumn<String>(
+      'payment_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _transactionIdMeta =
+      const VerificationMeta('transactionId');
+  @override
+  late final GeneratedColumn<String> transactionId = GeneratedColumn<String>(
+      'transaction_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productUnitIdMeta =
+      const VerificationMeta('productUnitId');
+  @override
+  late final GeneratedColumn<String> productUnitId = GeneratedColumn<String>(
+      'product_unit_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productNameMeta =
+      const VerificationMeta('productName');
+  @override
+  late final GeneratedColumn<String> productName = GeneratedColumn<String>(
+      'product_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _unitNameMeta =
+      const VerificationMeta('unitName');
+  @override
+  late final GeneratedColumn<String> unitName = GeneratedColumn<String>(
+      'unit_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _qtyMeta = const VerificationMeta('qty');
+  @override
+  late final GeneratedColumn<double> qty = GeneratedColumn<double>(
+      'qty', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _priceAtSaleMeta =
+      const VerificationMeta('priceAtSale');
+  @override
+  late final GeneratedColumn<int> priceAtSale = GeneratedColumn<int>(
+      'price_at_sale', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _subtotalMeta =
+      const VerificationMeta('subtotal');
+  @override
+  late final GeneratedColumn<int> subtotal = GeneratedColumn<int>(
+      'subtotal', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        paymentId,
+        transactionId,
+        productId,
+        productUnitId,
+        productName,
+        unitName,
+        qty,
+        priceAtSale,
+        subtotal,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transaction_adjustment_lines';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<TransactionAdjustmentLine> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('payment_id')) {
+      context.handle(_paymentIdMeta,
+          paymentId.isAcceptableOrUnknown(data['payment_id']!, _paymentIdMeta));
+    } else if (isInserting) {
+      context.missing(_paymentIdMeta);
+    }
+    if (data.containsKey('transaction_id')) {
+      context.handle(
+          _transactionIdMeta,
+          transactionId.isAcceptableOrUnknown(
+              data['transaction_id']!, _transactionIdMeta));
+    } else if (isInserting) {
+      context.missing(_transactionIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('product_unit_id')) {
+      context.handle(
+          _productUnitIdMeta,
+          productUnitId.isAcceptableOrUnknown(
+              data['product_unit_id']!, _productUnitIdMeta));
+    } else if (isInserting) {
+      context.missing(_productUnitIdMeta);
+    }
+    if (data.containsKey('product_name')) {
+      context.handle(
+          _productNameMeta,
+          productName.isAcceptableOrUnknown(
+              data['product_name']!, _productNameMeta));
+    } else if (isInserting) {
+      context.missing(_productNameMeta);
+    }
+    if (data.containsKey('unit_name')) {
+      context.handle(_unitNameMeta,
+          unitName.isAcceptableOrUnknown(data['unit_name']!, _unitNameMeta));
+    } else if (isInserting) {
+      context.missing(_unitNameMeta);
+    }
+    if (data.containsKey('qty')) {
+      context.handle(
+          _qtyMeta, qty.isAcceptableOrUnknown(data['qty']!, _qtyMeta));
+    } else if (isInserting) {
+      context.missing(_qtyMeta);
+    }
+    if (data.containsKey('price_at_sale')) {
+      context.handle(
+          _priceAtSaleMeta,
+          priceAtSale.isAcceptableOrUnknown(
+              data['price_at_sale']!, _priceAtSaleMeta));
+    } else if (isInserting) {
+      context.missing(_priceAtSaleMeta);
+    }
+    if (data.containsKey('subtotal')) {
+      context.handle(_subtotalMeta,
+          subtotal.isAcceptableOrUnknown(data['subtotal']!, _subtotalMeta));
+    } else if (isInserting) {
+      context.missing(_subtotalMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TransactionAdjustmentLine map(Map<String, dynamic> data,
+      {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransactionAdjustmentLine(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      paymentId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}payment_id'])!,
+      transactionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}transaction_id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_id'])!,
+      productUnitId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}product_unit_id'])!,
+      productName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_name'])!,
+      unitName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}unit_name'])!,
+      qty: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}qty'])!,
+      priceAtSale: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}price_at_sale'])!,
+      subtotal: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}subtotal'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $TransactionAdjustmentLinesTable createAlias(String alias) {
+    return $TransactionAdjustmentLinesTable(attachedDatabase, alias);
+  }
+}
+
+class TransactionAdjustmentLine extends DataClass
+    implements Insertable<TransactionAdjustmentLine> {
+  final String id;
+  final String paymentId;
+  final String transactionId;
+  final String productId;
+  final String productUnitId;
+
+  /// Snapshot nama produk & satuan SAAT momen ini — bukan referensi live,
+  /// supaya rincian retur/edit lama tetap benar walau produk kemudian
+  /// diganti nama/dihapus.
+  final String productName;
+  final String unitName;
+  final double qty;
+  final int priceAtSale;
+  final int subtotal;
+  final DateTime createdAt;
+  const TransactionAdjustmentLine(
+      {required this.id,
+      required this.paymentId,
+      required this.transactionId,
+      required this.productId,
+      required this.productUnitId,
+      required this.productName,
+      required this.unitName,
+      required this.qty,
+      required this.priceAtSale,
+      required this.subtotal,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['payment_id'] = Variable<String>(paymentId);
+    map['transaction_id'] = Variable<String>(transactionId);
+    map['product_id'] = Variable<String>(productId);
+    map['product_unit_id'] = Variable<String>(productUnitId);
+    map['product_name'] = Variable<String>(productName);
+    map['unit_name'] = Variable<String>(unitName);
+    map['qty'] = Variable<double>(qty);
+    map['price_at_sale'] = Variable<int>(priceAtSale);
+    map['subtotal'] = Variable<int>(subtotal);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TransactionAdjustmentLinesCompanion toCompanion(bool nullToAbsent) {
+    return TransactionAdjustmentLinesCompanion(
+      id: Value(id),
+      paymentId: Value(paymentId),
+      transactionId: Value(transactionId),
+      productId: Value(productId),
+      productUnitId: Value(productUnitId),
+      productName: Value(productName),
+      unitName: Value(unitName),
+      qty: Value(qty),
+      priceAtSale: Value(priceAtSale),
+      subtotal: Value(subtotal),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TransactionAdjustmentLine.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransactionAdjustmentLine(
+      id: serializer.fromJson<String>(json['id']),
+      paymentId: serializer.fromJson<String>(json['paymentId']),
+      transactionId: serializer.fromJson<String>(json['transactionId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      productUnitId: serializer.fromJson<String>(json['productUnitId']),
+      productName: serializer.fromJson<String>(json['productName']),
+      unitName: serializer.fromJson<String>(json['unitName']),
+      qty: serializer.fromJson<double>(json['qty']),
+      priceAtSale: serializer.fromJson<int>(json['priceAtSale']),
+      subtotal: serializer.fromJson<int>(json['subtotal']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'paymentId': serializer.toJson<String>(paymentId),
+      'transactionId': serializer.toJson<String>(transactionId),
+      'productId': serializer.toJson<String>(productId),
+      'productUnitId': serializer.toJson<String>(productUnitId),
+      'productName': serializer.toJson<String>(productName),
+      'unitName': serializer.toJson<String>(unitName),
+      'qty': serializer.toJson<double>(qty),
+      'priceAtSale': serializer.toJson<int>(priceAtSale),
+      'subtotal': serializer.toJson<int>(subtotal),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  TransactionAdjustmentLine copyWith(
+          {String? id,
+          String? paymentId,
+          String? transactionId,
+          String? productId,
+          String? productUnitId,
+          String? productName,
+          String? unitName,
+          double? qty,
+          int? priceAtSale,
+          int? subtotal,
+          DateTime? createdAt}) =>
+      TransactionAdjustmentLine(
+        id: id ?? this.id,
+        paymentId: paymentId ?? this.paymentId,
+        transactionId: transactionId ?? this.transactionId,
+        productId: productId ?? this.productId,
+        productUnitId: productUnitId ?? this.productUnitId,
+        productName: productName ?? this.productName,
+        unitName: unitName ?? this.unitName,
+        qty: qty ?? this.qty,
+        priceAtSale: priceAtSale ?? this.priceAtSale,
+        subtotal: subtotal ?? this.subtotal,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  TransactionAdjustmentLine copyWithCompanion(
+      TransactionAdjustmentLinesCompanion data) {
+    return TransactionAdjustmentLine(
+      id: data.id.present ? data.id.value : this.id,
+      paymentId: data.paymentId.present ? data.paymentId.value : this.paymentId,
+      transactionId: data.transactionId.present
+          ? data.transactionId.value
+          : this.transactionId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      productUnitId: data.productUnitId.present
+          ? data.productUnitId.value
+          : this.productUnitId,
+      productName:
+          data.productName.present ? data.productName.value : this.productName,
+      unitName: data.unitName.present ? data.unitName.value : this.unitName,
+      qty: data.qty.present ? data.qty.value : this.qty,
+      priceAtSale:
+          data.priceAtSale.present ? data.priceAtSale.value : this.priceAtSale,
+      subtotal: data.subtotal.present ? data.subtotal.value : this.subtotal,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransactionAdjustmentLine(')
+          ..write('id: $id, ')
+          ..write('paymentId: $paymentId, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('productId: $productId, ')
+          ..write('productUnitId: $productUnitId, ')
+          ..write('productName: $productName, ')
+          ..write('unitName: $unitName, ')
+          ..write('qty: $qty, ')
+          ..write('priceAtSale: $priceAtSale, ')
+          ..write('subtotal: $subtotal, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      paymentId,
+      transactionId,
+      productId,
+      productUnitId,
+      productName,
+      unitName,
+      qty,
+      priceAtSale,
+      subtotal,
+      createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransactionAdjustmentLine &&
+          other.id == this.id &&
+          other.paymentId == this.paymentId &&
+          other.transactionId == this.transactionId &&
+          other.productId == this.productId &&
+          other.productUnitId == this.productUnitId &&
+          other.productName == this.productName &&
+          other.unitName == this.unitName &&
+          other.qty == this.qty &&
+          other.priceAtSale == this.priceAtSale &&
+          other.subtotal == this.subtotal &&
+          other.createdAt == this.createdAt);
+}
+
+class TransactionAdjustmentLinesCompanion
+    extends UpdateCompanion<TransactionAdjustmentLine> {
+  final Value<String> id;
+  final Value<String> paymentId;
+  final Value<String> transactionId;
+  final Value<String> productId;
+  final Value<String> productUnitId;
+  final Value<String> productName;
+  final Value<String> unitName;
+  final Value<double> qty;
+  final Value<int> priceAtSale;
+  final Value<int> subtotal;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const TransactionAdjustmentLinesCompanion({
+    this.id = const Value.absent(),
+    this.paymentId = const Value.absent(),
+    this.transactionId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.productUnitId = const Value.absent(),
+    this.productName = const Value.absent(),
+    this.unitName = const Value.absent(),
+    this.qty = const Value.absent(),
+    this.priceAtSale = const Value.absent(),
+    this.subtotal = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransactionAdjustmentLinesCompanion.insert({
+    required String id,
+    required String paymentId,
+    required String transactionId,
+    required String productId,
+    required String productUnitId,
+    required String productName,
+    required String unitName,
+    required double qty,
+    required int priceAtSale,
+    required int subtotal,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        paymentId = Value(paymentId),
+        transactionId = Value(transactionId),
+        productId = Value(productId),
+        productUnitId = Value(productUnitId),
+        productName = Value(productName),
+        unitName = Value(unitName),
+        qty = Value(qty),
+        priceAtSale = Value(priceAtSale),
+        subtotal = Value(subtotal);
+  static Insertable<TransactionAdjustmentLine> custom({
+    Expression<String>? id,
+    Expression<String>? paymentId,
+    Expression<String>? transactionId,
+    Expression<String>? productId,
+    Expression<String>? productUnitId,
+    Expression<String>? productName,
+    Expression<String>? unitName,
+    Expression<double>? qty,
+    Expression<int>? priceAtSale,
+    Expression<int>? subtotal,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (paymentId != null) 'payment_id': paymentId,
+      if (transactionId != null) 'transaction_id': transactionId,
+      if (productId != null) 'product_id': productId,
+      if (productUnitId != null) 'product_unit_id': productUnitId,
+      if (productName != null) 'product_name': productName,
+      if (unitName != null) 'unit_name': unitName,
+      if (qty != null) 'qty': qty,
+      if (priceAtSale != null) 'price_at_sale': priceAtSale,
+      if (subtotal != null) 'subtotal': subtotal,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransactionAdjustmentLinesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? paymentId,
+      Value<String>? transactionId,
+      Value<String>? productId,
+      Value<String>? productUnitId,
+      Value<String>? productName,
+      Value<String>? unitName,
+      Value<double>? qty,
+      Value<int>? priceAtSale,
+      Value<int>? subtotal,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return TransactionAdjustmentLinesCompanion(
+      id: id ?? this.id,
+      paymentId: paymentId ?? this.paymentId,
+      transactionId: transactionId ?? this.transactionId,
+      productId: productId ?? this.productId,
+      productUnitId: productUnitId ?? this.productUnitId,
+      productName: productName ?? this.productName,
+      unitName: unitName ?? this.unitName,
+      qty: qty ?? this.qty,
+      priceAtSale: priceAtSale ?? this.priceAtSale,
+      subtotal: subtotal ?? this.subtotal,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (paymentId.present) {
+      map['payment_id'] = Variable<String>(paymentId.value);
+    }
+    if (transactionId.present) {
+      map['transaction_id'] = Variable<String>(transactionId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (productUnitId.present) {
+      map['product_unit_id'] = Variable<String>(productUnitId.value);
+    }
+    if (productName.present) {
+      map['product_name'] = Variable<String>(productName.value);
+    }
+    if (unitName.present) {
+      map['unit_name'] = Variable<String>(unitName.value);
+    }
+    if (qty.present) {
+      map['qty'] = Variable<double>(qty.value);
+    }
+    if (priceAtSale.present) {
+      map['price_at_sale'] = Variable<int>(priceAtSale.value);
+    }
+    if (subtotal.present) {
+      map['subtotal'] = Variable<int>(subtotal.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransactionAdjustmentLinesCompanion(')
+          ..write('id: $id, ')
+          ..write('paymentId: $paymentId, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('productId: $productId, ')
+          ..write('productUnitId: $productUnitId, ')
+          ..write('productName: $productName, ')
+          ..write('unitName: $unitName, ')
+          ..write('qty: $qty, ')
+          ..write('priceAtSale: $priceAtSale, ')
+          ..write('subtotal: $subtotal, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -14384,6 +15008,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PreorderEntriesTable preorderEntries =
       $PreorderEntriesTable(this);
   late final $ProductAliasesTable productAliases = $ProductAliasesTable(this);
+  late final $TransactionAdjustmentLinesTable transactionAdjustmentLines =
+      $TransactionAdjustmentLinesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -14421,7 +15047,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         leftBehindItems,
         borrowedItems,
         preorderEntries,
-        productAliases
+        productAliases,
+        transactionAdjustmentLines
       ];
 }
 
@@ -19173,6 +19800,7 @@ typedef $$TransactionPaymentsTableCreateCompanionBuilder
   Value<int> changeGiven,
   Value<bool> changeTaken,
   Value<bool> voided,
+  Value<int> sisaAfter,
   Value<int> rowid,
 });
 typedef $$TransactionPaymentsTableUpdateCompanionBuilder
@@ -19187,6 +19815,7 @@ typedef $$TransactionPaymentsTableUpdateCompanionBuilder
   Value<int> changeGiven,
   Value<bool> changeTaken,
   Value<bool> voided,
+  Value<int> sisaAfter,
   Value<int> rowid,
 });
 
@@ -19245,6 +19874,9 @@ class $$TransactionPaymentsTableFilterComposer
   ColumnFilters<bool> get voided => $composableBuilder(
       column: $table.voided, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<int> get sisaAfter => $composableBuilder(
+      column: $table.sisaAfter, builder: (column) => ColumnFilters(column));
+
   $$TransactionsTableFilterComposer get transactionId {
     final $$TransactionsTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -19301,6 +19933,9 @@ class $$TransactionPaymentsTableOrderingComposer
 
   ColumnOrderings<bool> get voided => $composableBuilder(
       column: $table.voided, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sisaAfter => $composableBuilder(
+      column: $table.sisaAfter, builder: (column) => ColumnOrderings(column));
 
   $$TransactionsTableOrderingComposer get transactionId {
     final $$TransactionsTableOrderingComposer composer = $composerBuilder(
@@ -19359,6 +19994,9 @@ class $$TransactionPaymentsTableAnnotationComposer
   GeneratedColumn<bool> get voided =>
       $composableBuilder(column: $table.voided, builder: (column) => column);
 
+  GeneratedColumn<int> get sisaAfter =>
+      $composableBuilder(column: $table.sisaAfter, builder: (column) => column);
+
   $$TransactionsTableAnnotationComposer get transactionId {
     final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -19416,6 +20054,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<int> changeGiven = const Value.absent(),
             Value<bool> changeTaken = const Value.absent(),
             Value<bool> voided = const Value.absent(),
+            Value<int> sisaAfter = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion(
@@ -19429,6 +20068,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             changeGiven: changeGiven,
             changeTaken: changeTaken,
             voided: voided,
+            sisaAfter: sisaAfter,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -19442,6 +20082,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<int> changeGiven = const Value.absent(),
             Value<bool> changeTaken = const Value.absent(),
             Value<bool> voided = const Value.absent(),
+            Value<int> sisaAfter = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion.insert(
@@ -19455,6 +20096,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             changeGiven: changeGiven,
             changeTaken: changeTaken,
             voided: voided,
+            sisaAfter: sisaAfter,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -23999,6 +24641,278 @@ typedef $$ProductAliasesTableProcessedTableManager = ProcessedTableManager<
     ),
     ProductAliase,
     PrefetchHooks Function()>;
+typedef $$TransactionAdjustmentLinesTableCreateCompanionBuilder
+    = TransactionAdjustmentLinesCompanion Function({
+  required String id,
+  required String paymentId,
+  required String transactionId,
+  required String productId,
+  required String productUnitId,
+  required String productName,
+  required String unitName,
+  required double qty,
+  required int priceAtSale,
+  required int subtotal,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$TransactionAdjustmentLinesTableUpdateCompanionBuilder
+    = TransactionAdjustmentLinesCompanion Function({
+  Value<String> id,
+  Value<String> paymentId,
+  Value<String> transactionId,
+  Value<String> productId,
+  Value<String> productUnitId,
+  Value<String> productName,
+  Value<String> unitName,
+  Value<double> qty,
+  Value<int> priceAtSale,
+  Value<int> subtotal,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$TransactionAdjustmentLinesTableFilterComposer
+    extends Composer<_$AppDatabase, $TransactionAdjustmentLinesTable> {
+  $$TransactionAdjustmentLinesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get paymentId => $composableBuilder(
+      column: $table.paymentId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get transactionId => $composableBuilder(
+      column: $table.transactionId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productUnitId => $composableBuilder(
+      column: $table.productUnitId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productName => $composableBuilder(
+      column: $table.productName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get unitName => $composableBuilder(
+      column: $table.unitName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get priceAtSale => $composableBuilder(
+      column: $table.priceAtSale, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get subtotal => $composableBuilder(
+      column: $table.subtotal, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$TransactionAdjustmentLinesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransactionAdjustmentLinesTable> {
+  $$TransactionAdjustmentLinesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get paymentId => $composableBuilder(
+      column: $table.paymentId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get transactionId => $composableBuilder(
+      column: $table.transactionId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productUnitId => $composableBuilder(
+      column: $table.productUnitId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productName => $composableBuilder(
+      column: $table.productName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get unitName => $composableBuilder(
+      column: $table.unitName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get priceAtSale => $composableBuilder(
+      column: $table.priceAtSale, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get subtotal => $composableBuilder(
+      column: $table.subtotal, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$TransactionAdjustmentLinesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransactionAdjustmentLinesTable> {
+  $$TransactionAdjustmentLinesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get paymentId =>
+      $composableBuilder(column: $table.paymentId, builder: (column) => column);
+
+  GeneratedColumn<String> get transactionId => $composableBuilder(
+      column: $table.transactionId, builder: (column) => column);
+
+  GeneratedColumn<String> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<String> get productUnitId => $composableBuilder(
+      column: $table.productUnitId, builder: (column) => column);
+
+  GeneratedColumn<String> get productName => $composableBuilder(
+      column: $table.productName, builder: (column) => column);
+
+  GeneratedColumn<String> get unitName =>
+      $composableBuilder(column: $table.unitName, builder: (column) => column);
+
+  GeneratedColumn<double> get qty =>
+      $composableBuilder(column: $table.qty, builder: (column) => column);
+
+  GeneratedColumn<int> get priceAtSale => $composableBuilder(
+      column: $table.priceAtSale, builder: (column) => column);
+
+  GeneratedColumn<int> get subtotal =>
+      $composableBuilder(column: $table.subtotal, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$TransactionAdjustmentLinesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $TransactionAdjustmentLinesTable,
+    TransactionAdjustmentLine,
+    $$TransactionAdjustmentLinesTableFilterComposer,
+    $$TransactionAdjustmentLinesTableOrderingComposer,
+    $$TransactionAdjustmentLinesTableAnnotationComposer,
+    $$TransactionAdjustmentLinesTableCreateCompanionBuilder,
+    $$TransactionAdjustmentLinesTableUpdateCompanionBuilder,
+    (
+      TransactionAdjustmentLine,
+      BaseReferences<_$AppDatabase, $TransactionAdjustmentLinesTable,
+          TransactionAdjustmentLine>
+    ),
+    TransactionAdjustmentLine,
+    PrefetchHooks Function()> {
+  $$TransactionAdjustmentLinesTableTableManager(
+      _$AppDatabase db, $TransactionAdjustmentLinesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransactionAdjustmentLinesTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransactionAdjustmentLinesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransactionAdjustmentLinesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> paymentId = const Value.absent(),
+            Value<String> transactionId = const Value.absent(),
+            Value<String> productId = const Value.absent(),
+            Value<String> productUnitId = const Value.absent(),
+            Value<String> productName = const Value.absent(),
+            Value<String> unitName = const Value.absent(),
+            Value<double> qty = const Value.absent(),
+            Value<int> priceAtSale = const Value.absent(),
+            Value<int> subtotal = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TransactionAdjustmentLinesCompanion(
+            id: id,
+            paymentId: paymentId,
+            transactionId: transactionId,
+            productId: productId,
+            productUnitId: productUnitId,
+            productName: productName,
+            unitName: unitName,
+            qty: qty,
+            priceAtSale: priceAtSale,
+            subtotal: subtotal,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String paymentId,
+            required String transactionId,
+            required String productId,
+            required String productUnitId,
+            required String productName,
+            required String unitName,
+            required double qty,
+            required int priceAtSale,
+            required int subtotal,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TransactionAdjustmentLinesCompanion.insert(
+            id: id,
+            paymentId: paymentId,
+            transactionId: transactionId,
+            productId: productId,
+            productUnitId: productUnitId,
+            productName: productName,
+            unitName: unitName,
+            qty: qty,
+            priceAtSale: priceAtSale,
+            subtotal: subtotal,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$TransactionAdjustmentLinesTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $TransactionAdjustmentLinesTable,
+        TransactionAdjustmentLine,
+        $$TransactionAdjustmentLinesTableFilterComposer,
+        $$TransactionAdjustmentLinesTableOrderingComposer,
+        $$TransactionAdjustmentLinesTableAnnotationComposer,
+        $$TransactionAdjustmentLinesTableCreateCompanionBuilder,
+        $$TransactionAdjustmentLinesTableUpdateCompanionBuilder,
+        (
+          TransactionAdjustmentLine,
+          BaseReferences<_$AppDatabase, $TransactionAdjustmentLinesTable,
+              TransactionAdjustmentLine>
+        ),
+        TransactionAdjustmentLine,
+        PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -24069,4 +24983,8 @@ class $AppDatabaseManager {
       $$PreorderEntriesTableTableManager(_db, _db.preorderEntries);
   $$ProductAliasesTableTableManager get productAliases =>
       $$ProductAliasesTableTableManager(_db, _db.productAliases);
+  $$TransactionAdjustmentLinesTableTableManager
+      get transactionAdjustmentLines =>
+          $$TransactionAdjustmentLinesTableTableManager(
+              _db, _db.transactionAdjustmentLines);
 }

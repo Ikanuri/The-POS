@@ -17,6 +17,22 @@ void main() {
 
     final v30 = raw.sqlite3.open(path);
     v30.execute('PRAGMA user_version = 30;');
+    // transaction_payments diperlukan agar migrasi v32 (addColumn
+    // sisa_after) tak gagal — riwayat pembayaran rincian retur/edit.
+    v30.execute('''
+      CREATE TABLE transaction_payments (
+        id TEXT NOT NULL PRIMARY KEY,
+        transaction_id TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        method TEXT NOT NULL,
+        paid_at INTEGER NOT NULL DEFAULT 0,
+        kasir_id TEXT,
+        note TEXT,
+        change_given INTEGER NOT NULL DEFAULT 0,
+        change_taken INTEGER NOT NULL DEFAULT 0,
+        voided INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
     // Tabel-tabel yang disentuh step migrasi TANPA syarat versi awal —
     // wajib ada di fixture manapun (pola sama migration_v26_test).
     v30.execute('''
@@ -70,7 +86,7 @@ void main() {
     expect(units.single.id, 'u-lama', reason: 'data lama tidak tersentuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 31);
+    expect(ver.data.values.first, 32);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

@@ -16,6 +16,7 @@ import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
 import 'tables/employee_tables.dart';
+import 'tables/adjustment_tables.dart';
 import 'tables/alias_tables.dart';
 import 'tables/laci_meja_tables.dart';
 import 'tables/ledger_tables.dart';
@@ -214,6 +215,7 @@ class BarcodeConflictException implements Exception {
   BorrowedItems,
   PreorderEntries,
   ProductAliases,
+  TransactionAdjustmentLines,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -226,7 +228,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -542,6 +544,13 @@ class AppDatabase extends _$AppDatabase {
           if (from < 31) {
             // Kamus belajar penerimaan barang (teks -> satuan produk).
             await m.createTable(productAliases);
+          }
+          if (from < 32) {
+            // Riwayat Pembayaran: rincian per-produk retur/edit + sisa
+            // tempo per momen (lihat dok `TransactionAdjustmentLines` &
+            // `TransactionPayments.sisaAfter`).
+            await m.addColumn(transactionPayments, transactionPayments.sisaAfter);
+            await m.createTable(transactionAdjustmentLines);
           }
         },
         beforeOpen: (details) async {
@@ -2668,13 +2677,15 @@ class AppDatabase extends _$AppDatabase {
         final newItemsTotal =
             items.fold<int>(0, (s, c) => s + c.subtotal.value);
         final totalAfterAddition = tx.total + newItemsTotal;
-        final changeGiven = await _computePaymentChangeGiven(
+        final delta = await _computePaymentDelta(
           txId: txId,
           newPaymentAmount: payment.amount.value,
           currentTotal: totalAfterAddition,
         );
-        await into(transactionPayments)
-            .insert(payment.copyWith(changeGiven: Value(changeGiven)));
+        await into(transactionPayments).insert(payment.copyWith(
+          changeGiven: Value(delta.changeGiven),
+          sisaAfter: Value(delta.sisaAfter),
+        ));
       }
 
       // Potong stok.
@@ -2709,7 +2720,15 @@ class AppDatabase extends _$AppDatabase {
   /// termasuk perubahan dalam operasi yang sama (mis. tambah belanjaan —
   /// `transactions.total` belum terupdate sampai `_reconcileTransactionTotals`
   /// jalan belakangan).
-  Future<int> _computePaymentChangeGiven({
+  ///
+  /// Sekalian menghitung [sisaAfter] — sisi SEBALIKNYA (kurang bayar,
+  /// bukan lebih bayar) dgn formula simetris: `max(0, currentTotal -
+  /// (priorPaid + newPaymentAmount))`. Beda dari `changeGiven`, `sisaAfter`
+  /// TIDAK perlu dikurangi `priorChangeSum`/akumulasi baris sebelumnya —
+  /// murni gap titik-waktu "berapa yang masih kurang SAAT INI", bukan
+  /// kuantitas yang terakumulasi lintas baris (lihat dok
+  /// `TransactionPayments.sisaAfter`).
+  Future<({int changeGiven, int sisaAfter})> _computePaymentDelta({
     required String txId,
     required int newPaymentAmount,
     required int currentTotal,
@@ -2733,8 +2752,17 @@ class AppDatabase extends _$AppDatabase {
       priorPaid = tx?.paid ?? 0;
     }
     final aggregateChange = (priorPaid + newPaymentAmount) - currentTotal;
+    // `priorChangeSum` WAJIB ikut dikurangi utk sisaAfter juga (bukan cuma
+    // changeGiven) — kembalian lama yang dipakai ULANG sbg pembayaran baru
+    // (mis. tambah belanjaan) tercatat lagi di `priorPaid`/`newPaymentAmount`
+    // seolah uang baru, padahal net-nya bukan. Tanpa pengurangan ini,
+    // sisaAfter UNDERSTATED persis pola bug lama `netRemainingOwed` (lihat
+    // dok `_computePaymentDelta` & `receipt_sisa_tagihan_net_test.dart`).
     final thisChange = aggregateChange - priorChangeSum;
-    return thisChange > 0 ? thisChange : 0;
+    return (
+      changeGiven: thisChange > 0 ? thisChange : 0,
+      sisaAfter: thisChange < 0 ? -thisChange : 0,
+    );
   }
 
   /// Σ subtotal baris item nota [txId] APA ADANYA dari DB saat ini — dipakai
@@ -2754,7 +2782,7 @@ class AppDatabase extends _$AppDatabase {
   /// sudah pernah disetor.
   ///
   /// Dicatat sbg `changeGiven` di baris pembayaran penanda (`amount: 0`) —
-  /// PERSIS mekanisme kembalian biasa, memakai [_computePaymentChangeGiven]
+  /// PERSIS mekanisme kembalian biasa, memakai [_computePaymentDelta]
   /// yang sama. Konsekuensinya SELURUH UX kembalian yang sudah ada langsung
   /// berlaku tanpa kode tampilan baru: baris "Kembalian" di struk (yang
   /// membaca `changeGiven` pembayaran TERAKHIR), centang "kembalian sudah
@@ -2766,13 +2794,72 @@ class AppDatabase extends _$AppDatabase {
   /// dirender di layar manapun (struk membaca `changeGiven`, bukan kolom
   /// header itu) — jadi uang yang jadi hak pelanggan hilang tanpa jejak yang
   /// bisa dilihat kasir.
-  Future<int> _overpaymentAfterUnpaidItemChange(String txId) =>
-      _sumItemSubtotals(txId).then((remainingTotal) =>
-          _computePaymentChangeGiven(
-            txId: txId,
-            newPaymentAmount: 0,
-            currentTotal: remainingTotal,
-          ));
+  ///
+  /// Sekalian mengembalikan `sisaAfter` — sisi sebaliknya, dipakai KHUSUS
+  /// nota tempo/kurang_bayar (retur/edit yang MENGURANGI total tapi masih
+  /// menyisakan hutang) — lihat dok [_computePaymentDelta].
+  Future<({int changeGiven, int sisaAfter})>
+      _paymentDeltaAfterUnpaidItemChange(String txId) =>
+          _sumItemSubtotals(txId).then((remainingTotal) =>
+              _computePaymentDelta(
+                txId: txId,
+                newPaymentAmount: 0,
+                currentTotal: remainingTotal,
+              ));
+
+  /// Nama produk & label satuan SAAT INI untuk [productUnitId] — dipakai
+  /// men-snapshot [TransactionAdjustmentLines.productName]/`unitName` supaya
+  /// rincian retur/edit lama tetap benar walau produk/satuan diubah/dihapus
+  /// belakangan (lihat dok tabel itu).
+  Future<({String productName, String unitName})> _productUnitLabel(
+      String productUnitId) async {
+    final u = await (select(productUnits)
+          ..where((t) => t.id.equals(productUnitId)))
+        .getSingleOrNull();
+    if (u == null) return (productName: '', unitName: '');
+    final p = await (select(products)..where((t) => t.id.equals(u.productId)))
+        .getSingleOrNull();
+    var unitName = '';
+    if (u.unitTypeId != null) {
+      final ut = await (select(unitTypes)
+            ..where((t) => t.id.equals(u.unitTypeId!)))
+          .getSingleOrNull();
+      unitName = ut?.name ?? '';
+    }
+    return (productName: p?.name ?? '', unitName: unitName);
+  }
+
+  /// Sisipkan satu baris rincian retur/edit — dipanggil dari 4 fungsi mutasi
+  /// item nota (lihat dok [TransactionAdjustmentLines]). [qty]/[priceAtSale]
+  /// bernilai POSITIF selalu (arah retur/tambah/kurang direpresentasikan
+  /// lewat konteks momen, bukan tanda qty) — kolom `subtotal` = `qty *
+  /// priceAtSale` (dibulatkan), dipakai UI menjumlah total momen.
+  Future<void> _insertAdjustmentLine({
+    required String paymentId,
+    required String txId,
+    required String productId,
+    required String productUnitId,
+    required double qty,
+    required int priceAtSale,
+    required DateTime now,
+  }) async {
+    if (qty <= 0) return;
+    final label = await _productUnitLabel(productUnitId);
+    await into(transactionAdjustmentLines)
+        .insert(TransactionAdjustmentLinesCompanion.insert(
+      id: const Uuid().v4(),
+      paymentId: paymentId,
+      transactionId: txId,
+      productId: productId,
+      productUnitId: productUnitId,
+      productName: label.productName,
+      unitName: label.unitName,
+      qty: qty,
+      priceAtSale: priceAtSale,
+      subtotal: (qty * priceAtSale).round(),
+      createdAt: Value(now),
+    ));
+  }
 
   /// Hitung ulang `total` (Σ subtotal item) dan `paid` (Σ pembayaran) sebuah
   /// transaksi dari child rows, lalu sesuaikan `status` & `change_amount`.
@@ -3239,6 +3326,7 @@ class AppDatabase extends _$AppDatabase {
       }
       final now = DateTime.now();
       var anyReturned = false;
+      final paymentId = const Uuid().v4();
 
       for (final r in returns) {
         if (r.qty <= 0) continue;
@@ -3261,6 +3349,19 @@ class AppDatabase extends _$AppDatabase {
           now: now,
         );
 
+        // Rincian per-produk momen ini — WAJIB sebelum item aslinya
+        // dikurangi/dihapus di bawah (data ini tidak bisa direkonstruksi
+        // lagi setelahnya). Lihat dok `TransactionAdjustmentLines`.
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: retQty,
+          priceAtSale: item.priceAtSale,
+          now: now,
+        );
+
         final newQty = item.qty - retQty;
         if (newQty <= 0) {
           // Seluruh qty baris ini diretur → baris hilang dari nota, persis
@@ -3280,17 +3381,20 @@ class AppDatabase extends _$AppDatabase {
 
       // Jejak audit ringan di timeline pembayaran (amount 0 → tidak
       // memengaruhi jumlah dibayar, murni catatan "kapan ada retur").
-      // `changeGiven` diisi kalau nilai retur melampaui sisa hutang — lihat
-      // dok [_overpaymentAfterUnpaidItemChange].
+      // `changeGiven`/`sisaAfter` diisi sesuai apakah nilai retur melampaui
+      // sisa hutang atau masih menyisakan hutang — lihat dok
+      // [_paymentDeltaAfterUnpaidItemChange].
+      final delta = await _paymentDeltaAfterUnpaidItemChange(txId);
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
-        id: const Uuid().v4(),
+        id: paymentId,
         transactionId: txId,
         amount: 0,
         method: 'retur',
         paidAt: Value(now),
         kasirId: Value(kasirId),
-        changeGiven: Value(await _overpaymentAfterUnpaidItemChange(txId)),
+        changeGiven: Value(delta.changeGiven),
+        sisaAfter: Value(delta.sisaAfter),
         note: const Value('Retur barang (nota belum lunas)'),
       ));
 
@@ -3380,6 +3484,7 @@ class AppDatabase extends _$AppDatabase {
         );
       }
 
+      final newSubtotal = (newPrice * clampedQty).round();
       if (clampedQty <= 0) {
         await (delete(transactionItems)..where((t) => t.id.equals(item.id)))
             .go();
@@ -3388,26 +3493,56 @@ class AppDatabase extends _$AppDatabase {
             .write(TransactionItemsCompanion(
           qty: Value(clampedQty),
           priceAtSale: Value(newPrice),
-          subtotal: Value((newPrice * clampedQty).round()),
+          subtotal: Value(newSubtotal),
           itemNote: Value(newNote?.isEmpty ?? true ? null : newNote),
         ));
       }
 
+      final paymentId = const Uuid().v4();
+      // Rincian per-produk momen ini — HANYA kalau qty/harga sungguhan
+      // berubah (bukan cuma catatan). qtyForLine = qty yang berubah (delta
+      // absolut), jatuh ke qty final kalau delta 0 tapi harga berubah
+      // (dianggap "harga seluruh baris berubah"). subtotalForLine = nilai
+      // Rupiah delta-nya (SELALU eksak); priceForLine diturunkan dari situ
+      // supaya qty*harga tetap ≈ subtotal — pendekatan ini bisa sedikit
+      // approksimasi kalau qty & harga SAMA-SAMA berubah dalam satu edit
+      // (kasus jarang), tapi totalnya (yang dipakai header "Rp x" di kartu
+      // Riwayat Pembayaran) tetap eksak.
+      final qtyDeltaAbs = qtyDelta.abs();
+      if (qtyDeltaAbs > 0 || newPrice != item.priceAtSale) {
+        final qtyForLine = qtyDeltaAbs > 0 ? qtyDeltaAbs : clampedQty;
+        final subtotalForLine = (item.subtotal - newSubtotal).abs();
+        final priceForLine =
+            qtyForLine > 0 ? (subtotalForLine / qtyForLine).round() : newPrice;
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: qtyForLine,
+          priceAtSale: priceForLine,
+          now: now,
+        );
+      }
+
       // Jejak audit ringan (amount 0 → tidak memengaruhi dibayar).
-      // `changeGiven` diisi kalau item dihapus/diturunkan sampai total nota
-      // jatuh di bawah uang yang sudah disetor — lihat dok
-      // [_overpaymentAfterUnpaidItemChange]. Jalur ini kena pola yang SAMA
-      // dgn retur (bug dilaporkan user menyoal retur, tapi hapus/edit item
-      // menghasilkan kelebihan bayar yang identik).
+      // `changeGiven`/`sisaAfter` diisi sesuai apakah item dihapus/
+      // diturunkan sampai total nota jatuh di bawah/di atas uang yang
+      // sudah disetor — lihat dok [_paymentDeltaAfterUnpaidItemChange].
+      // Jalur ini kena pola yang SAMA dgn retur (bug dilaporkan user
+      // menyoal retur, tapi hapus/edit item menghasilkan kelebihan bayar
+      // yang identik).
+      final delta = await _paymentDeltaAfterUnpaidItemChange(txId);
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
-        id: const Uuid().v4(),
+        id: paymentId,
         transactionId: txId,
         amount: 0,
         method: 'edit',
         paidAt: Value(now),
         kasirId: Value(kasirId),
-        changeGiven: Value(await _overpaymentAfterUnpaidItemChange(txId)),
+        changeGiven: Value(delta.changeGiven),
+        sisaAfter: Value(delta.sisaAfter),
         note: Value(clampedQty <= 0
             ? 'Item dihapus (nota belum lunas)'
             : 'Item diubah (nota belum lunas)'),
@@ -3478,6 +3613,7 @@ class AppDatabase extends _$AppDatabase {
       final alreadyReturned = await getReturnedQtyInTx(txId);
       var refundTotal = 0;
       var anyReturned = false;
+      final paymentId = const Uuid().v4();
 
       for (final r in returns) {
         if (r.qty <= 0) continue;
@@ -3533,6 +3669,19 @@ class AppDatabase extends _$AppDatabase {
           note: 'Retur (nota lunas)',
           now: now,
         );
+
+        // Rincian per-produk momen ini — nilai EKSAK (retQty/priceAtSale/
+        // subtotal), tidak perlu pendekatan spt jalur edit (baris retur di
+        // atas TIDAK mengubah data lama in-place, jadi nilainya sudah pasti).
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: retQty,
+          priceAtSale: item.priceAtSale,
+          now: now,
+        );
       }
       if (!anyReturned) return;
 
@@ -3540,7 +3689,7 @@ class AppDatabase extends _$AppDatabase {
       // belum-lunas, method dipilih user (tunai/transfer/dst).
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
-        id: const Uuid().v4(),
+        id: paymentId,
         transactionId: txId,
         amount: -refundTotal,
         method: refundMethod,
@@ -3651,11 +3800,30 @@ class AppDatabase extends _$AppDatabase {
       // Refund SUNGGUHAN (beda dari marker Rp0 nota belum-lunas — di sini
       // uangnya memang sudah masuk sebelumnya) — cuma kalau NILAINYA
       // beneran turun (delta > 0). Edit yang cuma ubah catatan (delta == 0)
-      // tidak butuh refund sama sekali.
+      // tidak butuh refund sama sekali — dan tanpa refund, tidak ada baris
+      // pembayaran utk ditautkan rincian per-produknya, jadi juga dilewati.
       if (delta > 0) {
+        final paymentId = const Uuid().v4();
+        // qtyForLine: qty yang berkurang, fallback ke qty final kalau qty
+        // tidak berubah (delta murni dari penurunan harga) — pola sama dgn
+        // editUnpaidTransactionItem, tapi subtotalForLine di sini EKSAK
+        // (langsung `delta`, bukan diturunkan dari selisih).
+        final qtyDeltaAbs = qtyDelta.abs();
+        final qtyForLine = qtyDeltaAbs > 0 ? qtyDeltaAbs : clampedQty;
+        final priceForLine =
+            qtyForLine > 0 ? (delta / qtyForLine).round() : newPrice;
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: qtyForLine,
+          priceAtSale: priceForLine,
+          now: now,
+        );
         await into(transactionPayments)
             .insert(TransactionPaymentsCompanion.insert(
-          id: const Uuid().v4(),
+          id: paymentId,
           transactionId: txId,
           amount: -delta,
           method: refundMethod,
@@ -3823,6 +3991,23 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.paidAt)]))
           .get();
 
+  /// Rincian per-produk retur/edit satu nota, dikelompokkan per `paymentId`
+  /// (satu momen retur/edit bisa punya beberapa produk) — dipakai kartu
+  /// "Riwayat Pembayaran" in-app utk menampilkan baris produk di bawah
+  /// momen retur/edit terkait. Lihat dok `TransactionAdjustmentLines`.
+  Future<Map<String, List<TransactionAdjustmentLine>>>
+      getAdjustmentLinesForTx(String txId) async {
+    final rows = await (select(transactionAdjustmentLines)
+          ..where((t) => t.transactionId.equals(txId))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    final out = <String, List<TransactionAdjustmentLine>>{};
+    for (final r in rows) {
+      (out[r.paymentId] ??= []).add(r);
+    }
+    return out;
+  }
+
   /// Riwayat pembayaran untuk beberapa transaksi (gabung nota), dikelompokkan
   /// per transactionId, masing-masing urut waktu.
   Future<Map<String, List<TransactionPayment>>> getPaymentsForTxs(
@@ -3864,7 +4049,7 @@ class AppDatabase extends _$AppDatabase {
       final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
           .getSingleOrNull();
       if (tx == null || tx.status == 'void') return 0;
-      final changeGiven = await _computePaymentChangeGiven(
+      final delta = await _computePaymentDelta(
         txId: txId,
         newPaymentAmount: amount,
         currentTotal: tx.total,
@@ -3878,7 +4063,8 @@ class AppDatabase extends _$AppDatabase {
         paidAt: Value(ts),
         kasirId: Value(kasirId),
         note: Value(note),
-        changeGiven: Value(changeGiven),
+        changeGiven: Value(delta.changeGiven),
+        sisaAfter: Value(delta.sisaAfter),
       ));
       // Status dari `paid` dikurangi TOTAL kembalian yang pernah diberikan
       // (termasuk baris ini) — sama alasannya seperti di
@@ -3902,7 +4088,7 @@ class AppDatabase extends _$AppDatabase {
           changeAmount: Value(change),
         ),
       );
-      return changeGiven;
+      return delta.changeGiven;
     });
   }
 
@@ -4093,6 +4279,12 @@ class AppDatabase extends _$AppDatabase {
             paidAt: Value(now),
             kasirId: Value(kasirId),
             note: Value('Gabung: $label'),
+            // Nota INI blm tentu lunas total dari pelunasan gabungan
+            // (uangnya bisa habis dialokasikan ke nota lebih lama duluan,
+            // FIFO) — sisa yang masih menggantung utk nota ini dicatat
+            // eksak di sini (bukan lewat `_computePaymentDelta`, `sisa`
+            // sudah dihitung tepat di atas).
+            sisaAfter: Value(sisa - applied),
           ),
         );
         lastPaymentId = paymentId;
@@ -4124,7 +4316,8 @@ class AppDatabase extends _$AppDatabase {
   /// `paid > 0` sengaja mengecualikan retur (paid negatif) dan tempo (paid 0).
   Future<void> backfillMissingPayments() async {
     final rows = await customSelect(
-      'SELECT t.id AS id, t.paid AS paid, t.payment_method AS method, '
+      'SELECT t.id AS id, t.paid AS paid, t.total AS total, '
+      't.payment_method AS method, '
       't.kasir_id AS kasir, t.created_at AS created, '
       't.change_amount AS change_amount, t.change_taken AS change_taken '
       'FROM transactions t '
@@ -4140,12 +4333,14 @@ class AppDatabase extends _$AppDatabase {
         final paidAt = created is int
             ? DateTime.fromMillisecondsSinceEpoch(created * 1000)
             : DateTime.now();
+        final paid = r.data['paid'] as int;
+        final total = (r.data['total'] as int?) ?? paid;
         b.insert(
           transactionPayments,
           TransactionPaymentsCompanion.insert(
             id: const Uuid().v4(),
             transactionId: r.data['id'] as String,
-            amount: r.data['paid'] as int,
+            amount: paid,
             method: (r.data['method'] as String?) ?? 'tunai',
             paidAt: Value(paidAt),
             kasirId: Value(r.data['kasir'] as String?),
@@ -4156,6 +4351,7 @@ class AppDatabase extends _$AppDatabase {
             // mendadak kosong untuk nota yang sudah ada sebelum migrasi ini.
             changeGiven: Value((r.data['change_amount'] as int?) ?? 0),
             changeTaken: Value((r.data['change_taken'] as int?) == 1),
+            sisaAfter: Value(total > paid ? total - paid : 0),
           ),
         );
       }
@@ -5054,6 +5250,10 @@ class AppDatabase extends _$AppDatabase {
     'transactions',
     'transaction_items',
     'transaction_payments',
+    // Rincian per-produk retur/edit (lihat dok `TransactionAdjustmentLines`)
+    // — ditaruh SETELAH `transaction_payments` (FK logis ke `paymentId`,
+    // walau bukan FK fisik Drift) supaya urutan insert (parent dulu) benar.
+    'transaction_adjustment_lines',
     // Item 52 "Laci Meja" (susulan fix 28 Juli): 3 tabel ini SEBELUMNYA
     // terlewat di list ini — sync LAN (`dumpSince`/`dumpLaciMejaProposals`)
     // sudah benar menyertakannya sejak awal, tapi backup penuh/Alihkan Owner
@@ -5161,6 +5361,7 @@ class AppDatabase extends _$AppDatabase {
       'transactions',
       'transaction_items',
       'transaction_payments',
+      'transaction_adjustment_lines',
       'stock_ledger',
       'loyalty_point_ledger',
       'expenses',

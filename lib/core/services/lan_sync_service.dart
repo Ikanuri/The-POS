@@ -387,6 +387,7 @@ class LanSyncService {
     'transactions',
     'transaction_items',
     'transaction_payments',
+    'transaction_adjustment_lines',
     'stock_ledger',
     'loyalty_point_ledger',
     'expenses',
@@ -441,7 +442,12 @@ class LanSyncService {
   /// digabung (header + item + pembayaran) agar tidak pernah terpisah.
   /// Tabel pertama tiap kategori dipakai untuk menghitung jumlah tampilan.
   static const syncCategories = <String, List<String>>{
-    'Transaksi': ['transactions', 'transaction_items', 'transaction_payments'],
+    'Transaksi': [
+      'transactions',
+      'transaction_items',
+      'transaction_payments',
+      'transaction_adjustment_lines',
+    ],
     'Stok': ['stock_ledger'],
     'Poin Loyalti': ['loyalty_point_ledger'],
     'Pengeluaran': ['expenses'],
@@ -592,7 +598,11 @@ class LanSyncService {
     }
 
     // 2. Child rows: cek induk yang tidak dikenal ke DB lokal (chunked).
-    const childTables = ['transaction_items', 'transaction_payments'];
+    const childTables = [
+      'transaction_items',
+      'transaction_payments',
+      'transaction_adjustment_lines',
+    ];
     final unknownParents = <String>{};
     for (final t in childTables) {
       for (final r in tables[t] ?? const <Map<String, Object?>>[]) {
@@ -714,7 +724,9 @@ class LanSyncService {
       String table, List<Map<String, Object?>> rows, Set<String> out) {
     final key = table == 'transactions'
         ? 'id'
-        : (table == 'transaction_items' || table == 'transaction_payments')
+        : (table == 'transaction_items' ||
+                table == 'transaction_payments' ||
+                table == 'transaction_adjustment_lines')
             ? 'transaction_id'
             : null;
     if (key == null) return;
@@ -1132,6 +1144,7 @@ class LanSyncService {
     'transactions': 'transaksi',
     'transaction_items': 'item transaksi',
     'transaction_payments': 'pembayaran',
+    'transaction_adjustment_lines': 'rincian retur/edit',
     'stock_ledger': 'stok',
     'loyalty_point_ledger': 'poin loyalti',
     'expenses': 'pengeluaran',

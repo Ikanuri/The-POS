@@ -120,6 +120,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Transaction? _tx;
   List<TransactionItem> _items = [];
   List<TransactionPayment> _payments = [];
+
+  /// Rincian per-produk retur/edit, dikelompokkan per `paymentId` — dipakai
+  /// KHUSUS kartu "Riwayat Pembayaran" in-app (`_buildPaymentTimeline`).
+  /// TIDAK dipakai nota share/print (permintaan eksplisit user — lihat dok
+  /// `_buildPaymentTimeline`).
+  Map<String, List<TransactionAdjustmentLine>> _adjustmentLines = {};
   Map<String, String> _productNames = {};
 
   /// Item 52 susulan — baris nota yang ditandai titip/ketinggalan
@@ -932,6 +938,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           ..where((t) => t.transactionId.equals(widget.transactionId)))
         .get();
     final payments = await db.getPaymentsForTx(widget.transactionId);
+    final adjustmentLines =
+        await db.getAdjustmentLinesForTx(widget.transactionId);
 
     Customer? customer;
     if (tx.customerId != null) {
@@ -998,6 +1006,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _tx = tx;
         _items = items;
         _payments = payments;
+        _adjustmentLines = adjustmentLines;
         _checked
           ..clear()
           ..addEntries(checkedIds.map((id) => MapEntry(id, true)));
@@ -3012,11 +3021,30 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               fontSize: 11,
                               fontStyle: FontStyle.italic,
                               color: scheme.error)),
+                    // Rincian per-produk retur/edit momen INI (permintaan
+                    // user) — HANYA in-app, tidak pernah muncul di nota
+                    // share/print (di luar `_ReceiptPaper`/`printer_service.
+                    // dart` sepenuhnya). Baris pembayaran yang dibatalkan
+                    // tidak lagi relevan finansial, jadi rinciannya
+                    // disembunyikan juga.
+                    if (!p.voided && (_adjustmentLines[p.id]?.isNotEmpty ?? false))
+                      _AdjustmentLinesBlock(
+                        method: p.method,
+                        total: _adjustmentLines[p.id]!
+                            .fold<int>(0, (s, l) => s + l.subtotal),
+                        lines: _adjustmentLines[p.id]!,
+                        scheme: scheme,
+                      ),
                     // Kembalian milik pembayaran INI (bukan akumulatif) —
                     // nempel langsung di bawah nominalnya, satu momen yang
-                    // sama (lihat AppDatabase._computePaymentChangeGiven).
-                    // Pembayaran yang dibatalkan tidak punya kembalian
-                    // relevan lagi (sudah tidak dihitung finansial).
+                    // sama (lihat AppDatabase._computePaymentDelta). Poin 3
+                    // permintaan user: berlaku juga utk momen retur/edit di
+                    // atas (marker retur/edit BISA punya changeGiven kalau
+                    // nilainya melampaui sisa hutang — lihat dok
+                    // `_paymentDeltaAfterUnpaidItemChange`), bukan cuma
+                    // pembayaran biasa. Pembayaran yang dibatalkan tidak
+                    // punya kembalian relevan lagi (sudah tidak dihitung
+                    // finansial).
                     if (p.changeGiven > 0 && !p.voided)
                       _ChangeTakenRow(
                         amount: formatRupiah(p.changeGiven),
@@ -3025,6 +3053,28 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         onChanged: isVoid
                             ? null
                             : (v) => _toggleChangeTaken(p.id, v),
+                      ),
+                    // Sisa tempo per momen (poin 2 & 3 permintaan user) —
+                    // pola sama _ChangeTakenRow tapi TANPA centang (sisa
+                    // tempo tidak "dipakai ulang"/tidak butuh reminder
+                    // ambil). Berlaku baik utk sesi bayar biasa (mis. bayar
+                    // 192.000 dari total 193.000 -> Sisa 1.000) maupun utk
+                    // momen retur/edit yang masih menyisakan hutang.
+                    if (p.sisaAfter > 0 && !p.voided)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(left: 30),
+                              child: Text('Sisa',
+                                  style: TextStyle(color: scheme.error)),
+                            ),
+                            Text(formatRupiah(p.sisaAfter),
+                                style: TextStyle(color: scheme.error)),
+                          ],
+                        ),
                       ),
                   ],
                 ),
@@ -3585,6 +3635,53 @@ class _ChangeTakenRow extends StatelessWidget {
             Text(amount, style: style),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Rincian per-produk satu momen retur/edit (permintaan user, in-app SAJA):
+/// header "(Retur/Edit) Rp X" lalu tiap produk: nama (bold) + baris
+/// "qty satuan x harga  total" (bold). Beberapa produk dalam satu momen
+/// (retur multi-item) tampil sbg beberapa pasang baris berurutan.
+class _AdjustmentLinesBlock extends StatelessWidget {
+  const _AdjustmentLinesBlock({
+    required this.method,
+    required this.total,
+    required this.lines,
+    required this.scheme,
+  });
+
+  final String method;
+  final int total;
+  final List<TransactionAdjustmentLine> lines;
+  final ColorScheme scheme;
+
+  static String _fmtQty(double v) =>
+      v % 1 == 0 ? v.toInt().toString() : v.toString();
+
+  @override
+  Widget build(BuildContext context) {
+    final label = method == 'retur' ? 'Retur' : 'Edit';
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, top: 2, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('($label) ${formatRupiah(total)}',
+              style:
+                  TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          for (final l in lines) ...[
+            Text(l.productName,
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700)),
+            Text(
+                '${_fmtQty(l.qty)} ${l.unitName} x ${formatRupiah(l.priceAtSale)}  '
+                '${formatRupiah(l.subtotal)}',
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700)),
+          ],
+        ],
       ),
     );
   }
