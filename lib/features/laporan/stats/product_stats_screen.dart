@@ -138,15 +138,13 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
                     ),
                     if (d.daily.isNotEmpty) ...[
                       const StatsSectionTitle('Tren penjualan (qty)'),
-                      StatsDailyBarChart(
+                      StatsTrendChart(
                         points: [
                           for (final p in d.daily)
                             (date: p.date, value: p.qty),
                         ],
                         color: scheme.primary,
-                        tooltipOf: (p) =>
-                            '${p.date.day}/${p.date.month}\n'
-                            '${fmtQty(p.value.toDouble())} terjual',
+                        valueLabel: (v) => '${fmtQty(v.toDouble())} terjual',
                       ),
                     ],
                     const StatsSectionTitle('Pembeli teratas'),
