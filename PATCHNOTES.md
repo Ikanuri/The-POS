@@ -8,6 +8,46 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 Agustus 2026
+
+### 🆕 Fitur baru
+- **Penerimaan Barang**: tempel daftar barang yang datang (satu baris
+  "jumlah satuan nama", misalnya "5 pcs Indomie Goreng") dan stok
+  langsung bertambah. Baris pemisah tanggal otomatis diabaikan. Barang
+  yang namanya tidak persis sama tinggal dipilih sekali dari daftar
+  (ada kotak pencarian), lalu **diingat** — penerimaan berikutnya tidak
+  akan menanyakan barang yang sama lagi, dan ingatan itu ikut tersalin
+  ke perangkat lain saat sinkron. Bisa dibuka dari layar Cek Stok.
+- **Statistik per produk & per pelanggan**: baris di Laporan → tab
+  Produk dan tab Pelanggan sekarang **bisa diketuk** untuk melihat
+  rinciannya — kapan saja terjual, tren harian, siapa pembelinya, dan
+  untuk pelanggan: barang apa yang rutin dia beli + riwayat notanya.
+  Semuanya bisa disaring per rentang tanggal. Statistik pelanggan juga
+  bisa dibuka langsung dari halaman detail pelanggan.
+- **Laporan Arus Kas** (tab baru di Laporan): uang yang benar-benar
+  masuk & keluar pada rentang itu — nota tempo yang belum dibayar
+  tidak ikut dihitung, dan pelunasan hutang nota lama dihitung di
+  tanggal uangnya benar-benar diterima. Dipisah tunai vs non-tunai,
+  lengkap dengan tren harian.
+- **Nilai rupiah selisih di riwayat Stock Opname** — sebelumnya cuma
+  menampilkan jumlah barang; sekarang terlihat berapa rupiah modal yang
+  susut (atau lebih) dari tiap sesi opname.
+
+### 🔧 Perbaikan
+- **Retur/hapus barang yang melebihi sisa hutang sekarang memunculkan
+  kembalian** — sebelumnya, kalau pelanggan punya hutang tempo lalu
+  meretur barang senilai lebih dari sisa hutangnya, kelebihan yang jadi
+  haknya tidak muncul di mana pun sehingga kasir tidak tahu ada uang
+  yang harus dikembalikan. Sekarang tampil sebagai kembalian biasa,
+  lengkap dengan centang "sudah diserahkan".
+- **Pengaturan toko ikut tersalin ke perangkat lain saat sinkron** —
+  aturan poin loyalti, kebijakan stok minus, nama/alamat/nomor toko di
+  struk, catatan struk, daftar metode pembayaran, dan daftar pegawai.
+  Sebelumnya semua itu hanya berlaku di perangkat pemilik; akibatnya
+  belanja bernilai sama bisa mendapat poin berbeda tergantung perangkat
+  mana yang melayani, dan struk dari perangkat berbeda bisa
+  mencantumkan alamat/nomor yang sudah tidak berlaku.
+
 ## 9 Agustus 2026
 
 ### 🔧 Perbaikan

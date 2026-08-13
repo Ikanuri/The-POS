@@ -5,6 +5,60 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 11 Agustus 2026 (lanjutan — batch 6 pekerjaan, SESI SELESAI)
+— versi kerja tetap **2.10.0+15**, schemaVersion **31** (naik 29→30 audit
+storage, lalu 30→31 tabel kamus `product_aliases`).
+
+User minta audit fitur & efisiensi storage, lalu menyetujui eksekusi 6
+task sekaligus. SEMUA SELESAI & di-push (urut commit):
+
+1. **`d7420b2`** — retur/hapus item nota BELUM LUNAS yang melebihi sisa
+   hutang: kelebihan bayar kini jadi kembalian NYATA. Akar: kelebihannya
+   terhitung tapi cuma mendarat di `transactions.changeAmount` — kolom
+   yang TIDAK PERNAH dirender (struk membaca `changeGiven` pembayaran
+   TERAKHIR). Keputusan user: "samakan dgn UI/UX kembalian yang sudah
+   ada" — jadi ditulis sbg `changeGiven` di baris penanda, BUKAN bikin
+   konsep deposit/kredit pelanggan baru.
+2. **`c1f639f`** — nilai rupiah selisih di riwayat Stock Opname (dari
+   HPP tier `min_qty=1`). Keterbatasan disengaja: HPP dibaca SAAT QUERY,
+   bukan snapshot — ubah HPP ikut mengubah nilai riwayat lama.
+3. **`352911b`** — statistik detail produk & pelanggan. Tab Produk &
+   Pelanggan di Laporan dulu BUNTU (`onTap` nihil). Statistik pelanggan
+   punya DUA pintu masuk (Laporan + detail pelanggan) memakai layar &
+   query yang SAMA. Pelanggan ad-hoc DIABAIKAN (keputusan user).
+4. **`7c89ca1`** — tab Arus Kas. Sumber kas masuk = `transaction_payments`
+   (`paid_at`), bukan `transactions` — menutup 2 cacat "Selisih Kas
+   Operasional" (nota tempo belum dibayar ikut terhitung; pelunasan
+   nota lama jatuh di tanggal salah).
+5. **`ba0a6fc`** — Penerimaan Barang via tempel teks + kamus tersinkron
+   (schemaVersion 31). **PENTING**: ini PENERIMAAN (qty MENAMBAH stok),
+   BUKAN opname (MENIMPA) — user semula menyebut "stok opname", setelah
+   contoh file HTML-nya ditinjau ternyata maksudnya barang datang.
+   Pencocokan PERSIS saja, TIDAK ada fuzzy (keputusan user eksplisit,
+   konsisten larangan Levenshtein di CLAUDE.md). Kamus tersinkron DUA
+   ARAH lewat konsep BARU `LanSyncService.sharedTables`.
+6. **`d300b16`** — sync setting toko/metode bayar/pegawai. `app_settings`
+   pakai ALLOWLIST `AppDatabase.syncableSettingKeys`, disaring di DUA
+   sisi. **JANGAN PERNAH** dump `app_settings` bulat-bulat — bercampur
+   identitas/state device (`store_key`/`device_code`/watermark); tanpa
+   guard penerima, `store_key` benar² ikut tertulis (terbukti di
+   revert-verification).
+
+Semua revert-verified, `flutter analyze` 0 issue, full suite 1042 hijau
+(1-2 kegagalan `proposal_unchanged_end_to_end_test.dart` — flaky
+pre-existing, tidak terkait).
+
+**Konsep sync sekarang ada 3 kategori** (dulu 2) — penting dipahami
+sebelum menambah tabel baru: `appendOnly` (2 arah, INSERT OR IGNORE),
+`masterData` (SATU arah host→klien, LWW), dan **`shared`** (2 arah, LWW
+— baru, sejauh ini cuma `product_aliases`).
+
+**Tercatat di task manager (belum dikerjakan)**: tidak ada — 6 task yang
+dibuat sesi ini semuanya selesai. Temuan storage yang SENGAJA ditunda
+user ("tidak perlu dulu"): rotasi/pemangkasan `CrashLogService` (log
+crash tumbuh tanpa batas, dipicu juga oleh kegagalan sync berulang) &
+`HeldOrders` tanpa kedaluwarsa.
+
 _Update sesi 11 Agustus 2026 — versi kerja tetap **2.10.0+15**,
 schemaVersion **30** (naik dari 29 — indeks baru, lihat poin 2 di
 bawah). User minta "audit efisiensi data penyimpanan" (audit-only
