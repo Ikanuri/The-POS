@@ -11,10 +11,12 @@ import 'package:uuid/uuid.dart';
 
 import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
+import '../services/receive_text_parser.dart';
 import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
 import 'tables/employee_tables.dart';
+import 'tables/alias_tables.dart';
 import 'tables/laci_meja_tables.dart';
 import 'tables/ledger_tables.dart';
 import 'tables/pricing_tables.dart';
@@ -211,6 +213,7 @@ class BarcodeConflictException implements Exception {
   LeftBehindItems,
   BorrowedItems,
   PreorderEntries,
+  ProductAliases,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -223,7 +226,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -498,6 +501,10 @@ class AppDatabase extends _$AppDatabase {
             // sengaja minimal (cuma tabel relevan ke migrasi yang diuji),
             // bukan replika skema penuh.
             await _createIndexesIfTableExists(_v30Indexes);
+          }
+          if (from < 31) {
+            // Kamus belajar penerimaan barang (teks -> satuan produk).
+            await m.createTable(productAliases);
           }
         },
         beforeOpen: (details) async {
@@ -1096,6 +1103,157 @@ class AppDatabase extends _$AppDatabase {
   /// ledger dalam sesi ini memakai [note] & satu timestamp yang SAMA PERSIS
   /// (di-capture SEKALI di sini, bukan per-baris) — supaya
   /// [getOpnameSessions] bisa mengelompokkannya kembali jadi satu sesi
+  // ───────────────── Penerimaan Barang + kamus belajar ─────────────────
+
+  /// Cari satuan produk untuk satu baris teks penerimaan.
+  ///
+  /// Urutan (SEMUA persis, TIDAK ada fuzzy — keputusan user):
+  ///   1. Kamus, kunci SPESIFIK-satuan (`nama|satuan`).
+  ///   2. Kamus, kunci TANPA satuan (`nama|`) — fallback tingkat 2, pola
+  ///      sama `nkLearn` di tools user.
+  ///   3. Nama produk PERSIS (setelah normalisasi) — kalau cuma ada SATU
+  ///      produk yang cocok. Lebih dari satu = ambigu, biar user yang pilih.
+  /// null = tidak ketemu / ambigu → UI menampilkan dropdown kandidat.
+  Future<String?> resolveReceiveUnit({
+    required String name,
+    required String unit,
+  }) async {
+    final nName = AliasKey.normalizeName(name);
+    final nUnit = AliasKey.normalizeUnit(unit);
+
+    for (final key in [nUnit, '']) {
+      final hit = await (select(productAliases)
+            ..where((t) =>
+                t.normalizedName.equals(nName) & t.normalizedUnit.equals(key)))
+          .getSingleOrNull();
+      if (hit != null) {
+        // Alias bisa menunjuk satuan yang sudah dihapus sejak dipelajari —
+        // jangan kembalikan id hantu yang nanti gagal saat menulis stok.
+        final unitRow = await (select(productUnits)
+              ..where((t) => t.id.equals(hit.productUnitId)))
+            .getSingleOrNull();
+        if (unitRow != null) return hit.productUnitId;
+      }
+    }
+
+    // Nama persis — dibandingkan setelah normalisasi yang SAMA dgn kamus.
+    final rows = await customSelect(
+      'SELECT pu.id AS uid FROM products p '
+      'JOIN product_units pu ON pu.product_id = p.id '
+      'WHERE p.is_active = 1 AND pu.is_base_unit = 1 '
+      "AND LOWER(TRIM(p.name)) = ?",
+      variables: [Variable.withString(nName)],
+      readsFrom: {products, productUnits},
+    ).get();
+    if (rows.length == 1) return rows.single.data['uid'] as String;
+    return null;
+  }
+
+  /// Simpan/perbarui satu entri kamus. Dipanggil begitu user memilih produk
+  /// untuk baris yang ambigu — supaya teks yang sama tidak ditanya lagi.
+  ///
+  /// Menulis DUA kunci sekaligus saat teksnya bersatuan: kunci spesifik
+  /// (`nama|satuan`) DAN kunci fallback (`nama|`) — jadi baris berikutnya
+  /// yang menyebut produk sama TANPA satuan (atau dgn satuan beda) tetap
+  /// ketemu, persis perilaku 2-tingkat di tools user.
+  Future<void> learnReceiveAlias({
+    required String name,
+    required String unit,
+    required String productUnitId,
+  }) async {
+    final nName = AliasKey.normalizeName(name);
+    final nUnit = AliasKey.normalizeUnit(unit);
+    final now = DateTime.now();
+    for (final key in {nUnit, ''}) {
+      final existing = await (select(productAliases)
+            ..where((t) =>
+                t.normalizedName.equals(nName) & t.normalizedUnit.equals(key)))
+          .getSingleOrNull();
+      if (existing != null) {
+        await (update(productAliases)..where((t) => t.id.equals(existing.id)))
+            .write(ProductAliasesCompanion(
+          productUnitId: Value(productUnitId),
+          // WAJIB dicap ulang — `dumpSince` memfilter `updated_at >= since`.
+          updatedAt: Value(now),
+        ));
+      } else {
+        await into(productAliases).insert(ProductAliasesCompanion.insert(
+          id: const Uuid().v4(),
+          normalizedName: nName,
+          normalizedUnit: key,
+          productUnitId: productUnitId,
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ));
+      }
+    }
+  }
+
+  /// Seluruh isi kamus + nama produk/satuannya — untuk layar kelola kamus.
+  Future<List<ReceiveAliasRow>> getReceiveAliases() async {
+    final rows = await customSelect(
+      'SELECT a.id AS id, a.normalized_name AS nm, a.normalized_unit AS un, '
+      '  a.product_unit_id AS uid, p.name AS pname '
+      'FROM product_aliases a '
+      'LEFT JOIN product_units pu ON pu.id = a.product_unit_id '
+      'LEFT JOIN products p ON p.id = pu.product_id '
+      'ORDER BY a.normalized_name, a.normalized_unit',
+      readsFrom: {productAliases, productUnits, products},
+    ).get();
+    return rows
+        .map((r) => (
+              id: r.data['id'] as String,
+              normalizedName: r.data['nm'] as String,
+              normalizedUnit: r.data['un'] as String,
+              productUnitId: r.data['uid'] as String,
+              productName: r.data['pname'] as String?,
+            ))
+        .toList();
+  }
+
+  Future<void> deleteReceiveAlias(String id) =>
+      (delete(productAliases)..where((t) => t.id.equals(id))).go();
+
+  /// Terapkan penerimaan barang: TAMBAH stok sebesar qty tiap baris.
+  ///
+  /// BEDA MENDASAR dari [commitOpname] yang MENIMPA stok jadi hasil hitung
+  /// fisik — di sini qty adalah barang yang DATANG, jadi ditambahkan ke stok
+  /// yang sudah ada. Ditulis sbg `stock_ledger` type `purchase`, satu
+  /// timestamp & note yang sama untuk seluruh sesi supaya bisa
+  /// direkonstruksi jadi satu penerimaan (pola sama sesi opname).
+  Future<void> commitReceive({
+    required List<({String productUnitId, double qty})> entries,
+    required String note,
+    String? kasirId,
+  }) async {
+    if (entries.isEmpty) return;
+    final at = DateTime.now();
+    await transaction(() async {
+      for (final e in entries) {
+        if (e.qty <= 0) continue;
+        // Konversi ke satuan DASAR — stok di app ini SELALU dianker ke
+        // satuan dasar (lihat dok `variantSaleUnit`/`_appendStock`).
+        final info = await _baseUnitOf(e.productUnitId);
+        await _appendStock(
+          productUnitId: info.id,
+          qtyChange: e.qty * info.ratio,
+          type: 'purchase',
+          kasirId: kasirId,
+          note: note,
+          now: at,
+        );
+      }
+    });
+  }
+
+  /// Konvensi note sesi penerimaan — dipakai saat commit DAN saat memfilter
+  /// riwayat, harus selalu sinkron (pola sama [buildOpnameNote]).
+  static String buildReceiveNote(DateTime at) {
+    final tgl = '${at.day.toString().padLeft(2, '0')} '
+        '${_bulanIndo[at.month - 1]} ${at.year}';
+    return 'Penerimaan $tgl';
+  }
+
   /// riwayat. [entries] hanya berisi produk yang selisihnya != 0 (pemanggil
   /// bertanggung jawab menyaring produk yang tidak berubah sebelum commit).
   Future<void> commitOpname({
@@ -4870,6 +5028,9 @@ class AppDatabase extends _$AppDatabase {
     'left_behind_items',
     'borrowed_items',
     'preorder_entries',
+    // Kamus belajar penerimaan barang — ikut backup/Alihkan Owner supaya
+    // pemetaan yang sudah dipelajari tidak hilang saat pindah device.
+    'product_aliases',
     'held_orders',
     'reserved_order_numbers',
     'stock_ledger',
@@ -4996,6 +5157,14 @@ class AppDatabase extends _$AppDatabase {
       'borrowed_items',
       'preorder_entries',
     ];
+    // Tabel yang mengalir DUA ARAH (klien->host maupun host->klien),
+    // last-write-wins by `updated_at`. Beda dari [masterData] yang sengaja
+    // satu arah (host = sumber kebenaran) DAN dari [appendOnly] yang tidak
+    // pernah meng-update baris yang sudah ada. Kamus penerimaan barang
+    // masuk sini atas permintaan user: pemetaan teks->produk yang
+    // dipelajari device kasir HARUS ikut sampai ke owner, bukan cuma
+    // sebaliknya. Lihat juga `LanSyncService.sharedTables`.
+    const shared = ['product_aliases'];
 
     final dump = <String, List<Map<String, Object?>>>{};
     // Drift stores DateTimeColumn as unix seconds; raw SQL must compare in the same unit.
@@ -5066,6 +5235,15 @@ class AppDatabase extends _$AppDatabase {
         variables: [Variable.withInt(sinceSec)],
       ).get();
       dump['kasir_permissions'] = rows.map((r) => r.data).toList();
+    }
+    // SELALU disertakan — termasuk saat klien mengirim ke atas
+    // (`includeMasterData: false`), justru itu tujuannya.
+    for (final t in shared) {
+      final rows = await customSelect(
+        'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
+        variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
+      ).get();
+      dump[t] = rows.map((r) => r.data).toList();
     }
     return dump;
   }
@@ -6420,6 +6598,17 @@ class AppDatabase extends _$AppDatabase {
 }
 
 /// Hasil agregat top-produk untuk laporan (JOIN query).
+/// Satu baris kamus belajar penerimaan barang (untuk layar kelola kamus).
+/// `productName` null = satuan tujuannya sudah dihapus sejak alias dipelajari
+/// — barisnya tetap ditampilkan supaya bisa dibersihkan user.
+typedef ReceiveAliasRow = ({
+  String id,
+  String normalizedName,
+  String normalizedUnit,
+  String productUnitId,
+  String? productName,
+});
+
 /// Satu titik tren harian arus kas.
 typedef CashFlowDaily = ({DateTime date, int cashIn, int cashOut});
 

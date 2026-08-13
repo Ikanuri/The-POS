@@ -392,6 +392,19 @@ class LanSyncService {
     'expenses',
   };
 
+  /// Tabel yang mengalir DUA ARAH (klien->host maupun host->klien) dgn
+  /// last-write-wins by `updated_at` — beda dari [appendOnlyTables] yang
+  /// tidak pernah meng-update baris lama, dan dari master data yang sengaja
+  /// SATU ARAH (host sumber kebenaran).
+  ///
+  /// Sejauh ini cuma kamus penerimaan barang, atas permintaan user:
+  /// pemetaan teks->produk yang dipelajari device kasir HARUS ikut sampai ke
+  /// owner, bukan cuma sebaliknya. Aman dibedakan dari master data karena
+  /// isinya murni bantuan pencocokan (bukan harga/stok/identitas) — salah
+  /// entri paling buruk berakibat satu baris penerimaan salah tunjuk, dan
+  /// bisa langsung ditimpa dgn memilih ulang.
+  static const sharedTables = {'product_aliases'};
+
   /// Item 41 B.3 — tabel yang boleh di-merge KLIEN dari respons host.
   /// Host sudah lama punya guard [appendOnlyTables]; klien dulu menerima
   /// nama tabel APA PUN dari respons (respons memang terenkripsi, tapi
@@ -400,6 +413,7 @@ class LanSyncService {
   /// `app_settings`).
   static const clientMergeableTables = {
     ...appendOnlyTables,
+    ...sharedTables,
     'products',
     'product_groups',
     'product_units',
@@ -425,6 +439,7 @@ class LanSyncService {
     'Stok': ['stock_ledger'],
     'Poin Loyalti': ['loyalty_point_ledger'],
     'Pengeluaran': ['expenses'],
+    'Kamus Produk': ['product_aliases'],
   };
 
   // ─── Host (server) side ──────────────────────────────────────────────────
@@ -648,11 +663,14 @@ class LanSyncService {
     final touchedStockUnitIds = <String>{};
     final touchedLoyaltyCustomerIds = <String>{};
     for (final entry in tables.entries) {
-      // Guard satu arah: hanya tabel append-only yang boleh dari klien.
-      if (!appendOnlyTables.contains(entry.key)) continue;
+      // Guard satu arah: dari klien hanya boleh tabel append-only ATAU
+      // tabel dua-arah yang eksplisit (lihat [sharedTables]). Master data
+      // TETAP ditolak — host adalah sumber kebenarannya.
+      final isAppendOnly = appendOnlyTables.contains(entry.key);
+      if (!isAppendOnly && !sharedTables.contains(entry.key)) continue;
       // Filter kategori yang dipilih owner.
       if (allowedTables != null && !allowedTables.contains(entry.key)) continue;
-      received += await _db!.mergeRows(entry.key, entry.value, true);
+      received += await _db!.mergeRows(entry.key, entry.value, isAppendOnly);
       _collectTxIds(entry.key, entry.value, touchedTxIds);
       _collectStockUnitIds(entry.key, entry.value, touchedStockUnitIds);
       _collectLoyaltyCustomerIds(
