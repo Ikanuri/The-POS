@@ -23,7 +23,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   rinciannya — kapan saja terjual, tren harian, siapa pembelinya, dan
   untuk pelanggan: barang apa yang rutin dia beli + riwayat notanya.
   Semuanya bisa disaring per rentang tanggal. Statistik pelanggan juga
-  bisa dibuka langsung dari halaman detail pelanggan.
+  bisa dibuka langsung dari halaman detail pelanggan. Grafik tren
+  penjualan produk sekarang berupa **garis interaktif** — sentuh atau
+  geser di sepanjang garis untuk melihat tanggal & jumlahnya, dan tetap
+  rapi walau rentang tanggalnya panjang (mis. setahun penuh).
 - **Laporan Arus Kas** (tab baru di Laporan): uang yang benar-benar
   masuk & keluar pada rentang itu — nota tempo yang belum dibayar
   tidak ikut dihitung, dan pelunasan hutang nota lama dihitung di

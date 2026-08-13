@@ -5,6 +5,30 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 11 Agustus 2026 (lanjutan lagi — chart interaktif,
+`5115832`) — user kirim screenshot: statistik produk dgn rentang
+setahun (~365 titik harian) label sumbu-X-nya PECAH jadi tumpukan
+karakter vertikal. Akar: `StatsDailyBarChart` (dibuat sesi ini juga,
+lihat poin 3 di bawah) me-layout satu `Expanded` per titik — dgn 365
+titik, tiap kolom lebih sempit dari satu karakter. **Ganti total** ke
+`StatsTrendChart` berbasis fl_chart `LineChart` (dependency sudah ada,
+sebelumnya cuma dipakai `PieChart`) — label sumbu pakai `interval`
+fl_chart (dihitung dari skala X sungguhan, BUKAN dibagi rata per titik
+spt versi lama), jadi jumlah label tetap terbatas berapa pun jumlah
+titiknya. `trend_aggregation.dart` baru (fungsi murni, testable tanpa
+widget) mengelompokkan harian->mingguan->bulanan begitu >60 titik.
+Sekalian interaktif ala trading sesuai permintaan user: `LineTouchData`
+bawaan fl_chart, tap/drag di garis -> tooltip tanggal+nilai + indikator
+titik mengikuti sentuhan. **Scope SENGAJA cuma `StatsTrendChart`**
+(satu-satunya pemakai: `ProductStatsScreen`) — chart pengeluaran/
+ringkasan/arus kas TIDAK disentuh (belum dikonfirmasi kena bug yang
+sama, kalau ada laporan serupa cek dulu apakah rentangnya juga bisa
+sepanjang itu). Test `trend_aggregation_test.dart` (8) +
+`stats_trend_chart_test.dart` (6, termasuk replay persis skenario 365
+titik) — revert-verified. Full suite 1058 hijau (kali ini TERMASUK
+`proposal_unchanged_end_to_end_test.dart` yg biasanya flaky — kebetulan
+lolos, bukan berarti sudah pasti stabil permanen).
+
 _Update sesi 11 Agustus 2026 (lanjutan — batch 6 pekerjaan, SESI SELESAI)
 — versi kerja tetap **2.10.0+15**, schemaVersion **31** (naik 29→30 audit
 storage, lalu 30→31 tabel kamus `product_aliases`).
