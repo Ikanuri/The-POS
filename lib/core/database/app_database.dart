@@ -92,6 +92,14 @@ typedef OpnameSessionSummary = ({
   DateTime createdAt,
   String note,
   int itemCount,
+
+  /// Nilai rupiah TOTAL selisih sesi ini (Σ `qtyChange × HPP satuan`).
+  /// NEGATIF = stok fisik lebih SEDIKIT dari catatan (kerugian/susut);
+  /// positif = fisik lebih banyak. Dihitung dari HPP (`price_tiers.
+  /// cost_price` tier `min_qty = 1`) — pola sama [AppDatabase.getInventoryRows]
+  /// — supaya angkanya berarti "berapa modal yang menguap", bukan potensi
+  /// omzet yang hilang.
+  int valueChange,
 });
 
 /// Baris detail satu produk dalam satu sesi opname (Item 36).
@@ -99,6 +107,16 @@ typedef OpnameSessionDetailRow = ({
   String productName,
   double qtyChange,
   double stockAfter,
+
+  /// HPP per satuan dasar saat query dijalankan (bukan snapshot saat opname
+  /// — `stock_ledger` tidak menyimpan harga). Konsekuensi yang disengaja:
+  /// kalau HPP diubah setelah opname, nilai rupiah riwayat lama IKUT
+  /// berubah. Alternatifnya (snapshot HPP ke ledger) butuh migrasi kolom
+  /// baru & tidak bisa mengisi mundur data lama, jadi tidak diambil.
+  int costPrice,
+
+  /// `qtyChange × costPrice`, dibulatkan. Negatif = susut.
+  int valueChange,
 });
 
 /// Baris hasil [AppDatabase.getInventoryRows] — Item 30(c) (laporan
@@ -1122,15 +1140,44 @@ class AppDatabase extends _$AppDatabase {
       final key = '${r.createdAt.millisecondsSinceEpoch}|${r.note}';
       grouped.putIfAbsent(key, () => []).add(r);
     }
+    // HPP per satuan diambil SEKALI utk seluruh unit yang tersentuh (bukan
+    // per-sesi/per-baris) — hindari N+1 di layar riwayat yang bisa berisi
+    // puluhan sesi × puluhan baris.
+    final costByUnit = await _costPriceByUnitIds(
+        rows.map((r) => r.productUnitId).toSet());
     final sessions = grouped.values
         .map((list) => (
               createdAt: list.first.createdAt,
               note: list.first.note!,
               itemCount: list.length,
+              valueChange: list.fold<int>(
+                  0,
+                  (s, r) =>
+                      s + (r.qtyChange * (costByUnit[r.productUnitId] ?? 0))
+                          .round()),
             ))
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return sessions;
+  }
+
+  /// HPP (tier `min_qty = 1`) per `product_unit_id` — satu query utk semua id
+  /// sekaligus. Unit tanpa tier harga tidak muncul di map (dianggap 0 oleh
+  /// pemanggil), bukan error: opname tetap sah walau HPP belum pernah diisi.
+  Future<Map<String, int>> _costPriceByUnitIds(Set<String> unitIds) async {
+    if (unitIds.isEmpty) return {};
+    final ids = unitIds.toList();
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT product_unit_id AS uid, cost_price AS cp FROM price_tiers '
+      'WHERE min_qty = 1 AND product_unit_id IN ($placeholders)',
+      variables: [for (final id in ids) Variable.withString(id)],
+      readsFrom: {priceTiers},
+    ).get();
+    return {
+      for (final r in rows)
+        r.data['uid'] as String: ((r.data['cp'] as num?) ?? 0).toInt(),
+    };
   }
 
   /// Detail per-produk satu sesi opname — dipanggil dari layar riwayat saat
@@ -1155,14 +1202,18 @@ class AppDatabase extends _$AppDatabase {
     final productRows =
         await (select(products)..where((p) => p.id.isIn(productIds))).get();
     final nameByProduct = {for (final p in productRows) p.id: p.name};
+    final costByUnit = await _costPriceByUnitIds(unitIds.toSet());
     final out = ledgerRows.map((r) {
       final pid = productIdByUnit[r.productUnitId];
       final name =
           pid != null ? (nameByProduct[pid] ?? r.productUnitId) : r.productUnitId;
+      final cost = costByUnit[r.productUnitId] ?? 0;
       return (
         productName: name,
         qtyChange: r.qtyChange,
         stockAfter: r.stockAfter,
+        costPrice: cost,
+        valueChange: (r.qtyChange * cost).round(),
       );
     }).toList()
       ..sort((a, b) => a.productName.compareTo(b.productName));
