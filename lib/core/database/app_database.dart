@@ -2491,6 +2491,43 @@ class AppDatabase extends _$AppDatabase {
     return thisChange > 0 ? thisChange : 0;
   }
 
+  /// Σ subtotal baris item nota [txId] APA ADANYA dari DB saat ini — dipakai
+  /// jalur retur/hapus item nota BELUM LUNAS untuk mengetahui total AKHIR
+  /// nota SEBELUM [_reconcileTransactionTotals] sempat menuliskannya ke
+  /// header `transactions`. Tidak bisa membaca `transactions.total` di titik
+  /// itu: nilainya masih total LAMA (pra-retur).
+  Future<int> _sumItemSubtotals(String txId) async {
+    final rows = await (select(transactionItems)
+          ..where((t) => t.transactionId.equals(txId)))
+        .get();
+    return rows.fold<int>(0, (s, i) => s + i.subtotal);
+  }
+
+  /// Kelebihan bayar yang jadi HAK PELANGGAN setelah nota BELUM LUNAS
+  /// diretur/itemnya dihapus sampai total akhirnya turun di bawah uang yang
+  /// sudah pernah disetor.
+  ///
+  /// Dicatat sbg `changeGiven` di baris pembayaran penanda (`amount: 0`) —
+  /// PERSIS mekanisme kembalian biasa, memakai [_computePaymentChangeGiven]
+  /// yang sama. Konsekuensinya SELURUH UX kembalian yang sudah ada langsung
+  /// berlaku tanpa kode tampilan baru: baris "Kembalian" di struk (yang
+  /// membaca `changeGiven` pembayaran TERAKHIR), centang "kembalian sudah
+  /// diserahkan" per baris pembayaran (`changeTaken`), dan `netRemainingOwed`
+  /// (`total - paid + Σ changeGiven`) otomatis jadi 0 alih-alih negatif.
+  ///
+  /// Bug yang ditutup (dilaporkan user): sebelumnya kelebihan itu HANYA
+  /// mendarat di `transactions.changeAmount`, kolom yang TIDAK PERNAH
+  /// dirender di layar manapun (struk membaca `changeGiven`, bukan kolom
+  /// header itu) — jadi uang yang jadi hak pelanggan hilang tanpa jejak yang
+  /// bisa dilihat kasir.
+  Future<int> _overpaymentAfterUnpaidItemChange(String txId) =>
+      _sumItemSubtotals(txId).then((remainingTotal) =>
+          _computePaymentChangeGiven(
+            txId: txId,
+            newPaymentAmount: 0,
+            currentTotal: remainingTotal,
+          ));
+
   /// Hitung ulang `total` (Σ subtotal item) dan `paid` (Σ pembayaran) sebuah
   /// transaksi dari child rows, lalu sesuaikan `status` & `change_amount`.
   /// Dipakai setelah tambah-item dan setelah sync (rekonsiliasi).
@@ -2997,6 +3034,8 @@ class AppDatabase extends _$AppDatabase {
 
       // Jejak audit ringan di timeline pembayaran (amount 0 → tidak
       // memengaruhi jumlah dibayar, murni catatan "kapan ada retur").
+      // `changeGiven` diisi kalau nilai retur melampaui sisa hutang — lihat
+      // dok [_overpaymentAfterUnpaidItemChange].
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
         id: const Uuid().v4(),
@@ -3005,6 +3044,7 @@ class AppDatabase extends _$AppDatabase {
         method: 'retur',
         paidAt: Value(now),
         kasirId: Value(kasirId),
+        changeGiven: Value(await _overpaymentAfterUnpaidItemChange(txId)),
         note: const Value('Retur barang (nota belum lunas)'),
       ));
 
@@ -3108,6 +3148,11 @@ class AppDatabase extends _$AppDatabase {
       }
 
       // Jejak audit ringan (amount 0 → tidak memengaruhi dibayar).
+      // `changeGiven` diisi kalau item dihapus/diturunkan sampai total nota
+      // jatuh di bawah uang yang sudah disetor — lihat dok
+      // [_overpaymentAfterUnpaidItemChange]. Jalur ini kena pola yang SAMA
+      // dgn retur (bug dilaporkan user menyoal retur, tapi hapus/edit item
+      // menghasilkan kelebihan bayar yang identik).
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
         id: const Uuid().v4(),
@@ -3116,6 +3161,7 @@ class AppDatabase extends _$AppDatabase {
         method: 'edit',
         paidAt: Value(now),
         kasirId: Value(kasirId),
+        changeGiven: Value(await _overpaymentAfterUnpaidItemChange(txId)),
         note: Value(clampedQty <= 0
             ? 'Item dihapus (nota belum lunas)'
             : 'Item diubah (nota belum lunas)'),

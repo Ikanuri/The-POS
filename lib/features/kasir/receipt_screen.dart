@@ -1556,9 +1556,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       // tidak menampilkan data basi.
       await _load();
       if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content:
-                Text('Retur dicatat, hutang berkurang, stok dikembalikan')));
+        // Kalau nilai retur melampaui sisa hutang, selisihnya jadi kembalian
+        // (hak pelanggan) — WAJIB disebut di sini, kalau tidak kasir tidak
+        // pernah tahu ada uang yang harus diserahkan balik. Angkanya dibaca
+        // dari pembayaran terakhir, sumber yang SAMA dgn baris "Kembalian"
+        // di ringkasan struk (lihat `_latestPayment`).
+        final change = _latestPayment?.changeGiven ?? 0;
+        messenger.showSnackBar(SnackBar(
+            content: Text(change > 0
+                ? 'Retur dicatat, stok dikembalikan · kembalian '
+                    '${formatRupiah(change)}'
+                : 'Retur dicatat, hutang berkurang, stok dikembalikan')));
       }
       return;
     }
