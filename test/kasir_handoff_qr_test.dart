@@ -177,8 +177,8 @@ void main() {
 
   testWidgets(
       'tombol "Salin Teks Pesanan" — jalur cadangan kalau scan QR susah — '
-      'menyalin teks yang PERSIS SAMA dengan isi QR ke clipboard',
-      (tester) async {
+      'menyalin teks LENGKAP (beda dari isi QR yang diperkecil demi '
+      'kepadatan modul) ke clipboard', (tester) async {
     // Clipboard.getData TIDAK di-mock otomatis oleh flutter_test di
     // environment ini (beda dari asumsi umum) — tanpa handler manual,
     // `await Clipboard.getData(...)` menggantung SELAMANYA (bukan error
@@ -232,10 +232,21 @@ void main() {
 
     final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
     expect(clipboard?.text, expectedText,
-        reason: 'teks yang disalin harus persis sama dgn isi QR, supaya '
-            'bisa ditempel manual (WhatsApp/Telegram) & tetap terbaca '
-            'parser "Tempel Pesanan" kalau scan tidak memungkinkan');
+        reason: 'teks yang disalin harus LENGKAP (blok manusiawi + kode '
+            'mesin) supaya enak dibaca kalau ditempel manual (WhatsApp/'
+            'Telegram) & tetap terbaca parser "Tempel Pesanan" kalau scan '
+            'tidak memungkinkan — beda dari isi QR yang diperkecil '
+            '(storeName dibuang) demi kepadatan modul, lihat dok '
+            '`_showHandoffQr`');
     expect(find.text('Teks pesanan disalin'), findsOneWidget);
+    // Susulan (permintaan user, 14 Agt 2026): buktikan Copy/Share
+    // MEMPERTAHANKAN blok manusiawi (beda dari QR yang membuangnya) —
+    // lihat `order_parser_service_test.dart` group "Item 54" utk
+    // pembuktian sisi lain (storeName: null -> header hilang total).
+    expect(clipboard?.text, contains('PESANAN — Toko Uji'),
+        reason: 'Copy/Share TETAP bawa blok manusiawi (nama toko + daftar '
+            'produk + Total) — cuma isi QR yang diperkecil, bukan Copy/'
+            'Share');
 
     // Drain timer SnackBar yang masih pending sebelum teardown (kalau
     // tidak, "A Timer is still pending" saat disposal binding).

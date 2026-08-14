@@ -98,7 +98,28 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final employeeName =
         meta.hasEmployee ? meta.employeeName! : device.deviceName;
     final needsGate = ref.read(needsPaymentGateProvider).valueOrNull ?? false;
-    final qrText = OrderParserService.encodeHandoff(
+    // Susulan (permintaan user, 14 Agt 2026): payload QR dipisah dari teks
+    // Copy/Share. `OrderParserService.parse` HANYA membaca baris `#PSN:...`
+    // + baris meta (Pegawai/Nama/dst) lewat regex per-baris — blok
+    // manusiawi "PESANAN — toko / daftar produk / Total" (digerbang param
+    // `storeName`, lihat dok Item 54 di `encodeHandoff`) SAMA SEKALI TIDAK
+    // ikut di-parse, baik lewat scan kamera/HID maupun Tempel Pesanan. Blok
+    // itu jadi beban murni di gambar QR (utk keranjang banyak baris/
+    // catatan, blok inilah kontributor terbesar panjang teks) — makin
+    // banyak modul, makin padat & rawan gagal-scan, TANPA manfaat
+    // fungsional apa pun krn memang tidak pernah dibaca ulang. QR sekarang
+    // pakai `storeName: null` (cuma kode mesin, padat modul rendah);
+    // Copy/Share TETAP teks lengkap (enak dibaca manusia via WhatsApp/dst).
+    final qrOnlyCodeText = OrderParserService.encodeHandoff(
+      items: cart,
+      employeeName: employeeName,
+      customerName: meta.hasCustomer ? meta.customerName : null,
+      customerId: meta.customerId,
+      reservedLocalId: meta.reservedLocalId,
+      trustPrices: !needsGate,
+      storeName: null,
+    );
+    final shareText = OrderParserService.encodeHandoff(
       items: cart,
       employeeName: employeeName,
       customerName: meta.hasCustomer ? meta.customerName : null,
@@ -132,7 +153,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         // owner/asisten (satu arah pasti); transfer bebas (Item 56) bisa
         // ke device manapun, judul generik.
         title: needsGate ? 'Kirim ke Owner/Asisten' : 'Transfer Transaksi',
-        qrText: qrText,
+        qrCodeText: qrOnlyCodeText,
+        shareText: shareText,
         itemCount: cart.where((c) => !c.isVariant).length,
         total: cart.fold<int>(0, (s, c) => s + (c.price * c.qty).round()),
       ),
@@ -851,13 +873,24 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
 class _HandoffQrSheet extends StatelessWidget {
   const _HandoffQrSheet({
     required this.title,
-    required this.qrText,
+    required this.qrCodeText,
+    required this.shareText,
     required this.itemCount,
     required this.total,
   });
 
   final String title;
-  final String qrText;
+
+  /// Payload GAMBAR QR — cuma kode mesin (`#PSN:...` + baris meta), TANPA
+  /// blok manusiawi "PESANAN — toko / daftar produk / Total" — lihat dok
+  /// panjang di `_showHandoffQr`. Lebih pendek = modul QR lebih rendah =
+  /// lebih gampang di-scan, TANPA mengubah apa pun yang diterima penerima
+  /// (blok yang dibuang memang tidak pernah ikut ke-parse).
+  final String qrCodeText;
+
+  /// Teks utk tombol Salin/Share — TETAP lengkap (blok manusiawi + kode
+  /// mesin) supaya enak dibaca kalau ditempel di WhatsApp/Telegram.
+  final String shareText;
   final int itemCount;
   final int total;
 
@@ -883,7 +916,7 @@ class _HandoffQrSheet extends StatelessWidget {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: QrImageView(data: qrText, size: 220),
+              child: QrImageView(data: qrCodeText, size: 220),
             ),
             const SizedBox(height: 12),
             Text(
@@ -893,12 +926,13 @@ class _HandoffQrSheet extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             // Jalur cadangan kalau scan QR susah (kamera rusak/pencahayaan
-            // kurang) — teks pesanan yang SAMA persis dgn isi QR bisa
+            // kurang) — teks pesanan (versi LENGKAP, beda dari isi QR yang
+            // diperkecil demi kepadatan modul — lihat dok `shareText`) bisa
             // ditempel manual lewat WhatsApp/Telegram, lalu owner buka
             // "Tempel Pesanan" di kasir (parser sudah baca format ini).
             OutlinedButton.icon(
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: qrText));
+                Clipboard.setData(ClipboardData(text: shareText));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Teks pesanan disalin')),
                 );
@@ -918,7 +952,7 @@ class _HandoffQrSheet extends StatelessWidget {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: () => Share.share(qrText),
+                onPressed: () => Share.share(shareText),
                 icon: const Icon(Icons.ios_share, size: 18),
                 label: const Text('Share Pesanan'),
               ),
