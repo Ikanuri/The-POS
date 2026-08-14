@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import 'receive_goods_screen.dart';
 import 'stock_opname_screen.dart';
 
 /// Item 30(b) — layar kontrol stok terpisah dari daftar Produk (fokus
@@ -307,6 +308,16 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
       appBar: AppBar(
         title: const Text('Cek Stok'),
         actions: [
+          // Penerimaan Barang sengaja bertetangga dgn Stock Opname (dua-duanya
+          // menyesuaikan stok) tapi TETAP terpisah: penerimaan MENAMBAH,
+          // opname MENIMPA jadi hasil hitung fisik.
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined),
+            tooltip: 'Penerimaan Barang',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const ReceiveGoodsScreen(),
+            )),
+          ),
           IconButton(
             icon: const Icon(Icons.checklist_rounded),
             tooltip: 'Stock Opname',

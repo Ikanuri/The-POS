@@ -11,10 +11,13 @@ import 'package:uuid/uuid.dart';
 
 import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
+import '../services/receive_text_parser.dart';
 import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
 import 'tables/employee_tables.dart';
+import 'tables/adjustment_tables.dart';
+import 'tables/alias_tables.dart';
 import 'tables/laci_meja_tables.dart';
 import 'tables/ledger_tables.dart';
 import 'tables/pricing_tables.dart';
@@ -92,6 +95,14 @@ typedef OpnameSessionSummary = ({
   DateTime createdAt,
   String note,
   int itemCount,
+
+  /// Nilai rupiah TOTAL selisih sesi ini (Σ `qtyChange × HPP satuan`).
+  /// NEGATIF = stok fisik lebih SEDIKIT dari catatan (kerugian/susut);
+  /// positif = fisik lebih banyak. Dihitung dari HPP (`price_tiers.
+  /// cost_price` tier `min_qty = 1`) — pola sama [AppDatabase.getInventoryRows]
+  /// — supaya angkanya berarti "berapa modal yang menguap", bukan potensi
+  /// omzet yang hilang.
+  int valueChange,
 });
 
 /// Baris detail satu produk dalam satu sesi opname (Item 36).
@@ -99,6 +110,16 @@ typedef OpnameSessionDetailRow = ({
   String productName,
   double qtyChange,
   double stockAfter,
+
+  /// HPP per satuan dasar saat query dijalankan (bukan snapshot saat opname
+  /// — `stock_ledger` tidak menyimpan harga). Konsekuensi yang disengaja:
+  /// kalau HPP diubah setelah opname, nilai rupiah riwayat lama IKUT
+  /// berubah. Alternatifnya (snapshot HPP ke ledger) butuh migrasi kolom
+  /// baru & tidak bisa mengisi mundur data lama, jadi tidak diambil.
+  int costPrice,
+
+  /// `qtyChange × costPrice`, dibulatkan. Negatif = susut.
+  int valueChange,
 });
 
 /// Baris hasil [AppDatabase.getInventoryRows] — Item 30(c) (laporan
@@ -193,6 +214,8 @@ class BarcodeConflictException implements Exception {
   LeftBehindItems,
   BorrowedItems,
   PreorderEntries,
+  ProductAliases,
+  TransactionAdjustmentLines,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e, {this.readOnly = false});
@@ -205,7 +228,44 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 32;
+
+  /// Key `app_settings` yang BOLEH ikut sync host->klien.
+  ///
+  /// ALLOWLIST, bukan blacklist — dan tabel `app_settings` TIDAK BOLEH
+  /// di-dump bulat-bulat. Isinya bercampur antara setting TOKO (harus
+  /// seragam di semua device) dgn IDENTITAS/STATE DEVICE
+  /// (`store_uuid`, `store_key`, `device_code`, `device_role`, watermark
+  /// sync, `last_archive_date`). Kalau semua ikut, device klien akan
+  /// tertimpa identitasnya sendiri — kerusakan parah & sulit dipulihkan.
+  ///
+  /// Dipakai di DUA sisi: saat MEMBUAT dump (host) dan saat MENERIMA
+  /// (klien, di [mergeRows]) — supaya payload yang menyelundupkan key lain
+  /// tetap ditolak walau dump-nya tidak lagi bisa dipercaya.
+  static const syncableSettingKeys = {
+    // Aturan poin loyalti — dibaca SAAT CHECKOUT. Tanpa disinkron, nota
+    // bernilai sama dapat poin BERBEDA tergantung device yang melayani,
+    // padahal `loyalty_point_ledger`-nya sendiri ikut tersync (jadi
+    // inkonsistensinya masuk ke data bersama).
+    'loyalty_point_threshold',
+    'loyalty_points_per',
+    // Kebijakan stok minus — ditetapkan owner, dibaca kasir saat checkout.
+    'allow_negative_stock',
+    // Identitas toko yang tercetak di struk. `store_name` selama ini cuma
+    // ikut SEKALI saat pairing (payload QR); perubahan setelahnya tidak
+    // pernah menyebar, jadi struk antar device bisa beda alamat/nomor.
+    'store_name',
+    'store_address',
+    'store_phone',
+    'store_whatsapp',
+    'store_telegram',
+    // Tampilan struk.
+    'receipt_header',
+    'receipt_note',
+    'receipt_show_employee',
+    // Perilaku katalog pesanan.
+    'katalog_wa_direct',
+  };
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -227,11 +287,60 @@ class AppDatabase extends _$AppDatabase {
     'CREATE INDEX IF NOT EXISTS idx_stock_ledger_created ON stock_ledger(created_at DESC)',
   ];
 
+  /// Indeks tambahan (v30, dari audit efisiensi storage) — tabel pricing/
+  /// produk/loyalti yang belum terindeks sebelumnya (bisa jadi besar seiring
+  /// katalog produk bertambah), plus `transaction_id` di 3 tabel Laci Meja
+  /// (dipakai guard baru [TutupBukuService.execute] yang JOIN ke sini).
+  static const _v30Indexes = <String>[
+    'CREATE INDEX IF NOT EXISTS idx_pu_product ON product_units(product_id)',
+    'CREATE INDEX IF NOT EXISTS idx_pt_unit ON price_tiers(product_unit_id)',
+    'CREATE INDEX IF NOT EXISTS idx_ap_unit ON alt_prices(product_unit_id)',
+    'CREATE INDEX IF NOT EXISTS idx_pb_unit ON product_barcodes(product_unit_id)',
+    'CREATE INDEX IF NOT EXISTS idx_lpl_customer ON loyalty_point_ledger(customer_id)',
+    'CREATE INDEX IF NOT EXISTS idx_lbi_tx ON left_behind_items(transaction_id)',
+    'CREATE INDEX IF NOT EXISTS idx_bi_tx ON borrowed_items(transaction_id)',
+    'CREATE INDEX IF NOT EXISTS idx_pe_tx ON preorder_entries(transaction_id)',
+  ];
+
+  /// Jalankan tiap `CREATE INDEX ... ON <table>(<col>[, <col>...])` di
+  /// [statements], SKIP diam-diam kalau `<table>`-nya belum ada ATAU salah
+  /// satu kolomnya belum ada (lihat dok pemanggil — fixture test migrasi
+  /// lama sering pakai stub tabel MINIMAL, mis. cuma kolom `id`). Idempoten
+  /// & aman (index hilang cuma berarti query itu sedikit lebih lambat,
+  /// BUKAN salah data) — tidak menyembunyikan bug produksi karena
+  /// tabel+kolom yang ditarget di sini semuanya sudah ada sejak
+  /// schemaVersion 1 di DB produksi nyata manapun.
+  Future<void> _createIndexesIfTableExists(List<String> statements) async {
+    final existingTables = (await customSelect(
+            "SELECT name FROM sqlite_master WHERE type='table'")
+        .get())
+        .map((r) => r.data['name'] as String)
+        .toSet();
+    for (final stmt in statements) {
+      final match =
+          RegExp(r'\sON\s+(\w+)\s*\(([^)]+)\)').firstMatch(stmt);
+      final table = match?.group(1);
+      if (table == null || !existingTables.contains(table)) continue;
+      final cols = (await customSelect("PRAGMA table_info('$table')").get())
+          .map((r) => r.data['name'] as String)
+          .toSet();
+      final wantedCols = match!
+          .group(2)!
+          .split(',')
+          .map((c) => c.trim().split(' ').first);
+      if (wantedCols.any((c) => !cols.contains(c))) continue;
+      await customStatement(stmt);
+    }
+  }
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
           for (final stmt in _performanceIndexes) {
+            await customStatement(stmt);
+          }
+          for (final stmt in _v30Indexes) {
             await customStatement(stmt);
           }
           await _seedDefaults();
@@ -417,6 +526,31 @@ class AppDatabase extends _$AppDatabase {
             // Susulan (permintaan user) — usulan sync pelanggan, pola SAMA
             // PERSIS dgn `products.locallyModified` (Item 40).
             await m.addColumn(customers, customers.locallyModified);
+          }
+          if (from < 29) {
+            // Item 61.5 — soft-delete expenses (lihat dok `Expenses.deletedAt`).
+            await m.addColumn(expenses, expenses.deletedAt);
+          }
+          if (from < 30) {
+            // Audit efisiensi storage — indeks yang belum ada sebelumnya.
+            // Tabel targetnya (price_tiers/product_barcodes/loyalty_point_
+            // ledger/dkk) sudah ada sejak schemaVersion 1 di DB PRODUKSI
+            // manapun (tidak pernah disentuh migrasi lain) — defensif thd
+            // tabel belum ada murni utk fixture test migrasi lama yang
+            // sengaja minimal (cuma tabel relevan ke migrasi yang diuji),
+            // bukan replika skema penuh.
+            await _createIndexesIfTableExists(_v30Indexes);
+          }
+          if (from < 31) {
+            // Kamus belajar penerimaan barang (teks -> satuan produk).
+            await m.createTable(productAliases);
+          }
+          if (from < 32) {
+            // Riwayat Pembayaran: rincian per-produk retur/edit + sisa
+            // tempo per momen (lihat dok `TransactionAdjustmentLines` &
+            // `TransactionPayments.sisaAfter`).
+            await m.addColumn(transactionPayments, transactionPayments.sisaAfter);
+            await m.createTable(transactionAdjustmentLines);
           }
         },
         beforeOpen: (details) async {
@@ -1015,6 +1149,157 @@ class AppDatabase extends _$AppDatabase {
   /// ledger dalam sesi ini memakai [note] & satu timestamp yang SAMA PERSIS
   /// (di-capture SEKALI di sini, bukan per-baris) — supaya
   /// [getOpnameSessions] bisa mengelompokkannya kembali jadi satu sesi
+  // ───────────────── Penerimaan Barang + kamus belajar ─────────────────
+
+  /// Cari satuan produk untuk satu baris teks penerimaan.
+  ///
+  /// Urutan (SEMUA persis, TIDAK ada fuzzy — keputusan user):
+  ///   1. Kamus, kunci SPESIFIK-satuan (`nama|satuan`).
+  ///   2. Kamus, kunci TANPA satuan (`nama|`) — fallback tingkat 2, pola
+  ///      sama `nkLearn` di tools user.
+  ///   3. Nama produk PERSIS (setelah normalisasi) — kalau cuma ada SATU
+  ///      produk yang cocok. Lebih dari satu = ambigu, biar user yang pilih.
+  /// null = tidak ketemu / ambigu → UI menampilkan dropdown kandidat.
+  Future<String?> resolveReceiveUnit({
+    required String name,
+    required String unit,
+  }) async {
+    final nName = AliasKey.normalizeName(name);
+    final nUnit = AliasKey.normalizeUnit(unit);
+
+    for (final key in [nUnit, '']) {
+      final hit = await (select(productAliases)
+            ..where((t) =>
+                t.normalizedName.equals(nName) & t.normalizedUnit.equals(key)))
+          .getSingleOrNull();
+      if (hit != null) {
+        // Alias bisa menunjuk satuan yang sudah dihapus sejak dipelajari —
+        // jangan kembalikan id hantu yang nanti gagal saat menulis stok.
+        final unitRow = await (select(productUnits)
+              ..where((t) => t.id.equals(hit.productUnitId)))
+            .getSingleOrNull();
+        if (unitRow != null) return hit.productUnitId;
+      }
+    }
+
+    // Nama persis — dibandingkan setelah normalisasi yang SAMA dgn kamus.
+    final rows = await customSelect(
+      'SELECT pu.id AS uid FROM products p '
+      'JOIN product_units pu ON pu.product_id = p.id '
+      'WHERE p.is_active = 1 AND pu.is_base_unit = 1 '
+      "AND LOWER(TRIM(p.name)) = ?",
+      variables: [Variable.withString(nName)],
+      readsFrom: {products, productUnits},
+    ).get();
+    if (rows.length == 1) return rows.single.data['uid'] as String;
+    return null;
+  }
+
+  /// Simpan/perbarui satu entri kamus. Dipanggil begitu user memilih produk
+  /// untuk baris yang ambigu — supaya teks yang sama tidak ditanya lagi.
+  ///
+  /// Menulis DUA kunci sekaligus saat teksnya bersatuan: kunci spesifik
+  /// (`nama|satuan`) DAN kunci fallback (`nama|`) — jadi baris berikutnya
+  /// yang menyebut produk sama TANPA satuan (atau dgn satuan beda) tetap
+  /// ketemu, persis perilaku 2-tingkat di tools user.
+  Future<void> learnReceiveAlias({
+    required String name,
+    required String unit,
+    required String productUnitId,
+  }) async {
+    final nName = AliasKey.normalizeName(name);
+    final nUnit = AliasKey.normalizeUnit(unit);
+    final now = DateTime.now();
+    for (final key in {nUnit, ''}) {
+      final existing = await (select(productAliases)
+            ..where((t) =>
+                t.normalizedName.equals(nName) & t.normalizedUnit.equals(key)))
+          .getSingleOrNull();
+      if (existing != null) {
+        await (update(productAliases)..where((t) => t.id.equals(existing.id)))
+            .write(ProductAliasesCompanion(
+          productUnitId: Value(productUnitId),
+          // WAJIB dicap ulang — `dumpSince` memfilter `updated_at >= since`.
+          updatedAt: Value(now),
+        ));
+      } else {
+        await into(productAliases).insert(ProductAliasesCompanion.insert(
+          id: const Uuid().v4(),
+          normalizedName: nName,
+          normalizedUnit: key,
+          productUnitId: productUnitId,
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ));
+      }
+    }
+  }
+
+  /// Seluruh isi kamus + nama produk/satuannya — untuk layar kelola kamus.
+  Future<List<ReceiveAliasRow>> getReceiveAliases() async {
+    final rows = await customSelect(
+      'SELECT a.id AS id, a.normalized_name AS nm, a.normalized_unit AS un, '
+      '  a.product_unit_id AS uid, p.name AS pname '
+      'FROM product_aliases a '
+      'LEFT JOIN product_units pu ON pu.id = a.product_unit_id '
+      'LEFT JOIN products p ON p.id = pu.product_id '
+      'ORDER BY a.normalized_name, a.normalized_unit',
+      readsFrom: {productAliases, productUnits, products},
+    ).get();
+    return rows
+        .map((r) => (
+              id: r.data['id'] as String,
+              normalizedName: r.data['nm'] as String,
+              normalizedUnit: r.data['un'] as String,
+              productUnitId: r.data['uid'] as String,
+              productName: r.data['pname'] as String?,
+            ))
+        .toList();
+  }
+
+  Future<void> deleteReceiveAlias(String id) =>
+      (delete(productAliases)..where((t) => t.id.equals(id))).go();
+
+  /// Terapkan penerimaan barang: TAMBAH stok sebesar qty tiap baris.
+  ///
+  /// BEDA MENDASAR dari [commitOpname] yang MENIMPA stok jadi hasil hitung
+  /// fisik — di sini qty adalah barang yang DATANG, jadi ditambahkan ke stok
+  /// yang sudah ada. Ditulis sbg `stock_ledger` type `purchase`, satu
+  /// timestamp & note yang sama untuk seluruh sesi supaya bisa
+  /// direkonstruksi jadi satu penerimaan (pola sama sesi opname).
+  Future<void> commitReceive({
+    required List<({String productUnitId, double qty})> entries,
+    required String note,
+    String? kasirId,
+  }) async {
+    if (entries.isEmpty) return;
+    final at = DateTime.now();
+    await transaction(() async {
+      for (final e in entries) {
+        if (e.qty <= 0) continue;
+        // Konversi ke satuan DASAR — stok di app ini SELALU dianker ke
+        // satuan dasar (lihat dok `variantSaleUnit`/`_appendStock`).
+        final info = await _baseUnitOf(e.productUnitId);
+        await _appendStock(
+          productUnitId: info.id,
+          qtyChange: e.qty * info.ratio,
+          type: 'purchase',
+          kasirId: kasirId,
+          note: note,
+          now: at,
+        );
+      }
+    });
+  }
+
+  /// Konvensi note sesi penerimaan — dipakai saat commit DAN saat memfilter
+  /// riwayat, harus selalu sinkron (pola sama [buildOpnameNote]).
+  static String buildReceiveNote(DateTime at) {
+    final tgl = '${at.day.toString().padLeft(2, '0')} '
+        '${_bulanIndo[at.month - 1]} ${at.year}';
+    return 'Penerimaan $tgl';
+  }
+
   /// riwayat. [entries] hanya berisi produk yang selisihnya != 0 (pemanggil
   /// bertanggung jawab menyaring produk yang tidak berubah sebelum commit).
   Future<void> commitOpname({
@@ -1059,15 +1344,44 @@ class AppDatabase extends _$AppDatabase {
       final key = '${r.createdAt.millisecondsSinceEpoch}|${r.note}';
       grouped.putIfAbsent(key, () => []).add(r);
     }
+    // HPP per satuan diambil SEKALI utk seluruh unit yang tersentuh (bukan
+    // per-sesi/per-baris) — hindari N+1 di layar riwayat yang bisa berisi
+    // puluhan sesi × puluhan baris.
+    final costByUnit = await _costPriceByUnitIds(
+        rows.map((r) => r.productUnitId).toSet());
     final sessions = grouped.values
         .map((list) => (
               createdAt: list.first.createdAt,
               note: list.first.note!,
               itemCount: list.length,
+              valueChange: list.fold<int>(
+                  0,
+                  (s, r) =>
+                      s + (r.qtyChange * (costByUnit[r.productUnitId] ?? 0))
+                          .round()),
             ))
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return sessions;
+  }
+
+  /// HPP (tier `min_qty = 1`) per `product_unit_id` — satu query utk semua id
+  /// sekaligus. Unit tanpa tier harga tidak muncul di map (dianggap 0 oleh
+  /// pemanggil), bukan error: opname tetap sah walau HPP belum pernah diisi.
+  Future<Map<String, int>> _costPriceByUnitIds(Set<String> unitIds) async {
+    if (unitIds.isEmpty) return {};
+    final ids = unitIds.toList();
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT product_unit_id AS uid, cost_price AS cp FROM price_tiers '
+      'WHERE min_qty = 1 AND product_unit_id IN ($placeholders)',
+      variables: [for (final id in ids) Variable.withString(id)],
+      readsFrom: {priceTiers},
+    ).get();
+    return {
+      for (final r in rows)
+        r.data['uid'] as String: ((r.data['cp'] as num?) ?? 0).toInt(),
+    };
   }
 
   /// Detail per-produk satu sesi opname — dipanggil dari layar riwayat saat
@@ -1092,14 +1406,18 @@ class AppDatabase extends _$AppDatabase {
     final productRows =
         await (select(products)..where((p) => p.id.isIn(productIds))).get();
     final nameByProduct = {for (final p in productRows) p.id: p.name};
+    final costByUnit = await _costPriceByUnitIds(unitIds.toSet());
     final out = ledgerRows.map((r) {
       final pid = productIdByUnit[r.productUnitId];
       final name =
           pid != null ? (nameByProduct[pid] ?? r.productUnitId) : r.productUnitId;
+      final cost = costByUnit[r.productUnitId] ?? 0;
       return (
         productName: name,
         qtyChange: r.qtyChange,
         stockAfter: r.stockAfter,
+        costPrice: cost,
+        valueChange: (r.qtyChange * cost).round(),
       );
     }).toList()
       ..sort((a, b) => a.productName.compareTo(b.productName));
@@ -2359,13 +2677,15 @@ class AppDatabase extends _$AppDatabase {
         final newItemsTotal =
             items.fold<int>(0, (s, c) => s + c.subtotal.value);
         final totalAfterAddition = tx.total + newItemsTotal;
-        final changeGiven = await _computePaymentChangeGiven(
+        final delta = await _computePaymentDelta(
           txId: txId,
           newPaymentAmount: payment.amount.value,
           currentTotal: totalAfterAddition,
         );
-        await into(transactionPayments)
-            .insert(payment.copyWith(changeGiven: Value(changeGiven)));
+        await into(transactionPayments).insert(payment.copyWith(
+          changeGiven: Value(delta.changeGiven),
+          sisaAfter: Value(delta.sisaAfter),
+        ));
       }
 
       // Potong stok.
@@ -2400,7 +2720,15 @@ class AppDatabase extends _$AppDatabase {
   /// termasuk perubahan dalam operasi yang sama (mis. tambah belanjaan —
   /// `transactions.total` belum terupdate sampai `_reconcileTransactionTotals`
   /// jalan belakangan).
-  Future<int> _computePaymentChangeGiven({
+  ///
+  /// Sekalian menghitung [sisaAfter] — sisi SEBALIKNYA (kurang bayar,
+  /// bukan lebih bayar) dgn formula simetris: `max(0, currentTotal -
+  /// (priorPaid + newPaymentAmount))`. Beda dari `changeGiven`, `sisaAfter`
+  /// TIDAK perlu dikurangi `priorChangeSum`/akumulasi baris sebelumnya —
+  /// murni gap titik-waktu "berapa yang masih kurang SAAT INI", bukan
+  /// kuantitas yang terakumulasi lintas baris (lihat dok
+  /// `TransactionPayments.sisaAfter`).
+  Future<({int changeGiven, int sisaAfter})> _computePaymentDelta({
     required String txId,
     required int newPaymentAmount,
     required int currentTotal,
@@ -2424,8 +2752,113 @@ class AppDatabase extends _$AppDatabase {
       priorPaid = tx?.paid ?? 0;
     }
     final aggregateChange = (priorPaid + newPaymentAmount) - currentTotal;
+    // `priorChangeSum` WAJIB ikut dikurangi utk sisaAfter juga (bukan cuma
+    // changeGiven) — kembalian lama yang dipakai ULANG sbg pembayaran baru
+    // (mis. tambah belanjaan) tercatat lagi di `priorPaid`/`newPaymentAmount`
+    // seolah uang baru, padahal net-nya bukan. Tanpa pengurangan ini,
+    // sisaAfter UNDERSTATED persis pola bug lama `netRemainingOwed` (lihat
+    // dok `_computePaymentDelta` & `receipt_sisa_tagihan_net_test.dart`).
     final thisChange = aggregateChange - priorChangeSum;
-    return thisChange > 0 ? thisChange : 0;
+    return (
+      changeGiven: thisChange > 0 ? thisChange : 0,
+      sisaAfter: thisChange < 0 ? -thisChange : 0,
+    );
+  }
+
+  /// Σ subtotal baris item nota [txId] APA ADANYA dari DB saat ini — dipakai
+  /// jalur retur/hapus item nota BELUM LUNAS untuk mengetahui total AKHIR
+  /// nota SEBELUM [_reconcileTransactionTotals] sempat menuliskannya ke
+  /// header `transactions`. Tidak bisa membaca `transactions.total` di titik
+  /// itu: nilainya masih total LAMA (pra-retur).
+  Future<int> _sumItemSubtotals(String txId) async {
+    final rows = await (select(transactionItems)
+          ..where((t) => t.transactionId.equals(txId)))
+        .get();
+    return rows.fold<int>(0, (s, i) => s + i.subtotal);
+  }
+
+  /// Kelebihan bayar yang jadi HAK PELANGGAN setelah nota BELUM LUNAS
+  /// diretur/itemnya dihapus sampai total akhirnya turun di bawah uang yang
+  /// sudah pernah disetor.
+  ///
+  /// Dicatat sbg `changeGiven` di baris pembayaran penanda (`amount: 0`) —
+  /// PERSIS mekanisme kembalian biasa, memakai [_computePaymentDelta]
+  /// yang sama. Konsekuensinya SELURUH UX kembalian yang sudah ada langsung
+  /// berlaku tanpa kode tampilan baru: baris "Kembalian" di struk (yang
+  /// membaca `changeGiven` pembayaran TERAKHIR), centang "kembalian sudah
+  /// diserahkan" per baris pembayaran (`changeTaken`), dan `netRemainingOwed`
+  /// (`total - paid + Σ changeGiven`) otomatis jadi 0 alih-alih negatif.
+  ///
+  /// Bug yang ditutup (dilaporkan user): sebelumnya kelebihan itu HANYA
+  /// mendarat di `transactions.changeAmount`, kolom yang TIDAK PERNAH
+  /// dirender di layar manapun (struk membaca `changeGiven`, bukan kolom
+  /// header itu) — jadi uang yang jadi hak pelanggan hilang tanpa jejak yang
+  /// bisa dilihat kasir.
+  ///
+  /// Sekalian mengembalikan `sisaAfter` — sisi sebaliknya, dipakai KHUSUS
+  /// nota tempo/kurang_bayar (retur/edit yang MENGURANGI total tapi masih
+  /// menyisakan hutang) — lihat dok [_computePaymentDelta].
+  Future<({int changeGiven, int sisaAfter})>
+      _paymentDeltaAfterUnpaidItemChange(String txId) =>
+          _sumItemSubtotals(txId).then((remainingTotal) =>
+              _computePaymentDelta(
+                txId: txId,
+                newPaymentAmount: 0,
+                currentTotal: remainingTotal,
+              ));
+
+  /// Nama produk & label satuan SAAT INI untuk [productUnitId] — dipakai
+  /// men-snapshot [TransactionAdjustmentLines.productName]/`unitName` supaya
+  /// rincian retur/edit lama tetap benar walau produk/satuan diubah/dihapus
+  /// belakangan (lihat dok tabel itu).
+  Future<({String productName, String unitName})> _productUnitLabel(
+      String productUnitId) async {
+    final u = await (select(productUnits)
+          ..where((t) => t.id.equals(productUnitId)))
+        .getSingleOrNull();
+    if (u == null) return (productName: '', unitName: '');
+    final p = await (select(products)..where((t) => t.id.equals(u.productId)))
+        .getSingleOrNull();
+    var unitName = '';
+    if (u.unitTypeId != null) {
+      final ut = await (select(unitTypes)
+            ..where((t) => t.id.equals(u.unitTypeId!)))
+          .getSingleOrNull();
+      unitName = ut?.name ?? '';
+    }
+    return (productName: p?.name ?? '', unitName: unitName);
+  }
+
+  /// Sisipkan satu baris rincian retur/edit — dipanggil dari 4 fungsi mutasi
+  /// item nota (lihat dok [TransactionAdjustmentLines]). [qty]/[priceAtSale]
+  /// bernilai POSITIF selalu (arah retur/tambah/kurang direpresentasikan
+  /// lewat konteks momen, bukan tanda qty) — kolom `subtotal` = `qty *
+  /// priceAtSale` (dibulatkan), dipakai UI menjumlah total momen.
+  Future<void> _insertAdjustmentLine({
+    required String paymentId,
+    required String txId,
+    required String productId,
+    required String productUnitId,
+    required double qty,
+    required int priceAtSale,
+    required DateTime now,
+  }) async {
+    if (qty <= 0) return;
+    final label = await _productUnitLabel(productUnitId);
+    await into(transactionAdjustmentLines)
+        .insert(TransactionAdjustmentLinesCompanion.insert(
+      id: const Uuid().v4(),
+      paymentId: paymentId,
+      transactionId: txId,
+      productId: productId,
+      productUnitId: productUnitId,
+      productName: label.productName,
+      unitName: label.unitName,
+      qty: qty,
+      priceAtSale: priceAtSale,
+      subtotal: (qty * priceAtSale).round(),
+      createdAt: Value(now),
+    ));
   }
 
   /// Hitung ulang `total` (Σ subtotal item) dan `paid` (Σ pembayaran) sebuah
@@ -2439,7 +2872,21 @@ class AppDatabase extends _$AppDatabase {
   ///            (transaksi legacy/tempo), pakai kolom header `paid` apa adanya.
   /// Keduanya hanya bergantung pada child rows yang menyebar via sync sebagai
   /// baris baru → hasil identik di semua perangkat & idempoten.
-  Future<void> _reconcileTransactionTotals(String txId) async {
+  /// [guardEmptyItems] — Item 61.2: kalau `true`, transaksi TANPA baris item
+  /// sama sekali TIDAK dianggap genuinely bertotal 0 — total LAMA
+  /// dipertahankan. Dipakai KHUSUS oleh path rekonsiliasi PASCA-SYNC
+  /// ([reconcileTransactionsByIds]), di mana item kosong bisa berarti item
+  /// susulan via sync di-skip permanen (mis. header parent-nya sempat
+  /// DITOLAK di antrian lama lalu di-reject, FK gagal saat item baru datang
+  /// belakangan, `mergeRows` skip baris itu diam-diam — lihat dok
+  /// error-swallow FK) — BUKAN genuinely nota kosong. Default `false`
+  /// (perilaku lama, tanpa guard) utk semua path mutasi LOKAL langsung (mis.
+  /// `returnUnpaidTransactionItems`/`editUnpaidTransactionItem` menghapus
+  /// SEMUA item nota dgn sengaja, dalam transaksi DB yang sama, item
+  /// kosong di situ SELALU genuine, guard di sini justru akan salah
+  /// mempertahankan total lama yang seharusnya jadi 0).
+  Future<void> _reconcileTransactionTotals(String txId,
+      {bool guardEmptyItems = false}) async {
     final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
         .getSingleOrNull();
     if (tx == null || tx.status == 'void') return;
@@ -2449,7 +2896,9 @@ class AppDatabase extends _$AppDatabase {
     final itemRows = await (select(transactionItems)
           ..where((t) => t.transactionId.equals(txId)))
         .get();
-    final newTotal = itemRows.fold<int>(0, (s, i) => s + i.subtotal);
+    final newTotal = (guardEmptyItems && itemRows.isEmpty)
+        ? tx.total
+        : itemRows.fold<int>(0, (s, i) => s + i.subtotal);
 
     final allPayRows = await (select(transactionPayments)
           ..where((t) => t.transactionId.equals(txId)))
@@ -2502,12 +2951,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Rekonsiliasi total/paid/status untuk sekumpulan id transaksi.
-  /// Id yang tidak ada di DB lokal dilewati dengan aman.
+  /// Id yang tidak ada di DB lokal dilewati dengan aman. HANYA dipakai path
+  /// pasca-sync (`LanSyncService.approveSync`/`syncToHost`) — `guardEmptyItems`
+  /// diaktifkan (Item 61.2), lihat dok `_reconcileTransactionTotals`.
   Future<void> reconcileTransactionsByIds(Set<String> ids) async {
     if (ids.isEmpty) return;
     await transaction(() async {
       for (final id in ids) {
-        await _reconcileTransactionTotals(id);
+        await _reconcileTransactionTotals(id, guardEmptyItems: true);
       }
     });
   }
@@ -2875,6 +3326,7 @@ class AppDatabase extends _$AppDatabase {
       }
       final now = DateTime.now();
       var anyReturned = false;
+      final paymentId = const Uuid().v4();
 
       for (final r in returns) {
         if (r.qty <= 0) continue;
@@ -2897,6 +3349,19 @@ class AppDatabase extends _$AppDatabase {
           now: now,
         );
 
+        // Rincian per-produk momen ini — WAJIB sebelum item aslinya
+        // dikurangi/dihapus di bawah (data ini tidak bisa direkonstruksi
+        // lagi setelahnya). Lihat dok `TransactionAdjustmentLines`.
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: retQty,
+          priceAtSale: item.priceAtSale,
+          now: now,
+        );
+
         final newQty = item.qty - retQty;
         if (newQty <= 0) {
           // Seluruh qty baris ini diretur → baris hilang dari nota, persis
@@ -2916,14 +3381,20 @@ class AppDatabase extends _$AppDatabase {
 
       // Jejak audit ringan di timeline pembayaran (amount 0 → tidak
       // memengaruhi jumlah dibayar, murni catatan "kapan ada retur").
+      // `changeGiven`/`sisaAfter` diisi sesuai apakah nilai retur melampaui
+      // sisa hutang atau masih menyisakan hutang — lihat dok
+      // [_paymentDeltaAfterUnpaidItemChange].
+      final delta = await _paymentDeltaAfterUnpaidItemChange(txId);
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
-        id: const Uuid().v4(),
+        id: paymentId,
         transactionId: txId,
         amount: 0,
         method: 'retur',
         paidAt: Value(now),
         kasirId: Value(kasirId),
+        changeGiven: Value(delta.changeGiven),
+        sisaAfter: Value(delta.sisaAfter),
         note: const Value('Retur barang (nota belum lunas)'),
       ));
 
@@ -3013,6 +3484,7 @@ class AppDatabase extends _$AppDatabase {
         );
       }
 
+      final newSubtotal = (newPrice * clampedQty).round();
       if (clampedQty <= 0) {
         await (delete(transactionItems)..where((t) => t.id.equals(item.id)))
             .go();
@@ -3021,20 +3493,56 @@ class AppDatabase extends _$AppDatabase {
             .write(TransactionItemsCompanion(
           qty: Value(clampedQty),
           priceAtSale: Value(newPrice),
-          subtotal: Value((newPrice * clampedQty).round()),
+          subtotal: Value(newSubtotal),
           itemNote: Value(newNote?.isEmpty ?? true ? null : newNote),
         ));
       }
 
+      final paymentId = const Uuid().v4();
+      // Rincian per-produk momen ini — HANYA kalau qty/harga sungguhan
+      // berubah (bukan cuma catatan). qtyForLine = qty yang berubah (delta
+      // absolut), jatuh ke qty final kalau delta 0 tapi harga berubah
+      // (dianggap "harga seluruh baris berubah"). subtotalForLine = nilai
+      // Rupiah delta-nya (SELALU eksak); priceForLine diturunkan dari situ
+      // supaya qty*harga tetap ≈ subtotal — pendekatan ini bisa sedikit
+      // approksimasi kalau qty & harga SAMA-SAMA berubah dalam satu edit
+      // (kasus jarang), tapi totalnya (yang dipakai header "Rp x" di kartu
+      // Riwayat Pembayaran) tetap eksak.
+      final qtyDeltaAbs = qtyDelta.abs();
+      if (qtyDeltaAbs > 0 || newPrice != item.priceAtSale) {
+        final qtyForLine = qtyDeltaAbs > 0 ? qtyDeltaAbs : clampedQty;
+        final subtotalForLine = (item.subtotal - newSubtotal).abs();
+        final priceForLine =
+            qtyForLine > 0 ? (subtotalForLine / qtyForLine).round() : newPrice;
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: qtyForLine,
+          priceAtSale: priceForLine,
+          now: now,
+        );
+      }
+
       // Jejak audit ringan (amount 0 → tidak memengaruhi dibayar).
+      // `changeGiven`/`sisaAfter` diisi sesuai apakah item dihapus/
+      // diturunkan sampai total nota jatuh di bawah/di atas uang yang
+      // sudah disetor — lihat dok [_paymentDeltaAfterUnpaidItemChange].
+      // Jalur ini kena pola yang SAMA dgn retur (bug dilaporkan user
+      // menyoal retur, tapi hapus/edit item menghasilkan kelebihan bayar
+      // yang identik).
+      final delta = await _paymentDeltaAfterUnpaidItemChange(txId);
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
-        id: const Uuid().v4(),
+        id: paymentId,
         transactionId: txId,
         amount: 0,
         method: 'edit',
         paidAt: Value(now),
         kasirId: Value(kasirId),
+        changeGiven: Value(delta.changeGiven),
+        sisaAfter: Value(delta.sisaAfter),
         note: Value(clampedQty <= 0
             ? 'Item dihapus (nota belum lunas)'
             : 'Item diubah (nota belum lunas)'),
@@ -3105,6 +3613,7 @@ class AppDatabase extends _$AppDatabase {
       final alreadyReturned = await getReturnedQtyInTx(txId);
       var refundTotal = 0;
       var anyReturned = false;
+      final paymentId = const Uuid().v4();
 
       for (final r in returns) {
         if (r.qty <= 0) continue;
@@ -3160,6 +3669,19 @@ class AppDatabase extends _$AppDatabase {
           note: 'Retur (nota lunas)',
           now: now,
         );
+
+        // Rincian per-produk momen ini — nilai EKSAK (retQty/priceAtSale/
+        // subtotal), tidak perlu pendekatan spt jalur edit (baris retur di
+        // atas TIDAK mengubah data lama in-place, jadi nilainya sudah pasti).
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: retQty,
+          priceAtSale: item.priceAtSale,
+          now: now,
+        );
       }
       if (!anyReturned) return;
 
@@ -3167,7 +3689,7 @@ class AppDatabase extends _$AppDatabase {
       // belum-lunas, method dipilih user (tunai/transfer/dst).
       await into(transactionPayments)
           .insert(TransactionPaymentsCompanion.insert(
-        id: const Uuid().v4(),
+        id: paymentId,
         transactionId: txId,
         amount: -refundTotal,
         method: refundMethod,
@@ -3278,11 +3800,30 @@ class AppDatabase extends _$AppDatabase {
       // Refund SUNGGUHAN (beda dari marker Rp0 nota belum-lunas — di sini
       // uangnya memang sudah masuk sebelumnya) — cuma kalau NILAINYA
       // beneran turun (delta > 0). Edit yang cuma ubah catatan (delta == 0)
-      // tidak butuh refund sama sekali.
+      // tidak butuh refund sama sekali — dan tanpa refund, tidak ada baris
+      // pembayaran utk ditautkan rincian per-produknya, jadi juga dilewati.
       if (delta > 0) {
+        final paymentId = const Uuid().v4();
+        // qtyForLine: qty yang berkurang, fallback ke qty final kalau qty
+        // tidak berubah (delta murni dari penurunan harga) — pola sama dgn
+        // editUnpaidTransactionItem, tapi subtotalForLine di sini EKSAK
+        // (langsung `delta`, bukan diturunkan dari selisih).
+        final qtyDeltaAbs = qtyDelta.abs();
+        final qtyForLine = qtyDeltaAbs > 0 ? qtyDeltaAbs : clampedQty;
+        final priceForLine =
+            qtyForLine > 0 ? (delta / qtyForLine).round() : newPrice;
+        await _insertAdjustmentLine(
+          paymentId: paymentId,
+          txId: txId,
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          qty: qtyForLine,
+          priceAtSale: priceForLine,
+          now: now,
+        );
         await into(transactionPayments)
             .insert(TransactionPaymentsCompanion.insert(
-          id: const Uuid().v4(),
+          id: paymentId,
           transactionId: txId,
           amount: -delta,
           method: refundMethod,
@@ -3304,15 +3845,27 @@ class AppDatabase extends _$AppDatabase {
   /// Buku hutang: pelanggan dengan nota belum lunas, diurut dari yang paling
   /// lama menunggak (nota tertua yang belum lunas). Diturunkan dari tabel
   /// transactions (lebih akurat dari kolom cache `customers.outstandingDebt`).
+  ///
+  /// Item 56 — `total - paid` MENTAH salah: `paid` SENGAJA boleh melebihi
+  /// `total` (kembalian dipakai ulang, lihat dok `netRemainingOwed` di
+  /// `receipt_screen.dart`). `SUM(total-paid)` per pelanggan bisa jadi
+  /// NEGATIF kalau ada nota LAIN milik pelanggan yang sama yang overpay
+  /// begitu — menutupi nota tempo asli, `HAVING debt > 0` gagal, SELURUH
+  /// pelanggan hilang dari Buku Hutang walau tiap nota individual
+  /// `status`-nya tetap benar. Fix: net dari `change_given` (LEFT JOIN
+  /// subquery per transaksi), pola SQL sepadan `netRemainingOwed`.
   Future<List<DebtBookEntry>> getDebtBook() async {
     final rows = await customSelect(
       'SELECT c.id AS cid, c.name AS name, c.phone AS phone, '
-      'SUM(t.total - t.paid) AS debt, MIN(t.created_at) AS oldest, '
-      'COUNT(*) AS cnt '
+      'SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0)) AS debt, '
+      'MIN(t.created_at) AS oldest, COUNT(*) AS cnt '
       'FROM transactions t JOIN customers c ON c.id = t.customer_id '
+      'LEFT JOIN (SELECT transaction_id, SUM(change_given) AS total_cg '
+      '  FROM transaction_payments WHERE NOT voided GROUP BY transaction_id) cg '
+      '  ON cg.transaction_id = t.id '
       "WHERE t.status IN ('kurang_bayar', 'tempo') "
       'GROUP BY c.id HAVING debt > 0 ORDER BY oldest ASC',
-      readsFrom: {transactions, customers},
+      readsFrom: {transactions, customers, transactionPayments},
     ).get();
     return rows.map((r) {
       final oldest = r.data['oldest'] as int;
@@ -3342,6 +3895,9 @@ class AppDatabase extends _$AppDatabase {
   /// Nota belum lunas milik pelanggan, LENGKAP (nomor, tanggal, sisa),
   /// terlama dulu — dipakai Buku Hutang untuk menampilkan daftar nota
   /// individual (Item baru: "lihat nota mana saja yang belum lunas").
+  ///
+  /// Item 56 — `sisa` net dari `change_given` (pola sama `netRemainingOwed`
+  /// di `receipt_screen.dart`), bukan `total - paid` mentah.
   Future<List<UnpaidTxEntry>> getUnpaidTxDetails(String customerId) async {
     final rows = await (select(transactions)
           ..where((t) =>
@@ -3349,28 +3905,80 @@ class AppDatabase extends _$AppDatabase {
               t.status.isIn(['kurang_bayar', 'tempo']))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
-    return rows
-        .map((t) => UnpaidTxEntry(
-              id: t.id,
-              localId: t.localId,
-              createdAt: t.createdAt,
-              sisa: t.total - t.paid,
-            ))
-        .toList();
+    final paymentsByTx = await getPaymentsForTxs(rows.map((t) => t.id).toList());
+    return rows.map((t) {
+      final sumChangeGiven = (paymentsByTx[t.id] ?? const [])
+          .where((p) => !p.voided)
+          .fold<int>(0, (s, p) => s + p.changeGiven);
+      final sisa = t.total - t.paid + sumChangeGiven;
+      return UnpaidTxEntry(
+        id: t.id,
+        localId: t.localId,
+        createdAt: t.createdAt,
+        sisa: sisa > 0 ? sisa : 0,
+      );
+    }).toList();
   }
 
   /// Total hutang akumulatif pelanggan + jumlah nota yang belum lunas.
+  ///
+  /// Item 56 — net dari `change_given`, pola sama [getDebtBook]/
+  /// `netRemainingOwed`, walau `debtCount` (gerbang tampil cart bar) tidak
+  /// kena bug lama krn `COUNT(*)`, bukan `SUM`.
   Future<(int debtTotal, int debtCount)> getCustomerOutstandingDebt(
       String customerId) async {
     final row = await customSelect(
-      'SELECT COALESCE(SUM(total - paid), 0) AS total, COUNT(*) AS cnt '
-      "FROM transactions WHERE customer_id = ? AND status IN ('kurang_bayar', 'tempo')",
+      'SELECT COALESCE(SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0)), 0) '
+      '  AS total, COUNT(*) AS cnt '
+      'FROM transactions t '
+      'LEFT JOIN (SELECT transaction_id, SUM(change_given) AS total_cg '
+      '  FROM transaction_payments WHERE NOT voided GROUP BY transaction_id) cg '
+      '  ON cg.transaction_id = t.id '
+      "WHERE t.customer_id = ? AND t.status IN ('kurang_bayar', 'tempo')",
       variables: [Variable.withString(customerId)],
-      readsFrom: {transactions},
+      readsFrom: {transactions, transactionPayments},
     ).getSingleOrNull();
     final total = (row?.data['total'] as int?) ?? 0;
     final cnt = (row?.data['cnt'] as int?) ?? 0;
     return (total, cnt);
+  }
+
+  /// Sisa tagihan NET per transaksi (dikurangi kembalian yang sudah
+  /// diberikan/dipakai ulang) — pola SQL sama persis [getDebtBook]/
+  /// [getCustomerOutstandingDebt], batched (hindari N+1) supaya aman dipakai
+  /// utk daftar (Riwayat Transaksi) yang bisa berisi puluhan/ratusan baris
+  /// hutang sekaligus.
+  ///
+  /// Bug dilaporkan user: layar Riwayat Transaksi (`tx_history_sheet.dart`)
+  /// menampilkan "Sisa" dari `tx.total - tx.paid` MENTAH — beda dari struk
+  /// (`receipt_screen.dart`'s `netRemainingOwed`) yang sudah benar net dari
+  /// `change_given`. Kalau kembalian dari pembayaran sebelumnya dipakai ulang
+  /// sbg pembayaran baru (`paid` naik lagi tanpa pernah dikurangi saat keluar
+  /// sbg kembalian), raw `total-paid` bisa NEGATIF padahal net-nya masih
+  /// positif (nota masih ada sisa) — sama akar dgn Item 56 (Buku Hutang),
+  /// beda lokasi (Buku Hutang sudah dibenerin, Riwayat Transaksi belum).
+  Future<Map<String, int>> getNetSisaForTxIds(Iterable<String> txIds) async {
+    final ids = txIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT t.id AS id, '
+      '  (t.total - t.paid + COALESCE(cg.total_cg, 0)) AS sisa '
+      'FROM transactions t '
+      'LEFT JOIN (SELECT transaction_id, SUM(change_given) AS total_cg '
+      '  FROM transaction_payments WHERE NOT voided GROUP BY transaction_id) cg '
+      '  ON cg.transaction_id = t.id '
+      'WHERE t.id IN ($placeholders)',
+      variables: [for (final id in ids) Variable.withString(id)],
+      readsFrom: {transactions, transactionPayments},
+    ).get();
+    return {
+      for (final r in rows)
+        r.data['id'] as String: () {
+          final raw = ((r.data['sisa'] as num?) ?? 0).toInt();
+          return raw > 0 ? raw : 0;
+        }(),
+    };
   }
 
   // ───────────────────────── Pembayaran (buku pembayaran) ─────────────────────────
@@ -3382,6 +3990,23 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.transactionId.equals(txId))
             ..orderBy([(t) => OrderingTerm.asc(t.paidAt)]))
           .get();
+
+  /// Rincian per-produk retur/edit satu nota, dikelompokkan per `paymentId`
+  /// (satu momen retur/edit bisa punya beberapa produk) — dipakai kartu
+  /// "Riwayat Pembayaran" in-app utk menampilkan baris produk di bawah
+  /// momen retur/edit terkait. Lihat dok `TransactionAdjustmentLines`.
+  Future<Map<String, List<TransactionAdjustmentLine>>>
+      getAdjustmentLinesForTx(String txId) async {
+    final rows = await (select(transactionAdjustmentLines)
+          ..where((t) => t.transactionId.equals(txId))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    final out = <String, List<TransactionAdjustmentLine>>{};
+    for (final r in rows) {
+      (out[r.paymentId] ??= []).add(r);
+    }
+    return out;
+  }
 
   /// Riwayat pembayaran untuk beberapa transaksi (gabung nota), dikelompokkan
   /// per transactionId, masing-masing urut waktu.
@@ -3424,7 +4049,7 @@ class AppDatabase extends _$AppDatabase {
       final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
           .getSingleOrNull();
       if (tx == null || tx.status == 'void') return 0;
-      final changeGiven = await _computePaymentChangeGiven(
+      final delta = await _computePaymentDelta(
         txId: txId,
         newPaymentAmount: amount,
         currentTotal: tx.total,
@@ -3438,7 +4063,8 @@ class AppDatabase extends _$AppDatabase {
         paidAt: Value(ts),
         kasirId: Value(kasirId),
         note: Value(note),
-        changeGiven: Value(changeGiven),
+        changeGiven: Value(delta.changeGiven),
+        sisaAfter: Value(delta.sisaAfter),
       ));
       // Status dari `paid` dikurangi TOTAL kembalian yang pernah diberikan
       // (termasuk baris ini) — sama alasannya seperti di
@@ -3462,7 +4088,7 @@ class AppDatabase extends _$AppDatabase {
           changeAmount: Value(change),
         ),
       );
-      return changeGiven;
+      return delta.changeGiven;
     });
   }
 
@@ -3518,28 +4144,37 @@ class AppDatabase extends _$AppDatabase {
     ));
   }
 
+  /// Item 61.5 — soft-delete (UPDATE `deleted_at`, bukan hard DELETE):
+  /// `expenses` sync-nya append-only (cuma kirim baris BARU) — hard DELETE
+  /// TIDAK PERNAH propagate ke device lain yang sudah menerima baris itu,
+  /// laba bersih antar-device beda permanen. UPDATE ini ikut ter-sync sbg
+  /// baris "diupdate" (lihat dok `dumpSince`/`mergeRows` bagian `expenses`).
   Future<void> deleteExpense(String id) =>
-      (delete(expenses)..where((t) => t.id.equals(id))).go();
+      (update(expenses)..where((t) => t.id.equals(id)))
+          .write(ExpensesCompanion(deletedAt: Value(DateTime.now())));
 
-  /// Semua pengeluaran dalam rentang [from]..[to], terbaru dulu.
+  /// Semua pengeluaran dalam rentang [from]..[to], terbaru dulu. Yang
+  /// soft-deleted (Item 61.5) tidak ikut tampil.
   Stream<List<Expense>> watchExpenses(DateTime from, DateTime to) {
     return (select(expenses)
           ..where((t) =>
               t.createdAt.isBiggerOrEqualValue(from) &
-              t.createdAt.isSmallerOrEqualValue(to))
+              t.createdAt.isSmallerOrEqualValue(to) &
+              t.deletedAt.isNull())
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }
 
   /// Total pengeluaran yang mengurangi Laba Bersih (daily_expense +
-  /// change_given) dalam rentang.
+  /// change_given) dalam rentang. Yang soft-deleted dikecualikan.
   Future<int> getNetProfitExpenseTotal(DateTime from, DateTime to) async {
     final amountSum = expenses.amount.sum();
     final row = await (selectOnly(expenses)
           ..addColumns([amountSum])
           ..where(expenses.type.isIn(netProfitExpenseTypes) &
               expenses.createdAt.isBiggerOrEqualValue(from) &
-              expenses.createdAt.isSmallerOrEqualValue(to)))
+              expenses.createdAt.isSmallerOrEqualValue(to) &
+              expenses.deletedAt.isNull()))
         .getSingle();
     return row.read(amountSum) ?? 0;
   }
@@ -3549,14 +4184,15 @@ class AppDatabase extends _$AppDatabase {
   /// owner_withdrawal/supplier_payment/change_given) — beda dari
   /// [getNetProfitExpenseTotal] yang cuma hitung subset [netProfitExpenseTypes]
   /// yang mengurangi Laba Bersih. Tab ini murni "ke mana saja uang mengalir",
-  /// bukan P&L.
+  /// bukan P&L. Yang soft-deleted dikecualikan.
   Future<Map<String, int>> getExpenseBreakdownByType(
       DateTime from, DateTime to) async {
     final amountSum = expenses.amount.sum();
     final rows = await (selectOnly(expenses)
           ..addColumns([expenses.type, amountSum])
           ..where(expenses.createdAt.isBiggerOrEqualValue(from) &
-              expenses.createdAt.isSmallerOrEqualValue(to))
+              expenses.createdAt.isSmallerOrEqualValue(to) &
+              expenses.deletedAt.isNull())
           ..groupBy([expenses.type]))
         .get();
     return {
@@ -3566,7 +4202,8 @@ class AppDatabase extends _$AppDatabase {
 
   /// Item 49d — total pengeluaran (SEMUA jenis digabung) per HARI (lokal)
   /// dalam rentang, utk grafik tren tab Laporan Pengeluaran. Pola query sama
-  /// dgn `rebuildStaleSummariesInRange` (strftime unixepoch→localtime).
+  /// dgn `rebuildStaleSummariesInRange` (strftime unixepoch→localtime). Yang
+  /// soft-deleted dikecualikan.
   Future<Map<DateTime, int>> getExpenseDailyTotals(
       DateTime from, DateTime to) async {
     final fromSec = from.millisecondsSinceEpoch ~/ 1000;
@@ -3574,7 +4211,8 @@ class AppDatabase extends _$AppDatabase {
     final rows = await customSelect(
       "SELECT strftime('%Y-%m-%d', datetime(created_at,'unixepoch','localtime')) AS d, "
       'COALESCE(SUM(amount),0) AS total '
-      'FROM expenses WHERE created_at >= ? AND created_at <= ? GROUP BY d',
+      'FROM expenses WHERE created_at >= ? AND created_at <= ? '
+      'AND deleted_at IS NULL GROUP BY d',
       variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
       readsFrom: {expenses},
     ).get();
@@ -3609,6 +4247,11 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.id.isIn(txIds))
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .get();
+      // Item 56 — `sisa` net dari `change_given` (pola `netRemainingOwed`),
+      // bukan `total - paid` mentah: nota di batch ini bisa saja sudah
+      // pernah overpay sebagian (kembalian dipakai ulang), jadi `paid`
+      // mentahnya BUKAN sisa hutang yang sebenarnya.
+      final paymentsByTx = await getPaymentsForTxs(txIds);
       final now = DateTime.now();
       final label = txs.map((t) => t.localId).join(', ');
       var remaining = amount;
@@ -3620,7 +4263,10 @@ class AppDatabase extends _$AppDatabase {
       String? lastPaymentId;
       for (final tx in txs) {
         if (remaining <= 0) break;
-        final sisa = tx.total - tx.paid;
+        final sumChangeGiven = (paymentsByTx[tx.id] ?? const [])
+            .where((p) => !p.voided)
+            .fold<int>(0, (s, p) => s + p.changeGiven);
+        final sisa = tx.total - tx.paid + sumChangeGiven;
         if (sisa <= 0) continue; // sudah lunas → lewati
         final applied = remaining < sisa ? remaining : sisa;
         final paymentId = const Uuid().v4();
@@ -3633,14 +4279,22 @@ class AppDatabase extends _$AppDatabase {
             paidAt: Value(now),
             kasirId: Value(kasirId),
             note: Value('Gabung: $label'),
+            // Nota INI blm tentu lunas total dari pelunasan gabungan
+            // (uangnya bisa habis dialokasikan ke nota lebih lama duluan,
+            // FIFO) — sisa yang masih menggantung utk nota ini dicatat
+            // eksak di sini (bukan lewat `_computePaymentDelta`, `sisa`
+            // sudah dihitung tepat di atas).
+            sisaAfter: Value(sisa - applied),
           ),
         );
         lastPaymentId = paymentId;
         final newPaid = tx.paid + applied;
+        final netPaidForStatus = newPaid - sumChangeGiven;
         await (update(transactions)..where((t) => t.id.equals(tx.id))).write(
           TransactionsCompanion(
             paid: Value(newPaid),
-            status: Value(newPaid >= tx.total ? 'lunas' : 'kurang_bayar'),
+            status:
+                Value(netPaidForStatus >= tx.total ? 'lunas' : 'kurang_bayar'),
           ),
         );
         remaining -= applied;
@@ -3662,7 +4316,8 @@ class AppDatabase extends _$AppDatabase {
   /// `paid > 0` sengaja mengecualikan retur (paid negatif) dan tempo (paid 0).
   Future<void> backfillMissingPayments() async {
     final rows = await customSelect(
-      'SELECT t.id AS id, t.paid AS paid, t.payment_method AS method, '
+      'SELECT t.id AS id, t.paid AS paid, t.total AS total, '
+      't.payment_method AS method, '
       't.kasir_id AS kasir, t.created_at AS created, '
       't.change_amount AS change_amount, t.change_taken AS change_taken '
       'FROM transactions t '
@@ -3678,12 +4333,14 @@ class AppDatabase extends _$AppDatabase {
         final paidAt = created is int
             ? DateTime.fromMillisecondsSinceEpoch(created * 1000)
             : DateTime.now();
+        final paid = r.data['paid'] as int;
+        final total = (r.data['total'] as int?) ?? paid;
         b.insert(
           transactionPayments,
           TransactionPaymentsCompanion.insert(
             id: const Uuid().v4(),
             transactionId: r.data['id'] as String,
-            amount: r.data['paid'] as int,
+            amount: paid,
             method: (r.data['method'] as String?) ?? 'tunai',
             paidAt: Value(paidAt),
             kasirId: Value(r.data['kasir'] as String?),
@@ -3694,6 +4351,7 @@ class AppDatabase extends _$AppDatabase {
             // mendadak kosong untuk nota yang sudah ada sebelum migrasi ini.
             changeGiven: Value((r.data['change_amount'] as int?) ?? 0),
             changeTaken: Value((r.data['change_taken'] as int?) == 1),
+            sisaAfter: Value(total > paid ? total - paid : 0),
           ),
         );
       }
@@ -4022,6 +4680,298 @@ class AppDatabase extends _$AppDatabase {
     }).toList();
   }
 
+  // ───────────────────────── Arus Kas ─────────────────────────
+  //
+  // BEDA MENDASAR dari "Selisih Kas Operasional" di tab Ringkasan (Omzet -
+  // Pengeluaran), yang bukan arus kas sungguhan karena:
+  //   (a) Omzet memuat nota TEMPO yang belum dibayar sepeser pun, dan
+  //   (b) pelunasan hutang nota lama TIDAK terhitung sbg kas masuk di
+  //       periode uangnya benar-benar diterima (omzetnya sudah tercatat di
+  //       periode nota dibuat).
+  // Query di bawah memakai `transaction_payments` (kapan uang BENAR-BENAR
+  // berpindah) sbg sumber kas masuk, bukan `transactions` — sehingga kedua
+  // masalah di atas hilang sekaligus, dan cicilan/pelunasan susulan
+  // otomatis jatuh di tanggal yang benar.
+
+  /// Kas MASUK per metode bayar dalam rentang (berdasar `paid_at`).
+  ///
+  /// NET dari `change_given`: uang yang diserahkan balik ke pembeli
+  /// (kembalian, termasuk kelebihan bayar akibat retur nota belum lunas)
+  /// tidak pernah benar-benar mengendap di laci. Baris pembayaran yang
+  /// DIBATALKAN (`voided`) dilewati, dan refund retur nota lunas otomatis
+  /// ikut terhitung karena `amount`-nya memang NEGATIF.
+  Future<Map<String, int>> getCashInByMethod(DateTime from, DateTime to) async {
+    final rows = await customSelect(
+      'SELECT method, COALESCE(SUM(amount),0) AS amt, '
+      '  COALESCE(SUM(change_given),0) AS chg '
+      'FROM transaction_payments '
+      'WHERE NOT voided AND paid_at >= ? AND paid_at <= ? '
+      'GROUP BY method',
+      variables: [
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionPayments},
+    ).get();
+    final out = <String, int>{};
+    for (final r in rows) {
+      final net = (r.data['amt'] as num).toInt() - (r.data['chg'] as num).toInt();
+      if (net == 0) continue;
+      out[r.data['method'] as String] = net;
+    }
+    return out;
+  }
+
+  /// Tren harian arus kas: kas masuk & kas keluar per tanggal LOKAL.
+  /// Dua query terpisah (pembayaran & pengeluaran) digabung di Dart —
+  /// UNION di SQL akan menyulitkan pembacaan tanpa keuntungan berarti pada
+  /// ukuran data app ini.
+  Future<List<CashFlowDaily>> getCashFlowDaily(
+      DateTime from, DateTime to) async {
+    final fromSec = from.millisecondsSinceEpoch ~/ 1000;
+    final toSec = to.millisecondsSinceEpoch ~/ 1000;
+    final inRows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(paid_at,'unixepoch','localtime')) AS d, "
+      '  COALESCE(SUM(amount),0) - COALESCE(SUM(change_given),0) AS net '
+      'FROM transaction_payments '
+      'WHERE NOT voided AND paid_at >= ? AND paid_at <= ? GROUP BY d',
+      variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
+      readsFrom: {transactionPayments},
+    ).get();
+    final outRows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(created_at,'unixepoch','localtime')) AS d, "
+      '  COALESCE(SUM(amount),0) AS total '
+      'FROM expenses WHERE created_at >= ? AND created_at <= ? '
+      'AND deleted_at IS NULL GROUP BY d',
+      variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
+      readsFrom: {expenses},
+    ).get();
+
+    DateTime parse(String s) {
+      final p = s.split('-').map(int.parse).toList();
+      return DateTime(p[0], p[1], p[2]);
+    }
+
+    final cashIn = <DateTime, int>{
+      for (final r in inRows) parse(r.data['d'] as String): (r.data['net'] as num).toInt(),
+    };
+    final cashOut = <DateTime, int>{
+      for (final r in outRows)
+        parse(r.data['d'] as String): (r.data['total'] as num).toInt(),
+    };
+    final days = {...cashIn.keys, ...cashOut.keys}.toList()..sort();
+    return [
+      for (final d in days)
+        (date: d, cashIn: cashIn[d] ?? 0, cashOut: cashOut[d] ?? 0),
+    ];
+  }
+
+  /// Ringkasan arus kas satu rentang: kas masuk (dipecah tunai vs non-tunai)
+  /// dan kas keluar (dari `expenses`, semua jenis — ini "ke mana uang
+  /// mengalir", bukan P&L, jadi TIDAK memakai [netProfitExpenseTypes]).
+  Future<CashFlowSummary> getCashFlowSummary(
+      DateTime from, DateTime to) async {
+    final byMethod = await getCashInByMethod(from, to);
+    // 'tempo' = penanda nota berhutang, BUKAN uang yang berpindah. Kalau
+    // pun muncul sbg method di baris pembayaran, nilainya tidak boleh
+    // dianggap kas masuk.
+    var cash = 0;
+    var nonCash = 0;
+    byMethod.forEach((method, net) {
+      if (method == 'tempo') return;
+      if (method == 'tunai') {
+        cash += net;
+      } else {
+        nonCash += net;
+      }
+    });
+    final outByType = await getExpenseBreakdownByType(from, to);
+    final totalOut = outByType.values.fold<int>(0, (s, v) => s + v);
+    return (
+      cashIn: cash,
+      nonCashIn: nonCash,
+      cashOut: totalOut,
+      outByType: outByType,
+      inByMethod: byMethod,
+    );
+  }
+
+  // ─────────── Statistik detail per produk / per pelanggan (drill-down) ───────────
+  //
+  // Permintaan user: tab Produk & Pelanggan di Laporan sebelumnya BUNTU
+  // (barisnya tidak bisa diketuk). Query di bawah menyuplai layar detail
+  // yang bisa dibuka dari sana + dari layar pelanggan. Semua menerima
+  // rentang tanggal & memfilter `status != 'void'` — konsisten dgn
+  // [getTopProductsByRevenue]/[getTopCustomersByRevenue] yang jadi
+  // pintu masuknya, supaya angka ringkas & detail tidak pernah berbeda.
+
+  /// Ringkasan satu produk dalam rentang: qty terjual, omzet, HPP, dan
+  /// jumlah NOTA yang memuatnya (bukan jumlah baris — satu nota bisa punya
+  /// beberapa baris produk yang sama dgn satuan berbeda).
+  Future<ProductStatsSummary> getProductStatsSummary(
+      String productId, DateTime from, DateTime to) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(ti.qty),0) AS qty, '
+      '  COALESCE(SUM(ti.subtotal),0) AS revenue, '
+      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs, '
+      '  COUNT(DISTINCT ti.transaction_id) AS tx_count '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      "WHERE ti.product_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ?',
+      variables: [
+        Variable.withString(productId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions},
+    ).getSingle();
+    return (
+      qtySold: (row.data['qty'] as num).toDouble(),
+      revenue: (row.data['revenue'] as num).toInt(),
+      cogs: (row.data['cogs'] as num).round(),
+      txCount: (row.data['tx_count'] as num).toInt(),
+    );
+  }
+
+  /// Tren harian satu produk (qty & omzet per tanggal LOKAL) — pola strftime
+  /// sama [getExpenseDailyTotals].
+  Future<List<ProductDailySales>> getProductDailySales(
+      String productId, DateTime from, DateTime to) async {
+    final rows = await customSelect(
+      "SELECT strftime('%Y-%m-%d', datetime(t.created_at,'unixepoch','localtime')) AS d, "
+      '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      "WHERE ti.product_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ? '
+      'GROUP BY d ORDER BY d',
+      variables: [
+        Variable.withString(productId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions},
+    ).get();
+    return rows.map((r) {
+      final p = (r.data['d'] as String).split('-').map(int.parse).toList();
+      return (
+        date: DateTime(p[0], p[1], p[2]),
+        qty: (r.data['qty'] as num).toDouble(),
+        revenue: (r.data['revenue'] as num).toInt(),
+      );
+    }).toList();
+  }
+
+  /// Pembeli teratas satu produk. HANYA pelanggan TERDAFTAR (`customer_id`
+  /// tidak null) — keputusan user: pembeli umum/ad-hoc diabaikan, karena
+  /// nota begitu cuma menyimpan nama bebas yang tidak bisa dijamin merujuk
+  /// orang yang sama.
+  Future<List<ProductBuyerStat>> getProductTopBuyers(
+      String productId, DateTime from, DateTime to,
+      {int limit = 20}) async {
+    final rows = await customSelect(
+      'SELECT c.id AS cid, c.name AS cname, '
+      '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN customers c ON c.id = t.customer_id '
+      "WHERE ti.product_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ? '
+      'GROUP BY c.id ORDER BY revenue DESC LIMIT $limit',
+      variables: [
+        Variable.withString(productId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions, customers},
+    ).get();
+    return rows
+        .map((r) => (
+              customerId: r.data['cid'] as String,
+              name: r.data['cname'] as String,
+              qty: (r.data['qty'] as num).toDouble(),
+              revenue: (r.data['revenue'] as num).toInt(),
+            ))
+        .toList();
+  }
+
+  /// Ringkasan belanja satu pelanggan dalam rentang. `totalSpent` dari
+  /// `transactions.total` (nilai nota), BUKAN `paid` — nota tempo yang belum
+  /// dibayar TETAP dihitung sbg belanja, konsisten dgn
+  /// [getTopCustomersByRevenue] yang jadi pintu masuknya.
+  Future<CustomerStatsSummary> getCustomerStatsSummary(
+      String customerId, DateTime from, DateTime to) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(t.total),0) AS spent, COUNT(*) AS tx_count, '
+      '  COALESCE(SUM((SELECT COALESCE(SUM(ti.qty),0) FROM transaction_items ti '
+      '     WHERE ti.transaction_id = t.id)),0) AS item_qty '
+      "FROM transactions t WHERE t.customer_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ?',
+      variables: [
+        Variable.withString(customerId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactions, transactionItems},
+    ).getSingle();
+    final txCount = (row.data['tx_count'] as num).toInt();
+    final spent = (row.data['spent'] as num).toInt();
+    return (
+      totalSpent: spent,
+      txCount: txCount,
+      itemQty: (row.data['item_qty'] as num).toDouble(),
+      avgPerTx: txCount == 0 ? 0 : (spent / txCount).round(),
+    );
+  }
+
+  /// Produk yang paling sering/banyak dibeli satu pelanggan dalam rentang.
+  Future<List<ProductRevenueStat>> getCustomerTopProducts(
+      String customerId, DateTime from, DateTime to,
+      {int limit = 20}) async {
+    final rows = await customSelect(
+      'SELECT p.id AS pid, p.name AS pname, '
+      '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue, '
+      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN products p ON p.id = ti.product_id '
+      "WHERE t.customer_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ? '
+      'GROUP BY p.id ORDER BY revenue DESC LIMIT $limit',
+      variables: [
+        Variable.withString(customerId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions, products},
+    ).get();
+    return rows
+        .map((r) => ProductRevenueStat(
+              productId: r.data['pid'] as String,
+              name: r.data['pname'] as String,
+              revenue: (r.data['revenue'] as num).toInt(),
+              qtySold: (r.data['qty'] as num).toDouble(),
+              cogs: (r.data['cogs'] as num).round(),
+            ))
+        .toList();
+  }
+
+  /// Daftar nota satu pelanggan dalam rentang (terbaru dulu) — dipakai
+  /// layar statistik pelanggan supaya bisa langsung dibuka ke struknya.
+  Future<List<Transaction>> getCustomerTransactions(
+      String customerId, DateTime from, DateTime to,
+      {int limit = 200}) =>
+      (select(transactions)
+            ..where((t) =>
+                t.customerId.equals(customerId) &
+                t.status.isNotValue('void') &
+                t.createdAt.isBiggerOrEqualValue(from) &
+                t.createdAt.isSmallerOrEqualValue(to))
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+            ..limit(limit))
+          .get();
+
   /// Total ringkas laporan (revenue, COGS, jumlah transaksi) dalam rentang —
   /// query agregat satu-baris, tidak memuat seluruh transaksi/item ke memori
   /// (mencegah Out of Memory saat ekspor periode besar).
@@ -4194,6 +5144,20 @@ class AppDatabase extends _$AppDatabase {
   /// menimpa antrian satu sama lain sebelum owner sempat approve. Kunci
   /// slot sekarang preferensi [deviceCode] (dikirim klien via
   /// `syncToHost`), fallback ke [fromIp] kalau klien lama belum kirim itu.
+  ///
+  /// Susulan (bug KRITIS lain, dilaporkan lewat audit sesi ini): DELETE+
+  /// INSERT ini SENGAJA masih menimpa isi slot lama, TAPI [tablesJson] yang
+  /// dioper ke sini WAJIB SUDAH di-gabung (union) oleh pemanggil
+  /// (`LanSyncService._handleRequest`, lihat `_unionSyncTables`) dgn isi
+  /// slot lama kalau ada — BUKAN payload delta mentah dari klien. Dulu
+  /// asumsinya "payload klien per-sync selalu superset dari watermark
+  /// upload klien" — TERBUKTI SALAH sejak watermark upload dimajukan
+  /// begitu HTTP 200 diterima (Item 17 Fase 2), BUKAN setelah owner
+  /// approve: sync kedua yang menyusul cepat (kebiasaan umum kasir tap
+  /// sync 2x, atau sync otomatis) cuma bawa DELTA kecil/kosong, dan tanpa
+  /// union, slot lama yang bisa berisi puluhan transaksi BELUM di-approve
+  /// hilang permanen tanpa jejak — cuma bisa pulih via "Sync Ulang Penuh"
+  /// manual yang tidak ada yang tahu harus dipakai.
   Future<void> enqueueSyncUpload({
     required String id,
     required String fromIp,
@@ -4226,6 +5190,20 @@ class AppDatabase extends _$AppDatabase {
       (select(syncUploadQueue)
             ..orderBy([(t) => OrderingTerm.asc(t.arrivedAt)]))
           .get();
+
+  /// Cari item antrian upload yang MASIH menunggu approve owner utk slot
+  /// pengirim ini (kunci sama persis dgn `enqueueSyncUpload`) — dipakai
+  /// `LanSyncService._handleRequest` utk GABUNGKAN (union) payload baru dgn
+  /// yang lama, bukan menimpanya. Lihat dok panjang di `enqueueSyncUpload`.
+  Future<SyncUploadQueueData?> getSyncUploadQueueItemForSlot({
+    required String fromIp,
+    String? deviceCode,
+  }) =>
+      (select(syncUploadQueue)
+            ..where((t) => (deviceCode != null && deviceCode.isNotEmpty
+                ? t.deviceCode.equals(deviceCode)
+                : t.fromIp.equals(fromIp) & t.deviceCode.isNull())))
+          .getSingleOrNull();
 
   Future<SyncUploadQueueData?> getSyncUploadQueueItem(String id) =>
       (select(syncUploadQueue)..where((t) => t.id.equals(id)))
@@ -4272,6 +5250,10 @@ class AppDatabase extends _$AppDatabase {
     'transactions',
     'transaction_items',
     'transaction_payments',
+    // Rincian per-produk retur/edit (lihat dok `TransactionAdjustmentLines`)
+    // — ditaruh SETELAH `transaction_payments` (FK logis ke `paymentId`,
+    // walau bukan FK fisik Drift) supaya urutan insert (parent dulu) benar.
+    'transaction_adjustment_lines',
     // Item 52 "Laci Meja" (susulan fix 28 Juli): 3 tabel ini SEBELUMNYA
     // terlewat di list ini — sync LAN (`dumpSince`/`dumpLaciMejaProposals`)
     // sudah benar menyertakannya sejak awal, tapi backup penuh/Alihkan Owner
@@ -4283,6 +5265,9 @@ class AppDatabase extends _$AppDatabase {
     'left_behind_items',
     'borrowed_items',
     'preorder_entries',
+    // Kamus belajar penerimaan barang — ikut backup/Alihkan Owner supaya
+    // pemetaan yang sudah dipelajari tidak hilang saat pindah device.
+    'product_aliases',
     'held_orders',
     'reserved_order_numbers',
     'stock_ledger',
@@ -4376,6 +5361,7 @@ class AppDatabase extends _$AppDatabase {
       'transactions',
       'transaction_items',
       'transaction_payments',
+      'transaction_adjustment_lines',
       'stock_ledger',
       'loyalty_point_ledger',
       'expenses',
@@ -4408,7 +5394,20 @@ class AppDatabase extends _$AppDatabase {
       'left_behind_items',
       'borrowed_items',
       'preorder_entries',
+      // Metode bayar & pegawai: master data owner yang selama ini TIDAK
+      // pernah menyebar — owner menambah rekening/QRIS atau pegawai baru,
+      // device kasir tidak pernah mendapatkannya.
+      'payment_methods',
+      'employees',
     ];
+    // Tabel yang mengalir DUA ARAH (klien->host maupun host->klien),
+    // last-write-wins by `updated_at`. Beda dari [masterData] yang sengaja
+    // satu arah (host = sumber kebenaran) DAN dari [appendOnly] yang tidak
+    // pernah meng-update baris yang sudah ada. Kamus penerimaan barang
+    // masuk sini atas permintaan user: pemetaan teks->produk yang
+    // dipelajari device kasir HARUS ikut sampai ke owner, bukan cuma
+    // sebaliknya. Lihat juga `LanSyncService.sharedTables`.
+    const shared = ['product_aliases'];
 
     final dump = <String, List<Map<String, Object?>>>{};
     // Drift stores DateTimeColumn as unix seconds; raw SQL must compare in the same unit.
@@ -4431,6 +5430,15 @@ class AppDatabase extends _$AppDatabase {
           varCount = 2;
         case 'transaction_payments':
           sql = 'SELECT * FROM "transaction_payments" WHERE paid_at >= ?';
+        case 'expenses':
+          // Item 61.5 — soft-delete (`deleted_at`) ditulis via UPDATE,
+          // TIDAK mengubah `created_at` — tanpa OR ini, baris yang baru
+          // dihapus tidak akan pernah ikut re-dump, penghapusannya tidak
+          // pernah sampai ke device lain (persis bug Item 57 tapi utk
+          // delete, bukan pelunasan/item susulan).
+          sql = 'SELECT * FROM "expenses" WHERE created_at >= ? '
+              'OR deleted_at >= ?';
+          varCount = 2;
         default:
           sql = 'SELECT * FROM "$t" WHERE created_at >= ?';
       }
@@ -4450,7 +5458,8 @@ class AppDatabase extends _$AppDatabase {
             t == 'customers' ||
             t == 'left_behind_items' ||
             t == 'borrowed_items' ||
-            t == 'preorder_entries';
+            t == 'preorder_entries' ||
+            t == 'employees';
         if (hasUpdated) {
           final rows = await customSelect(
             'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
@@ -4470,6 +5479,29 @@ class AppDatabase extends _$AppDatabase {
         variables: [Variable.withInt(sinceSec)],
       ).get();
       dump['kasir_permissions'] = rows.map((r) => r.data).toList();
+
+      // Setting toko — HANYA key di [syncableSettingKeys]. Lihat dok di
+      // sana kenapa tabel ini tidak boleh di-dump bulat-bulat.
+      final keyPlaceholders =
+          List.filled(syncableSettingKeys.length, '?').join(',');
+      final settingRows = await customSelect(
+        'SELECT * FROM "app_settings" WHERE updated_at >= ? '
+        'AND key IN ($keyPlaceholders)',
+        variables: [
+          Variable.withInt(sinceSec),
+          for (final k in syncableSettingKeys) Variable.withString(k),
+        ],
+      ).get();
+      dump['app_settings'] = settingRows.map((r) => r.data).toList();
+    }
+    // SELALU disertakan — termasuk saat klien mengirim ke atas
+    // (`includeMasterData: false`), justru itu tujuannya.
+    for (final t in shared) {
+      final rows = await customSelect(
+        'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
+        variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
+      ).get();
+      dump[t] = rows.map((r) => r.data).toList();
     }
     return dump;
   }
@@ -4856,9 +5888,17 @@ class AppDatabase extends _$AppDatabase {
     if (unitIds.isEmpty) return;
     await transaction(() async {
       for (final uid in unitIds) {
+        // Item 61.3 — tie-break kedua HARUS `rowid` (bukan `id`/UUID acak),
+        // SAMA PERSIS dgn `_rawBaseStock` (yang order DESC) — kalau tidak,
+        // utk baris² pada detik yang SAMA, pembaca (`_rawBaseStock`, ambil
+        // baris "terakhir") & penulis-ulang saldo (fungsi ini) bisa memilih
+        // baris "terakhir" yang BERBEDA, bikin saldo stok berbeda permanen
+        // antar host/client stlh sync (total akhir sama krn penjumlahan
+        // komutatif, tapi baris mana yang dianggap "terbaru" oleh
+        // `_rawBaseStock` bisa beda dari urutan yang dipakai di sini).
         final rows = await customSelect(
           'SELECT id, qty_change, stock_after FROM stock_ledger '
-          'WHERE product_unit_id = ? ORDER BY created_at ASC, id ASC',
+          'WHERE product_unit_id = ? ORDER BY created_at ASC, rowid ASC',
           variables: [Variable.withString(uid)],
         ).get();
         var running = 0.0;
@@ -4880,6 +5920,38 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Item 60 — hitung ulang `customers.loyalty_points` per pelanggan dari
+  /// SUM `loyalty_point_ledger.points` (pola PERSIS `rebuildStockAfterForUnits`
+  /// di atas). WAJIB dipanggil setelah merge `loyalty_point_ledger` dari
+  /// device lain (sync LAN, kedua arah): `customers` adalah master data yang
+  /// sync-nya last-write-wins berdasar `updated_at`, sementara 7 tempat tulis
+  /// `loyalty_points` yang ada (increment/decrement mentah, ditulis atomik
+  /// bareng baris ledger di device ASAL) TIDAK menyentuh `updated_at` sama
+  /// sekali — poin yang baru didapat device lain bisa KETIMPA BALIK begitu
+  /// host push versi lama pelanggan itu. Ledger-nya sendiri sinkron dengan
+  /// benar (append-only, PK dedup); rebuild ini menurunkan kolom saldo yang
+  /// dipakai di layar langsung dari ledger, bukan dari `updated_at` LWW.
+  Future<void> rebuildLoyaltyPointsForCustomers(
+      Set<String> customerIds) async {
+    if (customerIds.isEmpty) return;
+    await transaction(() async {
+      for (final cid in customerIds) {
+        final row = await customSelect(
+          'SELECT COALESCE(SUM(points), 0) AS total FROM loyalty_point_ledger '
+          'WHERE customer_id = ?',
+          variables: [Variable.withString(cid)],
+        ).getSingle();
+        final total = (row.data['total'] as num?)?.toInt() ?? 0;
+        await customUpdate(
+          'UPDATE customers SET loyalty_points = ? WHERE id = ?',
+          variables: [Variable.withInt(total), Variable.withString(cid)],
+          updates: {customers},
+          updateKind: UpdateKind.update,
+        );
+      }
+    });
+  }
+
   /// Merge rows from sync payload (INSERT OR IGNORE for ledger, last-write-wins for master).
   Future<int> mergeRows(String tableName, List<Map<String, Object?>> rows,
       bool isAppendOnly) async {
@@ -4889,6 +5961,18 @@ class AppDatabase extends _$AppDatabase {
     // Pemanggil sah selalu lolos (semua nama tabel app berpola ini).
     if (!RegExp(r'^[a-z_][a-z0-9_]*$').hasMatch(tableName)) {
       throw ArgumentError('Nama tabel sync tidak valid: $tableName');
+    }
+    // Guard KEY-level utk `app_settings`: tabel ini bercampur setting toko
+    // (boleh seragam) dgn identitas/state device (`store_uuid`, `store_key`,
+    // `device_code`, watermark sync...). Disaring di SINI — titik masuk data
+    // dari luar device — supaya payload yang menyelundupkan key lain tetap
+    // ditolak walau dump pengirimnya tidak bisa dipercaya. Lihat dok
+    // [syncableSettingKeys].
+    if (tableName == 'app_settings') {
+      rows = rows
+          .where((r) => syncableSettingKeys.contains(r['key']))
+          .toList();
+      if (rows.isEmpty) return 0;
     }
     // customStatement/customInsert lewat raw SQL tidak diketahui Drift tabel
     // mana yang berubah, jadi StreamProvider (mis. daftar produk/pelanggan)
@@ -4963,11 +6047,32 @@ class AppDatabase extends _$AppDatabase {
           // Append-only: skip if PK already exists.
           final pkVal = row['id'];
           if (pkVal != null) {
+            final selectCols = tableName == 'expenses' ? 'deleted_at' : '1';
             final exists = await customSelect(
-              'SELECT 1 FROM "$tableName" WHERE id = ?',
+              'SELECT $selectCols FROM "$tableName" WHERE id = ?',
               variables: [Variable<Object>(pkVal)],
             ).getSingleOrNull();
-            if (exists != null) continue;
+            if (exists != null) {
+              // Item 61.5 — `expenses` KHUSUS: baris yang isinya sendiri
+              // tidak pernah berubah (append-only-nya sungguhan), TAPI
+              // status soft-delete (`deleted_at`) satu-arah aktif→dihapus
+              // WAJIB tetap bisa propagate walau PK sudah ada di sisi ini —
+              // beda dari tabel append-only lain yang genuinely skip total.
+              if (tableName == 'expenses' &&
+                  row['deleted_at'] != null &&
+                  exists.data['deleted_at'] == null) {
+                await customUpdate(
+                  'UPDATE expenses SET deleted_at = ? WHERE id = ?',
+                  variables: [
+                    Variable<Object>(row['deleted_at']!),
+                    Variable<Object>(pkVal),
+                  ],
+                  updates: {expenses},
+                  updateKind: UpdateKind.update,
+                );
+              }
+              continue;
+            }
           }
           // Transactions & expenses have UNIQUE(local_id). Two devices with
           // the same kasir code produce identical local_ids for different
@@ -5543,16 +6648,108 @@ class AppDatabase extends _$AppDatabase {
     return result;
   }
 
+  /// Buang baris Laci Meja (left_behind_items/borrowed_items/preorder_entries)
+  /// dari usulan [rows] (payload `dumpLaciMejaProposals` klien) yang isinya
+  /// SUDAH IDENTIK dgn data HOST saat ini — dipanggil host SEBELUM baris itu
+  /// masuk antrian `_pendingLaciMejaProposals`. Pola SAMA PERSIS dgn
+  /// [filterUnchangedProposals] (produk, Item 40) tapi lebih sederhana
+  /// (satu baris = satu record datar, tanpa nested tier/unit).
+  ///
+  /// Bug nyata dilaporkan user: pre-order yang sudah "Dipenuhi" TETAP
+  /// terus-menerus muncul sbg usulan baru tiap sync walau ownernya SUDAH
+  /// menerapkan usulan itu sebelumnya. Akar: `locally_modified` di klien
+  /// TIDAK PERNAH direset manual — cuma direset kalau baris resmi dari host
+  /// (locally_modified=0) berhasil ter-merge BALIK ke klien lewat
+  /// `mergeRows` (host->klien). Sebelum itu terjadi (mis. owner belum
+  /// sempat approve, atau klien sync lagi SEBELUM sempat menerima baris
+  /// balik), baris yang SAMA terus dikirim ulang sbg "usulan baru" —
+  /// owner melihat pre-order yang sudah "Dipenuhi" seolah masih perlu
+  /// ditinjau. Fix: bandingkan tiap baris usulan thd baris HOST saat ini
+  /// per-kolom (kecuali `locally_modified`/`updated_at`, yang MEMANG selalu
+  /// beda antar device) — kalau identik, baris itu DIBUANG dari usulan
+  /// (host sudah tahu, tidak ada apa pun yang perlu diputuskan owner).
+  /// Baris yang belum ADA di host (pre-order/titip/pinjaman baru) SELALU
+  /// lolos filter (tidak ada pembanding).
+  Future<Map<String, List<Map<String, Object?>>>>
+      filterUnchangedLaciMejaProposals(
+          Map<String, List<Map<String, Object?>>> rows) async {
+    final result = <String, List<Map<String, Object?>>>{};
+    for (final entry in rows.entries) {
+      final table = entry.key;
+      final kept = <Map<String, Object?>>[];
+      for (final row in entry.value) {
+        final id = row['id'];
+        if (id is! String) {
+          kept.add(row);
+          continue;
+        }
+        final existingRows = await customSelect(
+          'SELECT * FROM "$table" WHERE id = ?',
+          variables: [Variable.withString(id)],
+        ).get();
+        if (existingRows.isEmpty) {
+          kept.add(row); // Baris baru — tidak ada pembanding di host.
+          continue;
+        }
+        final existing = existingRows.single.data;
+        var changed = false;
+        for (final key in row.keys) {
+          if (key == 'locally_modified' || key == 'updated_at') continue;
+          if (existing[key] != row[key]) {
+            changed = true;
+            break;
+          }
+        }
+        if (changed) kept.add(row);
+      }
+      if (kept.isNotEmpty) result[table] = kept;
+    }
+    return result;
+  }
+
+  /// Label ringkas satu baris Laci Meja utk pesan "dilewati" — dipakai
+  /// [applyLaciMejaProposals] saat baris gagal diterapkan (transaksi
+  /// terkait belum tersinkron).
+  String _laciMejaRowLabel(String table, Map<String, Object?> row) {
+    switch (table) {
+      case 'preorder_entries':
+        return 'Pre-order "${row['customer_name'] ?? '?'}"';
+      case 'borrowed_items':
+      case 'left_behind_items':
+        return '"${row['item_name'] ?? '?'}"';
+      default:
+        return table;
+    }
+  }
+
   /// Terapkan usulan Laci Meja yang DISETUJUI owner — [approvedIds] per
   /// tabel. `locallyModified` dipaksa false (host jadi sumber kebenaran),
   /// `updated_at` dicap ulang ke SAAT INI (sama alasan spt
   /// `applyProductProposals`: supaya baris ini lolos filter watermark
   /// `dumpSince` pada sync berikutnya, bukan macet tak pernah terkirim
   /// balik ke klien).
-  Future<int> applyLaciMejaProposals(
+  ///
+  /// Susulan (bug ditemukan user, `SqliteException FOREIGN KEY constraint
+  /// failed` saat Terapkan): ketiga tabel Laci Meja (`left_behind_items`/
+  /// `borrowed_items`/`preorder_entries`) punya kolom `transaction_id`
+  /// yang ber-FK ke `transactions.id` — tapi antrian usulan Laci Meja ini
+  /// SAMA SEKALI TERPISAH dari antrian sync kategori "Transaksi"
+  /// (`LanSyncService.syncCategories`/`approveSync`), tidak ada jaminan
+  /// urutan penerapan. Kalau owner menerapkan usulan Laci Meja SEBELUM
+  /// transaksi terkaitnya sendiri tersinkron ke host, insert PASTI gagal
+  /// FK — dan karena baris-baris lain sebelumnya sudah dieksekusi di
+  /// `transaction()` yang SAMA, seluruh batch ikut rollback (bukan cuma
+  /// baris yang bermasalah). Fix: cek existensi `transaction_id` di host
+  /// SEBELUM insert per-baris — kalau belum ada, SKIP baris itu saja
+  /// (lanjut ke baris lain, JANGAN gagalkan seluruh batch). Baris yang
+  /// di-skip TETAP `locallyModified=1` di device asalnya (tidak disentuh
+  /// di sini sama sekali), jadi otomatis diusulkan ulang sync berikutnya
+  /// begitu transaksinya sendiri sudah masuk ke host — bukan hilang.
+  Future<({int applied, List<String> skippedReasons})> applyLaciMejaProposals(
       Map<String, List<Map<String, Object?>>> proposals,
       Map<String, Set<String>> approvedIds) async {
     var count = 0;
+    final skippedReasons = <String>[];
     // `customInsert` raw SQL TIDAK memberi tahu Drift tabel mana yang
     // berubah kecuali param `updates:` disertakan — tanpa ini `.watch()`
     // (mis. layar dashboard Laci Meja) tidak auto-refresh walau data DB
@@ -5573,6 +6770,20 @@ class AppDatabase extends _$AppDatabase {
           var cleaned = Map<String, Object?>.from(row)
             ..removeWhere((k, _) => !localColumns.contains(k));
           if (cleaned.isEmpty) continue;
+
+          final txId = cleaned['transaction_id'];
+          if (txId is String && txId.isNotEmpty) {
+            final found = await customSelect(
+              'SELECT 1 FROM transactions WHERE id = ? LIMIT 1',
+              variables: [Variable.withString(txId)],
+            ).get();
+            if (found.isEmpty) {
+              skippedReasons.add(
+                  '${_laciMejaRowLabel(entry.key, row)}: transaksi terkait belum tersinkron ke perangkat ini');
+              continue;
+            }
+          }
+
           cleaned['locally_modified'] = 0;
           cleaned['updated_at'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
           final cols = cleaned.keys.map((k) => '"$k"').join(', ');
@@ -5586,7 +6797,7 @@ class AppDatabase extends _$AppDatabase {
         }
       }
     });
-    return count;
+    return (applied: count, skippedReasons: skippedReasons);
   }
 
   // ───────────────────────── Usulan Pelanggan ─────────────────────────
@@ -5657,6 +6868,73 @@ class AppDatabase extends _$AppDatabase {
 }
 
 /// Hasil agregat top-produk untuk laporan (JOIN query).
+/// Satu baris kamus belajar penerimaan barang (untuk layar kelola kamus).
+/// `productName` null = satuan tujuannya sudah dihapus sejak alias dipelajari
+/// — barisnya tetap ditampilkan supaya bisa dibersihkan user.
+typedef ReceiveAliasRow = ({
+  String id,
+  String normalizedName,
+  String normalizedUnit,
+  String productUnitId,
+  String? productName,
+});
+
+/// Satu titik tren harian arus kas.
+typedef CashFlowDaily = ({DateTime date, int cashIn, int cashOut});
+
+/// Ringkasan arus kas satu rentang tanggal.
+typedef CashFlowSummary = ({
+  /// Kas masuk TUNAI, net dari kembalian yang diserahkan.
+  int cashIn,
+
+  /// Kas masuk NON-tunai (transfer/QRIS/e-wallet/dst), net dari kembalian.
+  int nonCashIn,
+
+  /// Total uang keluar (`expenses`, semua jenis).
+  int cashOut,
+
+  /// Rincian uang keluar per jenis pengeluaran.
+  Map<String, int> outByType,
+
+  /// Rincian uang masuk per metode bayar (termasuk metode non-tunai
+  /// masing-masing, supaya bisa dipecah lebih detail dari sekadar
+  /// tunai/non-tunai).
+  Map<String, int> inByMethod,
+});
+
+/// Ringkasan statistik satu produk dalam rentang tanggal (layar detail
+/// produk, dibuka dari tab Produk di Laporan).
+typedef ProductStatsSummary = ({
+  double qtySold,
+  int revenue,
+  int cogs,
+
+  /// Jumlah NOTA yang memuat produk ini (DISTINCT transaction_id), bukan
+  /// jumlah baris — satu nota bisa memuat produk yang sama beberapa kali
+  /// dgn satuan berbeda (pola lazim di data toko ini, lihat dok
+  /// `LeftBehindItems.transactionItemId`).
+  int txCount,
+});
+
+/// Satu titik tren harian penjualan produk.
+typedef ProductDailySales = ({DateTime date, double qty, int revenue});
+
+/// Pembeli (pelanggan TERDAFTAR) satu produk.
+typedef ProductBuyerStat = ({
+  String customerId,
+  String name,
+  double qty,
+  int revenue,
+});
+
+/// Ringkasan belanja satu pelanggan dalam rentang tanggal.
+typedef CustomerStatsSummary = ({
+  int totalSpent,
+  int txCount,
+  double itemQty,
+  int avgPerTx,
+});
+
 class ProductRevenueStat {
   const ProductRevenueStat({
     required this.productId,
@@ -5764,6 +7042,14 @@ QueryExecutor _openConnection(String encryptionKey) {
         rawDb.execute('PRAGMA mmap_size = 134217728;'); // 128 MB mmap
         rawDb.execute('PRAGMA temp_store = MEMORY;');
         rawDb.execute('PRAGMA foreign_keys = ON;');
+        // Audit efisiensi storage — tanpa ini, ruang bekas baris yang
+        // dihapus (void transaksi, dsb.) TIDAK otomatis dikembalikan ke OS
+        // di luar `VACUUM` manual (cuma dipanggil Tutup Buku, setahun
+        // sekali). Pada DB BARU berlaku langsung; pada DB LAMA (auto_vacuum
+        // masih NONE) baru benar-benar aktif setelah `VACUUM` berikutnya
+        // (SQLite mensyaratkan itu) — otomatis kepakai di Tutup Buku
+        // berikutnya, tidak perlu tindakan tambahan.
+        rawDb.execute('PRAGMA auto_vacuum = INCREMENTAL;');
       },
     );
   });

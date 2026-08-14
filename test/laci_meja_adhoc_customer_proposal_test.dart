@@ -70,8 +70,9 @@ void main() {
 
     // TIDAK BOLEH throw (dulu: SqliteException 787 FOREIGN KEY constraint
     // failed).
-    final applied = await db.applyLaciMejaProposals(proposals, approvedIds);
-    expect(applied, 1);
+    final result = await db.applyLaciMejaProposals(proposals, approvedIds);
+    expect(result.applied, 1);
+    expect(result.skippedReasons, isEmpty);
 
     final rows = await db.select(db.leftBehindItems).get();
     expect(rows, hasLength(1));

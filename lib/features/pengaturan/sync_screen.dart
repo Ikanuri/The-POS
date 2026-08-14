@@ -11,6 +11,33 @@ import '../laci_meja/laci_meja_proposal_review_screen.dart';
 import '../pelanggan/customer_proposal_review_screen.dart';
 import 'product_proposal_review_screen.dart';
 
+/// Kategori yang tersedia di payload sync (yang ada datanya), beserta
+/// jumlah baris. Dipisah jadi fungsi murni supaya bisa diuji langsung tanpa
+/// widget (`approveSync` yang dipanggil sesudahnya butuh DB nyata, tidak
+/// selalu bisa diuji lewat tap widget — lihat dok test terkait).
+///
+/// Item 57 — HARUS jumlahkan SEMUA tabel dalam kategori, bukan cuma tabel
+/// PERTAMA (`tables.first`, spt sebelumnya): pelunasan/cicilan/item susulan
+/// ("Tambah Belanjaan") ke transaksi yang HEADER-nya (`transactions`) sudah
+/// lebih dulu tersinkron TIDAK PERNAH kirim ulang header itu (`dumpSince`
+/// filter `created_at`, tidak berubah saat melunasi) — payload sync bisa
+/// HANYA berisi `transaction_payments`/`transaction_items` baru dgn
+/// `transactions` kosong. Kalau cuma hitung tabel pertama, kategori
+/// "Transaksi" dianggap kosong (`count == 0`) walau ada isi pembayaran —
+/// kalau itu satu-satunya isi payload, `available.isEmpty` → otomatis
+/// `rejectSync` PERMANEN dgn pesan salah "tidak ada data baru".
+@visibleForTesting
+Map<String, ({List<String> tables, int count})> computeAvailableSyncCategories(
+    PendingSyncItem item) {
+  final available = <String, ({List<String> tables, int count})>{};
+  LanSyncService.syncCategories.forEach((label, tables) {
+    final count =
+        tables.fold<int>(0, (s, t) => s + (item.tables[t]?.length ?? 0));
+    if (count > 0) available[label] = (tables: tables, count: count);
+  });
+  return available;
+}
+
 class SyncScreen extends ConsumerStatefulWidget {
   const SyncScreen({super.key});
 
@@ -69,12 +96,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   }
 
   Future<void> _approve(PendingSyncItem item) async {
-    // Kategori yang tersedia di payload ini (yang ada datanya), beserta jumlah.
-    final available = <String, ({List<String> tables, int count})>{};
-    LanSyncService.syncCategories.forEach((label, tables) {
-      final count = item.tables[tables.first]?.length ?? 0;
-      if (count > 0) available[label] = (tables: tables, count: count);
-    });
+    final available = computeAvailableSyncCategories(item);
 
     final notifier = ref.read(syncStateProvider.notifier);
     if (available.isEmpty) {
@@ -99,15 +121,37 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                 style: const TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 4),
-              ...available.entries.map((e) => CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text('${e.key} (${e.value.count})'),
-                    value: selected[e.key],
-                    onChanged: (v) =>
-                        setSt(() => selected[e.key] = v ?? false),
-                  )),
+              // Item 61.4 — "Stok" WAJIB ikut ter-approve tiap kali
+              // "Transaksi" dipilih, tidak bisa dipisah lewat UI sama
+              // sekali: penjualan tanpa pergerakan stoknya bikin transaksi
+              // tercatat tapi stok TIDAK PERNAH berkurang, PERMANEN (baris
+              // `stock_ledger` yang di-skip tidak pernah dikirim ulang scr
+              // delta). Checkbox "Stok" disabled (dipaksa true) selama
+              // "Transaksi" masih tercentang.
+              ...available.entries.map((e) {
+                final forcedByTransaksi = e.key == 'Stok' &&
+                    available.containsKey('Transaksi') &&
+                    selected['Transaksi'] == true;
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(forcedByTransaksi
+                      ? '${e.key} (${e.value.count}) — wajib ikut Transaksi'
+                      : '${e.key} (${e.value.count})'),
+                  value: forcedByTransaksi ? true : selected[e.key],
+                  onChanged: forcedByTransaksi
+                      ? null
+                      : (v) => setSt(() {
+                            selected[e.key] = v ?? false;
+                            if (e.key == 'Transaksi' &&
+                                v == true &&
+                                available.containsKey('Stok')) {
+                              selected['Stok'] = true;
+                            }
+                          }),
+                );
+              }),
             ],
           ),
           actions: [

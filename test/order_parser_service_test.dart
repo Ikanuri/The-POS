@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/services/order_parser_service.dart';
+import 'package:the_pos/core/theme/app_theme.dart' show formatRupiah;
 
 /// Test Tier 1 (DB murni) untuk fitur eksperimental "Tempel Pesanan" —
 /// sisi kasir yang membaca teks pesanan hasil Katalog Pesanan (HTML) dan
@@ -317,6 +318,152 @@ void main() {
   });
 
   test(
+      'Bug nyata dilaporkan user: handoff QR sekarang bawa SEMUA atribut '
+      'keranjang (harga override, checklist verifikasi, status pre-order) '
+      'ke penerima — bukan cuma nama barang+qty yang di-harga-ulang',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    // Harga produk di DB PENERIMA sengaja BEDA dari harga di keranjang
+    // pengirim (mis. baru saja diubah, atau pengirim override manual) —
+    // sebelum fix, parse() SELALU resolve fresh dari sini, menimpa harga
+    // asli pengirim diam-diam.
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 30000);
+    final u1 = await _unitIdOf(db, p1);
+    final p2 = await _addProduct(db, name: 'Galon Aqua', price: 5000);
+    final u2 = await _unitIdOf(db, p2);
+
+    final cart = [
+      CartItem(
+        productId: p1,
+        productUnitId: u1,
+        productName: 'Ayam Potong',
+        unitName: 'Kg',
+        qty: 2,
+        price: 27000, // Override manual pengirim, BEDA dari 30000 di DB.
+        originalPrice: 30000,
+        costPrice: 22000,
+        priceOverridden: true,
+        checked: true, // Sudah diverifikasi fisik oleh pengirim.
+      ),
+      CartItem(
+        productId: p2,
+        productUnitId: u2,
+        productName: 'Galon Aqua',
+        unitName: 'Galon',
+        qty: 1,
+        price: 0, // Pre-order belum dibayar — harga sengaja 0.
+        originalPrice: 5000,
+        costPrice: 4000,
+        isPreorder: true,
+        preorderPaid: false,
+        depositQty: 1,
+      ),
+    ];
+
+    final encoded =
+        OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+    final result = await OrderParserService.parse(db: db, text: encoded);
+    expect(result.items, hasLength(2));
+
+    final ayam = result.items.firstWhere((i) => i.productId == p1);
+    expect(ayam.price, 27000,
+        reason: 'harga override pengirim harus ikut, BUKAN di-resolve '
+            'ulang jadi 30000 (harga terkini DB penerima)');
+    expect(ayam.originalPrice, 30000);
+    expect(ayam.priceOverridden, isTrue);
+    expect(ayam.checked, isTrue,
+        reason: 'checklist verifikasi pengirim harus ikut ke penerima');
+    expect(ayam.toCartItem().priceOverridden, isTrue);
+    expect(ayam.toCartItem().checked, isTrue);
+
+    final galon = result.items.firstWhere((i) => i.productId == p2);
+    expect(galon.price, 0);
+    expect(galon.originalPrice, 5000);
+    expect(galon.isPreorder, isTrue);
+    expect(galon.preorderPaid, isFalse);
+    expect(galon.depositQty, 1);
+    final galonCart = galon.toCartItem();
+    expect(galonCart.isPreorder, isTrue);
+    expect(galonCart.depositQty, 1);
+
+    await db.close();
+  });
+
+  test(
+      'Susulan (kekhawatiran user, valid): encodeHandoff(trustPrices: false) '
+      'utk device TANPA izin terima_pembayaran — harga TIDAK ikut dibawa '
+      '(resolve fresh dari DB penerima), tapi checklist/status pre-order '
+      'TETAP ikut (bukan itu yang jadi concern)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    // Harga DB penerima BEDA dari harga di keranjang pengirim — kalau
+    // trustPrices:false TIDAK bekerja, test ini akan salah expect harga
+    // override (27000) alih-alih harga live DB (30000).
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 30000);
+    final u1 = await _unitIdOf(db, p1);
+
+    final cart = [
+      CartItem(
+        productId: p1,
+        productUnitId: u1,
+        productName: 'Ayam Potong',
+        unitName: 'Kg',
+        qty: 2,
+        // Pegawai TANPA izin bayar bisa saja mengatur Harga Lain/override
+        // manual di keranjangnya sendiri (tidak digerbang izin apa pun di
+        // item_entry_sheet.dart) — kalau ini ikut dibawa mentah-mentah,
+        // owner menerima harga yang belum pernah divalidasi.
+        price: 27000,
+        originalPrice: 30000,
+        costPrice: 22000,
+        priceOverridden: true,
+        checked: true,
+      ),
+    ];
+
+    final encoded = OrderParserService.encodeHandoff(
+        items: cart, employeeName: 'Budi', trustPrices: false);
+    // Segmen harga TIDAK ADA sama sekali di kode mesin.
+    expect(encoded, isNot(contains('|p=')));
+    expect(encoded, isNot(contains('|o=')));
+    expect(encoded, isNot(contains('|k=')));
+    expect(encoded, isNot(contains('|v=')));
+    // Tapi checklist verifikasi TETAP ada (bukan concern-nya harga).
+    expect(encoded, contains('|c=1'));
+
+    final result = await OrderParserService.parse(db: db, text: encoded);
+    final ayam = result.items.single;
+    expect(ayam.price, 30000,
+        reason: 'harga override pengirim tak berizin TIDAK boleh dipakai — '
+            'harus resolve fresh dari DB penerima');
+    expect(ayam.priceOverridden, isFalse);
+    expect(ayam.checked, isTrue,
+        reason: 'checklist verifikasi TETAP ikut walau trustPrices:false');
+
+    await db.close();
+  });
+
+  test(
+      'Kode dari katalog HTML pelanggan (TANPA flag |p=/|c=/dst.) tetap '
+      'resolve harga fresh dari DB — perilaku lama TIDAK berubah', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+    final u1 = await _unitIdOf(db, p1);
+
+    // Format lama polos, PERSIS output buildOrderText() katalog HTML —
+    // tidak ada segmen '|' apa pun setelah qty.
+    final text = '#PSN:$u1=2';
+    final result = await OrderParserService.parse(db: db, text: text);
+
+    final ayam = result.items.single;
+    expect(ayam.price, 25000, reason: 'tetap resolve fresh dari DB lokal');
+    expect(ayam.originalPrice, 25000);
+    expect(ayam.priceOverridden, isFalse);
+    expect(ayam.checked, isFalse);
+    expect(ayam.isPreorder, isFalse);
+    await db.close();
+  });
+
+  test(
       'encodeHandoff() dgn customerName ikut baris "Nama:" — round-trip '
       'balik ke customerName (bukan cuma employeeName)', () async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -378,5 +525,145 @@ void main() {
     final result = await OrderParserService.parse(db: db, text: encoded);
     expect(result.customerName, isNull);
     await db.close();
+  });
+
+  group('Item 54 — encodeHandoff(storeName:) bawa keterangan item', () {
+    test(
+        'dgn storeName: keterangan item + Total tampil DI DEPAN kode mesin, '
+        'format sama pola dgn buildOrderText() katalog HTML', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+      final u1 = await _unitIdOf(db, p1);
+      final p2 = await _addProduct(db, name: 'Beras', price: 12000);
+      final u2 = await _unitIdOf(db, p2);
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Ayam Potong',
+          unitName: 'Kg',
+          qty: 2,
+          price: 25000,
+          originalPrice: 25000,
+          costPrice: 18000,
+        ),
+        CartItem(
+          productId: p2,
+          productUnitId: u2,
+          productName: 'Beras',
+          unitName: 'Kg',
+          qty: 1,
+          price: 12000,
+          originalPrice: 12000,
+          costPrice: 10000,
+        ),
+      ];
+
+      final encoded = OrderParserService.encodeHandoff(
+        items: cart,
+        employeeName: 'Budi',
+        storeName: 'Toko Segar',
+      );
+
+      expect(encoded, startsWith('PESANAN — Toko Segar\n'));
+      expect(encoded, contains('Ayam Potong Kg × 2'));
+      expect(encoded, contains('Beras Kg × 1'));
+      expect(encoded, contains('Total: ${formatRupiah(62000)}'));
+      // Kode mesin & baris meta tetap di BAWAH, urutan sama persis
+      // buildOrderText() (manusia baca isi pesanan dulu, kode di akhir).
+      expect(encoded.indexOf('#PSN:'), greaterThan(encoded.indexOf('Total:')));
+      expect(encoded, contains('Pegawai: Budi'));
+
+      final result = await OrderParserService.parse(db: db, text: encoded);
+      expect(result.items, hasLength(2),
+          reason: 'parse() harus tetap berhasil walau ada header baru di '
+              'depan kode mesin — regex per-baris sudah mentolerir baris '
+              'tambahan apa pun, sama seperti teks katalog HTML');
+      expect(result.employeeName, 'Budi');
+      await db.close();
+    });
+
+    test('TANPA storeName (default lama): tidak ada header "PESANAN —" sama '
+        'sekali, perilaku lama utuh', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Ayam Potong', price: 25000);
+      final u1 = await _unitIdOf(db, p1);
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Ayam Potong',
+          unitName: 'Kg',
+          qty: 1,
+          price: 25000,
+          originalPrice: 25000,
+          costPrice: 18000,
+        ),
+      ];
+
+      final encoded =
+          OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+      expect(encoded, isNot(contains('PESANAN —')));
+      expect(encoded, startsWith('#PSN:'));
+
+      final result = await OrderParserService.parse(db: db, text: encoded);
+      expect(result.items, hasLength(1));
+      await db.close();
+    });
+
+    test('varian (induk+anak): baris induk jadi header, anak diberi '
+        'indentasi "  > ", baris qty=0 murni placeholder DILEWATI', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final parentId = await _addProduct(db, name: 'Kaos', price: 50000);
+      final parentUnitId = await _unitIdOf(db, parentId);
+      final childId =
+          await _addProduct(db, name: 'Merah', price: 50000, parentProductId: parentId);
+      final childUnitId = await _unitIdOf(db, childId);
+
+      final cart = [
+        // Placeholder induk (qty 0) — hanya penanda struktur grouping,
+        // dibuat otomatis saat varian pertama ditambahkan (lihat
+        // kasir_screen.dart), BUKAN barang yang dibeli.
+        CartItem(
+          productId: parentId,
+          productUnitId: parentUnitId,
+          productName: 'Kaos',
+          unitName: 'Pcs',
+          qty: 0,
+          price: 50000,
+          originalPrice: 50000,
+          costPrice: 30000,
+        ),
+        CartItem(
+          productId: childId,
+          productUnitId: childUnitId,
+          productName: 'Merah',
+          unitName: 'Pcs',
+          qty: 3,
+          price: 50000,
+          originalPrice: 50000,
+          costPrice: 30000,
+          parentProductId: parentId,
+          isVariant: true,
+        ),
+      ];
+
+      final encoded = OrderParserService.encodeHandoff(
+        items: cart,
+        employeeName: 'Budi',
+        storeName: 'Toko Segar',
+      );
+
+      expect(encoded, contains('Kaos\n  > Merah Pcs × 3'),
+          reason: 'header induk lalu baris varian berindentasi, baris '
+              'placeholder qty=0 sendiri TIDAK ikut tampil sbg baris '
+              'terpisah');
+      expect(encoded, contains('Total: ${formatRupiah(150000)}'));
+
+      final result = await OrderParserService.parse(db: db, text: encoded);
+      expect(result.items, hasLength(1));
+      expect(result.items.single.qty, 3);
+      await db.close();
+    });
   });
 }

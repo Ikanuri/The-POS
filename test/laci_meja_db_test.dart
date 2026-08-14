@@ -214,9 +214,10 @@ void main() {
           locallyModified: true);
 
       final dump = await db.dumpLaciMejaProposals();
-      final count = await db.applyLaciMejaProposals(
+      final result = await db.applyLaciMejaProposals(
           dump, {'left_behind_items': {'l1'}});
-      expect(count, 1);
+      expect(result.applied, 1);
+      expect(result.skippedReasons, isEmpty);
 
       final l1 =
           await (db.select(db.leftBehindItems)..where((t) => t.id.equals('l1')))

@@ -8,9 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/device_provider.dart';
-import '../../core/providers/license_provider.dart';
 import '../../core/providers/theme_provider.dart';
-import '../../core/services/license_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import '../shell/sync_status_banner.dart';
@@ -126,17 +124,6 @@ class PengaturanScreen extends ConsumerWidget {
                       // Item 14 — sisa waktu lisensi, unit menyesuaikan (hari →
                       // jam → menit). Tidak tampil sama sekali kalau gerbang
                       // lisensi nonaktif (kill-switch) atau belum pernah aktivasi.
-                      if (LicenseService.isConfigured)
-                        Builder(builder: (context) {
-                          final license = ref.watch(licenseProvider);
-                          final status = license.licenseStatusLabel;
-                          if (status == null) return const SizedBox.shrink();
-                          return ListTile(
-                            leading: const Icon(Icons.verified_user_outlined),
-                            title: const Text('Lisensi'),
-                            subtitle: Text(status),
-                          );
-                        }),
                     ],
                   ),
                 ),
@@ -446,6 +433,27 @@ class PengaturanScreen extends ConsumerWidget {
                               context.push('/pengaturan/duplikat-data'),
                         ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const _SectionHeader('Lainnya'),
+                // Baris ber-aksen (mockup): satu-satunya entri di Pengaturan
+                // yang diberi tint aksen — pintu masuk ke identitas app
+                // (versi, panduan, lisensi), bukan setelan yang diubah-ubah.
+                Card(
+                  color: scheme.primary.withOpacity(0.06),
+                  child: ListTile(
+                    leading: Icon(Icons.info_outline, color: scheme.primary),
+                    title: Text(
+                      'Tentang Aplikasi',
+                      style: TextStyle(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text('Versi, panduan & tips, lisensi'),
+                    trailing: Icon(Icons.chevron_right, color: scheme.primary),
+                    onTap: () => context.push('/pengaturan/tentang'),
                   ),
                 ),
               ],

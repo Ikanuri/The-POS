@@ -135,6 +135,48 @@ class TutupBukuService {
     final periodEndExclusiveSec =
         end.add(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
 
+    // 2b. Guard KRITIS (ditemukan lewat audit efisiensi storage) — Laci Meja
+    // (`left_behind_items`/`borrowed_items`/`preorder_entries`) punya kolom
+    // `transaction_id` yang FK ke `transactions.id` TANPA `ON DELETE CASCADE`,
+    // dan `PRAGMA foreign_keys = ON` aktif. Kalau ADA nota dalam periode yang
+    // diarsipkan yang masih punya baris Laci Meja BELUM SELESAI (titip/
+    // ketinggalan belum diambil, pinjaman belum kembali penuh, pre-order
+    // belum dipenuhi/dibatalkan), menghapus `transactions`-nya akan
+    // menabrak "FOREIGN KEY constraint failed" DAN diam-diam membuang jejak
+    // tugas operasional yang masih aktif. Blokir dulu, minta owner
+    // menyelesaikan/membatalkannya — baris yang SUDAH selesai aman dihapus
+    // bersama notanya di langkah 4 (riwayatnya tetap ada di file arsip, yang
+    // sudah disalin utuh SEBELUM baris apa pun dihapus).
+    final openLaciMejaRow = await db.customSelect(
+      'SELECT '
+      '(SELECT COUNT(*) FROM left_behind_items lbi '
+      '  JOIN transactions t ON t.id = lbi.transaction_id '
+      '  WHERE t.created_at >= $periodStartSec AND t.created_at < $periodEndExclusiveSec '
+      '  AND lbi.collected_at IS NULL) AS titip, '
+      '(SELECT COUNT(*) FROM borrowed_items bi '
+      '  JOIN transactions t ON t.id = bi.transaction_id '
+      '  WHERE t.created_at >= $periodStartSec AND t.created_at < $periodEndExclusiveSec '
+      '  AND bi.fully_returned_at IS NULL) AS pinjaman, '
+      '(SELECT COUNT(*) FROM preorder_entries pe '
+      '  JOIN transactions t ON t.id = pe.transaction_id '
+      '  WHERE t.created_at >= $periodStartSec AND t.created_at < $periodEndExclusiveSec '
+      '  AND pe.fulfilled_at IS NULL AND pe.cancelled_at IS NULL) AS preorder',
+    ).getSingle();
+    final openTitip = (openLaciMejaRow.data['titip'] as int?) ?? 0;
+    final openPinjaman = (openLaciMejaRow.data['pinjaman'] as int?) ?? 0;
+    final openPreorder = (openLaciMejaRow.data['preorder'] as int?) ?? 0;
+    if (openTitip + openPinjaman + openPreorder > 0) {
+      final parts = <String>[
+        if (openTitip > 0) '$openTitip titip/ketinggalan',
+        if (openPinjaman > 0) '$openPinjaman pinjaman belum kembali',
+        if (openPreorder > 0) '$openPreorder pre-order belum dipenuhi',
+      ];
+      throw TutupBukuException(
+          'Ada nota dalam periode ini yang masih punya catatan Laci Meja '
+          'belum selesai (${parts.join(', ')}). Selesaikan atau batalkan '
+          'dulu di Laci Meja sebelum tutup buku periode ini.');
+    }
+
     final countRow = await db.customSelect(
       'SELECT COUNT(*) AS cnt FROM transactions '
       'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec',
@@ -148,25 +190,68 @@ class TutupBukuService {
 
     // 4. Hapus data operasional periode itu dari main.db.
     await db.transaction(() async {
-      // Snapshot saldo stok terakhir per satuan SEBELUM penghapusan. Produk
-      // yang seluruh riwayat stoknya berada di periode yang diarsipkan akan
-      // kehilangan semua barisnya — saldonya harus dibawa ke entri baru agar
-      // stok tidak ter-reset ke 0.
-      final balanceRows = await db.customSelect(
+      // Snapshot SEBELUM penghapusan, per satuan yang PUNYA baris di periode
+      // yang diarsipkan: (a) total qty_change baris² itu (deletedSum) — ini
+      // persis kontribusi yang akan HILANG dari total kumulatif kalau nanti
+      // `rebuildStockAfterForUnits` (dipanggil sync host/client, lihat dok
+      // di sana) menjumlah ulang stock_after dari NOL memakai baris yang
+      // TERSISA saja; (b) saldo baris terakhir SEBELUM periode ini
+      // (priorBalance) — basis kumulatif sebelum deletedSum ditambahkan.
+      // Item 59 fix: SEBELUMNYA baris carry-forward cuma dibuat kalau
+      // SELURUH riwayat satuan itu habis terhapus (`remain == null`) —
+      // beralasan "saldo tetap benar" utk PEMBACA (`_rawBaseStock` ambil
+      // baris TERAKHIR apa adanya, benar walau baris lama dihapus). Tapi
+      // itu SALAH utk `rebuildStockAfterForUnits`, yang menjumlah ulang qty
+      // dari nol — kalau ada baris SEBELUM/SESUDAH periode yang bertahan,
+      // kontribusi baris yang dihapus tetap harus dibawa (deletedSum),
+      // bukan cuma dilewati begitu saja. Sekarang SELALU sisipkan 1 baris
+      // penyeimbang per satuan yang punya deletedSum != 0, terlepas dari
+      // ada/tidaknya baris yang bertahan.
+      final deletedSumRows = await db.customSelect(
+        'SELECT product_unit_id AS uid, SUM(qty_change) AS total '
+        'FROM stock_ledger '
+        'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec '
+        'GROUP BY product_unit_id',
+      ).get();
+      final deletedSums = <String, double>{
+        for (final r in deletedSumRows)
+          r.data['uid'] as String: (r.data['total'] as num?)?.toDouble() ?? 0,
+      };
+
+      final priorBalanceRows = await db.customSelect(
         'SELECT sl.product_unit_id AS uid, sl.stock_after AS bal '
         'FROM stock_ledger sl '
-        'WHERE NOT EXISTS ('
+        'WHERE sl.created_at < $periodStartSec '
+        'AND NOT EXISTS ('
         '  SELECT 1 FROM stock_ledger s2 '
         '  WHERE s2.product_unit_id = sl.product_unit_id '
+        '  AND s2.created_at < $periodStartSec '
         '  AND (s2.created_at > sl.created_at '
         '       OR (s2.created_at = sl.created_at AND s2.id > sl.id)))',
       ).get();
-      final balances = <String, double>{
-        for (final r in balanceRows)
+      final priorBalances = <String, double>{
+        for (final r in priorBalanceRows)
           r.data['uid'] as String: (r.data['bal'] as num?)?.toDouble() ?? 0,
       };
 
-      // Hapus child tables dulu (FK).
+      // Hapus child tables dulu (FK). Laci Meja SELALU aman dihapus di sini
+      // — guard di langkah 2b sudah memastikan TIDAK ADA baris yang masih
+      // terbuka (belum selesai) di antara nota-nota periode ini.
+      await db.customUpdate(
+        'DELETE FROM left_behind_items WHERE transaction_id IN '
+        '(SELECT id FROM transactions '
+        ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+      );
+      await db.customUpdate(
+        'DELETE FROM borrowed_items WHERE transaction_id IN '
+        '(SELECT id FROM transactions '
+        ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+      );
+      await db.customUpdate(
+        'DELETE FROM preorder_entries WHERE transaction_id IN '
+        '(SELECT id FROM transactions '
+        ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+      );
       await db.customUpdate(
         'DELETE FROM transaction_items WHERE transaction_id IN '
         '(SELECT id FROM transactions '
@@ -194,16 +279,15 @@ class TutupBukuService {
         'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec',
       );
 
-      // Bawa saldo stok untuk satuan yang ledger-nya habis terhapus
-      // (pergerakan terakhirnya ada di periode yang diarsipkan).
-      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      for (final entry in balances.entries) {
+      // Bawa kontribusi baris yang terhapus ke SATU baris penyeimbang per
+      // satuan, ditanggal PAS di batas akhir periode (bukan `DateTime.now()`
+      // — WAJIB lebih awal dari baris apa pun yang bertahan SETELAH periode
+      // ini, supaya urutan kronologis `rebuildStockAfterForUnits` benar).
+      final carryForwardSec = periodEndExclusiveSec - 1;
+      for (final entry in deletedSums.entries) {
         if (entry.value == 0) continue;
-        final remain = await db.customSelect(
-          'SELECT 1 FROM stock_ledger WHERE product_unit_id = ? LIMIT 1',
-          variables: [Variable.withString(entry.key)],
-        ).getSingleOrNull();
-        if (remain != null) continue; // masih ada riwayat → saldo tetap benar
+        final prior = priorBalances[entry.key] ?? 0;
+        final newStockAfter = prior + entry.value;
         await db.customInsert(
           'INSERT INTO stock_ledger '
           '(id, product_unit_id, type, qty_change, stock_after, note, created_at) '
@@ -213,9 +297,9 @@ class TutupBukuService {
             Variable.withString(entry.key),
             Variable.withString('adjustment'),
             Variable.withReal(entry.value),
-            Variable.withReal(entry.value),
+            Variable.withReal(newStockAfter),
             Variable.withString('Saldo dibawa dari tutup buku $year'),
-            Variable.withInt(nowSec),
+            Variable.withInt(carryForwardSec),
           ],
         );
       }

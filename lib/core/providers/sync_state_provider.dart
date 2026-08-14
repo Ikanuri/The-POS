@@ -265,11 +265,17 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     _showTransient('Data sync ditolak', SyncBannerTone.sync);
   }
 
-  /// "Sync Ulang Penuh" — reset watermark upload klien ke epoch, escape
-  /// hatch manual utk pemulihan kalau owner salah tolak atau curiga ada
-  /// data yang belum pernah sampai ke host.
+  /// "Sync Ulang Penuh" — reset KEDUA watermark (upload klien→host DAN
+  /// download host→klien) ke epoch sekaligus, escape hatch manual utk
+  /// pemulihan kalau owner salah tolak, curiga ada data yang belum pernah
+  /// sampai ke host, ATAU (Item 61.1) selisih jam device bikin window
+  /// download macet permanen. Disatukan jadi SATU tombol (bukan 2 opsi
+  /// terpisah) — lebih aman drpd user harus paham beda upload/download
+  /// watermark sendiri utk pilih yang mana yang perlu direset.
   Future<void> resetUploadWatermark() async {
-    await LanSyncService.resetUploadWatermark(_ref.read(databaseProvider));
+    final db = _ref.read(databaseProvider);
+    await LanSyncService.resetUploadWatermark(db);
+    await LanSyncService.resetDownloadWatermark(db);
     _showTransient('Sync Ulang Penuh diaktifkan', SyncBannerTone.sync);
   }
 

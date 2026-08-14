@@ -76,7 +76,10 @@ void main() {
         db: db, child: const ReceiptScreen(transactionId: txId));
 
     expect(find.text('Sisa Tagihan'), findsOneWidget);
-    expect(find.text(formatRupiah(18100)), findsOneWidget);
+    // Muncul DUA kali: ringkasan "Sisa Tagihan" di atas, DAN baris "Sisa"
+    // per-sesi-bayar di kartu Riwayat Pembayaran (fitur baru, lihat dok
+    // `TransactionPayments.sisaAfter`) — keduanya harus konsisten Rp 18.100.
+    expect(find.text(formatRupiah(18100)), findsNWidgets(2));
     expect(find.text(formatRupiah(16800)), findsNothing);
   });
 }

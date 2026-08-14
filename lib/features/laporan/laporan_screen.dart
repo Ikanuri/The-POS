@@ -11,6 +11,7 @@ import 'tabs/transaksi_tab.dart';
 import 'tabs/hutang_tab.dart';
 import 'tabs/stok_tab.dart';
 import 'tabs/pengeluaran_tab.dart';
+import 'tabs/arus_kas_tab.dart';
 
 final dateRangeProvider = StateProvider<DateTimeRange>((ref) {
   final now = DateTime.now();
@@ -29,14 +30,14 @@ class LaporanScreen extends ConsumerStatefulWidget {
 
 class _LaporanScreenState extends ConsumerState<LaporanScreen>
     with SingleTickerProviderStateMixin {
-  // Item 49d — "Pengeluaran" ditambah di PALING AKHIR (bukan disisipkan di
-  // tengah) supaya index tab 0-3 yg dipakai `ReportTab.values[index]` utk
-  // ekspor PDF/Excel tetap sama persis, tak perlu ubah pemetaan itu. Sama
-  // seperti "Hutang"/"Stok" (index 4/5), tab ini TIDAK punya padanan
-  // `ReportTab` & tidak bisa diekspor (lihat _canExportCurrentTab) —
-  // ekspor PDF/Excel utk Pengeluaran scope terpisah (PLAN.md Item 47).
+  // Item 49d — "Pengeluaran", lalu "Arus Kas", ditambah di PALING AKHIR
+  // (bukan disisipkan di tengah) supaya index tab 0-3 yg dipakai
+  // `ReportTab.values[index]` utk ekspor PDF/Excel tetap sama persis, tak
+  // perlu ubah pemetaan itu. Sama seperti "Hutang"/"Stok" (index 4/5),
+  // kedua tab ini TIDAK punya padanan `ReportTab` & tidak bisa diekspor
+  // (lihat _canExportCurrentTab).
   late final TabController _tabController =
-      TabController(length: 7, vsync: this);
+      TabController(length: 8, vsync: this);
 
   @override
   void dispose() {
@@ -97,6 +98,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             Tab(text: 'Hutang'),
             Tab(text: 'Stok'),
             Tab(text: 'Pengeluaran'),
+            Tab(text: 'Arus Kas'),
           ],
         ),
       ),
@@ -114,6 +116,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                 const HutangTab(),
                 const StokTab(),
                 PengeluaranTab(range: range),
+                ArusKasTab(range: range),
               ],
             ),
           ),

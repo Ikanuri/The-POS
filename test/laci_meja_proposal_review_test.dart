@@ -34,6 +34,19 @@ void main() {
       'kosong', (tester) async {
     final hostDb = AppDatabase(NativeDatabase.memory());
     addTearDown(hostDb.close);
+    // Transaksi ini JUGA harus sudah ada di host (mis. disinkron duluan
+    // lewat jalur "Transaksi" terpisah) — kalau tidak, `applyLaciMejaProposals`
+    // sengaja MELEWATI baris ini (lihat dok di `AppDatabase.
+    // applyLaciMejaProposals`, fix utk bug FK constraint failed nyata).
+    await hostDb.into(hostDb.transactions).insert(TransactionsCompanion.insert(
+          id: 'tx1',
+          localId: 'tx1',
+          status: 'lunas',
+          total: 10000,
+          paid: 10000,
+          changeAmount: 0,
+          paymentMethod: 'tunai',
+        ));
 
     // Bangun usulan NYATA (row-set asli hasil dumpLaciMejaProposals) dari
     // DB kasir simulasi, bukan data palsu.
@@ -127,6 +140,17 @@ void main() {
       'tertulis ke DB host', (tester) async {
     final hostDb = AppDatabase(NativeDatabase.memory());
     addTearDown(hostDb.close);
+    // Sama seperti test di atas — transaksi harus sudah ada di host juga,
+    // kalau tidak `applyLaciMejaProposals` sengaja melewati barisnya.
+    await hostDb.into(hostDb.transactions).insert(TransactionsCompanion.insert(
+          id: 'tx1',
+          localId: 'tx1',
+          status: 'lunas',
+          total: 10000,
+          paid: 10000,
+          changeAmount: 0,
+          paymentMethod: 'tunai',
+        ));
 
     final kasirDb = AppDatabase(NativeDatabase.memory());
     await kasirDb.into(kasirDb.transactions).insert(TransactionsCompanion.insert(

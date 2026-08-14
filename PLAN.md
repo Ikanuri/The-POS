@@ -279,6 +279,27 @@ CHANGELOG 2026-07-18; test regresi: `test/lan_sync_item41_test.dart` +
 `test/audit_item41_unit_test.dart`, semua dgn bukti revert-merah.
 Di bawah ini HANYA yang masih menggantung.
 
+> **Diverifikasi ulang ke kode 11 Agustus 2026.** Tiap poin di bawah
+> dicek satu per satu ke file/baris sungguhan — yang sudah keburu
+> selesai lewat pekerjaan sesi lain DIHAPUS dari daftar (C.2 & A.11,
+> lihat catatan di bawah), sisanya dikonfirmasi MASIH ADA. **Angka &
+> deskripsi ikut dikoreksi** di beberapa poin yang cakupannya sudah
+> berubah sejak audit asli 18 Juli (file makin besar, callback statis
+> bertambah, duplikasi validasi hex jadi 3 tempat). Jangan percaya
+> daftar ini apa adanya lagi kalau sudah lewat beberapa sesi —
+> verifikasi ulang dulu spt ini sebelum dieksekusi.
+>
+> **Sudah SELESAI lewat pekerjaan lain (dihapus dari daftar):**
+> - **C.2 (upload klien→host selalu full-dump sejak epoch)** — tertutup
+>   oleh Item 17 Fase 2 (`sync_upload_queue` persisten) + Item 58
+>   (union antrian) + Item 61.1: watermark upload
+>   (`_kUploadWatermarkKey` di `lan_sync_service.dart`) sekarang benar²
+>   dimajukan, lengkap dgn pasangan `resetUploadWatermark`.
+> - **A.11 (`mergeRows` menghitung "diterima N" dari return
+>   `customInsert`)** — sekarang sudah `final inserted = await
+>   customInsert(...)` + `if (inserted > 0) count++`, jadi baris yang
+>   ter-skip `INSERT OR IGNORE` tidak lagi ikut terhitung.
+
 ### Sisa [P1]/[P2] — butuh keputusan/desain atau device fisik
 
 1. **[P1] B.1 — rotasi/pencabutan storeKey.** Risiko QR pairing membawa
@@ -288,62 +309,87 @@ Di bawah ini HANYA yang masih menggantung.
    re-pair semua device) dan/atau un-pair device (HP kasir hilang,
    pegawai keluar). Butuh desain UX + keputusan user — jangan dieksekusi
    sepihak. Sementara: kunci bocor = jalur "Alihkan Owner" ke identitas
-   toko baru.
-2. **[P2] C.2 — upload klien→host selalu full-dump sejak epoch.** Fix
-   minimal (satu slot antrian per IP) sudah menutup risiko OOM, tapi
-   biaya CPU/transfer tetap tumbuh seiring umur toko. Solusi struktural
-   SATU PAKET dgn Item 17+21: persist antrian approval host ke DB →
-   watermark upload aman dimajukan. Sesi fokus tersendiri (risiko
-   data-loss, wajib test round-trip HTTP asli).
+   toko baru. _(Dikonfirmasi 11 Agt: masih belum ada — `pairing_service.
+   dart` sendiri masih menulis "Belum ada mekanisme un-pair / rotasi".)_
+
+_(C.2 dulu ada di sini — SUDAH SELESAI, lihat catatan verifikasi di
+atas.)_
+
 ### Sisa [P3]
+
+Semua poin di bawah **dikonfirmasi MASIH ADA** per 11 Agustus 2026
+(dicek ke file:baris; nomor & deskripsi yang sudah bergeser sejak audit
+asli ikut dikoreksi di tempat).
 
 1. **A.8 redirect router tidak reaktif** — `ref.read` tanpa
    `refreshListenable`: perubahan state lisensi async tidak memicu
    redirect sampai navigasi berikutnya. Dokumentasikan atau pasang
-   Listenable gabungan.
+   Listenable gabungan. _(`app_router.dart:71,76` — masih `ref.read`.)_
 2. **A.9 `beforeOpen` unitTypes pakai `insertOrReplace`** padahal
    komentar bilang insertOrIgnore — bom waktu kalau kelak ada UI edit
-   satuan; samakan dgn `_seedDefaults`.
-3. **A.10 master data tanpa tombstone** — **SEBAGIAN SUDAH TERJAWAB (22
-   Juli)**: utk PRODUK, desain soft-delete tersinkron SUDAH ADA & SUDAH
-   CUKUP (tidak perlu tabel tombstone) — masalahnya murni bug implementasi
+   satuan; samakan dgn `_seedDefaults`. _(Masih beda: `unitTypes`
+   `insertOrReplace`, `kasirPermissions` di bawahnya `insertOrIgnore`.)_
+3. **A.10 master data tanpa tombstone** — **SEBAGIAN SUDAH TERJAWAB**:
+   utk PRODUK, desain soft-delete tersinkron SUDAH ADA & SUDAH CUKUP
+   (tidak perlu tabel tombstone) — masalahnya murni bug implementasi
    sempit (`deactivateProduct` lupa cap ulang `updated_at`), SUDAH
-   diperbaiki (lihat CHANGELOG `7f20d38`). **Belum diverifikasi**: apakah
-   pola bug yang SAMA (lupa cap `updated_at` saat soft-delete) juga ada di
-   `customers`/tier harga — cek dulu fungsi soft-delete pelanggan di
-   `app_database.dart` sebelum investigasi dari nol kalau ada laporan
-   "pelanggan yang dihapus owner masih muncul di klien".
-4. **A.11 `mergeRows` menghitung "diterima N" dari return `customInsert`**
-   — INSERT OR IGNORE yang ter-skip bisa tetap terhitung (kosmetik,
-   menyesatkan saat debug sync).
-5. **A.12 tutup buku: crash di antara copy-arsip & delete-data**
+   diperbaiki (lihat CHANGELOG `7f20d38`). **Utk PELANGGAN: sudah
+   diverifikasi 11 Agt — AMAN**, soft-delete `customers` sudah cap
+   `updatedAt: Value(DateTime.now())` eksplisit. **Sisa yang belum
+   diverifikasi: tier harga** (`price_tiers`/`alt_prices` disinkron
+   full-dump TANPA `updated_at` sama sekali — pola beda dari
+   products/customers, jadi pertanyaan tombstone-nya juga beda bentuk).
+4. **A.12 tutup buku: crash di antara copy-arsip & delete-data**
    meninggalkan state nyangkut ("Arsip tahun X sudah ada" padahal data
-   belum terhapus) tanpa jalur pemulihan.
-6. **B.7 `minifyEnabled=false`** — aktifkan R8 + keep rules (uji regresi
-   penuh, terutama drift/sqlcipher/BT).
-7. **B.8 `HttpCloudflareApi` tanpa timeout** — tambah connectionTimeout +
-   `.timeout()` seperti LAN sync.
-8. **C.3 `SystemChrome.setSystemUIOverlayStyle` & `ref.watch` di dalam
+   belum terhapus) tanpa jalur pemulihan. _(Masih: `execute()` copy file
+   dulu, baru `transaction()` delete — dua langkah terpisah.)_
+5. **B.7 `minifyEnabled=false`** — aktifkan R8 + keep rules (uji regresi
+   penuh, terutama drift/sqlcipher/BT). _(`build.gradle.kts:59-60`,
+   `minifyEnabled`+`shrinkResources` dua-duanya masih false.)_
+6. **B.8 `HttpCloudflareApi` tanpa timeout** — tambah connectionTimeout +
+   `.timeout()` seperti LAN sync. _(`cloudflare_publish_service.dart:75,
+   109` — `HttpClient()` polos, tanpa timeout apa pun.)_
+7. **C.3 `SystemChrome.setSystemUIOverlayStyle` & `ref.watch` di dalam
    `MaterialApp.builder`** — guard per perubahan brightness; pindahkan
-   watch ke build.
-9. **C.4 `generateUniqueLocalId` memuat semua transaksi hari itu** —
-   ganti `SELECT MAX(local_id)` + fallback bila mau rapi.
-10. **D.2 gotcha cleartext HTTP** — sync LAN kebetulan lolos blokir
-    cleartext Android karena dart:io; catat di CLAUDE.md (migrasi ke
-    package `http`/cronet akan mendadak gagal tanpa NSC exception).
-11. **D.3 Java 8 tanpa core library desugaring** — potensi build gagal
-    saat upgrade plugin.
-12. **D.5 terkunci di Flutter 3.24.5 (pin CI)** — di 3.44.6 stable gagal
+   watch ke build. _(`main.dart:120-122` — masih di dalam `builder:`.)_
+8. **C.4 `generateUniqueLocalId` memuat semua transaksi hari itu** —
+   ganti `SELECT MAX(local_id)` + fallback bila mau rapi. _(Sekarang
+   malah SELECT penuh dari DUA tabel: `transactions` +
+   `reserved_order_numbers`, lihat `_usedLocalIdsWithPrefix`.)_
+9. **D.2 gotcha cleartext HTTP** — sync LAN kebetulan lolos blokir
+   cleartext Android karena dart:io; catat di CLAUDE.md (migrasi ke
+   package `http`/cronet akan mendadak gagal tanpa NSC exception).
+   _(Dicek 11 Agt: kata "cleartext" masih NOL di CLAUDE.md & docs/ —
+   belum pernah dicatat.)_
+10. **D.3 Java 8 tanpa core library desugaring** — potensi build gagal
+    saat upgrade plugin. _(`build.gradle.kts:25-30` — masih
+    `VERSION_1_8` tanpa `coreLibraryDesugaring`.)_
+11. **D.5 terkunci di Flutter 3.24.5 (pin CI)** — di 3.44.6 stable gagal
     kompilasi: 1 error `CardTheme`→`CardThemeData` (`app_theme.dart:175`)
     + 53 deprecation (`withOpacity`, `DropdownButtonFormField.value`,
     `onReorder`). Rencanakan sesi upgrade SDK khusus (fix serentak +
-    full test + uji APK device fisik).
-13. **E — clean code**: pecah bertahap file raksasa (`kasir_screen.dart`
-    3.7k, `app_database.dart` 3.4k, `receipt_screen.dart` 2.7k);
-    `LanSyncService` full-static callback tunggal (2 listener saling
-    timpa); loop mati `lastQtyIdx` di `discount_allocation.dart`;
-    `_change` clamp `double.maxFinite.toInt()` → `max(0, ...)`;
-    duplikasi validasi hex key (`rekey` vs `_openConnection`).
+    full test + uji APK device fisik). _(CI masih pin `3.24.5`. Angka
+    error/deprecation di atas dari pengukuran 18 Juli — kemungkinan
+    sudah BERTAMBAH sejak itu, ukur ulang sebelum eksekusi.)_
+12. **E — clean code** (angka diperbarui 11 Agt, semua masih ada):
+    - pecah bertahap file raksasa — **sudah tumbuh jauh** dari angka
+      audit asli: `kasir_screen.dart` 3.7k→**4.2k**, `app_database.dart`
+      3.4k→**6.2k**, `receipt_screen.dart` 2.7k→**3.6k**.
+    - `LanSyncService` callback statis satu-slot — **sekarang 4, bukan
+      2**: `onQueueChanged`, `onProposalsChanged`,
+      `onLaciMejaProposalsChanged`, `onCustomerProposalsChanged`
+      (masing² `static void Function()?`, listener kedua menimpa yang
+      pertama).
+    - loop mati `lastQtyIdx` di `discount_allocation.dart:47-50` —
+      `lines` sudah difilter `eq > 0` di baris 42, jadi syarat
+      `lines[i].eq > 0` SELALU true & `lastQtyIdx` selalu berakhir
+      `lines.length - 1`. Bukan bug (hasilnya benar), murni loop
+      redundan yang bisa dihapus.
+    - `_change` clamp `double.maxFinite.toInt()` → `max(0, ...)`
+      (`payment_screen.dart:362` & `:1500`).
+    - duplikasi validasi hex key — **sekarang 3 tempat, bukan 2**:
+      `app_database.dart:4554` (rekey), `app_database.dart:6123`
+      (`_openConnection`), `archive_service.dart:50`.
 
 ---
 
@@ -529,3 +575,4 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
      1 angka) atau mulai hitung rata-rata tertimbang (lebih akurat kalau
      harga modal sering naik-turun antar pembelian, tapi perlu simpan
      riwayat per-batch pembelian, bukan cuma 1 kolom).
+

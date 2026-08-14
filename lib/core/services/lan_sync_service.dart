@@ -220,21 +220,57 @@ class LanSyncService {
   }
 
   static PendingSyncItem _pendingSyncItemFromRow(SyncUploadQueueData row) {
-    final rawTables = jsonDecode(row.tablesJson) as Map<String, dynamic>;
-    final tables = rawTables.map((k, v) {
+    return PendingSyncItem(
+      id: row.id,
+      fromIp: row.fromIp,
+      arrivedAt: row.arrivedAt,
+      tables: _decodeTablesJson(row.tablesJson),
+      since: row.since,
+      tablesSummary: row.tablesSummary,
+    );
+  }
+
+  /// Decode `tablesJson` (`sync_upload_queue`/payload mentah) jadi Map yang
+  /// dipakai di seluruh kelas ini — dipisah dari `_pendingSyncItemFromRow`
+  /// supaya bisa dipakai ulang oleh `_unionSyncTables` (lihat dok di sana).
+  static Map<String, List<Map<String, Object?>>> _decodeTablesJson(
+      String json) {
+    final rawTables = jsonDecode(json) as Map<String, dynamic>;
+    return rawTables.map((k, v) {
       final rows = (v as List).cast<Map<String, dynamic>>().map((r) {
         return r.map<String, Object?>((rk, rv) => MapEntry(rk, rv));
       }).toList();
       return MapEntry(k, rows);
     });
-    return PendingSyncItem(
-      id: row.id,
-      fromIp: row.fromIp,
-      arrivedAt: row.arrivedAt,
-      tables: tables,
-      since: row.since,
-      tablesSummary: row.tablesSummary,
-    );
+  }
+
+  /// Gabungkan (union) baris tabel append-only dari upload BARU dgn upload
+  /// LAMA yang MASIH menunggu approve owner (kalau ada) — mencegah bug
+  /// kritis dilaporkan lewat audit sesi ini: watermark upload klien
+  /// dimajukan begitu HTTP 200 diterima, BUKAN setelah owner approve, jadi
+  /// sync KEDUA yang menyusul cepat (kasir tap sync 2x, atau sync otomatis)
+  /// cuma bawa DELTA kecil/kosong — TANPA union, `enqueueSyncUpload` yang
+  /// DELETE+INSERT slot lama akan MENGHAPUS PERMANEN data lama yang belum
+  /// sempat di-approve. Dedup per baris berdasar kolom `id` (primary key
+  /// SEMUA tabel append-only) — baris yang identik di kedua sisi tidak
+  /// diduplikasi; baris LAMA yang tidak ada lagi di payload baru TETAP
+  /// dipertahankan (union, bukan replace).
+  static Map<String, List<Map<String, Object?>>> _unionSyncTables(
+    Map<String, List<Map<String, Object?>>> oldTables,
+    Map<String, List<Map<String, Object?>>> newTables,
+  ) {
+    final result = <String, List<Map<String, Object?>>>{};
+    for (final table in {...oldTables.keys, ...newTables.keys}) {
+      final seenIds = <Object?>{};
+      final merged = <Map<String, Object?>>[];
+      for (final row in [...?oldTables[table], ...?newTables[table]]) {
+        final id = row['id'];
+        if (id != null && !seenIds.add(id)) continue;
+        merged.add(row);
+      }
+      result[table] = merged;
+    }
+    return result;
   }
 
   // Item 40 — antrian usulan harga/produk (terpisah dari _pendingQueue).
@@ -299,11 +335,15 @@ class LanSyncService {
   }
 
   /// [approvedIds] per tabel (`left_behind_items`/`borrowed_items`/
-  /// `preorder_entries`) — subset id yang disetujui owner.
-  static Future<int> applyLaciMejaProposal(
-      String id, Map<String, Set<String>> approvedIds) async {
+  /// `preorder_entries`) — subset id yang disetujui owner. Sebagian baris
+  /// bisa saja DILEWATI (bukan gagal total) kalau transaksi terkaitnya
+  /// belum tersinkron ke host — lihat dok `AppDatabase.
+  /// applyLaciMejaProposals`.
+  static Future<({int applied, List<String> skippedReasons})>
+      applyLaciMejaProposal(
+          String id, Map<String, Set<String>> approvedIds) async {
     final idx = _pendingLaciMejaProposals.indexWhere((p) => p.id == id);
-    if (idx < 0) return 0;
+    if (idx < 0) return (applied: 0, skippedReasons: <String>[]);
     final item = _pendingLaciMejaProposals.removeAt(idx);
     onLaciMejaProposalsChanged?.call();
     return _db!.applyLaciMejaProposals(item.rows, approvedIds);
@@ -347,10 +387,24 @@ class LanSyncService {
     'transactions',
     'transaction_items',
     'transaction_payments',
+    'transaction_adjustment_lines',
     'stock_ledger',
     'loyalty_point_ledger',
     'expenses',
   };
+
+  /// Tabel yang mengalir DUA ARAH (klien->host maupun host->klien) dgn
+  /// last-write-wins by `updated_at` — beda dari [appendOnlyTables] yang
+  /// tidak pernah meng-update baris lama, dan dari master data yang sengaja
+  /// SATU ARAH (host sumber kebenaran).
+  ///
+  /// Sejauh ini cuma kamus penerimaan barang, atas permintaan user:
+  /// pemetaan teks->produk yang dipelajari device kasir HARUS ikut sampai ke
+  /// owner, bukan cuma sebaliknya. Aman dibedakan dari master data karena
+  /// isinya murni bantuan pencocokan (bukan harga/stok/identitas) — salah
+  /// entri paling buruk berakibat satu baris penerimaan salah tunjuk, dan
+  /// bisa langsung ditimpa dgn memilih ulang.
+  static const sharedTables = {'product_aliases'};
 
   /// Item 41 B.3 — tabel yang boleh di-merge KLIEN dari respons host.
   /// Host sudah lama punya guard [appendOnlyTables]; klien dulu menerima
@@ -360,6 +414,7 @@ class LanSyncService {
   /// `app_settings`).
   static const clientMergeableTables = {
     ...appendOnlyTables,
+    ...sharedTables,
     'products',
     'product_groups',
     'product_units',
@@ -375,16 +430,29 @@ class LanSyncService {
     'left_behind_items',
     'borrowed_items',
     'preorder_entries',
+    // Master data owner yang selama ini tidak pernah menyebar.
+    'payment_methods',
+    'employees',
+    // Setting toko — key-nya sendiri masih disaring `syncableSettingKeys`
+    // di `AppDatabase.mergeRows` (identitas device TIDAK ikut).
+    'app_settings',
   };
 
   /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi
   /// digabung (header + item + pembayaran) agar tidak pernah terpisah.
   /// Tabel pertama tiap kategori dipakai untuk menghitung jumlah tampilan.
   static const syncCategories = <String, List<String>>{
-    'Transaksi': ['transactions', 'transaction_items', 'transaction_payments'],
+    'Transaksi': [
+      'transactions',
+      'transaction_items',
+      'transaction_payments',
+      'transaction_adjustment_lines',
+    ],
     'Stok': ['stock_ledger'],
     'Poin Loyalti': ['loyalty_point_ledger'],
     'Pengeluaran': ['expenses'],
+    'Kamus Produk': ['product_aliases'],
+    'Pengaturan Toko': ['app_settings', 'payment_methods', 'employees'],
   };
 
   // ─── Host (server) side ──────────────────────────────────────────────────
@@ -530,7 +598,11 @@ class LanSyncService {
     }
 
     // 2. Child rows: cek induk yang tidak dikenal ke DB lokal (chunked).
-    const childTables = ['transaction_items', 'transaction_payments'];
+    const childTables = [
+      'transaction_items',
+      'transaction_payments',
+      'transaction_adjustment_lines',
+    ];
     final unknownParents = <String>{};
     for (final t in childTables) {
       for (final r in tables[t] ?? const <Map<String, Object?>>[]) {
@@ -606,14 +678,20 @@ class LanSyncService {
     int received = 0;
     final touchedTxIds = <String>{};
     final touchedStockUnitIds = <String>{};
+    final touchedLoyaltyCustomerIds = <String>{};
     for (final entry in tables.entries) {
-      // Guard satu arah: hanya tabel append-only yang boleh dari klien.
-      if (!appendOnlyTables.contains(entry.key)) continue;
+      // Guard satu arah: dari klien hanya boleh tabel append-only ATAU
+      // tabel dua-arah yang eksplisit (lihat [sharedTables]). Master data
+      // TETAP ditolak — host adalah sumber kebenarannya.
+      final isAppendOnly = appendOnlyTables.contains(entry.key);
+      if (!isAppendOnly && !sharedTables.contains(entry.key)) continue;
       // Filter kategori yang dipilih owner.
       if (allowedTables != null && !allowedTables.contains(entry.key)) continue;
-      received += await _db!.mergeRows(entry.key, entry.value, true);
+      received += await _db!.mergeRows(entry.key, entry.value, isAppendOnly);
       _collectTxIds(entry.key, entry.value, touchedTxIds);
       _collectStockUnitIds(entry.key, entry.value, touchedStockUnitIds);
+      _collectLoyaltyCustomerIds(
+          entry.key, entry.value, touchedLoyaltyCustomerIds);
     }
     // Rekonsiliasi total/paid dari child rows sebelum membangun ringkasan.
     // Id diambil juga dari item/pembayaran, sehingga transaksi lama yang hanya
@@ -626,6 +704,11 @@ class LanSyncService {
     // baris "terbaru" milik device lain menimpa pandangan saldo host
     // secara diam-diam (lihat rebuildStockAfterForUnits).
     await _db!.rebuildStockAfterForUnits(touchedStockUnitIds);
+    // Item 60 — poin loyalti WAJIB dihitung ulang setelah merge, alasan
+    // sama dgn saldo stok di atas: `customers.loyalty_points` di-LWW via
+    // `updated_at`, bisa ketimpa balik walau ledgernya sendiri sudah benar
+    // (lihat dok panjang di `rebuildLoyaltyPointsForCustomers`).
+    await _db!.rebuildLoyaltyPointsForCustomers(touchedLoyaltyCustomerIds);
     // Item 17 Fase 2 — item ini SUDAH resmi diproses, hapus dari antrian
     // durable (bukan cuma dari tampilan) supaya tidak pernah diproses ulang
     // walau host restart.
@@ -641,7 +724,9 @@ class LanSyncService {
       String table, List<Map<String, Object?>> rows, Set<String> out) {
     final key = table == 'transactions'
         ? 'id'
-        : (table == 'transaction_items' || table == 'transaction_payments')
+        : (table == 'transaction_items' ||
+                table == 'transaction_payments' ||
+                table == 'transaction_adjustment_lines')
             ? 'transaction_id'
             : null;
     if (key == null) return;
@@ -661,6 +746,18 @@ class LanSyncService {
     for (final r in rows) {
       final uid = r['product_unit_id'];
       if (uid is String && uid.isNotEmpty) out.add(uid);
+    }
+  }
+
+  /// Kumpulkan customer_id dari baris `loyalty_point_ledger` sebuah payload
+  /// — untuk [AppDatabase.rebuildLoyaltyPointsForCustomers] setelah merge
+  /// (Item 60), pola sama persis dgn [_collectStockUnitIds].
+  static void _collectLoyaltyCustomerIds(
+      String table, List<Map<String, Object?>> rows, Set<String> out) {
+    if (table != 'loyalty_point_ledger') return;
+    for (final r in rows) {
+      final cid = r['customer_id'];
+      if (cid is String && cid.isNotEmpty) out.add(cid);
     }
   }
 
@@ -837,9 +934,27 @@ class LanSyncService {
         return MapEntry(k, rows);
       });
 
-      // Build a human-readable summary for the approval UI.
+      // Item 58 — GABUNGKAN (union) dgn item antrian LAMA yang MASIH
+      // menunggu approve owner utk slot pengirim ini, bukan menimpanya.
+      // Watermark upload klien maju begitu HTTP 200 diterima (BUKAN setelah
+      // owner approve) — sync KEDUA yang menyusul cepat (tap sync 2x, atau
+      // auto-sync) cuma bawa DELTA kecil/kosong. Delete+insert lama (lihat
+      // dok panjang di `enqueueSyncUpload`) akan MENGHAPUS PERMANEN data
+      // lama yang belum sempat di-approve owner kalau tidak digabung dulu.
+      final existingItem = await _db!.getSyncUploadQueueItemForSlot(
+        fromIp: ip,
+        deviceCode: rawDeviceCode,
+      );
+      final finalTables = existingItem == null
+          ? tables
+          : _unionSyncTables(
+              _decodeTablesJson(existingItem.tablesJson),
+              tables,
+            );
+
+      // Build a human-readable summary for the approval UI (dari hasil union).
       final parts = <String>[];
-      for (final e in tables.entries) {
+      for (final e in finalTables.entries) {
         if (e.value.isNotEmpty) {
           final label = _tableLabel(e.key);
           parts.add('${e.value.length} $label');
@@ -856,15 +971,15 @@ class LanSyncService {
       // kirim ulang di percobaan berikutnya (aman, tidak ada data hilang).
       // "1 slot per pengirim" (Item 41 A.3, cegah RAM/DB menumpuk saat
       // klien nge-sync berulang sebelum owner approve) dipertahankan di
-      // dalam `enqueueSyncUpload` (delete+insert 1 transaksi) — AMAN
-      // menimpa item lama krn payload klien per-sync selalu superset dari
-      // watermark upload klien saat itu.
+      // dalam `enqueueSyncUpload` (delete+insert 1 transaksi) — payload yang
+      // di-insert di sini SUDAH hasil union (lihat Item 58 di atas), jadi
+      // delete+insert-nya aman walau payload klien per-sync bukan superset.
       final itemId = _generateNonce();
       await _db!.enqueueSyncUpload(
         id: itemId,
         fromIp: ip,
         deviceCode: rawDeviceCode,
-        tablesJson: jsonEncode(tables),
+        tablesJson: jsonEncode(finalTables),
         since: since,
         tablesSummary: summary,
       );
@@ -930,8 +1045,17 @@ class LanSyncService {
         }).toList();
         return MapEntry(k, rows);
       });
+      var filteredLaciMejaRows = laciMejaProposalRows;
+      if (laciMejaProposalRows.values.any((v) => v.isNotEmpty)) {
+        // Buang baris Laci Meja (mis. pre-order yang sudah "Dipenuhi") yang
+        // isinya SUDAH IDENTIK dgn data owner saat ini — laporan nyata user:
+        // pre-order yang sudah dipenuhi tetap terus diusulkan ulang tiap
+        // sync. Lihat dok `AppDatabase.filterUnchangedLaciMejaProposals`.
+        filteredLaciMejaRows =
+            await _db!.filterUnchangedLaciMejaProposals(laciMejaProposalRows);
+      }
       final laciMejaEntryCount =
-          laciMejaProposalRows.values.fold<int>(0, (a, b) => a + b.length);
+          filteredLaciMejaRows.values.fold<int>(0, (a, b) => a + b.length);
       if (laciMejaEntryCount > 0) {
         _pendingLaciMejaProposals.removeWhere((p) => p.slotKey == slotKey);
         _pendingLaciMejaProposals.add(PendingLaciMejaProposal(
@@ -939,7 +1063,7 @@ class LanSyncService {
           fromIp: ip,
           slotKey: slotKey,
           arrivedAt: DateTime.now(),
-          rows: laciMejaProposalRows,
+          rows: filteredLaciMejaRows,
           entryCount: laciMejaEntryCount,
         ));
         onLaciMejaProposalsChanged?.call();
@@ -1020,6 +1144,7 @@ class LanSyncService {
     'transactions': 'transaksi',
     'transaction_items': 'item transaksi',
     'transaction_payments': 'pembayaran',
+    'transaction_adjustment_lines': 'rincian retur/edit',
     'stock_ledger': 'stok',
     'loyalty_point_ledger': 'poin loyalti',
     'expenses': 'pengeluaran',
@@ -1098,6 +1223,18 @@ class LanSyncService {
       // menangani ini via `DateTime.tryParse('')` → null → fallback epoch,
       // tanpa perlu method delete-setting baru.
       db.setSetting(_kUploadWatermarkKey, '');
+
+  /// Item 61.1 — escape hatch manual utk watermark DOWNLOAD (klien→host),
+  /// pasangan [resetUploadWatermark] yang SEBELUMNYA tidak ada sama sekali.
+  /// `downloadSyncStartedAt` (dipakai memfilter baris berdasar jam HOST)
+  /// pakai jam KLIEN sendiri — kalau jam klien "lebih maju" dari jam host
+  /// (selisih di luar toleransi 5 menit, atau device pernah salah setel
+  /// tanggal), window download bisa macet PERMANEN (baris baru host
+  /// dianggap "sudah lama", tidak pernah di-dump lagi) TANPA cara reset
+  /// dari UI sama sekali sebelum ini — beda dari upload yang sudah punya
+  /// "Sync Ulang Penuh". Sama pola: string kosong, bukan hapus baris.
+  static Future<void> resetDownloadWatermark(AppDatabase db) =>
+      db.setSetting(_kDownloadWatermarkKey, '');
 
   static Future<SyncResult> syncToHost({
     required AppDatabase db,
@@ -1301,6 +1438,7 @@ class LanSyncService {
       final tables = respPayload['tables'] as Map<String, dynamic>? ?? {};
       final touchedTxIds = <String>{};
       final touchedStockUnitIds = <String>{};
+      final touchedLoyaltyCustomerIds = <String>{};
       for (final entry in tables.entries) {
         // Item 41 B.3 — hanya tabel yang memang disinkronkan (allowlist);
         // nama tak dikenal dilewati, bukan diteruskan mentah ke merge.
@@ -1315,6 +1453,7 @@ class LanSyncService {
             entry.key, rows, appendOnlyTables.contains(entry.key));
         _collectTxIds(entry.key, rows, touchedTxIds);
         _collectStockUnitIds(entry.key, rows, touchedStockUnitIds);
+        _collectLoyaltyCustomerIds(entry.key, rows, touchedLoyaltyCustomerIds);
       }
       // Rekonsiliasi total/paid dari child rows, lalu refresh ringkasan harian
       // untuk tanggal yang tersentuh — termasuk transaksi lama yang hanya
@@ -1324,6 +1463,9 @@ class LanSyncService {
       // Item 41 A.1 — hitung ulang saldo stok utk unit yang tersentuh merge
       // (alasan sama dgn approveSync di sisi host).
       await db.rebuildStockAfterForUnits(touchedStockUnitIds);
+      // Item 60 — hitung ulang poin loyalti utk pelanggan yang tersentuh
+      // merge (alasan sama dgn approveSync di sisi host).
+      await db.rebuildLoyaltyPointsForCustomers(touchedLoyaltyCustomerIds);
 
       // Watermark HANYA disimpan setelah data host benar-benar ter-merge
       // permanen ke DB lokal (baris di atas ini) — kalau ada exception di

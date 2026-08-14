@@ -554,13 +554,23 @@ class StockOpnameHistoryScreen extends ConsumerWidget {
                   subtitle: Text(
                       '${s.itemCount} produk disesuaikan',
                       style: const TextStyle(fontSize: 11)),
-                  trailing: Text(
-                    '${s.createdAt.day.toString().padLeft(2, '0')}/'
-                    '${s.createdAt.month.toString().padLeft(2, '0')}/'
-                    '${s.createdAt.year} '
-                    '${s.createdAt.hour.toString().padLeft(2, '0')}:'
-                    '${s.createdAt.minute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(fontSize: 11),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${s.createdAt.day.toString().padLeft(2, '0')}/'
+                        '${s.createdAt.month.toString().padLeft(2, '0')}/'
+                        '${s.createdAt.year} '
+                        '${s.createdAt.hour.toString().padLeft(2, '0')}:'
+                        '${s.createdAt.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      if (s.valueChange != 0) ...[
+                        const SizedBox(height: 2),
+                        _ValueChangeText(s.valueChange, bold: true),
+                      ],
+                    ],
                   ),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => _OpnameSessionDetailScreen(session: s),
@@ -591,24 +601,83 @@ class _OpnameSessionDetailScreen extends ConsumerWidget {
             return const Center(child: CircularProgressIndicator());
           }
           final rows = snap.data!;
-          return ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: rows.length,
-            itemBuilder: (context, i) {
-              final r = rows[i];
-              final v = r.qtyChange;
-              final label = v % 1 == 0 ? v.toInt().toString() : v.toString();
-              return ListTile(
-                dense: true,
-                title: Text(r.productName, style: const TextStyle(fontSize: 13)),
-                trailing: Text(
-                  '${v > 0 ? '+' : ''}$label',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          final totalValue = rows.fold<int>(0, (s, r) => s + r.valueChange);
+          return Column(
+            children: [
+              // Ringkasan nilai selisih SELURUH sesi — angka yang dipakai
+              // untuk pertanggungjawaban ("modal yang menguap berapa"),
+              // bukan cuma jumlah produknya.
+              if (totalValue != 0)
+                Card(
+                  margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: ListTile(
+                    dense: true,
+                    title: Text(
+                      totalValue < 0
+                          ? 'Nilai selisih (susut)'
+                          : 'Nilai selisih (lebih)',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    trailing: _ValueChangeText(totalValue, bold: true),
+                  ),
                 ),
-              );
-            },
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: rows.length,
+                  itemBuilder: (context, i) {
+                    final r = rows[i];
+                    final v = r.qtyChange;
+                    final label =
+                        v % 1 == 0 ? v.toInt().toString() : v.toString();
+                    return ListTile(
+                      dense: true,
+                      title: Text(r.productName,
+                          style: const TextStyle(fontSize: 13)),
+                      subtitle: r.valueChange != 0
+                          ? _ValueChangeText(r.valueChange)
+                          : null,
+                      trailing: Text(
+                        '${v > 0 ? '+' : ''}$label',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Nilai rupiah selisih opname. NEGATIF = stok fisik lebih sedikit dari
+/// catatan (susut/kerugian) → warna `error`; positif = fisik lebih banyak →
+/// `tertiary`. Pola warna SAMA dgn kartu laba/pengeluaran di tab Ringkasan
+/// Laporan supaya artinya konsisten di seluruh app.
+class _ValueChangeText extends StatelessWidget {
+  const _ValueChangeText(this.value, {this.bold = false});
+
+  final int value;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // `formatRupiah` tidak menerima angka negatif dgn rapi (tanda minus
+    // nyempil di antara "Rp" dan angka), jadi tandanya dibentuk manual di
+    // depan seperti baris Retur di struk.
+    final sign = value < 0 ? '-' : '+';
+    return Text(
+      '$sign${formatRupiah(value.abs())}',
+      style: AppTheme.numStyle(
+        context,
+        size: bold ? 12 : 11,
+        weight: bold ? FontWeight.w700 : FontWeight.w500,
+        color: value < 0 ? scheme.error : scheme.tertiary,
       ),
     );
   }

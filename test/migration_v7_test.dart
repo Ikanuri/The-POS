@@ -56,6 +56,22 @@ void main() {
 
     // Pastikan prakondisi benar: v6 & belum ada indeks pembayaran.
     v6.execute('PRAGMA user_version = 6;');
+    // Item 61.5 (fix baru) migrasi ALTER TABLE expenses ADD COLUMN
+    // deleted_at berlaku TANPA syarat versi — tabel ini WAJIB ada di
+    // fixture manapun yang diupgrade sampai schemaVersion terkini.
+    v6.execute('''
+      CREATE TABLE expenses (
+        id TEXT NOT NULL PRIMARY KEY,
+        local_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        note TEXT,
+        reference_id TEXT,
+        kasir_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT 0,
+        synced_at INTEGER
+      );
+    ''');
     final preIdx = v6
         .select("SELECT name FROM sqlite_master WHERE type='index' "
             "AND tbl_name='transaction_payments'")
@@ -87,7 +103,7 @@ void main() {
     // menambah alt_prices, change_taken & sort_order, tapi test ini fokus
     // ke migrasi 6->7).
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 28); // schemaVersion terkini
+    expect(ver.data.values.first, 32); // schemaVersion terkini
 
     // Data lama tetap utuh setelah migrasi.
     final pay = await db.customSelect(

@@ -223,7 +223,7 @@ const String _htmlTemplate = r'''
   --canvas:#ebe8e0; --panel:#fbfaf7; --card:#ffffff;
   --ink:#2a2824; --ink-2:#6c685f; --ink-3:#9d988b;
   --line:#e7e2d7; --field:#f1eee7;
-  --ok:#4f7b5e; --warn:#b9702b;
+  --ok:#4f7b5e; --warn:#b9702b; --danger:#c03a3a; --danger-bg:#fbeaea;
   --r-card:14px; --r-btn:11px;
   --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --serif:'Newsreader',Georgia,"Iowan Old Style","Palatino Linotype",serif;
@@ -235,13 +235,13 @@ const String _htmlTemplate = r'''
   --canvas:#161412; --panel:#211e1c; --card:#2a2623;
   --ink:#ece7dd; --ink-2:#a8a298; --ink-3:#726c63;
   --line:#383330; --field:#1c1917;
-  --ok:#6fa380; --warn:#d39a52;
+  --ok:#6fa380; --warn:#d39a52; --danger:#e0685f; --danger-bg:#3a2320;
 }
 :root[data-theme="light"]{
   --canvas:#ebe8e0; --panel:#fbfaf7; --card:#ffffff;
   --ink:#2a2824; --ink-2:#6c685f; --ink-3:#9d988b;
   --line:#e7e2d7; --field:#f1eee7;
-  --ok:#4f7b5e; --warn:#b9702b;
+  --ok:#4f7b5e; --warn:#b9702b; --danger:#c03a3a; --danger-bg:#fbeaea;
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;}
@@ -315,10 +315,12 @@ body{
   margin:10px auto 4px;flex-shrink:0;}
 .sheet-head{display:flex;align-items:center;padding:6px 16px 10px;flex-shrink:0;}
 .sheet-head b{font-size:18px;}
-.clear-cart-btn{margin-left:12px;border:none;background:transparent;color:var(--ink-3);
-  font-size:13px;font-weight:600;cursor:pointer;padding:4px 0;text-decoration:underline;}
-.sheet-x{margin-left:auto;border:none;background:transparent;color:var(--ink-3);
-  font-size:24px;cursor:pointer;padding:4px;}
+.clear-cart-btn{margin-left:auto;border:1px solid var(--danger);background:var(--danger-bg);
+  color:var(--danger);font-size:13px;font-weight:700;cursor:pointer;padding:8px 12px;
+  border-radius:999px;display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;}
+.clear-cart-btn svg{width:15px;height:15px;flex-shrink:0;}
+.sheet-x{margin-left:8px;border:none;background:transparent;color:var(--ink-3);
+  font-size:24px;cursor:pointer;padding:4px;flex-shrink:0;}
 .sheet-body{overflow-y:auto;padding:0 16px;flex:1;}
 .citem{display:flex;flex-direction:column;gap:7px;padding:11px 0;
   border-bottom:1px solid var(--line);}
@@ -327,12 +329,30 @@ body{
 .ci-name{font-size:16px;font-weight:600;}
 .ci-price{font-size:13.5px;color:var(--ink-3);margin-top:2px;}
 .ci-note-view{font-size:13.5px;color:var(--ink-2);padding:0 0 6px;}
+.ci-controls{display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .stepper{display:flex;align-items:center;gap:0;background:var(--field);
   border-radius:999px;overflow:hidden;flex-shrink:0;}
 .stepper button{width:34px;height:34px;border:none;background:transparent;
   color:var(--accent);font-size:19px;font-weight:700;cursor:pointer;
   display:flex;align-items:center;justify-content:center;}
 .stepper .n{min-width:26px;text-align:center;font-weight:700;font-size:15px;}
+.ci-delete{width:32px;height:32px;border:none;background:transparent;color:var(--ink-3);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:999px;
+  flex-shrink:0;}
+.ci-delete svg{width:17px;height:17px;}
+.ci-delete:hover{background:var(--danger-bg);color:var(--danger);}
+.confirm-overlay{position:fixed;inset:0;background:rgba(20,16,10,.42);z-index:40;
+  display:none;align-items:center;justify-content:center;}
+.confirm-overlay.show{display:flex;}
+.confirm-box{background:var(--card);border-radius:16px;padding:20px;width:280px;
+  max-width:calc(100vw - 40px);box-shadow:0 12px 30px rgba(0,0,0,.25);}
+.confirm-title{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+.confirm-body{font-size:14px;color:var(--ink-2);line-height:1.5;margin-bottom:18px;}
+.confirm-actions{display:flex;gap:10px;}
+.confirm-actions button{flex:1;border-radius:999px;padding:11px;font-size:14.5px;
+  font-weight:700;cursor:pointer;border:none;}
+.btn-cancel{background:var(--field);color:var(--ink);}
+.btn-danger{background:var(--danger);color:#fff;}
 .field-label{font-size:13px;color:var(--ink-3);font-weight:600;margin:16px 0 6px;}
 .tfield{width:100%;border:1px solid var(--line);background:var(--field);
   border-radius:var(--r-btn);padding:11px 13px;font-size:16px;color:var(--ink);
@@ -405,7 +425,7 @@ textarea.tfield{resize:none;min-height:64px;}
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-grip"></div>
-  <div class="sheet-head"><b>Pesanan Anda</b><button class="clear-cart-btn" id="clearCartBtn" type="button">Kosongkan</button><button class="sheet-x" id="sheetClose">&times;</button></div>
+  <div class="sheet-head"><b>Pesanan Anda</b><button class="clear-cart-btn" id="clearCartBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Kosongkan Keranjang</button><button class="sheet-x" id="sheetClose">&times;</button></div>
   <div class="sheet-body">
     <div id="cartItems"></div>
     <div class="field-label">Nama</div>
@@ -446,6 +466,18 @@ textarea.tfield{resize:none;min-height:64px;}
     <div class="grand"><span class="gl">Subtotal</span><span class="gv" id="itemSubtotal">Rp 0</span></div>
     <button class="add-cta" id="itemAddBtn" type="button">Tambah ke Pesanan</button>
     <button class="copy-btn" id="itemRemoveBtn" type="button" style="display:none;">Hapus dari Pesanan</button>
+  </div>
+</div>
+
+
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirmTitle"></div>
+    <div class="confirm-body" id="confirmBody"></div>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="confirmCancel" type="button">Batal</button>
+      <button class="btn-danger" id="confirmOk" type="button">Hapus</button>
+    </div>
   </div>
 </div>
 
@@ -520,14 +552,61 @@ function loadCart(){
   } catch (e) {}
 }
 
+// Modal konfirmasi generik (ganti confirm() bawaan browser yang tidak
+// ikut tema app) — dipakai baik utk kosongkan semua maupun hapus satu
+// barang, supaya kedua tindakan destruktif ini konsisten butuh konfirmasi
+// eksplisit sebelum benar-benar menghapus data pesanan pelanggan.
+var _confirmCb = null;
+function showConfirm(title, body, okLabel, cb){
+  _confirmCb = cb;
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmBody').textContent = body;
+  document.getElementById('confirmOk').textContent = okLabel;
+  document.getElementById('confirmOverlay').classList.add('show');
+}
+function hideConfirm(){
+  document.getElementById('confirmOverlay').classList.remove('show');
+  _confirmCb = null;
+}
+document.getElementById('confirmCancel').addEventListener('click', hideConfirm);
+document.getElementById('confirmOverlay').addEventListener('click', function(e){
+  if (e.target === this) hideConfirm();
+});
+document.getElementById('confirmOk').addEventListener('click', function(){
+  var cb = _confirmCb;
+  hideConfirm();
+  if (cb) cb();
+});
+
 function clearCart(){
-  if (cartCount() > 0 && !confirm('Kosongkan semua barang di pesanan ini?')) return;
-  cart = {};
-  cartNotes = {};
-  try { localStorage.removeItem(CART_STORAGE_KEY); } catch (e) {}
-  render();
+  if (cartCount() === 0) return;
+  showConfirm(
+    'Kosongkan Keranjang?',
+    'Semua barang (' + cartCount() + ' item) akan dihapus dari pesanan ini. Tindakan ini tidak bisa dibatalkan.',
+    'Kosongkan',
+    function(){
+      cart = {};
+      cartNotes = {};
+      try { localStorage.removeItem(CART_STORAGE_KEY); } catch (e) {}
+      render();
+    }
+  );
 }
 document.getElementById('clearCartBtn').addEventListener('click', clearCart);
+
+// Hapus SATU barang langsung (terpisah dari stepper −) — sebelumnya cuma
+// bisa dihapus dgn menekan − berulang sampai qty 0, tidak eksplisit &
+// tidak ada konfirmasi sama sekali walau barangnya banyak/mahal.
+function deleteCartItem(unitId){
+  var u = byUnit[unitId];
+  if (!u) return;
+  showConfirm(
+    'Hapus Barang?',
+    '"' + u.name + '" akan dihapus dari pesanan Anda.',
+    'Hapus',
+    function(){ setQty(unitId, 0); }
+  );
+}
 
 DATA.products.forEach(function(p){
   // Satuan lain (mis. Dus di samping Biji) sama-sama milik produk INI —
@@ -814,7 +893,18 @@ function renderCartSheet(){
       '<div class="ci-info"><div class="ci-name">'+esc(u.name)+'</div>' +
         '<div class="ci-price">'+qty+' '+esc(u.unit)+' × '+rp(price)+
           ' = '+rp(price*qty)+'</div></div>';
-    top.appendChild(buildStepper(id, qty));
+    var controls = document.createElement('div');
+    controls.className = 'ci-controls';
+    controls.appendChild(buildStepper(id, qty));
+    var delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'ci-delete';
+    delBtn.dataset.act = 'delete';
+    delBtn.dataset.id = id;
+    delBtn.setAttribute('aria-label', 'Hapus barang');
+    delBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+    controls.appendChild(delBtn);
+    top.appendChild(controls);
     // Item 14 — tap baris (di luar tombol +/-) buka lagi modal item, utk
     // ubah satuan/harga/catatan tanpa menghapus & menambah ulang dari nol.
     top.addEventListener('click', function(e){
@@ -840,6 +930,7 @@ document.getElementById('cartItems').addEventListener('click', function(e){
   var btn = e.target.closest('button[data-act]');
   if (!btn) return;
   var id = btn.dataset.id;
+  if (btn.dataset.act === 'delete') { deleteCartItem(id); return; }
   var cur = cart[id] || 0;
   setQty(id, btn.dataset.act === 'inc' ? cur + 1 : cur - 1);
 });

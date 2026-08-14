@@ -403,7 +403,9 @@ void main() {
       await db.close();
     });
 
-    test('tidak ada saldo yang perlu dibawa (semua unit punya sisa riwayat) → tanpa entri tambahan',
+    test(
+        'unit punya sisa riwayat SETELAH periode → carry-forward TETAP dibuat '
+        '(Item 59: kontribusi baris terhapus wajib dibawa utk rebuildStockAfterForUnits)',
         () async {
       final dbFile = File('${tempDir.path}/the_pos.db');
       final db = AppDatabase(NativeDatabase(dbFile));
@@ -445,9 +447,24 @@ void main() {
       final ledger = await (db.select(db.stockLedger)
             ..where((t) => t.productUnitId.equals('U-X')))
           .get();
-      expect(ledger.length, 1, reason: 'tidak ada carry-forward yang perlu ditambahkan');
-      expect(ledger.single.id, 'sl-2');
-      expect(await db.currentStock('U-X'), 40);
+      // sl-1 (dalam periode, qty_change 50) terhapus, TAPI kontribusinya
+      // WAJIB dibawa via 1 baris carry-forward baru walau sl-2 (setelah
+      // periode) masih ada — kalau tidak, `rebuildStockAfterForUnits`
+      // (dipanggil sync host/client) akan kehilangan +50 itu saat
+      // menjumlah ulang dari nol.
+      expect(ledger.length, 2,
+          reason: 'sl-2 (sisa) + 1 carry-forward baru utk kontribusi sl-1 '
+              'yang terhapus');
+      expect(ledger.map((r) => r.id), containsAll(['sl-2']));
+      expect(await db.currentStock('U-X'), 40,
+          reason: 'pembaca (_rawBaseStock) tetap ambil baris TERAKHIR — '
+              'tidak berubah, carry-forward ditanggal SEBELUM sl-2');
+
+      // Buktikan carry-forward-nya benar dgn simulasi rebuild (efek sync).
+      await db.rebuildStockAfterForUnits({'U-X'});
+      expect(await db.currentStock('U-X'), 40,
+          reason: 'invariant: rebuild TIDAK BOLEH mengubah saldo akhir yang '
+              'sudah benar (Item 59)');
 
       await db.close();
     });

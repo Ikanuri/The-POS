@@ -8,9 +8,221 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 14 Agustus 2026
+
+### 🔧 Perbaikan
+- **QR Transfer Transaksi lebih gampang di-scan**: gambar QR di sheet
+  "Transfer Transaksi"/"Kirim ke Owner/Asisten" sekarang cuma berisi
+  kode intinya saja — jadi tidak sepadat dan tidak segelap dulu, lebih
+  gampang dibaca kamera scanner. Daftar barang lengkap tetap ada kok,
+  cuma dipindah ke tombol "Salin Teks Pesanan" dan "Share Pesanan" —
+  jadi kalau mau kirim manual lewat WhatsApp/Telegram, teksnya tetap
+  enak dibaca lengkap dengan nama barang & totalnya.
+
+---
+
+## 13 Agustus 2026
+
+### 🆕 Fitur baru
+- **Riwayat Pembayaran lebih detail** (di struk in-app, saat lihat
+  kembali sebuah nota): setiap kali ada **retur atau edit barang**,
+  sekarang tampil rincian barang apa saja yang diretur/diedit — nama
+  barang, jumlah, harga satuan, dan totalnya — tanpa perlu menghitung
+  ulang manual. Untuk **nota tempo/kurang bayar**, tiap kali kasir
+  menerima sebagian pembayaran, langsung tampil juga baris "Sisa" di
+  bawahnya (contoh: total belanja Rp 193.000, dibayar Tunai Rp 192.000,
+  Sisa Rp 1.000) — persis seperti baris "Kembalian" yang sudah ada,
+  tapi tanpa perlu dicentang karena sisa tempo tidak akan dipakai
+  ulang. Kembalian atau sisa yang muncul TEPAT pada momen retur/edit
+  itu sendiri juga langsung terlihat di situ. Fitur ini murni untuk
+  membantu kasir & audit — struk yang dibagikan (share/cetak) tidak
+  berubah.
+
+---
+
+## 11 Agustus 2026
+
+### 🆕 Fitur baru
+- **Penerimaan Barang**: tempel daftar barang yang datang (satu baris
+  "jumlah satuan nama", misalnya "5 pcs Indomie Goreng") dan stok
+  langsung bertambah. Baris pemisah tanggal otomatis diabaikan. Barang
+  yang namanya tidak persis sama tinggal dipilih sekali dari daftar
+  (ada kotak pencarian), lalu **diingat** — penerimaan berikutnya tidak
+  akan menanyakan barang yang sama lagi, dan ingatan itu ikut tersalin
+  ke perangkat lain saat sinkron. Bisa dibuka dari layar Cek Stok.
+- **Statistik per produk & per pelanggan**: baris di Laporan → tab
+  Produk dan tab Pelanggan sekarang **bisa diketuk** untuk melihat
+  rinciannya — kapan saja terjual, tren harian, siapa pembelinya, dan
+  untuk pelanggan: barang apa yang rutin dia beli + riwayat notanya.
+  Semuanya bisa disaring per rentang tanggal. Statistik pelanggan juga
+  bisa dibuka langsung dari halaman detail pelanggan. Grafik tren
+  penjualan produk sekarang berupa **garis interaktif** — sentuh atau
+  geser di sepanjang garis untuk melihat tanggal & jumlahnya, dan tetap
+  rapi walau rentang tanggalnya panjang (mis. setahun penuh).
+- **Laporan Arus Kas** (tab baru di Laporan): uang yang benar-benar
+  masuk & keluar pada rentang itu — nota tempo yang belum dibayar
+  tidak ikut dihitung, dan pelunasan hutang nota lama dihitung di
+  tanggal uangnya benar-benar diterima. Dipisah tunai vs non-tunai,
+  lengkap dengan tren harian.
+- **Nilai rupiah selisih di riwayat Stock Opname** — sebelumnya cuma
+  menampilkan jumlah barang; sekarang terlihat berapa rupiah modal yang
+  susut (atau lebih) dari tiap sesi opname.
+
+### 🔧 Perbaikan
+- **Retur/hapus barang yang melebihi sisa hutang sekarang memunculkan
+  kembalian** — sebelumnya, kalau pelanggan punya hutang tempo lalu
+  meretur barang senilai lebih dari sisa hutangnya, kelebihan yang jadi
+  haknya tidak muncul di mana pun sehingga kasir tidak tahu ada uang
+  yang harus dikembalikan. Sekarang tampil sebagai kembalian biasa,
+  lengkap dengan centang "sudah diserahkan".
+- **Pengaturan toko ikut tersalin ke perangkat lain saat sinkron** —
+  aturan poin loyalti, kebijakan stok minus, nama/alamat/nomor toko di
+  struk, catatan struk, daftar metode pembayaran, dan daftar pegawai.
+  Sebelumnya semua itu hanya berlaku di perangkat pemilik; akibatnya
+  belanja bernilai sama bisa mendapat poin berbeda tergantung perangkat
+  mana yang melayani, dan struk dari perangkat berbeda bisa
+  mencantumkan alamat/nomor yang sudah tidak berlaku.
+
+## 9 Agustus 2026
+
+### 🔧 Perbaikan
+- **Tombol debug sementara di "Tempel Pesanan" (ikon kutu) sudah
+  dicabut** — dipasang untuk investigasi bug pegawai tidak bisa tempel
+  pesanan, bug-nya sudah tidak lagi terjadi jadi tombolnya tidak
+  diperlukan lagi.
+- **Angka "Sisa" di Riwayat Transaksi sekarang selalu sama dengan
+  "Sisa Tagihan" di struk** — sebelumnya, untuk nota yang kembaliannya
+  dipakai ulang sebagai pembayaran, Riwayat Transaksi bisa menampilkan
+  angka yang salah (bahkan minus), padahal struknya sendiri sudah
+  benar. Tombol "Lunasi" juga ikut dibetulkan supaya jumlah yang
+  tercatat sebagai pembayaran selalu akurat.
+
+## 8 Agustus 2026
+
+### 🆕 Fitur baru
+- **QR/teks transfer keranjang antar-perangkat sekarang menampilkan
+  daftar barang & totalnya**, bukan cuma kode acak — jadi sebelum
+  scan, penerima (atau siapa pun yang lihat pesannya di WhatsApp)
+  bisa langsung baca sekilas isi pesanannya.
+
+### 🔧 Perbaikan
+- **Penghapusan pengeluaran sekarang ikut tersinkron ke perangkat
+  lain** — sebelumnya, pengeluaran yang dihapus di satu perangkat
+  bisa tetap muncul di perangkat lain yang sudah menerimanya lebih
+  dulu, bikin laba bersih beda antar perangkat.
+- **Dialog terima data sync**: kategori "Stok" sekarang otomatis
+  ikut tercentang & tidak bisa dilepas selama kategori "Transaksi"
+  dipilih — mencegah penjualan tercatat tanpa stoknya ikut berkurang.
+- **"Sync Ulang Penuh" sekarang benar-benar penuh** — dulu cuma
+  mereset satu arah (data yang dikirim), sekarang mereset kedua arah
+  sekaligus. Membantu kalau jam salah satu perangkat pernah salah
+  setel dan sinkron jadi macet.
+- **Pelunasan/cicilan/tambahan belanja pada nota yang sudah pernah
+  disinkron sekarang selalu sampai ke pemilik toko.** Sebelumnya,
+  kalau nota itu headernya sudah lebih dulu tersinkron, pelunasan atau
+  penambahan barang belakangan padanya bisa gagal terkirim sama
+  sekali dan otomatis ditolak dengan pesan "tidak ada data baru" —
+  padahal ada.
+- **Nota tempo yang belum lunas tidak lagi bisa "hilang" dari Laporan
+  → Buku Hutang.** Sebelumnya, kalau pelanggan yang sama punya nota
+  lain yang pernah kelebihan bayar (kembalian dari nota itu dipakai
+  ulang untuk belanja tambahan), nota tempo-nya yang genuinely belum
+  lunas bisa hilang sama sekali dari daftar Buku Hutang — padahal
+  tetap muncul normal di riwayat transaksi. Sekarang perhitungannya
+  benar, nota tempo selalu tampil.
+- **Poin loyalti pelanggan tidak lagi bisa "hilang" setelah sinkron
+  antar-perangkat.** Sebelumnya, kalau pegawai/kasir mencatat poin
+  baru untuk pelanggan, lalu perangkat itu sinkron dengan pemilik
+  toko, poin barunya kadang bisa tertimpa balik ke angka lama.
+  Sekarang poin selalu dihitung ulang dari riwayat lengkap
+  (transaksi masuk/keluar poin) setelah sinkron, jadi tidak akan
+  pernah salah atau hilang.
+- **Saldo stok tidak lagi bisa berubah salah setelah Tutup Buku** —
+  kalau sebuah barang punya riwayat stok sebelum DAN sesudah periode
+  yang baru diarsipkan (bukan cuma di periode yang diarsipkan itu
+  sendiri), sebelumnya saldo barang tersebut bisa jadi salah begitu
+  sinkron dengan perangkat lain pertama kali dilakukan pasca Tutup
+  Buku. Sekarang saldo dijamin tetap benar.
+- **Data yang dikirim kasir/pegawai untuk disetujui pemilik toko tidak
+  lagi bisa hilang tanpa jejak** kalau perangkat itu sinkron dua kali
+  berturut-turut sebelum sempat disetujui (misal tap tombol sync 2x,
+  atau sinkron otomatis kepicu lagi). Sebelumnya, sinkron kedua bisa
+  menimpa & menghapus permanen data dari sinkron pertama yang belum
+  sempat ditinjau pemilik toko — sekarang data digabung, tidak ada yang
+  hilang.
+
+## 6 Agustus 2026
+
+### 🆕 Fitur baru
+- **Letak checkbox verifikasi di baris keranjang sekarang bisa diatur
+  sendiri** — tombol pengaturan (ikon gerigi) baru di samping ikon
+  "Tempel Pesanan" di keranjang, dengan 4 pilihan posisi: depan qty
+  (default), belakang tombol +/-, kiri tombol minus, atau di sebelah
+  nama barang.
+- **Opsi konfirmasi sebelum tombol minus mengurangi qty** — di dialog
+  pengaturan yang sama, cegah qty berkurang tanpa sengaja kalau jari
+  tergelincir menekan tombol minus. Kalau aktif, tap pertama tombol
+  minus membuat baris item bergetar sebagai peringatan (belum
+  mengurangi apa pun) — tap berikutnya (selama jari belum pindah ke
+  tombol lain) baru benar-benar mengurangi qty, boleh ditekan
+  berkali-kali beruntun seperti stepper biasa. Mati secara default,
+  bisa diaktifkan sendiri.
+
+### 🔧 Perbaikan
+- **Pre-order/titip/pinjaman yang sudah selesai (Dipenuhi/Dibatalkan/
+  Diambil/Dikembalikan) tidak lagi terus-menerus muncul sebagai usulan
+  baru** di layar Sync pemilik toko — sebelumnya bisa terus diusulkan
+  ulang walau sudah pernah disetujui.
+- **Transfer keranjang lewat scan QR antar HP sekarang membawa semua
+  detail** — harga yang sudah diubah manual, satuan Harga Lain, dan
+  centang verifikasi item sekarang ikut terbawa ke penerima. Sebelumnya
+  detail ini hilang dan harga dihitung ulang dari awal di HP penerima.
+  **Kecuali** untuk pegawai tanpa izin "Terima Pembayaran" — harga dari
+  device mereka tetap dihitung ulang otomatis di HP penerima (bukan
+  dipercaya mentah-mentah), supaya owner tidak menerima harga yang belum
+  divalidasi.
+- **Usulan Laci Meja (Titip/Ketinggalan/Pinjaman/Pre-order) dari kasir
+  ke pemilik toko tidak lagi gagal total** saat transaksi terkaitnya
+  belum sempat tersinkron ke perangkat pemilik — sekarang baris itu
+  ditunda otomatis dan akan muncul lagi begitu transaksinya sampai.
+- **Checkbox verifikasi di baris keranjang kembali ke sisi kiri** (sempat
+  dipindah ke kanan di update sebelumnya).
+
+## 5 Agustus 2026
+
+### 🆕 Fitur baru
+- **Katalog HTML (pesan sendiri via WhatsApp): keranjang pelanggan bisa
+  hapus barang langsung** — tiap baris ada ikon tempat sampah sendiri
+  (dulu cuma bisa turunkan jumlah sampai 0), lengkap dengan konfirmasi
+  sebelum benar-benar terhapus. Tombol "Kosongkan" juga diperjelas jadi
+  "Kosongkan Keranjang" dengan ikon merah di pojok kanan atas.
+- **Nomor serial device sekarang disamarkan (spoiler)** di halaman
+  Lisensi & Serial — tersembunyi di balik pola titik-titik sampai
+  diketuk, mencegah orang lewat membaca sidik jari device sekilas.
+- **Panduan & Tips ditambah 6 bab baru**: Printer Bluetooth, Backup &
+  Restore + Alihkan Owner, Poin Loyalitas, Retur & Edit Transaksi
+  Lunas, Tutup Kasir vs Tutup Buku, dan Katalog Pesanan.
+
+### 🔧 Perbaikan
+- **Ikon di halaman Tentang Aplikasi diganti gambar resolusi lebih
+  tinggi** — tidak lagi terlihat patah-patah/pecah di HP layar tajam.
+- Garis tipis yang sempat muncul di atas isi panduan saat dibuka
+  (Panduan & Tips) sudah dihilangkan.
+- Seksi "Segera Hadir" di halaman Lisensi & Serial dihapus (belum ada
+  isinya, cuma tempat kosong).
+
 ## 4 Agustus 2026
 
 ### 🆕 Fitur baru
+- **Halaman baru "Tentang Aplikasi"** (Pengaturan → Lainnya → Tentang
+  Aplikasi) — nomor versi, dan tombol "?" untuk buka "Panduan & Tips":
+  daftar panduan yang bisa dicari (mis. ketik "izin" atau "tempel
+  pesanan"), tiap panduan disertai tips fitur yang mungkin belum
+  disadari (mis. tempel pesanan otomatis masuk ke keranjang aktif).
+- **"Info Lisensi & Serial"** (nomor serial dalam bentuk QR — bisa
+  langsung discan developer, tanggal diaktifkan, tanggal berlaku
+  sampai) sekarang dibuka dari halaman "Tentang Aplikasi" di atas. QR
+  serial juga tampil di layar aktivasi device baru.
 - **Keranjang sekarang ingat posisi scroll terakhir** — kalau sedang
   mencentang barang di keranjang yang panjang lalu tidak sengaja kepencet
   item (kembali ke layar kasir), begitu buka keranjang lagi posisinya

@@ -101,6 +101,13 @@ lib/
   `Material` **di dalam** `Theme(data: AppTheme.light())` agar ink light dipakai.
 - **Font PDF default** tidak mendukung en-dash `–` / non-ASCII. Pakai ASCII
   (`-`, `s/d`). Printer ESC/POS juga: sanitasi ke ASCII.
+- **`DateFormat(..., 'id_ID')` MELEDAK** — app ini TIDAK PERNAH memanggil
+  `initializeDateFormatting`, jadi konstruktor `DateFormat` ber-locale throw
+  `LocaleDataException` **saat build** → SELURUH layar gagal render (layar
+  merah), bukan cuma tanggalnya salah format. Nama hari/bulan Indonesia
+  WAJIB dibentuk MANUAL (lihat `_idMonths` di `expenses_screen.dart` /
+  `device_license_screen.dart`). `DateFormat` TANPA locale (mis.
+  `DateFormat('yyyy-MM-dd')`) aman.
 - **Field harga IME desync** akibat pemisah ribuan — hati-hati saat mengubah
   formatting input angka.
 - **`formatRupiah` pakai non-breaking space (U+00A0)** antara "Rp" dan angka,

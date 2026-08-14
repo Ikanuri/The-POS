@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
+import '../../../core/providers/theme_provider.dart';
 import '../../../core/services/order_parser_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
@@ -94,7 +97,29 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final meta = ref.read(cartMetaProvider(widget.cartId));
     final employeeName =
         meta.hasEmployee ? meta.employeeName! : device.deviceName;
-    final qrText = OrderParserService.encodeHandoff(
+    final needsGate = ref.read(needsPaymentGateProvider).valueOrNull ?? false;
+    // Susulan (permintaan user, 14 Agt 2026): payload QR dipisah dari teks
+    // Copy/Share. `OrderParserService.parse` HANYA membaca baris `#PSN:...`
+    // + baris meta (Pegawai/Nama/dst) lewat regex per-baris — blok
+    // manusiawi "PESANAN — toko / daftar produk / Total" (digerbang param
+    // `storeName`, lihat dok Item 54 di `encodeHandoff`) SAMA SEKALI TIDAK
+    // ikut di-parse, baik lewat scan kamera/HID maupun Tempel Pesanan. Blok
+    // itu jadi beban murni di gambar QR (utk keranjang banyak baris/
+    // catatan, blok inilah kontributor terbesar panjang teks) — makin
+    // banyak modul, makin padat & rawan gagal-scan, TANPA manfaat
+    // fungsional apa pun krn memang tidak pernah dibaca ulang. QR sekarang
+    // pakai `storeName: null` (cuma kode mesin, padat modul rendah);
+    // Copy/Share TETAP teks lengkap (enak dibaca manusia via WhatsApp/dst).
+    final qrOnlyCodeText = OrderParserService.encodeHandoff(
+      items: cart,
+      employeeName: employeeName,
+      customerName: meta.hasCustomer ? meta.customerName : null,
+      customerId: meta.customerId,
+      reservedLocalId: meta.reservedLocalId,
+      trustPrices: !needsGate,
+      storeName: null,
+    );
+    final shareText = OrderParserService.encodeHandoff(
       items: cart,
       employeeName: employeeName,
       customerName: meta.hasCustomer ? meta.customerName : null,
@@ -105,8 +130,20 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       // dibawa utuh, supaya "urutan pelanggan yang harus dilayani" tetap
       // sama di penerima (bukan reservasi baru).
       reservedLocalId: meta.reservedLocalId,
+      // Susulan (kekhawatiran user, valid): device TANPA izin
+      // terima_pembayaran (needsGate true — tombol Bayar-nya otomatis
+      // jadi "Kirim ke Owner/Asisten") bisa menyetel Harga Lain/override
+      // manual di keranjangnya sendiri TANPA gerbang izin apa pun. Kalau
+      // harga itu dipercaya mentah-mentah, owner menerima harga yang
+      // belum pernah divalidasi dari device tak berizin. Untuk pengirim
+      // begini, harga TETAP di-resolve ulang fresh dari DB penerima
+      // (perilaku lama) — hanya device BERIZIN (owner/asisten/pegawai
+      // terima_pembayaran) yang harganya dipercaya penuh.
+      trustPrices: !needsGate,
+      // Item 54 — keterangan item + Total manusia-bisa-baca di depan kode
+      // mesin, format sama dgn katalog HTML (`buildOrderText`).
+      storeName: device.storeName,
     );
-    final needsGate = ref.read(needsPaymentGateProvider).valueOrNull ?? false;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -116,7 +153,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         // owner/asisten (satu arah pasti); transfer bebas (Item 56) bisa
         // ke device manapun, judul generik.
         title: needsGate ? 'Kirim ke Owner/Asisten' : 'Transfer Transaksi',
-        qrText: qrText,
+        qrCodeText: qrOnlyCodeText,
+        shareText: shareText,
         itemCount: cart.where((c) => !c.isVariant).length,
         total: cart.fold<int>(0, (s, c) => s + (c.price * c.qty).round()),
       ),
@@ -150,6 +188,75 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     ref.read(cartProvider(widget.cartId).notifier).clear();
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
     if (ctx.mounted) Navigator.of(ctx).pop();
+  }
+
+  /// Susulan (permintaan user): dialog "Pengaturan Keranjang" — berisi
+  /// posisi checkbox verifikasi (`CartCheckboxPosition`) DAN toggle
+  /// konfirmasi tombol minus stepper (`cartMinusConfirmProvider`, mencegah
+  /// missclick qty berkurang tanpa sengaja) — keduanya persisten
+  /// (SharedPreferences), berlaku global utk semua keranjang, bukan
+  /// per-`cartId`.
+  void _showCartSettingsDialog(BuildContext ctx) {
+    showDialog<void>(
+      context: ctx,
+      builder: (dCtx) => Consumer(
+        builder: (context, dialogRef, _) {
+          final current = dialogRef.watch(cartCheckboxPositionProvider);
+          final minusConfirm = dialogRef.watch(cartMinusConfirmProvider);
+          return AlertDialog(
+            title: const Text('Pengaturan Keranjang'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('Letak checkbox verifikasi',
+                        style: Theme.of(context).textTheme.labelLarge),
+                  ),
+                  for (final pos in CartCheckboxPosition.values)
+                    RadioListTile<CartCheckboxPosition>(
+                      value: pos,
+                      groupValue: current,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(pos.label),
+                      onChanged: (v) {
+                        if (v != null) {
+                          dialogRef
+                              .read(cartCheckboxPositionProvider.notifier)
+                              .set(v);
+                        }
+                      },
+                    ),
+                  const Divider(height: 24),
+                  SwitchListTile(
+                    value: minusConfirm,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Konfirmasi sebelum kurangi qty'),
+                    subtitle: const Text(
+                        'Tap pertama tombol minus cuma bergetar sbg '
+                        'peringatan; tap berikutnya (selama stepper masih '
+                        'membesar) baru benar-benar mengurangi qty'),
+                    onChanged: (v) => dialogRef
+                        .read(cartMinusConfirmProvider.notifier)
+                        .set(v),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dCtx).pop(),
+                child: const Text('Tutup'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -251,6 +358,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       ),
                       icon: const Icon(Icons.content_paste_go),
                     ),
+                  // Susulan (permintaan user): tombol pengaturan keranjang —
+                  // untuk sekarang isinya cuma posisi checkbox verifikasi
+                  // (lihat `CartCheckboxPosition`), tapi dibuat generik
+                  // ("Pengaturan Keranjang") supaya opsi lain bisa ditambah
+                  // ke dialog yang sama nanti tanpa tombol baru lagi.
+                  IconButton(
+                    tooltip: 'Pengaturan Keranjang',
+                    onPressed: () => _showCartSettingsDialog(ctx),
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
                   if (canTransfer)
                     IconButton(
                       tooltip: 'Transfer via QR',
@@ -291,6 +408,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             final item = ordered[i];
                             final effQty = notifier.effectiveQtyFor(item);
                             return _CartItemTile(
+                              // Susulan (permintaan user, fitur getar+tap-lagi
+                              // minus): key stabil PER-ITEM wajib supaya state
+                              // "bersenjata" (`_armed`)/timer TIDAK bocor ke
+                              // baris lain kalau urutan keranjang berubah
+                              // (mis. qty item lain diubah, ikut mengubah
+                              // `orderCartItems`).
+                              key: ValueKey(item.productUnitId),
                               index: i,
                               item: item,
                               isVariant: item.isVariant,
@@ -355,8 +479,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   }
 }
 
-class _CartItemTile extends ConsumerWidget {
+/// Lama getar peringatan ("gesture warning") tombol minus saat toggle
+/// "Konfirmasi sebelum kurangi qty" aktif.
+const _kMinusShakeDuration = Duration(milliseconds: 400);
+
+class _CartItemTile extends ConsumerStatefulWidget {
   const _CartItemTile({
+    super.key,
     required this.index,
     required this.item,
     this.isVariant = false,
@@ -370,11 +499,102 @@ class _CartItemTile extends ConsumerWidget {
   final String cartId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CartItemTile> createState() => _CartItemTileState();
+}
+
+class _CartItemTileState extends ConsumerState<_CartItemTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shakeController;
+  // Susulan (perubahan desain KEDUA, permintaan user — jendela waktu tetap
+  // 1.5 detik DIHAPUS TOTAL): "bersenjata" sekarang berlaku SELAMA stepper
+  // baris ini masih membesar (`AddControl.activeStepper`, mekanisme
+  // "pijakan jempol" yang SUDAH ADA — stepper tetap besar sampai user tap
+  // AREA LAIN/scroll, lihat dok di `add_control.dart`), BUKAN sampai timer
+  // habis. Alasan user: kadang butuh menekan minus berkali-kali TANPA
+  // pindah jempol — jendela waktu tetap bikin tap kedua/ketiga/dst yang
+  // terlambat (tapi jempol MASIH di situ) dianggap tap pertama lagi
+  // (getar ulang, bukan mengurangi).
+  final GlobalKey<State<AddControl>> _stepperKey = GlobalKey();
+  bool _armed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shakeController =
+        AnimationController(vsync: this, duration: _kMinusShakeDuration);
+    AddControl.activeStepper.addListener(_handleActiveStepperChanged);
+  }
+
+  @override
+  void dispose() {
+    AddControl.activeStepper.removeListener(_handleActiveStepperChanged);
+    _shakeController.dispose();
+    super.dispose();
+  }
+
+  /// Dipanggil setiap kali stepper YANG SEDANG MEMBESAR di seluruh layar
+  /// berganti (mis. user tap stepper baris LAIN, tap area kosong, atau
+  /// scroll — lihat `StepperActiveScope`/`AddControl.clearActive`). Kalau
+  /// baris KITA tadinya bersenjata & TERNYATA bukan lagi stepper yang aktif
+  /// (jempol sudah pindah), lepas status bersenjata.
+  void _handleActiveStepperChanged() {
+    if (_armed &&
+        !identical(AddControl.activeStepper.value, _stepperKey.currentState)) {
+      _disarm();
+    }
+  }
+
+  void _disarm() {
+    if (_armed && mounted) setState(() => _armed = false);
+  }
+
+  /// Tap PERTAMA (belum `_armed`): getarkan baris sbg warning — TIDAK
+  /// mengurangi qty sama sekali. Tap KEDUA/ketiga/dst yang jatuh SELAMA
+  /// stepper baris ini masih membesar (`_armed` masih true, lihat
+  /// `_handleActiveStepperChanged`): benar-benar mengurangi qty tanpa
+  /// dilepas statusnya — jempol boleh menekan minus berkali-kali beruntun
+  /// tanpa perlu getar ulang tiap kali, PERSIS spt stepper `+` biasa.
+  void _handleMinusTap(CartNotifier notifier) {
+    if (_armed) {
+      notifier.setEffectiveQty(
+          widget.item.productUnitId, widget.effectiveQty - 1);
+      return;
+    }
+    setState(() => _armed = true);
+    _shakeController.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final isVariant = widget.isVariant;
+    final effectiveQty = widget.effectiveQty;
+    final cartId = widget.cartId;
     final notifier = ref.read(cartProvider(cartId).notifier);
     final scheme = Theme.of(context).colorScheme;
     final isZeroed = !isVariant && effectiveQty == 0;
     final subtotal = (item.price * effectiveQty).round();
+    // Susulan (permintaan user): letak checkbox verifikasi sekarang bisa
+    // diatur (dialog "Pengaturan Keranjang" di header `CartSheet`) — 4 opsi,
+    // lihat `CartCheckboxPosition`. Widget-nya dibangun sekali di sini lalu
+    // ditaruh di salah satu dari 4 posisi berbeda di bawah (mutually
+    // exclusive, cuma satu cabang `if` yang aktif per build).
+    final position = ref.watch(cartCheckboxPositionProvider);
+    // Susulan (perubahan desain, permintaan user): toggle "Konfirmasi
+    // sebelum kurangi qty" di dialog "Pengaturan Keranjang" — mencegah qty
+    // berkurang tanpa sengaja (missclick) saat menekan tombol minus
+    // stepper. Default OFF. Versi AWAL fitur ini pakai dialog konfirmasi —
+    // diganti total krn butuh 1 tap ekstra + jempol biasanya sudah di atas
+    // stepper (menutupi warning kalau cuma stepper yg digetarkan) — jadi
+    // SELURUH baris ikut bergetar (lihat `_handleMinusTap`), lebih kentara
+    // walau jempol/fokus mata sedang di area manapun pada baris ini.
+    final minusConfirm = ref.watch(cartMinusConfirmProvider);
+    final checkbox = Checkbox(
+      value: item.checked,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      onChanged: (v) => notifier.setChecked(item.productUnitId, v ?? false),
+    );
 
     // Susulan (permintaan user): baris keranjang TIDAK lagi memakai
     // `ListTile`. Alasannya konkret — `ListTile` mengunci tinggi
@@ -384,225 +604,257 @@ class _CartItemTile extends ConsumerWidget {
     // "RenderFlex overflowed by 14 pixels"). Disusun manual dengan `Row`
     // supaya blok kanan (centang + stepper + subtotal) bebas tinggi dan
     // tetap aman saat skala font sistem dibesarkan.
-    return Opacity(
-      opacity: isZeroed ? 0.45 : 1.0,
-      child: InkWell(
-        // Tap item keranjang → tutup sheet keranjang sambil mengembalikan id
-        // produk yang akan diedit. Kasir akan membuka modal entri item di atas
-        // layar (bukan bertumpuk di atas DraggableScrollableSheet, yang
-        // memutus koneksi input keyboard). Untuk varian, kirim id induk.
-        onTap: () {
-          final targetId = (item.isVariant && item.parentProductId != null)
-              ? item.parentProductId!
-              : item.productId;
-          Navigator.of(context).pop(targetId);
-        },
-        child: Container(
-          // Susulan (permintaan user): highlight soft utk item yang sudah
-          // dicentang (verifikasi serah-terima) — supaya kelihatan sekilas
-          // baris mana yang sudah/belum dicek, tanpa mengganggu keterbacaan
-          // teks (opacity rendah, warna tema `primary`, bukan warna keras).
-          color: item.checked
-              ? scheme.primary.withOpacity(0.08)
-              : Colors.transparent,
-          child: Padding(
-            // Susulan (permintaan user): jarak ke tepi layar diperlebar di
-            // KEDUA sisi (dulu 8/4px — terlalu mepet, checklist+stepper nyaris
-            // menempel tepi kanan, nama+nominal nyaris menempel tepi kiri).
-            padding: EdgeInsets.fromLTRB(isVariant ? 40 : 16, 4, 16, 4),
-            child: Row(
-              children: [
-                // Item 44 — badge jumlah qty di KIRI item (selain angka di
-                // stepper kanan), supaya qty langsung kebaca tanpa lihat ke
-                // stepper. Hanya tampil bila qty > 0 (baris "via varian" qty 0
-                // tidak diberi badge).
-                if (effectiveQty > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: Text(
-                      '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}\u00d7',
-                      style: AppTheme.numStyle(context,
-                          size: 13,
-                          weight: FontWeight.w600,
-                          color: scheme.onSurfaceVariant),
+    return AnimatedBuilder(
+      animation: _shakeController,
+      // Osilasi horizontal meredam (amplitudo mengecil seiring waktu) —
+      // pola getar umum utk warning "hati-hati" tanpa perlu paket animasi
+      // tambahan.
+      builder: (context, child) {
+        final t = _shakeController.value;
+        final dx = t == 0 ? 0.0 : sin(t * pi * 6) * 6 * (1 - t);
+        return Transform.translate(offset: Offset(dx, 0), child: child);
+      },
+      child: Opacity(
+        opacity: isZeroed ? 0.45 : 1.0,
+        child: InkWell(
+          // Tap item keranjang → tutup sheet keranjang sambil mengembalikan id
+          // produk yang akan diedit. Kasir akan membuka modal entri item di atas
+          // layar (bukan bertumpuk di atas DraggableScrollableSheet, yang
+          // memutus koneksi input keyboard). Untuk varian, kirim id induk.
+          onTap: () {
+            final targetId = (item.isVariant && item.parentProductId != null)
+                ? item.parentProductId!
+                : item.productId;
+            Navigator.of(context).pop(targetId);
+          },
+          child: Container(
+            // Susulan (permintaan user): highlight soft utk item yang sudah
+            // dicentang (verifikasi serah-terima) — supaya kelihatan sekilas
+            // baris mana yang sudah/belum dicek, tanpa mengganggu keterbacaan
+            // teks (opacity rendah, warna tema `primary`, bukan warna keras).
+            color: item.checked
+                ? scheme.primary.withOpacity(0.08)
+                : Colors.transparent,
+            child: Padding(
+              // Susulan (permintaan user): jarak ke tepi layar diperlebar di
+              // KEDUA sisi (dulu 8/4px — terlalu mepet, checklist+stepper nyaris
+              // menempel tepi kanan, nama+nominal nyaris menempel tepi kiri).
+              padding: EdgeInsets.fromLTRB(isVariant ? 40 : 16, 4, 16, 4),
+              child: Row(
+                children: [
+                  // Susulan (permintaan user): checkbox verifikasi posisi
+                  // "depan qty, paling kiri" — DEFAULT, tapi sekarang cuma satu
+                  // dari 4 opsi yang bisa dipilih (lihat `position` di atas).
+                  if (position == CartCheckboxPosition.depanQty) checkbox,
+                  // Item 44 — badge jumlah qty di KIRI item (selain angka di
+                  // stepper kanan), supaya qty langsung kebaca tanpa lihat ke
+                  // stepper. Hanya tampil bila qty > 0 (baris "via varian" qty 0
+                  // tidak diberi badge).
+                  if (effectiveQty > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Text(
+                        '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}\u00d7',
+                        style: AppTheme.numStyle(context,
+                            size: 13,
+                            weight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant),
+                      ),
                     ),
-                  ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          if (isVariant)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(Icons.subdirectory_arrow_right,
-                                  size: 15, color: scheme.onSurfaceVariant),
-                            ),
-                          Expanded(
-                            // Permintaan user — nama produk panjang dulu terpotong 1 baris
-                            // (ellipsis); sekarang auto-tumbuh sampai 2 baris. `ListTile`
-                            // menyesuaikan tinggi baris ke title/subtitle-nya sendiri,
-                            // leading/trailing (checkbox, stepper, harga) tetap fixed-size
-                            // & otomatis center-vertikal — tidak perlu restrukturisasi.
-                            //
-                            // Item 52 redesain pre-order — label "Titip [qty]" (jaminan
-                            // dititip) DISATUKAN ke text run yang SAMA (bukan Text/Container
-                            // terpisah dgn jarak sendiri) — pola PERSIS badge "Habis" di
-                            // katalog kasir (`'${product.name} · Habis'`), supaya
-                            // keterangannya menempel rapat ke nama, bukan berjarak.
-                            child: (item.depositQty != null &&
-                                    item.depositQty! > 0)
-                                ? Text.rich(
-                                    TextSpan(
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            if (isVariant)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Icon(Icons.subdirectory_arrow_right,
+                                    size: 15, color: scheme.onSurfaceVariant),
+                              ),
+                            Flexible(
+                              // Permintaan user — nama produk panjang dulu terpotong 1 baris
+                              // (ellipsis); sekarang auto-tumbuh sampai 2 baris. `ListTile`
+                              // menyesuaikan tinggi baris ke title/subtitle-nya sendiri,
+                              // leading/trailing (checkbox, stepper, harga) tetap fixed-size
+                              // & otomatis center-vertikal — tidak perlu restrukturisasi.
+                              //
+                              // Item 52 redesain pre-order — label "Titip [qty]" (jaminan
+                              // dititip) DISATUKAN ke text run yang SAMA (bukan Text/Container
+                              // terpisah dgn jarak sendiri) — pola PERSIS badge "Habis" di
+                              // katalog kasir (`'${product.name} · Habis'`), supaya
+                              // keterangannya menempel rapat ke nama, bukan berjarak.
+                              //
+                              // Susulan (permintaan user): `Expanded` diganti `Flexible` —
+                              // dibutuhkan supaya opsi checkbox "kanan nama" bisa menempel
+                              // PAS setelah nama (bukan terdorong ke ujung kanan baris);
+                              // `Flexible` (loose fit) membiarkan Text menyusut ke lebar
+                              // aslinya, beda dari `Expanded` (tight fit) yang MEMAKSA lebar
+                              // penuh ruang tersisa walau namanya pendek.
+                              child: (item.depositQty != null &&
+                                      item.depositQty! > 0)
+                                  ? Text.rich(
+                                      TextSpan(
+                                        style: TextStyle(
+                                            fontSize: isVariant ? 15 : 17,
+                                            color: isVariant
+                                                ? scheme.onSurfaceVariant
+                                                : null),
+                                        children: [
+                                          TextSpan(text: item.productName),
+                                          TextSpan(
+                                            text:
+                                                ' · Titip ${item.depositQty! % 1 == 0 ? item.depositQty!.toInt() : item.depositQty}',
+                                            style: TextStyle(
+                                                fontSize: isVariant ? 12 : 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppTheme.laciFg(
+                                                    Theme.of(context)
+                                                            .brightness ==
+                                                        Brightness.dark)),
+                                          ),
+                                        ],
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    )
+                                  : Text(item.productName,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                           fontSize: isVariant ? 15 : 17,
                                           color: isVariant
                                               ? scheme.onSurfaceVariant
-                                              : null),
+                                              : null)),
+                            ),
+                            if (position == CartCheckboxPosition.kananNama) ...[
+                              const SizedBox(width: 2),
+                              checkbox,
+                            ],
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: scheme.onSurfaceVariant),
                                       children: [
-                                        TextSpan(text: item.productName),
+                                        TextSpan(text: '${item.unitName} · '),
                                         TextSpan(
-                                          text:
-                                              ' · Titip ${item.depositQty! % 1 == 0 ? item.depositQty!.toInt() : item.depositQty}',
-                                          style: TextStyle(
-                                              fontSize: isVariant ? 12 : 13,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppTheme.laciFg(
-                                                  Theme.of(context)
-                                                          .brightness ==
-                                                      Brightness.dark)),
-                                        ),
+                                            text: formatRupiah(item.price),
+                                            style: AppTheme.numStyle(context,
+                                                size: 13,
+                                                color:
+                                                    scheme.onSurfaceVariant)),
                                       ],
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (item.priceOverridden) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.edit,
+                                      size: 12, color: scheme.tertiary),
+                                ],
+                                if (isZeroed) ...[
+                                  const SizedBox(width: 4),
+                                  Text('via varian',
+                                      style: TextStyle(
+                                          fontSize: 12, color: scheme.primary)),
+                                ],
+                              ],
+                            ),
+                            // Susulan (permintaan user): nominal subtotal taruh PERSIS di
+                            // bawah baris satuan+harga ("Karung · Rp 65.000") — bukan di
+                            // blok kanan (dulu sempat dicoba di bawah qty badge kiri, lalu
+                            // di bawah stepper; keduanya BUKAN yang dimaksud user).
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                formatRupiah(subtotal),
+                                style: AppTheme.numStyle(context,
+                                    size: 14,
+                                    weight: FontWeight.w700,
+                                    color: isZeroed
+                                        ? scheme.onSurfaceVariant
+                                        : scheme.primary),
+                              ),
+                            ),
+                            if (item.itemNote != null &&
+                                item.itemNote!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Container(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(8, 3, 6, 3),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                        left: BorderSide(
+                                            width: 3,
+                                            color: scheme.tertiary
+                                                .withOpacity(0.5))),
+                                    color: scheme.tertiary.withOpacity(0.06),
+                                    borderRadius: const BorderRadius.horizontal(
+                                        right: Radius.circular(4)),
+                                  ),
+                                  child: Text(
+                                    item.itemNote!,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                  )
-                                : Text(item.productName,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        fontSize: isVariant ? 15 : 17,
-                                        color: isVariant
-                                            ? scheme.onSurfaceVariant
-                                            : null)),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text.rich(
-                                  TextSpan(
                                     style: TextStyle(
                                         fontSize: 13,
-                                        color: scheme.onSurfaceVariant),
-                                    children: [
-                                      TextSpan(text: '${item.unitName} · '),
-                                      TextSpan(
-                                          text: formatRupiah(item.price),
-                                          style: AppTheme.numStyle(context,
-                                              size: 13,
-                                              color: scheme.onSurfaceVariant)),
-                                    ],
+                                        fontStyle: FontStyle.italic,
+                                        color: scheme.tertiary),
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (item.priceOverridden) ...[
-                                const SizedBox(width: 4),
-                                Icon(Icons.edit,
-                                    size: 12, color: scheme.tertiary),
-                              ],
-                              if (isZeroed) ...[
-                                const SizedBox(width: 4),
-                                Text('via varian',
-                                    style: TextStyle(
-                                        fontSize: 12, color: scheme.primary)),
-                              ],
-                            ],
-                          ),
-                          // Susulan (permintaan user): nominal subtotal taruh PERSIS di
-                          // bawah baris satuan+harga ("Karung · Rp 65.000") — bukan di
-                          // blok kanan (dulu sempat dicoba di bawah qty badge kiri, lalu
-                          // di bawah stepper; keduanya BUKAN yang dimaksud user).
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              formatRupiah(subtotal),
-                              style: AppTheme.numStyle(context,
-                                  size: 14,
-                                  weight: FontWeight.w700,
-                                  color: isZeroed
-                                      ? scheme.onSurfaceVariant
-                                      : scheme.primary),
-                            ),
-                          ),
-                          if (item.itemNote != null &&
-                              item.itemNote!.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Container(
-                                padding: const EdgeInsets.fromLTRB(8, 3, 6, 3),
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                      left: BorderSide(
-                                          width: 3,
-                                          color: scheme.tertiary
-                                              .withOpacity(0.5))),
-                                  color: scheme.tertiary.withOpacity(0.06),
-                                  borderRadius: const BorderRadius.horizontal(
-                                      right: Radius.circular(4)),
-                                ),
-                                child: Text(
-                                  item.itemNote!,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      fontStyle: FontStyle.italic,
-                                      color: scheme.tertiary),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                // Susulan (permintaan user): nominal PINDAH ke bawah baris
-                // satuan+harga (lihat blok kiri di atas) — blok kanan sekarang
-                // cuma checkbox + stepper, tidak ada lagi teks yang ditumpuk di
-                // sini. Checkbox verifikasi ada di sini (kiri stepper, sesuai
-                // permintaan: stepper paling kanan, centang di kirinya), jarak
-                // ke stepper DIRENGGANGKAN (permintaan user) — stepper (widget
-                // `AddControl`) sendiri TIDAK diubah desainnya.
-                Checkbox(
-                  value: item.checked,
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  onChanged: (v) =>
-                      notifier.setChecked(item.productUnitId, v ?? false),
-                ),
-                const SizedBox(width: 14),
-                AddControl(
-                  qty: effectiveQty,
-                  size: 30,
-                  onTap: () => notifier.setEffectiveQty(
-                      item.productUnitId, effectiveQty + 1),
-                  onMinus: isZeroed
-                      ? null
-                      : () => notifier.setEffectiveQty(
-                          item.productUnitId, effectiveQty - 1),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  // Susulan (permintaan user): nominal PINDAH ke bawah baris
+                  // satuan+harga (lihat blok kiri di atas) — blok kanan sekarang
+                  // cuma stepper, KECUALI kalau posisi checkbox diatur ke
+                  // "kiri stepper"/"belakang stepper" (lihat 2 cabang di bawah).
+                  if (position == CartCheckboxPosition.kiriStepper) ...[
+                    checkbox,
+                    // Jarak supaya checkbox tidak ikut terpencet saat menekan
+                    // tombol minus stepper (permintaan eksplisit user).
+                    const SizedBox(width: 6),
+                  ],
+                  AddControl(
+                    key: _stepperKey,
+                    qty: effectiveQty,
+                    size: 30,
+                    onTap: () => notifier.setEffectiveQty(
+                        item.productUnitId, effectiveQty + 1),
+                    onMinus: isZeroed
+                        ? null
+                        : minusConfirm
+                            ? () => _handleMinusTap(notifier)
+                            : () => notifier.setEffectiveQty(
+                                item.productUnitId, effectiveQty - 1),
+                  ),
+                  if (position == CartCheckboxPosition.belakangStepper) ...[
+                    // Jarak supaya checkbox tidak ikut terpencet saat menekan
+                    // tombol plus stepper (permintaan eksplisit user).
+                    const SizedBox(width: 6),
+                    checkbox,
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -621,13 +873,24 @@ class _CartItemTile extends ConsumerWidget {
 class _HandoffQrSheet extends StatelessWidget {
   const _HandoffQrSheet({
     required this.title,
-    required this.qrText,
+    required this.qrCodeText,
+    required this.shareText,
     required this.itemCount,
     required this.total,
   });
 
   final String title;
-  final String qrText;
+
+  /// Payload GAMBAR QR — cuma kode mesin (`#PSN:...` + baris meta), TANPA
+  /// blok manusiawi "PESANAN — toko / daftar produk / Total" — lihat dok
+  /// panjang di `_showHandoffQr`. Lebih pendek = modul QR lebih rendah =
+  /// lebih gampang di-scan, TANPA mengubah apa pun yang diterima penerima
+  /// (blok yang dibuang memang tidak pernah ikut ke-parse).
+  final String qrCodeText;
+
+  /// Teks utk tombol Salin/Share — TETAP lengkap (blok manusiawi + kode
+  /// mesin) supaya enak dibaca kalau ditempel di WhatsApp/Telegram.
+  final String shareText;
   final int itemCount;
   final int total;
 
@@ -653,7 +916,7 @@ class _HandoffQrSheet extends StatelessWidget {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: QrImageView(data: qrText, size: 220),
+              child: QrImageView(data: qrCodeText, size: 220),
             ),
             const SizedBox(height: 12),
             Text(
@@ -663,12 +926,13 @@ class _HandoffQrSheet extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             // Jalur cadangan kalau scan QR susah (kamera rusak/pencahayaan
-            // kurang) — teks pesanan yang SAMA persis dgn isi QR bisa
+            // kurang) — teks pesanan (versi LENGKAP, beda dari isi QR yang
+            // diperkecil demi kepadatan modul — lihat dok `shareText`) bisa
             // ditempel manual lewat WhatsApp/Telegram, lalu owner buka
             // "Tempel Pesanan" di kasir (parser sudah baca format ini).
             OutlinedButton.icon(
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: qrText));
+                Clipboard.setData(ClipboardData(text: shareText));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Teks pesanan disalin')),
                 );
@@ -688,7 +952,7 @@ class _HandoffQrSheet extends StatelessWidget {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: () => Share.share(qrText),
+                onPressed: () => Share.share(shareText),
                 icon: const Icon(Icons.ios_share, size: 18),
                 label: const Text('Share Pesanan'),
               ),

@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../laporan/stats/customer_stats_screen.dart';
 
 const _custUuid = Uuid();
 
@@ -213,6 +214,29 @@ class _PelangganFormScreenState
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Pelanggan' : 'Tambah Pelanggan'),
         actions: [
+          // Pintu masuk KEDUA ke statistik belanja pelanggan (permintaan
+          // user: dari sini DAN dari tab Pelanggan di Laporan). Layar &
+          // query-nya SAMA supaya angkanya tidak pernah berbeda antar
+          // pintu masuk. Rentang awal 1 tahun terakhir — layar ini tidak
+          // punya konteks tanggal spt header Laporan.
+          if (_isEdit && _existing != null)
+            IconButton(
+              icon: const Icon(Icons.insights_outlined),
+              tooltip: 'Statistik Belanja',
+              onPressed: _isLoading
+                  ? null
+                  : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => CustomerStatsScreen(
+                            customerId: _customerId!,
+                            customerName: _nameCtrl.text.trim().isEmpty
+                                ? 'Pelanggan'
+                                : _nameCtrl.text.trim(),
+                            initialRange: CustomerStatsScreen.defaultRange(),
+                          ),
+                        ),
+                      ),
+            ),
           if (_isEdit && _existing != null)
             IconButton(
               icon: Icon(Icons.delete_outline, color: scheme.error),

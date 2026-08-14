@@ -82,10 +82,43 @@ jobs:
         run: |
           TAG="dev-$(date +%Y%m%d-%H%M%S)"
           BRANCH="${GITHUB_REF#refs/heads/}"
-          gh release create "$TAG" "$APK_PATH" \
-            --title "Dev Build — ${BRANCH} (${GITHUB_SHA::7})" \
-            --notes "Automated dev build from \`${BRANCH}\` @ [\`${GITHUB_SHA::7}\`](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)" \
-            --prerelease
+          NOTES="Automated dev build from \`${BRANCH}\` @ [\`${GITHUB_SHA::7}\`](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)"
+
+          # API GitHub sesekali balas 5xx sesaat — sudah kejadian nyata:
+          # "error checking for existing release: HTTP 503" menggagalkan
+          # SELURUH run padahal APK-nya sendiri sudah sukses dibuild &
+          # terupload sbg artifact. Coba ulang dgn backoff, jangan jatuhkan
+          # build cuma karena hiccup jaringan.
+          published=0
+          for delay in 0 5 15 30; do
+            if [ "$delay" -gt 0 ]; then
+              echo "Mencoba ulang dalam ${delay}s…"
+              sleep "$delay"
+            fi
+
+            if gh release create "$TAG" "$APK_PATH" \
+                 --title "Dev Build — ${BRANCH} (${GITHUB_SHA::7})" \
+                 --notes "$NOTES" \
+                 --prerelease; then
+              published=1
+              break
+            fi
+
+            # Percobaan sebelumnya bisa saja SUDAH membuat rilisnya lalu
+            # gagal saat mengunggah aset — jangan bikin rilis dobel, cukup
+            # lengkapi asetnya.
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              if gh release upload "$TAG" "$APK_PATH" --clobber; then
+                published=1
+                break
+              fi
+            fi
+          done
+
+          if [ "$published" -ne 1 ]; then
+            echo "::error::Gagal membuat dev pre-release setelah 4 percobaan."
+            exit 1
+          fi
 
           DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${APK_NAME}"
           echo "### 📦 APK Download" >> "$GITHUB_STEP_SUMMARY"

@@ -5,9 +5,558 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 4 Agustus 2026 — versi kerja **2.10.0+15** (naik dari
+_Update sesi 14 Agustus 2026 — QR Transfer Transaksi diperkecil, Copy/
+Share tetap lengkap (`0419df5`). Pertimbangan user (dijawab dulu via
+analisis sebelum eksekusi, sesuai kebiasaan sesi ini): QR menumpuk/padat
+& sulit di-scan kamera. Investigasi: gambar QR, tombol Salin, dan Share
+di `_HandoffQrSheet` (`cart_sheet.dart`) semuanya SEBELUMNYA memakai satu
+string identik dari `OrderParserService.encodeHandoff()` — termasuk blok
+manusiawi "PESANAN — toko / daftar produk / Total" (digerbang param
+`storeName`, fitur lama Item 54) yang TERNYATA **tidak pernah ikut
+di-parse balik** — `OrderParserService.parse()` cuma baca baris
+`#PSN:...` + baris meta (`Pegawai:`/`Nama:`/`PelangganId:`/`Nota:`) lewat
+regex per-baris, `multiLine: true`, baris lain diabaikan total. Jadi blok
+itu MURNI beban modul QR tanpa manfaat fungsional — utk keranjang banyak
+baris/catatan, blok inilah kontributor terbesar panjang teks. Fix (risiko
+rendah krn tidak ada perubahan format wire sama sekali): pisah jadi 2
+string dari fungsi yang SAMA — `_showHandoffQr` sekarang panggil
+`encodeHandoff` DUA KALI, sekali `storeName: null` (buat `QrImageView`,
+kecil/modul rendah), sekali `storeName: device.storeName` (buat tombol
+Salin/Share, tetap teks lengkap enak dibaca manusia di WhatsApp/Telegram).
+Sisi scan/parse (`_handleOrderCode`, HID merge, `PasteOrderSheet`) SAMA
+SEKALI TIDAK disentuh — behaviornya identik krn bagian yang dibuang dari
+QR memang sudah lama tidak pernah dibaca.
+
+Test `kasir_handoff_qr_test.dart` diperbarui: assersi lama "Copy = isi QR
+persis sama" (sudah tidak berlaku, isinya sekarang beda) diganti "Copy
+tetap lengkap, beda dari QR yang diperkecil" + assersi baru clipboard
+mengandung blok "PESANAN — <toko>" secara eksplisit — revert-verified.
+Coverage "storeName: null → header hilang total" sudah lama ada di
+`order_parser_service_test.dart` group "Item 54" (tidak perlu test baru,
+`_showHandoffQr` cuma komposisi ulang primitif yang sudah teruji). Full
+suite 1067 hijau, `flutter analyze` 0 issue.
+
+**Catatan desain yang perlu diingat kalau ada fitur QR/handoff baru**:
+ada 2 sistem QR TERPISAH di app ini — QR order/cart handoff
+(`OrderParserService`, prefix `#PSN:`, dibahas di atas) vs QR pairing
+sync LAN (`qr_sync_widgets.dart`, payload JSON `{ip, key}`, dipakai
+`pairing_screen.dart`/`pair_device_screen.dart`) — JANGAN dicampur.
+`QrImageView` (paket `qr_flutter`) TIDAK punya getter publik utk data-nya
+— widget test tidak bisa memverifikasi isi QR langsung lewat widget tree,
+harus dibuktikan tidak langsung (bandingkan dgn `encodeHandoff()` yang
+dipanggil manual, atau uji primitif penyusunnya secara terpisah).
+
+_Update sesi 13 Agustus 2026 — Riwayat Pembayaran: rincian per-produk
+retur/edit + Sisa per sesi bayar (`5c46846`), schemaVersion **32**
+(naik dari 31). Permintaan user: kartu "Riwayat Pembayaran" in-app WAJIB
+menampilkan (1) rincian per-produk tiap momen retur/edit — nama +
+`qty satuan x harga  total` (keduanya bold), beberapa produk dalam satu
+momen tampil berurutan; (2) baris "Sisa" per sesi bayar pada nota
+tempo/kurang_bayar (pola sama "Kembalian" tapi TANPA centang); (3)
+kembalian/sisa yang berlaku PERSIS pada momen retur/edit itu SENDIRI
+(klarifikasi user eksplisit: "poin 3 'tersebut' refer ke poin 1", bukan
+poin 2). **Scope eksplisit user: HANYA in-app** — nota share
+(`_ReceiptPaper`) & cetak (`printer_service.dart`) TIDAK disentuh sama
+sekali.
+
+Dua keputusan desain lewat `AskUserQuestion` (kedua "Recommended" dipilih):
+kembalian/sisa historis harus per-momen (bukan cuma kondisi terkini), dan
+boleh bikin tabel audit baru. Implementasi AKHIRNYA jauh lebih sederhana
+dari rencana awal (draft sempat merencanakan "rekonstruksi mundur dari
+total terkini" — DIBATALKAN, tidak jadi dipakai): karena `changeGiven`
+sudah lama disimpan IMMUTABLE per baris `transaction_payments` saat baris
+itu dibuat, cukup tambah kolom SIMETRIS `sisaAfter` yang dihitung &
+disimpan permanen dgn pola SAMA persis (`_computePaymentDelta`,
+menggantikan `_computePaymentChangeGiven` lama) — tidak perlu rekonstruksi
+apa pun belakangan. **Gotcha BARU yang sempat lolos ke test** (perlu
+diwaspadai kalau ada formula simetris serupa di masa depan): `sisaAfter`
+WAJIB dihitung dari `thisChange` (SUDAH dikurangi `priorChangeSum`), BUKAN
+`aggregateChange` mentah — kembalian lama yang dipakai ulang sbg
+pembayaran baru (mis. tambah belanjaan) harus dinetkan di KEDUA sisi
+formula, sama alasannya dgn kenapa `changeGiven` sendiri sudah lama
+mengurangi `priorChangeSum`. Bug ini lolos ke `flutter analyze` + semua
+test BARU (yg kebetulan tidak menyentuh skenario kembalian-dipakai-ulang)
+tapi ketangkap `receipt_sisa_tagihan_net_test.dart` (test LAMA) di full
+suite — pelajaran: full suite WAJIB dijalankan sebelum yakin selesai,
+tidak cukup test file baru saja.
+
+Rincian per-produk: tabel BARU insert-only `transaction_adjustment_lines`
+(snapshot nama produk/satuan, supaya tetap benar walau produk diedit/
+dihapus belakangan), ditaut ke `transaction_payments` via `paymentId`.
+Diisi di titik yang TEPAT di 4 fungsi mutasi (`returnUnpaidTransactionItems`/
+`editUnpaidTransactionItem`/`returnPaidTransactionItems`/
+`editPaidTransactionItem`) — utk 2 fungsi retur nilainya EKSAK langsung
+dari data yg ada, utk 2 fungsi edit (qty & harga BISA berubah bersamaan
+dlm 1 aksi) dipakai formula derivasi supaya `qty×harga≈subtotal` tetap
+konsisten (subtotal-nya sendiri selalu eksak, cuma pemecahan qty/harga
+per-baris yg didekati). Edit yg CUMA ubah catatan (qty & harga persis
+sama) sengaja TIDAK menghasilkan baris rincian (dicek eksplisit,
+revert-verified).
+
+Sync LAN: tabel baru + kolom baru diwire penuh ke 3 tempat
+(`lan_sync_service.dart`: `appendOnlyTables`/`syncCategories`/
+`childTables`/`_collectTxIds`/label; `app_database.dart`: `_allTables`/
+`dumpSince` appendOnly list) — kalau lupa salah satu, gejalanya BUKAN
+error nyata, cuma data diam-diam tidak pernah nyampai device lain (pola
+gotcha lama di CLAUDE.md).
+
+Test `adjustment_lines_sisa_test.dart` (8, DB murni — 4 fungsi mutasi +
+`addPaymentToTransaction` + `settleMergedDebt`) — revert-verified 2x.
+16 test migrasi lama (v7 s/d v31) diperbarui: SEMUANYA sekarang
+diupgrade sampai schemaVersion terkini (32) krn migrasi v32 tanpa syarat
+versi awal (`m.addColumn(transactionPayments, ...)`) — 9 fixture yg
+sebelumnya tidak pernah membuat tabel `transaction_payments` sama sekali
+(tidak dibutuhkan migrasi manapun sebelum ini) sekarang WAJIB
+menyertakannya, assersi `PRAGMA user_version` akhir dinaikkan 31→32 di
+semua 16 file. Full suite 1066 hijau, `flutter analyze` 0 issue.
+
+**Tercatat di task manager (belum dikerjakan)**: tidak ada baru sesi ini.
+Item lama yang masih SENGAJA ditunda user ("tidak perlu dulu"):
+rotasi/pemangkasan `CrashLogService` & `HeldOrders` tanpa kedaluwarsa.
+
+_Update sesi 11 Agustus 2026 (lanjutan lagi — chart interaktif,
+`5115832`) — user kirim screenshot: statistik produk dgn rentang
+setahun (~365 titik harian) label sumbu-X-nya PECAH jadi tumpukan
+karakter vertikal. Akar: `StatsDailyBarChart` (dibuat sesi ini juga,
+lihat poin 3 di bawah) me-layout satu `Expanded` per titik — dgn 365
+titik, tiap kolom lebih sempit dari satu karakter. **Ganti total** ke
+`StatsTrendChart` berbasis fl_chart `LineChart` (dependency sudah ada,
+sebelumnya cuma dipakai `PieChart`) — label sumbu pakai `interval`
+fl_chart (dihitung dari skala X sungguhan, BUKAN dibagi rata per titik
+spt versi lama), jadi jumlah label tetap terbatas berapa pun jumlah
+titiknya. `trend_aggregation.dart` baru (fungsi murni, testable tanpa
+widget) mengelompokkan harian->mingguan->bulanan begitu >60 titik.
+Sekalian interaktif ala trading sesuai permintaan user: `LineTouchData`
+bawaan fl_chart, tap/drag di garis -> tooltip tanggal+nilai + indikator
+titik mengikuti sentuhan. **Scope SENGAJA cuma `StatsTrendChart`**
+(satu-satunya pemakai: `ProductStatsScreen`) — chart pengeluaran/
+ringkasan/arus kas TIDAK disentuh (belum dikonfirmasi kena bug yang
+sama, kalau ada laporan serupa cek dulu apakah rentangnya juga bisa
+sepanjang itu). Test `trend_aggregation_test.dart` (8) +
+`stats_trend_chart_test.dart` (6, termasuk replay persis skenario 365
+titik) — revert-verified. Full suite 1058 hijau (kali ini TERMASUK
+`proposal_unchanged_end_to_end_test.dart` yg biasanya flaky — kebetulan
+lolos, bukan berarti sudah pasti stabil permanen).
+
+_Update sesi 11 Agustus 2026 (lanjutan — batch 6 pekerjaan, SESI SELESAI)
+— versi kerja tetap **2.10.0+15**, schemaVersion **31** (naik 29→30 audit
+storage, lalu 30→31 tabel kamus `product_aliases`).
+
+User minta audit fitur & efisiensi storage, lalu menyetujui eksekusi 6
+task sekaligus. SEMUA SELESAI & di-push (urut commit):
+
+1. **`d7420b2`** — retur/hapus item nota BELUM LUNAS yang melebihi sisa
+   hutang: kelebihan bayar kini jadi kembalian NYATA. Akar: kelebihannya
+   terhitung tapi cuma mendarat di `transactions.changeAmount` — kolom
+   yang TIDAK PERNAH dirender (struk membaca `changeGiven` pembayaran
+   TERAKHIR). Keputusan user: "samakan dgn UI/UX kembalian yang sudah
+   ada" — jadi ditulis sbg `changeGiven` di baris penanda, BUKAN bikin
+   konsep deposit/kredit pelanggan baru.
+2. **`c1f639f`** — nilai rupiah selisih di riwayat Stock Opname (dari
+   HPP tier `min_qty=1`). Keterbatasan disengaja: HPP dibaca SAAT QUERY,
+   bukan snapshot — ubah HPP ikut mengubah nilai riwayat lama.
+3. **`352911b`** — statistik detail produk & pelanggan. Tab Produk &
+   Pelanggan di Laporan dulu BUNTU (`onTap` nihil). Statistik pelanggan
+   punya DUA pintu masuk (Laporan + detail pelanggan) memakai layar &
+   query yang SAMA. Pelanggan ad-hoc DIABAIKAN (keputusan user).
+4. **`7c89ca1`** — tab Arus Kas. Sumber kas masuk = `transaction_payments`
+   (`paid_at`), bukan `transactions` — menutup 2 cacat "Selisih Kas
+   Operasional" (nota tempo belum dibayar ikut terhitung; pelunasan
+   nota lama jatuh di tanggal salah).
+5. **`ba0a6fc`** — Penerimaan Barang via tempel teks + kamus tersinkron
+   (schemaVersion 31). **PENTING**: ini PENERIMAAN (qty MENAMBAH stok),
+   BUKAN opname (MENIMPA) — user semula menyebut "stok opname", setelah
+   contoh file HTML-nya ditinjau ternyata maksudnya barang datang.
+   Pencocokan PERSIS saja, TIDAK ada fuzzy (keputusan user eksplisit,
+   konsisten larangan Levenshtein di CLAUDE.md). Kamus tersinkron DUA
+   ARAH lewat konsep BARU `LanSyncService.sharedTables`.
+6. **`d300b16`** — sync setting toko/metode bayar/pegawai. `app_settings`
+   pakai ALLOWLIST `AppDatabase.syncableSettingKeys`, disaring di DUA
+   sisi. **JANGAN PERNAH** dump `app_settings` bulat-bulat — bercampur
+   identitas/state device (`store_key`/`device_code`/watermark); tanpa
+   guard penerima, `store_key` benar² ikut tertulis (terbukti di
+   revert-verification).
+
+Semua revert-verified, `flutter analyze` 0 issue, full suite 1042 hijau
+(1-2 kegagalan `proposal_unchanged_end_to_end_test.dart` — flaky
+pre-existing, tidak terkait).
+
+**Konsep sync sekarang ada 3 kategori** (dulu 2) — penting dipahami
+sebelum menambah tabel baru: `appendOnly` (2 arah, INSERT OR IGNORE),
+`masterData` (SATU arah host→klien, LWW), dan **`shared`** (2 arah, LWW
+— baru, sejauh ini cuma `product_aliases`).
+
+**Tercatat di task manager (belum dikerjakan)**: tidak ada — 6 task yang
+dibuat sesi ini semuanya selesai. Temuan storage yang SENGAJA ditunda
+user ("tidak perlu dulu"): rotasi/pemangkasan `CrashLogService` (log
+crash tumbuh tanpa batas, dipicu juga oleh kegagalan sync berulang) &
+`HeldOrders` tanpa kedaluwarsa.
+
+_Update sesi 11 Agustus 2026 — versi kerja tetap **2.10.0+15**,
+schemaVersion **30** (naik dari 29 — indeks baru, lihat poin 2 di
+bawah). User minta "audit efisiensi data penyimpanan" (audit-only
+dulu, baru "perbaiki semua, metode paling efisien & ampuh menurut
+saya" di giliran berikutnya). 4 temuan, semua di-fix commit `49b2834`:
+
+1. **KRITIS — Tutup Buku bisa gagal total.** `TutupBukuService.execute`
+   menghapus `transactions` dalam periode yang diarsipkan, TAPI tidak
+   pernah menyentuh `left_behind_items`/`borrowed_items`/
+   `preorder_entries` (Laci Meja) sama sekali — ketiganya FK ke
+   `transactions` TANPA cascade, `PRAGMA foreign_keys = ON` aktif. Kalau
+   ADA nota dalam periode itu yang masih punya baris Laci Meja (bahkan
+   yang sudah SELESAI sekalipun — baris itu tidak pernah dihapus
+   seumur hidup DB), `DELETE FROM transactions` menabrak "FOREIGN KEY
+   constraint failed" dan SELURUH Tutup Buku rollback/gagal. Tidak ada
+   test lama yang menyentuh kombinasi ini sama sekali. Fix: guard baru
+   di awal `execute()` — BLOKIR (`TutupBukuException`, pesan jelas)
+   kalau ada baris Laci Meja BELUM SELESAI (titip/pinjaman/pre-order
+   aktif — jangan diam-diam buang tugas operasional aktif); hapus baris
+   yang SUDAH SELESAI bersama notanya di langkah delete (riwayatnya
+   tetap ada di `archive_YYYY.db` yang sudah disalin duluan).
+2. Indeks baru (schemaVersion 30) utk 5 tabel yang sebelumnya tidak
+   terindeks sama sekali (`product_units.product_id`, `price_tiers.
+   product_unit_id`, `alt_prices.product_unit_id`, `product_barcodes.
+   product_unit_id`, `loyalty_point_ledger.customer_id`) + `transaction_id`
+   di 3 tabel Laci Meja (dipakai guard poin 1). Migrasinya
+   (`_createIndexesIfTableExists`) SENGAJA defensif thd tabel/kolom
+   belum ada — 14 dari 15 fixture test migrasi lama (`migration_v7`
+   s/d `v26`) TIDAK replika skema penuh (cuma tabel relevan ke migrasi
+   yang diuji), jadi kalau step-nya tidak defensif, hampir semua
+   fixture lama gagal "no such table"/"no such column". Di DB PRODUKSI
+   nyata semua tabel targetnya sudah ada sejak v1, jadi ini tidak
+   pernah skip apa pun di real world.
+3. `PRAGMA auto_vacuum = INCREMENTAL` (sebelumnya `NONE`) — ruang bekas
+   baris terhapus di luar Tutup Buku (void transaksi, dst.) sebelumnya
+   tidak pernah dikembalikan ke OS di luar `VACUUM` manual (setahun
+   sekali). DB baru langsung aktif; DB lama aktif otomatis setelah
+   `VACUUM` berikutnya (Tutup Buku tahunan) — SQLite mensyaratkan itu,
+   tidak ada tindakan tambahan yang perlu dilakukan.
+4. `CatalogStore.add()` dibatasi 30 katalog tersimpan TERBARU — blob
+   JSON `saved_catalogs` (AppSettings) sebelumnya tidak punya batas
+   jumlah sama sekali.
+
+Test baru: `tutup_buku_laci_meja_guard_test.dart` (5),
+`migration_v30_indexes_test.dart` (1), `catalog_store_cap_test.dart`
+(2) — semua revert-verified. 15 test migrasi lama (`migration_v7`..
+`v26`) diupdate assersi `PRAGMA user_version` 29→30 (bump schemaVersion
+rutin, pola sama tiap kali ada migrasi baru). Full suite hijau (1
+kegagalan `proposal_unchanged_end_to_end_test.dart` — flaky
+pre-existing, tidak terkait), `flutter analyze` 0 issue. Sudah
+di-push. **Temuan sekunder dari audit yang TIDAK di-fix (dianggap
+cukup aman/rendah-risiko utk dibiarkan)**: tidak ada — 4 temuan di
+atas mencakup SEMUA yang dilaporkan di audit. Tidak ada pekerjaan
+menggantung dari sesi ini.
+
+_Update sesi 9 Agustus 2026 — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap **29**. User laporkan (screenshot) nota
+`A1-20260809-0030`: "Sisa" di Riwayat Transaksi (`-Rp 300`) beda dari
+"Sisa Tagihan" di struk (`Rp 6.600`) untuk nota yang SAMA. Root cause
+sama persis dgn Item 56 (Buku Hutang) yg sudah diperbaiki sesi
+sebelumnya, tapi di lokasi lain yg belum kena: `tx_history_sheet.dart`
+pakai `total - paid` MENTAH, bukan net dari `change_given`. **Fix
+(`0becd9c`)**: `AppDatabase.getNetSisaForTxIds` baru (pola SQL sama
+`getDebtBook`, batched) dipakai di SEMUA titik `tx_history_sheet.dart`
+— ringkasan multi-pilih, baris daftar, detail baris, dan `_lunasi`
+(fetch fresh dari DB langsung, bukan provider yg bisa basi/race, krn
+jumlah ini yg tercatat sbg pembayaran). Test baru
+`tx_history_net_sisa_test.dart` (6 test: 4 DB + 2 widget) —
+revert-verified.
+
+**Susulan langsung, sesi sama**: user tanya balik soal bug Item 55
+("Tempel Pesanan pegawai") — ternyata SUDAH TIDAK TERJADI LAGI menurut
+user, walau belum sempat dibuka log diagnostiknya (tidak ada error
+yg tertangkap). Investigasi: diff commit `0919f0d` dibaca ulang —
+SEMUA perubahannya cuma `OrderParseDiagnostics.add(...)` pasif, TIDAK
+menyentuh logic/urutan eksekusi sama sekali, jadi logging itu sendiri
+BUKAN penyebab hilangnya bug. Titik gagal yg diinstrumentasi (`unitId`
+tak ketemu di `product_units`, atau produk induk tak ketemu/nonaktif)
+justru menunjuk ke masalah KETERSEDIAAN DATA (produk baru owner belum
+sampai ke DB lokal pegawai), bukan bug logika parser — sejalan dgn 4
+ronde investigasi kode statis sebelumnya yg sudah menyingkirkan hipotesis
+parser. Dugaan kuat (TIDAK terkonfirmasi via log runtime): tertutup
+sbg efek samping salah satu fix sync KRITIS di sesi yg sama — kandidat
+paling plausibel Item 58 (union queue upload, cegah kehilangan batch),
+Item 61.1 (reset watermark download yg bisa macet), atau Item 60
+(loyalty points ketimpa LWW, pola bug serupa). **Ditanya ke user**
+mau instrumentasi dicabut sekarang atau disimpan dulu — user pilih
+**cabut sekarang** (`19c635e`): `OrderParseDiagnostics`, titik `.add()`
+di `parse()`, `ParseDiagnosticsScreen`, tombol bug_report di
+`PasteOrderSheet`, dan `order_parse_diagnostics_test.dart` — dihapus
+total. Full suite hijau (1 kegagalan `proposal_unchanged_end_to_end_test.
+dart` — flaky pre-existing, sama seperti sesi-sesi sebelumnya, tidak
+terkait perubahan ini), `flutter analyze` 0 issue.
+
+Kedua perubahan sudah di-push. **Item 55 PLAN.md kini bisa dianggap
+selesai** (walau root cause pastinya tidak pernah terkonfirmasi via
+log — cuma penalaran dari pola gejala + kebetulan waktu). Tidak ada
+pekerjaan menggantung dari sesi ini.
+
+_Update sesi 8 Agustus 2026 (lanjutan 9, SESI SELESAI) — versi kerja
+tetap **2.10.0+15**, schemaVersion **29** (naik dari 28 — Item 61.5
+nambah `Expenses.deletedAt`). User minta kerjakan semua temuan sync
+sesi lalu (PLAN.md Item 56-61 + 54/55) sesuai urutan prioritas,
+kecualikan backlog lama (47/48/23/17/21/28/41/51). Urutan disepakati:
+**58, 59, 60, 56, 57, 61, 55, 54** — **SEMUA 8 SELESAI dikerjakan**
+(7 dieksekusi tuntas, 1 — Item 55 — infrastrukturnya terpasang tapi
+fix sebenarnya menunggu data dari user).
+
+**SELESAI (commit, ringkas — urut sesi)**:
+- Item 58 (KRITIS, `8897298`) — sync kedua client tidak lagi hapus
+  permanen batch upload lama yg belum di-approve (union, bukan
+  replace, di `enqueueSyncUpload`/`_handleRequest`).
+- Item 59 (KRITIS, `3de2358`) — Tutup Buku selalu carry-forward saldo
+  stok, dulu dilewati kalau unit masih punya sisa riwayat →
+  `rebuildStockAfterForUnits` pasca-sync jadi salah.
+- Item 60 (KRITIS, `219bf7f`) — `rebuildLoyaltyPointsForCustomers`
+  baru, poin loyalti tidak lagi bisa ketimpa LWW `customers`.
+- Item 56 (`5b2029f`) — Buku Hutang pakai net `change_given`
+  (`netRemainingOwed`), bukan `total-paid` mentah.
+- Item 57 (`b76b923`) — hitung kategori sync dari SEMUA tabel
+  (`computeAvailableSyncCategories`), bukan cuma tabel pertama.
+- Item 61 (`b3d1588`) — 5 temuan menengah: reset watermark download
+  (baru, disatukan ke "Sync Ulang Penuh"), guard `reconcileTransactionsByIds`
+  thd item kosong pasca-sync (SCOPED ke path sync saja — sempat blanket
+  & merusak `returnUnpaidTransactionItems`, sudah dikoreksi), tie-break
+  `rowid` `rebuildStockAfterForUnits`, checkbox "Stok" wajib ikut
+  "Transaksi" di dialog approve, `Expenses.deletedAt` (migrasi v29)
+  + soft-delete penuh (dumpSince/mergeRows khusus expenses).
+- Item 54 (`fb0acd5`) — QR Share handoff bawa keterangan item + Total
+  (format sama `buildOrderText()` katalog HTML), lewat param baru
+  `encodeHandoff(storeName:)`. Parser TIDAK perlu diubah (sudah
+  tolerir baris tambahan).
+- **Item 55 (`0919f0d`) — SETENGAH JALAN, PERLU TINDAK LANJUT.**
+  Logging diagnostik in-app TERPASANG (`OrderParseDiagnostics`
+  in-memory maks 200 entry + titik `.add()` di `OrderParserService.
+  parse()` + `ParseDiagnosticsScreen` via tombol bug_report sementara
+  di `PasteOrderSheet`), tapi bug aslinya ("Tempel Pesanan" pegawai
+  non `terima_pembayaran` tidak dapat produk dari QR/teks owner)
+  BELUM diperbaiki — 4 ronde investigasi kode statis mentok, butuh
+  bukti runtime. **Langkah selanjutnya**: minta user build APK debug,
+  reproduksi bug (owner buat produk baru → share → pegawai tempel,
+  gagal lagi), buka halaman debug (ikon bug_report di
+  `PasteOrderSheet`) di device pegawai, salin & kirim balik isinya.
+  Dari situ baru bisa fix akar masalahnya. **WAJIB** cabut total
+  instrumentasi (daftar file lengkap di PLAN.md Item 55) begitu fix
+  itu dieksekusi.
+
+Semua commit di atas sudah di-push ke
+`claude/kategori-produk-qty-harga-mqjh21`. `flutter analyze` bersih +
+full `flutter test` hijau di tiap commit (revert-verified tiap fix).
+Tidak ada lagi item PLAN.md yang "siap eksekusi" tersisa — cuma
+Item 55 yang menggantung menunggu user.
+
+_Update sesi 6 Agustus 2026 (lanjutan 2) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. User tanya susulan: "bug titipan pre-order yang
+masih terikut sync meski sudah dipenuhi — apakah sudah diperbaiki?" —
+DICEK, TERNYATA BELUM (beda dari fix `81f3b66` yang cuma soal tampilan
+struk). **fix (`f0c5ea5`) — SEKARANG SUDAH**: `dumpLaciMejaProposals`
+(client->host) cuma filter `locally_modified=1`, TANPA banding ke data
+host — flag itu cuma reset kalau baris resmi host ter-merge BALIK ke
+klien (lihat dok `AppDatabase.dumpLaciMejaProposals`), jadi sebelum itu
+kejadian (owner belum sempat approve, atau klien sync lagi duluan),
+baris pre-order/titip/pinjaman yang SUDAH SELESAI terus dikirim ulang
+sbg "usulan baru" — pola bug SAMA PERSIS dgn produk Item 40 yang sudah
+diperbaiki `filterUnchangedProposals`, tapi Laci Meja tidak pernah dapat
+perbaikan setara. Fix: `filterUnchangedLaciMejaProposals` (pola sama,
+lebih sederhana — record datar tanpa nested tier/unit), dipanggil host
+sebelum baris masuk `_pendingLaciMejaProposals`, buang baris identik dgn
+host (kecuali `locally_modified`/`updated_at`). 5 test baru (3 unit DB +
+2 end-to-end HTTP sungguhan, pola sama `proposal_unchanged_end_to_end_
+test.dart`) — revert-verified.
+
+_Update sesi 6 Agustus 2026 (lanjutan) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. User kirim 3 permintaan sekaligus dalam 1 pesan
+(screenshot bug Laci Meja + 2 laporan bug lain + 1 ide fitur baru):
+
+1. **fix (`62d739d`)**: usulan Laci Meja (client->host) gagal total
+   `SqliteException 787 FOREIGN KEY constraint failed` saat transaksi
+   terkaitnya SENDIRI belum tersync ke host (screenshot user: pre-order
+   "Bu Diah"). Akar: usulan Laci Meja & usulan sync "Transaksi" adalah
+   DUA ANTRIAN INDEPENDEN tanpa jaminan urutan (arsitektur sengaja
+   paralel, lihat CLAUDE.md). Fix: `applyLaciMejaProposals` cek dulu
+   `transaction_id` ada di host sebelum insert — kalau belum, baris itu
+   DILEWATI (bukan gagalkan seluruh batch), tampil alasan ke owner, baris
+   otomatis diusulkan lagi begitu transaksinya tersync. Test end-to-end
+   HTTP loopback ASLI (FK enforcement ON) mereproduksi persis bug di
+   screenshot — revert-verified. **Efek samping ketemu**: 2 widget test
+   lama (`laci_meja_proposal_review_test.dart`) jadi gagal krn hostDb-nya
+   TIDAK pernah seed transaksi (sebelumnya lolos cuma krn FK OFF di DB
+   test biasa) — disesuaikan seed transaksi di hostDb juga, sesuai
+   skenario legitimate (transaksi sudah tersync duluan).
+2. **fix (`4d5c170`)**: handoff QR keranjang antar device (scan kamera)
+   kehilangan harga override/Harga Lain/checklist verifikasi — penerima
+   selalu resolve harga fresh dari DB seolah pesanan katalog HTML biasa.
+   Fix: `encodeHandoff()`/`parse()` di `order_parser_service.dart` sekarang
+   membawa segmen opsional `|p=/|o=/|k=/|v=/|c=/|pr=/|pd=/|dq=` setelah
+   qty tiap item — HANYA diisi jalur handoff antar-device (kode katalog
+   HTML pelanggan TETAP tanpa segmen ini, perilaku lama utuh). 2 test
+   baru, revert-verified.
+3b. **fix (`70089e7`) — susulan langsung dari poin 2 di atas**: user
+   sendiri menyadari konsekuensi fix handoff QR — pegawai TANPA izin
+   `terima_pembayaran` bisa setel Harga Lain/override manual TANPA
+   digerbang izin apa pun di `item_entry_sheet.dart`, jadi kalau harga
+   itu ikut dibawa apa adanya, owner menerima harga tak tervalidasi dari
+   device tak berizin. Fix: `encodeHandoff(trustPrices: bool)` — dipanggil
+   `trustPrices: !needsGate` dari `cart_sheet.dart`. Device tanpa izin
+   bayar → flag harga (p=/o=/k=/v=) TIDAK disertakan, `parse()` resolve
+   fresh dari DB penerima (perilaku lama). Atribut NON-harga (checklist,
+   status pre-order) TETAP dibawa apa pun izinnya — bukan concern-nya.
+5b. **feat (`d99e4b1`) — susulan LANGSUNG dari poin 5**: user kadang butuh
+   tekan minus BERKALI-KALI beruntun tanpa pindah jempol — jendela waktu
+   tetap 1.5 detik (poin 5 di bawah) bikin tap terlambat (walau jempol
+   MASIH di stepper) salah dianggap tap pertama lagi. **Timer dihapus
+   total**, diganti: "bersenjata" berlaku SELAMA stepper baris ini masih
+   membesar (`AddControl.activeStepper` — mekanisme "pijakan jempol" yg
+   SUDAH ADA sebelumnya, tidak disentuh) — lepas HANYA kalau stepper
+   baris LAIN jadi aktif (jempol pindah) atau scroll, TIDAK PERNAH krn
+   lewat waktu. Tap beruntun selama bersenjata langsung mengurangi qty
+   tiap kali (persis stepper biasa setelah "terkonfirmasi" sekali).
+   Implementasi: `GlobalKey<State<AddControl>>` per baris dibandingkan
+   `identical()` thd `AddControl.activeStepper.value` tiap listener
+   terpicu. Test diganti (skenario jeda lama tanpa pindah jempol tetap
+   confirm; tap beruntun; pindah jempol ke baris lain BENAR melepas
+   status) — revert-verified.
+5. **feat (`cdde036`) → REDESAIN LANGSUNG (`5740203`) — SELESAI**: user
+   minta 1 lagi di dialog "Pengaturan Keranjang" yang sama — toggle
+   "Konfirmasi sebelum kurangi qty" (`cartMinusConfirmProvider`, default
+   OFF/opt-in). Versi AWAL pakai `AlertDialog` "Kurangi Qty?" — user
+   SENDIRI sadar itu kurang pas (jempol biasanya sudah menutupi tombol
+   minus itu sendiri saat menekannya, jadi warning visual yang cuma di
+   situ tak kentara; fokus mata pun kadang di bagian lain baris, bukan
+   stepper). **Redesain total**: tap PERTAMA tombol minus bikin SELURUH
+   BARIS item bergetar (warning, qty BELUM berkurang) — tap KEDUA yang
+   jatuh dalam ~1.5 detik baru benar-benar mengurangi qty; lewat jendela
+   itu tanpa tap kedua, kembali netral (tap berikutnya = tap pertama
+   lagi, harus getar ulang). Lebih cepat dari dialog utk aksi yg sering
+   diulang (kurangi qty satu-satu), tidak perlu tap ekstra "Kurangi"+
+   tutup popup. Implementasi: `_CartItemTile` diubah `ConsumerWidget` →
+   `ConsumerStatefulWidget` (`AnimationController` getar + `Timer`
+   jendela per-item) — `ValueKey(item.productUnitId)` WAJIB ditambah di
+   `itemBuilder` supaya state "bersenjata"/timer TIDAK bocor ke baris
+   lain kalau urutan keranjang berubah (mis. qty item lain diubah, ikut
+   memanggil `orderCartItems` ulang). 5 test baru menggantikan test
+   dialog versi awal — revert-verified (3 test terbukti gagal sensible
+   saat mekanisme dilepas).
+4. **feat (`3ef3019`) — SELESAI**: tombol "Pengaturan Keranjang" (ikon
+   gerigi) di samping ikon "Tempel Pesanan" — dialog 4 opsi letak
+   checkbox verifikasi (`CartCheckboxPosition` di `theme_provider.dart`,
+   persisted SharedPreferences pola sama `fontScaleProvider`): depan
+   qty/kiri (default), belakang stepper/kanan, kiri stepper minus, kanan
+   nama item (baris nama `Expanded`→`Flexible` supaya checkbox menempel
+   PAS setelah nama pendek, bukan terdorong ke ujung kanan). Jawaban
+   PERMANEN atas posisi checkbox yang sudah 2x dibalik bolak-balik sesi
+   sebelumnya — sekarang user pilih sendiri, tidak perlu kode diubah lagi
+   kalau minta ganti posisi. 4 test baru — revert-verified.
+
+Full suite 920 hijau (2 kegagalan `proposal_unchanged_end_to_end_test.dart`
+flaky pre-existing/port-conflict — TIDAK terkait perubahan sesi ini).
+`flutter analyze` 0 issue di semua 3 commit sesi ini.
+
+_Riwayat sesi 6 Agustus 2026 (awal) — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. Satu susulan kecil: checkbox verifikasi baris keranjang
+(`_CartItemTile`, `cart_sheet.dart`) DIKEMBALIKAN ke paling KIRI baris
+(`bd2ee9b`) — membalik keputusan sesi 1 Agustus yg memindahkannya ke kanan
+(kiri stepper). Test posisi di-rename & disesuaikan (revert-verified).
+Ini kemungkinan BUKAN keputusan final selamanya — sudah 2x bolak-balik
+posisi checkbox ini dalam beberapa sesi terakhir, kalau user minta ubah
+lagi jangan heran/protes, cukup eksekusi & catat di sini lagi.
+
+_Riwayat sesi 5 Agustus 2026 — versi kerja tetap **2.10.0+15**,
+schemaVersion tetap 28. Susulan langsung dari fitur "Tentang Aplikasi"/
+"Info Lisensi & Serial" yang dibangun sesi 4 Agustus (ringkasan lengkap
+ada di bawah):
+
+1. **CI**: `build-apk.yml` sempat gagal total (`3485f42`) padahal APK-nya
+   sendiri sukses dibuild — `gh release create` kena HTTP 503 (hiccup API
+   GitHub sesaat), langkah itu dulu tanpa retry sama sekali padahal jalan
+   di SETIAP push branch. Fix (`09927d1`): retry 4x (jeda 0/5/15/30 detik)
+   + fallback `gh release upload --clobber` kalau rilisnya ternyata sudah
+   terbuat di percobaan sebelumnya (hindari rilis dobel). API yang
+   benar-benar down terus TETAP menggagalkan build (bukan lolos diam-diam).
+2. **5 penyesuaian About/Lisensi** (`ead32f8`) dari feedback user: ikon
+   pakai `filterQuality: high`+`isAntiAlias`; jarak chip Lisensi–AppBar
+   direnggangkan; seksi "Segera Hadir" di halaman Lisensi DIHAPUS TOTAL;
+   nomor serial jadi **spoiler** (pola titik-titik, tap utk reveal — QR di
+   atasnya SENGAJA tidak ikut disamarkan, sudah spt noise visual).
+3. **`license-generator.html`: pesan error kamera scan QR** (`4fa815d`) —
+   user laporkan "Permission denied" polos. Dugaan awal soal "secure
+   context" TERBUKTI SALAH (Playwright: `isSecureContext==true` utk
+   `file://` di Chromium) — akar sebenarnya banyak browser (Chrome Android
+   khususnya) auto-tolak izin kamera TANPA dialog sama sekali kalau HTML
+   dibuka langsung dari file manager (bukan lewat alamat web), muncul sbg
+   `NotAllowedError`/`NotFoundError`. Fix: deteksi error itu, kasih
+   panduan `python3 -m http.server`/`npx serve .` + buka via localhost.
+   Diverifikasi via Playwright dgn BarcodeDetector+getUserMedia PALSU yg
+   disuntik utk mensimulasikan persis skenario itu (Chromium bundelan
+   Playwright sendiri tidak support BarcodeDetector sama sekali, jadi
+   tidak bisa dites lewat klik tombol sungguhan — harus disuntik manual).
+4. **Ikon HD asli + tutorial dilengkapi + bug garis ExpansionTile**
+   (`0f70fc8`): user kirim file emoji resmi 512x512 ber-alpha (`Image` di
+   pesan chat, DIEKSTRAK dari base64 transcript JSONL sesi ini — bukan
+   dari upload folder biasa, krn gambar terkirim inline via clipboard/
+   paste, cek `message.content[].source.data` di `.jsonl` kalau kejadian
+   lagi). Source lama (192x192, mipmap-xxxhdpi) adalah resolusi TERBESAR
+   yang ADA di repo, sengaja diganti total. Source baru TRANSPARAN (emoji
+   mentah, bukan squircle solid spt mipmap Android) — backdrop `#FFC896`
+   (disampel dari pixel pojok mipmap lama via Pillow) ditambahkan di
+   belakang `Image` supaya bentuk squircle tetap identik dgn launcher asli.
+   Tutorial +6 bab (Printer Bluetooth, Backup&Restore+Alihkan Owner, Poin
+   Loyalitas, Retur&Edit Transaksi Lunas, Tutup Kasir vs Tutup Buku,
+   Katalog Pesanan) — SEMUA Pro Tip di-grep-verifikasi ke kode/nama-test
+   nyata dulu sebelum ditulis (2 draft awal dicoret krn spekulatif, tidak
+   ada dasar di kode — soal pairing Bluetooth "remembers" lama, dan klaim
+   "device asal tak lagi owner" stlh Alihkan Owner). Bug visual dari
+   screenshot user: `ExpansionTile` bawaan Flutter gambar border tema saat
+   expanded, nempel aneh di dalam `Card` — fix `shape`/`collapsedShape:
+   const Border()`.
+
+5. **Redesain keranjang katalog HTML** (`0577fef`) — mockup Playwright
+   JPG (3 frame: sheet, konfirmasi hapus-item, konfirmasi kosongkan-semua)
+   dikonfirmasi user DULU, termasuk cek eksplisit kompatibilitas dark mode
+   (disuntik `data-theme=dark` + toggle asli via tombol tema, discreenshot
+   ulang) sebelum eksekusi ke `order_page_service.dart`. Perubahan: (a)
+   ikon 🗑 hapus per-baris keranjang, terpisah dari stepper qty (dulu
+   cuma bisa hapus dgn tekan − sampai 0, tanpa konfirmasi); (b) modal
+   konfirmasi custom (`showConfirm`/`hideConfirm`, ikut tema — GANTI
+   `confirm()` bawaan browser) utk hapus-satu-barang MAUPUN
+   kosongkan-semua; (c) tombol "Kosongkan" (teks polos) jadi pill ikon+
+   "Kosongkan Keranjang" aksen merah di kanan-atas header. Token
+   `--danger`/`--danger-bg` baru, dgn varian dark (pola sama persis
+   `--ok`/`--warn` yg sudah ada). Test baru (`order_page_service_cart_
+   delete_test.dart`) — revert-verified via python patch+restore (bukan
+   sed) krn JS-dalam-Dart-raw-string rawan escaping kalau pakai sed.
+
+Full suite 925 hijau tiap commit (1 flaky pre-existing
+`proposal_unchanged_end_to_end_test.dart`, port-conflict paralel, lolos
+sendirian — TIDAK terkait perubahan manapun sesi ini). `flutter analyze`
+0 issue di semua commit.
+
+_Riwayat sesi 4 Agustus 2026 (lanjutan) — QR sidik jari device + "Tentang
+Aplikasi"/"Info Lisensi & Serial" dibangun dari nol, lalu DIKOREKSI BESAR
+sekali krn versi pertama (`b97a0e8`) dibangun TANPA membuka ulang mockup
+yang sudah dikonfirmasi (ikon 108px di ATAS wordmark bukannya 178px
+DI BAWAH wordmark, AppBar berjudul bukannya polos+tombol "?" bulat, entri
+lisensi jadi kartu besar bukannya chip rata-kanan) — user menegur ("Design
+melenceng jauh... baca mockup yang anda buat sendiri"), dikoreksi total di
+`dcf7bf8`. **Pelajaran WAJIB diingat**: mockup yang sudah dibuat &
+dikonfirmasi WAJIB dibuka lagi saat implementasi, jangan dibangun ulang
+dari ingatan/deskripsi teks. Bug nyata ikut ketemu saat koreksi itu:
+`DeviceLicenseScreen` sempat pakai `DateFormat(..., 'id_ID')` →
+`LocaleDataException`, app TIDAK PERNAH `initializeDateFormatting` (sudah
+didokumentasikan di CLAUDE.md §Gotcha & `expenses_screen.dart`, terlewat
+saat menulis layar baru ini) — format nama bulan manual, ada test
+regresinya sekarang. Hasil akhir arsitektur: `AboutScreen`
+(`/pengaturan/tentang`, wordmark+ikon+versi+"made with ♥️ by Dre"+chip
+Lisensi rata-kanan) → tombol "?" ke `TutorialListScreen`
+(`/pengaturan/tentang/tutorial`, searchable+Pro Tips) & chip Lisensi ke
+`DeviceLicenseScreen` (`/pengaturan/lisensi`, QR+serial+tanggal
+aktivasi/berlaku). Entri "Info Lisensi & Serial" lama di kartu "Device
+Ini" Pengaturan SUDAH DIHAPUS (bukan cuma ditambah alternatif), diganti
+"Tentang Aplikasi" di kartu Diagnostik.
+
+_Riwayat sesi 4 Agustus 2026 (awal) — versi kerja **2.10.0+15** (naik dari
 2.9.1+14, MINOR bump eksplisit diminta user — lihat poin 6), schemaVersion
-**28** (naik sesi 3 Agustus, tidak berubah sesi ini). Sesi ini jawab 4
+**28** (naik sesi 3 Agustus). Sesi itu jawab 4
 pertanyaan/insight user (poin 1-4) + 1 fix susulan (poin 5) + rilis resmi
 (poin 6):
 1. **Percepat input harga modal/stok dari nota supplier** — user minta
