@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 14 Agustus 2026
+
+### 🔧 Perbaikan
+- **QR Transfer Transaksi lebih gampang di-scan**: gambar QR di sheet
+  "Transfer Transaksi"/"Kirim ke Owner/Asisten" sekarang cuma berisi
+  kode intinya saja — jadi tidak sepadat dan tidak segelap dulu, lebih
+  gampang dibaca kamera scanner. Daftar barang lengkap tetap ada kok,
+  cuma dipindah ke tombol "Salin Teks Pesanan" dan "Share Pesanan" —
+  jadi kalau mau kirim manual lewat WhatsApp/Telegram, teksnya tetap
+  enak dibaca lengkap dengan nama barang & totalnya.
+
+---
+
 ## 13 Agustus 2026
 
 ### 🆕 Fitur baru

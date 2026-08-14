@@ -5,6 +5,47 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 14 Agustus 2026 — QR Transfer Transaksi diperkecil, Copy/
+Share tetap lengkap (`0419df5`). Pertimbangan user (dijawab dulu via
+analisis sebelum eksekusi, sesuai kebiasaan sesi ini): QR menumpuk/padat
+& sulit di-scan kamera. Investigasi: gambar QR, tombol Salin, dan Share
+di `_HandoffQrSheet` (`cart_sheet.dart`) semuanya SEBELUMNYA memakai satu
+string identik dari `OrderParserService.encodeHandoff()` — termasuk blok
+manusiawi "PESANAN — toko / daftar produk / Total" (digerbang param
+`storeName`, fitur lama Item 54) yang TERNYATA **tidak pernah ikut
+di-parse balik** — `OrderParserService.parse()` cuma baca baris
+`#PSN:...` + baris meta (`Pegawai:`/`Nama:`/`PelangganId:`/`Nota:`) lewat
+regex per-baris, `multiLine: true`, baris lain diabaikan total. Jadi blok
+itu MURNI beban modul QR tanpa manfaat fungsional — utk keranjang banyak
+baris/catatan, blok inilah kontributor terbesar panjang teks. Fix (risiko
+rendah krn tidak ada perubahan format wire sama sekali): pisah jadi 2
+string dari fungsi yang SAMA — `_showHandoffQr` sekarang panggil
+`encodeHandoff` DUA KALI, sekali `storeName: null` (buat `QrImageView`,
+kecil/modul rendah), sekali `storeName: device.storeName` (buat tombol
+Salin/Share, tetap teks lengkap enak dibaca manusia di WhatsApp/Telegram).
+Sisi scan/parse (`_handleOrderCode`, HID merge, `PasteOrderSheet`) SAMA
+SEKALI TIDAK disentuh — behaviornya identik krn bagian yang dibuang dari
+QR memang sudah lama tidak pernah dibaca.
+
+Test `kasir_handoff_qr_test.dart` diperbarui: assersi lama "Copy = isi QR
+persis sama" (sudah tidak berlaku, isinya sekarang beda) diganti "Copy
+tetap lengkap, beda dari QR yang diperkecil" + assersi baru clipboard
+mengandung blok "PESANAN — <toko>" secara eksplisit — revert-verified.
+Coverage "storeName: null → header hilang total" sudah lama ada di
+`order_parser_service_test.dart` group "Item 54" (tidak perlu test baru,
+`_showHandoffQr` cuma komposisi ulang primitif yang sudah teruji). Full
+suite 1067 hijau, `flutter analyze` 0 issue.
+
+**Catatan desain yang perlu diingat kalau ada fitur QR/handoff baru**:
+ada 2 sistem QR TERPISAH di app ini — QR order/cart handoff
+(`OrderParserService`, prefix `#PSN:`, dibahas di atas) vs QR pairing
+sync LAN (`qr_sync_widgets.dart`, payload JSON `{ip, key}`, dipakai
+`pairing_screen.dart`/`pair_device_screen.dart`) — JANGAN dicampur.
+`QrImageView` (paket `qr_flutter`) TIDAK punya getter publik utk data-nya
+— widget test tidak bisa memverifikasi isi QR langsung lewat widget tree,
+harus dibuktikan tidak langsung (bandingkan dgn `encodeHandoff()` yang
+dipanggil manual, atau uji primitif penyusunnya secara terpisah).
+
 _Update sesi 13 Agustus 2026 — Riwayat Pembayaran: rincian per-produk
 retur/edit + Sisa per sesi bayar (`5c46846`), schemaVersion **32**
 (naik dari 31). Permintaan user: kartu "Riwayat Pembayaran" in-app WAJIB
