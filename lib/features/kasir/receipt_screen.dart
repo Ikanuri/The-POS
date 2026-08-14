@@ -2973,6 +2973,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
                           child: Text(_formatDateTime(p.paidAt),
@@ -2993,20 +2994,28 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 decoration: p.voided
                                     ? TextDecoration.lineThrough
                                     : null)),
-                        const SizedBox(width: 8),
-                        Text(formatRupiah(p.amount),
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: p.voided ? scheme.onSurfaceVariant : null,
-                                decoration: p.voided
-                                    ? TextDecoration.lineThrough
-                                    : null)),
+                        // Baris penanda retur/edit (amount SELALU 0, nilai
+                        // sungguhannya ada di header "(Retur) Rp X" di blok
+                        // rincian di bawah) — "Rp 0" di sini cuma noise,
+                        // disembunyikan.
+                        if (p.amount != 0) ...[
+                          const SizedBox(width: 8),
+                          Text(formatRupiah(p.amount),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      p.voided ? scheme.onSurfaceVariant : null,
+                                  decoration: p.voided
+                                      ? TextDecoration.lineThrough
+                                      : null)),
+                        ],
                         if (!p.voided && !isVoid)
                           IconButton(
                             icon: const Icon(Icons.cancel_outlined, size: 16),
                             tooltip: 'Batalkan Pembayaran',
                             visualDensity: VisualDensity.compact,
+                            alignment: Alignment.center,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
                                 minWidth: 28, minHeight: 28),
@@ -3668,18 +3677,25 @@ class _AdjustmentLinesBlock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('($label) ${formatRupiah(total)}',
-              style:
-                  TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          Text.rich(
+            TextSpan(
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              children: [
+                TextSpan(text: '($label) '),
+                TextSpan(
+                    text: formatRupiah(total),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
           for (final l in lines) ...[
             Text(l.productName,
                 style: const TextStyle(
                     fontSize: 12, fontWeight: FontWeight.w700)),
             Text(
-                '${_fmtQty(l.qty)} ${l.unitName} x ${formatRupiah(l.priceAtSale)}  '
+                '${_fmtQty(l.qty)} ${l.unitName} x ${formatRupiah(l.priceAtSale)} = '
                 '${formatRupiah(l.subtotal)}',
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700)),
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
           ],
         ],
       ),
