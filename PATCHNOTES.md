@@ -10,6 +10,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 14 Agustus 2026
 
+### 🆕 Fitur baru
+- **Tombol "Tahan Pesanan" di keranjang**: sekarang ada tombol Tahan
+  (ikon jeda) langsung di bagian atas keranjang, di sebelah kiri tombol
+  "Tempel Pesanan" — jadi kasir tidak perlu tutup dulu keranjangnya
+  untuk menahan pesanan. Kalau pelanggan sudah dipilih, langsung
+  ditahan pakai nama pelanggan itu; kalau belum, akan ditanya nama/
+  penanda dulu (misal "Meja 3").
+
 ### 🔧 Perbaikan
 - **QR Transfer Transaksi lebih gampang di-scan**: gambar QR di sheet
   "Transfer Transaksi"/"Kirim ke Owner/Asisten" sekarang cuma berisi
