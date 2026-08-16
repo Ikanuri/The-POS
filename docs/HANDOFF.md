@@ -5,6 +5,45 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 14 Agustus 2026 (lanjutan — tombol Tahan Pesanan, `aa814d6`)
+— versi kerja **2.11.0+16**. Permintaan user: tombol "Tahan Pesanan" di
+header sheet Keranjang (`CartSheet`), di kiri "Tempel Pesanan" —
+sebelumnya cuma bisa lewat tab folder `_CartMetaTab` di `kasir_screen.
+dart` yang tersembunyi begitu sheet keranjang dibuka. Gerbang tampil
+SAMA PERSIS dgn `_CartMetaTab`: cuma `kMainCartId` (mode Katalog bukan
+transaksi sungguhan, mode Tambah Belanjaan ikut transaksi asli — tidak
+ada konsep "tahan" terpisah utknya). Logikanya (`_holdCurrent`/
+`_askHoldLabel`) SENGAJA DISALIN ke `cart_sheet.dart`, BUKAN dibagi lewat
+fungsi bersama dgn versi `kasir_screen.dart` — versi lama terikat erat ke
+state layar itu sendiri (`_heldPanelOpen`, banner kustom `_showBanner`),
+menyatukannya lewat abstraksi baru berisiko mengubah perilaku yang sudah
+berjalan tanpa ada yang memintanya (prinsip dipegang sepanjang sesi ini:
+jangan refactor di luar yang diminta).
+
+**Gotcha BARU (perlu diingat kalau bikin dialog lain yang dibuka dari
+dalam bottom sheet)**: pola lama "buat `TextEditingController` di fungsi,
+`showDialog`, lalu `ctrl.dispose()` di `finally` setelah Future resolve"
+— PERSIS pola yang dipakai `_askHoldLabel` versi `kasir_screen.dart` —
+KETANGKAP widget test baru (`cart_sheet_hold_button_test.dart`) sbg bug
+nyata: "TextEditingController was used after being disposed". Akar:
+dispose manual di `finally` bisa lebih cepat dari animasi TUTUP dialog
+yang masih berjalan (`TextField` masih ter-render selama transisi
+keluar) — KHUSUSNYA saat dialog dibuka dari dalam `DraggableScrollableSheet`
+(dipakai `CartSheet`), yang punya lapisan animasi/rebuild sendiri saat
+bottom sheet ikut menyesuaikan ukuran. Fix: pindah ke `StatefulWidget`
+`_HoldLabelDialog` dgn `dispose()` sendiri (tied ke lifecycle Element
+sungguhan, bukan timing resolve Future) — pola SAMA dgn
+`debt_payment_dialog.dart` yang SUDAH benar sejak awal. **Versi
+`kasir_screen.dart` (`_askHoldLabel` lama) TIDAK ikut diperbaiki** —
+scope sesi ini cuma nambah tombol baru, bukan audit ulang dialog lama;
+kalau nanti ada laporan bug serupa dari tab folder `_CartMetaTab`, ini
+akar penyebabnya & fix-nya sudah ada contoh jadi (`_HoldLabelDialog`).
+
+Test `cart_sheet_hold_button_test.dart` (6, widget) — revert-verified.
+Full suite 1071 (2 gagal `proposal_unchanged_end_to_end_test.dart` — flaky
+pre-existing, dikonfirmasi lolos sendiri kalau dijalankan terisolasi,
+tidak terkait perubahan ini), `flutter analyze` 0 issue.
+
 _Update sesi 14 Agustus 2026 — QR Transfer Transaksi diperkecil, Copy/
 Share tetap lengkap (`0419df5`). Pertimbangan user (dijawab dulu via
 analisis sebelum eksekusi, sesuai kebiasaan sesi ini): QR menumpuk/padat

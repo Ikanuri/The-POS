@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
@@ -160,6 +162,50 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       ),
     );
   }
+
+  /// Susulan (permintaan user): "Tahan Pesanan" juga bisa dipicu LANGSUNG
+  /// dari header keranjang yang sedang terbuka (di samping "Tempel
+  /// Pesanan") — sebelumnya cuma bisa lewat tab folder di `kasir_screen.
+  /// dart` (`_CartMetaTab`/`_holdCurrent`), yang tersembunyi begitu sheet
+  /// keranjang ini dibuka. Logikanya SENGAJA disalin (bukan dibagi lewat
+  /// fungsi bersama) — `_holdCurrent` versi kasir_screen.dart terikat erat
+  /// ke state layar itu (`_heldPanelOpen`, banner kustom `_showBanner`),
+  /// menyatukannya lewat abstraksi baru berisiko mengubah perilaku yang
+  /// sudah berjalan tanpa ada yang memintanya. HANYA tersedia utk
+  /// `kMainCartId` (gerbang sama persis dgn `_CartMetaTab` — mode Katalog
+  /// bukan transaksi sungguhan, mode Tambah Belanjaan ikut transaksi asli
+  /// yang tidak bisa "ditahan" terpisah).
+  Future<void> _holdCurrent(BuildContext ctx, WidgetRef ref) async {
+    final cart = ref.read(cartProvider(widget.cartId));
+    if (cart.isEmpty) return;
+    final meta = ref.read(cartMetaProvider(widget.cartId));
+
+    String label;
+    if (meta.hasCustomer) {
+      label = meta.customerName!;
+    } else {
+      final entered = await _askHoldLabel(ctx);
+      if (entered == null) return; // dibatalkan
+      label = entered;
+    }
+
+    final db = ref.read(databaseProvider);
+    final payload = jsonEncode({
+      'items': cart.map((c) => c.toJson()).toList(),
+      'meta': meta.toJson(),
+    });
+    await db.holdOrder(id: const Uuid().v4(), label: label, cartJson: payload);
+    ref.read(cartProvider(widget.cartId).notifier).clear();
+    ref.read(cartMetaProvider(widget.cartId).notifier).clear();
+    if (!ctx.mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(content: Text('Pesanan "$label" ditahan')),
+    );
+    Navigator.of(ctx).pop();
+  }
+
+  Future<String?> _askHoldLabel(BuildContext ctx) =>
+      showDialog<String>(context: ctx, builder: (_) => const _HoldLabelDialog());
 
   /// Item 56 — Kosongkan keranjang (ikon tempat sampah, dialog konfirmasi
   /// tetap ada) — juga melepas reservasi nomor nota (Item 55) supaya
@@ -339,6 +385,20 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             color: scheme.onSurfaceVariant)),
                   ],
                   const Spacer(),
+                  // Susulan (permintaan user): "Tahan Pesanan" langsung dari
+                  // header keranjang, di SAMPING KIRI "Tempel Pesanan" —
+                  // gerbang sama persis dgn tab folder `_CartMetaTab` di
+                  // kasir_screen.dart (cuma `kMainCartId`; mode Katalog
+                  // bukan transaksi sungguhan, mode Tambah Belanjaan ikut
+                  // transaksi asli yang tidak bisa ditahan terpisah).
+                  if (widget.cartId == kMainCartId)
+                    IconButton(
+                      tooltip: 'Tahan Pesanan',
+                      onPressed: cart.isEmpty
+                          ? null
+                          : () => _holdCurrent(ctx, ref),
+                      icon: const Icon(Icons.pause_circle_outline),
+                    ),
                   // Susulan (permintaan user): "Tempel Pesanan" juga bisa
                   // dipakai LANGSUNG dari keranjang yang sedang terbuka —
                   // berguna kalau ada pesanan tambahan (dari pelanggan via
@@ -475,6 +535,58 @@ class _CartSheetState extends ConsumerState<CartSheet> {
           ],
         );
       },
+    );
+  }
+}
+
+/// Dialog isi label "Tahan Pesanan" — `TextEditingController` SENGAJA
+/// dimiliki widget State-nya sendiri (bukan dibuat di fungsi pemanggil lalu
+/// di-dispose manual di `finally` setelah `showDialog` resolve): dispose
+/// manual semacam itu bisa lebih cepat dari animasi TUTUP dialog yang masih
+/// berjalan (TextField masih ter-render selama transisi keluar) →
+/// "TextEditingController was used after being disposed" (ketangkap widget
+/// test `pumpAndSettle`, bukan sekadar teori). Pola State.dispose() di sini
+/// SAMA dgn `debt_payment_dialog.dart` — dispose baru terjadi saat Element
+/// dialog benar² unmount, bukan saat Future-nya resolve.
+class _HoldLabelDialog extends StatefulWidget {
+  const _HoldLabelDialog();
+
+  @override
+  State<_HoldLabelDialog> createState() => _HoldLabelDialogState();
+}
+
+class _HoldLabelDialogState extends State<_HoldLabelDialog> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Tahan Pesanan'),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          labelText: 'Nama / penanda',
+          hintText: 'Contoh: Bu Sari',
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Batal')),
+        FilledButton(
+          onPressed: () => Navigator.of(context)
+              .pop(_ctrl.text.trim().isEmpty ? 'Pesanan' : _ctrl.text.trim()),
+          child: const Text('Tahan'),
+        ),
+      ],
     );
   }
 }
