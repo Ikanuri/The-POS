@@ -19,6 +19,7 @@ import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 import 'add_control.dart';
+import 'cart_meta_pickers.dart';
 import 'paste_order_sheet.dart';
 
 /// Susulan (permintaan user): posisi scroll TERAKHIR per keranjang (key:
@@ -175,18 +176,38 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// `kMainCartId` (gerbang sama persis dgn `_CartMetaTab` — mode Katalog
   /// bukan transaksi sungguhan, mode Tambah Belanjaan ikut transaksi asli
   /// yang tidak bisa "ditahan" terpisah).
+  ///
+  /// Susulan (permintaan user): kalau belum ada pelanggan terpilih, dialog
+  /// pengisi label PERSIS dropdown "Pelanggan" di cart bar shrinked
+  /// (`showCustomerPickerSheet`, dipakai bareng `_CartMetaTab`) — cari
+  /// pelanggan terdaftar (lengkap atribut hutangnya) atau ketik nama
+  /// manual, BUKAN dialog polos terpisah. Pelanggan terdaftar yang dipilih
+  /// ikut disematkan ke `cartMetaProvider` (bukan cuma dipakai sbg teks
+  /// label) — payload `held_order` jadi bawa `customerId` sungguhan,
+  /// bukan cuma nama, konsisten dgn nota yang checkout normal.
   Future<void> _holdCurrent(BuildContext ctx, WidgetRef ref) async {
     final cart = ref.read(cartProvider(widget.cartId));
     if (cart.isEmpty) return;
-    final meta = ref.read(cartMetaProvider(widget.cartId));
+    var meta = ref.read(cartMetaProvider(widget.cartId));
 
     String label;
     if (meta.hasCustomer) {
       label = meta.customerName!;
     } else {
-      final entered = await _askHoldLabel(ctx);
-      if (entered == null) return; // dibatalkan
-      label = entered;
+      final pick = await showCustomerPickerSheet(ctx, ref);
+      if (pick == null) return; // dibatalkan (tap di luar sheet)
+      if (pick.id != null && pick.name != null) {
+        ref
+            .read(cartMetaProvider(widget.cartId).notifier)
+            .setCustomer(pick.id, pick.name);
+        meta = ref.read(cartMetaProvider(widget.cartId));
+        label = pick.name!;
+      } else {
+        // "Umum" (tanpa nama) atau nama manual kosong -> fallback label
+        // default, sama persis perilaku lama saat field label dikosongkan.
+        final manual = pick.name?.trim();
+        label = (manual == null || manual.isEmpty) ? 'Pesanan' : manual;
+      }
     }
 
     final db = ref.read(databaseProvider);
@@ -203,9 +224,6 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     );
     Navigator.of(ctx).pop();
   }
-
-  Future<String?> _askHoldLabel(BuildContext ctx) =>
-      showDialog<String>(context: ctx, builder: (_) => const _HoldLabelDialog());
 
   /// Item 56 — Kosongkan keranjang (ikon tempat sampah, dialog konfirmasi
   /// tetap ada) — juga melepas reservasi nomor nota (Item 55) supaya
@@ -535,58 +553,6 @@ class _CartSheetState extends ConsumerState<CartSheet> {
           ],
         );
       },
-    );
-  }
-}
-
-/// Dialog isi label "Tahan Pesanan" — `TextEditingController` SENGAJA
-/// dimiliki widget State-nya sendiri (bukan dibuat di fungsi pemanggil lalu
-/// di-dispose manual di `finally` setelah `showDialog` resolve): dispose
-/// manual semacam itu bisa lebih cepat dari animasi TUTUP dialog yang masih
-/// berjalan (TextField masih ter-render selama transisi keluar) →
-/// "TextEditingController was used after being disposed" (ketangkap widget
-/// test `pumpAndSettle`, bukan sekadar teori). Pola State.dispose() di sini
-/// SAMA dgn `debt_payment_dialog.dart` — dispose baru terjadi saat Element
-/// dialog benar² unmount, bukan saat Future-nya resolve.
-class _HoldLabelDialog extends StatefulWidget {
-  const _HoldLabelDialog();
-
-  @override
-  State<_HoldLabelDialog> createState() => _HoldLabelDialogState();
-}
-
-class _HoldLabelDialogState extends State<_HoldLabelDialog> {
-  final _ctrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Tahan Pesanan'),
-      content: TextField(
-        controller: _ctrl,
-        autofocus: true,
-        textCapitalization: TextCapitalization.words,
-        decoration: const InputDecoration(
-          labelText: 'Nama / penanda',
-          hintText: 'Contoh: Bu Sari',
-        ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Batal')),
-        FilledButton(
-          onPressed: () => Navigator.of(context)
-              .pop(_ctrl.text.trim().isEmpty ? 'Pesanan' : _ctrl.text.trim()),
-          child: const Text('Tahan'),
-        ),
-      ],
     );
   }
 }
