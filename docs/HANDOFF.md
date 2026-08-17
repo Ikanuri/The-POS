@@ -5,6 +5,50 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 14 Agustus 2026 (lanjutan lagi — dialog Tahan Pesanan pakai
+dropdown pelanggan, `d805143`) — versi kerja **2.12.0+17** (belum
+dinaikkan lagi sesi ini). Permintaan user susulan dari tombol Tahan
+Pesanan yang baru ditambah: dialog isi label (saat belum ada pelanggan
+terpilih) HARUS "persis dropdown cart bar shrinked" — bukan dialog polos
+terpisah. Diselesaikan dgn REUSE langsung `showCustomerPickerSheet`
+(`cart_meta_pickers.dart`, sheet yang sama dipakai `_CartMetaTab` di
+kasir_screen.dart) — bukan menulis ulang tampilannya. Konsekuensi bagus
+yang TIDAK diminta eksplisit tapi logis: pelanggan TERDAFTAR yang dipilih
+sekarang ikut disematkan ke `cartMetaProvider` (`setCustomer`), bukan
+cuma dipakai sbg string label — payload `held_order` (`cartJson`) jadi
+bawa `customerId` sungguhan, sama seperti nota yang checkout normal
+(sebelumnya cuma nama, walau user pilih dari pelanggan terdaftar).
+`_HoldLabelDialog` (StatefulWidget yang baru dibuat SESI SEBELUMNYA
+persis utk menghindari bug dispose-timing) DIHAPUS TOTAL lagi — jadi
+"berumur" cuma satu sesi, digantikan reuse yang lebih sederhana &
+sekalian menutup gap fungsional (customerId). Pelajaran: kalau ada
+permintaan susulan yang mengarah ke "pakai ulang komponen yang sudah
+ada" SEBELUM menulis komponen custom baru, sebaiknya digali dulu di awal
+— tapi dlm kasus ini permintaan awal user ("Tahan Pesanan") memang belum
+menyebut soal dropdown pelanggan sama sekali, itu baru muncul di
+permintaan susulan terpisah.
+
+**Insiden testing (bukan bug kode, murni infra)**: 2 percobaan full-suite
+berturut-turut menunjukkan kegagalan 15-21 test yang TIDAK PERNAH terlihat
+sebelumnya — investigasi menemukan akarnya BUKAN regresi kode sama sekali,
+melainkan DUA proses `flutter test` penuh (1071+ test masing-masing)
+berjalan BERSAMAAN tanpa disadari (sisa proses background dari percobaan
+sebelumnya yang gagal terdeteksi selesai + proses baru), berebut CPU
+sampai banyak widget test yang sensitif timing/animasi gagal random.
+Setelah dipastikan HANYA SATU proses `flutter test` berjalan (`ps aux |
+grep flutter_tester` harus 0 sebelum memulai proses baru), full suite
+kembali normal: 1073 total, 2 gagal (`proposal_unchanged_end_to_end_test.
+dart`, flaky pre-existing lama, dikonfirmasi lolos sendiri terisolasi).
+**Pelajaran utk sesi depan**: SELALU cek `ps aux | grep flutter_tester`
+kosong dulu sebelum memulai full-suite run baru — kalau ada sisa proses
+background dari percobaan sebelumnya (mis. karena command sebelumnya
+di-background lewat `&` shell biasa yang lalu "hilang" dari tracking,
+bukan lewat mekanisme background resmi tool), jumlah kegagalan yang
+dilaporkan TIDAK BISA dipercaya sampai dijalankan ulang sendirian.
+
+Test `cart_sheet_hold_button_test.dart` (8, ditambah revisi dari 6) —
+revert-verified. `flutter analyze` 0 issue.
+
 _Update sesi 14 Agustus 2026 (lanjutan — tombol Tahan Pesanan, `aa814d6`)
 — versi kerja **2.11.0+16**. Permintaan user: tombol "Tahan Pesanan" di
 header sheet Keranjang (`CartSheet`), di kiri "Tempel Pesanan" —
