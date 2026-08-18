@@ -15,6 +15,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/utils/qris_dynamic.dart';
 import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_meta_provider.dart';
 import 'discount_allocation.dart';
@@ -1289,7 +1290,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
                 if (_selectedMethodType == 'qris') ...[
                   _QrisDisplay(
-                      methods: _methods, selectedId: _selectedMethodId),
+                      methods: _methods,
+                      selectedId: _selectedMethodId,
+                      total: _total),
                 ],
 
                 // Item 62 — metadata (no. rekening/HP) utk metode non-QRIS,
@@ -1950,12 +1953,20 @@ class _Keypad extends StatelessWidget {
 }
 
 class _QrisDisplay extends StatelessWidget {
-  const _QrisDisplay({required this.methods, required this.selectedId});
+  const _QrisDisplay(
+      {required this.methods, required this.selectedId, required this.total});
   final List<PaymentMethod> methods;
   final String selectedId;
 
+  /// Item 62 susulan — nominal yg mau disisipkan ke QR (fitur EKSPERIMENTAL,
+  /// lihat dok `qris_dynamic.dart`). Nilainya total checkout SAAT QR ini
+  /// dirender (sebelum kalkulator dibuka) — bukan `_tendered`, krn kalkulator
+  /// baru dibuka setelah tombol "Bayar" ditekan.
+  final int total;
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final method = methods.where((m) => m.id == selectedId).firstOrNull;
     if (method?.qrValue == null) {
       return Card(
@@ -1963,29 +1974,86 @@ class _QrisDisplay extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Text(
             'QR QRIS belum dikonfigurasi. Atur di Pengaturan → Metode Pembayaran.',
-            style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(color: scheme.onSurfaceVariant),
           ),
         ),
       );
     }
+
+    // Item 62 susulan — coba sisipkan nominal ke payload statis (lihat
+    // `injectQrisAmount`). GAGAL (payload bukan format EMVCo yg dikenali)
+    // → fallback DIAM-DIAM ke QR statis polos apa adanya (perilaku lama) —
+    // checkout TIDAK BOLEH gagal gara-gara fitur eksperimental ini.
+    var qrData = method!.qrValue!;
+    var nominalLocked = false;
+    if (total > 0) {
+      try {
+        qrData = injectQrisAmount(method.qrValue!, total);
+        nominalLocked = true;
+      } on QrisTlvException {
+        // fallback ke qrData statis di atas.
+      }
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text('Scan QRIS', style: Theme.of(context).textTheme.titleSmall),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Scan QRIS',
+                    style: Theme.of(context).textTheme.titleSmall),
+                if (nominalLocked) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: scheme.tertiaryContainer,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('Eksperimental',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onTertiaryContainer)),
+                  ),
+                ],
+              ],
+            ),
+            if (nominalLocked) ...[
+              const SizedBox(height: 4),
+              Text(formatRupiah(total),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
+                      color: scheme.primary)),
+            ],
             const SizedBox(height: 12),
-            // Render payload QRIS statis sebagai QR yang bisa discan pembeli.
+            // Render payload QRIS (statis, atau statis+nominal bila berhasil
+            // disisipkan) sebagai QR yang bisa discan pembeli.
             Container(
               color: Colors.white,
               padding: const EdgeInsets.all(8),
               child: QrImageView(
-                data: method!.qrValue!,
+                data: qrData,
                 size: 200,
                 backgroundColor: Colors.white,
               ),
             ),
+            if (nominalLocked) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Nominal disisipkan otomatis ke QR (fitur eksperimental, '
+                'BUKAN lewat server QRIS resmi) — tidak ada verifikasi '
+                'pembayaran otomatis atau batas waktu/1x-pakai. Tetap '
+                'konfirmasi manual setelah pelanggan bayar.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              ),
+            ],
           ],
         ),
       ),
