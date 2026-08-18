@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -357,7 +358,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   int get _total => _totalOverride ?? _cartTotal;
 
-  int get _paid => _selectedMethodType == 'tunai' ? _tendered : _total;
+  /// Item 62 — kalkulator (keypad) dipakai SAMA untuk semua metode selain
+  /// tempo (dulu hanya tunai; non-tunai dipaksa lunas exact = `_total`).
+  /// `_tendered` sekarang diisi lewat keypad yang sama utk tunai maupun
+  /// non-tunai, jadi `_paid` cukup baca nilai itu langsung — tempo tetap
+  /// dipaksa 0 di `_confirm`/`_confirmAddItems` (isTempo check terpisah).
+  int get _paid => _tendered;
 
   int get _change => (_paid - _total).clamp(0, double.maxFinite.toInt());
 
@@ -1266,6 +1272,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           setState(() {
                             _selectedMethodId = m.id;
                             _selectedMethodType = m.type;
+                            // Ganti metode → nominal yang sudah diketik lewat
+                            // keypad utk metode SEBELUMNYA tidak boleh ikut
+                            // terbawa (mis. tunai 50rb lalu pindah ke QRIS).
+                            _tendered = 0;
                           });
                         },
                         selectedColor: scheme.primaryContainer,
@@ -1279,6 +1289,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
                 if (_selectedMethodType == 'qris') ...[
                   _QrisDisplay(
+                      methods: _methods, selectedId: _selectedMethodId),
+                ],
+
+                // Item 62 — metadata (no. rekening/HP) utk metode non-QRIS,
+                // dulu tersimpan di DB (`PaymentMethods.data`) tapi tidak
+                // pernah ditampilkan sama sekali ke kasir saat checkout.
+                if (_selectedMethodType == 'bank' ||
+                    _selectedMethodType == 'ewallet') ...[
+                  _PaymentMetadataDisplay(
                       methods: _methods, selectedId: _selectedMethodId),
                 ],
 
@@ -1396,11 +1415,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   String _bayarLabel() => 'Bayar ${formatRupiah(_total)}';
 
-  /// Tap "Bayar": untuk tunai buka sheet keypad (slide-up) lalu konfirmasi
-  /// dengan tombol ✓; untuk metode lain langsung konfirmasi.
+  /// Tap "Bayar": buka sheet keypad (slide-up) yang sama utk SEMUA metode
+  /// selain tempo (Item 62 — dulu keypad ini cuma dipakai tunai, non-tunai
+  /// langsung dipaksa lunas exact tanpa kalkulator sama sekali) lalu
+  /// konfirmasi dengan tombol ✓. Tempo tidak lewat sini — dedicated tombol
+  /// "Bayar Nanti" sendiri (`_onBayarNantiPressed`).
   Future<void> _onBayarPressed() async {
     FocusScope.of(context).unfocus();
-    if (_selectedMethodType == 'tunai') {
+    if (_selectedMethodType != 'tempo') {
+      final selectedMethod =
+          _methods.where((m) => m.id == _selectedMethodId).firstOrNull;
       final result = await showModalBottomSheet<int>(
         context: context,
         isScrollControlled: true,
@@ -1408,6 +1432,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         builder: (_) => _CashKeypadSheet(
           total: _total,
           initial: _tendered,
+          methodName: selectedMethod?.name ?? _selectedMethodType,
           unclaimedChangeAmount: _unclaimedChange?.amount,
           unclaimedChangeTaken: _unclaimedChangeTaken,
           onToggleUnclaimedChangeTaken:
@@ -1441,6 +1466,7 @@ class _CashKeypadSheet extends StatefulWidget {
   const _CashKeypadSheet({
     required this.total,
     required this.initial,
+    required this.methodName,
     this.unclaimedChangeAmount,
     this.unclaimedChangeTaken = false,
     this.onToggleUnclaimedChangeTaken,
@@ -1448,6 +1474,11 @@ class _CashKeypadSheet extends StatefulWidget {
   });
   final int total;
   final int initial;
+
+  /// Item 62 — keypad ini sekarang dipakai utk SEMUA metode (dulu cuma
+  /// tunai), jadi perlu penanda jelas metode mana yang "dikunci" utk sesi
+  /// input nominal ini (tidak bisa diganti tanpa menutup sheet dulu).
+  final String methodName;
 
   /// Mode tambah belanjaan (Poin 1): kembalian pembayaran terakhir transaksi
   /// asli yang masih belum diambil — null bila bukan mode tambah belanjaan
@@ -1594,6 +1625,31 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: scheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock_outline,
+                          size: 13, color: scheme.onSecondaryContainer),
+                      const SizedBox(width: 4),
+                      Text('Metode: ${widget.methodName}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSecondaryContainer)),
+                    ],
+                  ),
+                ),
               ),
               if (widget.existingShortfall != null) ...[
                 Padding(
@@ -1929,6 +1985,77 @@ class _QrisDisplay extends StatelessWidget {
                 size: 200,
                 backgroundColor: Colors.white,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Item 62 — no. rekening (bank) / no. HP-akun (e-wallet) metode terpilih,
+/// sudah lama tersimpan di `PaymentMethods.data` (diisi lewat Pengaturan →
+/// Metode Pembayaran) tapi tidak pernah disurfacekan ke kasir saat checkout
+/// — kasir harus tahu manual/hafalan. Pola tampilan mengikuti `_QrisDisplay`
+/// di atas (Card sendiri, muncul saat metode terkait dipilih).
+class _PaymentMetadataDisplay extends StatelessWidget {
+  const _PaymentMetadataDisplay(
+      {required this.methods, required this.selectedId});
+  final List<PaymentMethod> methods;
+  final String selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final method = methods.where((m) => m.id == selectedId).firstOrNull;
+    final data = method?.data?.trim();
+    if (method == null || data == null || data.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No. rekening/akun belum diatur. Atur di Pengaturan → Metode Pembayaran.',
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+    final label = method.type == 'bank' ? 'No. Rekening' : 'No. HP / Akun';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              method.type == 'bank'
+                  ? Icons.account_balance_outlined
+                  : Icons.phone_android_outlined,
+              color: scheme.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$label — ${method.name}',
+                      style:
+                          TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  SelectableText(data,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy_outlined, size: 18),
+              tooltip: 'Salin',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: data));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Nomor disalin')),
+                );
+              },
             ),
           ],
         ),
