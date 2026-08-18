@@ -5,6 +5,58 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 18 Agustus 2026 — kalkulator bayar dipakai sama utk metode
+non-tunai + tampilkan metadata rekening/akun (`1596283`), versi kerja
+**2.13.0+19**. Sesi diawali 4 pertanyaan analisis user (dijawab dulu via
+riset codebase langsung, TANPA kode, sesuai instruksi eksplisit "Analisis
+dulu, jangan code"): (1) metode bayar BISA dihapus tapi digated —
+`Tunai` tidak pernah bisa, lainnya wajib dinonaktifkan dulu; aman krn
+`paymentMethod` di transaksi string mandiri, bukan FK; (2) non-tunai
+DULU selalu dipaksa lunas exact hanya krn efek samping UI checkout (tidak
+ada keypad utk non-tunai) — bukan validasi eksplisit; cicilan non-tunai
+sudah lama bisa lewat "Tambah Bayar" pada nota existing, TIDAK bisa di
+checkout awal; (3) "Alihkan Owner" = restore file backup terenkripsi
+(BPOT1) penuh + rekey SQLCipher, BUKAN QR+LAN live; nomor nota tetap
+koheren (deviceCode baru WAJIB dipilih manual saat import, historical
+local_id ikut utuh dari dump); TIDAK ADA registry device sentral & TIDAK
+ADA mekanisme un-pair/rotasi storeKey (gap yang sudah didokumentasikan
+sendiri di PLAN.md item B.1) — risiko akumulasi deviceCode dobel/basi
+kalau device hilang lalu reinstall pakai kode baru itu VALID & belum
+ditangani, workaround resmi skrg cuma "Alihkan Owner ke identitas toko
+baru"; (4) `PaymentMethods.data` (no. rekening/HP) sudah lama tersimpan
+di skema TAPI tidak pernah ditampilkan ke kasir sama sekali (dikonfirmasi
+lewat grep `payment_screen.dart` — cuma `qrValue` yang dibaca, `data`
+sama sekali tidak direferensikan).
+
+Setelah dikonfirmasi, user minta eksekusi poin (2)+(4) sekaligus: reuse
+`_CashKeypadSheet` (sebelumnya cuma dipakai tunai) utk SEMUA metode
+selain tempo — `_paid` disederhanakan dari `_selectedMethodType ==
+'tunai' ? _tendered : _total` jadi murni `_tendered` (tempo tetap 0 via
+guard `isTempo` terpisah, tidak disentuh). Kalkulator dapat badge
+"Metode: <nama>" + ikon gembok (permintaan eksplisit "UI penanda ...
+pembayaran apa yang dilock") krn sheet sekarang dipakai bergantian utk
+semua metode. Widget baru `_PaymentMetadataDisplay` (pola sama
+`_QrisDisplay`) menampilkan `PaymentMethods.data` + tombol salin saat
+metode `bank`/`ewallet` dipilih di layar checkout. Ganti metode via chip
+sekarang mereset `_tendered = 0` (bug laten yang baru kelihatan setelah
+keypad dipakai bersama — nominal tunai lama bisa nyasar ke metode baru
+kalau tidak direset).
+
+Test baru `payment_screen_noncash_keypad_test.dart` (2: metadata metode
+bank tampil di checkout; kalkulator non-tunai buka dgn badge kunci &
+terima nominal kurang → status `kurang_bayar`) — revert-verified (`_paid`
+dikembalikan ke formula lama, assersi status gagal sensibel `lunas` vs
+`kurang_bayar`). **Catatan test**: surface size 400×900 SEMPAT dicoba dulu
+lalu dilepas krn overflow RenderFlex di baris tombol bawah sheet
+("Uang Pas" + "Catat Hutang Rp X") pada lebar sesempit itu — belum
+ditelusuri apakah ini overflow nyata yang perlu diperbaiki di layar
+sungguhan pada HP sempit (mirip gotcha `OutlinedButton`/`FilledButton`
+lebar-penuh yang sudah didokumentasikan di CLAUDE.md) atau cuma teks
+"Catat Hutang" yang memang panjang wajar dipotong `ellipsis`— PR/sesi
+depan sebaiknya cek manual di HP sungguhan kalau nominal shortfall besar
+(misal jutaan rupiah, teksnya makin panjang). Full suite 1077, `flutter
+analyze` 0 issue.
+
 _Update sesi 14 Agustus 2026 (lanjutan lagi — dialog Tahan Pesanan pakai
 dropdown pelanggan, `d805143`) — versi kerja **2.12.0+17** (belum
 dinaikkan lagi sesi ini). Permintaan user susulan dari tombol Tahan

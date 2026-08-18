@@ -8,6 +8,24 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 18 Agustus 2026
+
+### 🆕 Fitur baru
+- **Bayar non-tunai sekarang bisa pakai kalkulator, termasuk bayar kurang**:
+  dulu kalau pilih metode selain Tunai (Transfer Bank/E-Wallet/QRIS) di
+  layar Bayar, jumlahnya otomatis dianggap lunas penuh — tidak ada
+  kalkulator sama sekali. Sekarang tombol "Bayar" membuka kalkulator yang
+  sama persis seperti Tunai untuk semua metode, jadi kasir bisa mengetik
+  nominal yang benar-benar diterima — kalau kurang, otomatis tercatat
+  sebagai hutang (kurang bayar), sama seperti Tunai. Di kalkulator ada
+  penanda kecil "Metode: ..." supaya kasir tetap tahu sedang input nominal
+  untuk metode yang mana.
+- **No. rekening/akun tampil otomatis saat Bayar**: kalau metode
+  pembayaran Transfer Bank atau E-Wallet sudah diisi nomornya di
+  Pengaturan → Metode Pembayaran, sekarang nomornya langsung tampil di
+  layar Bayar begitu metode itu dipilih — lengkap tombol salin. Tidak
+  perlu buka Pengaturan lagi atau hafal manual saat melayani pelanggan.
+
 ## 14 Agustus 2026
 
 ### 🆕 Fitur baru
