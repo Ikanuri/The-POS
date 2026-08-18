@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -14,6 +15,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/utils/qris_dynamic.dart';
 import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_meta_provider.dart';
 import 'discount_allocation.dart';
@@ -94,6 +96,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   List<PaymentMethod> _methods = [];
   bool _isSaving = false;
 
+  /// Mode QR QRIS: true = sisipkan nominal transaksi ke payload (lihat
+  /// `qris_dynamic.dart`), false = tampilkan QRIS statis polos. Persisten
+  /// di setting `qris_dynamic_enabled` — kasir tidak perlu menggeser tiap
+  /// transaksi, dan krn `app_settings` ikut sync host→client, pilihan owner
+  /// otomatis menyebar ke perangkat kasir. Default ON.
+  bool _qrisDynamic = true;
+
+  Future<void> _setQrisDynamic(bool value) async {
+    setState(() => _qrisDynamic = value);
+    await ref
+        .read(databaseProvider)
+        .setSetting('qris_dynamic_enabled', value ? '1' : '0');
+  }
+
   // Pegawai yang melayani — dipilih dari daftar (modal sheet, tanpa keyboard).
   List<Employee> _employees = [];
   Employee? _selectedEmployee;
@@ -129,6 +145,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
     final employees = await db.getEmployees();
+    // Default ON bila setting belum pernah diisi sama sekali.
+    final qrisDynamic = (await db.getSetting('qris_dynamic_enabled')) != '0';
 
     // Pra-isi pelanggan & pegawai dari metadata keranjang (dipilih di cart bar
     // kasir). Mode tambah belanjaan mengikuti transaksi asli → tidak pra-isi.
@@ -178,6 +196,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       setState(() {
         _methods = methods;
         _employees = employees;
+        _qrisDynamic = qrisDynamic;
         _unclaimedChange = unclaimedChange;
         _unclaimedChangeTaken = false;
         _existingShortfall = existingShortfall;
@@ -357,7 +376,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   int get _total => _totalOverride ?? _cartTotal;
 
-  int get _paid => _selectedMethodType == 'tunai' ? _tendered : _total;
+  /// Item 62 — kalkulator (keypad) dipakai SAMA untuk semua metode selain
+  /// tempo (dulu hanya tunai; non-tunai dipaksa lunas exact = `_total`).
+  /// `_tendered` sekarang diisi lewat keypad yang sama utk tunai maupun
+  /// non-tunai, jadi `_paid` cukup baca nilai itu langsung — tempo tetap
+  /// dipaksa 0 di `_confirm`/`_confirmAddItems` (isTempo check terpisah).
+  int get _paid => _tendered;
 
   int get _change => (_paid - _total).clamp(0, double.maxFinite.toInt());
 
@@ -1266,6 +1290,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           setState(() {
                             _selectedMethodId = m.id;
                             _selectedMethodType = m.type;
+                            // Ganti metode → nominal yang sudah diketik lewat
+                            // keypad utk metode SEBELUMNYA tidak boleh ikut
+                            // terbawa (mis. tunai 50rb lalu pindah ke QRIS).
+                            _tendered = 0;
                           });
                         },
                         selectedColor: scheme.primaryContainer,
@@ -1279,6 +1307,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
                 if (_selectedMethodType == 'qris') ...[
                   _QrisDisplay(
+                    methods: _methods,
+                    selectedId: _selectedMethodId,
+                    total: _total,
+                    dynamicMode: _qrisDynamic,
+                    onDynamicModeChanged: _setQrisDynamic,
+                  ),
+                ],
+
+                // Item 62 — metadata (no. rekening/HP) utk metode non-QRIS,
+                // dulu tersimpan di DB (`PaymentMethods.data`) tapi tidak
+                // pernah ditampilkan sama sekali ke kasir saat checkout.
+                if (_selectedMethodType == 'bank' ||
+                    _selectedMethodType == 'ewallet') ...[
+                  _PaymentMetadataDisplay(
                       methods: _methods, selectedId: _selectedMethodId),
                 ],
 
@@ -1396,11 +1438,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   String _bayarLabel() => 'Bayar ${formatRupiah(_total)}';
 
-  /// Tap "Bayar": untuk tunai buka sheet keypad (slide-up) lalu konfirmasi
-  /// dengan tombol ✓; untuk metode lain langsung konfirmasi.
+  /// Tap "Bayar": buka sheet keypad (slide-up) yang sama utk SEMUA metode
+  /// selain tempo (Item 62 — dulu keypad ini cuma dipakai tunai, non-tunai
+  /// langsung dipaksa lunas exact tanpa kalkulator sama sekali) lalu
+  /// konfirmasi dengan tombol ✓. Tempo tidak lewat sini — dedicated tombol
+  /// "Bayar Nanti" sendiri (`_onBayarNantiPressed`).
   Future<void> _onBayarPressed() async {
     FocusScope.of(context).unfocus();
-    if (_selectedMethodType == 'tunai') {
+    if (_selectedMethodType != 'tempo') {
+      final selectedMethod =
+          _methods.where((m) => m.id == _selectedMethodId).firstOrNull;
       final result = await showModalBottomSheet<int>(
         context: context,
         isScrollControlled: true,
@@ -1408,6 +1455,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         builder: (_) => _CashKeypadSheet(
           total: _total,
           initial: _tendered,
+          methodName: selectedMethod?.name ?? _selectedMethodType,
           unclaimedChangeAmount: _unclaimedChange?.amount,
           unclaimedChangeTaken: _unclaimedChangeTaken,
           onToggleUnclaimedChangeTaken:
@@ -1441,6 +1489,7 @@ class _CashKeypadSheet extends StatefulWidget {
   const _CashKeypadSheet({
     required this.total,
     required this.initial,
+    required this.methodName,
     this.unclaimedChangeAmount,
     this.unclaimedChangeTaken = false,
     this.onToggleUnclaimedChangeTaken,
@@ -1448,6 +1497,11 @@ class _CashKeypadSheet extends StatefulWidget {
   });
   final int total;
   final int initial;
+
+  /// Item 62 — keypad ini sekarang dipakai utk SEMUA metode (dulu cuma
+  /// tunai), jadi perlu penanda jelas metode mana yang "dikunci" utk sesi
+  /// input nominal ini (tidak bisa diganti tanpa menutup sheet dulu).
+  final String methodName;
 
   /// Mode tambah belanjaan (Poin 1): kembalian pembayaran terakhir transaksi
   /// asli yang masih belum diambil — null bila bukan mode tambah belanjaan
@@ -1594,6 +1648,31 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: scheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock_outline,
+                          size: 13, color: scheme.onSecondaryContainer),
+                      const SizedBox(width: 4),
+                      Text('Metode: ${widget.methodName}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSecondaryContainer)),
+                    ],
+                  ),
+                ),
               ),
               if (widget.existingShortfall != null) ...[
                 Padding(
@@ -1894,12 +1973,30 @@ class _Keypad extends StatelessWidget {
 }
 
 class _QrisDisplay extends StatelessWidget {
-  const _QrisDisplay({required this.methods, required this.selectedId});
+  const _QrisDisplay({
+    required this.methods,
+    required this.selectedId,
+    required this.total,
+    required this.dynamicMode,
+    required this.onDynamicModeChanged,
+  });
   final List<PaymentMethod> methods;
   final String selectedId;
 
+  /// Nominal yg disisipkan ke QR saat [dynamicMode] aktif. Nilainya total
+  /// checkout SAAT QR ini dirender (sebelum kalkulator dibuka) — bukan
+  /// `_tendered`, krn kalkulator baru dibuka setelah tombol "Bayar" ditekan.
+  final int total;
+
+  /// Mode QR: true = sisipkan nominal (QRIS "dinamis" bentukan lokal, lihat
+  /// `qris_dynamic.dart`), false = QRIS statis polos apa adanya. Disimpan
+  /// persisten di setting `qris_dynamic_enabled` oleh pemanggil.
+  final bool dynamicMode;
+  final ValueChanged<bool> onDynamicModeChanged;
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final method = methods.where((m) => m.id == selectedId).firstOrNull;
     if (method?.qrValue == null) {
       return Card(
@@ -1907,28 +2004,152 @@ class _QrisDisplay extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Text(
             'QR QRIS belum dikonfigurasi. Atur di Pengaturan → Metode Pembayaran.',
-            style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(color: scheme.onSurfaceVariant),
           ),
         ),
       );
     }
+
+    // Sisipkan nominal ke payload statis (lihat `injectQrisAmount`) — hanya
+    // bila mode nominal aktif. GAGAL (payload bukan format EMVCo yg dikenali)
+    // → fallback DIAM-DIAM ke QR statis polos apa adanya; checkout TIDAK
+    // BOLEH gagal cuma gara-gara QR-nya tidak bisa disisipi nominal.
+    var qrData = method!.qrValue!;
+    var nominalLocked = false;
+    if (dynamicMode && total > 0) {
+      try {
+        qrData = injectQrisAmount(method.qrValue!, total);
+        nominalLocked = true;
+      } on QrisTlvException {
+        // fallback ke qrData statis di atas.
+      }
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text('Scan QRIS', style: Theme.of(context).textTheme.titleSmall),
+            // Toggle statis/nominal di pojok kanan atas kartu QR.
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Scan QRIS',
+                      style: Theme.of(context).textTheme.titleSmall),
+                ),
+                Text(dynamicMode ? 'Nominal' : 'Statis',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurfaceVariant)),
+                const SizedBox(width: 4),
+                Switch(
+                  value: dynamicMode,
+                  onChanged: onDynamicModeChanged,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ],
+            ),
+            if (nominalLocked) ...[
+              const SizedBox(height: 4),
+              Text(formatRupiah(total),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
+                      color: scheme.primary)),
+            ],
             const SizedBox(height: 12),
-            // Render payload QRIS statis sebagai QR yang bisa discan pembeli.
+            // Render payload QRIS (statis, atau statis+nominal bila berhasil
+            // disisipkan) sebagai QR yang bisa discan pembeli.
             Container(
               color: Colors.white,
               padding: const EdgeInsets.all(8),
               child: QrImageView(
-                data: method!.qrValue!,
+                data: qrData,
                 size: 200,
                 backgroundColor: Colors.white,
               ),
+            ),
+            if (nominalLocked) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Nominal sudah terkunci di QR — pelanggan tidak perlu '
+                'mengetik jumlah. Pembayaran tetap dikonfirmasi manual '
+                'oleh kasir.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Item 62 — no. rekening (bank) / no. HP-akun (e-wallet) metode terpilih,
+/// sudah lama tersimpan di `PaymentMethods.data` (diisi lewat Pengaturan →
+/// Metode Pembayaran) tapi tidak pernah disurfacekan ke kasir saat checkout
+/// — kasir harus tahu manual/hafalan. Pola tampilan mengikuti `_QrisDisplay`
+/// di atas (Card sendiri, muncul saat metode terkait dipilih).
+class _PaymentMetadataDisplay extends StatelessWidget {
+  const _PaymentMetadataDisplay(
+      {required this.methods, required this.selectedId});
+  final List<PaymentMethod> methods;
+  final String selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final method = methods.where((m) => m.id == selectedId).firstOrNull;
+    final data = method?.data?.trim();
+    if (method == null || data == null || data.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No. rekening/akun belum diatur. Atur di Pengaturan → Metode Pembayaran.',
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+    final label = method.type == 'bank' ? 'No. Rekening' : 'No. HP / Akun';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              method.type == 'bank'
+                  ? Icons.account_balance_outlined
+                  : Icons.phone_android_outlined,
+              color: scheme.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$label — ${method.name}',
+                      style:
+                          TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  SelectableText(data,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy_outlined, size: 18),
+              tooltip: 'Salin',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: data));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Nomor disalin')),
+                );
+              },
             ),
           ],
         ),

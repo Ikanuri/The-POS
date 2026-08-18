@@ -8,6 +8,36 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 18 Agustus 2026
+
+### 🆕 Fitur baru
+- **QR QRIS langsung membawa nominal belanja**: saat metode QRIS dipilih
+  di layar Bayar, QR yang tampil sudah berisi jumlah yang harus dibayar —
+  pelanggan tinggal scan lalu langsung ke layar konfirmasi, tidak perlu
+  mengetik nominal sendiri (salah ketik jumlah jadi hilang). Nominalnya
+  diambil dari QRIS statis toko Anda sendiri yang diisi di Pengaturan →
+  Metode Pembayaran, jadi dana tetap masuk ke rekening yang sama.
+  Pembayaran tetap dikonfirmasi manual oleh kasir seperti biasa.
+- **Tombol geser Statis / Nominal di kartu QR**: ada di pojok kanan atas
+  kartu QR pada layar Bayar. Geser ke "Statis" kalau ingin menampilkan QR
+  polos (pelanggan mengetik sendiri jumlahnya), geser ke "Nominal" untuk
+  QR yang sudah terkunci jumlahnya. Pilihan ini tersimpan — tidak perlu
+  digeser ulang tiap transaksi, dan otomatis ikut ke HP kasir lain.
+- **Bayar non-tunai sekarang bisa pakai kalkulator, termasuk bayar kurang**:
+  dulu kalau pilih metode selain Tunai (Transfer Bank/E-Wallet/QRIS) di
+  layar Bayar, jumlahnya otomatis dianggap lunas penuh — tidak ada
+  kalkulator sama sekali. Sekarang tombol "Bayar" membuka kalkulator yang
+  sama persis seperti Tunai untuk semua metode, jadi kasir bisa mengetik
+  nominal yang benar-benar diterima — kalau kurang, otomatis tercatat
+  sebagai hutang (kurang bayar), sama seperti Tunai. Di kalkulator ada
+  penanda kecil "Metode: ..." supaya kasir tetap tahu sedang input nominal
+  untuk metode yang mana.
+- **No. rekening/akun tampil otomatis saat Bayar**: kalau metode
+  pembayaran Transfer Bank atau E-Wallet sudah diisi nomornya di
+  Pengaturan → Metode Pembayaran, sekarang nomornya langsung tampil di
+  layar Bayar begitu metode itu dipilih — lengkap tombol salin. Tidak
+  perlu buka Pengaturan lagi atau hafal manual saat melayani pelanggan.
+
 ## 14 Agustus 2026
 
 ### 🆕 Fitur baru

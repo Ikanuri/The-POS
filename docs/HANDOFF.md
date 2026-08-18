@@ -5,6 +5,135 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 18 Agustus 2026 (lanjutan lagi — QRIS nominal jadi fitur
+TETAP + toggle Statis/Nominal), versi kerja **2.15.0+21**, sudah
+di-merge ke `main`. **User sudah menguji bayar SUNGGUHAN** lewat fitur
+QRIS-nominal di bawah dan dana masuk normal ke NMID yang sama —
+kesimpulan analisis sesi ini terbukti benar di lapangan, bukan cuma di
+test. Konsekuensinya: label "Eksperimental" dibuang, caption kartu QR
+diringkas jadi info operasional saja (peringatan "bukan server resmi /
+tanpa kedaluwarsa" dipindah ke dok kode `qris_dynamic.dart`, tidak lagi
+dipajang ke kasir tiap transaksi). Ditambah toggle `Switch` Statis ↔
+Nominal di POJOK KANAN ATAS kartu QR.
+
+**Keputusan desain yang saya ambil sendiri (user bilang "kerjakan" tanpa
+merinci, jadi ini bisa direvisi kalau tidak cocok)**: pilihan toggle
+disimpan PERSISTEN di setting `qris_dynamic_enabled` (default ON kalau
+belum pernah diisi), BUKAN state layar sesaat — alasannya kasir tidak
+perlu menggeser tiap transaksi, dan krn `app_settings` masuk kategori
+sync masterData 'Pengaturan Toko', pilihan owner otomatis menyebar ke HP
+kasir. Tanpa migrasi DB (key-value).
+
+Permintaan user poin 3 ("app dipakai banyak toko, acuan pola dinamis =
+value QR statis yang diinputkan") ternyata SUDAH terpenuhi sejak
+implementasi awal — `injectQrisAmount` cuma menyentuh tag `01`/`54`/`63`,
+identitas merchant (`26`/`51`/`59`/`60`/`61`) diteruskan apa adanya,
+tidak pernah di-hardcode. Sekarang dibuktikan eksplisit lewat test
+payload merchant BERBEDA (Warung Melati/SURABAYA, acquirer & NMID beda
+total).
+
+**Pelajaran berulang (2x kejadian di sesi ini)**: bikin fixture payload
+QRIS dgn mengetik panjang TLV MANUAL selalu salah hitung → payload rusak
+& test menguji hal yang salah (parser-nya benar, fixture-nya yang
+bohong). Selalu bangun fixture lewat helper yang MENGHITUNG panjang
+(lihat `tlv()` di `qris_dynamic_test.dart`).
+
+**Masih menggantung (belum dijawab user, jangan diasumsikan beres)**:
+nominal QR dipatri dari `_total` saat kartu QR dirender — kalau kasir
+lalu mengetik nominal BERBEDA di kalkulator (bayar sebagian), QR tidak
+ikut ter-refresh. Sudah 2x saya angkat ke user, belum dijawab. Mitigasi
+yang ada sekarang: toggle ke "Statis" supaya pelanggan ketik sendiri.
+
+_Update sesi 18 Agustus 2026 (lanjutan — QR QRIS sisipkan nominal
+otomatis, saat itu masih EKSPERIMENTAL), versi kerja **2.14.0+20**. Setelah fitur
+kalkulator-non-tunai (di bawah) selesai, user tanya soal QR QRIS statis
+vs dinamis (kirim 3 screenshot GoPay merchant tools: QR statis + 2 QR
+dinamis dgn nominal terkunci Rp17rb/Rp20rb) — apakah pola dinamis bisa
+"diakali" sesuai nominal belanja. **Penting: analisis awal SENGAJA tanpa
+generate QR sungguhan** (`Bash` sempat diblokir classifier keamanan
+sandbox saat mencoba benar2 generate file QR, walau cuma nominal Rp1000
+milik toko sendiri utk testing — dihormati, tidak dicoba jalan memutar,
+dijelaskan ke user). Analisis matematis murni (CRC-16/CCITT-FALSE +
+struktur TLV EMVCo) dilakukan dulu pakai Python di scratchpad
+(`qris_dynamic.py`, DILUAR repo) sblm user kirim 3 payload QRIS TEKS asli
+dari HP-nya (1 statis + 2 dinamis, toko nyata "Toko Berkah, BNY NYR") —
+dipakai memvalidasi analisisnya SEBELUM implementasi. Terbukti: beda
+statis→dinamis PERSIS 3 tag (`01`:`11`→`12`, `54`:nominal disisipkan
+stlh tag `53`, `63`:CRC ulang) — field lain byte-identik. Tag `62`
+sub-`50` (token+timestamp proprietary GoPay) di luar spek EMVCo standar,
+tidak direplikasi.
+
+Implementasi: `lib/core/utils/qris_dynamic.dart` (CRC16 + parser/builder
+TLV + `injectQrisAmount`, Dart murni, tervalidasi thd check value baku +
+3 payload asli sbg fixture test). `_QrisDisplay` (`payment_screen.dart`)
+coba sisipkan `_total` ke QR, sukses → badge "Eksperimental" + nominal +
+caption peringatan (bukan resmi, tanpa verifikasi otomatis/kedaluwarsa);
+gagal (`QrisTlvException`) → fallback diam2 ke QR statis polos (checkout
+tidak boleh gagal krn fitur eksperimental). Test: `qris_dynamic_test.dart`
+(6, fixture payload asli) + `payment_screen_qris_dynamic_test.dart` (2,
+termasuk fallback payload rusak) — revert-verified 2x (CRC poly salah;
+wiring `_QrisDisplay` dimatikan). **Catatan utk sesi depan**: cara test
+teraman yg disarankan ke user = scan QR sampai layar konfirmasi nominal
+di app e-wallet, LALU BATALKAN tanpa bayar — kalau nominal/nama toko
+tampil benar, payload sudah pasti valid struktural tanpa perlu transfer
+uang sungguhan. Belum ditanya: nominal QR yg dipakai saat kasir bayar
+SEBAGIAN (partial via kalkulator non-tunai) — QR di-render SEBELUM
+keypad dibuka jadi masih pakai `_total` penuh, belum ada refresh setelah
+nominal di keypad beda dari `_total` (pertanyaan desain yg pernah
+diajukan ke user, belum dijawab — jangan diasumsikan "sudah beres").
+
+_Update sesi 18 Agustus 2026 — kalkulator bayar dipakai sama utk metode
+non-tunai + tampilkan metadata rekening/akun (`1596283`), versi kerja
+**2.13.0+19**. Sesi diawali 4 pertanyaan analisis user (dijawab dulu via
+riset codebase langsung, TANPA kode, sesuai instruksi eksplisit "Analisis
+dulu, jangan code"): (1) metode bayar BISA dihapus tapi digated —
+`Tunai` tidak pernah bisa, lainnya wajib dinonaktifkan dulu; aman krn
+`paymentMethod` di transaksi string mandiri, bukan FK; (2) non-tunai
+DULU selalu dipaksa lunas exact hanya krn efek samping UI checkout (tidak
+ada keypad utk non-tunai) — bukan validasi eksplisit; cicilan non-tunai
+sudah lama bisa lewat "Tambah Bayar" pada nota existing, TIDAK bisa di
+checkout awal; (3) "Alihkan Owner" = restore file backup terenkripsi
+(BPOT1) penuh + rekey SQLCipher, BUKAN QR+LAN live; nomor nota tetap
+koheren (deviceCode baru WAJIB dipilih manual saat import, historical
+local_id ikut utuh dari dump); TIDAK ADA registry device sentral & TIDAK
+ADA mekanisme un-pair/rotasi storeKey (gap yang sudah didokumentasikan
+sendiri di PLAN.md item B.1) — risiko akumulasi deviceCode dobel/basi
+kalau device hilang lalu reinstall pakai kode baru itu VALID & belum
+ditangani, workaround resmi skrg cuma "Alihkan Owner ke identitas toko
+baru"; (4) `PaymentMethods.data` (no. rekening/HP) sudah lama tersimpan
+di skema TAPI tidak pernah ditampilkan ke kasir sama sekali (dikonfirmasi
+lewat grep `payment_screen.dart` — cuma `qrValue` yang dibaca, `data`
+sama sekali tidak direferensikan).
+
+Setelah dikonfirmasi, user minta eksekusi poin (2)+(4) sekaligus: reuse
+`_CashKeypadSheet` (sebelumnya cuma dipakai tunai) utk SEMUA metode
+selain tempo — `_paid` disederhanakan dari `_selectedMethodType ==
+'tunai' ? _tendered : _total` jadi murni `_tendered` (tempo tetap 0 via
+guard `isTempo` terpisah, tidak disentuh). Kalkulator dapat badge
+"Metode: <nama>" + ikon gembok (permintaan eksplisit "UI penanda ...
+pembayaran apa yang dilock") krn sheet sekarang dipakai bergantian utk
+semua metode. Widget baru `_PaymentMetadataDisplay` (pola sama
+`_QrisDisplay`) menampilkan `PaymentMethods.data` + tombol salin saat
+metode `bank`/`ewallet` dipilih di layar checkout. Ganti metode via chip
+sekarang mereset `_tendered = 0` (bug laten yang baru kelihatan setelah
+keypad dipakai bersama — nominal tunai lama bisa nyasar ke metode baru
+kalau tidak direset).
+
+Test baru `payment_screen_noncash_keypad_test.dart` (2: metadata metode
+bank tampil di checkout; kalkulator non-tunai buka dgn badge kunci &
+terima nominal kurang → status `kurang_bayar`) — revert-verified (`_paid`
+dikembalikan ke formula lama, assersi status gagal sensibel `lunas` vs
+`kurang_bayar`). **Catatan test**: surface size 400×900 SEMPAT dicoba dulu
+lalu dilepas krn overflow RenderFlex di baris tombol bawah sheet
+("Uang Pas" + "Catat Hutang Rp X") pada lebar sesempit itu — belum
+ditelusuri apakah ini overflow nyata yang perlu diperbaiki di layar
+sungguhan pada HP sempit (mirip gotcha `OutlinedButton`/`FilledButton`
+lebar-penuh yang sudah didokumentasikan di CLAUDE.md) atau cuma teks
+"Catat Hutang" yang memang panjang wajar dipotong `ellipsis`— PR/sesi
+depan sebaiknya cek manual di HP sungguhan kalau nominal shortfall besar
+(misal jutaan rupiah, teksnya makin panjang). Full suite 1077, `flutter
+analyze` 0 issue.
+
 _Update sesi 14 Agustus 2026 (lanjutan lagi — dialog Tahan Pesanan pakai
 dropdown pelanggan, `d805143`) — versi kerja **2.12.0+17** (belum
 dinaikkan lagi sesi ini). Permintaan user susulan dari tombol Tahan
