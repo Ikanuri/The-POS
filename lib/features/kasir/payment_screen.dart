@@ -1438,13 +1438,30 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   String _bayarLabel() => 'Bayar ${formatRupiah(_total)}';
 
-  /// Tap "Bayar": buka sheet keypad (slide-up) yang sama utk SEMUA metode
-  /// selain tempo (Item 62 — dulu keypad ini cuma dipakai tunai, non-tunai
-  /// langsung dipaksa lunas exact tanpa kalkulator sama sekali) lalu
-  /// konfirmasi dengan tombol ✓. Tempo tidak lewat sini — dedicated tombol
-  /// "Bayar Nanti" sendiri (`_onBayarNantiPressed`).
+  /// QRIS yang nominalnya SUDAH terkunci di dalam QR (toggle "Nominal").
+  /// Pelanggan tidak bisa mengubah jumlahnya saat scan, jadi tidak ada yang
+  /// perlu diketik kasir — lihat `_onBayarPressed`.
+  bool get _isQrisNominalLocked =>
+      _selectedMethodType == 'qris' && _qrisDynamic;
+
+  /// Tap "Bayar": buka sheet keypad (slide-up) yang sama utk SEMUA metode,
+  /// KECUALI dua ini yang langsung konfirmasi tanpa kalkulator:
+  /// - **tempo** — punya tombol "Bayar Nanti" sendiri
+  ///   (`_onBayarNantiPressed`), dicatat sbg hutang penuh.
+  /// - **QRIS mode "Nominal"** — jumlahnya sudah dipatri di QR yang discan
+  ///   pelanggan (tidak bisa dikurangi saat bayar), jadi kalkulator cuma
+  ///   jadi langkah tambahan tanpa guna: langsung lunas penuh, persis
+  ///   perilaku non-tunai SEBELUM kalkulator dipakai bersama (Item 62).
+  ///   Ini sekaligus menutup celah nominal-QR-vs-ketikan-kasir bisa beda.
+  ///   QRIS mode "Statis" TETAP lewat kalkulator — di sana pelanggan
+  ///   mengetik sendiri jumlahnya, jadi bisa saja tidak penuh.
   Future<void> _onBayarPressed() async {
     FocusScope.of(context).unfocus();
+    if (_isQrisNominalLocked) {
+      setState(() => _tendered = _total);
+      await _confirm();
+      return;
+    }
     if (_selectedMethodType != 'tempo') {
       final selectedMethod =
           _methods.where((m) => m.id == _selectedMethodId).firstOrNull;

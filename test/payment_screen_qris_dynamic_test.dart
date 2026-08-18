@@ -185,6 +185,103 @@ void main() {
   });
 
   testWidgets(
+      'mode Nominal: tap Bayar TIDAK membuka kalkulator — langsung lunas '
+      'penuh (nominal sudah dipatri di QR, tak ada yg perlu diketik kasir)',
+      (tester) async {
+    final db = await makeDbWithQris();
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider.overrideWith((ref) => DeviceNotifier()
+        ..state = const DeviceIdentity(
+          storeUuid: 'test-store-uuid',
+          storeKey: 'test-store-key',
+          storeName: 'Toko Uji',
+          deviceName: 'Kasir Uji',
+          deviceCode: 'K1',
+          deviceRole: 'owner',
+        )),
+    ]);
+    addTearDown(container.dispose);
+    container.read(cartProvider(kMainCartId).notifier).addItem(item);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: PaymentScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'QRIS'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining('Bayar Rp'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Kalkulator TIDAK boleh muncul sama sekali.
+    expect(find.text('Uang Pas'), findsNothing);
+    expect(find.text('Diterima'), findsNothing);
+    expect(find.text('Metode: QRIS'), findsNothing);
+
+    await tester.pumpAndSettle();
+
+    final tx = await db.select(db.transactions).getSingle();
+    expect(tx.status, 'lunas');
+    expect(tx.paid, 17000);
+    expect(tx.total, 17000);
+    expect(tx.changeAmount, 0);
+    expect(tx.paymentMethod, 'qris');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets(
+      'mode Statis: tap Bayar TETAP membuka kalkulator (pelanggan mengetik '
+      'sendiri jumlahnya, bisa saja tidak penuh)', (tester) async {
+    final db = await makeDbWithQris();
+    await db.setSetting('qris_dynamic_enabled', '0');
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider.overrideWith((ref) => DeviceNotifier()
+        ..state = const DeviceIdentity(
+          storeUuid: 'test-store-uuid',
+          storeKey: 'test-store-key',
+          storeName: 'Toko Uji',
+          deviceName: 'Kasir Uji',
+          deviceCode: 'K1',
+          deviceRole: 'owner',
+        )),
+    ]);
+    addTearDown(container.dispose);
+    container.read(cartProvider(kMainCartId).notifier).addItem(item);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: PaymentScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'QRIS'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining('Bayar Rp'));
+    await tester.pumpAndSettle();
+
+    // Kalkulator terbuka — dgn penanda metode terkunci spt metode lain.
+    expect(find.text('Uang Pas'), findsOneWidget);
+    expect(find.text('Metode: QRIS'), findsOneWidget);
+    // Belum ada transaksi tersimpan: masih menunggu kasir input nominal.
+    expect(await db.select(db.transactions).get(), isEmpty);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets(
       'qrValue BUKAN payload QRIS valid (rusak) → fallback diam-diam ke QR '
       'apa adanya, checkout tidak error',
       (tester) async {
