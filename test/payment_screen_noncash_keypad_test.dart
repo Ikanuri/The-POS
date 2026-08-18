@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
@@ -78,6 +79,41 @@ void main() {
 
     expect(find.text('No. Rekening — BRI'), findsOneWidget);
     expect(find.text('1234-5678-9012'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets(
+      'tombol salin di metadata non-tunai menyalin nomor ke clipboard & tampilkan snackbar',
+      (tester) async {
+    final db = await makeDbWithBankMethod();
+
+    String? copied;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+
+    await pumpPayment(tester, db);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'BRI'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.copy_outlined), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.copy_outlined));
+    await tester.pump();
+
+    expect(copied, '1234-5678-9012');
+    expect(find.text('Nomor disalin'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
