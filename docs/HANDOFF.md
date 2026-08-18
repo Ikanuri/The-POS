@@ -5,6 +5,44 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 18 Agustus 2026 (lanjutan — QR QRIS sisipkan nominal
+otomatis, EKSPERIMENTAL), versi kerja **2.14.0+20**. Setelah fitur
+kalkulator-non-tunai (di bawah) selesai, user tanya soal QR QRIS statis
+vs dinamis (kirim 3 screenshot GoPay merchant tools: QR statis + 2 QR
+dinamis dgn nominal terkunci Rp17rb/Rp20rb) — apakah pola dinamis bisa
+"diakali" sesuai nominal belanja. **Penting: analisis awal SENGAJA tanpa
+generate QR sungguhan** (`Bash` sempat diblokir classifier keamanan
+sandbox saat mencoba benar2 generate file QR, walau cuma nominal Rp1000
+milik toko sendiri utk testing — dihormati, tidak dicoba jalan memutar,
+dijelaskan ke user). Analisis matematis murni (CRC-16/CCITT-FALSE +
+struktur TLV EMVCo) dilakukan dulu pakai Python di scratchpad
+(`qris_dynamic.py`, DILUAR repo) sblm user kirim 3 payload QRIS TEKS asli
+dari HP-nya (1 statis + 2 dinamis, toko nyata "Toko Berkah, BNY NYR") —
+dipakai memvalidasi analisisnya SEBELUM implementasi. Terbukti: beda
+statis→dinamis PERSIS 3 tag (`01`:`11`→`12`, `54`:nominal disisipkan
+stlh tag `53`, `63`:CRC ulang) — field lain byte-identik. Tag `62`
+sub-`50` (token+timestamp proprietary GoPay) di luar spek EMVCo standar,
+tidak direplikasi.
+
+Implementasi: `lib/core/utils/qris_dynamic.dart` (CRC16 + parser/builder
+TLV + `injectQrisAmount`, Dart murni, tervalidasi thd check value baku +
+3 payload asli sbg fixture test). `_QrisDisplay` (`payment_screen.dart`)
+coba sisipkan `_total` ke QR, sukses → badge "Eksperimental" + nominal +
+caption peringatan (bukan resmi, tanpa verifikasi otomatis/kedaluwarsa);
+gagal (`QrisTlvException`) → fallback diam2 ke QR statis polos (checkout
+tidak boleh gagal krn fitur eksperimental). Test: `qris_dynamic_test.dart`
+(6, fixture payload asli) + `payment_screen_qris_dynamic_test.dart` (2,
+termasuk fallback payload rusak) — revert-verified 2x (CRC poly salah;
+wiring `_QrisDisplay` dimatikan). **Catatan utk sesi depan**: cara test
+teraman yg disarankan ke user = scan QR sampai layar konfirmasi nominal
+di app e-wallet, LALU BATALKAN tanpa bayar — kalau nominal/nama toko
+tampil benar, payload sudah pasti valid struktural tanpa perlu transfer
+uang sungguhan. Belum ditanya: nominal QR yg dipakai saat kasir bayar
+SEBAGIAN (partial via kalkulator non-tunai) — QR di-render SEBELUM
+keypad dibuka jadi masih pakai `_total` penuh, belum ada refresh setelah
+nominal di keypad beda dari `_total` (pertanyaan desain yg pernah
+diajukan ke user, belum dijawab — jangan diasumsikan "sudah beres").
+
 _Update sesi 18 Agustus 2026 — kalkulator bayar dipakai sama utk metode
 non-tunai + tampilkan metadata rekening/akun (`1596283`), versi kerja
 **2.13.0+19**. Sesi diawali 4 pertanyaan analisis user (dijawab dulu via

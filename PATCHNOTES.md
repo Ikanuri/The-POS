@@ -10,6 +10,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 18 Agustus 2026
 
+### 🧪 Eksperimental
+- **QR QRIS sekarang bisa langsung bawa nominal (uji coba)**: saat metode
+  QRIS dipilih di layar Bayar, QR yang tampil akan mencoba menyisipkan
+  nominal secara otomatis — pelanggan tinggal scan & langsung ke layar
+  konfirmasi jumlah, tidak perlu ketik manual lagi. Diberi label
+  "Eksperimental" jelas karena ini BUKAN dibuat lewat server resmi
+  penyedia QRIS — jadi tidak ada verifikasi pembayaran otomatis atau
+  batas waktu/1x-pakai seperti QRIS dinamis resmi. Kasir tetap harus
+  konfirmasi manual setelah pelanggan bayar, sama seperti sebelumnya.
+  Kalau nominal gagal disisipkan (jarang, tergantung format QR toko),
+  otomatis kembali ke QR polos seperti biasa — tidak akan mengganggu
+  proses bayar.
+
 ### 🆕 Fitur baru
 - **Bayar non-tunai sekarang bisa pakai kalkulator, termasuk bayar kurang**:
   dulu kalau pilih metode selain Tunai (Transfer Bank/E-Wallet/QRIS) di
