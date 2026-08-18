@@ -5,8 +5,47 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 18 Agustus 2026 (lanjutan lagi — QRIS nominal jadi fitur
+TETAP + toggle Statis/Nominal), versi kerja **2.15.0+21**, sudah
+di-merge ke `main`. **User sudah menguji bayar SUNGGUHAN** lewat fitur
+QRIS-nominal di bawah dan dana masuk normal ke NMID yang sama —
+kesimpulan analisis sesi ini terbukti benar di lapangan, bukan cuma di
+test. Konsekuensinya: label "Eksperimental" dibuang, caption kartu QR
+diringkas jadi info operasional saja (peringatan "bukan server resmi /
+tanpa kedaluwarsa" dipindah ke dok kode `qris_dynamic.dart`, tidak lagi
+dipajang ke kasir tiap transaksi). Ditambah toggle `Switch` Statis ↔
+Nominal di POJOK KANAN ATAS kartu QR.
+
+**Keputusan desain yang saya ambil sendiri (user bilang "kerjakan" tanpa
+merinci, jadi ini bisa direvisi kalau tidak cocok)**: pilihan toggle
+disimpan PERSISTEN di setting `qris_dynamic_enabled` (default ON kalau
+belum pernah diisi), BUKAN state layar sesaat — alasannya kasir tidak
+perlu menggeser tiap transaksi, dan krn `app_settings` masuk kategori
+sync masterData 'Pengaturan Toko', pilihan owner otomatis menyebar ke HP
+kasir. Tanpa migrasi DB (key-value).
+
+Permintaan user poin 3 ("app dipakai banyak toko, acuan pola dinamis =
+value QR statis yang diinputkan") ternyata SUDAH terpenuhi sejak
+implementasi awal — `injectQrisAmount` cuma menyentuh tag `01`/`54`/`63`,
+identitas merchant (`26`/`51`/`59`/`60`/`61`) diteruskan apa adanya,
+tidak pernah di-hardcode. Sekarang dibuktikan eksplisit lewat test
+payload merchant BERBEDA (Warung Melati/SURABAYA, acquirer & NMID beda
+total).
+
+**Pelajaran berulang (2x kejadian di sesi ini)**: bikin fixture payload
+QRIS dgn mengetik panjang TLV MANUAL selalu salah hitung → payload rusak
+& test menguji hal yang salah (parser-nya benar, fixture-nya yang
+bohong). Selalu bangun fixture lewat helper yang MENGHITUNG panjang
+(lihat `tlv()` di `qris_dynamic_test.dart`).
+
+**Masih menggantung (belum dijawab user, jangan diasumsikan beres)**:
+nominal QR dipatri dari `_total` saat kartu QR dirender — kalau kasir
+lalu mengetik nominal BERBEDA di kalkulator (bayar sebagian), QR tidak
+ikut ter-refresh. Sudah 2x saya angkat ke user, belum dijawab. Mitigasi
+yang ada sekarang: toggle ke "Statis" supaya pelanggan ketik sendiri.
+
 _Update sesi 18 Agustus 2026 (lanjutan — QR QRIS sisipkan nominal
-otomatis, EKSPERIMENTAL), versi kerja **2.14.0+20**. Setelah fitur
+otomatis, saat itu masih EKSPERIMENTAL), versi kerja **2.14.0+20**. Setelah fitur
 kalkulator-non-tunai (di bawah) selesai, user tanya soal QR QRIS statis
 vs dinamis (kirim 3 screenshot GoPay merchant tools: QR statis + 2 QR
 dinamis dgn nominal terkunci Rp17rb/Rp20rb) — apakah pola dinamis bisa
