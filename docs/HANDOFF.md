@@ -6,8 +6,8 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 18 Agustus 2026 (lanjutan lagi — QRIS nominal jadi fitur
-TETAP + toggle Statis/Nominal), versi kerja **2.15.0+21**, sudah
-di-merge ke `main`. **User sudah menguji bayar SUNGGUHAN** lewat fitur
+TETAP + toggle Statis/Nominal + mode Nominal lewati kalkulator), versi
+kerja **2.16.0+22**, sudah di-merge ke `main`. **User sudah menguji bayar SUNGGUHAN** lewat fitur
 QRIS-nominal di bawah dan dana masuk normal ke NMID yang sama —
 kesimpulan analisis sesi ini terbukti benar di lapangan, bukan cuma di
 test. Konsekuensinya: label "Eksperimental" dibuang, caption kartu QR
@@ -38,11 +38,18 @@ QRIS dgn mengetik panjang TLV MANUAL selalu salah hitung → payload rusak
 bohong). Selalu bangun fixture lewat helper yang MENGHITUNG panjang
 (lihat `tlv()` di `qris_dynamic_test.dart`).
 
-**Masih menggantung (belum dijawab user, jangan diasumsikan beres)**:
-nominal QR dipatri dari `_total` saat kartu QR dirender — kalau kasir
-lalu mengetik nominal BERBEDA di kalkulator (bayar sebagian), QR tidak
-ikut ter-refresh. Sudah 2x saya angkat ke user, belum dijawab. Mitigasi
-yang ada sekarang: toggle ke "Statis" supaya pelanggan ketik sendiri.
+**Celah nominal-QR-vs-ketikan-kasir SUDAH TERTUTUP** (dulu 2x saya angkat
+sbg pertanyaan menggantung — sekarang terjawab oleh permintaan user
+berikutnya, bukan oleh asumsi saya): di QRIS mode **Nominal**,
+`_onBayarPressed` sekarang LANGSUNG `_confirm()` dgn `_tendered = _total`
+TANPA membuka kalkulator sama sekali (`_isQrisNominalLocked`) — persis
+perilaku non-tunai sebelum Item 62. Alasannya: jumlahnya sudah dipatri di
+QR & pelanggan tidak bisa menguranginya saat scan, jadi kalkulator cuma
+langkah tambahan tanpa guna sekaligus sumber ketidaksinkronan. QRIS mode
+**Statis** TETAP lewat kalkulator (pelanggan ketik sendiri, bisa tidak
+penuh). Metode non-tunai lain (bank/e-wallet) TIDAK ikut berubah — di
+sana nominal tidak pernah terkunci di mana pun, jadi kalkulator tetap
+wajib.
 
 _Update sesi 18 Agustus 2026 (lanjutan — QR QRIS sisipkan nominal
 otomatis, saat itu masih EKSPERIMENTAL), versi kerja **2.14.0+20**. Setelah fitur
