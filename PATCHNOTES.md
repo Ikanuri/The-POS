@@ -23,6 +23,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   polos (pelanggan mengetik sendiri jumlahnya), geser ke "Nominal" untuk
   QR yang sudah terkunci jumlahnya. Pilihan ini tersimpan — tidak perlu
   digeser ulang tiap transaksi, dan otomatis ikut ke HP kasir lain.
+- **Bayar QRIS mode "Nominal" jadi satu ketukan saja**: karena jumlahnya
+  sudah terkunci di QR dan pelanggan tidak bisa mengubahnya, kasir tidak
+  perlu lagi melewati kalkulator — cukup tekan "Bayar" dan nota langsung
+  tercatat lunas. Kalau QR-nya mode "Statis", kalkulator tetap muncul
+  seperti biasa (jumlah yang dibayar pelanggan bisa saja tidak penuh).
 - **Bayar non-tunai sekarang bisa pakai kalkulator, termasuk bayar kurang**:
   dulu kalau pilih metode selain Tunai (Transfer Bank/E-Wallet/QRIS) di
   layar Bayar, jumlahnya otomatis dianggap lunas penuh — tidak ada
