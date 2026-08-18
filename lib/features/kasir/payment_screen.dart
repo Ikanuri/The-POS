@@ -96,6 +96,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   List<PaymentMethod> _methods = [];
   bool _isSaving = false;
 
+  /// Mode QR QRIS: true = sisipkan nominal transaksi ke payload (lihat
+  /// `qris_dynamic.dart`), false = tampilkan QRIS statis polos. Persisten
+  /// di setting `qris_dynamic_enabled` — kasir tidak perlu menggeser tiap
+  /// transaksi, dan krn `app_settings` ikut sync host→client, pilihan owner
+  /// otomatis menyebar ke perangkat kasir. Default ON.
+  bool _qrisDynamic = true;
+
+  Future<void> _setQrisDynamic(bool value) async {
+    setState(() => _qrisDynamic = value);
+    await ref
+        .read(databaseProvider)
+        .setSetting('qris_dynamic_enabled', value ? '1' : '0');
+  }
+
   // Pegawai yang melayani — dipilih dari daftar (modal sheet, tanpa keyboard).
   List<Employee> _employees = [];
   Employee? _selectedEmployee;
@@ -131,6 +145,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
     final employees = await db.getEmployees();
+    // Default ON bila setting belum pernah diisi sama sekali.
+    final qrisDynamic = (await db.getSetting('qris_dynamic_enabled')) != '0';
 
     // Pra-isi pelanggan & pegawai dari metadata keranjang (dipilih di cart bar
     // kasir). Mode tambah belanjaan mengikuti transaksi asli → tidak pra-isi.
@@ -180,6 +196,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       setState(() {
         _methods = methods;
         _employees = employees;
+        _qrisDynamic = qrisDynamic;
         _unclaimedChange = unclaimedChange;
         _unclaimedChangeTaken = false;
         _existingShortfall = existingShortfall;
@@ -1290,9 +1307,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
                 if (_selectedMethodType == 'qris') ...[
                   _QrisDisplay(
-                      methods: _methods,
-                      selectedId: _selectedMethodId,
-                      total: _total),
+                    methods: _methods,
+                    selectedId: _selectedMethodId,
+                    total: _total,
+                    dynamicMode: _qrisDynamic,
+                    onDynamicModeChanged: _setQrisDynamic,
+                  ),
                 ],
 
                 // Item 62 — metadata (no. rekening/HP) utk metode non-QRIS,
@@ -1953,16 +1973,26 @@ class _Keypad extends StatelessWidget {
 }
 
 class _QrisDisplay extends StatelessWidget {
-  const _QrisDisplay(
-      {required this.methods, required this.selectedId, required this.total});
+  const _QrisDisplay({
+    required this.methods,
+    required this.selectedId,
+    required this.total,
+    required this.dynamicMode,
+    required this.onDynamicModeChanged,
+  });
   final List<PaymentMethod> methods;
   final String selectedId;
 
-  /// Item 62 susulan — nominal yg mau disisipkan ke QR (fitur EKSPERIMENTAL,
-  /// lihat dok `qris_dynamic.dart`). Nilainya total checkout SAAT QR ini
-  /// dirender (sebelum kalkulator dibuka) — bukan `_tendered`, krn kalkulator
-  /// baru dibuka setelah tombol "Bayar" ditekan.
+  /// Nominal yg disisipkan ke QR saat [dynamicMode] aktif. Nilainya total
+  /// checkout SAAT QR ini dirender (sebelum kalkulator dibuka) — bukan
+  /// `_tendered`, krn kalkulator baru dibuka setelah tombol "Bayar" ditekan.
   final int total;
+
+  /// Mode QR: true = sisipkan nominal (QRIS "dinamis" bentukan lokal, lihat
+  /// `qris_dynamic.dart`), false = QRIS statis polos apa adanya. Disimpan
+  /// persisten di setting `qris_dynamic_enabled` oleh pemanggil.
+  final bool dynamicMode;
+  final ValueChanged<bool> onDynamicModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1980,13 +2010,13 @@ class _QrisDisplay extends StatelessWidget {
       );
     }
 
-    // Item 62 susulan — coba sisipkan nominal ke payload statis (lihat
-    // `injectQrisAmount`). GAGAL (payload bukan format EMVCo yg dikenali)
-    // → fallback DIAM-DIAM ke QR statis polos apa adanya (perilaku lama) —
-    // checkout TIDAK BOLEH gagal gara-gara fitur eksperimental ini.
+    // Sisipkan nominal ke payload statis (lihat `injectQrisAmount`) — hanya
+    // bila mode nominal aktif. GAGAL (payload bukan format EMVCo yg dikenali)
+    // → fallback DIAM-DIAM ke QR statis polos apa adanya; checkout TIDAK
+    // BOLEH gagal cuma gara-gara QR-nya tidak bisa disisipi nominal.
     var qrData = method!.qrValue!;
     var nominalLocked = false;
-    if (total > 0) {
+    if (dynamicMode && total > 0) {
       try {
         qrData = injectQrisAmount(method.qrValue!, total);
         nominalLocked = true;
@@ -2000,27 +2030,24 @@ class _QrisDisplay extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // Toggle statis/nominal di pojok kanan atas kartu QR.
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Scan QRIS',
-                    style: Theme.of(context).textTheme.titleSmall),
-                if (nominalLocked) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: scheme.tertiaryContainer,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text('Eksperimental',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onTertiaryContainer)),
-                  ),
-                ],
+                Expanded(
+                  child: Text('Scan QRIS',
+                      style: Theme.of(context).textTheme.titleSmall),
+                ),
+                Text(dynamicMode ? 'Nominal' : 'Statis',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurfaceVariant)),
+                const SizedBox(width: 4),
+                Switch(
+                  value: dynamicMode,
+                  onChanged: onDynamicModeChanged,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ],
             ),
             if (nominalLocked) ...[
@@ -2046,10 +2073,9 @@ class _QrisDisplay extends StatelessWidget {
             if (nominalLocked) ...[
               const SizedBox(height: 10),
               Text(
-                'Nominal disisipkan otomatis ke QR (fitur eksperimental, '
-                'BUKAN lewat server QRIS resmi) — tidak ada verifikasi '
-                'pembayaran otomatis atau batas waktu/1x-pakai. Tetap '
-                'konfirmasi manual setelah pelanggan bayar.',
+                'Nominal sudah terkunci di QR — pelanggan tidak perlu '
+                'mengetik jumlah. Pembayaran tetap dikonfirmasi manual '
+                'oleh kasir.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
               ),

@@ -1,13 +1,20 @@
 /// Injeksi nominal ke payload QRIS statis -> "QRIS nominal terkunci"
 /// (format EMVCo Merchant Presented Mode / QRIS).
 ///
-/// **EKSPERIMENTAL** (Item 62 susulan). Payload hasil fungsi ini TIDAK
-/// melalui server acquirer (GoPay/OVO/dst) — beda dari QRIS dinamis
-/// resmi yang dibuat lewat aplikasi merchant, hasil di sini TIDAK
-/// mendapat masa berlaku/pembatasan 1x-transaksi yang ditegakkan
-/// server, dan aplikasi TIDAK bisa tahu otomatis kapan pelanggan sudah
-/// bayar (tetap perlu konfirmasi manual, sama seperti alur checkout
-/// yang sudah ada).
+/// Payload hasil fungsi ini TIDAK melalui server acquirer (GoPay/OVO/dst)
+/// — beda dari QRIS dinamis resmi yang dibuat lewat aplikasi merchant,
+/// hasil di sini TIDAK mendapat masa berlaku/pembatasan 1x-transaksi yang
+/// ditegakkan server, dan aplikasi TIDAK bisa tahu otomatis kapan
+/// pelanggan sudah bayar (tetap perlu konfirmasi manual, sama seperti
+/// alur checkout yang sudah ada). Sudah diuji bayar sungguhan oleh user
+/// (Agt 2026) — dana masuk normal ke NMID yang sama.
+///
+/// PENTING (app ini dipakai banyak toko, bukan cuma satu): SELURUH
+/// identitas merchant diambil dari payload statis yang diinput toko
+/// masing-masing lewat Pengaturan → Metode Pembayaran. Fungsi ini hanya
+/// menyentuh tag `01`/`54`/`63` — tag lain (`26`/`51` merchant+NMID,
+/// `59` nama, `60` kota, dst) diteruskan APA ADANYA, tidak pernah
+/// di-hardcode ke toko mana pun.
 ///
 /// Tervalidasi terhadap 3 payload GoPay ASLI (1 statis + 2 dinamis,
 /// toko nyata) sebelum fitur ini ditambahkan — lihat

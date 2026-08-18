@@ -68,6 +68,56 @@ void main() {
     expect(got['54'], want['54']);
   });
 
+  test(
+      'identitas merchant SELALU diwarisi dari payload yg diinput, bukan '
+      'hardcode — payload toko LAIN (NMID/nama/kota beda) ikut terbawa utuh',
+      () {
+    // App dipakai banyak toko: yang jadi acuan HARUS qrValue statis milik
+    // toko itu sendiri. Payload di bawah sengaja beda total dari fixture
+    // Toko Berkah di atas (acquirer, NMID, nama, kota, kode pos). Dibangun
+    // lewat helper supaya panjang TLV dihitung, bukan diketik manual
+    // (salah hitung manual = payload rusak & test menguji hal yg salah).
+    String tlv(String tag, String value) =>
+        '$tag${value.length.toString().padLeft(2, '0')}$value';
+
+    final otherMerchant = [
+      tlv('00', 'COM.OTHERBANK.WWW'),
+      tlv('01', '936000009876543210'),
+      tlv('02', '000000001234567'),
+      tlv('03', 'UMI'),
+    ].join();
+    final otherMerchantBody = [
+      tlv('00', '01'),
+      tlv('01', '11'),
+      tlv('26', otherMerchant),
+      tlv('52', '5812'),
+      tlv('53', '360'),
+      tlv('58', 'ID'),
+      tlv('59', 'Warung Melati'),
+      tlv('60', 'SURABAYA'),
+      tlv('61', '60111'),
+      '6304',
+    ].join();
+    final otherStatic =
+        '$otherMerchantBody${crc16CcittFalse(otherMerchantBody)}';
+    expect(verifyQrisCrc(otherStatic), isTrue,
+        reason: 'fixture payload toko lain harus valid dulu');
+
+    final result = injectQrisAmount(otherStatic, 5000);
+    expect(verifyQrisCrc(result), isTrue);
+
+    final src = Map.fromEntries(parseQrisTlv(otherStatic));
+    final got = Map.fromEntries(parseQrisTlv(result));
+    expect(got['54'], '5000');
+    expect(got['01'], '12');
+    // Identitas toko LAIN itu harus lolos apa adanya — tidak tertukar dgn
+    // data toko mana pun, tidak ada nilai yang dipaksakan.
+    for (final tag in ['26', '52', '53', '58', '59', '60', '61']) {
+      expect(got[tag], src[tag], reason: 'tag $tag harus diwarisi apa adanya');
+    }
+    expect(got['59'], 'Warung Melati');
+  });
+
   test('injectQrisAmount payload rusak (tag 53 tak ada) -> QrisTlvException',
       () {
     const noCurrency =
