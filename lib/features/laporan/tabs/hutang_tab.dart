@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../kasir/widgets/debt_payment_dialog.dart';
+import '../../kasir/widgets/debt_payment_sheet.dart';
 
 final _debtBookProvider =
     FutureProvider.autoDispose<List<DebtBookEntry>>((ref) {
@@ -224,7 +224,7 @@ class _HutangTabState extends ConsumerState<HutangTab> {
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
     final messenger = ScaffoldMessenger.of(context);
-    final result = await showDebtPaymentDialog(context, db,
+    final result = await showDebtPaymentSheet(context, db,
         remaining: e.debt, title: 'Lunasi Hutang ${e.name}');
     if (result == null || result.amount <= 0) return;
 

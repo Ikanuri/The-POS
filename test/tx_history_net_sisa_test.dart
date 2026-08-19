@@ -138,7 +138,7 @@ void main() {
     });
 
     testWidgets(
-        'tombol "Lunasi" membuka dialog dgn jumlah NET (Rp 6.600), bukan '
+        'tombol "Lunasi" membuka sheet bayar dgn jumlah NET (Rp 6.600), bukan '
         'raw yang bisa negatif/salah — bug ini FUNGSIONAL, bukan cuma '
         'tampilan (jumlah ini yang dicatat sbg pembayaran)', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
@@ -162,10 +162,14 @@ void main() {
       await tester.tap(find.text('Lunasi'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Sisa tagihan: Rp${_nbsp}6.600'), findsOneWidget,
-          reason: 'dialog pelunasan harus pre-fill jumlah NET yang benar '
+      // Sheet pelunasan menampilkan sisa di header DAN memakai angka yang
+      // sama sbg nominal awal ("Dibayar"), jadi Rp 6.600 muncul >1x.
+      expect(find.text('Rp${_nbsp}6.600'), findsWidgets,
+          reason: 'sheet pelunasan harus pre-fill jumlah NET yang benar '
               '(6.600), bukan raw total-paid (-300) — kalau salah, jumlah '
               'yang benar-benar TERCATAT sbg pembayaran ikut salah');
+      expect(find.textContaining('-Rp'), findsNothing,
+          reason: 'raw negatif tidak boleh bocor ke sheet bayar');
 
       await db.close();
     });

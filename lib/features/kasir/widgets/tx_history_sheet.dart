@@ -10,7 +10,7 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
 import '../merged_receipt_screen.dart';
-import 'debt_payment_dialog.dart';
+import 'debt_payment_sheet.dart';
 
 /// Parameter query riwayat. Saat tidak ada filter aktif → 100 terakhir;
 /// saat ada filter aktif → sampai 1000 agar pencarian menjangkau data lama.
@@ -1072,7 +1072,7 @@ class _TxDetail extends ConsumerWidget {
     final remaining = (await db.getNetSisaForTxIds([tx.id]))[tx.id] ?? 0;
     if (remaining <= 0) return;
     if (!context.mounted) return;
-    final result = await showDebtPaymentDialog(context, db,
+    final result = await showDebtPaymentSheet(context, db,
         remaining: remaining, title: 'Lunasi Transaksi');
     if (result == null || result.amount <= 0 || !context.mounted) return;
 

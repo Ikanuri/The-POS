@@ -9,7 +9,7 @@ class AppTheme {
 
   // Tombol "Bayar" (aksi konfirmasi pembayaran lunas) — hijau tetap sama
   // di light & dark, dipakai di modal checkout (payment_screen.dart) DAN
-  // dialog Bayar/Lunasi di struk (debt_payment_dialog.dart) supaya warna
+  // dialog Bayar/Lunasi di struk (debt_payment_sheet.dart) supaya warna
   // aksi utama konsisten di seluruh alur pembayaran.
   static const payGreen = Color(0xFF22C55E);
 

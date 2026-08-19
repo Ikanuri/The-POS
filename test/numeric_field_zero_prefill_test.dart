@@ -12,7 +12,7 @@ import 'helpers/pump_app.dart';
 /// placeholder pra-cursor tidak terhapus".
 ///
 /// Dua pelanggar pola ditemukan (field angka lain di app — `thresholdCtrl`
-/// Pengaturan, `debt_payment_dialog`, harga/HPP produk — SUDAH sengaja
+/// Pengaturan, `debt_payment_sheet`, harga/HPP produk — SUDAH sengaja
 /// kosong saat nilainya nol):
 ///
 /// 1. Dialog "Sesuaikan Stok" (`produk_form_screen.dart`): field `autofocus`

@@ -3,10 +3,8 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
@@ -15,12 +13,12 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
-import '../../core/utils/qris_dynamic.dart';
 import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_meta_provider.dart';
-import 'discount_allocation.dart';
 import 'cart_provider.dart';
+import 'discount_allocation.dart';
 import 'receipt_screen.dart' show netRemainingOwed;
+import 'widgets/payment_qris_view.dart';
 
 const _uuid = Uuid();
 
@@ -2027,20 +2025,16 @@ class _QrisDisplay extends StatelessWidget {
       );
     }
 
-    // Sisipkan nominal ke payload statis (lihat `injectQrisAmount`) — hanya
-    // bila mode nominal aktif. GAGAL (payload bukan format EMVCo yg dikenali)
-    // → fallback DIAM-DIAM ke QR statis polos apa adanya; checkout TIDAK
-    // BOLEH gagal cuma gara-gara QR-nya tidak bisa disisipi nominal.
-    var qrData = method!.qrValue!;
-    var nominalLocked = false;
-    if (dynamicMode && total > 0) {
-      try {
-        qrData = injectQrisAmount(method.qrValue!, total);
-        nominalLocked = true;
-      } on QrisTlvException {
-        // fallback ke qrData statis di atas.
-      }
-    }
+    // Sisipkan nominal ke payload statis bila mode nominal aktif — termasuk
+    // fallback diam-diam ke QR statis kalau payload tak bisa diparse (lihat
+    // dok `resolveQrisPayload`).
+    final payload = resolveQrisPayload(
+      staticPayload: method!.qrValue!,
+      amount: total,
+      dynamicMode: dynamicMode,
+    );
+    final qrData = payload.data;
+    final nominalLocked = payload.nominalLocked;
 
     return Card(
       child: Padding(
@@ -2078,15 +2072,7 @@ class _QrisDisplay extends StatelessWidget {
             const SizedBox(height: 12),
             // Render payload QRIS (statis, atau statis+nominal bila berhasil
             // disisipkan) sebagai QR yang bisa discan pembeli.
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(8),
-              child: QrImageView(
-                data: qrData,
-                size: 200,
-                backgroundColor: Colors.white,
-              ),
-            ),
+            QrisQrBox(data: qrData),
             if (nominalLocked) ...[
               const SizedBox(height: 10),
               Text(
@@ -2131,18 +2117,13 @@ class _PaymentMetadataDisplay extends StatelessWidget {
         ),
       );
     }
-    final label = method.type == 'bank' ? 'No. Rekening' : 'No. HP / Akun';
+    final label = paymentMetadataLabel(method.type);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(
-              method.type == 'bank'
-                  ? Icons.account_balance_outlined
-                  : Icons.phone_android_outlined,
-              color: scheme.primary,
-            ),
+            Icon(paymentMethodIcon(method.type), color: scheme.primary),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -2161,12 +2142,7 @@ class _PaymentMetadataDisplay extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.copy_outlined, size: 18),
               tooltip: 'Salin',
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: data));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Nomor disalin')),
-                );
-              },
+              onPressed: () => copyPaymentMetadata(context, data),
             ),
           ],
         ),
