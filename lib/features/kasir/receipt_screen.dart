@@ -1218,7 +1218,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   String _methodLabel(String method) => switch (method) {
         'tunai' => 'Tunai',
-        'transfer' => 'Transfer',
+        'bank' => 'Transfer',
         'qris' => 'QRIS',
         'ewallet' => 'E-Wallet',
         'tempo' => 'Tempo',
@@ -3497,7 +3497,7 @@ class _ReceiptPaper extends StatelessWidget {
 
   String _methodShort(String m) => switch (m) {
         'tunai' => 'Tunai',
-        'transfer' => 'Transfer',
+        'bank' => 'Transfer',
         'qris' => 'QRIS',
         'ewallet' => 'E-Wallet',
         _ => m,

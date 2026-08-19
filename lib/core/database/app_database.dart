@@ -4421,11 +4421,20 @@ class AppDatabase extends _$AppDatabase {
       '${d.day.toString().padLeft(2, '0')}';
 
   static int _paymentBucket(String method, Map<int, int> buckets, int total) {
-    // 0=tunai 1=qris 2=transfer 3=lainnya
+    // 0=tunai 1=qris 2=transfer(bank) 3=lainnya
+    //
+    // Bug nyata (ditemukan lewat audit tab Ringkasan): nilai `type` yang
+    // BENAR-BENAR tersimpan di `transactions.paymentMethod` untuk transfer
+    // bank adalah 'bank' (lihat dropdown `payment_methods_screen.dart`) —
+    // string 'transfer' TIDAK PERNAH ada di data nyata. Case ini dulu
+    // salah cocok, jadi SETIAP transaksi Transfer Bank jatuh ke bucket
+    // "lainnya" & `pembayaranTransfer` selalu 0 walau toko rutin terima
+    // transfer. E-wallet/tempo TETAP sengaja masuk "lainnya" (lihat dok
+    // `DailySummaries` — bucket cuma 4, bukan tabel baru).
     final idx = switch (method) {
       'tunai' => 0,
       'qris' => 1,
-      'transfer' => 2,
+      'bank' => 2,
       _ => 3,
     };
     buckets[idx] = (buckets[idx] ?? 0) + total;

@@ -240,7 +240,7 @@ class _TxTile extends ConsumerWidget {
 
   String _methodLabel(String m) => switch (m) {
         'tunai' => 'Tunai',
-        'transfer' => 'Transfer',
+        'bank' => 'Transfer',
         'qris' => 'QRIS',
         'ewallet' => 'E-Wallet',
         'tempo' => 'Tempo',

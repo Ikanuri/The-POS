@@ -25,9 +25,14 @@ typedef _CashFlowData = ({
   List<CashFlowDaily> daily,
 });
 
+// Kunci di sini adalah nilai MENTAH `transaction_payments.method`
+// (`getCashInByMethod` GROUP BY langsung dari kolom itu) — 'bank', bukan
+// 'transfer'. String 'transfer' tidak pernah ada di data nyata (lihat dok
+// `AppDatabase._paymentBucket`); dulu key ini salah, jadi metode Transfer
+// Bank tampil sbg "bank" mentah (fallback `?? e.key`) di tab Arus Kas.
 const _methodLabels = {
   'tunai': 'Tunai',
-  'transfer': 'Transfer',
+  'bank': 'Transfer',
   'qris': 'QRIS',
   'ewallet': 'E-Wallet',
   'retur': 'Retur (kembalian)',

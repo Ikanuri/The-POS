@@ -5,8 +5,10 @@ import 'package:drift/drift.dart';
 /// tabel transaksi/item (O(transaksi)) melainkan cukup membaca per-hari
 /// (O(hari)). Tetap konsisten walau data menumpuk bertahun-tahun.
 ///
-/// Pembayaran disederhanakan ke 4 bucket. Metode di luar tunai/qris/transfer
-/// (mis. ewallet, tempo) dimasukkan ke [pembayaranLainnya].
+/// Pembayaran disederhanakan ke 4 bucket. Metode di luar tunai/qris/bank
+/// (mis. ewallet, tempo) dimasukkan ke [pembayaranLainnya] — lihat
+/// `AppDatabase._paymentBucket`. `pembayaranTransfer` diisi dari metode
+/// ber-`type` 'bank' (nama kolom "transfer" murni historis/label).
 class DailySummaries extends Table {
   /// 'YYYY-MM-DD' (zona waktu lokal device).
   TextColumn get date => text()();
