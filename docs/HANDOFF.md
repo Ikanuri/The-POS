@@ -5,6 +5,36 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 18 Agustus 2026 (lanjutan lagi — fix bucket metode Transfer
+Bank), versi kerja TETAP **2.17.0+23** (user minta merge tanpa bump versi
+baru, dianggap bagian rilis yang sama dgn sheet pelunasan hutang di
+atas). Bug yang sudah diketahui dari audit tab Ringkasan sesi ini
+(`AppDatabase._paymentBucket` cocok string 'transfer' yang tidak pernah
+ada di data nyata — nilai asli 'bank') akhirnya diperbaiki: user sempat
+lupa lalu minta "sekalian perbaiki" sambil menambahkan permintaan sheet
+pelunasan hutang. Fix di 5 lokasi yg switch pada RAW `paymentMethod`
+(`_paymentBucket`, `receipt_screen.dart` 2x, `transaksi_tab.dart`,
+`printer_service.dart`) + 1 lokasi BARU yang ketemu saat re-audit sebelum
+fix (`arus_kas_tab.dart` `_methodLabels`, key lokal ke
+`getCashInByMethod` yang GROUP BY raw `method` juga) — TIDAK ketemu di
+audit awal krn sumber datanya beda (query langsung ke `transaction_payments`,
+bukan lewat `daily_summaries`). `ringkasan_tab.dart`/`report_export.dart`
+SENGAJA tidak disentuh — key `'transfer'` di sana nama bucket internal,
+sudah benar otomatis begitu sumbernya (`_paymentBucket`) diperbaiki.
+
+Keputusan soal Tempo (pertanyaan yg saya ajukan ke user, tidak pernah
+dijawab eksplisit): TERNYATA sudah dijawab sendiri oleh desain existing —
+komentar tabel `DailySummaries` sudah eksplisit bilang e-wallet & tempo
+sengaja masuk bucket "Lainnya" (cuma 4 bucket, bukan tabel baru). Jadi
+tidak perlu tanya ulang, cukup dikonfirmasi & didokumentasikan ulang di
+komentar kode + di sini.
+
+Test baru `payment_bucket_transfer_bank_test.dart` (DB murni, 5 metode
+sekaligus) — revert-verified. Full suite 1100 lolos SEMUA (termasuk yg
+biasanya flaky `proposal_unchanged_end_to_end_test.dart` — kebetulan ikut
+hijau run ini, JANGAN dianggap sudah fixed permanen tanpa bukti lebih
+lanjut). `flutter analyze` 0 issue. Sudah di-merge ke `main`.
+
 _Update sesi 18 Agustus 2026 (lanjutan lagi — sheet pelunasan hutang gaya
 kalkulator checkout), versi kerja **2.17.0+23**, sudah di-merge ke `main`.
 Dirancang bareng user lewat diskusi desain PANJANG sebelum eksekusi (user

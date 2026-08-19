@@ -10,6 +10,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 18 Agustus 2026
 
+### 🐛 Perbaikan
+- **Rincian "Metode Pembayaran" di Laporan sekarang menghitung Transfer
+  Bank dengan benar**: sebelumnya transaksi Transfer Bank selalu tercatat
+  Rp 0 di rincian tersebut (uangnya diam-diam masuk ke "Lainnya"), dan di
+  struk/riwayat/cetak thermal metodenya tampil sebagai tulisan "bank"
+  mentah, bukan "Transfer". Total Omzet/Laba tidak pernah salah — cuma
+  rincian per-metode pembayaran yang keliru.
+
 ### 🆕 Fitur baru
 - **Bayar hutang/tempo sekarang pakai kalkulator yang sama seperti kasir**:
   tombol "Bayar" di struk (juga di Riwayat Transaksi, Daftar Transaksi, dan
