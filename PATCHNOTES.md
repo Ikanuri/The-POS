@@ -11,6 +11,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 18 Agustus 2026
 
 ### 🆕 Fitur baru
+- **Bayar hutang/tempo sekarang pakai kalkulator yang sama seperti kasir**:
+  tombol "Bayar" di struk (juga di Riwayat Transaksi, Daftar Transaksi, dan
+  "Lunasi Hutang" di Laporan) kini membuka panel kalkulator yang bisa
+  digeser ke bawah untuk ditutup — bukan lagi kotak dialog kecil. Metode
+  pembayaran bisa dipilih langsung di dalamnya.
+- **Nomor rekening & QRIS ikut tampil saat melunasi hutang**: pilih metode
+  Transfer Bank atau E-Wallet, nomornya langsung muncul di sebelah tombol
+  metode lengkap dengan tombol salin. Pilih QRIS, QR-nya tampil di panel
+  yang sama — pelanggan tinggal scan, tidak perlu lagi buka layar lain.
+- **QRIS saat melunasi hutang bisa dikunci nominalnya**: awalnya tampil QR
+  biasa beserta kalkulator (karena jumlah cicilan biasanya perlu diketik
+  dulu). Setelah jumlahnya diketik, geser tombol ke "Nominal" — QR berganti
+  membawa jumlah itu, jadi pelanggan tidak perlu mengetik sendiri. Salah
+  geser pun aman: angka yang sudah diketik tidak hilang.
+
 - **QR QRIS langsung membawa nominal belanja**: saat metode QRIS dipilih
   di layar Bayar, QR yang tampil sudah berisi jumlah yang harus dibayar —
   pelanggan tinggal scan lalu langsung ke layar konfirmasi, tidak perlu
