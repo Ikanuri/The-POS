@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../kasir/widgets/debt_payment_dialog.dart';
+import '../../kasir/widgets/debt_payment_sheet.dart';
 
 final _transaksiTabProvider =
     StreamProvider.family<List<Transaction>, DateTimeRange>((ref, range) {
@@ -221,7 +221,7 @@ class _TxTile extends ConsumerWidget {
       BuildContext ctx, WidgetRef ref, Transaction tx) async {
     final remaining = tx.total - tx.paid;
     final db = ref.read(databaseProvider);
-    final result = await showDebtPaymentDialog(ctx, db,
+    final result = await showDebtPaymentSheet(ctx, db,
         remaining: remaining, title: 'Bayar', prefillRemaining: false);
 
     if (result != null && result.amount > 0) {

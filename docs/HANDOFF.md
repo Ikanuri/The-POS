@@ -5,6 +5,68 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 18 Agustus 2026 (lanjutan lagi — sheet pelunasan hutang gaya
+kalkulator checkout), versi kerja **2.17.0+23**, sudah di-merge ke `main`.
+Dirancang bareng user lewat diskusi desain PANJANG sebelum eksekusi (user
+menawarkan 2 opsi, saya sarankan opsi ketiga; salah paham saya soal scope
+`hutang_tab` justru memunculkan insight yang user akui perlu — pelanggan
+bayar 3 nota sekaligus besar kemungkinan pakai QRIS).
+
+`debt_payment_dialog.dart` DIHAPUS, diganti `debt_payment_sheet.dart`,
+dipakai di SELURUH 4 pemanggil (`receipt_screen`, `tx_history_sheet`,
+`transaksi_tab`, `hutang_tab`) — bukan ditambah berdampingan, supaya
+tidak ada 2 UI berbeda utk aksi identik.
+
+**Keputusan desain yang PENTING diingat (jangan dibalik tanpa sadar):**
+- QRIS di sheet ini default **STATIS**, beda dari checkout. Alasannya di
+  pelunasan nominalnya justru yang belum diketahui — kasir mengetik dulu
+  di mode statis (keypad tersedia), baru geser ke "Nominal" supaya angka
+  itu terpatri di QR. Di checkout kebalikannya (total sudah pasti).
+- Perilaku checkout "QRIS Nominal → lewati kalkulator, langsung lunas"
+  SENGAJA TIDAK dibawa ke sini. Kalau ikut terbawa, cicilan sebagian via
+  QRIS jadi mustahil — itu regresi nyata (kemampuan cicilan non-tunai
+  sudah dikonfirmasi penting di awal sesi ini).
+- Chip **Tunai tidak pernah meng-collapse** chip lain: ia gerbang masuk ke
+  metode lain & tak punya metadata utk ditonjolkan.
+- Geser ke dinamis SEBELUM mengetik apa pun → QR & nota pakai sisa penuh
+  (`_qrAmount`). Keputusan saya sendiri, disetujui user di muka: QR
+  bernominal nol tidak sah.
+- Nominal TIDAK tereset saat toggle bolak-balik (permintaan eksplisit:
+  salah pencet harus aman).
+
+**Yang di-share vs yang sengaja TIDAK**: `payment_qris_view.dart` berisi
+`resolveQrisPayload`/`QrisQrBox`/label-ikon-salin — dipakai bersama
+checkout supaya tidak menyimpang diam-diam. TATA LETAK sengaja tetap
+lokal di masing-masing layar (di checkout QR+toggle menyatu satu Card; di
+sheet QR berpindah posisi & toggle tinggal di baris tombol bawah) —
+memaksakan satu widget layout justru bikin parameter kondisional lebih
+ruwet daripada manfaatnya.
+
+**Gotcha test baru (2, kena keduanya di sesi ini)**:
+1. `find.byType(OutlinedButton)` TIDAK match `OutlinedButton.icon` —
+   `.icon` menghasilkan subclass privat. Pakai OutlinedButton polos + Row
+   kalau tombolnya perlu ditemukan widget test.
+2. `setSurfaceSize` TIDAK BOLEH dipanggil dari `setUp` grup (assert
+   `inTest`), harus di dalam `testWidgets`. Dan surface default
+   flutter_test (800x600) LEBIH PENDEK dari HP sungguhan — QR + keypad
+   tidak muat, keypad ter-render di luar viewport & `tap` gagal
+   "off-screen". Helper `pumpSheet` di `debt_payment_sheet_test.dart`
+   sekarang selalu set 400x900.
+
+**PR/utang teknis yang MASIH menggantung (belum dikerjakan, sudah
+disetujui user utk dikerjakan)**: bug bucket metode pembayaran —
+`_paymentBucket` (`app_database.dart:4423`) mencocokkan string
+`'transfer'` yang TIDAK PERNAH ada di data nyata (nilai `type` yang
+tersimpan adalah `'bank'`), sehingga Transfer Bank + E-Wallet + Tempo
+SEMUANYA jatuh ke bucket "lainnya" dan `pembayaranTransfer` selalu 0.
+Kena di 6 tempat (`ringkasan_tab`, `report_export`, `receipt_screen`,
+`transaksi_tab`, `printer_service` yang malah cetak string mentah
+"bank"). User sudah bilang "oke perbaiki" SEBELUM menyisipkan permintaan
+sheet ini — jadi ini pekerjaan berikutnya. Masih perlu keputusan user:
+apakah Tempo ikut dihitung di breakdown "Metode Pembayaran" (definisi
+sekarang: omzet ditag per metode, Tempo ikut walau kasnya belum masuk)
+atau dipisah/dikecualikan.
+
 _Update sesi 18 Agustus 2026 (lanjutan lagi — QRIS nominal jadi fitur
 TETAP + toggle Statis/Nominal + mode Nominal lewati kalkulator), versi
 kerja **2.16.0+22**, sudah di-merge ke `main`. **User sudah menguji bayar SUNGGUHAN** lewat fitur

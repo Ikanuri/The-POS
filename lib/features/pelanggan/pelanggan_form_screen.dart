@@ -32,7 +32,7 @@ class _PelangganFormScreenState
   /// mengetik (kalau tidak, angkanya menempel di belakang nol). Kosong sudah
   /// aman: jalur simpan memakai `int.tryParse(...) ?? 0`. Pola ini sama dgn
   /// field angka lain di app (mis. `thresholdCtrl` di Pengaturan &
-  /// `debt_payment_dialog`) yang juga kosong saat nilainya nol.
+  /// `debt_payment_sheet`) yang juga kosong saat nilainya nol.
   final _pointsCtrl = TextEditingController();
   bool _isLoading = false;
   bool _isEdit = false;

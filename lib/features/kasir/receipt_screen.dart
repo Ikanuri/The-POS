@@ -22,7 +22,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/widgets/item_count_badge.dart';
 import '../../core/widgets/status_watermark_stamp.dart';
-import 'widgets/debt_payment_dialog.dart';
+import 'widgets/debt_payment_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
 
 /// Sisa tagihan yang BENAR: `total - paid` mentah bisa understate kalau
@@ -1229,7 +1229,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final remaining = netRemainingOwed(_tx!, _payments);
     final db = ref.read(databaseProvider);
-    final result = await showDebtPaymentDialog(context, db,
+    final result = await showDebtPaymentSheet(context, db,
         remaining: remaining, title: 'Bayar', prefillRemaining: false);
 
     if (result != null && result.amount > 0 && mounted) {
