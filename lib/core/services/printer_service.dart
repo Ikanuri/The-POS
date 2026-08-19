@@ -903,7 +903,7 @@ class PrinterService {
     switch (m) {
       case 'tunai':
         return 'Tunai';
-      case 'transfer':
+      case 'bank':
         return 'Transfer';
       case 'qris':
         return 'QRIS';
