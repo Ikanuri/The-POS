@@ -235,10 +235,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       .fold(0, (s, p) => s + p.amount);
 
   /// Method refund yang dipakai (dari pembayaran refund TERAKHIR).
-  String? get _refundMethod => _payments
-      .where((p) => !p.voided && p.amount < 0)
-      .lastOrNull
-      ?.method;
+  String? get _refundMethod =>
+      _payments.where((p) => !p.voided && p.amount < 0).lastOrNull?.method;
 
   /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
   /// induknya tidak ada di transaksi ini).
@@ -310,8 +308,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             '${returned.hour.toString().padLeft(2, '0')}:${returned.minute.toString().padLeft(2, '0')}';
         if (label != lastReturLabel) {
           lastReturLabel = label;
-          rows.add(_AddedSeparator(
-              time: label, scheme: scheme, prefix: 'Retur'));
+          rows.add(
+              _AddedSeparator(time: label, scheme: scheme, prefix: 'Retur'));
         }
       }
       rows.add(_itemCheckRow(parent, scheme,
@@ -366,7 +364,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         // nota belum lunas (checkbox tetap harus bisa dipakai independen —
         // beda gesture, beda tujuan). Placeholder induk-via-varian tidak
         // punya baris nyata utk diedit.
-        onTap: (!isPlaceholder && editable) ? () => _openEditItemSheet(item) : null,
+        onTap: (!isPlaceholder && editable)
+            ? () => _openEditItemSheet(item)
+            : null,
         leading: Checkbox(value: checked, onChanged: onCheckChanged),
         title: Row(
           children: [
@@ -411,11 +411,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.laciFg(Theme.of(context)
-                                    .brightness ==
-                                Brightness.dark)),
+                            color: AppTheme.laciFg(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark)),
                       ),
-                    if (_preorderDeposit['${item.productId}|${item.productUnitId}'] !=
+                    if (_preorderDeposit[
+                            '${item.productId}|${item.productUnitId}'] !=
                         null)
                       TextSpan(
                         text: ' · Titip '
@@ -423,9 +424,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.laciFg(Theme.of(context)
-                                    .brightness ==
-                                Brightness.dark)),
+                            color: AppTheme.laciFg(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark)),
                       ),
                   ],
                 ),
@@ -457,7 +458,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           // TIDAK lebih tebal dari nama produk (w700 induk /
                           // w500 varian). Bagian "× harga" tetap berat normal.
                           TextSpan(
-                            text: '${effQty % 1 == 0 ? effQty.toInt() : effQty} '
+                            text:
+                                '${effQty % 1 == 0 ? effQty.toInt() : effQty} '
                                 '${_unitNames[item.productUnitId] ?? ''}',
                             style: TextStyle(
                                 fontWeight: isVariant
@@ -581,7 +583,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       ? 'Nota sudah lunas — nilai yang berkurang dikembalikan '
                           'sbg refund ${_methodLabel(_tx!.paymentMethod)}.'
                       : 'Nota belum lunas — perubahan langsung menyesuaikan total & hutang.',
-                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                  style:
+                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -589,13 +592,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   keyboardType: TextInputType.number,
                   inputFormatters: const [ThousandsSeparatorFormatter()],
                   decoration: const InputDecoration(
-                      labelText: 'Harga', prefixText: 'Rp ',
+                      labelText: 'Harga',
+                      prefixText: 'Rp ',
                       border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Text('Jumlah', style: TextStyle(color: scheme.onSurfaceVariant)),
+                    Text('Jumlah',
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline),
@@ -639,7 +644,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   onPressed: () => setSheet(() => qty = 0),
                   icon: const Icon(Icons.delete_outline),
                   label: const Text('Hapus Barang Ini'),
-                  style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
+                  style:
+                      OutlinedButton.styleFrom(foregroundColor: scheme.error),
                 ),
                 const SizedBox(height: 8),
                 FilledButton(
@@ -812,8 +818,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       final allowed = await db.isPermissionEnabled('batal_transaksi');
       if (!allowed) {
         if (mounted) {
-          AppTheme.showSnack(
-              context, 'Tidak punya izin membatalkan pembayaran',
+          AppTheme.showSnack(context, 'Tidak punya izin membatalkan pembayaran',
               isError: true);
         }
         return;
@@ -977,7 +982,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final checkedIds = <String>{};
     if (tx.checkedItemIds != null) {
       try {
-        checkedIds.addAll((jsonDecode(tx.checkedItemIds!) as List).cast<String>());
+        checkedIds
+            .addAll((jsonDecode(tx.checkedItemIds!) as List).cast<String>());
       } catch (_) {
         // Data rusak/format lama — abaikan, mulai dari kosong.
       }
@@ -989,8 +995,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         await db.getPreorderDepositForTransaction(widget.transactionId);
     final borrowedForTx =
         await db.getBorrowedForTransaction(widget.transactionId);
-    final leftBehindOtherForTx = await db
-        .getLeftBehindWithoutLineForTransaction(widget.transactionId);
+    final leftBehindOtherForTx =
+        await db.getLeftBehindWithoutLineForTransaction(widget.transactionId);
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -1267,7 +1273,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // != null) dari retur sebelumnya di nota LUNAS ini — baris itu sendiri
     // bukan target retur ulang.
     final returnableItems = _items.where((i) => i.qty > 0).toList();
-    final returnQty = <String, double>{for (final i in returnableItems) i.id: 0};
+    final returnQty = <String, double>{
+      for (final i in returnableItems) i.id: 0
+    };
     // Susulan (permintaan user): retur produk timbang (mis. minyak kelapa
     // 4.5kg) butuh qty DESIMAL — stepper +/-1 SENDIRIAN tidak bisa mencapai
     // nilai desimal sembarang (pola identik `_showLeftBehindDialog`).
@@ -1381,8 +1389,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   child: TextField(
                                     controller: qtyCtrl,
                                     textAlign: TextAlign.center,
-                                    keyboardType: const TextInputType
-                                        .numberWithOptions(decimal: true),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
                                     style: const TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600),
@@ -1419,9 +1428,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                       // otomatis jadi TIDAK ada data rusak,
                                       // tapi ANGKA DI LAYAR bisa keliru/
                                       // membingungkan kasir).
-                                      : () => setQty(q + 1 > maxQty
-                                          ? maxQty
-                                          : q + 1),
+                                      : () => setQty(
+                                          q + 1 > maxQty ? maxQty : q + 1),
                                 ),
                               ],
                             ),
@@ -1734,7 +1742,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             ListTile(
               leading: const Icon(Icons.swap_horiz),
               title: const Text('Pinjaman Barang'),
-              subtitle: const Text('Wadah/deposit (galon, tabung) — harus kembali fisik'),
+              subtitle: const Text(
+                  'Wadah/deposit (galon, tabung) — harus kembali fisik'),
               onTap: () => Navigator.pop(ctx, 'pinjaman'),
             ),
           ],
@@ -1774,8 +1783,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // bisa langsung menampilkan namanya tanpa staf mengetik ulang. Masih
     // bisa diedit utk nota "Umum" (pembeli lewat yg tidak terdaftar).
     final notaCustomer = _customerDisplay(_tx!);
-    final customerController = TextEditingController(
-        text: notaCustomer == 'Umum' ? '' : notaCustomer);
+    final customerController =
+        TextEditingController(text: notaCustomer == 'Umum' ? '' : notaCustomer);
     var jenis = 'titip';
     // Presence di map = tercentang; nilainya = qty yg titip/ketinggalan
     // (default qty penuh saat dicentang, bisa diturunkan via stepper/ketik).
@@ -1818,7 +1827,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text('Pilih barang di nota ini',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   if (candidates.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
@@ -1882,8 +1892,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                     child: TextField(
                                       controller: qtyCtrl,
                                       textAlign: TextAlign.center,
-                                      keyboardType: const TextInputType
-                                          .numberWithOptions(decimal: true),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
                                       style: const TextStyle(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600),
@@ -1937,7 +1948,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   // pelanggan yang tidak beli di toko ini, tapi tertinggal
                   // atau sengaja dititipkan).
                   const Text('Atau barang lain (di luar nota)',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1958,8 +1970,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         child: TextField(
                           controller: otherQtyController,
                           textAlign: TextAlign.center,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: const InputDecoration(
                               labelText: 'Jml', isDense: true),
                         ),
@@ -2059,8 +2071,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final qtyController = TextEditingController(text: '1');
     // Pelanggan diwarisi dari NOTA (lihat alasan di _showLeftBehindDialog).
     final notaCustomer = _customerDisplay(_tx!);
-    final customerController = TextEditingController(
-        text: notaCustomer == 'Umum' ? '' : notaCustomer);
+    final customerController =
+        TextEditingController(text: notaCustomer == 'Umum' ? '' : notaCustomer);
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2079,7 +2091,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: qtyController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Jumlah'),
             ),
             const SizedBox(height: 12),
@@ -2146,9 +2159,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// null kalau belum ada satu pun dikonfigurasi.
   Future<PaymentMethod?> _activeQrisMethod() async {
     final db = ref.read(databaseProvider);
-    final methods =
-        await (db.select(db.paymentMethods)..where((t) => t.isActive.equals(true)))
-            .get();
+    final methods = await (db.select(db.paymentMethods)
+          ..where((t) => t.isActive.equals(true)))
+        .get();
     for (final m in methods) {
       if (m.type == 'qris' && (m.qrValue?.trim().isNotEmpty ?? false)) {
         return m;
@@ -2186,6 +2199,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
 
     final boundaryKey = GlobalKey();
+    // Akumulasi overscroll drag-turun dlm SATU gesture — dismiss-drag
+    // bawaan `showModalBottomSheet` cuma nyambung kalau isi TIDAK
+    // scrollable; begitu gambar struk (+QR) melebihi layar & jadi
+    // scrollable, gesture arena selalu dimenangkan scrollable itu. Lihat
+    // dok setara di `debt_payment_sheet.dart` (kena bug yang sama).
+    var dragOverscroll = 0.0;
     if (!mounted) return;
     await showModalBottomSheet(
       context: context,
@@ -2206,33 +2225,48 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                Text('Bagikan Struk', style: Theme.of(ctx).textTheme.titleMedium),
+                Text('Bagikan Struk',
+                    style: Theme.of(ctx).textTheme.titleMedium),
                 const SizedBox(height: 12),
                 Flexible(
-                  child: SingleChildScrollView(
-                    child: RepaintBoundary(
-                      key: boundaryKey,
-                      child: _ReceiptPaper(
-                        tx: _tx!,
-                        items: _items,
-                        payments: _payments,
-                        productNames: _productNames,
-                        unitNames: _unitNames,
-                        customerName: _customerDisplay(_tx!),
-                        customerAddress: _customer?.address?.trim() ?? '',
-                        employeeName: _employeeForReceipt,
-                        storeName: prefs.name.isNotEmpty
-                            ? prefs.name
-                            : device.storeName,
-                        storeAddress: prefs.address,
-                        storePhone: prefs.phone,
-                        storeWhatsapp: prefs.whatsapp,
-                        storeTelegram: prefs.telegram,
-                        receiptHeader: prefs.header,
-                        receiptFooter: prefs.footer,
-                        parentOf: _parentOf,
-                        checkedIds: _checkedIds,
-                        qrData: resolveQr(),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n is OverscrollNotification &&
+                          n.dragDetails != null) {
+                        dragOverscroll += n.overscroll;
+                        if (dragOverscroll < -60) {
+                          Navigator.of(ctx).maybePop();
+                        }
+                      } else if (n is ScrollEndNotification) {
+                        dragOverscroll = 0;
+                      }
+                      return false;
+                    },
+                    child: SingleChildScrollView(
+                      child: RepaintBoundary(
+                        key: boundaryKey,
+                        child: _ReceiptPaper(
+                          tx: _tx!,
+                          items: _items,
+                          payments: _payments,
+                          productNames: _productNames,
+                          unitNames: _unitNames,
+                          customerName: _customerDisplay(_tx!),
+                          customerAddress: _customer?.address?.trim() ?? '',
+                          employeeName: _employeeForReceipt,
+                          storeName: prefs.name.isNotEmpty
+                              ? prefs.name
+                              : device.storeName,
+                          storeAddress: prefs.address,
+                          storePhone: prefs.phone,
+                          storeWhatsapp: prefs.whatsapp,
+                          storeTelegram: prefs.telegram,
+                          receiptHeader: prefs.header,
+                          receiptFooter: prefs.footer,
+                          parentOf: _parentOf,
+                          checkedIds: _checkedIds,
+                          qrData: resolveQr(),
+                        ),
                       ),
                     ),
                   ),
@@ -2645,9 +2679,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           ),
                           Column(
                             children: _buildItemRows(scheme,
-                                showProfit:
-                                    device.canSeeReports && _showProfit,
-                                editable: (isKurangBayar || isLunas) && !isVoid),
+                                showProfit: device.canSeeReports && _showProfit,
+                                editable:
+                                    (isKurangBayar || isLunas) && !isVoid),
                           ),
                         ],
                       )
@@ -2665,7 +2699,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           // 3-baris biasa (Item 49b).
                           if (_hasRetur) ...[
                             _SummaryRow('Total awal', formatRupiah(_totalAwal)),
-                            _SummaryRow('Retur', '- ${formatRupiah(_returAmount)}',
+                            _SummaryRow(
+                                'Retur', '- ${formatRupiah(_returAmount)}',
                                 color: scheme.error),
                             _SummaryRow('Total akhir', formatRupiah(tx.total),
                                 bold: true, color: scheme.primary),
@@ -2675,9 +2710,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           if (device.canSeeReports && _showProfit)
                             _buildTotalProfitRow(scheme),
                           if (tx.paid > 0)
-                            _SummaryRow('Dibayar',
+                            _SummaryRow(
+                                'Dibayar',
                                 '${_methodLabel(tx.paymentMethod)} · '
-                                '${formatRupiah(dibayarDisplay(tx, _payments, _latestPayment?.changeGiven ?? 0))}'),
+                                    '${formatRupiah(dibayarDisplay(tx, _payments, _latestPayment?.changeGiven ?? 0))}'),
                           // Item 49b — ringkasan disederhanakan jadi 3 baris
                           // inti (state akhir akumulatif): Total / Dibayar /
                           // Kembalian-ATAU-Sisa. Baris "Uang Diterima" (uang
@@ -2686,15 +2722,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           // itu, tak perlu diulang di ringkasan.
                           if ((_latestPayment?.changeGiven ?? 0) > 0)
                             _ChangeTakenRow(
-                              amount:
-                                  formatRupiah(_latestPayment!.changeGiven),
+                              amount: formatRupiah(_latestPayment!.changeGiven),
                               taken: _latestPayment!.changeTaken,
                               color: scheme.tertiary,
                               bold: true,
                               onChanged: isVoid
                                   ? null
-                                  : (v) => _toggleChangeTaken(
-                                      _latestPayment!.id, v),
+                                  : (v) =>
+                                      _toggleChangeTaken(_latestPayment!.id, v),
                             ),
                           if (isKurangBayar)
                             _SummaryRow(
@@ -3144,7 +3179,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     // dart` sepenuhnya). Baris pembayaran yang dibatalkan
                     // tidak lagi relevan finansial, jadi rinciannya
                     // disembunyikan juga.
-                    if (!p.voided && (_adjustmentLines[p.id]?.isNotEmpty ?? false))
+                    if (!p.voided &&
+                        (_adjustmentLines[p.id]?.isNotEmpty ?? false))
                       _AdjustmentLinesBlock(
                         method: p.method,
                         total: _adjustmentLines[p.id]!
@@ -3167,9 +3203,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         amount: formatRupiah(p.changeGiven),
                         taken: p.changeTaken,
                         color: scheme.tertiary,
-                        onChanged: isVoid
-                            ? null
-                            : (v) => _toggleChangeTaken(p.id, v),
+                        onChanged:
+                            isVoid ? null : (v) => _toggleChangeTaken(p.id, v),
                       ),
                     // Sisa tempo per momen (poin 2 & 3 permintaan user) —
                     // pola sama _ChangeTakenRow tapi TANPA centang (sisa
@@ -3286,10 +3321,8 @@ class _ReceiptPaper extends StatelessWidget {
       .where((p) => !p.voided && p.amount < 0)
       .fold(0, (s, p) => s + p.amount);
 
-  String? get _refundMethod => payments
-      .where((p) => !p.voided && p.amount < 0)
-      .lastOrNull
-      ?.method;
+  String? get _refundMethod =>
+      payments.where((p) => !p.voided && p.amount < 0).lastOrNull?.method;
 
   /// Item terurut: induk diikuti varian-variannya.
   List<TransactionItem> get _ordered {
@@ -3740,8 +3773,8 @@ class _ChangeTakenRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = TextStyle(
-        color: color, fontWeight: bold ? FontWeight.w700 : null);
+    final style =
+        TextStyle(color: color, fontWeight: bold ? FontWeight.w700 : null);
     return InkWell(
       onTap: onChanged == null ? null : () => onChanged!(!taken),
       borderRadius: BorderRadius.circular(8),
@@ -3816,8 +3849,8 @@ class _AdjustmentLinesBlock extends StatelessWidget {
           ),
           for (final l in lines) ...[
             Text(l.productName,
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700)),
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             Text(
                 '${_fmtQty(l.qty)} ${l.unitName} x ${formatRupiah(l.priceAtSale)} = '
                 '${formatRupiah(l.subtotal)}',
