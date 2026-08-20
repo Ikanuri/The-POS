@@ -27,8 +27,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Struk (saat QR pelunasan dinyalakan) sekarang bisa ditutup dengan
   swipe ke bawah** — sebelumnya macet karena isinya lebih panjang dari
   layar.
-- **Tombol +/- di keranjang diperbesar** supaya lebih mudah dan tidak
-  salah pencet.
+- **Tombol +/- diperbesar** — di baris keranjang, kartu/daftar produk, dan
+  baris varian di layar Kasir — supaya lebih mudah dan tidak salah pencet.
 - **Jarak tombol Bayar/Uang Pas di kalkulator bayar nota tempo dirapikan**
   agar tidak bergeser-geser saat ganti metode pembayaran.
 - **Label tombol ganti mode QR di kalkulator bayar nota tempo diperbaiki**
