@@ -5,6 +5,68 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 18 Agustus 2026 (lanjutan lagi — toggle tema aktivasi, rapikan
+sheet bayar tempo, perbesar stepper), versi kerja TETAP **2.17.0+23**
+(BELUM di-merge ke `main` — ditahan sengaja sampai poin QR nota tempo/
+share di bawah selesai, supaya jadi satu rilis). 4 permintaan sekaligus:
+
+1. **Toggle terang/gelap di layar aktivasi (serial key)** — layar ini
+   muncul SEBELUM `/setup`/DB bisa dibuka, jadi Pengaturan (tempat mode
+   gelap biasa diatur) belum terjangkau. Ikon/tooltip menyebut TUJUAN
+   (bulan = "ke gelap"), bukan keadaan sekarang.
+
+   **Bug PRE-EXISTING ditemukan saat menguji tombol ini** (dibuktikan via
+   probe: gagal juga kalau tema diganti langsung lewat provider, TANPA
+   menyentuh tombol sama sekali) — akarnya di **`QrImageView` (qr_flutter
+   4.1.0)**: melempar assert framework `'debugSize == size'`
+   (text_painter.dart) kalau tema berganti selagi QR terlihat. Selama ini
+   tak pernah terjangkau krn dari layar aktivasi memang belum ada cara
+   ganti tema — tombol baru inilah yang membukanya. Dikunci pakai `key`
+   yang ikut brightness, ditaruh di `QrisQrBox` (SEMUA QR app ikut aman,
+   bukan cuma layar aktivasi) + `KeyedSubtree` di seluruh body layar
+   aktivasi (`Text`/`SelectableText` di situ JUGA kena bug sejenis).
+   **Kalau nanti nemu assert serupa di layar LAIN yang punya QR + tema
+   bisa berganti selagi terlihat, ini akar masalahnya — bukan bug baru.**
+
+2. **Sheet bayar nota tempo** (`debt_payment_sheet.dart`, dibangun sesi
+   sebelumnya) dirapikan 2 hal: (a) jarak keypad->baris tombol kini
+   PERMANEN — diganti dari `DraggableScrollableSheet` (pecahan tetap
+   layar) ke `Column(mainAxisSize.min)` + `Flexible`+scroll (tinggi
+   ikut isi, tombol mengalir tepat di bawah keypad, persis pola
+   kalkulator checkout); (b) label tombol switch QR dibalik — sekarang
+   menyebut TUJUAN bukan keadaan sekarang (state di statis -> tertulis
+   "Nominal"). Toggle QR checkout (`Switch`) TIDAK ikut diubah — widget
+   itu memang lazimnya menyatakan keadaan sekarang.
+
+3. **Stepper +/- baris keranjang diperbesar** 30->44px (+~45%) — keluhan
+   missclick. **User eksplisit ingin diskusi lebih dalam soal ini nanti**
+   (root cause / desain alternatif) — perubahan sesi ini murni mitigasi
+   cepat sementara, BUKAN solusi final. Jangan anggap topik ini selesai.
+   Stepper produk grid/list/varian (`kasir_screen.dart`) SENGAJA tidak
+   ikut diperbesar (beda konteks: nambah item baru, bukan ubah qty
+   transaksi).
+
+**Flaky family meluas**: `proposal_unchanged_end_to_end_test.dart` yang
+biasa flaky ternyata punya saudara `laci_meja_proposal_unchanged_end_to_
+end_test.dart` (pola sync proposal serupa) yang JUGA flaky pas dijalankan
+bareng — keduanya lolos sendiri terisolasi, tidak terkait perubahan sesi
+ini (subsistem beda total: sync proposal vs UI stepper). Kalau full-suite
+nunjukkin salah satu/kedua gagal, cek dulu terisolasi sebelum curiga
+regresi.
+
+**Poin yang masih menggantung (blocker merge)** — QR di nota
+share/print utk nota tempo/kurang_bayar, dikonfirmasi user:
+- Nominal QR dinamis = **sisa tagihan** (`netRemainingOwed`), BUKAN total
+  nota. Toggle QR ini HANYA relevan utk nota tempo/kurang_bayar — kalau
+  nota lunas, toggle "praktis tidak ada" (kecuali next status berubah lagi
+  jadi tempo, mis. pembayaran dibatalkan/tambah barang).
+- Nota GABUNGAN (`printMergedReceipt`) TIDAK perlu QR — pelunasan tempo
+  sudah ditangani via Laporan > Hutang; nota gabungan untuk sekarang
+  murni informasi total belanja yang SUDAH lunas.
+- Risiko belum diverifikasi: QR dicetak thermal lewat printer QR native
+  (ESC/POS `GS ( k`) — printer murah kadang mengabaikannya. Sudah
+  diperingatkan ke user, belum ada konfirmasi hasil uji cetak nyata.
+
 _Update sesi 18 Agustus 2026 (lanjutan lagi — fix bucket metode Transfer
 Bank), versi kerja TETAP **2.17.0+23** (user minta merge tanpa bump versi
 baru, dianggap bagian rilis yang sama dgn sheet pelunasan hutang di
