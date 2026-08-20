@@ -1931,7 +1931,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                 gridDelegate:
                                     const SliverGridDelegateWithMaxCrossAxisExtent(
                                   maxCrossAxisExtent: 180,
-                                  mainAxisExtent: 138,
+                                  // +14 dari 138 — mengimbangi stepper "+"/"-"
+                                  // yang diperbesar (lihat AddControl size di
+                                  // bawah), supaya tidak overflow.
+                                  mainAxisExtent: 152,
                                   crossAxisSpacing: 8,
                                   mainAxisSpacing: 8,
                                 ),
@@ -2030,7 +2033,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                         // Pengingat hutang akumulatif (permintaan user):
                         // di CART BAR juga, bukan cuma modal checkout.
                         customerDebt: ref
-                            .watch(cartCustomerDebtProvider(cartMeta.customerId))
+                            .watch(
+                                cartCustomerDebtProvider(cartMeta.customerId))
                             .valueOrNull,
                         orderNumber:
                             _isAddMode ? null : cartMeta.displayOrderNumber,
@@ -2732,7 +2736,10 @@ class _ProductCard extends ConsumerWidget {
                     detailAsync.maybeWhen(
                       data: (d) => AddControl(
                         qty: qty,
-                        size: 32,
+                        // Keluhan missclick (sama spt stepper baris keranjang,
+                        // lihat cart_sheet.dart) — 32->46, mainAxisExtent grid
+                        // ikut ditambah supaya tidak overflow.
+                        size: 46,
                         onTap: () {
                           // "+" selalu menambah satuan dasar induk, walau produk
                           // punya varian. Pilih varian via tahan item / ketuk body.
@@ -2747,7 +2754,7 @@ class _ProductCard extends ConsumerWidget {
                                 context, cart, notifier, product.id)
                             : null,
                       ),
-                      orElse: () => const SizedBox(width: 32, height: 32),
+                      orElse: () => const SizedBox(width: 46, height: 46),
                     ),
                   ],
                 ),
@@ -2940,6 +2947,9 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                   detailAsync.maybeWhen(
                     data: (d) => AddControl(
                       qty: qty,
+                      // Keluhan missclick — default 34->48 (baris tidak
+                      // berukuran tetap, ikut memanjang otomatis).
+                      size: 48,
                       onTap: () {
                         // "+" selalu menambah satuan dasar induk, walau punya
                         // varian. Pilih varian via tahan item / ketuk body.
@@ -2954,7 +2964,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                               context, cart, notifier, product.id)
                           : null,
                     ),
-                    orElse: () => const SizedBox(width: 34, height: 34),
+                    orElse: () => const SizedBox(width: 48, height: 48),
                   ),
                 ],
               ),
@@ -3047,7 +3057,9 @@ class _VariantDropdown extends ConsumerWidget {
                             .fold<double>(0, (s, c) => s + c.qty);
                         return AddControl(
                           qty: vQty,
-                          size: 28,
+                          // Keluhan missclick — 28->42 (baris varian juga
+                          // tidak berukuran tetap).
+                          size: 42,
                           onTap: () {
                             final d = parentDetail;
                             if (d == null) return;
@@ -3639,8 +3651,8 @@ class _CartMetaTab extends ConsumerWidget {
                   onTap: onBayar,
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: AppTheme.accent,
                       borderRadius: BorderRadius.circular(8),
@@ -4214,4 +4226,3 @@ class _HeldCard extends StatelessWidget {
     );
   }
 }
-
