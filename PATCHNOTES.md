@@ -21,6 +21,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Mode terang/gelap di layar aktivasi kode serial** — sekarang bisa
   diganti langsung dari layar pertama saat mengaktifkan aplikasi, tidak
   perlu menunggu masuk ke Pengaturan.
+- **Tampilan tombol "+" di kartu produk kasir dirapikan** — sebelum
+  produk ditambahkan ke keranjang, tombol tampil lebih ringan (ring
+  putus-putus, tanpa warna solid/bayangan) supaya tidak terlalu "ramai"
+  saat melihat banyak produk sekaligus. Begitu produk masuk keranjang,
+  tombol berubah jadi warna solid seperti biasa.
 
 ### 🐛 Perbaikan
 - **Sheet kalkulator bayar nota tempo (mode QRIS statis) & sheet Bagikan
