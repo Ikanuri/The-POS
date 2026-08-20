@@ -97,17 +97,23 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
   /// controller ini dipakai untuk melompati blok QR sekali, tepat setelah
   /// blok itu dirender.
   final _qrBlockKey = GlobalKey();
-  ScrollController? _scroll;
+  final _scroll = ScrollController();
 
   void _scrollPastQrBlock() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final c = _scroll;
       final ctx = _qrBlockKey.currentContext;
-      if (c == null || !c.hasClients || ctx == null || !mounted) return;
+      if (!c.hasClients || ctx == null || !mounted) return;
       final h = ctx.size?.height ?? 0;
       if (h <= 0) return;
       c.jumpTo(h.clamp(0.0, c.position.maxScrollExtent));
     });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   PaymentMethod? get _selected => _selectedId == null
@@ -185,14 +191,16 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
           )
         : null;
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.86,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (ctx, scrollController) {
-        _scroll = scrollController;
-        return Material(
+    final ctx = context;
+    // Tinggi sheet mengikuti ISI (mainAxisSize.min), bukan pecahan tetap
+    // layar spt `DraggableScrollableSheet` — persis pola kalkulator checkout
+    // (`_CashKeypadSheet`). Ini yang membuat jarak keypad->tombol bawah
+    // PERMANEN: tombol ikut mengalir tepat di bawah keypad (bukan dipatok
+    // ke dasar sheet), jadi berubahnya isi di ATAS keypad (mis. metadata
+    // metode muncul/hilang) menggeser keduanya BERSAMAAN tanpa mengubah
+    // jaraknya. `Flexible` + scroll cuma aktif kalau isi melebihi layar
+    // (kasus QRIS statis: QR + keypad sekaligus).
+    return Material(
         color: scheme.surface,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -200,8 +208,9 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
         child: SafeArea(
           top: false,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Handle + judul (tetap terlihat) ─────────────────────────
+              // ── Handle (juga area seret utk menutup sheet) ──────────────
               Container(
                 width: 40,
                 height: 4,
@@ -211,11 +220,14 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  children: [
+              Flexible(
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  padding: EdgeInsets.fromLTRB(
+                      16, 0, 16, MediaQuery.of(ctx).viewInsets.bottom + 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     // QR STATIS ditaruh PALING ATAS (di atas nominal) supaya
                     // keypad tetap menempel di bawah — area jempol kasir.
                     // Awalnya di luar layar; kasir menggulir ke atas untuk
@@ -343,16 +355,16 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
                               ),
                       ),
                     ),
-                  ],
-                ),
-              ),
 
-              // ── Baris tombol bawah (selalu terjangkau) ──────────────────
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                    16, 8, 16, MediaQuery.of(ctx).viewInsets.bottom + 12),
-                child: Row(
-                  children: [
+                    // ── Baris tombol ────────────────────────────────────
+                    // Jarak ke keypad SENGAJA konstan 10px & ikut mengalir
+                    // di dalam scroll (bukan dipatok ke dasar sheet) —
+                    // sama persis dgn kalkulator checkout, supaya posisinya
+                    // relatif terhadap keypad tidak pernah bergeser saat
+                    // isi di atasnya berubah.
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
                     // "Uang Pas" DIGANTI toggle Statis/Nominal saat QRIS
                     // dipilih: QR dinamis nominalnya sudah pas by definition,
                     // sedangkan QR statis justru dipakai untuk nominal bebas.
@@ -393,14 +405,15 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
                         ),
                       ),
                     ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
-      },
+      ),
     );
   }
 
@@ -524,6 +537,14 @@ class _QrModeToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Ini TOMBOL AKSI, bukan indikator status: labelnya menyebut TUJUAN
+    // (ke mana perpindahannya), bukan keadaan sekarang. Sedang di mode
+    // statis → tertulis "Nominal" (artinya: tekan utk ke mode nominal).
+    // Beda dari toggle QR di layar checkout yang memakai `Switch` — di sana
+    // label memang menyebut keadaan sekarang, karena itu memang lazimnya
+    // switch. Ikonnya ikut menyebut tujuan yang sama supaya tidak bertolak
+    // belakang dgn teksnya.
+    //
     // OutlinedButton BIASA (bukan `.icon`) — `.icon` menghasilkan subclass
     // privat sehingga `find.byType(OutlinedButton)` di widget test tidak
     // pernah match, dan tombol ini menggantikan slot "Uang Pas" yang juga
@@ -536,10 +557,10 @@ class _QrModeToggle extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(dynamicMode ? Icons.lock_outline : Icons.qr_code_2_outlined,
+          Icon(dynamicMode ? Icons.qr_code_2_outlined : Icons.lock_outline,
               size: 18),
           const SizedBox(width: 6),
-          Text(dynamicMode ? 'Nominal' : 'Statis',
+          Text(dynamicMode ? 'Statis' : 'Nominal',
               style: TextStyle(
                   fontWeight: FontWeight.w600, color: scheme.primary)),
         ],

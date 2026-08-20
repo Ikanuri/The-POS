@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers/license_provider.dart';
+import '../../core/providers/theme_provider.dart';
 import '../../core/services/license_service.dart';
 
 /// Item 25c — layar gerbang aktivasi. Muncul (lewat redirect di
@@ -65,6 +66,9 @@ class _AktivasiScreenState extends ConsumerState<AktivasiScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Brightness EFEKTIF (sudah benar juga untuk ThemeMode.system).
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    ref.watch(themeModeProvider); // rebuild saat mode ditukar
     final fingerprint = ref.watch(licenseProvider).fingerprint;
     final formatted = LicenseService.formatFingerprint(fingerprint);
 
@@ -72,10 +76,42 @@ class _AktivasiScreenState extends ConsumerState<AktivasiScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
+          // Kunci ikut brightness: berganti tema selagi layar ini terlihat
+          // membuat sebagian widget dicat memakai ukuran layout LAMA →
+          // assert framework 'debugSize == size' (text_painter.dart). Bug
+          // ini SUDAH ada sebelum tombol mode gelap di bawah ditambahkan
+          // (dibuktikan lewat probe yang mengganti tema langsung via
+          // provider, tanpa menyentuh tombol) — cuma tidak pernah
+          // terjangkau karena dari layar ini memang belum ada cara
+          // mengubah tema. Mengganti key memaksa subtree baru sehingga
+          // layout & paint selalu sepadan. AMAN thd isi field kode: teksnya
+          // dipegang `_codeCtrl` milik State, bukan oleh widget tree.
+          child: KeyedSubtree(
+            key: ValueKey(isDark),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 24),
+              // Layar ini muncul SEBELUM /setup & sebelum DB bisa dibuka
+              // (gerbang lisensi Item 25c) — jadi belum ada akses ke layar
+              // Pengaturan tempat mode gelap biasanya diatur. `themeMode`
+              // sendiri disimpan di SharedPreferences (bukan tabel settings
+              // DB), jadi aman dipakai di titik ini.
+              //
+              // Ikon & tooltip menyebut TUJUAN (mode yang dituju kalau
+              // ditekan), bukan keadaan sekarang — pola yang sama dgn tombol
+              // switch QR di sheet pelunasan.
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  tooltip: isDark ? 'Mode Terang' : 'Mode Gelap',
+                  icon: Icon(isDark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined),
+                  onPressed: () =>
+                      ref.read(themeModeProvider.notifier).toggle(),
+                ),
+              ),
+              const SizedBox(height: 4),
               Icon(Icons.storefront_outlined, size: 56, color: scheme.primary),
               const SizedBox(height: 20),
               Text(
@@ -115,6 +151,12 @@ class _AktivasiScreenState extends ConsumerState<AktivasiScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: QrImageView(
+                        // Kunci ikut brightness — lihat dok `QrisQrBox`:
+                        // `QrImageView` (qr_flutter 4.1.0) melempar assert
+                        // 'debugSize == size' saat tema berganti selagi QR
+                        // terlihat. Baru terjangkau sejak tombol mode gelap
+                        // ditambahkan di layar ini.
+                        key: ValueKey(isDark),
                         data: fingerprint,
                         version: QrVersions.auto,
                         size: 160,
@@ -186,6 +228,7 @@ class _AktivasiScreenState extends ConsumerState<AktivasiScreen> {
                     : const Text('Aktifkan'),
               ),
             ],
+            ),
           ),
         ),
       ),

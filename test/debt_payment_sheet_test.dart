@@ -166,6 +166,34 @@ void main() {
     expect(tester.getRect(payButton()).right, lessThanOrEqualTo(screenW));
   });
 
+  testWidgets(
+      'jarak keypad -> baris tombol PERMANEN walau isi di atas keypad '
+      'berubah (metode diganti)', (tester) async {
+    await db.into(db.paymentMethods).insert(PaymentMethodsCompanion.insert(
+        id: 'pm-bca',
+        type: 'bank',
+        name: 'BCA',
+        data: const Value('1234-5678-9012'),
+        sortOrder: const Value(1)));
+    await pumpSheet(tester, remaining: 50000, prefillRemaining: false);
+
+    // Jarak diukur dari sisi bawah keypad ke sisi atas tombol Bayar.
+    double gap() =>
+        tester.getRect(payButton()).top - tester.getRect(find.text('000')).bottom;
+
+    final before = gap();
+
+    // Pilih BCA: chip lain collapse & metadata muncul -> isi DI ATAS keypad
+    // berubah tinggi, tapi jarak keypad->tombol tidak boleh ikut berubah.
+    await tester.tap(find.text('BCA'));
+    await tester.pumpAndSettle();
+    expect(find.text('1234-5678-9012'), findsOneWidget);
+
+    expect(gap(), closeTo(before, 0.5),
+        reason: 'tombol harus mengalir tepat di bawah keypad (jarak tetap), '
+            'bukan dipatok ke dasar sheet');
+  });
+
   group('chip metode: collapse & batal', () {
     setUp(() async {
       await db.into(db.paymentMethods).insert(PaymentMethodsCompanion.insert(
@@ -240,7 +268,8 @@ void main() {
       await tester.tap(find.text('QRIS'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Statis'), findsOneWidget);
+      // Tombol menyebut TUJUAN: sedang statis -> tertulis "Nominal".
+      expect(find.widgetWithText(OutlinedButton, 'Nominal'), findsOneWidget);
       expect(find.text('7'), findsOneWidget, reason: 'keypad masih tampil');
       expect(find.byType(QrImageView), findsOneWidget);
     });
@@ -262,10 +291,11 @@ void main() {
       await tester.tap(find.text('000'));
       await tester.pump();
 
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Statis'));
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Nominal'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nominal'), findsOneWidget);
+      // Sudah di mode nominal -> tombol kini menawarkan tujuan "Statis".
+      expect(find.widgetWithText(OutlinedButton, 'Statis'), findsOneWidget);
       expect(find.text('7'), findsNothing, reason: 'keypad disembunyikan');
 
       await tester.tap(payButton());
@@ -288,9 +318,9 @@ void main() {
       await tester.pump();
       expect(find.text(formatRupiah(25000)), findsWidgets);
 
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Statis'));
-      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Nominal'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Statis'));
       await tester.pumpAndSettle();
 
       expect(find.text(formatRupiah(25000)), findsWidgets,
@@ -308,7 +338,7 @@ void main() {
           onResult: (r) => result = r);
       await tester.tap(find.text('QRIS'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Statis'));
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Nominal'));
       await tester.pumpAndSettle();
 
       await tester.tap(payButton());

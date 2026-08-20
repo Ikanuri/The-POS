@@ -5,6 +5,101 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Agustus 2026 — QR pelunasan di nota share & cetak
+(`198518f`), versi kerja **2.18.0+24**, sudah di-merge ke `main`. Poin
+ke-2 dari 4 permintaan susulan user (poin 1/3/4 di update sebelumnya di
+bawah ini). Sheet "Bagikan Struk" (`receipt_screen.dart`) dapat toggle
+"Tampilkan QR Pelunasan" -- HANYA muncul utk nota `tempo`/`kurang_bayar`
+dgn metode QRIS aktif terkonfigurasi (`_eligibleForShareQr`); nota lunas/
+void/retur: toggle sama sekali tidak ditawarkan. Menyalakannya
+menampilkan toggle kedua "QR Dinamis" (default ON); QR dirender di
+`_ReceiptPaper` di atas footer, TANPA nominal terpisah (beda dari
+`_QrisDisplay` checkout, nominal sudah ada di baris "Sisa" nota itu
+sendiri). **Nominal QR dinamis = SISA TAGIHAN (`netRemainingOwed`), BUKAN
+total nota** — dikonfirmasi eksplisit user, jangan dibalik. Caption
+"Mohon konfirmasi setelah membayar." di bawah QR baik di gambar struk
+maupun cetak thermal. Kedua toggle persisten via SharedPreferences
+(`receipt_show_qr`, `receipt_qr_dynamic`) — preferensi TAMPILAN milik
+device, bukan data transaksi, tidak ikut sync — dan dipakai SAMA baik di
+share-sheet (live, `StatefulBuilder`) maupun cetak thermal
+(`_resolvePrintQrData`, dipanggil `_printReceipt`). `PrinterService.
+printReceipt`/`_buildBytes` dapat param baru `qrData`, dicetak native via
+`Generator.qrcode` (ESC/POS `GS ( k`).
+
+**Belum diverifikasi**: printer murah kadang mengabaikan command QR
+native — sudah diperingatkan ke user, belum ada laporan hasil cetak
+nyata dari sesi ini atau sesudahnya. Kalau ada laporan QR tidak muncul di
+struk cetak (bukan struk share/gambar), ini kandidat pertama yang dicek.
+
+Nota GABUNGAN (`printMergedReceipt`) SENGAJA TIDAK dapat opsi ini —
+dikonfirmasi user: pelunasan tempo cukup lewat Laporan > Hutang, nota
+gabungan murni info total belanja yang SUDAH lunas. Reuse
+`resolveQrisPayload`/`QrisQrBox` dari `payment_qris_view.dart` (dibangun
+sesi sebelumnya) — tidak ada logika QRIS baru diketik ulang.
+
+Test baru `receipt_screen_qr_toggle_test.dart` (4) — revert-verified 2x.
+49 test struk terkait lain (regresi) tetap lolos. Full suite 1109 lolos +
+1 gagal (`proposal_unchanged_end_to_end_test.dart`, flaky pre-existing,
+lolos sendiri terisolasi), `flutter analyze` 0 issue.
+
+**Dengan ini SELURUH 4 poin permintaan susulan user (toggle tema
+aktivasi, QR nota share/cetak, layout kalkulator bayar tempo permanen,
+label switch QR destinasi-bukan-state) + stepper diperbesar sudah
+selesai & di-merge ke `main` sbg satu rilis** (bersama commit
+`d9b3a31`/`6697931`/`29e8ea0` di bawah).
+
+_Update sesi 18 Agustus 2026 (lanjutan lagi — toggle tema aktivasi, rapikan
+sheet bayar tempo, perbesar stepper), versi kerja **2.17.0+23**, sudah
+di-merge ke `main` (lihat update di atas utk kelanjutan poin QR nota).
+4 permintaan sekaligus:
+
+1. **Toggle terang/gelap di layar aktivasi (serial key)** — layar ini
+   muncul SEBELUM `/setup`/DB bisa dibuka, jadi Pengaturan (tempat mode
+   gelap biasa diatur) belum terjangkau. Ikon/tooltip menyebut TUJUAN
+   (bulan = "ke gelap"), bukan keadaan sekarang.
+
+   **Bug PRE-EXISTING ditemukan saat menguji tombol ini** (dibuktikan via
+   probe: gagal juga kalau tema diganti langsung lewat provider, TANPA
+   menyentuh tombol sama sekali) — akarnya di **`QrImageView` (qr_flutter
+   4.1.0)**: melempar assert framework `'debugSize == size'`
+   (text_painter.dart) kalau tema berganti selagi QR terlihat. Selama ini
+   tak pernah terjangkau krn dari layar aktivasi memang belum ada cara
+   ganti tema — tombol baru inilah yang membukanya. Dikunci pakai `key`
+   yang ikut brightness, ditaruh di `QrisQrBox` (SEMUA QR app ikut aman,
+   bukan cuma layar aktivasi) + `KeyedSubtree` di seluruh body layar
+   aktivasi (`Text`/`SelectableText` di situ JUGA kena bug sejenis).
+   **Kalau nanti nemu assert serupa di layar LAIN yang punya QR + tema
+   bisa berganti selagi terlihat, ini akar masalahnya — bukan bug baru.**
+
+2. **Sheet bayar nota tempo** (`debt_payment_sheet.dart`, dibangun sesi
+   sebelumnya) dirapikan 2 hal: (a) jarak keypad->baris tombol kini
+   PERMANEN — diganti dari `DraggableScrollableSheet` (pecahan tetap
+   layar) ke `Column(mainAxisSize.min)` + `Flexible`+scroll (tinggi
+   ikut isi, tombol mengalir tepat di bawah keypad, persis pola
+   kalkulator checkout); (b) label tombol switch QR dibalik — sekarang
+   menyebut TUJUAN bukan keadaan sekarang (state di statis -> tertulis
+   "Nominal"). Toggle QR checkout (`Switch`) TIDAK ikut diubah — widget
+   itu memang lazimnya menyatakan keadaan sekarang.
+
+3. **Stepper +/- baris keranjang diperbesar** 30->44px (+~45%) — keluhan
+   missclick. **User eksplisit ingin diskusi lebih dalam soal ini nanti**
+   (root cause / desain alternatif) — perubahan sesi ini murni mitigasi
+   cepat sementara, BUKAN solusi final. Jangan anggap topik ini selesai.
+   Stepper produk grid/list/varian (`kasir_screen.dart`) SENGAJA tidak
+   ikut diperbesar (beda konteks: nambah item baru, bukan ubah qty
+   transaksi).
+
+**Flaky family meluas**: `proposal_unchanged_end_to_end_test.dart` yang
+biasa flaky ternyata punya saudara `laci_meja_proposal_unchanged_end_to_
+end_test.dart` (pola sync proposal serupa) yang JUGA flaky pas dijalankan
+bareng — keduanya lolos sendiri terisolasi, tidak terkait perubahan sesi
+ini (subsistem beda total: sync proposal vs UI stepper). Kalau full-suite
+nunjukkin salah satu/kedua gagal, cek dulu terisolasi sebelum curiga
+regresi.
+
+Poin QR nota tempo/share yang sebelumnya menggantung di sini SUDAH
+selesai dikerjakan — lihat update `198518f` paling atas file ini.
+
 _Update sesi 18 Agustus 2026 (lanjutan lagi — fix bucket metode Transfer
 Bank), versi kerja TETAP **2.17.0+23** (user minta merge tanpa bump versi
 baru, dianggap bagian rilis yang sama dgn sheet pelunasan hutang di
