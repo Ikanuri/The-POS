@@ -66,10 +66,18 @@ class QrisQrBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `key` ikut brightness: `QrImageView` (qr_flutter 4.1.0) melempar assert
+    // framework 'debugSize == size' (text_painter.dart) kalau tema berganti
+    // selagi QR terlihat — dicat memakai ukuran layout LAMA. Bug ada di
+    // package, bukan di app ini (terbukti lewat probe QrImageView polos di
+    // layar minimal). Mengganti key memaksa elemen baru, jadi layout & paint
+    // selalu sepadan.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(8),
       child: QrImageView(
+        key: ValueKey(isDark),
         data: data,
         size: size,
         backgroundColor: Colors.white,
