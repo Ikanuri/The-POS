@@ -5,9 +5,30 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Agustus 2026 (lanjutan lagi — perbesar stepper +/- di
+Kasir grid/list/varian, `c1d14f6`), versi kerja **TETAP 2.18.0+24** (fix
+kecil, bagian rilis yang sama). User tanya "apakah stepper di tab kasir
+juga ikut besar?" (jawaban: belum, cuma baris keranjang) — lalu minta
+diterapkan juga krn keluhan missclick yang sama berlaku di sana.
+
+Delta +14 YANG SAMA dgn stepper keranjang (bukan rasio baru) dipakai lagi
+supaya konsisten: kartu grid 32->46, baris list 34->48, baris varian
+28->42. `mainAxisExtent` grid (138->152) ikut ditambah +14 persis
+(kartu grid TINGGI TETAP, beda dari baris list/varian yang mengikuti
+isi) — kalau lupa, kartu grid overflow begitu stepper diperbesar lagi
+di masa depan. Test baru `kasir_stepper_size_test.dart` (3, revert-
+verified). Full suite 1113 lolos + 2 gagal (`proposal_unchanged_end_
+to_end_test.dart`, flaky pre-existing, lolos sendiri terisolasi),
+`flutter analyze` 0 issue.
+
+Topik missclick stepper INI SENDIRI masih menunggu diskusi lebih dalam
+(root cause / desain alternatif) sesuai permintaan user sebelumnya —
+kedua perbesaran (keranjang + kasir) sama-sama masih mitigasi cepat,
+BUKAN solusi final yang sudah didiskusikan.
+
 _Update sesi 20 Agustus 2026 (lanjutan — fix swipe-turun macet di sheet
 QRIS statis/toggle QR nota, `fb1e317`), versi kerja **TETAP 2.18.0+24**
-(fix kecil, tidak bump baru), akan di-merge sbg bagian rilis yang sama.
+(fix kecil, tidak bump baru), sudah di-merge ke `main`.
 User lapor: sheet bayar tempo (state QRIS statis) & sheet Bagikan Struk
 (QR pelunasan dinyalakan) TIDAK BISA ditutup via swipe turun, padahal
 state lain di sheet yang sama bisa. Ditanya dulu apakah bisa diperbaiki
