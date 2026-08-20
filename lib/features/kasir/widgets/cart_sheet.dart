@@ -256,8 +256,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
 
   /// Susulan (permintaan user): dialog "Pengaturan Keranjang" — berisi
   /// posisi checkbox verifikasi (`CartCheckboxPosition`) DAN toggle
-  /// konfirmasi tombol minus stepper (`cartMinusConfirmProvider`, mencegah
-  /// missclick qty berkurang tanpa sengaja) — keduanya persisten
+  /// konfirmasi tombol +/- stepper (`cartMinusConfirmProvider` — nama
+  /// provider TETAP dipertahankan apa adanya walau sekarang menggerbang
+  /// KEDUA arah, bukan cuma minus, supaya tidak mengganti key
+  /// SharedPreferences yang sudah tersimpan di device user; mencegah
+  /// missclick qty berubah tanpa sengaja) — keduanya persisten
   /// (SharedPreferences), berlaku global utk semua keranjang, bukan
   /// per-`cartId`.
   void _showCartSettingsDialog(BuildContext ctx) {
@@ -299,11 +302,12 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     value: minusConfirm,
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Konfirmasi sebelum kurangi qty'),
+                    title: const Text('Konfirmasi sebelum ubah qty'),
                     subtitle: const Text(
-                        'Tap pertama tombol minus cuma bergetar sbg '
-                        'peringatan; tap berikutnya (selama stepper masih '
-                        'membesar) baru benar-benar mengurangi qty'),
+                        'Tap pertama tombol + atau - cuma bergetar sbg '
+                        'peringatan; tap berikutnya pada tombol yang sama '
+                        '(selama stepper masih membesar) baru benar-benar '
+                        'mengubah qty'),
                     onChanged: (v) => dialogRef
                         .read(cartMinusConfirmProvider.notifier)
                         .set(v),
@@ -412,9 +416,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   if (widget.cartId == kMainCartId)
                     IconButton(
                       tooltip: 'Tahan Pesanan',
-                      onPressed: cart.isEmpty
-                          ? null
-                          : () => _holdCurrent(ctx, ref),
+                      onPressed:
+                          cart.isEmpty ? null : () => _holdCurrent(ctx, ref),
                       icon: const Icon(Icons.pause_circle_outline),
                     ),
                   // Susulan (permintaan user): "Tempel Pesanan" juga bisa
@@ -557,9 +560,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   }
 }
 
-/// Lama getar peringatan ("gesture warning") tombol minus saat toggle
-/// "Konfirmasi sebelum kurangi qty" aktif.
-const _kMinusShakeDuration = Duration(milliseconds: 400);
+/// Lama getar peringatan ("gesture warning") tombol +/- stepper baris
+/// keranjang saat toggle "Konfirmasi sebelum ubah qty" aktif.
+const _kStepConfirmShakeDuration = Duration(milliseconds: 400);
 
 class _CartItemTile extends ConsumerStatefulWidget {
   const _CartItemTile({
@@ -592,14 +595,22 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
   // pindah jempol — jendela waktu tetap bikin tap kedua/ketiga/dst yang
   // terlambat (tapi jempol MASIH di situ) dianggap tap pertama lagi
   // (getar ulang, bukan mengurangi).
+  //
+  // Susulan (permintaan user): perilaku yang SAMA sekarang berlaku juga utk
+  // tombol "+" — bukan cuma minus. `_armedDelta` menyimpan ARAH yang
+  // bersenjata (+1/-1), bukan sekadar bool: menekan arah LAIN saat sudah
+  // bersenjata mengganti arah bersenjata (getar ulang utk arah barunya),
+  // BUKAN langsung dieksekusi — kalau dibagi rata pakai satu bool tanpa
+  // arah, tap minus (getar, bersenjata) lalu tap plus akan langsung
+  // menambah TANPA peringatan sendiri, padahal plus belum pernah ditekan.
   final GlobalKey<State<AddControl>> _stepperKey = GlobalKey();
-  bool _armed = false;
+  int? _armedDelta;
 
   @override
   void initState() {
     super.initState();
     _shakeController =
-        AnimationController(vsync: this, duration: _kMinusShakeDuration);
+        AnimationController(vsync: this, duration: _kStepConfirmShakeDuration);
     AddControl.activeStepper.addListener(_handleActiveStepperChanged);
   }
 
@@ -616,29 +627,30 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
   /// baris KITA tadinya bersenjata & TERNYATA bukan lagi stepper yang aktif
   /// (jempol sudah pindah), lepas status bersenjata.
   void _handleActiveStepperChanged() {
-    if (_armed &&
+    if (_armedDelta != null &&
         !identical(AddControl.activeStepper.value, _stepperKey.currentState)) {
       _disarm();
     }
   }
 
   void _disarm() {
-    if (_armed && mounted) setState(() => _armed = false);
+    if (_armedDelta != null && mounted) setState(() => _armedDelta = null);
   }
 
-  /// Tap PERTAMA (belum `_armed`): getarkan baris sbg warning — TIDAK
-  /// mengurangi qty sama sekali. Tap KEDUA/ketiga/dst yang jatuh SELAMA
-  /// stepper baris ini masih membesar (`_armed` masih true, lihat
-  /// `_handleActiveStepperChanged`): benar-benar mengurangi qty tanpa
-  /// dilepas statusnya — jempol boleh menekan minus berkali-kali beruntun
-  /// tanpa perlu getar ulang tiap kali, PERSIS spt stepper `+` biasa.
-  void _handleMinusTap(CartNotifier notifier) {
-    if (_armed) {
+  /// Tap PERTAMA pada suatu arah (belum bersenjata utk arah itu): getarkan
+  /// baris sbg warning — TIDAK mengubah qty sama sekali. Tap KEDUA/ketiga/
+  /// dst pada arah YANG SAMA, selama stepper baris ini masih membesar
+  /// (`_armedDelta` masih menyimpan arah itu, lihat
+  /// `_handleActiveStepperChanged`): benar-benar mengubah qty tanpa
+  /// dilepas statusnya — jempol boleh menekan tombol yang sama berkali-kali
+  /// beruntun tanpa perlu getar ulang tiap kali.
+  void _handleStepTap(CartNotifier notifier, int delta) {
+    if (_armedDelta == delta) {
       notifier.setEffectiveQty(
-          widget.item.productUnitId, widget.effectiveQty - 1);
+          widget.item.productUnitId, widget.effectiveQty + delta);
       return;
     }
-    setState(() => _armed = true);
+    setState(() => _armedDelta = delta);
     _shakeController.forward(from: 0);
   }
 
@@ -659,13 +671,16 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
     // exclusive, cuma satu cabang `if` yang aktif per build).
     final position = ref.watch(cartCheckboxPositionProvider);
     // Susulan (perubahan desain, permintaan user): toggle "Konfirmasi
-    // sebelum kurangi qty" di dialog "Pengaturan Keranjang" — mencegah qty
-    // berkurang tanpa sengaja (missclick) saat menekan tombol minus
-    // stepper. Default OFF. Versi AWAL fitur ini pakai dialog konfirmasi —
-    // diganti total krn butuh 1 tap ekstra + jempol biasanya sudah di atas
-    // stepper (menutupi warning kalau cuma stepper yg digetarkan) — jadi
-    // SELURUH baris ikut bergetar (lihat `_handleMinusTap`), lebih kentara
-    // walau jempol/fokus mata sedang di area manapun pada baris ini.
+    // sebelum ubah qty" di dialog "Pengaturan Keranjang" — mencegah qty
+    // berubah tanpa sengaja (missclick) saat menekan tombol +/- stepper.
+    // Default OFF. Versi AWAL fitur ini pakai dialog konfirmasi & cuma
+    // menggerbang minus — diganti total krn butuh 1 tap ekstra + jempol
+    // biasanya sudah di atas stepper (menutupi warning kalau cuma
+    // stepper yg digetarkan) — jadi SELURUH baris ikut bergetar (lihat
+    // `_handleStepTap`), lebih kentara walau jempol/fokus mata sedang di
+    // area manapun pada baris ini. Susulan lagi (permintaan user):
+    // gerbang yang sama diperluas ke tombol "+" juga, bukan cuma minus —
+    // qty bisa berubah tanpa sengaja lewat kedua arah, bukan cuma turun.
     final minusConfirm = ref.watch(cartMinusConfirmProvider);
     final checkbox = Checkbox(
       value: item.checked,
@@ -926,12 +941,14 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                     // tidak ikut diperbesar: itu utk MENAMBAH item baru, bukan
                     // titik misclick yang dikeluhkan (mengubah qty transaksi).
                     size: 44,
-                    onTap: () => notifier.setEffectiveQty(
-                        item.productUnitId, effectiveQty + 1),
+                    onTap: minusConfirm
+                        ? () => _handleStepTap(notifier, 1)
+                        : () => notifier.setEffectiveQty(
+                            item.productUnitId, effectiveQty + 1),
                     onMinus: isZeroed
                         ? null
                         : minusConfirm
-                            ? () => _handleMinusTap(notifier)
+                            ? () => _handleStepTap(notifier, -1)
                             : () => notifier.setEffectiveQty(
                                 item.productUnitId, effectiveQty - 1),
                   ),
