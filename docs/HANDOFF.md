@@ -5,6 +5,44 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Agustus 2026 (lanjutan — fix swipe-turun macet di sheet
+QRIS statis/toggle QR nota, `fb1e317`), versi kerja **TETAP 2.18.0+24**
+(fix kecil, tidak bump baru), akan di-merge sbg bagian rilis yang sama.
+User lapor: sheet bayar tempo (state QRIS statis) & sheet Bagikan Struk
+(QR pelunasan dinyalakan) TIDAK BISA ditutup via swipe turun, padahal
+state lain di sheet yang sama bisa. Ditanya dulu apakah bisa diperbaiki
+TANPA mengorbankan jarak keypad->tombol permanen (hasil Item 62)
+sebelum eksekusi — user jawab "Eksekusi".
+
+**Akar (temuan penting, dokumentasikan untuk sheet BARU nanti)**:
+`showModalBottomSheet` bawaan cuma menghubungkan swipe-turun ke
+`Navigator.pop` kalau isi TIDAK scrollable. Begitu `SingleChildScrollView`
+di dalamnya beneran overflow (QR+keypad; struk gambar+QR di layar
+pendek), gesture arena SELALU dimenangkan scrollable itu — dismiss-drag
+bawaan tidak pernah kebagian giliran, TERLEPAS dari posisi scroll
+(bukan cuma "pas lagi di tengah konten"). Ini limitasi umum
+`showModalBottomSheet`+`SingleChildScrollView` polos (beda dari
+`DraggableScrollableSheet` yang punya wiring internal sendiri) — **kalau
+nanti ada sheet lain yang isinya scrollable & lapor swipe-close macet,
+INI akar masalahnya, bukan bug baru.**
+
+Fix: `NotificationListener<ScrollNotification>` membungkus tiap
+`SingleChildScrollView` (`debt_payment_sheet.dart`,
+`receipt_screen.dart::_showShareSheet`), mengakumulasi
+`OverscrollNotification` (tetap terkirim walau `ClampingScrollPhysics` —
+posisi tidak bergerak tapi notifikasi overscroll tetap dikirim) SELAMA
+satu gesture drag; tarikan ke bawah melewati ambang -60px →
+`Navigator.maybePop()` manual, reset saat `ScrollEndNotification`.
+Meniru wiring internal `DraggableScrollableSheet` TANPA mengubah
+struktur layout sama sekali — jarak keypad->tombol permanen TETAP utuh.
+
+Test baru di `debt_payment_sheet_test.dart` + `receipt_screen_qr_toggle_
+test.dart` — masuk ke state overflow, drag turun pada
+`SingleChildScrollView`, assert sheet ter-pop — revert-verified 2x
+(ambang dinaikkan mustahil tercapai → kedua test gagal sensibel). Full
+suite 1111 lolos + 1 gagal (`proposal_unchanged_end_to_end_test.dart`,
+flaky pre-existing, lolos sendiri terisolasi), `flutter analyze` 0 issue.
+
 _Update sesi 20 Agustus 2026 — QR pelunasan di nota share & cetak
 (`198518f`), versi kerja **2.18.0+24**, sudah di-merge ke `main`. Poin
 ke-2 dari 4 permintaan susulan user (poin 1/3/4 di update sebelumnya di

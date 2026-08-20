@@ -149,4 +149,29 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  testWidgets(
+      'swipe turun BISA menutup sheet Bagikan Struk walau isi overflow/'
+      'scrollable (mis. QR aktif di layar pendek)', (tester) async {
+    await seedQris();
+    final txId = await seedTx(status: 'tempo', total: 50000, paid: 0);
+    await pumpWithFakeApp(tester,
+        db: db,
+        child: ReceiptScreen(transactionId: txId),
+        surfaceSize: const Size(360, 500));
+
+    await openShareSheet(tester);
+    await tester.tap(find.text('Tampilkan QR Pelunasan'));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.byType(SingleChildScrollView).first;
+    await tester.drag(scrollable, const Offset(0, 400));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tampilkan QR Pelunasan'), findsNothing,
+        reason: 'sheet harus ter-pop oleh swipe turun');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }

@@ -194,6 +194,44 @@ void main() {
             'bukan dipatok ke dasar sheet');
   });
 
+  testWidgets(
+      'swipe turun BISA menutup sheet walau state QRIS statis overflow/'
+      'scrollable (dulu macet — gesture arena dimenangkan scrollable)',
+      (tester) async {
+    await db.into(db.paymentMethods).insert(PaymentMethodsCompanion.insert(
+        id: 'pm-qris',
+        type: 'qris',
+        name: 'QRIS',
+        qrValue: const Value(staticQris),
+        sortOrder: const Value(1)));
+
+    ({int amount, String method})? result;
+    var resultCalled = false;
+    await pumpSheet(tester,
+        remaining: 50000,
+        prefillRemaining: false,
+        surface: const Size(360, 800),
+        onResult: (r) {
+          result = r;
+          resultCalled = true;
+        });
+
+    // Masuk ke state QRIS statis (QR + keypad sekaligus) — inilah state
+    // overflow yang dikeluhkan tidak bisa ditutup via swipe.
+    await tester.tap(find.text('QRIS'));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.byType(SingleChildScrollView).first;
+    await tester.drag(scrollable, const Offset(0, 500));
+    await tester.pumpAndSettle();
+
+    expect(resultCalled, isTrue,
+        reason: 'sheet harus ter-pop oleh swipe turun');
+    expect(result, isNull,
+        reason: 'ditutup via swipe (batal), bukan lewat tombol Bayar');
+    expect(find.byType(FilledButton), findsNothing);
+  });
+
   group('chip metode: collapse & batal', () {
     setUp(() async {
       await db.into(db.paymentMethods).insert(PaymentMethodsCompanion.insert(

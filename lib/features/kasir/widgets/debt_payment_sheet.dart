@@ -99,6 +99,19 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
   final _qrBlockKey = GlobalKey();
   final _scroll = ScrollController();
 
+  /// Akumulasi overscroll (drag ke bawah saat sudah di posisi paling atas)
+  /// selama SATU gesture drag. `showModalBottomSheet` bawaan cuma
+  /// menghubungkan swipe-turun ke `Navigator.pop` kalau isi TIDAK
+  /// scrollable (mis. state QRIS statis yang lebih tinggi dari layar) —
+  /// begitu ada `SingleChildScrollView` yang benar-benar overflow, gesture
+  /// arena selalu dimenangkan scrollable itu, dismiss-drag bawaan tidak
+  /// pernah kebagian giliran. `OverscrollNotification` tetap muncul walau
+  /// scroll-nya `ClampingScrollPhysics` (posisi tidak bergerak, tapi
+  /// notifikasi overscroll tetap dikirim) — dipakai di sini utk pop manual
+  /// begitu tarikan ke bawah melewati ambang batas, meniru perilaku
+  /// `DraggableScrollableSheet`.
+  double _dragOverscroll = 0;
+
   void _scrollPastQrBlock() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final c = _scroll;
@@ -134,9 +147,11 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
   /// sudah terkunci di dalam QR, jadi tidak ada yang perlu diketik lagi.
   bool get _showKeypad => !(_isQris && _qrDynamic);
 
-  int get _change => _amount > widget.remaining ? _amount - widget.remaining : 0;
-  int get _shortfall =>
-      _amount > 0 && _amount < widget.remaining ? widget.remaining - _amount : 0;
+  int get _change =>
+      _amount > widget.remaining ? _amount - widget.remaining : 0;
+  int get _shortfall => _amount > 0 && _amount < widget.remaining
+      ? widget.remaining - _amount
+      : 0;
 
   void _press(String key) {
     setState(() {
@@ -201,26 +216,38 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
     // jaraknya. `Flexible` + scroll cuma aktif kalau isi melebihi layar
     // (kasus QRIS statis: QR + keypad sekaligus).
     return Material(
-        color: scheme.surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ── Handle (juga area seret utk menutup sheet) ──────────────
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: 8, bottom: 10),
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      color: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Handle (juga area seret utk menutup sheet) ──────────────
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 8, bottom: 10),
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
               ),
-              Flexible(
+            ),
+            Flexible(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (n) {
+                  if (n is OverscrollNotification && n.dragDetails != null) {
+                    _dragOverscroll += n.overscroll;
+                    if (_dragOverscroll < -60) {
+                      Navigator.of(context).maybePop();
+                    }
+                  } else if (n is ScrollEndNotification) {
+                    _dragOverscroll = 0;
+                  }
+                  return false;
+                },
                 child: SingleChildScrollView(
                   controller: _scroll,
                   padding: EdgeInsets.fromLTRB(
@@ -228,186 +255,194 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                    // QR STATIS ditaruh PALING ATAS (di atas nominal) supaya
-                    // keypad tetap menempel di bawah — area jempol kasir.
-                    // Awalnya di luar layar; kasir menggulir ke atas untuk
-                    // menunjukkannya ke pelanggan.
-                    if (qris != null && !_qrDynamic)
-                      Column(
-                        key: _qrBlockKey,
+                      // QR STATIS ditaruh PALING ATAS (di atas nominal) supaya
+                      // keypad tetap menempel di bawah — area jempol kasir.
+                      // Awalnya di luar layar; kasir menggulir ke atas untuk
+                      // menunjukkannya ke pelanggan.
+                      if (qris != null && !_qrDynamic)
+                        Column(
+                          key: _qrBlockKey,
+                          children: [
+                            Center(child: QrisQrBox(data: qris.data)),
+                            const SizedBox(height: 6),
+                            Text(
+                              'QR statis — pelanggan mengetik sendiri '
+                              'nominalnya. Geser tombol di bawah ke "Nominal" '
+                              'agar jumlahnya terkunci di QR.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 11, color: scheme.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+
+                      // ── Sisa tagihan ────────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Center(child: QrisQrBox(data: qris.data)),
-                          const SizedBox(height: 6),
-                          Text(
-                            'QR statis — pelanggan mengetik sendiri '
-                            'nominalnya. Geser tombol di bawah ke "Nominal" '
-                            'agar jumlahnya terkunci di QR.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 11, color: scheme.onSurfaceVariant),
+                          Expanded(
+                            child: Text(widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(ctx).textTheme.titleSmall),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(width: 8),
+                          // Dua Text terpisah (bukan Text.rich) supaya nominal
+                          // sisa bisa di-assert langsung di widget test — angka
+                          // ini yang nanti dicatat sbg pembayaran, jadi wajib
+                          // terjaga (lihat `tx_history_net_sisa_test.dart`).
+                          Text('Sisa tagihan ',
+                              style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                  fontSize: 13)),
+                          Text(formatRupiah(widget.remaining),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  color: scheme.onSurface)),
                         ],
                       ),
+                      const SizedBox(height: 10),
 
-                    // ── Sisa tagihan ────────────────────────────────────
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(widget.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(ctx).textTheme.titleSmall),
-                        ),
-                        const SizedBox(width: 8),
-                        // Dua Text terpisah (bukan Text.rich) supaya nominal
-                        // sisa bisa di-assert langsung di widget test — angka
-                        // ini yang nanti dicatat sbg pembayaran, jadi wajib
-                        // terjaga (lihat `tx_history_net_sisa_test.dart`).
-                        Text('Sisa tagihan ',
-                            style: TextStyle(
-                                color: scheme.onSurfaceVariant, fontSize: 13)),
-                        Text(formatRupiah(widget.remaining),
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                                color: scheme.onSurface)),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ── Metode bayar (+ metadata segaris saat terpilih) ──
-                    _MethodPicker(
-                      methods: widget.methods,
-                      selectedId: _selectedId,
-                      collapsed: collapsed,
-                      onTap: _tapMethod,
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ── Nominal diterima ────────────────────────────────
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Dibayar',
-                            style: TextStyle(color: scheme.onSurfaceVariant)),
-                        Text(formatRupiah(_amount),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 22)),
-                      ],
-                    ),
-                    if (_amount > 0) ...[
-                      const SizedBox(height: 8),
-                      _StatusPill(
-                          change: _change,
-                          shortfall: _shortfall,
-                          isDark: isDark),
-                    ],
-                    const SizedBox(height: 10),
-
-                    // ── Keypad ⇄ QR dinamis ─────────────────────────────
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.topCenter,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        switchInCurve: Curves.easeOut,
-                        switchOutCurve: Curves.easeIn,
-                        child: _showKeypad
-                            ? Column(
-                                key: const ValueKey('keypad'),
-                                children: [
-                                  _QuickAmountChips(
-                                    remaining: widget.remaining,
-                                    // "Uang Pas" hanya perlu dimunculkan
-                                    // sbg chip saat slot tombol kiri-bawah
-                                    // sedang dipakai toggle QR — kalau
-                                    // tidak, ia sudah ada di sana.
-                                    includeUangPas: _isQris &&
-                                        widget.qrisToggleAllowed &&
-                                        qris != null,
-                                    onPick: (v) =>
-                                        setState(() => _amount = v),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _Keypad(onPress: _press),
-                                ],
-                              )
-                            : Column(
-                                key: const ValueKey('qr'),
-                                children: [
-                                  Center(
-                                      child: QrisQrBox(data: qris?.data ?? '')),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Nominal ${formatRupiah(_qrAmount)} sudah '
-                                    'terkunci di QR — pelanggan tinggal scan. '
-                                    'Untuk mengubahnya, geser kembali ke '
-                                    '"Statis".',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: scheme.onSurfaceVariant),
-                                  ),
-                                ],
-                              ),
+                      // ── Metode bayar (+ metadata segaris saat terpilih) ──
+                      _MethodPicker(
+                        methods: widget.methods,
+                        selectedId: _selectedId,
+                        collapsed: collapsed,
+                        onTap: _tapMethod,
                       ),
-                    ),
+                      const SizedBox(height: 10),
 
-                    // ── Baris tombol ────────────────────────────────────
-                    // Jarak ke keypad SENGAJA konstan 10px & ikut mengalir
-                    // di dalam scroll (bukan dipatok ke dasar sheet) —
-                    // sama persis dgn kalkulator checkout, supaya posisinya
-                    // relatif terhadap keypad tidak pernah bergeser saat
-                    // isi di atasnya berubah.
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                    // "Uang Pas" DIGANTI toggle Statis/Nominal saat QRIS
-                    // dipilih: QR dinamis nominalnya sudah pas by definition,
-                    // sedangkan QR statis justru dipakai untuk nominal bebas.
-                    if (_isQris && widget.qrisToggleAllowed && qris != null)
-                      _QrModeToggle(
-                        dynamicMode: _qrDynamic,
-                        onChanged: (v) => setState(() {
-                          _qrDynamic = v;
-                          if (!v) _scrollPastQrBlock();
-                        }),
-                      )
-                    else
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 52),
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16)),
-                        onPressed: () =>
-                            setState(() => _amount = widget.remaining),
-                        child: const Text('Uang Pas'),
-                      ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: SizedBox(
-                        height: 52,
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppTheme.payGreen,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _payEnabled
-                              ? () => Navigator.of(ctx).pop(
-                                  (amount: _payAmount, method: _selectedType))
-                              : null,
-                          child: Text(_payLabel,
+                      // ── Nominal diterima ────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Dibayar',
+                              style: TextStyle(color: scheme.onSurfaceVariant)),
+                          Text(formatRupiah(_amount),
                               style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600)),
+                                  fontWeight: FontWeight.w700, fontSize: 22)),
+                        ],
+                      ),
+                      if (_amount > 0) ...[
+                        const SizedBox(height: 8),
+                        _StatusPill(
+                            change: _change,
+                            shortfall: _shortfall,
+                            isDark: isDark),
+                      ],
+                      const SizedBox(height: 10),
+
+                      // ── Keypad ⇄ QR dinamis ─────────────────────────────
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          child: _showKeypad
+                              ? Column(
+                                  key: const ValueKey('keypad'),
+                                  children: [
+                                    _QuickAmountChips(
+                                      remaining: widget.remaining,
+                                      // "Uang Pas" hanya perlu dimunculkan
+                                      // sbg chip saat slot tombol kiri-bawah
+                                      // sedang dipakai toggle QR — kalau
+                                      // tidak, ia sudah ada di sana.
+                                      includeUangPas: _isQris &&
+                                          widget.qrisToggleAllowed &&
+                                          qris != null,
+                                      onPick: (v) =>
+                                          setState(() => _amount = v),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _Keypad(onPress: _press),
+                                  ],
+                                )
+                              : Column(
+                                  key: const ValueKey('qr'),
+                                  children: [
+                                    Center(
+                                        child:
+                                            QrisQrBox(data: qris?.data ?? '')),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Nominal ${formatRupiah(_qrAmount)} sudah '
+                                      'terkunci di QR — pelanggan tinggal scan. '
+                                      'Untuk mengubahnya, geser kembali ke '
+                                      '"Statis".',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: scheme.onSurfaceVariant),
+                                    ),
+                                  ],
+                                ),
                         ),
                       ),
-                    ),
-                      ],
-                    ),
-                  ],
+
+                      // ── Baris tombol ────────────────────────────────────
+                      // Jarak ke keypad SENGAJA konstan 10px & ikut mengalir
+                      // di dalam scroll (bukan dipatok ke dasar sheet) —
+                      // sama persis dgn kalkulator checkout, supaya posisinya
+                      // relatif terhadap keypad tidak pernah bergeser saat
+                      // isi di atasnya berubah.
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          // "Uang Pas" DIGANTI toggle Statis/Nominal saat QRIS
+                          // dipilih: QR dinamis nominalnya sudah pas by definition,
+                          // sedangkan QR statis justru dipakai untuk nominal bebas.
+                          if (_isQris &&
+                              widget.qrisToggleAllowed &&
+                              qris != null)
+                            _QrModeToggle(
+                              dynamicMode: _qrDynamic,
+                              onChanged: (v) => setState(() {
+                                _qrDynamic = v;
+                                if (!v) _scrollPastQrBlock();
+                              }),
+                            )
+                          else
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 52),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16)),
+                              onPressed: () =>
+                                  setState(() => _amount = widget.remaining),
+                              child: const Text('Uang Pas'),
+                            ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 52,
+                              child: FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.payGreen,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: _payEnabled
+                                    ? () => Navigator.of(ctx).pop((
+                                          amount: _payAmount,
+                                          method: _selectedType
+                                        ))
+                                    : null,
+                                child: Text(_payLabel,
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -452,8 +487,7 @@ class _MethodPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final selected =
-        methods.where((m) => m.id == selectedId).firstOrNull;
+    final selected = methods.where((m) => m.id == selectedId).firstOrNull;
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 220),
@@ -529,8 +563,7 @@ class _MethodPicker extends StatelessWidget {
 
 /// Toggle Statis ⇄ Nominal, menggantikan "Uang Pas" saat metode QRIS aktif.
 class _QrModeToggle extends StatelessWidget {
-  const _QrModeToggle(
-      {required this.dynamicMode, required this.onChanged});
+  const _QrModeToggle({required this.dynamicMode, required this.onChanged});
   final bool dynamicMode;
   final ValueChanged<bool> onChanged;
 
@@ -601,8 +634,7 @@ class _StatusPill extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(fontWeight: FontWeight.w600, color: fg)),
+          Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: fg)),
           if (change > 0 || shortfall > 0)
             Text(formatRupiah(change > 0 ? change : shortfall),
                 style: TextStyle(
