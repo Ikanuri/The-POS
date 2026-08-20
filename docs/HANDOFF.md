@@ -5,6 +5,57 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Agustus 2026 (lanjutan lagi lagi — stepper "+" idle jadi
+ring putus-putus netral + flat, `008958d`), versi kerja **TETAP
+2.18.0+24**. User: "stepper state idle di halaman kasir itu secara UI
+terlalu over" — lingkaran solid terracotta+shadow di SETIAP kartu grid
+sekaligus dianggap menyaingi info produk. User usul sendiri: hilangkan
+lingkaran, sisakan "+" polos + aksen garis sobekan kertas di
+sampingnya. **Saya negasikan** usul itu (bukan langsung eksekusi) —
+alasan: menghilangkan lingkaran = menghilangkan afordansi tap, padahal
+SESI SEBELUMNYA baru saja memperbesar stepper demi mengurangi missclick
+— berisiko regresi. Diskusi berlanjut 3 putaran ("Lainnya?"/"Alternatif
+lain?"), total 9 alternatif diajukan (ghost outline, chip bertinta,
+pill gabung, badge sudut, netral->berwarna, dashed ring SEBAGAI stroke
+tombol itu sendiri [bukan elemen terpisah — ini yang menjawab kritik
+awal saya], flat tanpa shadow, dll). User pilih kombinasi **Alt.7
+(netral idle -> berwarna begitu di keranjang) + Alt.4 (dashed ring,
+bukan elemen dekoratif terpisah) + Alt.9 (flat, shadow dihapus total)**
+— setelah saya kirim **mockup .jpg** (dibangun via Playwright/Chromium
+headless yg sudah pre-installed di environment ini, render HTML lokal
+lalu screenshot langsung ke JPEG — `page.screenshot({type:'jpeg'})`,
+BUKAN convert PNG->JPG krn `ffmpeg` di environment ini dibuild TANPA
+PNG decoder, cuma encoder) yang membandingkan 1 kartu (idle/di-keranjang,
+sebelum/sesudah) DAN simulasi grid 6 kartu penuh — grid penuh inilah
+yang paling meyakinkan (kepadatan visual idle vs sesudah baru kelihatan
+jelas bedanya di situ, bukan di 1 kartu saja).
+
+**Detail teknis yang perlu diingat**: `_DashedCirclePainter` (baru,
+`add_control.dart`) menggambar ring via `Canvas.drawArc` berulang —
+Flutter TIDAK punya border dashed bawaan. Jumlah segmen DIHITUNG dari
+keliling lingkaran (`circumference / targetSegment`), BUKAN angka tetap
+— supaya pola dashed menutup 360° tanpa "jahitan" di titik pertemuan,
+dan tetap proporsional di semua ukuran stepper (32-52px, beda-beda per
+grid/list/varian/keranjang sejak sesi stepper-resize sebelumnya). Warna
+idle = `Theme.of(context).colorScheme.onSurfaceVariant` (netral,
+konsisten dgn token yang sudah dipakai luas di app utk teks/ikon
+sekunder). `boxShadow` DIHAPUS TOTAL dari `mainCircle` (bukan cuma saat
+idle) — kesan "solid tapi flat" di state di-keranjang juga bagian dari
+keputusan desain, bukan cuma efek samping.
+
+Test baru `add_control_idle_flat_style_test.dart` (2) — revert-verified.
+Full suite 1117 lolos SEMUA (kebetulan `proposal_unchanged_end_to_end_
+test.dart` yg biasa flaky ikut hijau run ini — jangan dianggap sudah
+fixed permanen), `flutter analyze` 0 issue. **Insiden testing kecil**:
+sempat menjalankan `flutter test` foreground (visual check manual, file
+sementara `_tmp_visual_check.dart`, sudah dihapus lagi — bukan bagian
+commit) BERSAMAAN dengan full-suite run di background — gotcha CPU-
+contention yang sudah didokumentasikan (lihat entri 14 Agustus di
+bawah) — full-suite run PERTAMA (b2ppefxqz) karenanya tidak dipakai
+sbg bukti, ditunggu sampai semua proses `flutter_tester` benar2 kosong
+lalu diverifikasi ulang manual (hasil 1117 lolos semua di atas adalah
+dari run itu, BUKAN dari run yang overlap).
+
 _Update sesi 20 Agustus 2026 (lanjutan lagi — perbesar stepper +/- di
 Kasir grid/list/varian, `c1d14f6`), versi kerja **TETAP 2.18.0+24** (fix
 kecil, bagian rilis yang sama). User tanya "apakah stepper di tab kasir
