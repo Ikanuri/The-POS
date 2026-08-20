@@ -449,6 +449,12 @@ class PrinterService {
     String receiptHeader = '',
     String receiptFooter = '',
     Map<String, String?> parentOf = const {},
+    // Item 62 susulan — QR pelunasan (dinamis/statis) utk nota tempo/kurang
+    // bayar, PAYLOAD SUDAH JADI (hasil `resolveQrisPayload` di
+    // receipt_screen.dart — pemanggil yg tahu status nota/setting toko/nominal
+    // sisa; sengaja tidak dihitung ulang di sini). null = tidak dicetak sama
+    // sekali (nota lunas, toggle mati, atau QRIS belum dikonfigurasi).
+    String? qrData,
   }) async {
     final mac = await getSavedMac();
     if (mac == null || mac.isEmpty) return false;
@@ -474,6 +480,7 @@ class PrinterService {
       receiptFooter: receiptFooter,
       strukNote: strukNote,
       parentOf: parentOf,
+      qrData: qrData,
       settings: settings,
     );
 
@@ -533,6 +540,7 @@ class PrinterService {
     String receiptHeader = '',
     String receiptFooter = '',
     Map<String, String?> parentOf = const {},
+    String? qrData,
     required PrinterSettings settings,
   }) async {
     final w = settings.charWidth;
@@ -825,6 +833,19 @@ class PrinterService {
         final left = '${_fmtDateTimeFull(p.paidAt)} ${_methodShort(p.method)}';
         out.addAll(bodyLR(left, 'Rp ${_fmtNum(p.amount)}'));
       }
+    }
+
+    // ── QR pelunasan (Item 62 susulan) ──────────────────────────────────────
+    // "Di atas footer" (permintaan user) — payload sudah final (dinamis
+    // dgn nominal sisa tagihan, atau statis polos) dari pemanggil. Perintah
+    // QR native printer (ESC/POS `GS ( k`) — printer murah kadang
+    // mengabaikannya; belum ada fallback raster, lihat dok `printReceipt`.
+    if (qrData != null && qrData.isNotEmpty) {
+      out.addAll(bodySep());
+      out.addAll(gen.qrcode(qrData, align: PosAlign.center));
+      out.addAll(gen.feed(1));
+      out.addAll(bodyText('Mohon konfirmasi setelah membayar.',
+          styles: const PosStyles(align: PosAlign.center)));
     }
 
     // ── Footer ────────────────────────────────────────────────────────────

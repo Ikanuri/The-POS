@@ -23,6 +23,7 @@ import '../../core/utils/input_formatters.dart';
 import '../../core/widgets/item_count_badge.dart';
 import '../../core/widgets/status_watermark_stamp.dart';
 import 'widgets/debt_payment_sheet.dart';
+import 'widgets/payment_qris_view.dart';
 import 'widgets/tx_history_sheet.dart';
 
 /// Sisa tagihan yang BENAR: `total - paid` mentah bisa understate kalau
@@ -1641,6 +1642,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       return;
     }
     final prefs = await _getStorePrefs();
+    final qrData = await _resolvePrintQrData();
+    if (!mounted) return;
     final ok = await PrinterService.printReceipt(
       tx: _tx!,
       items: _items,
@@ -1658,11 +1661,31 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       receiptFooter: prefs.footer,
       strukNote: _tx!.strukNote,
       parentOf: _parentOf,
+      qrData: qrData,
     );
     if (!mounted) return;
     AppTheme.showSnack(
         context, ok ? 'Struk berhasil dicetak' : 'Gagal mencetak struk',
         isError: !ok);
+  }
+
+  /// Item 62 susulan — cetak thermal TIDAK punya dialog opsi sendiri;
+  /// ikutkan toggle yang SAMA persis dgn yang terakhir diatur di sheet
+  /// "Bagikan Struk" (SharedPreferences bersama), sesuai permintaan user
+  /// eksplisit ("juga ikutkan ke print struk").
+  Future<String?> _resolvePrintQrData() async {
+    if (!_eligibleForShareQr) return null;
+    final sharedPrefs = await SharedPreferences.getInstance();
+    if (!(sharedPrefs.getBool('receipt_show_qr') ?? false)) return null;
+    final qrisMethod = await _activeQrisMethod();
+    if (qrisMethod == null) return null;
+    final dynamicMode = sharedPrefs.getBool('receipt_qr_dynamic') ?? true;
+    final remaining = netRemainingOwed(_tx!, _payments);
+    return resolveQrisPayload(
+      staticPayload: qrisMethod.qrValue!,
+      amount: remaining,
+      dynamicMode: dynamicMode,
+    ).data;
   }
 
   Future<
@@ -2107,66 +2130,151 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
   }
 
+  /// Item 62 susulan — nota ini SECARA PRINSIP layak ditawari QR pelunasan
+  /// (status tempo/kurang_bayar, bukan void/retur) — independen dari apakah
+  /// QRIS sudah dikonfigurasi toko atau toggle-nya sedang aktif.
+  bool get _eligibleForShareQr {
+    final tx = _tx;
+    if (tx == null) return false;
+    final isKurangBayar = tx.status == 'kurang_bayar' || tx.status == 'tempo';
+    final isVoid = tx.status == 'void';
+    final isRetur = tx.internalNote?.startsWith('RETUR:') ?? false;
+    return isKurangBayar && !isVoid && !isRetur;
+  }
+
+  /// Metode QRIS aktif pertama yang payload statisnya sudah diisi, atau
+  /// null kalau belum ada satu pun dikonfigurasi.
+  Future<PaymentMethod?> _activeQrisMethod() async {
+    final db = ref.read(databaseProvider);
+    final methods =
+        await (db.select(db.paymentMethods)..where((t) => t.isActive.equals(true)))
+            .get();
+    for (final m in methods) {
+      if (m.type == 'qris' && (m.qrValue?.trim().isNotEmpty ?? false)) {
+        return m;
+      }
+    }
+    return null;
+  }
+
   Future<void> _showShareSheet() async {
     final prefs = await _getStorePrefs();
     final device = ref.read(deviceProvider);
     if (!mounted) return;
 
+    // Item 62 susulan — QR pelunasan: ditawarkan hanya utk nota tempo/
+    // kurang_bayar yang punya metode QRIS aktif terisi. Nilai awal toggle
+    // dibaca dari SharedPreferences (persisten per-device, pola SAMA dgn
+    // "Tampilkan Laba" di menu Pengaturan Struk) — BUKAN per-transaksi:
+    // ini preferensi TAMPILAN milik device yang membuka struk, bukan data
+    // nota itu sendiri.
+    final qrisMethod = _eligibleForShareQr ? await _activeQrisMethod() : null;
+    if (!mounted) return;
+    final sharedPrefs = await SharedPreferences.getInstance();
+    var showQr =
+        qrisMethod != null && (sharedPrefs.getBool('receipt_show_qr') ?? false);
+    var qrDynamic = sharedPrefs.getBool('receipt_qr_dynamic') ?? true;
+    final remaining = netRemainingOwed(_tx!, _payments);
+
+    String? resolveQr() {
+      if (!showQr || qrisMethod == null) return null;
+      return resolveQrisPayload(
+        staticPayload: qrisMethod.qrValue!,
+        amount: remaining,
+        dynamicMode: qrDynamic,
+      ).data;
+    }
+
     final boundaryKey = GlobalKey();
+    if (!mounted) return;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              Text('Bagikan Struk', style: Theme.of(ctx).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: RepaintBoundary(
-                    key: boundaryKey,
-                    child: _ReceiptPaper(
-                      tx: _tx!,
-                      items: _items,
-                      payments: _payments,
-                      productNames: _productNames,
-                      unitNames: _unitNames,
-                      customerName: _customerDisplay(_tx!),
-                      customerAddress: _customer?.address?.trim() ?? '',
-                      employeeName: _employeeForReceipt,
-                      storeName:
-                          prefs.name.isNotEmpty ? prefs.name : device.storeName,
-                      storeAddress: prefs.address,
-                      storePhone: prefs.phone,
-                      storeWhatsapp: prefs.whatsapp,
-                      storeTelegram: prefs.telegram,
-                      receiptHeader: prefs.header,
-                      receiptFooter: prefs.footer,
-                      parentOf: _parentOf,
-                      checkedIds: _checkedIds,
+                Text('Bagikan Struk', style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: RepaintBoundary(
+                      key: boundaryKey,
+                      child: _ReceiptPaper(
+                        tx: _tx!,
+                        items: _items,
+                        payments: _payments,
+                        productNames: _productNames,
+                        unitNames: _unitNames,
+                        customerName: _customerDisplay(_tx!),
+                        customerAddress: _customer?.address?.trim() ?? '',
+                        employeeName: _employeeForReceipt,
+                        storeName: prefs.name.isNotEmpty
+                            ? prefs.name
+                            : device.storeName,
+                        storeAddress: prefs.address,
+                        storePhone: prefs.phone,
+                        storeWhatsapp: prefs.whatsapp,
+                        storeTelegram: prefs.telegram,
+                        receiptHeader: prefs.header,
+                        receiptFooter: prefs.footer,
+                        parentOf: _parentOf,
+                        checkedIds: _checkedIds,
+                        qrData: resolveQr(),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => _captureAndShare(ctx, boundaryKey),
-                icon: const Icon(Icons.share),
-                label: const Text('Bagikan Gambar'),
-              ),
-            ],
+                if (qrisMethod != null) ...[
+                  const SizedBox(height: 4),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Tampilkan QR Pelunasan'),
+                    subtitle: const Text(
+                        'Muncul di struk gambar, di atas footer',
+                        style: TextStyle(fontSize: 11)),
+                    value: showQr,
+                    onChanged: (v) {
+                      setSheetState(() => showQr = v);
+                      sharedPrefs.setBool('receipt_show_qr', v);
+                    },
+                  ),
+                  if (showQr)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('QR Dinamis'),
+                      subtitle: const Text(
+                          'Nominal sisa tagihan terkunci di QR — mati = QR statis polos',
+                          style: TextStyle(fontSize: 11)),
+                      value: qrDynamic,
+                      onChanged: (v) {
+                        setSheetState(() => qrDynamic = v);
+                        sharedPrefs.setBool('receipt_qr_dynamic', v);
+                      },
+                    ),
+                ],
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => _captureAndShare(ctx, boundaryKey),
+                  icon: const Icon(Icons.share),
+                  label: const Text('Bagikan Gambar'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -3116,6 +3224,7 @@ class _ReceiptPaper extends StatelessWidget {
     this.receiptFooter = '',
     this.parentOf = const {},
     this.checkedIds = const {},
+    this.qrData,
   });
 
   final Transaction tx;
@@ -3135,6 +3244,15 @@ class _ReceiptPaper extends StatelessWidget {
   final String receiptHeader;
   final String receiptFooter;
   final Set<String> checkedIds;
+
+  /// Item 62 susulan — payload QR pelunasan SUDAH JADI (hasil
+  /// `resolveQrisPayload`, dinamis dgn nominal sisa tagihan atau statis
+  /// polos) dari pemanggil (`_showShareSheet`), yang tahu status
+  /// nota/toggle tersimpan/setting toko. null = tidak ditampilkan (nota
+  /// lunas, toggle mati, atau QRIS belum dikonfigurasi). SENGAJA tanpa
+  /// nominal terpisah di atas QR (beda dari `_QrisDisplay` checkout) —
+  /// nominalnya sudah ada di baris "Sisa" nota ini.
+  final String? qrData;
 
   static const _ink = Color(0xFF111111);
   // Item 7 — 'monospace' generik resolve ke font DEFAULT OS yang beda-beda
@@ -3454,6 +3572,14 @@ class _ReceiptPaper extends StatelessWidget {
             Text(tx.strukNote!,
                 textAlign: TextAlign.center,
                 style: _mono.copyWith(fontSize: 11)),
+          ],
+          if (qrData != null && qrData!.isNotEmpty) ...[
+            const _DashedLine(),
+            Center(child: QrisQrBox(data: qrData!, size: 160)),
+            const SizedBox(height: 4),
+            Text('Mohon konfirmasi setelah membayar.',
+                textAlign: TextAlign.center,
+                style: _mono.copyWith(fontSize: 10)),
           ],
           const _DashedLine(),
           // "Catatan di Struk" (Informasi Toko) — fallback ke "Terima
