@@ -915,7 +915,17 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                   AddControl(
                     key: _stepperKey,
                     qty: effectiveQty,
-                    size: 30,
+                    // Keluhan user: stepper baris keranjang masih sering
+                    // missclick (dibahas lebih lanjut nanti, lihat
+                    // docs/HANDOFF.md) — pijakan jempol diperbesar 30->44
+                    // (+~45%, sengaja SEDIKIT di bawah "setengah lebih besar"
+                    // literal /1.5x/45 supaya nama produk 2-baris di sebelahnya
+                    // tetap muat wajar di HP sempit, lihat
+                    // `cart_stepper_size_test.dart`). Stepper LAIN (grid/list
+                    // produk, baris varian — `kasir_screen.dart`) SENGAJA
+                    // tidak ikut diperbesar: itu utk MENAMBAH item baru, bukan
+                    // titik misclick yang dikeluhkan (mengubah qty transaksi).
+                    size: 44,
                     onTap: () => notifier.setEffectiveQty(
                         item.productUnitId, effectiveQty + 1),
                     onMinus: isZeroed
