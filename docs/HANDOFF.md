@@ -5,6 +5,44 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Agustus 2026 (lanjutan lagi lagi lagi — perluas
+konfirmasi getar stepper keranjang ke tombol "+", `b2c3358`), versi
+kerja **TETAP 2.18.0+24**. User: "Untuk behavior stepper minus yang
+bergetar di keranjang, coba terapkan juga untuk plus." Ini fitur LAMA
+(`cartMinusConfirmProvider`, toggle "Konfirmasi sebelum kurangi qty" di
+dialog "Pengaturan Keranjang", default OFF) — tap pertama tombol minus
+getar SELURUH baris sbg warning tanpa mengurangi qty, tap kedua/dst
+SELAMA stepper baris itu masih membesar (`AddControl.activeStepper`,
+pijakan jempol) baru benar2 mengurangi.
+
+**Detail teknis PENTING yang HARUS diingat kalau ada bug laporan
+"tombol plus/minus ke-swap" nanti**: `_armed` (bool sederhana) TIDAK
+CUKUP begitu dua arah ikut digerbang — diganti `_armedDelta` (`int?`,
+nilai `+1`/`-1`/`null`) yang menyimpan ARAH mana yang bersenjata, bukan
+sekadar ya/tidak. Kalau dipertahankan sbg bool tanpa arah: tap minus
+(arm, getar) lalu tap plus akan LANGSUNG dieksekusi tanpa peringatan
+sendiri (krn baris "sudah bersenjata"), padahal tombol plus belum
+pernah ditekan sama sekali — user tidak akan pernah dapat warning utk
+arah yang baru pertama kali ditekannya. Fix: `_handleStepTap(notifier,
+delta)` generik, cek `_armedDelta == delta` (arah yang SAMA persis)
+baru eksekusi; arah beda → re-arm (getar ulang) ke arah baru itu.
+
+Provider/pref key **SENGAJA TIDAK di-rename** (`cartMinusConfirmProvider`
+/ `cart_minus_confirm` di SharedPreferences) walau namanya sekarang
+menyesatkan (bukan cuma minus lagi) — mengubah nama provider itu
+sendiri aman (cuma identifier kode), tapi pref KEY di SharedPreferences
+kalau diganti akan bikin setting yang SUDAH diaktifkan user di device
+lama hilang/reset ke default begitu update — trade-off nama-jelek vs
+migrasi-setting, pilih nama-jelek (dijelaskan di komentar kode). Teks
+UI toggle diubah ("...sebelum kurangi qty" → "...sebelum ubah qty").
+
+Test baru 3 (tap pertama "+" cuma getar; tap kedua "+" arah sama
+eksekusi; ganti arah minus→plus getar ulang bukan langsung eksekusi) +
+1 assersi lama diperbaiki (teks toggle) di `cart_minus_confirm_test.
+dart` — revert-verified. Full suite 1119 lolos + 1 gagal
+(`proposal_unchanged_end_to_end_test.dart`, flaky pre-existing, lolos
+sendiri terisolasi), `flutter analyze` 0 issue.
+
 _Update sesi 20 Agustus 2026 (lanjutan lagi lagi — stepper "+" idle jadi
 ring putus-putus netral + flat, `008958d`), versi kerja **TETAP
 2.18.0+24**. User: "stepper state idle di halaman kasir itu secara UI
