@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -115,17 +117,20 @@ class _AddControlState extends State<AddControl> {
     final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = inCart ? AppTheme.changeFg(isDark) : AppTheme.accent;
-    final shadowColor = inCart
-        ? AppTheme.changeFg(isDark).withOpacity(0.30)
-        : const Color(0x33C96442);
     final circleSize = size + 4;
     final minusSize = size - 2;
     // Item 6 revisi — di mode gelap, lingkaran hijau (sudah di keranjang)
     // pakai warna hijau muda (changeFg dark) → angka/"+" putih jadi kurang
     // kontras. Pakai warna gelap untuk angka/ikon di lingkaran hijau saja
     // (lingkaran terracotta saat belum di keranjang tetap putih).
-    final mainFg =
-        (inCart && isDark) ? const Color(0xFF0A3D28) : Colors.white;
+    final mainFg = (inCart && isDark) ? const Color(0xFF0A3D28) : Colors.white;
+    // Susulan keluhan "terlalu ramai" (banyak lingkaran solid berwarna
+    // sekaligus di grid produk): SEBELUM ada di keranjang, lingkaran TIDAK
+    // diisi & TANPA shadow (flat) — cuma ring putus-putus warna netral +
+    // ikon "+" senada, supaya idle state tidak menyaingi info produk.
+    // Warna baru "hidup" (fill solid, spt sebelumnya) begitu produk BENAR2
+    // masuk keranjang. Area tap TIDAK berubah — cuma bobot visualnya.
+    final idleColor = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return ValueListenableBuilder<State<AddControl>?>(
       valueListenable: AddControl.activeStepper,
@@ -153,20 +158,23 @@ class _AddControlState extends State<AddControl> {
               width: circleSize,
               height: circleSize,
               decoration: BoxDecoration(
-                color: bgColor,
+                color: inCart ? bgColor : Colors.transparent,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                      color: shadowColor,
-                      blurRadius: 6,
-                      offset: const Offset(0, 2)),
-                ],
               ),
-              child: Center(
-                child: rightShowsPlus
-                    ? Icon(Icons.add_rounded,
-                        color: mainFg, size: circleSize * 0.6)
-                    : _qtyLabel(label, circleSize, color: mainFg),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (!inCart)
+                    CustomPaint(
+                      size: Size(circleSize, circleSize),
+                      painter: _DashedCirclePainter(color: idleColor),
+                    ),
+                  rightShowsPlus
+                      ? Icon(Icons.add_rounded,
+                          color: inCart ? mainFg : idleColor,
+                          size: circleSize * 0.6)
+                      : _qtyLabel(label, circleSize, color: mainFg),
+                ],
               ),
             ),
           ),
@@ -223,6 +231,50 @@ class _AddControlState extends State<AddControl> {
       },
     );
   }
+}
+
+/// Ring putus-putus (idle state `AddControl`, lihat dok `idleColor` di
+/// atas) — `Canvas.drawArc` berulang, BUKAN `BoxDecoration` (Flutter tak
+/// punya border dashed bawaan). Jumlah segmen dihitung dari keliling
+/// lingkaran (bukan angka tetap) supaya pola pas menutup 360° tanpa
+/// "jahitan" terlihat di titik pertemuan awal/akhir, konsisten di semua
+/// ukuran stepper (grid/list/varian/keranjang beda-beda `size`).
+class _DashedCirclePainter extends CustomPainter {
+  const _DashedCirclePainter({required this.color});
+
+  final Color color;
+  static const _strokeWidth = 2.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = (size.shortestSide - _strokeWidth) / 2;
+    final circumference = 2 * math.pi * radius;
+    const targetSegment = 7.0; // dash+gap idaman, dlm px logis
+    final segments = (circumference / targetSegment).round().clamp(8, 60);
+    final anglePerSegment = 2 * math.pi / segments;
+    final dashSweep = anglePerSegment * 0.55;
+
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    for (var i = 0; i < segments; i++) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        i * anglePerSegment,
+        dashSweep,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedCirclePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 /// Bungkus area yang berisi [AddControl] (grid/list produk kasir, daftar
