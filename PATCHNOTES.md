@@ -8,6 +8,28 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 20 Agustus 2026
+
+### ✨ Fitur Baru
+- **QR pelunasan di nota tempo** — saat membagikan atau mencetak struk nota
+  yang masih tempo/kurang bayar dan toko sudah mengaktifkan QRIS, kini ada
+  opsi untuk menampilkan QR pelunasan langsung di struk (nominalnya sisa
+  tagihan, bukan total nota). Ada juga pilihan QR Dinamis (nominal sudah
+  terisi otomatis) atau Statis (pelanggan isi sendiri), plus keterangan
+  "Mohon konfirmasi setelah membayar." Pilihan ini diingat aplikasi untuk
+  struk-struk berikutnya.
+- **Mode terang/gelap di layar aktivasi kode serial** — sekarang bisa
+  diganti langsung dari layar pertama saat mengaktifkan aplikasi, tidak
+  perlu menunggu masuk ke Pengaturan.
+
+### 🐛 Perbaikan
+- **Tombol +/- di keranjang diperbesar** supaya lebih mudah dan tidak
+  salah pencet.
+- **Jarak tombol Bayar/Uang Pas di kalkulator bayar nota tempo dirapikan**
+  agar tidak bergeser-geser saat ganti metode pembayaran.
+- **Label tombol ganti mode QR di kalkulator bayar nota tempo diperbaiki**
+  — sekarang menunjukkan mode yang akan dituju, bukan mode yang sedang aktif.
+
 ## 18 Agustus 2026
 
 ### 🐛 Perbaikan
