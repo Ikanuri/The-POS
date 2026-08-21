@@ -5,6 +5,20 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 20 Agustus 2026 (lanjutan lagi lagi lagi — REVERT perluasan
+konfirmasi getar stepper ke tombol "+", `98ce883`/`4cd7f0c`), versi
+kerja **TETAP 2.18.0+24**. Fitur "perluas konfirmasi getar ke tombol +"
+(sempat dibangun & di-merge ke `main`, lihat riwayat CHANGELOG) DIBATALKAN
+user setelah dipertimbangkan lagi — dikerjakan via `git revert` (BUKAN
+reset/force-push, krn sudah terlanjur di-push & merge sebelumnya),
+bersih tanpa konflik. Perilaku stepper baris keranjang balik seperti
+semula: toggle "Konfirmasi sebelum kurangi qty" HANYA menggerbang
+tombol minus, tombol "+" selalu langsung menambah tanpa gerbang apa
+pun. **Kalau nanti user minta lagi fitur serupa, jangan asumsikan
+otomatis "sudah pernah dikerjakan tinggal reapply"** — user sempat
+setuju lalu berubah pikiran, jadi tanyakan dulu apakah memang mau versi
+yang SAMA persis atau ada penyesuaian.
+
 _Update sesi 20 Agustus 2026 (lanjutan lagi lagi — stepper "+" idle jadi
 ring putus-putus netral + flat, `008958d`), versi kerja **TETAP
 2.18.0+24**. User: "stepper state idle di halaman kasir itu secara UI
