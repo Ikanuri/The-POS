@@ -34,10 +34,6 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   layar.
 - **Tombol +/- diperbesar** — di baris keranjang, kartu/daftar produk, dan
   baris varian di layar Kasir — supaya lebih mudah dan tidak salah pencet.
-- **Opsi "Konfirmasi sebelum ubah qty" di keranjang (Pengaturan Keranjang)
-  sekarang berlaku juga untuk tombol "+"**, tidak cuma "-" seperti
-  sebelumnya — tap pertama pada tombol yang mana pun cuma bergetar sebagai
-  peringatan, tap kedua baru benar-benar mengubah jumlah.
 - **Jarak tombol Bayar/Uang Pas di kalkulator bayar nota tempo dirapikan**
   agar tidak bergeser-geser saat ganti metode pembayaran.
 - **Label tombol ganti mode QR di kalkulator bayar nota tempo diperbaiki**
