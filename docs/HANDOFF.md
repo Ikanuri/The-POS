@@ -5,8 +5,89 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Agustus 2026 (lanjutan lagi — koreksi bentuk tab indeks +
+fix bug cetak QR gagal total), commit `75a049c`/`e6b215e`, di atas versi
+kerja **2.19.0+25** (belum di-bump lagi, masih dianggap bagian rilis yang
+sama — BELUM di-merge ke `main` di titik penulisan ini, tunggu akhir sesi).
+
+**Bug printer WAJIB diketahui**: user lapor "printer terhubung, lampu
+indikator nyala, tapi kertas tidak pernah keluar" — ternyata regresi
+LANGSUNG dari fitur logo QRIS cetak yang baru ditambahkan sesi sebelumnya
+(`1e56dd0`). Akar: `Generator._toRasterFormat` (esc_pos_utils_plus)
+MEWAJIBKAN lebar bitmap kelipatan 8, kalau tidak cabang paddingnya sendiri
+melempar `Unsupported operation: Cannot add to a fixed-length list`. Lebar
+logo yg dihitung `_buildBytes` (55% lebar kertas: 384*0.55≈211 @58mm,
+576*0.55≈317 @80mm) TIDAK PERNAH kebetulan kelipatan 8 — SELALU meledak
+begitu toggle "Tampilkan QR Pelunasan" aktif, exception terjadi SEBELUM
+byte apa pun terkirim ke channel native (tidak ada try/catch di
+`printReceipt`), jadi TIDAK ADA snackbar error sama sekali — printer cuma
+"diam" tanpa jejak kesalahan di UI. Fix: `_qrisLogo` membulatkan lebar
+target ke kelipatan 8 terdekat (ke bawah) sebelum resize.
+**Kalau nanti nambah gambar raster lain ke cetak ESC/POS (logo toko
+custom, dll.) — WAJIB pastikan lebar akhir kelipatan 8 dulu, jangan
+asumsikan `Generator.imageRaster` menangani sendiri.**
+
+**Gotcha tooling BARU**: `testWidgets()` + `CapabilityProfile.load()`
+(esc_pos_utils_plus, dipanggil test yg ingin memanggil `Generator` ASLI)
+TERBUKTI HANG TANPA BATAS di environment ini (timeout 10 menit tercapai,
+padahal step lain sebelum/sesudahnya sukses instan) — direproduksi manual
+2x. Test yg butuh `CapabilityProfile.load()` WAJIB pakai `test()` biasa
+(bukan `testWidgets()`), `TestWidgetsFlutterBinding.ensureInitialized()`
+tetap dipanggil di `main()` kalau juga butuh `rootBundle` (itu sendiri
+AMAN dipakai baik di `test()` maupun `testWidgets()` — bukan biang hang-nya).
+
+**Koreksi bentuk tab indeks** (`_CartMetaTab`/`_IndexTabPainter`,
+`kasir_screen.dart`): redesain sesi SEBELUMNYA (`2569a27`, "tab indeks
+folder") ternyata **meleset jauh** dari referensi user meski sudah lewat
+proses mockup — dicek ulang dgn membaca PIKSEL file referensi langsung
+(bukan menerka dari ingatan/deskripsi), ternyata SALAH di 4 hal sekaligus:
+tinggi tab (harusnya seragam, bukan staircase), urutan tumpuk (kanan
+paling depan, BUKAN kiri), bentuk (jajar-genjang dua sisi sejajar miring,
+BUKAN trapesium sisi kanan lurus), & arah kemiringan (bawah geser ke
+KANAN relatif atas, sebelumnya kebalikannya — 2 iterasi mockup sempat
+salah arah dulu sebelum ketemu yang benar). **Pelajaran metodologis**:
+setelah 2x revisi mockup based-on-description tetap meleset, baru
+efektif setelah baca file referensi via Python/PIL langsung (sampling
+piksel boundary antar-warna di beberapa baris y) utk menentukan
+geometri sebenarnya — jangan ulangi siklus tebak-revisi-tebak kalau
+sudah 2x gagal, langsung analisis piksel.
+
+Warna DIKEMBALIKAN ke default (`cs.surface`, sama dgn badan cart) utk
+semua tab non-Bayar (revert dari soft-terracotta 0.07/0.12/0.17 sesi
+sebelumnya) — permintaan user eksplisit ("warna ubah ke default sebelum
+perubahan saja"), fokus koreksi memang murni bentuk. Sudut ATAS tiap tab
+dibulatkan tipis (radius 3.5, `quadraticBezierTo`) — permintaan tambahan
+user setelah bentuk disetujui. Bayangan seam antar-tab pakai linear
+gradient manual di dalam `clipPath` (BUKAN `filter: box-shadow`/drop-
+shadow CSS — waktu bikin mockup HTML, `filter:drop-shadow` TERBUKTI TIDAK
+RENDER sama sekali kalau dikombinasikan dgn `clip-path` di headless
+Chromium versi environment ini, diverifikasi via sampling piksel; solusi
+paralel dipakai juga di Flutter: gradient manual, bukan efek shadow
+bawaan).
+
+**1 regresi test ditemukan & diperbaiki sebelum commit** (bukan dibiarkan
+lolos): percobaan pertama menaikkan padding horizontal `_IndexTab` (utk
+"center-kan teks", permintaan user) dari (8,4) ke (10,8) MENGGESER ambang
+"muat/tidak" `_MarqueeText` sampai `cart_bar_bayar_button_test.dart` gagal
+("Buk Khotimah" yg SEHARUSNYA baseline muat tanpa ambient-widening jadi
+overflow duluan krn ruang kurang 6px). Padding dikembalikan ke (8,4)
+semula — pusat teks sudah cukup ditangani `Center()` saja, tidak perlu
+padding ekstra.
+
+Test: `cart_meta_index_tabs_test.dart` comment diperbarui (bukan lagi
+gradasi warna), assersi struktural TETAP tidak berubah. `printer_qris_
+logo_test.dart` +2 test regresi (lebar dibulatkan kelipatan 8; panggilan
+`Generator.imageRaster` ASLI tanpa exception) — keduanya revert-verified
+(exception PERSIS `Unsupported operation: Cannot add to a fixed-length
+list` muncul saat fix di-revert sementara). Full suite 1126 lolos SEMUA
+(termasuk `proposal_unchanged_end_to_end_test.dart` yg biasa flaky — ikut
+hijau run ini, jangan dianggap sudah fixed permanen tanpa bukti lebih
+lanjut), `flutter analyze` 0 issue.
+
 _Update sesi 22 Agustus 2026 — 3 permintaan sekaligus (stepper idle jadi
-garis vertikal, redesain tab meta cart bar, logo QRIS di struk),
+garis vertikal, redesain tab meta cart bar [KEMUDIAN DIKOREKSI LAGI —
+lihat update di atas], logo QRIS di struk [KEMUDIAN ditemukan bug fatal —
+lihat update di atas]),
 versi kerja **2.19.0+25**, commit `2569a27`/`a68dc39`/`1e56dd0`, SUDAH
 di-merge ke `main`. Semua didahului analisis + preview mockup sebelum
 eksekusi (permintaan user eksplisit "Berikan analisa dulu... setelah
