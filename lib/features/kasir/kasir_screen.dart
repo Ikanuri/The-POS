@@ -3559,126 +3559,202 @@ class _CartMetaTab extends ConsumerWidget {
     // berizin selalu dapat.
     final needsGate = ref.watch(needsPaymentGateProvider).valueOrNull ?? false;
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureReserved(ref));
-    const slant = 14.0;
 
+    // Redesain (permintaan user, mengacu contoh tab indeks map folder):
+    // dulu SATU tab trapesium tunggal yang menampung semua segmen di
+    // dalamnya; sekarang EMPAT tab terpisah yang saling mengunci seperti
+    // indeks folder. Aksen warna terracotta tapi SANGAT LEMBUT (hampir
+    // transparan) & menguat sedikit demi sedikit ke kanan — memberi kesan
+    // "indeks bertingkat" tanpa jadi warna-warni yang lepas dari identitas
+    // app (app ini cuma punya satu warna aksen). Tab "Bayar" SENGAJA
+    // dikecualikan dari pelembutan itu: ia aksi utama, warnanya tetap
+    // terracotta pekat + teks putih seperti sebelumnya, supaya tidak
+    // kehilangan penekanan sbg CTA di antara tab-tab yang kini berwarna.
+    const tint = AppTheme.accent;
+    // Semua tab WAJIB sama tinggi supaya garis atasnya sejajar (kalau tiap
+    // tab setinggi isinya sendiri, barisan tab terlihat bergerigi).
+    // `IntrinsicHeight` TIDAK BISA dipakai di sini — isi tab mengandung
+    // `_MarqueeText` yang berbasis `LayoutBuilder`, dan LayoutBuilder tidak
+    // mendukung kueri dimensi intrinsik ("LayoutBuilder does not support
+    // returning intrinsic dimensions", ketahuan saat render preview).
+    // Jadi tingginya DIHITUNG eksplisit dari skala teks sistem — tetap ikut
+    // membesar saat user menaikkan ukuran font perangkat, tanpa intrinsics.
+    final scaledLine = MediaQuery.textScalerOf(context).scale(12.5);
+    final tabHeight = 20 + (scaledLine < 12.5 ? 12.5 : scaledLine) * 1.3;
     return Transform.translate(
       // Geser turun 1px agar dasar tab menutup garis batas atas cart bar →
       // tampak menyatu seperti tab folder yang menonjol dari bar.
       offset: const Offset(0, 1),
-      child: CustomPaint(
-        painter: _TabPainter(
-          fill: cs.surface,
-          border: cs.outlineVariant,
-          slant: slant,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(slant + 10, 7, slant, 8),
-          // Bug nyata dilaporkan user (screenshot): nama pelanggan panjang
-          // mendorong tombol "Bayar" KELUAR layar sampai terpotong — dulu
-          // `Row(mainAxisSize.min)` yang tidak pernah melipat. `Wrap` bikin
-          // segmen yang tidak muat turun ke baris berikutnya (tab ikut
-          // meninggi), jadi tombol Bayar SELALU terjangkau berapa pun
-          // panjang namanya.
-          //
-          // Penyesuaian susulan: `Bayar` WAJIB tetap menempel di kanan walau
-          // baris Pelanggan/Pegawai/Tahan melipat ke 2 baris — kalau semua
-          // segmen (termasuk Bayar) satu `Wrap` yang sama, Bayar ikut hanyut
-          // ke mana pun sisa ruang jatuh. Jadi Bayar dikeluarkan dari Wrap:
-          // `Expanded(Wrap(...))` menampung segmen kiri yang boleh melipat,
-          // Bayar sendiri jadi elemen `Row` terakhir yang selalu di ujung
-          // kanan.
-          //
-          // Redesain (permintaan user): layout TIDAK BOLEH berubah-ubah lagi
-          // walau nama pelanggan panjang. `Wrap` lama menyelesaikan overflow
-          // dgn MELIPAT baris — artinya tinggi & posisi tombol ikut berubah
-          // tiap ganti pelanggan. Sekarang: satu `Row` TETAP, porsi tiap
-          // segmen dikunci `Expanded(flex:)` (chip pelanggan dapat porsi
-          // TERBESAR & tidak pernah dikurangi), dan nama yang tidak muat
-          // TIDAK memicu re-layout — ia BERJALAN kiri↔kanan di dalam
-          // porsinya sendiri (lihat `_MarqueeText`).
+      child: Padding(
+        // Ruang untuk diagonal tab PERTAMA, yang digambar menjorok ke kiri
+        // di luar kotaknya sendiri (lihat `_IndexTabPainter`).
+        padding: const EdgeInsets.only(left: _kTabSlant),
+        child: SizedBox(
+          height: tabHeight,
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 flex: 4,
-                child: _MetaChip(
-                  icon: Icons.person_outline,
-                  label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
-                  active: meta.hasCustomer,
-                  onTap: () => _pickCustomer(context, ref),
-                  onClear:
-                      meta.hasCustomer ? () => notifier.clearCustomer() : null,
+                child: _IndexTab(
+                  fill: tint.withOpacity(0.07),
+                  child: _MetaChip(
+                    icon: Icons.person_outline,
+                    label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
+                    active: meta.hasCustomer,
+                    onTap: () => _pickCustomer(context, ref),
+                    onClear: meta.hasCustomer
+                        ? () => notifier.clearCustomer()
+                        : null,
+                  ),
                 ),
               ),
               Expanded(
                 flex: 3,
-                child: _MetaChip(
-                  icon: Icons.badge_outlined,
-                  label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
-                  active: meta.hasEmployee,
-                  onTap: () => _pickEmployee(context, ref),
-                  onClear:
-                      meta.hasEmployee ? () => notifier.clearEmployee() : null,
+                child: _IndexTab(
+                  fill: tint.withOpacity(0.12),
+                  child: _MetaChip(
+                    icon: Icons.badge_outlined,
+                    label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
+                    active: meta.hasEmployee,
+                    onTap: () => _pickEmployee(context, ref),
+                    onClear: meta.hasEmployee
+                        ? () => notifier.clearEmployee()
+                        : null,
+                  ),
                 ),
               ),
-              InkWell(
-                onTap: onHold,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.pause_circle_outline,
-                          size: 16, color: cs.primary),
-                      const SizedBox(width: 3),
-                      Text('Tahan',
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: cs.primary)),
-                    ],
+              _IndexTab(
+                fill: tint.withOpacity(0.17),
+                child: InkWell(
+                  onTap: onHold,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.pause_circle_outline,
+                            size: 16, color: cs.primary),
+                        const SizedBox(width: 3),
+                        Text('Tahan',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: cs.primary)),
+                      ],
+                    ),
                   ),
                 ),
               ),
               // Item 56 — segmen "Bayar" terracotta — tap langsung ke layar
               // bayar (`/kasir/bayar`), TANPA lewat sheet keranjang dulu
-              // (checkout cepat). Di LUAR Wrap kiri supaya selalu di kanan.
-              if (!needsGate) ...[
-                const SizedBox(width: 4),
-                InkWell(
-                  onTap: onBayar,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.payments_outlined,
-                            size: 16, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text('Bayar',
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white)),
-                      ],
+              // (checkout cepat).
+              if (!needsGate)
+                _IndexTab(
+                  fill: tint,
+                  child: InkWell(
+                    onTap: onBayar,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.payments_outlined,
+                              size: 16, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text('Bayar',
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// Kemiringan sisi kiri tiap tab indeks (lihat [_IndexTabPainter]).
+const _kTabSlant = 14.0;
+
+/// Satu tab indeks: bentuk digambar [_IndexTabPainter], isinya bebas.
+class _IndexTab extends StatelessWidget {
+  const _IndexTab({required this.fill, required this.child});
+
+  final Color fill;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _IndexTabPainter(
+        fill: fill,
+        border: Theme.of(context).colorScheme.outlineVariant,
+      ),
+      child: Padding(
+        // HANYA padding horizontal — kiri lebih lega dari kanan karena sisi
+        // kiri tab miring, isi yang terlalu mepet terlihat "menabrak"
+        // diagonalnya. Vertikal SENGAJA 0: tinggi tab sudah dipatok
+        // eksplisit oleh pemanggil & isi dirata-tengah `Center`. Sempat
+        // ada padding vertikal di sini dan hasilnya isi tab (mis. nama
+        // pegawai) TERPOTONG — padding tab menumpuk dgn padding milik
+        // `_MetaChip` sendiri sampai melebihi tinggi yang dipatok.
+        padding: const EdgeInsets.only(left: 8, right: 4),
+        child: Center(child: child),
+      ),
+    );
+  }
+}
+
+/// Bentuk satu tab indeks: sisi kiri MIRING, sisi kanan lurus, dasar
+/// terbuka (menyatu dgn cart bar di bawahnya).
+///
+/// Kuncinya: diagonal digambar MENJOROK [_kTabSlant] px ke KIRI di luar
+/// kotak widget-nya sendiri (x negatif — `CustomPaint` tidak meng-clip),
+/// sehingga tiap tab menindih sedikit tab di kirinya & pertemuan keduanya
+/// jadi garis diagonal rapat TANPA celah segitiga. Konsekuensinya urutan
+/// gambar = urutan `Row`, jadi tab PALING KANAN ("Bayar") tampil paling
+/// depan — kebetulan sejalan dgn statusnya sbg aksi utama.
+class _IndexTabPainter extends CustomPainter {
+  _IndexTabPainter({required this.fill, required this.border});
+
+  final Color fill;
+  final Color border;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(-_kTabSlant, size.height)
+      ..lineTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, size.height)
+      ..close();
+
+    canvas.drawPath(path, Paint()..color = fill);
+
+    // Garis tepi hanya di sisi miring + sisi atas — dasar dibiarkan
+    // terbuka agar menyatu dgn cart bar. Sisi kanan TIDAK digaris: ia
+    // selalu tertindih tab berikutnya (kecuali tab terakhir, yang memang
+    // lebih rapi tanpa garis tegak di ujung kanan layar).
+    final stroke = Paint()
+      ..color = border
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
+    final edge = Path()
+      ..moveTo(-_kTabSlant, size.height)
+      ..lineTo(0, 0)
+      ..lineTo(size.width, 0);
+    canvas.drawPath(edge, stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant _IndexTabPainter old) =>
+      old.fill != fill || old.border != border;
 }
 
 class _MetaChip extends StatelessWidget {
@@ -3957,43 +4033,6 @@ class _MarqueeTextState extends State<_MarqueeText>
       },
     );
   }
-}
-
-class _TabPainter extends CustomPainter {
-  _TabPainter({required this.fill, required this.border, required this.slant});
-
-  final Color fill;
-  final Color border;
-  final double slant;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(slant, 0)
-      ..lineTo(size.width - slant, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    canvas.drawPath(path, Paint()..color = fill);
-
-    // Garis tepi hanya pada sisi atas + dua sisi miring (dasar dibiarkan
-    // terbuka agar menyatu dengan cart bar).
-    final stroke = Paint()
-      ..color = border
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.5;
-    final edge = Path()
-      ..moveTo(0, size.height)
-      ..lineTo(slant, 0)
-      ..lineTo(size.width - slant, 0)
-      ..lineTo(size.width, size.height);
-    canvas.drawPath(edge, stroke);
-  }
-
-  @override
-  bool shouldRepaint(covariant _TabPainter old) =>
-      old.fill != fill || old.border != border || old.slant != slant;
 }
 
 // ─── Panel pesanan ditahan (inline) ────────────────────────────────────────

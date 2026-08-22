@@ -86,7 +86,14 @@ void main() {
     AnimatedScale scaleOf() =>
         tester.widget<AnimatedScale>(find.byType(AnimatedScale));
 
-    await tester.tap(find.byType(AddControl));
+    // Sasar ikon "+"-nya langsung, BUKAN titik tengah `AddControl`:
+    // `ListView` memberi anaknya constraint lebar KETAT (selebar viewport),
+    // jadi baris stepper ikut melebar & titik tengahnya jatuh di ruang
+    // kosong sebelah kanan tombol — bukan di tombolnya. (Di app sungguhan
+    // `AddControl` selalu jadi anak `Row` biasa yang constraint-nya
+    // longgar, jadi ia menyusut seukuran isinya; ini murni artefak ListView
+    // di test.)
+    await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
     expect(scaleOf().scale, greaterThan(1.0));
 

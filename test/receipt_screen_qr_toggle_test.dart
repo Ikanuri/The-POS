@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
+import 'package:the_pos/features/kasir/widgets/payment_qris_view.dart';
 
 import 'helpers/pump_app.dart';
 
@@ -54,8 +55,8 @@ void main() {
     return txId;
   }
 
-  Future<void> seedQris() => db.into(db.paymentMethods).insert(
-      PaymentMethodsCompanion.insert(
+  Future<void> seedQris() =>
+      db.into(db.paymentMethods).insert(PaymentMethodsCompanion.insert(
           id: 'pm-qris',
           type: 'qris',
           name: 'QRIS',
@@ -87,6 +88,18 @@ void main() {
 
     expect(find.text('QR Dinamis'), findsOneWidget);
     expect(find.text('Mohon konfirmasi setelah membayar.'), findsOneWidget);
+
+    // Susulan (permintaan user): logo QRIS di ATAS kode QR pada struk
+    // gambar (share) -- bukan sekadar teks "QRIS" polos.
+    final logoFinder = find.byWidgetPredicate((w) =>
+        w is Image &&
+        w.image is AssetImage &&
+        (w.image as AssetImage).assetName == 'assets/qris/qris_logo.png');
+    expect(logoFinder, findsOneWidget,
+        reason: 'logo QRIS harus tampil di atas QR saat toggle dinyalakan');
+    expect(tester.getBottomLeft(logoFinder).dy,
+        lessThan(tester.getTopLeft(find.byType(QrisQrBox)).dy),
+        reason: 'logo harus di ATAS kode QR, bukan di bawah/tumpang tindih');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -125,7 +138,8 @@ void main() {
       'pilihan toggle TERSIMPAN persisten — buka lagi sheet, state '
       'bertahan', (tester) async {
     await seedQris();
-    final txId = await seedTx(status: 'kurang_bayar', total: 50000, paid: 20000);
+    final txId =
+        await seedTx(status: 'kurang_bayar', total: 50000, paid: 20000);
     await pumpWithFakeApp(tester,
         db: db, child: ReceiptScreen(transactionId: txId));
 

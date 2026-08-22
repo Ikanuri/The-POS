@@ -5,14 +5,103 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Agustus 2026 — 3 permintaan sekaligus (stepper idle jadi
+garis vertikal, redesain tab meta cart bar, logo QRIS di struk),
+versi kerja **2.19.0+25**, commit `2569a27`/`a68dc39`/`1e56dd0`, SUDAH
+di-merge ke `main`. Semua didahului analisis + preview mockup sebelum
+eksekusi (permintaan user eksplisit "Berikan analisa dulu... setelah
+disetujui, berikan preview mockupnya").
+
+**Poin 1 — ring putus-putus idle stepper dinilai masih terlalu tegas**
+(susulan dari desain sesi sebelumnya). Diganti SATU garis putus-putus
+VERTIKAL di kiri tombol "+" (`_DashedVLinePainter`, `add_control.dart`),
+warna `outlineVariant` (bukan `onSurfaceVariant` yang setara teks —
+`outlineVariant` adalah token pembatas paling samar yang sudah dipakai
+di tempat lain di app ini). `_DashedCirclePainter` (ring melingkar)
+DIHAPUS TOTAL, bukan disembunyikan.
+
+**Poin 2 — redesain `_CartMetaTab`** (header cart-bar-shrunk: Pelanggan/
+Pegawai/Tahan/Bayar) dari SATU tab trapesium tunggal jadi EMPAT tab
+terpisah model "indeks folder" (mengacu contoh map folder yang user
+kirim) — `_IndexTab`/`_IndexTabPainter`, tiap tab menjorok sedikit ke
+tab di kirinya (diagonal negatif, `CustomPaint` tidak clip) supaya
+saling mengunci tanpa celah segitiga. Warna terracotta SANGAT LEMBUT
+(opacity 0.07/0.12/0.17, menguat ke kanan) KECUALI tab "Bayar" — sengaja
+dikecualikan, tetap pekat + teks putih, supaya tidak kehilangan
+penekanan sbg CTA di antara tab lain yang kini ikut berwarna (keputusan
+eksplisit user: "Tombol bayar usahakan aksen lebih tegas, mungkin sama
+seperti sekarang").
+
+**2 bug NYATA ketemu & diperbaiki lewat render preview widget
+SUNGGUHAN** (bukan cuma dibaca kodenya — mockup dibangun via
+`flutter test` + `RepaintBoundary.toImage`, screenshot hasil beneran,
+BUKAN mockup HTML seperti sesi sebelumnya):
+1. Versi pertama pakai `IntrinsicHeight` utk menyamakan tinggi 4 tab —
+   meledak "LayoutBuilder does not support returning intrinsic
+   dimensions" krn `_MetaChip` mengandung `_MarqueeText` berbasis
+   `LayoutBuilder`. Fix: tinggi tab dihitung EKSPLISIT dari skala teks
+   sistem (`MediaQuery.textScalerOf`), bukan query intrinsik.
+2. Padding vertikal GANDA (`_IndexTab` + `_MetaChip` sendiri) memotong
+   teks nama pegawai/pelanggan — kelihatan jelas di screenshot preview
+   ("Rina" terpotong). Fix: padding vertikal `_IndexTab` DIHAPUS TOTAL
+   (cuma padding horizontal), tinggi sudah dipatok pemanggil & isi
+   dirata-tengah `Center`.
+
+**Poin 3 — logo QRIS resmi** (aset dikirim user via upload file, BUKAN
+paste inline chat — paste inline TIDAK tersimpan sbg file yang bisa
+diakses tool, harus attach sungguhan; ketahuan setelah investigasi
+`/root/.claude/uploads/<session>/`). `assets/qris/qris_logo.png`
+(1350x512, transparan, wordmark hitam solid — dipilih user dari opsi
+resolusi zonalogo.com). Paket `image` naik dari transitif jadi
+dependensi langsung.
+
+**Bug nyata WAJIB diingat kalau nanti nambah gambar lain ke cetak
+ESC/POS**: `Generator._toRasterFormat` (esc_pos_utils_plus, dipanggil
+`imageRaster`) HANYA membaca kanal RGB via `grayscale()`+`invert()`,
+TIDAK PERNAH melihat alpha. PNG dgn latar TRANSPARAN yang kebetulan RGB
+(0,0,0) — sama seperti wordmark hitamnya sendiri — akan tercetak sbg
+SATU BLOK PADAT kalau langsung di-raster tanpa komposit ke kanvas putih
+solid dulu (alpha diabaikan total, tidak ada kontras RGB murni utk
+dibedakan pipeline b/w-nya). `PrinterService._qrisLogo` sekarang WAJIB
+`img.fill` (putih) + `img.compositeImage` sebelum `imageRaster` —
+dibuktikan via revert-verification (skip komposit → test kontras gagal
+sensibel: Expected >200, Actual 0). **Kalau nanti ada fitur cetak gambar
+lain (logo toko custom, dll.) — cek komposit-ke-putih ini DULU sebelum
+dianggap "tinggal print", jangan asumsikan alpha PNG otomatis
+ditangani.**
+
+Perbedaan disengaja poin 3 antara struk **share** (gambar) vs **cetak
+thermal**: share pakai `Image.asset` biasa di `_ReceiptPaper` (widget
+tree/RepaintBoundary menghormati alpha PNG apa adanya, TIDAK perlu
+komposit manual); cetak pakai `_qrisLogo` yg komposit manual (krn masuk
+pipeline raster ESC/POS yang alpha-blind). User TOLAK opsi "cukup teks
+QRIS polos di cetak" (lebih aman/simpel) — insisten logo asli harus
+works di kedua jalur.
+
+Test baru: `printer_qris_logo_test.dart` (3) + `cart_meta_index_tabs_
+test.dart` (4) + `add_control_idle_flat_style_test.dart` diupdate (ring
+→ garis) + 1 assersi baru di `receipt_screen_qr_toggle_test.dart` (logo
+di atas QR) — semua revert-verified. Regresi: 33 file test receipt/
+printer + suite kasir/cart terkait tetap lolos. Full suite 1123 lolos +
+1 gagal (`proposal_unchanged_end_to_end_test.dart`, flaky pre-existing,
+lolos sendiri terisolasi), `flutter analyze` 0 issue.
+
+**Insiden kecil (bukan bug kode)**: `add_control_press_scale_test.dart`
+sempat gagal di full-suite run — BUKAN regresi app, murni artefak test
+(`AddControl` idle sekarang lebih lebar krn ada garis vertikal baru;
+test lama tap TITIK TENGAH widget yang jatuh di `ListView` dgn
+constraint tight, titik tengah bergeser ke ruang kosong). Fix: tap ikon
+"+" langsung, bukan titik tengah widget.
+
 _Update sesi 20 Agustus 2026 (lanjutan lagi lagi lagi — REVERT perluasan
 konfirmasi getar stepper ke tombol "+", `98ce883`/`4cd7f0c`), versi
-kerja **TETAP 2.18.0+24**. Fitur "perluas konfirmasi getar ke tombol +"
-(sempat dibangun & di-merge ke `main`, lihat riwayat CHANGELOG) DIBATALKAN
-user setelah dipertimbangkan lagi — dikerjakan via `git revert` (BUKAN
-reset/force-push, krn sudah terlanjur di-push & merge sebelumnya),
-bersih tanpa konflik. Perilaku stepper baris keranjang balik seperti
-semula: toggle "Konfirmasi sebelum kurangi qty" HANYA menggerbang
+kerja **2.18.0+24**, SUDAH di-merge ke `main`. Fitur "perluas konfirmasi
+getar ke tombol +" (sempat dibangun & di-merge ke `main`, lihat riwayat
+CHANGELOG) DIBATALKAN user setelah dipertimbangkan lagi — dikerjakan via
+`git revert` (BUKAN reset/force-push, krn sudah terlanjur di-push &
+merge sebelumnya), bersih tanpa konflik. Perilaku stepper baris
+keranjang balik seperti semula: toggle "Konfirmasi sebelum kurangi qty"
+HANYA menggerbang
 tombol minus, tombol "+" selalu langsung menambah tanpa gerbang apa
 pun. **Kalau nanti user minta lagi fitur serupa, jangan asumsikan
 otomatis "sudah pernah dikerjakan tinggal reapply"** — user sempat

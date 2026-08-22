@@ -1,5 +1,7 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,8 +19,7 @@ String shortTxNo(String localId) {
 
 /// Satu baris dalam log debug koneksi printer.
 class PrintLogEntry {
-  PrintLogEntry(this.step, {this.ok, this.detail})
-      : time = DateTime.now();
+  PrintLogEntry(this.step, {this.ok, this.detail}) : time = DateTime.now();
 
   final DateTime time;
   final String step;
@@ -32,8 +33,7 @@ class PrintLogEntry {
   }
 
   @override
-  String toString() =>
-      '[$timeStr] $step${ok == null ? '' : ok! ? ' ✓' : ' ✗'}'
+  String toString() => '[$timeStr] $step${ok == null ? '' : ok! ? ' ✓' : ' ✗'}'
       '${detail != null ? ': $detail' : ''}';
 }
 
@@ -49,13 +49,13 @@ class PrinterSettings {
     this.showStatusText = true,
   });
 
-  final String paperSize;       // '58' | '80'
-  final bool showDateHeader;    // baris tanggal berdiri sendiri sebelum separator
-  final bool showTxNumber;      // "#localId" di baris datetime
-  final bool showCustomer;      // nama pelanggan
-  final bool showProductCount;  // "Produk: N"
+  final String paperSize; // '58' | '80'
+  final bool showDateHeader; // baris tanggal berdiri sendiri sebelum separator
+  final bool showTxNumber; // "#localId" di baris datetime
+  final bool showCustomer; // nama pelanggan
+  final bool showProductCount; // "Produk: N"
   final bool showPaymentDetail; // baris Bayar + Kembali/Kurang
-  final bool showStatusText;    // "Sudah bayar" / "Kurang bayar" dll
+  final bool showStatusText; // "Sudah bayar" / "Kurang bayar" dll
 
   int get charWidth => paperSize == '80' ? 42 : 32;
 
@@ -155,7 +155,8 @@ class PrinterService {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         final res = await _channel.invokeMapMethod<String, dynamic>(
-          'connect', {'mac': mac},
+          'connect',
+          {'mac': mac},
         ).timeout(const Duration(seconds: 12), onTimeout: () => null);
         final ok = res?['ok'] as bool? ?? false;
         if (ok) {
@@ -244,7 +245,8 @@ class PrinterService {
           paired.any((d) => d.macAdress.toUpperCase() == mac.toUpperCase());
       add('Printer "$mac" ada di daftar', ok: found);
       if (!found) {
-        add('Printer tidak ditemukan di daftar paired. '
+        add(
+            'Printer tidak ditemukan di daftar paired. '
             'Lakukan pairing ulang di Pengaturan Bluetooth HP.',
             ok: false);
       }
@@ -260,8 +262,7 @@ class PrinterService {
       } catch (e) {
         add('status exception', ok: false, detail: '$e');
       }
-      add('Status sebelumnya',
-          detail: wasConnected ? 'terhubung' : 'terputus');
+      add('Status sebelumnya', detail: wasConnected ? 'terhubung' : 'terputus');
 
       if (wasConnected) {
         add('Putuskan koneksi lama sebelum reconnect…');
@@ -283,7 +284,8 @@ class PrinterService {
         add('Percobaan koneksi $i/3 ke $mac…');
         try {
           final res = await _channel.invokeMapMethod<String, dynamic>(
-            'connect', {'mac': mac},
+            'connect',
+            {'mac': mac},
           ).timeout(const Duration(seconds: 12), onTimeout: () {
             add('Percobaan $i timeout (12 dtk)', ok: false);
             return null;
@@ -295,8 +297,8 @@ class PrinterService {
           connected = false;
           connectErr = '$e';
         }
-        add('Hasil percobaan $i', ok: connected,
-            detail: connected ? null : connectErr);
+        add('Hasil percobaan $i',
+            ok: connected, detail: connected ? null : connectErr);
         if (connected) break;
         if (i < 3) {
           add('Tunggu 800ms sebelum percobaan berikutnya…');
@@ -306,7 +308,8 @@ class PrinterService {
 
       if (!connected) {
         add('Gagal terhubung setelah 3 percobaan.', ok: false);
-        add('Tips: pastikan printer menyala, dalam jangkauan, '
+        add(
+            'Tips: pastikan printer menyala, dalam jangkauan, '
             'dan sudah dipasangkan di Pengaturan Bluetooth HP.',
             ok: false);
         return (false, log);
@@ -332,23 +335,26 @@ class PrinterService {
       try {
         final warmup = Uint8List.fromList([0x1B, 0x40]);
         final wRes = await _channel.invokeMapMethod<String, dynamic>(
-          'write', {'bytes': warmup},
+          'write',
+          {'bytes': warmup},
         ).timeout(const Duration(seconds: 4), onTimeout: () => null);
         final wOk = wRes?['ok'] as bool? ?? false;
         final wErr = wRes?['err'] as String?;
-        add('Warm-up write', ok: wOk,
-            detail: wOk ? 'stream siap' : (wErr ?? 'belum siap'));
+        add('Warm-up write',
+            ok: wOk, detail: wOk ? 'stream siap' : (wErr ?? 'belum siap'));
         if (!wOk) {
           await Future<void>.delayed(const Duration(milliseconds: 500));
           final wRes2 = await _channel.invokeMapMethod<String, dynamic>(
-            'write', {'bytes': warmup},
+            'write',
+            {'bytes': warmup},
           ).timeout(const Duration(seconds: 4), onTimeout: () => null);
           final wOk2 = wRes2?['ok'] as bool? ?? false;
           final wErr2 = wRes2?['err'] as String?;
-          add('Warm-up write retry', ok: wOk2,
-              detail: wOk2 ? null : (wErr2 ?? 'masih gagal'));
+          add('Warm-up write retry',
+              ok: wOk2, detail: wOk2 ? null : (wErr2 ?? 'masih gagal'));
           if (!wOk2) {
-            add('Stream tidak bisa ditulis. '
+            add(
+                'Stream tidak bisa ditulis. '
                 'Error: ${wErr2 ?? wErr ?? "tidak diketahui"}',
                 ok: false);
             return (false, log);
@@ -397,14 +403,16 @@ class PrinterService {
       bool writeOk = false;
       try {
         final writeRes = await _channel.invokeMapMethod<String, dynamic>(
-          'write', {'bytes': bytes},
+          'write',
+          {'bytes': bytes},
         ).timeout(const Duration(seconds: 10), onTimeout: () {
           add('Write timeout (10 dtk)', ok: false);
           return null;
         });
         writeOk = writeRes?['ok'] as bool? ?? false;
         final writeErr = writeRes?['err'] as String?;
-        add('Kirim data', ok: writeOk,
+        add('Kirim data',
+            ok: writeOk,
             detail: writeOk
                 ? '${bytes.length} bytes terkirim'
                 : (writeErr ?? 'tidak ada detail'));
@@ -486,7 +494,8 @@ class PrinterService {
 
     try {
       final res = await _channel.invokeMapMethod<String, dynamic>(
-        'write', {'bytes': bytes},
+        'write',
+        {'bytes': bytes},
       ).timeout(const Duration(seconds: 10), onTimeout: () => null);
       return res?['ok'] as bool? ?? false;
     } catch (_) {
@@ -520,6 +529,57 @@ class PrinterService {
     }
     return out;
   }
+
+  // ── Logo QRIS (cetak thermal) ────────────────────────────────────────────
+
+  /// Cache in-memory — aset statis, tidak pernah berubah selama app
+  /// berjalan, tidak perlu decode+resize ulang tiap kali cetak.
+  static img.Image? _qrisLogoCache;
+
+  /// Decode PNG aset logo QRIS (latar TRANSPARAN, wordmark hitam solid) lalu
+  /// KOMPOSIT ke atas kanvas PUTIH SOLID sebelum dirasterisasi.
+  ///
+  /// WAJIB — kalau alpha dibiarkan transparan, `Generator._toRasterFormat`
+  /// (dipanggil `imageRaster`) memanggil `grayscale()`+`invert()` yang HANYA
+  /// membaca kanal RGB, TIDAK PERNAH melihat alpha. Piksel latar transparan
+  /// di file aslinya kebetulan RGB (0,0,0) — SAMA PERSIS dgn RGB wordmark
+  /// hitamnya sendiri — jadi tanpa komposit ke putih, seluruh gambar akan
+  /// tercetak sbg satu blok padat (tidak ada kontras sama sekali bagi
+  /// pipeline b/w-nya utk dibedakan), bukan bentuk logo yg sebenarnya.
+  static Future<img.Image?> _qrisLogo(int targetWidthDots) async {
+    if (_qrisLogoCache == null) {
+      try {
+        final data = await rootBundle.load('assets/qris/qris_logo.png');
+        final decoded = img.decodePng(data.buffer.asUint8List());
+        if (decoded == null) return null;
+        final white = img.Image(
+            width: decoded.width, height: decoded.height, numChannels: 3);
+        img.fill(white, color: img.ColorRgb8(255, 255, 255));
+        _qrisLogoCache = img.compositeImage(white, decoded);
+      } catch (_) {
+        // Aset gagal dimuat/didecode — jangan sampai gagalkan cetak struk
+        // seutuhnya cuma krn logo, lewati saja bagian ini.
+        return null;
+      }
+    }
+    final base = _qrisLogoCache;
+    if (base == null) return null;
+    final scale = targetWidthDots / base.width;
+    return img.copyResize(base,
+        width: targetWidthDots, height: (base.height * scale).round());
+  }
+
+  /// Test-only seam ke [_qrisLogo] (private) — pola sama dgn
+  /// `CartSheetScrollTestSeam`.
+  @visibleForTesting
+  static Future<img.Image?> debugQrisLogo(int targetWidthDots) =>
+      _qrisLogo(targetWidthDots);
+
+  /// Test-only — reset cache in-memory antar test (`_qrisLogoCache`
+  /// bertahan lintas pemanggilan seperti aset sungguhan, tapi test butuh
+  /// keadaan bersih tiap kali).
+  @visibleForTesting
+  static void debugClearQrisLogoCache() => _qrisLogoCache = null;
 
   // ── Build ESC/POS bytes ──────────────────────────────────────────────────
 
@@ -644,7 +704,8 @@ class PrinterService {
         if (hhmm != lastBatch) {
           lastBatch = hhmm;
           final label = '----- Tambahan $hhmm -----';
-          final left = label.length >= innerW ? 0 : (innerW - label.length) ~/ 2;
+          final left =
+              label.length >= innerW ? 0 : (innerW - label.length) ~/ 2;
           out.addAll(bodyText('${' ' * left}$label'));
         }
       }
@@ -657,15 +718,16 @@ class PrinterService {
         if (hhmm != lastRetur) {
           lastRetur = hhmm;
           final label = '----- Retur $hhmm -----';
-          final left = label.length >= innerW ? 0 : (innerW - label.length) ~/ 2;
+          final left =
+              label.length >= innerW ? 0 : (innerW - label.length) ~/ 2;
           out.addAll(bodyText('${' ' * left}$label'));
         }
       }
 
       final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
       final prefix = isVar ? '  > ' : '';
-      out.addAll(bodyText('$prefix$rawName',
-          styles: const PosStyles(bold: true)));
+      out.addAll(
+          bodyText('$prefix$rawName', styles: const PosStyles(bold: true)));
 
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
         // Item 49c — catatan barang bisa multi-baris (maxLines:2 di UI);
@@ -732,9 +794,8 @@ class PrinterService {
     if (hasRetur) {
       final totalAwal =
           items.where((i) => i.qty > 0).fold<int>(0, (s, i) => s + i.subtotal);
-      final returAmount = -items
-          .where((i) => i.qty < 0)
-          .fold<int>(0, (s, i) => s + i.subtotal);
+      final returAmount =
+          -items.where((i) => i.qty < 0).fold<int>(0, (s, i) => s + i.subtotal);
       out.addAll(bodyLR('Total awal', 'Rp ${_fmtNum(totalAwal)}'));
       out.addAll(bodyLR('Retur', '- Rp ${_fmtNum(returAmount)}'));
       out.addAll(bodyText('Total akhir', styles: const PosStyles(bold: true)));
@@ -752,8 +813,9 @@ class PrinterService {
       // dgn Item 23, sudah diperbaiki di `receipt_screen.dart`/nota gabungan,
       // sekarang dikonsistenkan ke struk cetak tunggal). "Kembali" HARUS
       // dari pembayaran TERAKHIR saja (bukan akumulasi seluruh riwayat nota).
-      final sumChangeGiven =
-          payments.where((p) => !p.voided).fold<int>(0, (s, p) => s + p.changeGiven);
+      final sumChangeGiven = payments
+          .where((p) => !p.voided)
+          .fold<int>(0, (s, p) => s + p.changeGiven);
       final netPaid = tx.paid - sumChangeGiven;
 
       TransactionPayment? latestWithChange;
@@ -842,6 +904,21 @@ class PrinterService {
     // mengabaikannya; belum ada fallback raster, lihat dok `printReceipt`.
     if (qrData != null && qrData.isNotEmpty) {
       out.addAll(bodySep());
+      // Logo QRIS DI ATAS kode QR (permintaan user — bukan cuma teks "QRIS"
+      // polos, logo aslinya harus works di cetak juga). Dirasterisasi
+      // (`Generator.imageRaster`, BUKAN command QR native) — konsisten dgn
+      // caveat risiko yg sudah didokumentasikan (printer murah bisa saja
+      // tidak mendukung bitmap raster, sama spt risiko QR-sbg-gambar).
+      // Lebar ~55% lebar kertas cetak (dlm dot printer, BUKAN kolom
+      // karakter — 384 dot utk 58mm, 576 dot utk 80mm, sama dgn konvensi
+      // `Generator` sendiri) — cukup besar utk kebaca tanpa mendominasi
+      // struk kecil.
+      final paperDots = paperSize == PaperSize.mm80 ? 576 : 384;
+      final logo = await _qrisLogo((paperDots * 0.55).round());
+      if (logo != null) {
+        out.addAll(gen.imageRaster(logo, align: PosAlign.center));
+        out.addAll(gen.feed(1));
+      }
       out.addAll(gen.qrcode(qrData, align: PosAlign.center));
       out.addAll(gen.feed(1));
       out.addAll(bodyText('Mohon konfirmasi setelah membayar.',
@@ -895,8 +972,18 @@ class PrinterService {
   }
 
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Ags',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des'
   ];
 
   static String _fmtDateTimeFull(DateTime dt) {
@@ -967,7 +1054,8 @@ class PrinterService {
 
     try {
       final res = await _channel.invokeMapMethod<String, dynamic>(
-        'write', {'bytes': bytes},
+        'write',
+        {'bytes': bytes},
       ).timeout(const Duration(seconds: 10), onTimeout: () => null);
       return res?['ok'] as bool? ?? false;
     } catch (_) {
@@ -1021,8 +1109,8 @@ class PrinterService {
       out.addAll(gen.barcode(Barcode.code128('{B$barcode'.split('')),
           height: 80, textPos: BarcodeText.below));
     } else {
-      out.addAll(gen.text(barcode,
-          styles: const PosStyles(align: PosAlign.center)));
+      out.addAll(
+          gen.text(barcode, styles: const PosStyles(align: PosAlign.center)));
     }
 
     out.addAll(gen.feed(2));
@@ -1082,7 +1170,8 @@ class PrinterService {
 
     try {
       final res = await _channel.invokeMapMethod<String, dynamic>(
-        'write', {'bytes': bytes},
+        'write',
+        {'bytes': bytes},
       ).timeout(const Duration(seconds: 10), onTimeout: () => null);
       return res?['ok'] as bool? ?? false;
     } catch (_) {
@@ -1177,7 +1266,8 @@ class PrinterService {
       final items = itemsByTx[tx.id] ?? const <TransactionItem>[];
       out.addAll(gen.text(_sep(w)));
       out.addAll(gen.text(
-          _rowLR('#${shortTxNo(tx.localId)}', _fmtDateTimeFull(tx.createdAt), w),
+          _rowLR(
+              '#${shortTxNo(tx.localId)}', _fmtDateTimeFull(tx.createdAt), w),
           styles: const PosStyles(bold: true)));
       // Pegawai di bawah id nota (bila diinput & toggle aktif).
       final empName = (showEmployee ? tx.employeeName?.trim() : null) ?? '';
@@ -1212,12 +1302,10 @@ class PrinterService {
         out.addAll(gen.text(_rowLR(qtyLine, _fmtNum(item.subtotal), w)));
       }
       out.addAll(gen.feed(1));
-      out.addAll(gen.text(
-          _rowLR('Subtotal nota', 'Rp ${_fmtNum(tx.total)}', w),
+      out.addAll(gen.text(_rowLR('Subtotal nota', 'Rp ${_fmtNum(tx.total)}', w),
           styles: const PosStyles(bold: true)));
       if (txSisa > 0) {
-        out.addAll(
-            gen.text(_rowLR('  Sisa', 'Rp ${_fmtNum(txSisa)}', w)));
+        out.addAll(gen.text(_rowLR('  Sisa', 'Rp ${_fmtNum(txSisa)}', w)));
       }
     }
 
@@ -1247,8 +1335,7 @@ class PrinterService {
         }
       }
     }
-    out.addAll(gen.text('Total Tagihan',
-        styles: const PosStyles(bold: true)));
+    out.addAll(gen.text('Total Tagihan', styles: const PosStyles(bold: true)));
     out.addAll(wideNominal('Rp ${_fmtNum(grandTotal)}'));
     // "Terbayar" HARUS Total + Kembalian saat ada kembalian (bukan grandPaid
     // net) — supaya "Total Tagihan = Terbayar - Kembalian" konsisten, sama
@@ -1289,23 +1376,55 @@ class PrinterService {
 
   static String _toAscii(String s) {
     const map = {
-      '—': '-', '–': '-',
-      '‘': "'", '’': "'",
-      '“': '"', '”': '"',
-      '…': '...', '×': 'x', '·': '.',
-      '«': '"', '»': '"', '•': '*',
-      '❤': '<3', '°': 'deg',
-      'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
-      'à': 'a', 'â': 'a', 'ä': 'a', 'á': 'a',
-      'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o',
-      'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
-      'í': 'i', 'î': 'i', 'ï': 'i',
-      'É': 'E', 'È': 'E', 'Ê': 'E',
-      'À': 'A', 'Â': 'A', 'Ä': 'A',
-      'Ó': 'O', 'Ô': 'O', 'Ö': 'O',
-      'Ú': 'U', 'Û': 'U', 'Ü': 'U',
-      'ñ': 'n', 'Ñ': 'N',
-      'ç': 'c', 'Ç': 'C',
+      '—': '-',
+      '–': '-',
+      '‘': "'",
+      '’': "'",
+      '“': '"',
+      '”': '"',
+      '…': '...',
+      '×': 'x',
+      '·': '.',
+      '«': '"',
+      '»': '"',
+      '•': '*',
+      '❤': '<3',
+      '°': 'deg',
+      'é': 'e',
+      'è': 'e',
+      'ê': 'e',
+      'ë': 'e',
+      'à': 'a',
+      'â': 'a',
+      'ä': 'a',
+      'á': 'a',
+      'ó': 'o',
+      'ò': 'o',
+      'ô': 'o',
+      'ö': 'o',
+      'ú': 'u',
+      'ù': 'u',
+      'û': 'u',
+      'ü': 'u',
+      'í': 'i',
+      'î': 'i',
+      'ï': 'i',
+      'É': 'E',
+      'È': 'E',
+      'Ê': 'E',
+      'À': 'A',
+      'Â': 'A',
+      'Ä': 'A',
+      'Ó': 'O',
+      'Ô': 'O',
+      'Ö': 'O',
+      'Ú': 'U',
+      'Û': 'U',
+      'Ü': 'U',
+      'ñ': 'n',
+      'Ñ': 'N',
+      'ç': 'c',
+      'Ç': 'C',
     };
     final buf = StringBuffer();
     for (final rune in s.runes) {
