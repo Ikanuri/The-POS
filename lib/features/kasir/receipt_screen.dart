@@ -3608,6 +3608,16 @@ class _ReceiptPaper extends StatelessWidget {
           ],
           if (qrData != null && qrData!.isNotEmpty) ...[
             const _DashedLine(),
+            // Logo QRIS di ATAS kode QR (bukan watermark di dalamnya) —
+            // aman dari risiko scan (tidak menyentuh piksel QR sama
+            // sekali), dan cocok utk struk gambar (Image.asset biasa,
+            // beda dari cetak thermal yg perlu dirasterisasi manual —
+            // lihat `PrinterService._qrisLogoRaster`).
+            Center(
+              child: Image.asset('assets/qris/qris_logo.png',
+                  height: 22, fit: BoxFit.contain),
+            ),
+            const SizedBox(height: 6),
             Center(child: QrisQrBox(data: qrData!, size: 160)),
             const SizedBox(height: 4),
             Text('Mohon konfirmasi setelah membayar.',

@@ -35,6 +35,10 @@ dependencies:
   print_bluetooth_thermal: ^1.0.9
   esc_pos_utils_plus: ^2.0.4
   permission_handler: ^11.3.1
+  # Sebelumnya cuma dependensi transitif (lewat esc_pos_utils_plus) —
+  # dinaikkan jadi langsung krn sekarang dipakai eksplisit utk decode PNG
+  # logo QRIS sblm dicetak via Generator.imageRaster (lihat printer_service.dart).
+  image: ^4.3.0
 
   # WiFi LAN sync
   shelf: ^1.4.0
@@ -85,3 +89,4 @@ flutter:
   assets:
     - assets/fonts/
     - assets/icon/
+    - assets/qris/
