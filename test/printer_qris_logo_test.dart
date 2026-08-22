@@ -63,19 +63,20 @@ void main() {
   // proses `connect()` berjalan) tapi kertas tidak pernah keluar sama
   // sekali. Akar masalah: `Generator._toRasterFormat` (esc_pos_utils_plus)
   // MELEDAK (`Unsupported operation: Cannot add to a fixed-length list`)
-  // kalau lebar gambar BUKAN kelipatan 8 — dan lebar asli yg dihitung
-  // `_buildBytes` (35% lebar kertas, sblmnya 55%: 384*0.35≈134 @58mm,
-  // 576*0.35≈202 @80mm) TIDAK PERNAH kebetulan kelipatan 8, jadi SELALU
-  // meledak begitu toggle "Tampilkan QR Pelunasan" aktif. Exception ini
-  // terjadi DI DALAM `_buildBytes` (sebelum byte apa pun dikirim ke channel
-  // native `write`), jadi printer tidak pernah menerima data struk sama
-  // sekali.
+  // kalau lebar gambar BUKAN kelipatan 8. Rasio lebar logo di `_buildBytes`
+  // sendiri sudah beberapa kali disusutkan (55% -> 35% -> 25%, laporan user
+  // "terlalu besar" berulang) dan TIDAK SELALU kebetulan menghasilkan lebar
+  // non-kelipatan-8 lagi (25% pas kelipatan 8 di kedua ukuran kertas) —
+  // tapi `_qrisLogo` WAJIB tetap membulatkan APA PUN rasionya nanti, jadi
+  // test di bawah sengaja pakai lebar ganjil generik (BUKAN terikat rasio
+  // spesifik yg sedang aktif) utk membuktikan perilaku pembulatannya, bukan
+  // cuma kebetulan lolos krn angka saat ini pas kelipatan 8.
   group('regresi: lebar logo HARUS kelipatan 8 (syarat Generator.imageRaster)',
       () {
     testWidgets(
-        'lebar ganjil (mis. 134px, persis spt perhitungan 35% kertas 58mm) '
-        'DIBULATKAN ke kelipatan 8 terdekat', (tester) async {
-      final logo = await PrinterService.debugQrisLogo(134);
+        'lebar ganjil sembarang (mis. 130px) DIBULATKAN ke kelipatan 8 '
+        'terdekat', (tester) async {
+      final logo = await PrinterService.debugQrisLogo(130);
       expect(logo, isNotNull);
       expect(logo!.width % 8, 0,
           reason:
@@ -97,9 +98,9 @@ void main() {
     test(
         'logo hasil (lebar target sungguhan 58mm & 80mm) BISA dirasterisasi '
         'lewat Generator.imageRaster ASLI tanpa exception', () async {
-      // Angka PERSIS sama dgn `_buildBytes`: paperDots * 0.35, dibulatkan.
-      const width58 = 384 * 0.35; // ≈134 -> round -> 134
-      const width80 = 576 * 0.35; // ≈202 -> round -> 202
+      // Angka PERSIS sama dgn `_buildBytes`: paperDots * 0.25, dibulatkan.
+      const width58 = 384 * 0.25; // = 96 (kebetulan sudah kelipatan 8)
+      const width80 = 576 * 0.25; // = 144 (kebetulan sudah kelipatan 8)
       final logo58 = await PrinterService.debugQrisLogo(width58.round());
       final logo80 = await PrinterService.debugQrisLogo(width80.round());
       expect(logo58, isNotNull);
