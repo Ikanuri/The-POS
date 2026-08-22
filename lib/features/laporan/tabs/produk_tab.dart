@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../stats/product_stats_screen.dart';
 
 final _produkTabProvider = FutureProvider.family<List<ProductRevenueStat>,
     DateTimeRange>((ref, range) async {
+  // Lihat dok `dataSyncedTickProvider` — provider ini tidak reaktif thd DB.
+  ref.watch(dataSyncedTickProvider);
   final db = ref.watch(databaseProvider);
   // Satu query JOIN + GROUP BY, bukan N+1 per transaksi.
   return db.getTopProductsByRevenue(range.start, range.end);

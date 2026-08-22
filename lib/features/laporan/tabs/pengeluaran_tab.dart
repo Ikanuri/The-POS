@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/chart_utils.dart';
@@ -14,6 +15,8 @@ import '../../../core/utils/chart_utils.dart';
 final _pengeluaranTabProvider =
     FutureProvider.family<_PengeluaranTabData, DateTimeRange>(
         (ref, range) async {
+  // Lihat dok `dataSyncedTickProvider` — provider ini tidak reaktif thd DB.
+  ref.watch(dataSyncedTickProvider);
   final db = ref.watch(databaseProvider);
   final byType = await db.getExpenseBreakdownByType(range.start, range.end);
   final daily = await db.getExpenseDailyTotals(range.start, range.end);

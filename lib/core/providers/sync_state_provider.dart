@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/lan_sync_service.dart';
+import 'data_refresh_provider.dart';
 import 'device_provider.dart';
 
 /// Item 21 (Fase 1) — status progres sync sisi KLIEN. "Realtime per-baris"
@@ -253,6 +254,10 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     final received =
         await LanSyncService.approveSync(itemId, allowedTables: allowedTables);
     await _refreshQueue();
+    // Data baru masuk ke DB host lewat merge (raw SQL) — bump tick supaya
+    // layar Ringkasan/Laporan (`FutureProvider` non-reaktif, lihat dok
+    // `dataSyncedTickProvider`) ikut re-fetch tanpa perlu refresh manual.
+    if (received > 0) _ref.read(dataSyncedTickProvider.notifier).state++;
     _showTransient('Disetujui — $received baris diterima', SyncBannerTone.success);
     return received;
   }
@@ -323,6 +328,16 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
             : 'Sync selesai — diterima ${result.received} baris',
         result.pendingApproval ? SyncBannerTone.sync : SyncBannerTone.success,
       );
+      // Klien baru saja menerima data dari host (mis. transaksi kasir lain)
+      // lewat merge (raw SQL) — bump tick supaya layar Ringkasan/Laporan
+      // (`FutureProvider` non-reaktif, lihat dok `dataSyncedTickProvider`)
+      // ikut re-fetch. Bug nyata dilaporkan user: total pendapatan hari ini
+      // di Ringkasan KLIEN tidak bertambah setelah klien sync dari host,
+      // walau data transaksi di DB lokal sudah benar (baru tampak kalau
+      // user tekan refresh manual).
+      if (result.received > 0) {
+        _ref.read(dataSyncedTickProvider.notifier).state++;
+      }
       return result;
     } catch (e) {
       state = state.copyWith(

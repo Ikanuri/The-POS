@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -32,6 +33,8 @@ class _StokReport {
 }
 
 final _stokTabProvider = FutureProvider<_StokReport>((ref) async {
+  // Lihat dok `dataSyncedTickProvider` — provider ini tidak reaktif thd DB.
+  ref.watch(dataSyncedTickProvider);
   final db = ref.watch(databaseProvider);
   final rows = await db.getInventoryRows();
   final groups = await db.getAllProductGroups();
