@@ -5,6 +5,62 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Agustus 2026 (lanjutan lagi lagi — tab meta cart bar
+disederhanakan jadi FLAT + logo QRIS cetak dikecilkan), commit
+`e1db726`/`49a529f`, versi kerja **2.19.1+26** (belum di-bump lagi lebih
+lanjut sesi ini — tunggu akhir sesi utk push+merge), SUDAH di-merge ke
+`main`.
+
+**Tab meta cart bar (`_CartMetaTab`) DIROMBAK LAGI** — kali ini bukan
+sekadar koreksi geometri, tapi PENYEDERHANAAN TOTAL. Kronologi: desain
+awal (single trapesium) -> "tab folder menumpuk" v1 (`2569a27`, arah
+miring & urutan tumpuk salah) -> "tab folder menumpuk" v2 (`75a049c`,
+sudah diukur presisi dari piksel referensi, arah & urutan BENAR) -> user
+tetap bilang "masih belum sesuai ekspektasi" dan mengirim contoh KONKRET
+utk ditiru PERSIS. Contoh itu ternyata JAUH lebih sederhana dari 2 versi
+sebelumnya: EMPAT segmen RATA/DATAR dlm SATU baris (tanpa kemiringan
+apa pun, tanpa efek "menumpuk"), dipisah garis vertikal tipis, sudut ATAS
+baris membulat sbg SATU GRUP (bukan per-segmen). **Pelajaran utk sesi
+depan**: kalau iterasi ke-2 berbasis pengukuran piksel presisi MASIH
+ditolak user, jangan asumsikan butuh iterasi ke-3 yg makin canggih/rumit —
+tanya/tunggu user kirim contoh konkret dulu, karena bisa jadi solusinya
+justru JAUH LEBIH SEDERHANA dari yg sedang dikerjakan, bukan lebih rumit.
+
+Implementasi baru: `_IndexTab`/`_IndexTabPainter` (`CustomPainter` jajar-
+genjang + bayangan manual) DIHAPUS TOTAL. Diganti `Container` biasa
+(`clipBehavior: Clip.antiAlias`, `borderRadius` cuma top-only, `border`
+top+left+right, TANPA bottom — menyatu dgn garis atas `_CartBar` di
+bawahnya persis pola lama) + `Row` + `_MetaTabDivider` (widget kecil baru,
+cuma `Container(width:1)`, dibuat kelas terpisah SEMATA supaya test bisa
+menghitungnya via `runtimeType.toString()`, pola yg sama dipakai
+`_IndexTabPainter` sebelumnya). Segmen "Bayar" dapat `ColoredBox` lokal
+(accent solid) — sudut kanan-atasnya OTOMATIS ikut membulat karena
+`clipBehavior` induk, tidak perlu radius terpisah.
+
+Diverifikasi visual via render widget SUNGGUHAN (`flutter test` +
+`RepaintBoundary.toImage`, BUKAN mockup HTML) dibandingkan LANGSUNG dgn
+contoh yg dikirim user (side-by-side crop) — cocok persis: baris flat,
+divider tipis, sudut membulat sbg grup, Bayar solid di ujung kanan.
+
+**Logo QRIS di struk cetak DIKECILKAN** (55% -> 35% lebar kertas) —
+dilaporkan user "terlalu besar", target kira-kira seukuran kode QR
+di bawahnya. **Catatan penting**: lebar QR sungguhan TIDAK BISA dihitung
+persis dari kode Dart manapun di app ini — `gen.qrcode()` (esc_pos_utils_
+plus) cuma kirim teks mentah + ukuran modul (4 dot/modul) ke command QR
+NATIF printer (`GS ( k`), jumlah modul akhir (makin banyak makin lebar)
+ditentukan printer sendiri dari panjang payload + level koreksi, bukan
+dihitung di sisi app. Rasio 35% murni pendekatan berdasar feedback
+visual user, BUKAN hasil kalkulasi presisi — kalau user lapor lagi masih
+kurang pas (terlalu besar/kecil), sesuaikan rasio ini lagi, jangan cari
+formula "benar" yg sebenarnya tidak bisa dihitung dari sini.
+
+Test: `cart_meta_index_tabs_test.dart` — `countIndexTabs` diganti
+`countMetaDividers` (jumlah segmen = jumlah divider + 1), assersi warna
+Bayar/Tahan & no-crash marquee tidak berubah. `printer_qris_logo_test.dart`
+— angka target lebar disesuaikan (384*0.35≈134, 576*0.35≈202), test
+regresi kelipatan-8 dari fix sebelumnya (lihat update di bawah) TIDAK
+berubah logikanya. Full suite 1126 lolos, `flutter analyze` 0 issue.
+
 _Update sesi 22 Agustus 2026 (lanjutan lagi — koreksi bentuk tab indeks +
 fix bug cetak QR gagal total), commit `75a049c`/`e6b215e`, di atas versi
 kerja **2.19.0+25** (belum di-bump lagi, masih dianggap bagian rilis yang
