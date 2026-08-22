@@ -564,9 +564,24 @@ class PrinterService {
     }
     final base = _qrisLogoCache;
     if (base == null) return null;
-    final scale = targetWidthDots / base.width;
+    // `Generator._toRasterFormat` (esc_pos_utils_plus) MEWAJIBKAN lebar bit
+    // kelipatan 8 — kalau tidak, cabang "padding" internalnya (di baris yg
+    // menimpa `oneChannelBytes` dgn `List.filled` lalu `insertAll` ke list
+    // FIXED-LENGTH itu) melempar `Unsupported operation: Cannot add to a
+    // fixed-length list`. BUG NYATA dilaporkan user: printer terhubung,
+    // lampu indikator nyala (proses `connect()` jalan), tapi kertas tidak
+    // pernah keluar — krn exception ini terjadi SEBELUM `write()` ke
+    // channel native sama sekali dipanggil (di dalam `_buildBytes`, tidak
+    // dibungkus try/catch), byte TIDAK PERNAH terkirim ke printer. `55%` dari
+    // lebar kertas (384 dot @58mm, 576 dot @80mm) TIDAK KEBETULAN kelipatan
+    // 8 (211 & 317) — jadi SELALU meledak begitu QR pelunasan+logo aktif.
+    // Dibuktikan lewat test langsung terhadap `Generator.imageRaster` real
+    // (`test/printer_qris_logo_test.dart`) sebelum fix ini.
+    final rawWidth = targetWidthDots - (targetWidthDots % 8);
+    final width = rawWidth < 8 ? 8 : rawWidth;
+    final scale = width / base.width;
     return img.copyResize(base,
-        width: targetWidthDots, height: (base.height * scale).round());
+        width: width, height: (base.height * scale).round());
   }
 
   /// Test-only seam ke [_qrisLogo] (private) — pola sama dgn

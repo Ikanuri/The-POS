@@ -12,12 +12,14 @@ import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/cart_meta_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 
-/// Redesain (permintaan user, mengacu contoh tab indeks map folder): tab
-/// meta cart bar (Pelanggan/Pegawai/Tahan/Bayar) dulu SATU trapesium
-/// tunggal berisi semua segmen, sekarang EMPAT tab terpisah yang saling
-/// mengunci. Warna aksen terracotta tapi SANGAT LEMBUT & menguat sedikit
-/// demi sedikit ke kanan; "Bayar" dikecualikan — tetap pekat + teks putih
-/// supaya tidak kehilangan penekanan sbg aksi utama.
+/// Redesain (permintaan user, mengacu contoh tab indeks map folder — bentuk
+/// dikoreksi ulang setelah diukur langsung dari piksel referensi): tab meta
+/// cart bar (Pelanggan/Pegawai/Tahan/Bayar) dulu SATU trapesium tunggal
+/// berisi semua segmen, sekarang EMPAT tab jajar-genjang terpisah yang
+/// saling menumpuk (kanan paling depan). Warna tab non-"Bayar" DEFAULT
+/// (sama dgn badan cart) — bukan lagi gradasi terracotta lembut; "Bayar"
+/// tetap dikecualikan, tetap pekat + teks putih supaya tidak kehilangan
+/// penekanan sbg aksi utama.
 void main() {
   Future<AppDatabase> seedDb({bool terimaPembayaran = true}) async {
     final db = AppDatabase(NativeDatabase.memory());

@@ -3560,17 +3560,19 @@ class _CartMetaTab extends ConsumerWidget {
     final needsGate = ref.watch(needsPaymentGateProvider).valueOrNull ?? false;
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureReserved(ref));
 
-    // Redesain (permintaan user, mengacu contoh tab indeks map folder):
+    // Redesain (permintaan user, mengacu contoh tab indeks map folder —
+    // diukur ulang persis dari piksel referensi setelah 2 revisi meleset):
     // dulu SATU tab trapesium tunggal yang menampung semua segmen di
-    // dalamnya; sekarang EMPAT tab terpisah yang saling mengunci seperti
-    // indeks folder. Aksen warna terracotta tapi SANGAT LEMBUT (hampir
-    // transparan) & menguat sedikit demi sedikit ke kanan — memberi kesan
-    // "indeks bertingkat" tanpa jadi warna-warni yang lepas dari identitas
-    // app (app ini cuma punya satu warna aksen). Tab "Bayar" SENGAJA
-    // dikecualikan dari pelembutan itu: ia aksi utama, warnanya tetap
-    // terracotta pekat + teks putih seperti sebelumnya, supaya tidak
-    // kehilangan penekanan sbg CTA di antara tab-tab yang kini berwarna.
-    const tint = AppTheme.accent;
+    // dalamnya; sekarang EMPAT tab terpisah berbentuk jajar-genjang
+    // (miring ~25°, sisi bawah bergeser ke KANAN relatif sisi atas) yang
+    // saling menumpuk seperti indeks folder — tab PALING KANAN paling
+    // DEPAN, tab "Pelanggan" (kiri) paling BELAKANG & menyatu lurus dgn
+    // cart (sisi kirinya TIDAK miring). Warna DIKEMBALIKAN ke default (sama
+    // dgn badan cart, `cs.surface`) — permintaan user setelah revisi
+    // warna soft-terracotta sebelumnya dianggap bukan fokus utama; yang
+    // dikoreksi adalah BENTUKnya. Tab "Bayar" tetap dikecualikan: warnanya
+    // tetap terracotta pekat + teks putih, ia aksi utama.
+    final surface = cs.surface;
     // Semua tab WAJIB sama tinggi supaya garis atasnya sejajar (kalau tiap
     // tab setinggi isinya sendiri, barisan tab terlihat bergerigi).
     // `IntrinsicHeight` TIDAK BISA dipakai di sini — isi tab mengandung
@@ -3585,109 +3587,131 @@ class _CartMetaTab extends ConsumerWidget {
       // Geser turun 1px agar dasar tab menutup garis batas atas cart bar →
       // tampak menyatu seperti tab folder yang menonjol dari bar.
       offset: const Offset(0, 1),
-      child: Padding(
-        // Ruang untuk diagonal tab PERTAMA, yang digambar menjorok ke kiri
-        // di luar kotaknya sendiri (lihat `_IndexTabPainter`).
-        padding: const EdgeInsets.only(left: _kTabSlant),
-        child: SizedBox(
-          height: tabHeight,
-          child: Row(
-            children: [
-              Expanded(
-                flex: 4,
-                child: _IndexTab(
-                  fill: tint.withOpacity(0.07),
-                  child: _MetaChip(
-                    icon: Icons.person_outline,
-                    label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
-                    active: meta.hasCustomer,
-                    onTap: () => _pickCustomer(context, ref),
-                    onClear: meta.hasCustomer
-                        ? () => notifier.clearCustomer()
-                        : null,
+      // TIDAK ada padding-left lagi di sini: tab "Pelanggan" sekarang rata
+      // lurus dgn tepi cart (sisi kirinya tidak miring, tidak menjorok
+      // keluar kotak), beda dari desain sebelumnya yg semua tab (termasuk
+      // yg pertama) miring & butuh ruang cadangan di kiri.
+      child: SizedBox(
+        height: tabHeight,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 4,
+              child: _IndexTab(
+                fill: surface,
+                straightLeft: true,
+                castShadow: true,
+                child: _MetaChip(
+                  icon: Icons.person_outline,
+                  label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
+                  active: meta.hasCustomer,
+                  onTap: () => _pickCustomer(context, ref),
+                  onClear: meta.hasCustomer
+                      ? () => notifier.clearCustomer()
+                      : null,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: _IndexTab(
+                fill: surface,
+                castShadow: true,
+                child: _MetaChip(
+                  icon: Icons.badge_outlined,
+                  label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
+                  active: meta.hasEmployee,
+                  onTap: () => _pickEmployee(context, ref),
+                  onClear: meta.hasEmployee
+                      ? () => notifier.clearEmployee()
+                      : null,
+                ),
+              ),
+            ),
+            _IndexTab(
+              fill: surface,
+              castShadow: true,
+              child: InkWell(
+                onTap: onHold,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.pause_circle_outline,
+                          size: 16, color: cs.primary),
+                      const SizedBox(width: 3),
+                      Text('Tahan',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: cs.primary)),
+                    ],
                   ),
                 ),
               ),
-              Expanded(
-                flex: 3,
-                child: _IndexTab(
-                  fill: tint.withOpacity(0.12),
-                  child: _MetaChip(
-                    icon: Icons.badge_outlined,
-                    label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
-                    active: meta.hasEmployee,
-                    onTap: () => _pickEmployee(context, ref),
-                    onClear: meta.hasEmployee
-                        ? () => notifier.clearEmployee()
-                        : null,
-                  ),
-                ),
-              ),
+            ),
+            // Item 56 — segmen "Bayar" terracotta — tap langsung ke layar
+            // bayar (`/kasir/bayar`), TANPA lewat sheet keranjang dulu
+            // (checkout cepat).
+            if (!needsGate)
               _IndexTab(
-                fill: tint.withOpacity(0.17),
+                fill: AppTheme.accent,
                 child: InkWell(
-                  onTap: onHold,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onTap: onBayar,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.pause_circle_outline,
-                            size: 16, color: cs.primary),
-                        const SizedBox(width: 3),
-                        Text('Tahan',
+                        Icon(Icons.payments_outlined,
+                            size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text('Bayar',
                             style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
-                                color: cs.primary)),
+                                color: Colors.white)),
                       ],
                     ),
                   ),
                 ),
               ),
-              // Item 56 — segmen "Bayar" terracotta — tap langsung ke layar
-              // bayar (`/kasir/bayar`), TANPA lewat sheet keranjang dulu
-              // (checkout cepat).
-              if (!needsGate)
-                _IndexTab(
-                  fill: tint,
-                  child: InkWell(
-                    onTap: onBayar,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.payments_outlined,
-                              size: 16, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text('Bayar',
-                              style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Kemiringan sisi kiri tiap tab indeks (lihat [_IndexTabPainter]).
-const _kTabSlant = 14.0;
+/// Sudut kemiringan jajar-genjang tiap tab indeks — diukur langsung dari
+/// piksel referensi (folder tab kuning/oranye/pink/ungu yg dikirim user).
+const _kTabSlantDeg = 25.0;
+
+/// Radius sudut ATAS tiap tab (kiri-atas & kanan-atas) — permintaan user
+/// "sudutnya agak rounded dikit" setelah bentuk jajar-genjangnya disetujui.
+/// Sudut BAWAH sengaja TETAP tajam: dasar tab menyatu dgn cart bar di
+/// bawahnya, membulatkannya akan bikin ada celah kecil yg aneh.
+const _kTabCornerRadius = 3.5;
 
 /// Satu tab indeks: bentuk digambar [_IndexTabPainter], isinya bebas.
 class _IndexTab extends StatelessWidget {
-  const _IndexTab({required this.fill, required this.child});
+  const _IndexTab({
+    required this.fill,
+    required this.child,
+    this.straightLeft = false,
+    this.castShadow = false,
+  });
 
   final Color fill;
   final Widget child;
+  /// Tab "Pelanggan" (paling kiri, paling belakang) menyatu LURUS dgn tepi
+  /// cart — sisi kirinya TIDAK ikut miring seperti tab lainnya.
+  final bool straightLeft;
+  /// Tab ini TERTUTUPI tab berikutnya (di kanannya) — beri bayangan tipis
+  /// di sisi kanan spy terkesan "ketindih", konsisten dgn arah kemiringan.
+  /// Tab terakhir ("Bayar") tidak perlu ini krn tak ada yg menutupinya.
+  final bool castShadow;
 
   @override
   Widget build(BuildContext context) {
@@ -3695,6 +3719,8 @@ class _IndexTab extends StatelessWidget {
       painter: _IndexTabPainter(
         fill: fill,
         border: Theme.of(context).colorScheme.outlineVariant,
+        straightLeft: straightLeft,
+        castShadow: castShadow,
       ),
       child: Padding(
         // HANYA padding horizontal — kiri lebih lega dari kanan karena sisi
@@ -3711,31 +3737,88 @@ class _IndexTab extends StatelessWidget {
   }
 }
 
-/// Bentuk satu tab indeks: sisi kiri MIRING, sisi kanan lurus, dasar
-/// terbuka (menyatu dgn cart bar di bawahnya).
+/// Bentuk satu tab indeks: jajar-genjang miring [_kTabSlantDeg]° (sisi
+/// bawah bergeser ke KANAN relatif sisi atas), sudut atas membulat tipis,
+/// dasar terbuka (menyatu dgn cart bar di bawahnya).
 ///
-/// Kuncinya: diagonal digambar MENJOROK [_kTabSlant] px ke KIRI di luar
-/// kotak widget-nya sendiri (x negatif — `CustomPaint` tidak meng-clip),
-/// sehingga tiap tab menindih sedikit tab di kirinya & pertemuan keduanya
-/// jadi garis diagonal rapat TANPA celah segitiga. Konsekuensinya urutan
-/// gambar = urutan `Row`, jadi tab PALING KANAN ("Bayar") tampil paling
-/// depan — kebetulan sejalan dgn statusnya sbg aksi utama.
+/// Kuncinya: sisi kiri-ATAS digambar MENJOROK ke KIRI di luar kotak
+/// widget-nya sendiri (x negatif — `CustomPaint` tidak meng-clip), makin
+/// SEDIKIT menjorok ke arah bawah (sampai pas rata di tepi kotak sendiri
+/// pada sisi kiri-BAWAH). Ini yg bikin tab berikutnya (digambar setelahnya
+/// dlm urutan `Row`, jadi tampil lebih DEPAN) tampak "menyingkap" tab ini
+/// secara diagonal — kebalikan dari desain awal yang arah kemiringannya
+/// justru terbalik (sudah dikonfirmasi via pengukuran piksel referensi
+/// langsung). Tab PALING KANAN ("Bayar") tampil paling depan — sejalan dgn
+/// statusnya sbg aksi utama.
 class _IndexTabPainter extends CustomPainter {
-  _IndexTabPainter({required this.fill, required this.border});
+  _IndexTabPainter({
+    required this.fill,
+    required this.border,
+    required this.straightLeft,
+    required this.castShadow,
+  });
 
   final Color fill;
   final Color border;
+  final bool straightLeft;
+  final bool castShadow;
+
+  /// Titik di ruas [from]→[to], sejauh [d] dari [from] — dipakai utk
+  /// "memotong" sudut sebelum dibulatkan dgn kurva kuadratik.
+  static Offset _towards(Offset from, Offset to, double d) {
+    final v = to - from;
+    final len = v.distance;
+    if (len <= d * 2) return Offset.lerp(from, to, 0.5)!;
+    return from + v / len * d;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
+    final slant = straightLeft ? 0.0 : size.height * math.tan(_kTabSlantDeg * math.pi / 180);
+    final rightSlant = size.height * math.tan(_kTabSlantDeg * math.pi / 180);
+
+    // 4 sudut jajar-genjang (sblm dibulatkan): kiri-atas menjorok keluar
+    // sejauh `slant` (0 kalau `straightLeft`), kanan-atas ikut geser sejauh
+    // `rightSlant` supaya sisi kanan tetap sejajar sisi kiri.
+    final topLeft = Offset(-slant, 0);
+    final topRight = Offset(size.width - rightSlant, 0);
+    final bottomRight = Offset(size.width, size.height);
+    final bottomLeft = Offset(0, size.height);
+
+    const r = _kTabCornerRadius;
+    final topLeftIn1 = _towards(topLeft, bottomLeft, r);
+    final topLeftIn2 = _towards(topLeft, topRight, r);
+    final topRightIn1 = _towards(topRight, topLeft, r);
+    final topRightIn2 = _towards(topRight, bottomRight, r);
+
     final path = Path()
-      ..moveTo(-_kTabSlant, size.height)
-      ..lineTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, size.height)
+      ..moveTo(topLeftIn1.dx, topLeftIn1.dy)
+      ..quadraticBezierTo(topLeft.dx, topLeft.dy, topLeftIn2.dx, topLeftIn2.dy)
+      ..lineTo(topRightIn1.dx, topRightIn1.dy)
+      ..quadraticBezierTo(
+          topRight.dx, topRight.dy, topRightIn2.dx, topRightIn2.dy)
+      ..lineTo(bottomRight.dx, bottomRight.dy)
+      ..lineTo(bottomLeft.dx, bottomLeft.dy)
       ..close();
 
     canvas.drawPath(path, Paint()..color = fill);
+
+    if (castShadow) {
+      // Bayangan yg "dijatuhkan" tab berikutnya (di kanan, lebih depan) ke
+      // tab ini — pita gradasi gelap tipis di sisi kanan, memudar ke kiri.
+      canvas.save();
+      canvas.clipPath(path);
+      final shadowWidth = math.min(size.height * 0.65, size.width * 0.4);
+      final rect =
+          Rect.fromLTWH(size.width - shadowWidth, 0, shadowWidth, size.height);
+      final shader = const LinearGradient(
+        begin: Alignment.centerRight,
+        end: Alignment.centerLeft,
+        colors: [Color(0x52140F08), Color(0x00140F08)],
+      ).createShader(rect);
+      canvas.drawRect(rect, Paint()..shader = shader);
+      canvas.restore();
+    }
 
     // Garis tepi hanya di sisi miring + sisi atas — dasar dibiarkan
     // terbuka agar menyatu dgn cart bar. Sisi kanan TIDAK digaris: ia
@@ -3746,15 +3829,20 @@ class _IndexTabPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5;
     final edge = Path()
-      ..moveTo(-_kTabSlant, size.height)
-      ..lineTo(0, 0)
-      ..lineTo(size.width, 0);
+      ..moveTo(topLeftIn1.dx, topLeftIn1.dy)
+      ..quadraticBezierTo(topLeft.dx, topLeft.dy, topLeftIn2.dx, topLeftIn2.dy)
+      ..lineTo(topRightIn1.dx, topRightIn1.dy)
+      ..quadraticBezierTo(
+          topRight.dx, topRight.dy, topRightIn2.dx, topRightIn2.dy);
     canvas.drawPath(edge, stroke);
   }
 
   @override
   bool shouldRepaint(covariant _IndexTabPainter old) =>
-      old.fill != fill || old.border != border;
+      old.fill != fill ||
+      old.border != border ||
+      old.straightLeft != straightLeft ||
+      old.castShadow != castShadow;
 }
 
 class _MetaChip extends StatelessWidget {

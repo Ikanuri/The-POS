@@ -14,9 +14,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Logo QRIS resmi di struk** — muncul di atas kode QR pelunasan, baik
   saat struk dibagikan sebagai gambar maupun dicetak ke printer thermal.
 - **Header keranjang (nama pelanggan/pegawai/Tahan/Bayar) tampil lebih
-  jelas dengan gaya "tab indeks"** — empat bagian yang saling mengunci
-  seperti map folder, dengan aksen warna lembut yang menguat ke arah
-  tombol Bayar (yang tetap paling menonjol karena itu aksi utama).
+  jelas dengan gaya "tab indeks"** — empat bagian yang saling mengunci &
+  menumpuk seperti map folder (bentuk disempurnakan setelah dibandingkan
+  ulang dengan referensinya), tombol Bayar tetap paling menonjol karena
+  itu aksi utama.
+
+### 🐛 Perbaikan
+- **Struk dengan QR pelunasan (nota tempo/kurang bayar dgn QRIS aktif)
+  gagal tercetak sama sekali di printer thermal** — printer terhubung &
+  terlihat memproses, tapi kertas tidak pernah keluar. Sudah diperbaiki.
 
 ### 🐛 Perbaikan
 - **Tampilan tombol "+" saat idle disederhanakan lagi** — garis
