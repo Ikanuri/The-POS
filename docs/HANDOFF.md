@@ -5,6 +5,60 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Agustus 2026 (lanjutan lagi x4 — fix Ringkasan/Laporan
+tidak auto-refresh setelah sync), commit `09ce02e`, versi kerja **2.19.3+
+28** (belum di-bump lebih lanjut — tunggu akhir sesi), SUDAH di-merge ke
+`main`. Juga catatan penting: **Flutter SDK di environment ini SEMPAT
+HILANG TOTAL** di tengah sesi (`/tmp/flutter` kosong, kemungkinan `/tmp`
+di-reset environment) — harus di-clone ulang. **WAJIB pin ke versi PERSIS
+yang dipakai CI** (`.github/workflows/*.yml` → `flutter-action` →
+`flutter-version: '3.24.5'`, BUKAN branch `stable` biasa — sempat salah
+clone `-b stable` dulu yg ternyata jauh lebih baru [3.47.1] dan
+memunculkan 87 warning deprecare + 1 error baru yg sama sekali tidak
+terkait kode kita, murni krn API Flutter berubah). `git clone --depth 1 -b
+3.24.5 https://github.com/flutter/flutter.git` ke `/tmp/flutter` beres.
+**Efek samping jangan lupa dibersihkan**: `flutter pub get` pertama (pakai
+SDK salah/3.47.1) menimpa `pubspec.lock` (25 dependensi bergeser versi)
+DAN `analysis_options.yaml` (nambah blok `analyzer: exclude:` sendiri) —
+KEDUANYA di-`git checkout --` sebelum commit supaya tidak ikut ke-commit
+sbg noise tak disengaja. **Kalau flutter SDK hilang lagi di sesi
+mendatang, ulangi resep ini: clone persis `3.24.5`, verifikasi
+`git diff --stat pubspec.lock`/`analysis_options.yaml` kosong setelah
+`pub get` pertama sebelum lanjut kerja.**
+
+**Bug sync yang diperbaiki**: user lapor total pendapatan hari ini di
+Ringkasan KLIEN tidak bertambah setelah klien sync dari host (skenario:
+host sync dgn klien 1, beberapa transaksi lewat, host sync ke klien 2 —
+di klien 2 angkanya "macet"). Diinvestigasi via agent Explore dulu (bukan
+langsung nebak) — awalnya dicurigai gotcha lama `customStatement` tanpa
+param `updates:` (sudah didokumentasikan CLAUDE.md), TERNYATA BUKAN itu:
+`mergeRows` (`app_database.dart`) SUDAH benar kasih `updates: {table}` di
+semua cabang. Akar SEBENARNYA: `_ringkasanProvider` (ringkasan_screen.
+dart) & TUJUH provider tab Laporan lain (stok/arus_kas/hutang/pelanggan/
+pengeluaran/produk/ringkasan_tab) semuanya `FutureProvider` BIASA — sengaja
+dipilih krn query agregat berat (rentang tanggal, JOIN multi-tabel), tapi
+konsekuensinya TIDAK PERNAH `.watch()` tabel apa pun, jadi TIDAK PERNAH
+otomatis re-fetch kecuali dibuka pertama kali/refresh manual/ganti rentang
+tanggal. `transaksi_tab.dart` (satu-satunya yg sudah `StreamProvider`)
+TIDAK kena bug ini.
+
+Fix: `dataSyncedTickProvider` (baru, `core/providers/data_refresh_provider.
+dart`) — `StateProvider<int>` yg di-bump `SyncStateNotifier`
+(`sync_state_provider.dart`) di DUA titik: `sync()` (klien menerima data
+dari host) dan `approveSync()` (host menerima approve dari klien),
+KEDUANYA hanya kalau `received > 0`. Kedelapan provider tsb sekarang
+`ref.watch(dataSyncedTickProvider)` di baris PALING ATAS — pola ini
+GENERIK, kalau nanti ada provider Ringkasan/Laporan baru yg juga
+`FutureProvider` non-reaktif, tinggal tambahkan baris yg sama, TIDAK perlu
+bikin mekanisme invalidasi baru lagi.
+
+**Gotcha test BARU**: `pumpWithFakeApp` (helper umum) TIDAK mengekspos
+`ProviderContainer`-nya (bikin `ProviderScope` sendiri di dalam), jadi
+test yg perlu bump provider dari LUAR (spt `dataSyncedTickProvider`) WAJIB
+bikin `ProviderContainer`+`UncontrolledProviderScope` sendiri (pola sama
+dgn `cart_meta_index_tabs_test.dart`), BUKAN pakai `pumpWithFakeApp`. Lihat
+`ringkasan_sync_refresh_test.dart`.
+
 _Update sesi 22 Agustus 2026 (lanjutan lagi lagi lagi — logo QRIS cetak
 dikecilkan LAGI, 35% -> 25%), commit `f878d90`, versi kerja **2.19.2+27**
 (belum di-bump lebih lanjut — tunggu akhir sesi), SUDAH di-merge ke `main`.

@@ -24,6 +24,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   terlihat memproses, tapi kertas tidak pernah keluar. Sudah diperbaiki.
 - **Logo QRIS di struk cetak terlalu besar** — sekarang disusutkan
   seukuran kode QR di bawahnya.
+- **Total pendapatan & angka lain di layar Ringkasan/Laporan tidak
+  bertambah setelah sinkronisasi dari perangkat lain** — data sudah benar
+  di database, tapi layarnya perlu ditarik-refresh manual dulu untuk
+  terlihat. Sekarang otomatis terupdate begitu sinkronisasi selesai.
 
 ### 🐛 Perbaikan
 - **Tampilan tombol "+" saat idle disederhanakan lagi** — garis
