@@ -924,17 +924,19 @@ class PrinterService {
       // (`Generator.imageRaster`, BUKAN command QR native) — konsisten dgn
       // caveat risiko yg sudah didokumentasikan (printer murah bisa saja
       // tidak mendukung bitmap raster, sama spt risiko QR-sbg-gambar).
-      // Lebar ~35% lebar kertas cetak (dlm dot printer, BUKAN kolom
+      // Lebar ~25% lebar kertas cetak (dlm dot printer, BUKAN kolom
       // karakter — 384 dot utk 58mm, 576 dot utk 80mm, sama dgn konvensi
-      // `Generator` sendiri) — disusutkan dari 55% semula (dilaporkan user
-      // "terlalu besar" begitu dicetak sungguhan), target kira2 sepanjang
-      // kode QR di bawahnya. Lebar QR sendiri TIDAK bisa dihitung persis
-      // dari sini — `gen.qrcode()` cuma mengirim TEKS mentah + ukuran modul
-      // (4 dot) ke command QR NATIF printer (`GS ( k`), jumlah modul
-      // (makin banyak makin lebar) ditentukan printer sendiri dari panjang
-      // data QRIS + level koreksi, bukan dihitung di kode Dart ini.
+      // `Generator` sendiri) — disusutkan bertahap dari 55% -> 35% -> 25%
+      // (dilaporkan user "terlalu besar" 2x berturut2 begitu dicetak
+      // sungguhan). Lebar QR sendiri TIDAK bisa dihitung persis dari sini
+      // — `gen.qrcode()` cuma mengirim TEKS mentah + ukuran modul (4 dot)
+      // ke command QR NATIF printer (`GS ( k`), jumlah modul (makin
+      // banyak makin lebar) ditentukan printer sendiri dari panjang data
+      // QRIS + level koreksi, bukan dihitung di kode Dart ini — rasio ini
+      // MURNI pendekatan dari feedback visual user, bukan hasil kalkulasi
+      // presisi thd lebar QR sungguhan.
       final paperDots = paperSize == PaperSize.mm80 ? 576 : 384;
-      final logo = await _qrisLogo((paperDots * 0.35).round());
+      final logo = await _qrisLogo((paperDots * 0.25).round());
       if (logo != null) {
         out.addAll(gen.imageRaster(logo, align: PosAlign.center));
         out.addAll(gen.feed(1));
