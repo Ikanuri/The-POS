@@ -5,6 +5,21 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 22 Agustus 2026 (lanjutan lagi lagi lagi — logo QRIS cetak
+dikecilkan LAGI, 35% -> 25%), commit `f878d90`, versi kerja **2.19.2+27**
+(belum di-bump lebih lanjut — tunggu akhir sesi), SUDAH di-merge ke `main`.
+User masih bilang "kecilin dikit" setelah pengecilan sebelumnya (55%->35%).
+**Rasio ini MURNI pendekatan visual, bukan hasil kalkulasi presisi** (lihat
+penjelasan lengkap di update sebelumnya persis di bawah ini) — kalau user
+lapor lagi masih kurang pas, TURUNKAN LAGI rasionya, jangan cari "angka
+yang benar" krn memang tidak ada cara menghitung lebar QR sungguhan dari
+Dart. Test regresi kelipatan-8 (`printer_qris_logo_test.dart`) SENGAJA
+sudah dilepas dari ketergantungan pada rasio spesifik (pakai lebar ganjil
+generik 130px, bukan angka turunan `paperDots * rasio`) tepatnya supaya
+tidak perlu diedit lagi tiap kali rasio ini disesuaikan ke depan — kalau
+nanti diminta ubah lagi, CUKUP ubah angka `0.25` di `printer_service.dart`
+tanpa perlu sentuh test sama sekali.
+
 _Update sesi 22 Agustus 2026 (lanjutan lagi lagi — tab meta cart bar
 disederhanakan jadi FLAT + logo QRIS cetak dikecilkan), commit
 `e1db726`/`49a529f`, versi kerja **2.19.1+26** (belum di-bump lagi lebih
