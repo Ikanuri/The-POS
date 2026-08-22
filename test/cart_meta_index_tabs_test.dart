@@ -12,14 +12,15 @@ import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/cart_meta_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 
-/// Redesain (permintaan user, mengacu contoh tab indeks map folder — bentuk
-/// dikoreksi ulang setelah diukur langsung dari piksel referensi): tab meta
-/// cart bar (Pelanggan/Pegawai/Tahan/Bayar) dulu SATU trapesium tunggal
-/// berisi semua segmen, sekarang EMPAT tab jajar-genjang terpisah yang
-/// saling menumpuk (kanan paling depan). Warna tab non-"Bayar" DEFAULT
-/// (sama dgn badan cart) — bukan lagi gradasi terracotta lembut; "Bayar"
-/// tetap dikecualikan, tetap pekat + teks putih supaya tidak kehilangan
-/// penekanan sbg aksi utama.
+/// Redesain (permintaan user, mengacu contoh tab indeks map folder). Lewat
+/// 2 iterasi bentuk "tab folder" (jajar-genjang/trapesium menumpuk) yang
+/// SAMA SEKALI TIDAK cocok ekspektasi user meski sudah lewat proses mockup
+/// — akhirnya user kirim contoh KONKRET yg diminta ditiru PERSIS: EMPAT
+/// segmen RATA/DATAR dalam SATU baris (bukan tab terpisah yg saling
+/// menumpuk), dipisah garis vertikal tipis, sudut ATAS baris membulat sbg
+/// SATU GRUP. Warna semua segmen non-"Bayar" DEFAULT (sama dgn badan
+/// cart); "Bayar" tetap dikecualikan, tetap pekat + teks putih supaya
+/// tidak kehilangan penekanan sbg aksi utama.
 void main() {
   Future<AppDatabase> seedDb({bool terimaPembayaran = true}) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -96,21 +97,23 @@ void main() {
     return container;
   }
 
-  /// `_IndexTabPainter` private — dihitung lewat nama runtime-nya, pola
-  /// sama dgn `add_control_idle_flat_style_test.dart`.
-  int countIndexTabs(WidgetTester tester) => tester
-      .widgetList<CustomPaint>(find.byType(CustomPaint))
-      .where((w) => w.painter.runtimeType.toString() == '_IndexTabPainter')
+  /// `_MetaTabDivider` private — dihitung lewat nama runtime-nya, pola sama
+  /// dgn `add_control_idle_flat_style_test.dart`. Jumlah SEGMEN = jumlah
+  /// divider + 1 (segmen pertama tidak didahului divider).
+  int countMetaDividers(WidgetTester tester) => tester
+      .widgetList(find.byWidgetPredicate(
+          (w) => w.runtimeType.toString() == '_MetaTabDivider'))
       .length;
 
   testWidgets(
-      'owner: EMPAT tab indeks terpisah (Pelanggan/Pegawai/Tahan/Bayar), '
-      'bukan satu tab gabungan', (tester) async {
+      'owner: EMPAT segmen (Pelanggan/Pegawai/Tahan/Bayar) dlm satu baris '
+      'flat, dipisah 3 garis', (tester) async {
     final db = await seedDb();
     addTearDown(() async => db.close());
     await pumpKasirWithCart(tester, db, deviceRole: 'owner');
 
-    expect(countIndexTabs(tester), 4);
+    expect(countMetaDividers(tester), 3,
+        reason: '4 segmen -> 3 garis pemisah di antaranya');
     // "Pelanggan" juga jadi label tab bottom-nav, jadi cukup pastikan ADA
     // (bukan tepat satu).
     expect(find.text('Pelanggan'), findsWidgets);
@@ -155,20 +158,21 @@ void main() {
         customerName: 'Buk Khotimah Rahmawati Kusumaningrum');
 
     expect(tester.takeException(), isNull);
-    expect(countIndexTabs(tester), 4);
+    expect(countMetaDividers(tester), 3);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
 
   testWidgets(
-      'pegawai TANPA izin terima_pembayaran: cuma TIGA tab (tanpa Bayar)',
+      'pegawai TANPA izin terima_pembayaran: cuma TIGA segmen (tanpa Bayar)',
       (tester) async {
     final db = await seedDb(terimaPembayaran: false);
     addTearDown(() async => db.close());
     await pumpKasirWithCart(tester, db, deviceRole: 'kasir');
 
-    expect(countIndexTabs(tester), 3);
+    expect(countMetaDividers(tester), 2,
+        reason: '3 segmen (Pelanggan/Pegawai/Tahan) -> 2 garis pemisah');
     expect(find.text('Bayar'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
