@@ -4,12 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/database/app_database.dart';
+import '../../core/providers/data_refresh_provider.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/chart_utils.dart';
 import '../shell/sync_status_banner.dart';
 
 final _ringkasanProvider = FutureProvider<_RingkasanData>((ref) async {
+  // WAJIB baris pertama — lihat dok `dataSyncedTickProvider` (bug nyata:
+  // total pendapatan hari ini tidak bertambah setelah sync dari host).
+  ref.watch(dataSyncedTickProvider);
   final db = ref.watch(databaseProvider);
   final now = DateTime.now();
   final todayStart = DateTime(now.year, now.month, now.day);

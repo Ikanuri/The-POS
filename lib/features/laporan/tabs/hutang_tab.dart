@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../kasir/widgets/debt_payment_sheet.dart';
 
 final _debtBookProvider =
     FutureProvider.autoDispose<List<DebtBookEntry>>((ref) {
+  // Lihat dok `dataSyncedTickProvider` — provider ini tidak reaktif thd DB.
+  ref.watch(dataSyncedTickProvider);
   final db = ref.watch(databaseProvider);
   return db.getDebtBook();
 });
