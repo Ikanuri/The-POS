@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/features/kasir/widgets/add_control.dart';
 
-/// Susulan diskusi desain (mockup: Alt.7 netral->berwarna + Alt.4 dashed
-/// ring + Alt.9 flat) — keluhan "terlalu ramai" saat idle (banyak lingkaran
-/// solid berwarna sekaligus di grid produk). SEBELUM di keranjang:
-/// lingkaran TIDAK diisi (transparan) & TANPA shadow, cuma ring
-/// putus-putus (`CustomPaint`) warna netral (`onSurfaceVariant`) + ikon
-/// "+" senada. Begitu masuk keranjang (qty>0): kembali solid seperti
+/// Susulan diskusi desain — keluhan "terlalu ramai" saat idle (banyak
+/// lingkaran solid berwarna sekaligus di grid produk). SEBELUM di
+/// keranjang: lingkaran TIDAK diisi (transparan) & TANPA shadow, cuma
+/// ikon "+" polos warna netral + SATU garis putus-putus VERTIKAL di
+/// kirinya. Begitu masuk keranjang (qty>0): kembali solid seperti
 /// sebelumnya (fill + warna brand), TETAP tanpa shadow (flat).
+///
+/// Revisi susulan (permintaan user): ring MELINGKAR dibuang total —
+/// dinilai "masih terlalu tegas" walau warnanya sudah netral (lingkaran
+/// penuh = banyak garis sekaligus). Diganti satu garis vertikal saja,
+/// warna `outlineVariant` (token pembatas paling samar), stroke 1.5.
 void main() {
   setUp(() => AddControl.clearActive());
 
@@ -32,13 +36,13 @@ void main() {
     expect(mainDecoration.boxShadow, anyOf(isNull, isEmpty),
         reason: 'idle: flat, tanpa shadow');
 
-    // Ring putus-putus (`_DashedCirclePainter`, dicari via nama runtime krn
-    // private) tampil; ikon "+" netral (bukan putih).
-    final hasDashedRing = tester
+    // Garis putus-putus vertikal (`_DashedVLinePainter`, dicari via nama
+    // runtime krn private) tampil; ikon "+" netral (bukan putih).
+    final hasDashedLine = tester
         .widgetList<CustomPaint>(find.byType(CustomPaint))
-        .any((w) => w.painter.runtimeType.toString() == '_DashedCirclePainter');
-    expect(hasDashedRing, isTrue,
-        reason: 'idle: ring putus-putus harus tampil');
+        .any((w) => w.painter.runtimeType.toString() == '_DashedVLinePainter');
+    expect(hasDashedLine, isTrue,
+        reason: 'idle: garis putus-putus vertikal harus tampil');
     final icon = tester.widget<Icon>(find.byIcon(Icons.add_rounded));
     expect(icon.color, isNot(Colors.white),
         reason: 'idle: ikon "+" warna netral, bukan putih spt sebelumnya');
@@ -58,12 +62,12 @@ void main() {
     expect(mainDecoration.boxShadow, anyOf(isNull, isEmpty),
         reason: 'flat berlaku di kedua state, bukan cuma idle');
 
-    // Ring putus-putus HANYA relevan saat idle -- tidak perlu digambar lagi
-    // begitu sudah solid (fill sudah jadi "border"-nya secara visual).
-    final hasDashedRing = tester
+    // Garis putus-putus HANYA relevan saat idle -- begitu produk sudah di
+    // keranjang, stepper penuh (minus + angka) yang tampil, tanpa garis.
+    final hasDashedLine = tester
         .widgetList<CustomPaint>(find.byType(CustomPaint))
-        .any((w) => w.painter.runtimeType.toString() == '_DashedCirclePainter');
-    expect(hasDashedRing, isFalse,
-        reason: 'di keranjang: ring putus-putus tidak perlu digambar lagi');
+        .any((w) => w.painter.runtimeType.toString() == '_DashedVLinePainter');
+    expect(hasDashedLine, isFalse,
+        reason: 'di keranjang: garis putus-putus tidak digambar lagi');
   });
 }

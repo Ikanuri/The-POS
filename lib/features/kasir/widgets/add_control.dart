@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -126,11 +124,19 @@ class _AddControlState extends State<AddControl> {
     final mainFg = (inCart && isDark) ? const Color(0xFF0A3D28) : Colors.white;
     // Susulan keluhan "terlalu ramai" (banyak lingkaran solid berwarna
     // sekaligus di grid produk): SEBELUM ada di keranjang, lingkaran TIDAK
-    // diisi & TANPA shadow (flat) — cuma ring putus-putus warna netral +
-    // ikon "+" senada, supaya idle state tidak menyaingi info produk.
-    // Warna baru "hidup" (fill solid, spt sebelumnya) begitu produk BENAR2
-    // masuk keranjang. Area tap TIDAK berubah — cuma bobot visualnya.
+    // diisi & TANPA shadow (flat) — ikon "+" polos warna netral, supaya
+    // idle state tidak menyaingi info produk. Warna baru "hidup" (fill
+    // solid, spt sebelumnya) begitu produk BENAR2 masuk keranjang. Area tap
+    // TIDAK berubah sama sekali — cuma bobot visualnya.
     final idleColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    // Revisi susulan (permintaan user): ring putus-putus MELINGKAR dibuang,
+    // diganti SATU garis putus-putus VERTIKAL di kiri tombol "+" — lebih
+    // minimalis, dan yang lama dinilai "masih terlalu tegas" walau sudah
+    // netral (lingkaran penuh = banyak garis sekaligus, jadi berat walau
+    // warnanya redup). Garisnya sendiri pakai `outlineVariant` (token
+    // pembatas paling samar di app ini — dipakai juga oleh garis batas atas
+    // cart bar), BUKAN `onSurfaceVariant` yang derajatnya setara teks.
+    final hairlineColor = Theme.of(context).colorScheme.outlineVariant;
 
     return ValueListenableBuilder<State<AddControl>?>(
       valueListenable: AddControl.activeStepper,
@@ -161,20 +167,12 @@ class _AddControlState extends State<AddControl> {
                 color: inCart ? bgColor : Colors.transparent,
                 shape: BoxShape.circle,
               ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (!inCart)
-                    CustomPaint(
-                      size: Size(circleSize, circleSize),
-                      painter: _DashedCirclePainter(color: idleColor),
-                    ),
-                  rightShowsPlus
-                      ? Icon(Icons.add_rounded,
-                          color: inCart ? mainFg : idleColor,
-                          size: circleSize * 0.6)
-                      : _qtyLabel(label, circleSize, color: mainFg),
-                ],
+              child: Center(
+                child: rightShowsPlus
+                    ? Icon(Icons.add_rounded,
+                        color: inCart ? mainFg : idleColor,
+                        size: circleSize * 0.6)
+                    : _qtyLabel(label, circleSize, color: mainFg),
               ),
             ),
           ),
@@ -190,7 +188,24 @@ class _AddControlState extends State<AddControl> {
               child: child,
             );
 
-        if (!inCart) return markDown(mainCircle);
+        // Idle: "+" polos didampingi SATU garis putus-putus vertikal di
+        // kirinya (lihat dok `hairlineColor`). Tingginya sengaja cuma
+        // sebagian dari kotak stepper & rata tengah — permintaan user:
+        // garis ini TIDAK boleh menyambung ke kartu/baris di bawahnya,
+        // harus tetap ada jeda di atas & bawahnya.
+        if (!inCart) {
+          return markDown(Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CustomPaint(
+                size: Size(_kHairlineStroke, circleSize * 0.58),
+                painter: _DashedVLinePainter(color: hairlineColor),
+              ),
+              const SizedBox(width: 10),
+              mainCircle,
+            ],
+          ));
+        }
 
         // Tombol minus: merah, sedikit lebih kecil dari lingkaran jumlah.
         // Pakai HitTestBehavior.opaque agar tap tidak "tembus" ke InkWell
@@ -233,47 +248,46 @@ class _AddControlState extends State<AddControl> {
   }
 }
 
-/// Ring putus-putus (idle state `AddControl`, lihat dok `idleColor` di
-/// atas) — `Canvas.drawArc` berulang, BUKAN `BoxDecoration` (Flutter tak
-/// punya border dashed bawaan). Jumlah segmen dihitung dari keliling
-/// lingkaran (bukan angka tetap) supaya pola pas menutup 360° tanpa
-/// "jahitan" terlihat di titik pertemuan awal/akhir, konsisten di semua
-/// ukuran stepper (grid/list/varian/keranjang beda-beda `size`).
-class _DashedCirclePainter extends CustomPainter {
-  const _DashedCirclePainter({required this.color});
+/// Ketebalan garis rambut putus-putus idle (lihat [_DashedVLinePainter]).
+/// Sengaja tipis — keluhan user: versi ring sebelumnya "masih terlalu
+/// tegas" walau warnanya sudah netral.
+const _kHairlineStroke = 1.5;
+
+/// Garis putus-putus VERTIKAL di kiri tombol "+" saat idle (menggantikan
+/// ring melingkar). Digambar manual (`Canvas.drawLine` berulang) karena
+/// Flutter tidak punya border/garis dashed bawaan.
+///
+/// Jumlah segmen DIHITUNG dari tinggi yang tersedia (bukan angka tetap)
+/// supaya pola dash tetap proporsional di semua ukuran stepper
+/// (grid/list/varian punya `size` berbeda-beda) dan selalu berakhir rapi
+/// di ujung bawah, bukan terpotong separuh dash.
+class _DashedVLinePainter extends CustomPainter {
+  const _DashedVLinePainter({required this.color});
 
   final Color color;
-  static const _strokeWidth = 2.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = (size.shortestSide - _strokeWidth) / 2;
-    final circumference = 2 * math.pi * radius;
-    const targetSegment = 7.0; // dash+gap idaman, dlm px logis
-    final segments = (circumference / targetSegment).round().clamp(8, 60);
-    final anglePerSegment = 2 * math.pi / segments;
-    final dashSweep = anglePerSegment * 0.55;
+    const targetSegment = 6.0; // dash+gap idaman, dlm px logis
+    final segments = (size.height / targetSegment).round().clamp(3, 20);
+    final segmentHeight = size.height / segments;
+    final dashHeight = segmentHeight * 0.55;
+    final x = size.width / 2;
 
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = _strokeWidth
+      ..strokeWidth = _kHairlineStroke
       ..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < segments; i++) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        i * anglePerSegment,
-        dashSweep,
-        false,
-        paint,
-      );
+      final top = i * segmentHeight;
+      canvas.drawLine(Offset(x, top), Offset(x, top + dashHeight), paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DashedCirclePainter oldDelegate) =>
+  bool shouldRepaint(covariant _DashedVLinePainter oldDelegate) =>
       oldDelegate.color != color;
 }
 
