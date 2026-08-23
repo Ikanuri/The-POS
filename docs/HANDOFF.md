@@ -5,6 +5,48 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi — avatar produk kasir
+dilembutkan + hapus 2 fitur: Import Griyo POS & Cek Duplikat Data),
+commit `c0a570a`/`1740d68`, versi kerja **2.19.5+30** (akan di-bump lagi
+di akhir sesi ini sebelum merge ke `main`).
+
+**Avatar produk kasir** (`_ProductCard`/`_ProductListTileState`,
+`kasir_screen.dart`): user minta warna dikurangi intensitasnya lewat
+mockup Playwright 3 opsi (A: gradient -45% pastel huruf putih, B: tint
+lembut ala chip bg muda+huruf solid, C: gradient -25% minim). User pilih
+**opsi B** — `_kAvatarGradients`/`_gradFor` (2-warna gradient solid+huruf
+putih) diganti `_kAvatarPalette`/`_avatarColorsFor` (record `{bg, fg}`,
+bg tint sangat muda, fg warna solid aslinya, huruf TIDAK lagi putih).
+
+**2 fitur dihapus** (permintaan user langsung, tanpa diskusi lebih
+lanjut):
+1. Settings > Eksperimental > Import dari Griyo POS — tile+route
+   dihapus dari `pengaturan_screen.dart`/`app_router.dart`. Screen-nya
+   (`csv_import_screen.dart`) DIPAKAI BERSAMA fitur "Import Produk CSV"
+   biasa via flag `griyoMode` — flag & kedua cabang kondisionalnya
+   dilucuti, sisa file jadi HANYA varian generik. `CsvImportService`
+   TIDAK disentuh (parser tetap otomatis kenali skema legacy Griyo di
+   balik layar, cuma UI-nya yang hilang).
+2. Settings > Diagnostik > Cek Duplikat Data — tile+route+screen
+   dihapus total (`duplicate_data_screen.dart` di-`rm`). Method DB
+   eksklusifnya, `AppDatabase.findMasterDataDuplicates()` + class
+   `MasterDataDuplicate` (`app_database.dart`), ikut dihapus karena
+   dipakai HANYA oleh screen ini.
+
+**Test dihapus** (bukan cuma trim): `csv_import_griyo_test.dart`,
+`duplicate_data_screen_test.dart`, `experimental_flags_test.dart`
+(seluruhnya soal flag Griyo yang sudah tidak ada lagi),
+`master_data_duplicate_detection_test.dart` (menguji langsung
+`findMasterDataDuplicates` yang baru dihapus — **catatan penting**:
+agent Explore sempat salah menandai file ini sebagai "tidak terkait",
+ternyata SALAH — selalu cek isi file test yang disebut ambigu, jangan
+percaya begitu saja hasil grep judul/deskripsi).
+
+`flutter analyze` 0 issue. Full suite 1111 lolos + 1 gagal (flaky
+pre-existing `proposal_unchanged_end_to_end_test.dart`/
+`laci_meja_proposal_unchanged_end_to_end_test.dart`, bukan regresi dari
+perubahan sesi ini).
+
 _Update sesi 23 Agustus 2026 — redesain lanjutan stepper +/- (lingkaran
 solid dihilangkan saat di keranjang, ikon "+" idle dikecilkan), commit
 `c0397ba`, di atas versi kerja **2.19.4+29** (belum di-bump lebih lanjut
