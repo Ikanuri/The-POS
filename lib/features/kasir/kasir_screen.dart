@@ -714,7 +714,7 @@ void _decrementVariant({
 // — diturunkan jadi latar TINT LEMBUT + huruf berwarna solid (pola yang
 // sama dgn chip toolbar kasir/Item 33 — bg pastel, fg tetap jenuh),
 // dipilih user dari 3 opsi mockup Playwright (opsi B: "tint lembut").
-const _kAvatarPalette = [
+const _kAvatarPaletteLight = [
   (bg: Color(0xFFF5E4DC), fg: Color(0xFFC96442)), // terracotta
   (bg: Color(0xFFE1EAE4), fg: Color(0xFF3A6349)), // hijau
   (bg: Color(0xFFDDE6EE), fg: Color(0xFF345880)), // biru
@@ -723,8 +723,24 @@ const _kAvatarPalette = [
   (bg: Color(0xFFDDEBEB), fg: Color(0xFF3A7474)), // teal
 ];
 
-({Color bg, Color fg}) _avatarColorsFor(String name) => _kAvatarPalette[
-    (name.isEmpty ? 0 : name.codeUnitAt(0)) % _kAvatarPalette.length];
+// Varian dark mode — palet light dipakai APA ADANYA di dark dulunya bikin bg
+// pastel terang jadi tempelan mencolok di atas panel gelap. Ikuti pola
+// scanFg/scanBg dkk (app_theme.dart, Item 33): bg jadi tint alpha ~20% dari
+// warna fg (menyatu dgn panel gelap, bukan solid terang), huruf dicerahkan
+// biar tetap kontras. Dipilih user dari mockup Playwright.
+const _kAvatarPaletteDark = [
+  (bg: Color(0x33C96442), fg: Color(0xFFE0916B)), // terracotta
+  (bg: Color(0x334F7B5E), fg: Color(0xFF7FCB9F)), // hijau
+  (bg: Color(0x334A6E94), fg: Color(0xFF83AED4)), // biru
+  (bg: Color(0x338E6B3E), fg: Color(0xFFCFA871)), // cokelat
+  (bg: Color(0x337B5EA7), fg: Color(0xFFB399DC)), // ungu
+  (bg: Color(0x334E8B8B), fg: Color(0xFF74CAC0)), // teal
+];
+
+({Color bg, Color fg}) _avatarColorsFor(String name, bool isDark) {
+  final palette = isDark ? _kAvatarPaletteDark : _kAvatarPaletteLight;
+  return palette[(name.isEmpty ? 0 : name.codeUnitAt(0)) % palette.length];
+}
 
 /// Item 46 — observer rute navigator shell, dipakai `_KasirScreenState`
 /// (RouteAware) untuk tahu kapan pengguna KEMBALI ke kasir (dari layar
@@ -2648,7 +2664,8 @@ class _ProductCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    final avatarColors = _avatarColorsFor(product.name);
+    final avatarColors = _avatarColorsFor(
+        product.name, Theme.of(context).brightness == Brightness.dark);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
     final cart = ref.watch(cartProvider(cartId));
     final notifier = ref.read(cartProvider(cartId).notifier);
@@ -2815,7 +2832,8 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final avatarColors = _avatarColorsFor(product.name);
+    final avatarColors = _avatarColorsFor(
+        product.name, Theme.of(context).brightness == Brightness.dark);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
     final cart = ref.watch(cartProvider(widget.cartId));
     final notifier = ref.read(cartProvider(widget.cartId).notifier);

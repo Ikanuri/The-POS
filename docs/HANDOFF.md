@@ -5,6 +5,31 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi lagi — avatar produk kasir
+dibuat dark-aware), commit `971f647`, di atas versi kerja **2.19.6+31**
+(akan di-bump lagi sebelum merge ke `main`). Susulan langsung dari
+update di bawah ini (opsi B tint lembut) — user minta warnanya JUGA
+dicek kompatibilitasnya di mode gelap. Ternyata palet light dipakai
+APA ADANYA di dark: bg pastel terang (mis. `#F5E4DC`) di atas panel
+gelap (`_dPanel #211E1C`) jadi tempelan mencolok, bukan "lembut" lagi
+seperti maksud desainnya.
+
+Fix: `_kAvatarPaletteDark` baru (`kasir_screen.dart`) — bg jadi warna fg
+yang sama dengan alpha ~20% (`0x33RRGGBB`, dioper di atas panel gelap,
+bukan solid), fg dicerahkan (mis. terracotta `#C96442`→`#E0916B`).
+Mengikuti PERSIS pola pasangan warna dark-aware yang SUDAH ada di
+`app_theme.dart` (`scanFg`/`scanBg`, `tealFg`/`tealBg`, dst — Item 33) —
+bukan skema baru. `_avatarColorsFor` sekarang `(String name, bool
+isDark)`, dipanggil dgn `Theme.of(context).brightness == Brightness.
+dark` di kedua situs pemakaian (`_ProductCard`/`_ProductListTileState`).
+Light mode TIDAK berubah sama sekali. Didahului mockup Playwright
+(simulasi latar panel gelap sungguhan `#211E1C`, bukan cuma
+"dark-mode-ish" hitam polos) yang dikirim & disetujui user sebelum
+eksekusi.
+
+`flutter analyze` 0 issue, full suite 1111 lolos + 1 gagal (flaky
+pre-existing yang sama, bukan regresi).
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi — avatar produk kasir
 dilembutkan + hapus 2 fitur: Import Griyo POS & Cek Duplikat Data),
 commit `c0a570a`/`1740d68`, versi kerja **2.19.5+30** (akan di-bump lagi

@@ -19,6 +19,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Warna ikon avatar produk di halaman kasir dilembutkan** — dulu
   warnanya pekat/solid, sekarang latar jadi warna muda dengan huruf
   tetap berwarna solid, senada dengan gaya chip lain di app.
+- **Warna ikon avatar produk kini juga menyesuaikan mode gelap** —
+  sebelumnya latarnya tetap terang mencolok walau app dipakai dalam
+  mode gelap, sekarang latarnya jadi lebih redup & menyatu dengan tema.
 
 ### 🗑️ Fitur Dihapus
 - **Import dari Griyo POS** (Pengaturan > Eksperimental) dihapus.
