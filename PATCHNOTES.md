@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 23 Agustus 2026
+
+### ✨ Tampilan
+- **Tombol +/- di kasir & keranjang disederhanakan lagi** — ikon "+"
+  sedikit dikecilkan saat belum ditambahkan, dan lingkaran solid di
+  belakang angka/tombol saat sudah di keranjang dihilangkan (cuma angka
+  & ikonnya saja yang tampil, warnanya tetap hijau/merah seperti
+  biasa). Area yang bisa disentuh tidak berubah sama sekali.
+
 ## 22 Agustus 2026
 
 ### ✨ Fitur Baru

@@ -114,20 +114,23 @@ class _AddControlState extends State<AddControl> {
     final inCart = qty > 0;
     final label = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = inCart ? AppTheme.changeFg(isDark) : AppTheme.accent;
     final circleSize = size + 4;
     final minusSize = size - 2;
-    // Item 6 revisi — di mode gelap, lingkaran hijau (sudah di keranjang)
-    // pakai warna hijau muda (changeFg dark) → angka/"+" putih jadi kurang
-    // kontras. Pakai warna gelap untuk angka/ikon di lingkaran hijau saja
-    // (lingkaran terracotta saat belum di keranjang tetap putih).
-    final mainFg = (inCart && isDark) ? const Color(0xFF0A3D28) : Colors.white;
-    // Susulan keluhan "terlalu ramai" (banyak lingkaran solid berwarna
-    // sekaligus di grid produk): SEBELUM ada di keranjang, lingkaran TIDAK
-    // diisi & TANPA shadow (flat) — ikon "+" polos warna netral, supaya
-    // idle state tidak menyaingi info produk. Warna baru "hidup" (fill
-    // solid, spt sebelumnya) begitu produk BENAR2 masuk keranjang. Area tap
-    // TIDAK berubah sama sekali — cuma bobot visualnya.
+    // Revisi susulan (permintaan user): lingkaran solid (hijau/merah) di
+    // state "sudah di keranjang" DIHILANGKAN TOTAL — hanya angka/ikon yang
+    // tampil mengambang, TANPA latar. Cakupan sentuh (ukuran `circleSize`/
+    // `minusSize`) TIDAK ikut mengecil, cuma bobot visualnya yang berkurang
+    // (sejalan dgn revisi idle sebelumnya: "terlalu ramai" saat semua kartu
+    // grid punya lingkaran solid sekaligus). Warna kini ditentukan oleh SISI
+    // (kanan/"+" = hijau, kiri/"−" = merah) — BUKAN oleh jenis kontennya
+    // (ikon vs angka) — jadi saat qty "pindah sisi" (lihat `qtyOnLeft`),
+    // warnanya ikut berpindah, bukan menempel ke angka.
+    final greenSlot = AppTheme.changeFg(isDark);
+    final redSlot = AppTheme.debtFg(isDark);
+    // SEBELUM ada di keranjang, ikon "+" polos warna netral, supaya idle
+    // state tidak menyaingi info produk. Warna baru "hidup" (hijau) begitu
+    // produk BENAR2 masuk keranjang. Area tap TIDAK berubah sama sekali —
+    // cuma bobot visualnya.
     final idleColor = Theme.of(context).colorScheme.onSurfaceVariant;
     // Revisi susulan (permintaan user): ring putus-putus MELINGKAR dibuang,
     // diganti SATU garis putus-putus VERTIKAL di kiri tombol "+" — lebih
@@ -151,7 +154,8 @@ class _AddControlState extends State<AddControl> {
         final rightShowsPlus = !inCart || qtyOnLeft;
 
         // Lingkaran utama (jumlah / "+") berukuran sama baik saat kosong
-        // maupun saat sudah ada di keranjang, agar tidak "melompat" ukuran.
+        // maupun saat sudah ada di keranjang, agar tidak "melompat" ukuran —
+        // TANPA latar/fill lagi, cuma kotak transparan sbg cakupan sentuh.
         final mainCircle = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleTap,
@@ -159,20 +163,20 @@ class _AddControlState extends State<AddControl> {
             scale: isActive ? _kActiveScale : 1.0,
             duration: _kActiveScaleDuration,
             curve: Curves.easeOut,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
+            child: SizedBox(
               width: circleSize,
               height: circleSize,
-              decoration: BoxDecoration(
-                color: inCart ? bgColor : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
               child: Center(
                 child: rightShowsPlus
                     ? Icon(Icons.add_rounded,
-                        color: inCart ? mainFg : idleColor,
-                        size: circleSize * 0.6)
-                    : _qtyLabel(label, circleSize, color: mainFg),
+                        color: inCart ? greenSlot : idleColor,
+                        // HANYA ikon "+" IDLE yang dikecilkan (permintaan
+                        // user) — "+" yang muncul lagi setelah qty
+                        // dipindah ke kiri (`inCart`) TETAP ukuran lama.
+                        // Cakupan sentuh (SizedBox di atas) TIDAK ikut
+                        // mengecil sama sekali di kedua kasus.
+                        size: circleSize * (inCart ? 0.6 : 0.5))
+                    : _qtyLabel(label, circleSize, color: greenSlot),
               ),
             ),
           ),
@@ -207,10 +211,11 @@ class _AddControlState extends State<AddControl> {
           ));
         }
 
-        // Tombol minus: merah, sedikit lebih kecil dari lingkaran jumlah.
-        // Pakai HitTestBehavior.opaque agar tap tidak "tembus" ke InkWell
-        // kartu produk. Menampilkan angka qty saat `qtyOnLeft` (setelah "+"
-        // ditekan), selain itu ikon "-".
+        // Tombol minus: TANPA latar/fill (lihat dok `redSlot`), cakupan
+        // sentuh (`minusSize`) tidak berubah. Pakai HitTestBehavior.opaque
+        // agar tap tidak "tembus" ke InkWell kartu produk. Menampilkan
+        // angka qty saat `qtyOnLeft` (setelah "+" ditekan), selain itu
+        // ikon "-" — keduanya warna merah (warna sisi, bukan warna konten).
         final minusButton = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleMinus,
@@ -218,18 +223,14 @@ class _AddControlState extends State<AddControl> {
             scale: isActive ? _kActiveScale : 1.0,
             duration: _kActiveScaleDuration,
             curve: Curves.easeOut,
-            child: Container(
+            child: SizedBox(
               width: minusSize,
               height: minusSize,
-              decoration: const BoxDecoration(
-                color: Color(0xFFD64545),
-                shape: BoxShape.circle,
-              ),
               child: Center(
                 child: qtyOnLeft
-                    ? _qtyLabel(label, minusSize)
+                    ? _qtyLabel(label, minusSize, color: redSlot)
                     : Icon(Icons.remove_rounded,
-                        color: Colors.white, size: minusSize * 0.6),
+                        color: redSlot, size: minusSize * 0.6),
               ),
             ),
           ),
