@@ -5,6 +5,54 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 — redesain lanjutan stepper +/- (lingkaran
+solid dihilangkan saat di keranjang, ikon "+" idle dikecilkan), commit
+`c0397ba`, di atas versi kerja **2.19.4+29** (belum di-bump lebih lanjut
+di titik ini — tunggu akhir sesi). Didahului mockup Playwright (4
+alternatif bentuk dikirim dulu — pill menyatu/chip lembut/kotak
+membulat/minimal — SEMUANYA DITOLAK user, minta arah lain sama sekali)
+lalu instruksi presisi user sendiri (3 poin), dieksekusi PERSIS sesuai
+itu tanpa iterasi ulang mockup krn instruksinya sudah sangat spesifik.
+
+**Perubahan bentuk (`add_control.dart`)**:
+1. Idle (`qty==0`): bentuk & cakupan sentuh SAMA PERSIS, cuma ikon "+"
+   dikecilkan (`circleSize * 0.5`, sblmnya `0.6`).
+2. Di keranjang (`qty>0`): lingkaran solid (hijau di kanan/qty-plus,
+   merah di kiri/minus) DIHILANGKAN TOTAL — `AnimatedContainer`/
+   `Container` berdekorasi warna diganti `SizedBox` transparan
+   (cakupan sentuh, via `circleSize`/`minusSize`, TIDAK ikut mengecil).
+3. Warna kini melekat pada SISI (kanan="+"=hijau `AppTheme.changeFg`,
+   kiri="-"=merah `AppTheme.debtFg`), BUKAN pada jenis konten (ikon vs
+   angka) — konsekuensinya saat qty "pindah sisi" (perilaku `_qtyOnLeft`
+   lama, TIDAK diubah sama sekali: tap "+" → angka pindah ke slot minus/
+   kiri, tap "-" → kembali ke kanan), warnanya ikut berpindah bersama
+   angka (jadi merah di kiri, hijau di kanan — bukan menempel ke "jenis
+   konten qty" spt sebelumnya kesannya).
+
+**Efek berantai yg perlu diingat**: logic lama `mainFg` (dark-mode
+kontras teks putih vs teks gelap thd fill hijau muda mode gelap, dari
+"Item 6" sesi jauh sebelumnya) jadi TIDAK RELEVAN LAGI krn fill-nya
+sendiri sudah tidak ada — dihapus total, diganti langsung `AppTheme.
+changeFg(isDark)`/`debtFg(isDark)` (keduanya sudah dirancang sbg
+pasangan warna teks-aman utk kedua mode, TIDAK butuh pasangan fg/bg lagi
+krn tidak ada background yg perlu dikontraskan).
+
+**Test lama yang SUPERSEDED (bukan bug, memang sengaja dibalik)**:
+`add_control_dark_fg_and_no_debounce_test.dart` (assersi warna putih vs
+`0xFF0A3D28` diganti `changeFg(isDark)` di kedua mode) dan
+`add_control_idle_flat_style_test.dart` (assersi "lingkaran KEMBALI
+solid saat qty>0" DIBALIK jadi "TETAP tidak ada fill" — beda dari
+desain ASLI 2 sesi lalu yg justru sengaja mengembalikan fill solid
+begitu masuk keranjang; itu sekarang sudah tidak berlaku). Revert-
+verified (kedua file gagal sensibel — `AnimatedContainer` masih
+ketemu, warna masih lama — saat widget fix di-revert sementara).
+Diverifikasi juga via render widget sungguhan (`RepaintBoundary.
+toImage`) — ikon "+" idle kelihatan lebih kecil, tidak ada lingkaran
+berwarna di state manapun.
+
+Full suite 1127 lolos SEMUA (tidak ada kegagalan flaky kali ini),
+`flutter analyze` 0 issue.
+
 _Update sesi 22 Agustus 2026 (lanjutan lagi x4 — fix Ringkasan/Laporan
 tidak auto-refresh setelah sync), commit `09ce02e`, versi kerja **2.19.3+
 28** (belum di-bump lebih lanjut — tunggu akhir sesi), SUDAH di-merge ke
