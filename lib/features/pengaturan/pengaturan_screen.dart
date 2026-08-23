@@ -77,8 +77,6 @@ class PengaturanScreen extends ConsumerWidget {
     final tokoBg = AppTheme.changeBg(isDark); // Toko → hijau (usaha)
     final perangkatBg = AppTheme.tealBg(isDark); // Perangkat → teal (hardware)
     final syncBg = AppTheme.riwayatBg(isDark); // Sinkronisasi → ungu
-    final expBg =
-        AppTheme.stockWarnBg(isDark); // Eksperimental → amber (hati-hati)
     final dataMgmtBg =
         AppTheme.debtBg(isDark); // Manajemen Data → merah (berisiko tinggi)
 
@@ -313,21 +311,6 @@ class PengaturanScreen extends ConsumerWidget {
                 ),
                 if (device.isOwner) ...[
                   const SizedBox(height: 8),
-                  const _SectionHeader('Eksperimental'),
-                  Card(
-                    color: expBg,
-                    child: ListTile(
-                      leading: const Icon(Icons.science_outlined),
-                      title: const Text('Import dari Griyo POS'),
-                      subtitle: const Text(
-                          'Migrasi data produk dari file export Griyo POS'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/pengaturan/import-griyo'),
-                    ),
-                  ),
-                ],
-                if (device.isOwner) ...[
-                  const SizedBox(height: 8),
                   const _SectionHeader('Manajemen Data'),
                   Card(
                     color: dataMgmtBg,
@@ -422,16 +405,6 @@ class PengaturanScreen extends ConsumerWidget {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/pengaturan/log-error'),
                       ),
-                      if (device.isOwner)
-                        ListTile(
-                          leading: const Icon(Icons.rule_folder_outlined),
-                          title: const Text('Cek Duplikat Data'),
-                          subtitle: const Text(
-                              'Cari barcode/harga dobel, mis. akibat restore backup dari device lain'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () =>
-                              context.push('/pengaturan/duplikat-data'),
-                        ),
                     ],
                   ),
                 ),

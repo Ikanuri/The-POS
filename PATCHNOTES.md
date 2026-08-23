@@ -16,6 +16,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   belakang angka/tombol saat sudah di keranjang dihilangkan (cuma angka
   & ikonnya saja yang tampil, warnanya tetap hijau/merah seperti
   biasa). Area yang bisa disentuh tidak berubah sama sekali.
+- **Warna ikon avatar produk di halaman kasir dilembutkan** — dulu
+  warnanya pekat/solid, sekarang latar jadi warna muda dengan huruf
+  tetap berwarna solid, senada dengan gaya chip lain di app.
+
+### 🗑️ Fitur Dihapus
+- **Import dari Griyo POS** (Pengaturan > Eksperimental) dihapus.
+- **Cek Duplikat Data** (Pengaturan) dihapus.
 
 ## 22 Agustus 2026
 

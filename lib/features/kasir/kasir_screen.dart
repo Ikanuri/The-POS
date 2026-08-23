@@ -709,18 +709,22 @@ void _decrementVariant({
   notifier.setEffectiveQty(v.unitId, existing.qty - 1);
 }
 
-// Gradient palette for product avatars — cycles by first char code
-const _kAvatarGradients = [
-  [Color(0xFFD97757), Color(0xFFC96442)],
-  [Color(0xFF4F7B5E), Color(0xFF3A6349)],
-  [Color(0xFF4A6E94), Color(0xFF345880)],
-  [Color(0xFF8E6B3E), Color(0xFF7A5A2F)],
-  [Color(0xFF7B5EA7), Color(0xFF654E90)],
-  [Color(0xFF4E8B8B), Color(0xFF3A7474)],
+// Palet avatar produk — cycles by first char code. Permintaan user: warna
+// dulu gradient SOLID PEKAT (dua warna, huruf putih) dinilai terlalu tegas
+// — diturunkan jadi latar TINT LEMBUT + huruf berwarna solid (pola yang
+// sama dgn chip toolbar kasir/Item 33 — bg pastel, fg tetap jenuh),
+// dipilih user dari 3 opsi mockup Playwright (opsi B: "tint lembut").
+const _kAvatarPalette = [
+  (bg: Color(0xFFF5E4DC), fg: Color(0xFFC96442)), // terracotta
+  (bg: Color(0xFFE1EAE4), fg: Color(0xFF3A6349)), // hijau
+  (bg: Color(0xFFDDE6EE), fg: Color(0xFF345880)), // biru
+  (bg: Color(0xFFEDE4D6), fg: Color(0xFF7A5A2F)), // cokelat
+  (bg: Color(0xFFEAE1F2), fg: Color(0xFF654E90)), // ungu
+  (bg: Color(0xFFDDEBEB), fg: Color(0xFF3A7474)), // teal
 ];
 
-List<Color> _gradFor(String name) => _kAvatarGradients[
-    (name.isEmpty ? 0 : name.codeUnitAt(0)) % _kAvatarGradients.length];
+({Color bg, Color fg}) _avatarColorsFor(String name) => _kAvatarPalette[
+    (name.isEmpty ? 0 : name.codeUnitAt(0)) % _kAvatarPalette.length];
 
 /// Item 46 — observer rute navigator shell, dipakai `_KasirScreenState`
 /// (RouteAware) untuk tahu kapan pengguna KEMBALI ke kasir (dari layar
@@ -2644,7 +2648,7 @@ class _ProductCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    final grad = _gradFor(product.name);
+    final avatarColors = _avatarColorsFor(product.name);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
     final cart = ref.watch(cartProvider(cartId));
     final notifier = ref.read(cartProvider(cartId).notifier);
@@ -2674,11 +2678,7 @@ class _ProductCard extends ConsumerWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: grad,
-                    ),
+                    color: avatarColors.bg,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
@@ -2686,8 +2686,8 @@ class _ProductCard extends ConsumerWidget {
                       product.name.isNotEmpty
                           ? product.name[0].toUpperCase()
                           : '?',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: avatarColors.fg,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
@@ -2815,7 +2815,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final grad = _gradFor(product.name);
+    final avatarColors = _avatarColorsFor(product.name);
     final detailAsync = ref.watch(_catalogDetailProvider(product.id));
     final cart = ref.watch(cartProvider(widget.cartId));
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
@@ -2846,11 +2846,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: grad,
-                      ),
+                      color: avatarColors.bg,
                       borderRadius: BorderRadius.circular(11),
                     ),
                     child: Center(
@@ -2858,8 +2854,8 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                         product.name.isNotEmpty
                             ? product.name[0].toUpperCase()
                             : '?',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: avatarColors.fg,
                           fontWeight: FontWeight.w700,
                           fontSize: 16,
                         ),
