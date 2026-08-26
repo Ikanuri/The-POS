@@ -6,7 +6,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi lagi — hapus tombol Batal
-di kartu Pre-order dashboard), commit `<pending>`, versi kerja
+di kartu Pre-order dashboard), commit `1ffe791`, versi kerja
 **2.19.11+36**. Permintaan user singkat: tombol "Batal" (ikon X,
 `cancelPreorderEntry`) di kartu Pre-order `laci_meja_dashboard_screen.
 dart` dihapus, hanya "Penuhi" tersisa. `cancelPreorderEntry` & aksi log
