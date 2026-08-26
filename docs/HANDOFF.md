@@ -6,7 +6,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 23 Agustus 2026 (lanjutan — Laci Meja poin 1/2/5: ambil
-parsial + riwayat per-nota + log global), commit `<pending>`, versi
+parsial + riwayat per-nota + log global), commit `39c6e7f`, versi
 kerja **2.19.9+34**. **KELIMA usulan Laci Meja user SELESAI SEMUA**
 (poin 3 & 4 di blok berikutnya di bawah). PLAN.md Item 54 dihapus.
 
