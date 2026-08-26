@@ -6,7 +6,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi — field "Nama barang" di
-luar nota dukung multi-baris), commit `<pending>`, versi kerja
+luar nota dukung multi-baris), commit `25f7090`, versi kerja
 **2.19.10+35**. Perubahan kecil: `TextField` di `_showLeftBehindDialog`
 (`receipt_screen.dart`) diberi `minLines:1, maxLines:null,
 keyboardType: multiline, textInputAction: newline` supaya Enter bikin
