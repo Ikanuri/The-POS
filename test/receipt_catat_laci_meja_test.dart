@@ -372,6 +372,41 @@ void main() {
   });
 
   testWidgets(
+      'susulan (permintaan user): field "Nama barang" (di luar nota) bisa '
+      'diisi BEBERAPA baris — Enter bikin baris baru, bukan submit/tutup '
+      'keyboard, dan seluruh baris ikut tersimpan', (tester) async {
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.byTooltip('+ Catat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Titip/Ketinggalan'));
+    await tester.pumpAndSettle();
+
+    final field =
+        tester.widget<TextField>(find.widgetWithText(TextField, 'Nama barang'));
+    expect(field.maxLines, isNull,
+        reason: 'null (bukan 1) -> field boleh tumbuh multi-baris');
+    expect(field.keyboardType, TextInputType.multiline);
+    expect(field.textInputAction, TextInputAction.newline,
+        reason: 'Enter di keyboard harus bikin baris baru, bukan submit');
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Nama barang'), 'Payung\nTas titipan');
+    await tester.enterText(find.widgetWithText(TextField, 'Jml'), '2');
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.leftBehindItems).get();
+    expect(rows, hasLength(1));
+    expect(rows.single.itemName, 'Payung\nTas titipan',
+        reason: 'newline ikut tersimpan utuh, bukan terpotong/gabung');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
       'device NON-OWNER (kasir) mencatat -> locallyModified=true (menunggu '
       'approve owner, pola sama spt usulan produk Item 40)', (tester) async {
     await pumpWithFakeApp(

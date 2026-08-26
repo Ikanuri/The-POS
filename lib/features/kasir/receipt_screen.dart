@@ -1987,8 +1987,20 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
+                        // Permintaan user: input bebas ini bisa berisi
+                        // BEBERAPA baris (mis. daftar barang dipisah per
+                        // baris) — sebelumnya terpaku 1 baris, teks panjang
+                        // cuma menunggu penuh kiri-ke-kanan lalu terpotong.
+                        // `minLines`/`maxLines: null` biarkan field tumbuh
+                        // sesuai isi, `TextInputAction.newline` supaya
+                        // Enter di keyboard bikin baris baru (bukan
+                        // men-submit/menutup keyboard).
                         child: TextField(
                           controller: otherNameController,
+                          minLines: 1,
+                          maxLines: null,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
                           decoration: const InputDecoration(
                             labelText: 'Nama barang',
                             hintText: 'Contoh: Payung, tas titipan',
