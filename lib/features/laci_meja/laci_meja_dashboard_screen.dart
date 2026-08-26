@@ -873,48 +873,35 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           total: e.qtyOrdered,
           verb: 'Dipenuhi',
           isDark: isDark),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Batal',
-            icon: const Icon(Icons.close),
-            visualDensity: VisualDensity.compact,
-            onPressed: () async {
-              final db = ref.read(databaseProvider);
-              final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-              await db.cancelPreorderEntry(e.id,
-                  locallyModified: locallyModified,
-                  deviceCode: ref.read(deviceProvider).deviceCode);
-            },
-          ),
-          TextButton(
-            onPressed: () async {
-              final db = ref.read(databaseProvider);
-              final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-              final deviceCode = ref.read(deviceProvider).deviceCode;
-              // Pre-order boleh dipenuhi bertahap (kasus user: antri 5 LPG,
-              // datang 3 dulu).
-              if (sisa > 1) {
-                final qty = await _showQtyDialog(
-                  context,
-                  title: 'Penuhi — $productName',
-                  sisaLabel:
-                      'Sisa belum dipenuhi: ${_n(sisa)} dari ${_n(e.qtyOrdered)}',
-                  sisa: sisa,
-                  actionLabel: 'Penuhi',
-                );
-                if (qty == null || qty <= 0) return;
-                await db.fulfillPreorderQty(e.id, qty,
-                    locallyModified: locallyModified, deviceCode: deviceCode);
-                return;
-              }
-              await db.fulfillPreorderEntry(e.id,
-                  locallyModified: locallyModified, deviceCode: deviceCode);
-            },
-            child: const Text('Penuhi'),
-          ),
-        ],
+      // Tombol "Batal" (hapus pre-order) DIHAPUS atas permintaan user —
+      // hanya "Penuhi" yang tersisa. `cancelPreorderEntry`/aksi log 'batal'
+      // tetap ada di DB (dipakai jalur lain: sync/riwayat lama), cuma
+      // pemicunya dari kartu ini yang dicabut.
+      trailing: TextButton(
+        onPressed: () async {
+          final db = ref.read(databaseProvider);
+          final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+          final deviceCode = ref.read(deviceProvider).deviceCode;
+          // Pre-order boleh dipenuhi bertahap (kasus user: antri 5 LPG,
+          // datang 3 dulu).
+          if (sisa > 1) {
+            final qty = await _showQtyDialog(
+              context,
+              title: 'Penuhi — $productName',
+              sisaLabel:
+                  'Sisa belum dipenuhi: ${_n(sisa)} dari ${_n(e.qtyOrdered)}',
+              sisa: sisa,
+              actionLabel: 'Penuhi',
+            );
+            if (qty == null || qty <= 0) return;
+            await db.fulfillPreorderQty(e.id, qty,
+                locallyModified: locallyModified, deviceCode: deviceCode);
+            return;
+          }
+          await db.fulfillPreorderEntry(e.id,
+              locallyModified: locallyModified, deviceCode: deviceCode);
+        },
+        child: const Text('Penuhi'),
       ),
     );
   }
