@@ -5,6 +5,81 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan — Laci Meja: nama ikut nota +
+redesain kartu), commit `<pending>`, di atas versi kerja **2.19.7+32**.
+Bagian dari **5 usulan fitur Laci Meja** yang user ajukan sekaligus.
+Analisis + mockup Playwright sudah diberikan utk KELIMA poin; user
+memilih dikerjakan **BERTAHAP — poin 3 & 4 dulu** (murah, tanpa migrasi
+DB). **Poin 1, 2, 5 BELUM dikerjakan** (lihat blok "MENGGANTUNG" di
+bawah).
+
+**Poin 3 (bug) — nama pelanggan tidak ikut saat nota diubah.** Akar:
+ketiga tabel Laci Meja simpan nama sbg SALINAN BEKU
+(`customerNameText`, dan `PreorderEntries.customerName` yang bahkan
+TIDAK punya `customerId` sama sekali), tidak pernah dicap ulang saat
+nota berubah. **Keputusan desain penting**: TIDAK menambah jalur "cap
+ulang" — utk device kasir itu berarti mutasi master-data → masuk
+antrian persetujuan owner (lihat `dumpLaciMejaProposals`), padahal ini
+cuma soal tampilan. Nama DIBACA HIDUP dari nota di sisi render:
+`AppDatabase.getCustomerNamesForTransactions` (1 query utk ketiga
+kategori) + `laciMejaCustomerNamesProvider`. Urutan fallback:
+nama nota → salinan beku → "Umum". Konsekuensi bagus: entri LAMA yang
+sudah terlanjur salah ikut terkoreksi, tanpa migrasi & tanpa backfill.
+
+**Poin 4 — kartu 3 tingkat**: baris 1 nama pelanggan (H1 w800, jadi
+HEADER kartu, tidak diulang per baris), baris 2 barang+qty (H2 w700;
+pinjaman pakai "Sisa x dari y"), baris 3 timestamp `dd/MM/yyyy HH:mm`
+(disamakan PERSIS dgn `receipt_screen.dart::_formatDateTime`) + umur
+relatif berwarna yang lama TETAP dipertahankan. `ListTile` diganti
+`_EntryRow` (kelas terpisah supaya widget test bisa menghitung baris
+per kartu — pola `_MetaTabDivider`/`_VariantRow`). Grouping SENGAJA
+tidak diubah (titip/pre-order per-nota, pinjaman per-pelanggan) supaya
+pembagian grup tidak ikut bergeser.
+
+**INSIDEN — kegagalan test terlewat di rilis sebelumnya.** Penghapusan
+fitur Griyo/Cek Duplikat dilaporkan "1111 lolos + 1 gagal (flaky)",
+PADAHAL ada 2 gagal: `laporan_pengaturan_accent_color_test.dart` masih
+menuntut kartu seksi "Eksperimental" (amber) yang seksinya ikut
+terhapus. Terlewat karena saat memeriksa hasil full-suite saya cuma
+mencocokkan nama test yang sudah dicurigai (`proposal_unchanged`),
+bukan MENDAFTAR SEMUA kegagalan. **Pelajaran: selalu ekstrak daftar
+lengkap nama test gagal** (mis. `grep -oE "--plain-name '[^']*'"` atas
+log, lalu `sort -u`) sebelum menyimpulkan "cuma flaky" — jangan
+mencocokkan satu nama lalu berhenti. Sudah diperbaiki di commit ini.
+
+**MENGGANTUNG — poin 1, 2, 5 (sudah dianalisis & disetujui arahnya,
+belum dieksekusi).** Keputusan arsitektur yang SUDAH diambil user:
+- **Pencatatan pengambilan = TABEL LOG APPEND-ONLY** (`laci_meja_events`
+  atau sejenisnya), BUKAN mengurangi kolom qty. Sisa = `qty − Σ log`.
+  Alasan: ketiga tabel Laci Meja itu master-data last-write-wins, jadi
+  read-modify-write pada qty bikin dua pengambilan bersamaan (owner &
+  kasir) SALING MENIMPA — salah satu hilang diam-diam di ledger barang
+  fisik. Baris log tidak pernah bentrok. Sekaligus langsung memenuhi
+  poin 2 (riwayat per-nota) & 5 (log global) dari tabel yang sama.
+  Polanya = `transaction_payments`.
+- **Sinkronisasi log TETAP lewat antrian persetujuan owner** (pilihan
+  eksplisit user — BUKAN auto-merge append-only spt `transactions`).
+  Tetap kompatibel: baris log tidak saling menimpa, hanya tampilan di
+  HP owner yang baru berubah setelah di-approve.
+- Poin 1 detail: `markLeftBehindCollected` & `fulfillPreorderEntry`
+  saat ini semua-atau-tidak; **pinjaman SUDAH parsial**
+  (`returnBorrowedItemQty` akumulasi `qtyReturned`) tapi tanpa jejak.
+- Poin 2 detail: kartu per-nota utk titipan & pinjaman SUDAH ADA di
+  `receipt_screen.dart` (`_buildLeftBehindOtherCard` ~3002,
+  `_buildBorrowedCard` ~2964) tapi TANPA timestamp; **pre-order belum
+  punya kartu sama sekali** di nota (cuma penanda inline "· Titip n").
+- **Jebakan yang WAJIB diingat saat mengeksekusi**:
+  `tutup_buku_service.dart` (~240-254) menghapus baris Laci Meja
+  bersama notanya saat arsip — baris log baru WAJIB ikut dihapus di
+  situ, kalau tidak jadi orphan permanen. Juga: `dumpLaciMejaProposals`
+  pakai `SELECT *` dan `filterUnchangedLaciMejaProposals` membandingkan
+  per-kolom, keduanya harus ikut disesuaikan. Dan data pinjaman lama
+  (`qtyReturned` sudah terisi) perlu di-backfill jadi 1 baris log
+  historis saat migrasi, kalau tidak riwayatnya tampak kosong padahal
+  qty sudah berkurang.
+- Estimasi storage log: ~150 byte/baris, 20 pengambilan/hari ≈ 1 MB/
+  tahun — tidak signifikan.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi lagi — avatar produk kasir
 dibuat dark-aware), commit `971f647`, di atas versi kerja **2.19.6+31**
 (akan di-bump lagi sebelum merge ke `main`). Susulan langsung dari

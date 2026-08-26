@@ -23,6 +23,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sebelumnya latarnya tetap terang mencolok walau app dipakai dalam
   mode gelap, sekarang latarnya jadi lebih redup & menyatu dengan tema.
 
+### 🔧 Perbaikan
+- **Laci Meja: nama pelanggan sekarang ikut notanya** — dulu kalau nota
+  diubah dari pembeli umum ke nama pelanggan (atau sebaliknya), entri
+  di Laci Meja tetap menampilkan nama lama. Sekarang namanya selalu
+  mengikuti nota, termasuk untuk entri lama yang terlanjur salah.
+
+### ✨ Tampilan (lanjutan)
+- **Kartu Laci Meja ditata ulang** — nama pelanggan naik ke paling atas
+  (paling besar & tebal), nama barang + jumlah di baris kedua, dan
+  **waktu pencatatan kini ditampilkan** di baris ketiga (tanggal & jam,
+  format sama dengan Riwayat Pembayaran). Berlaku untuk ketiga kategori:
+  titip/ketinggalan, pinjaman, dan pre-order.
+
 ### 🗑️ Fitur Dihapus
 - **Import dari Griyo POS** (Pengaturan > Eksperimental) dihapus.
 - **Cek Duplikat Data** (Pengaturan) dihapus.
