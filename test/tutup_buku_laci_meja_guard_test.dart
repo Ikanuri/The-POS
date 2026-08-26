@@ -183,4 +183,58 @@ void main() {
         reason: 'baris di luar periode tidak tersentuh sama sekali');
     await db.close();
   });
+
+  test(
+      'log kejadian (PLAN.md Item 54) ikut terhapus bersama entri induknya — '
+      'kalau tidak, baris log jadi YATIM permanen & menumpuk tiap tutup buku',
+      () async {
+    final db = openDb();
+    await _insertTx(db, id: 'tx-in', localId: 'K1-A', createdAtSec: inRangeSec);
+    final outsideSec =
+        periodEnd.add(const Duration(days: 5)).millisecondsSinceEpoch ~/ 1000;
+    await _insertTx(db,
+        id: 'tx-out', localId: 'K1-B', createdAtSec: outsideSec);
+
+    // Di dalam periode & SUDAH selesai -> ikut terhapus.
+    await db.addLeftBehindItem(
+        id: 'lbi-in',
+        transactionId: 'tx-in',
+        itemName: 'Payung',
+        jenis: 'titip',
+        qty: 1);
+    await db.collectLeftBehindQty('lbi-in', 1, total: 1, eventId: 'ev-in');
+    await db.addBorrowedItem(
+        id: 'bi-in', transactionId: 'tx-in', itemName: 'Krat', qty: 1);
+    await db.returnBorrowedItemQty('bi-in', 1, eventId: 'ev-bi');
+    await db.addPreorderEntry(
+        id: 'pe-in',
+        productId: 'P1',
+        productUnitId: 'U1',
+        customerName: 'Budi',
+        qtyOrdered: 1,
+        transactionId: 'tx-in');
+    await db.fulfillPreorderEntry('pe-in', eventId: 'ev-pe');
+
+    // DI LUAR periode -> harus tetap utuh.
+    await db.addLeftBehindItem(
+        id: 'lbi-out',
+        transactionId: 'tx-out',
+        itemName: 'Topi',
+        jenis: 'titip',
+        qty: 1);
+    await db.collectLeftBehindQty('lbi-out', 1, total: 1, eventId: 'ev-out');
+
+    expect(await db.select(db.laciMejaEvents).get(), hasLength(4),
+        reason: 'prakondisi: 3 di dalam periode + 1 di luar');
+
+    final result = await TutupBukuService.execute(
+        db: db, periodStart: periodStart, periodEnd: periodEnd);
+    expect(result.txArchived, 1);
+
+    final events = await db.select(db.laciMejaEvents).get();
+    expect(events.map((e) => e.id).toSet(), {'ev-out'},
+        reason: 'hanya log milik nota di luar periode yang tersisa — '
+            'ev-in/ev-bi/ev-pe ikut terhapus bersama entri induknya');
+    await db.close();
+  });
 }

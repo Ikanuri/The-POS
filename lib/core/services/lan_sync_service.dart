@@ -430,6 +430,10 @@ class LanSyncService {
     'left_behind_items',
     'borrowed_items',
     'preorder_entries',
+    // Log kejadian Laci Meja (PLAN.md Item 54). Arah host->klien saja di
+    // sini; arah klien->host tetap lewat antrian usulan spt 3 tabel induknya
+    // (lihat `dumpLaciMejaProposals`), BUKAN auto-merge.
+    'laci_meja_events',
     // Master data owner yang selama ini tidak pernah menyebar.
     'payment_methods',
     'employees',

@@ -237,6 +237,28 @@ class TutupBukuService {
       // Hapus child tables dulu (FK). Laci Meja SELALU aman dihapus di sini
       // — guard di langkah 2b sudah memastikan TIDAK ADA baris yang masih
       // terbuka (belum selesai) di antara nota-nota periode ini.
+      //
+      // Log kejadian DULUAN sebelum 3 tabel induknya (PLAN.md Item 54):
+      // `entry_id` menunjuk baris induk tapi BUKAN FK fisik (polimorfik),
+      // jadi SQLite tidak akan menghalangi maupun membersihkan sendiri —
+      // kalau induknya dihapus lebih dulu, baris log ini tertinggal jadi
+      // yatim PERMANEN dan menumpuk tiap tutup buku. Riwayatnya sendiri
+      // tetap utuh di file arsip (sudah disalin SEBELUM penghapusan apa pun).
+      await db.customUpdate(
+        'DELETE FROM laci_meja_events WHERE entry_id IN ('
+        ' SELECT id FROM left_behind_items WHERE transaction_id IN '
+        '  (SELECT id FROM transactions '
+        '   WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)'
+        ' UNION ALL'
+        ' SELECT id FROM borrowed_items WHERE transaction_id IN '
+        '  (SELECT id FROM transactions '
+        '   WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)'
+        ' UNION ALL'
+        ' SELECT id FROM preorder_entries WHERE transaction_id IN '
+        '  (SELECT id FROM transactions '
+        '   WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)'
+        ')',
+      );
       await db.customUpdate(
         'DELETE FROM left_behind_items WHERE transaction_id IN '
         '(SELECT id FROM transactions '

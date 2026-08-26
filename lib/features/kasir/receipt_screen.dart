@@ -152,6 +152,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// terpisah di struk, bukan penanda per-baris (tidak ada baris nota utk
   /// ditaut).
   List<LeftBehindItem> _leftBehindOtherForTx = [];
+
+  /// PLAN.md Item 54 poin 2 — pre-order milik nota ini. Sebelumnya pre-order
+  /// satu-satunya kategori Laci Meja yang TIDAK punya kartu di layar nota.
+  List<PreorderEntry> _preorderForTx = [];
+
+  /// Nama produk+satuan per `product_unit_id` utk [_preorderForTx].
+  Map<String, ({String productName, String unitName})> _preorderLabels = {};
+
+  /// Riwayat kejadian per entri Laci Meja (key: id entri) — sumbernya sama
+  /// dgn layar "Riwayat" di dashboard, cuma disaring ke nota ini.
+  Map<String, List<LaciMejaEvent>> _laciMejaEvents = {};
+
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
   Customer? _customer;
@@ -997,6 +1009,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         await db.getBorrowedForTransaction(widget.transactionId);
     final leftBehindOtherForTx =
         await db.getLeftBehindWithoutLineForTransaction(widget.transactionId);
+    // PLAN.md Item 54 poin 2 — pre-order dulu satu-satunya kategori Laci Meja
+    // TANPA kartu di nota (cuma penanda inline "· Titip n" di baris produk).
+    final preorderForTx =
+        await db.getPreorderForTransaction(widget.transactionId);
+    // Nama produk pre-order di-resolve TERPISAH lewat `product_unit_id`:
+    // `_productNames` hanya berisi produk yang jadi BARIS nota, sedangkan
+    // pre-order bisa saja untuk produk yang tidak ikut dibeli saat itu —
+    // kalau ikut `_productNames` saja, namanya jatuh ke UUID mentah.
+    final preorderLabels = await db.getProductUnitLabelsFor(
+        preorderForTx.map((e) => e.productUnitId).toSet().toList());
+    // Riwayat kejadian (ambil/kembali/penuhi/batal) SELURUH entri Laci Meja
+    // nota ini — satu query utk ketiganya, bukan 3x.
+    final laciMejaEvents = await db.getLaciMejaEventsForEntries([
+      ...borrowedForTx.map((e) => e.id),
+      ...leftBehindOtherForTx.map((e) => e.id),
+      ...preorderForTx.map((e) => e.id),
+    ]);
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -1022,6 +1051,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _preorderDeposit = preorderDeposit;
         _borrowedForTx = borrowedForTx;
         _leftBehindOtherForTx = leftBehindOtherForTx;
+        _preorderForTx = preorderForTx;
+        _preorderLabels = preorderLabels;
+        _laciMejaEvents = laciMejaEvents;
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customer = customer;
@@ -2786,6 +2818,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             _buildLeftBehindOtherCard(),
           ],
 
+          // PLAN.md Item 54 poin 2 — pre-order nota ini, pola identik dua
+          // section di atas (sebelumnya pre-order tidak punya kartu sendiri).
+          if (_preorderForTx.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildPreorderCard(),
+          ],
+
           // Catatan internal — card terpisah
           if (!isVoid && !isRetur) ...[
             const SizedBox(height: 8),
@@ -2982,19 +3021,94 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             ),
             const SizedBox(height: 6),
             for (final b in _borrowedForTx)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  '${_fmtQtyShort(b.qty)} ${b.itemName}'
-                  '${b.fullyReturnedAt != null ? ' · sudah kembali' : (b.qtyReturned > 0 ? ' · sisa ${_fmtQtyShort(b.qty - b.qtyReturned)}' : ' · belum kembali')}',
-                  style: TextStyle(fontSize: 12, color: fg),
-                ),
+              _laciMejaEntryBlock(
+                fg: fg,
+                headline: '${_fmtQtyShort(b.qty)} ${b.itemName}',
+                createdLabel: 'Dipinjam',
+                createdAt: b.createdAt,
+                events: _laciMejaEvents[b.id] ?? const [],
+                status: b.fullyReturnedAt != null
+                    ? (text: 'Selesai — semua sudah kembali', done: true)
+                    : (
+                        text:
+                            'Sisa ${_fmtQtyShort(b.qty - b.qtyReturned)} belum kembali',
+                        done: false
+                      ),
               ),
           ],
         ),
       ),
     );
   }
+
+  /// Satu entri Laci Meja + riwayat kejadiannya di kartu nota (PLAN.md Item
+  /// 54 poin 2). Bentuk barisnya SENGAJA meniru kartu "Riwayat Pembayaran"
+  /// (`_buildPaymentTimeline`): waktu di kiri, keterangan, jumlah di kanan —
+  /// permintaan user eksplisit supaya formatnya seragam.
+  Widget _laciMejaEntryBlock({
+    required Color fg,
+    required String headline,
+    required String createdLabel,
+    required DateTime createdAt,
+    required List<LaciMejaEvent> events,
+    required ({String text, bool done}) status,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(headline,
+              style: TextStyle(
+                  fontSize: 12.5, fontWeight: FontWeight.w700, color: fg)),
+          Text('$createdLabel ${_formatDateTime(createdAt)}',
+              style: TextStyle(fontSize: 11, color: fg.withOpacity(0.75))),
+          for (final e in events)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                children: [
+                  Text(_formatDateTime(e.createdAt),
+                      style: TextStyle(fontSize: 11.5, color: fg)),
+                  const SizedBox(width: 8),
+                  Text(_laciMejaAksiLabel(e.aksi),
+                      style: TextStyle(fontSize: 11.5, color: fg)),
+                  const Spacer(),
+                  if (e.qty > 0)
+                    Text(_fmtQtyShort(e.qty),
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: fg)),
+                ],
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              status.done ? '✓ ${status.text}' : status.text,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: status.done
+                    ? AppTheme.changeFg(isDark)
+                    : AppTheme.stockWarnFg(isDark),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _laciMejaAksiLabel(String aksi) => switch (aksi) {
+        'ambil' => 'Diambil',
+        'kembali' => 'Kembali',
+        'penuhi' => 'Dipenuhi',
+        'batal' => 'Dibatalkan',
+        _ => aksi,
+      };
 
   /// Susulan (permintaan user) — barang titip/ketinggalan yang BUKAN baris
   /// nota (diketik bebas lewat "Atau barang lain (di luar nota)" di
@@ -3020,15 +3134,77 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             ),
             const SizedBox(height: 6),
             for (final l in _leftBehindOtherForTx)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  '${_fmtQtyShort(l.qty ?? 1)} ${l.itemName}'
-                  '${l.jenis == 'titip' ? ' · Dititip' : ' · Ketinggalan'}'
-                  '${l.collectedAt != null ? ' · sudah diambil' : ''}',
-                  style: TextStyle(fontSize: 12, color: fg),
-                ),
+              _laciMejaEntryBlock(
+                fg: fg,
+                headline: '${_fmtQtyShort(l.qty ?? 1)} ${l.itemName}',
+                createdLabel:
+                    l.jenis == 'titip' ? 'Dititip' : 'Ketinggalan sejak',
+                createdAt: l.createdAt,
+                events: _laciMejaEvents[l.id] ?? const [],
+                status: l.collectedAt != null
+                    ? (text: 'Selesai — sudah diambil', done: true)
+                    : (text: 'Belum diambil', done: false),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// PLAN.md Item 54 poin 2 — kartu Pre-order di layar nota. Kategori ini
+  /// dulu SATU-SATUNYA yang tidak punya kartu sendiri di sini (cuma penanda
+  /// inline "· Titip n" di baris produk), jadi riwayat pemenuhannya tidak
+  /// bisa dilihat dari notanya sama sekali.
+  Widget _buildPreorderCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = AppTheme.laciFg(isDark);
+    return Card(
+      color: AppTheme.laciBg(isDark),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.hourglass_empty, size: 15, color: fg),
+                const SizedBox(width: 6),
+                Text('Pre-order',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            for (final p in _preorderForTx)
+              Builder(builder: (_) {
+                final events = _laciMejaEvents[p.id] ?? const <LaciMejaEvent>[];
+                final terpenuhi = events
+                    .where((e) => e.aksi != 'batal')
+                    .fold<double>(0, (s, e) => s + e.qty);
+                final nama = _preorderLabels[p.productUnitId]?.productName ??
+                    _productNames[p.productId] ??
+                    p.productId;
+                final jaminan = p.depositQty > 0
+                    ? ' · ${_fmtQtyShort(p.depositQty)} jaminan'
+                    : '';
+                return _laciMejaEntryBlock(
+                  fg: fg,
+                  headline:
+                      '${_fmtQtyShort(p.qtyOrdered)} $nama$jaminan',
+                  createdLabel: 'Dipesan',
+                  createdAt: p.createdAt,
+                  events: events,
+                  status: p.cancelledAt != null
+                      ? (text: 'Dibatalkan', done: true)
+                      : p.fulfilledAt != null
+                          ? (text: 'Selesai — sudah dipenuhi', done: true)
+                          : (
+                              text:
+                                  'Sisa ${_fmtQtyShort(p.qtyOrdered - terpenuhi)} belum dipenuhi',
+                              done: false
+                            ),
+                );
+              }),
           ],
         ),
       ),

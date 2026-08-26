@@ -5,6 +5,63 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan — Laci Meja poin 1/2/5: ambil
+parsial + riwayat per-nota + log global), commit `39c6e7f`, versi
+kerja **2.19.9+34**. **KELIMA usulan Laci Meja user SELESAI SEMUA**
+(poin 3 & 4 di blok berikutnya di bawah). PLAN.md Item 54 dihapus.
+
+**Arsitektur (jangan didesain ulang)**: tabel BARU `laci_meja_events` —
+satu baris per kejadian (`ambil`/`kembali`/`penuhi`/`batal`), TIDAK
+PERNAH di-update. Sisa = `qty − Σ log`. Alasannya ada di dok tabelnya:
+3 tabel Laci Meja itu master-data *last-write-wins*, jadi kalau "ambil
+3 dari 5" ditulis sbg read-modify-write pada kolom qty, dua device yang
+mengambil sebelum sync SALING MENIMPA dan satu pengambilan hilang
+diam-diam. **Sinkronisasi tetap lewat antrian persetujuan owner**
+(keputusan eksplisit user) — append-only di sini soal BENTUK data,
+BUKAN jalur sync-nya. schemaVersion **33**.
+
+**Keputusan turunan yang penting**:
+- `borrowedItems.qtyReturned` DIPERTAHANKAN tapi jadi CACHE murni:
+  `returnBorrowedItemQty` sekarang menghitung ulang dari log, bukan
+  `+= delta`. Titip & pre-order SENGAJA tidak diberi kolom akumulator
+  sejenis (dihitung on-the-fly lewat `getLaciMejaTakenQty`) supaya
+  tidak ada cache kedua yang bisa menyimpang.
+- Semua metode "tutup" lama (`markLeftBehindCollected`,
+  `fulfillPreorderEntry`, `cancelPreorderEntry`) sekarang JUGA menulis
+  baris log — kalau tidak, riwayatnya bolong. `fulfillPreorderEntry`
+  mencatat SISA-nya saja (bukan qty penuh) supaya tidak dobel.
+- `cancelPreorderEntry` menulis log qty **0**: pembatalan menutup sisa
+  TANPA barang berpindah, jadi tidak boleh terhitung sbg "dipenuhi".
+- Semua metode menerima `eventId` opsional — dipakai test (dan sync)
+  untuk membuat baris log yang deterministik/identik antar device.
+
+**Jebakan yang SUDAH ditangani (jangan dibuka lagi tanpa sadar)**:
+- **Tutup Buku**: baris log dihapus DULUAN sebelum 3 tabel induknya.
+  `entry_id` polimorfik → BUKAN FK fisik → SQLite tidak membersihkan
+  sendiri; kalau induknya dihapus lebih dulu, log jadi yatim PERMANEN
+  dan menumpuk tiap tutup buku. Ada testnya (revert-verified).
+- **`applyLaciMejaProposals` dulu SELALU mencap `updated_at`** walau
+  tabelnya tidak punya kolom itu — `laci_meja_events` memang tidak
+  punya (delta-nya by `created_at`). Sekarang dicek `localColumns`
+  dulu. Ini bug laten yang baru muncul begitu ada tabel usulan tanpa
+  `updated_at`.
+- **`dumpSince`** dapat cabang ketiga khusus tabel ini (`created_at`
+  saja) — TIDAK boleh full-dump, isinya tumbuh terus seiring waktu.
+- **Backfill migrasi v33**: `qty_returned` pinjaman lama jadi 1 baris
+  log historis, id deterministik `bf-<id>`. Tanpa ini riwayat entri
+  lama tampak kosong padahal qty sudah berkurang.
+
+**Test superseded yang perlu diketahui**:
+`laci_meja_proposal_unchanged_end_to_end_test.dart` — premis "host &
+klien PERSIS sama" TIDAK lagi otomatis benar, karena "Dipenuhi" kini
+juga menulis baris log; kedua sisi harus dikasih `eventId` yang SAMA
+supaya benar-benar identik. Plus 16 `migration_v*_test.dart` ikut naik
+ke 33 (ripple yang selalu terjadi tiap schemaVersion naik).
+
+Full suite **1145 lolos SEMUA** (termasuk pasangan flaky
+`proposal_unchanged`/`laci_meja_proposal_unchanged` — ikut hijau run
+ini, JANGAN dianggap fixed permanen). `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan — Laci Meja: nama ikut nota +
 redesain kartu), commit `32713aa`, di atas versi kerja **2.19.7+32**.
 Bagian dari **5 usulan fitur Laci Meja** yang user ajukan sekaligus.

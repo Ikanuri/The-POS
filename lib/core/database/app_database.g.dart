@@ -14008,6 +14008,498 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
   }
 }
 
+class $LaciMejaEventsTable extends LaciMejaEvents
+    with TableInfo<$LaciMejaEventsTable, LaciMejaEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LaciMejaEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _entityTypeMeta =
+      const VerificationMeta('entityType');
+  @override
+  late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
+      'entity_type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _entryIdMeta =
+      const VerificationMeta('entryId');
+  @override
+  late final GeneratedColumn<String> entryId = GeneratedColumn<String>(
+      'entry_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _aksiMeta = const VerificationMeta('aksi');
+  @override
+  late final GeneratedColumn<String> aksi = GeneratedColumn<String>(
+      'aksi', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _qtyMeta = const VerificationMeta('qty');
+  @override
+  late final GeneratedColumn<double> qty = GeneratedColumn<double>(
+      'qty', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _deviceCodeMeta =
+      const VerificationMeta('deviceCode');
+  @override
+  late final GeneratedColumn<String> deviceCode = GeneratedColumn<String>(
+      'device_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _locallyModifiedMeta =
+      const VerificationMeta('locallyModified');
+  @override
+  late final GeneratedColumn<bool> locallyModified = GeneratedColumn<bool>(
+      'locally_modified', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("locally_modified" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        entityType,
+        entryId,
+        aksi,
+        qty,
+        note,
+        deviceCode,
+        locallyModified,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'laci_meja_events';
+  @override
+  VerificationContext validateIntegrity(Insertable<LaciMejaEvent> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('entity_type')) {
+      context.handle(
+          _entityTypeMeta,
+          entityType.isAcceptableOrUnknown(
+              data['entity_type']!, _entityTypeMeta));
+    } else if (isInserting) {
+      context.missing(_entityTypeMeta);
+    }
+    if (data.containsKey('entry_id')) {
+      context.handle(_entryIdMeta,
+          entryId.isAcceptableOrUnknown(data['entry_id']!, _entryIdMeta));
+    } else if (isInserting) {
+      context.missing(_entryIdMeta);
+    }
+    if (data.containsKey('aksi')) {
+      context.handle(
+          _aksiMeta, aksi.isAcceptableOrUnknown(data['aksi']!, _aksiMeta));
+    } else if (isInserting) {
+      context.missing(_aksiMeta);
+    }
+    if (data.containsKey('qty')) {
+      context.handle(
+          _qtyMeta, qty.isAcceptableOrUnknown(data['qty']!, _qtyMeta));
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('device_code')) {
+      context.handle(
+          _deviceCodeMeta,
+          deviceCode.isAcceptableOrUnknown(
+              data['device_code']!, _deviceCodeMeta));
+    }
+    if (data.containsKey('locally_modified')) {
+      context.handle(
+          _locallyModifiedMeta,
+          locallyModified.isAcceptableOrUnknown(
+              data['locally_modified']!, _locallyModifiedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LaciMejaEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LaciMejaEvent(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      entityType: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}entity_type'])!,
+      entryId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}entry_id'])!,
+      aksi: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}aksi'])!,
+      qty: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}qty'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      deviceCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}device_code']),
+      locallyModified: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $LaciMejaEventsTable createAlias(String alias) {
+    return $LaciMejaEventsTable(attachedDatabase, alias);
+  }
+}
+
+class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
+  final String id;
+
+  /// 'titip' | 'pinjaman' | 'preorder' — kategori entri induknya. Disimpan
+  /// eksplisit (bukan disimpulkan dari tabel mana `entryId` ada) supaya log
+  /// gabungan bisa dibaca & difilter tanpa 3x JOIN.
+  final String entityType;
+
+  /// Id baris induk di `left_behind_items` / `borrowed_items` /
+  /// `preorder_entries`. SENGAJA TANPA FK: tabelnya berbeda-beda tergantung
+  /// [entityType] (SQLite tidak punya FK polimorfik), dan alasan yang sama
+  /// dgn `LeftBehindItems.customerId` berlaku — baris induk bisa saja belum
+  /// tersinkron ke host saat usulan diterapkan, FK akan bikin gagal permanen.
+  final String entryId;
+
+  /// 'ambil' (titip/ketinggalan diambil) | 'kembali' (pinjaman dikembalikan)
+  /// | 'penuhi' (pre-order dipenuhi) | 'batal' (pre-order dibatalkan).
+  final String aksi;
+
+  /// Jumlah pada kejadian ini. Untuk `aksi = 'batal'` nilainya 0 — pembatalan
+  /// menutup sisa yang belum terpenuhi tanpa ada barang yang berpindah.
+  final double qty;
+  final String? note;
+
+  /// Device yang mencatat (`device_code`) — sekadar jejak "siapa", tidak
+  /// dipakai logika apa pun.
+  final String? deviceCode;
+  final bool locallyModified;
+  final DateTime createdAt;
+  const LaciMejaEvent(
+      {required this.id,
+      required this.entityType,
+      required this.entryId,
+      required this.aksi,
+      required this.qty,
+      this.note,
+      this.deviceCode,
+      required this.locallyModified,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['entity_type'] = Variable<String>(entityType);
+    map['entry_id'] = Variable<String>(entryId);
+    map['aksi'] = Variable<String>(aksi);
+    map['qty'] = Variable<double>(qty);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || deviceCode != null) {
+      map['device_code'] = Variable<String>(deviceCode);
+    }
+    map['locally_modified'] = Variable<bool>(locallyModified);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  LaciMejaEventsCompanion toCompanion(bool nullToAbsent) {
+    return LaciMejaEventsCompanion(
+      id: Value(id),
+      entityType: Value(entityType),
+      entryId: Value(entryId),
+      aksi: Value(aksi),
+      qty: Value(qty),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      deviceCode: deviceCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceCode),
+      locallyModified: Value(locallyModified),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory LaciMejaEvent.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LaciMejaEvent(
+      id: serializer.fromJson<String>(json['id']),
+      entityType: serializer.fromJson<String>(json['entityType']),
+      entryId: serializer.fromJson<String>(json['entryId']),
+      aksi: serializer.fromJson<String>(json['aksi']),
+      qty: serializer.fromJson<double>(json['qty']),
+      note: serializer.fromJson<String?>(json['note']),
+      deviceCode: serializer.fromJson<String?>(json['deviceCode']),
+      locallyModified: serializer.fromJson<bool>(json['locallyModified']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'entityType': serializer.toJson<String>(entityType),
+      'entryId': serializer.toJson<String>(entryId),
+      'aksi': serializer.toJson<String>(aksi),
+      'qty': serializer.toJson<double>(qty),
+      'note': serializer.toJson<String?>(note),
+      'deviceCode': serializer.toJson<String?>(deviceCode),
+      'locallyModified': serializer.toJson<bool>(locallyModified),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  LaciMejaEvent copyWith(
+          {String? id,
+          String? entityType,
+          String? entryId,
+          String? aksi,
+          double? qty,
+          Value<String?> note = const Value.absent(),
+          Value<String?> deviceCode = const Value.absent(),
+          bool? locallyModified,
+          DateTime? createdAt}) =>
+      LaciMejaEvent(
+        id: id ?? this.id,
+        entityType: entityType ?? this.entityType,
+        entryId: entryId ?? this.entryId,
+        aksi: aksi ?? this.aksi,
+        qty: qty ?? this.qty,
+        note: note.present ? note.value : this.note,
+        deviceCode: deviceCode.present ? deviceCode.value : this.deviceCode,
+        locallyModified: locallyModified ?? this.locallyModified,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  LaciMejaEvent copyWithCompanion(LaciMejaEventsCompanion data) {
+    return LaciMejaEvent(
+      id: data.id.present ? data.id.value : this.id,
+      entityType:
+          data.entityType.present ? data.entityType.value : this.entityType,
+      entryId: data.entryId.present ? data.entryId.value : this.entryId,
+      aksi: data.aksi.present ? data.aksi.value : this.aksi,
+      qty: data.qty.present ? data.qty.value : this.qty,
+      note: data.note.present ? data.note.value : this.note,
+      deviceCode:
+          data.deviceCode.present ? data.deviceCode.value : this.deviceCode,
+      locallyModified: data.locallyModified.present
+          ? data.locallyModified.value
+          : this.locallyModified,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LaciMejaEvent(')
+          ..write('id: $id, ')
+          ..write('entityType: $entityType, ')
+          ..write('entryId: $entryId, ')
+          ..write('aksi: $aksi, ')
+          ..write('qty: $qty, ')
+          ..write('note: $note, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, entityType, entryId, aksi, qty, note,
+      deviceCode, locallyModified, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LaciMejaEvent &&
+          other.id == this.id &&
+          other.entityType == this.entityType &&
+          other.entryId == this.entryId &&
+          other.aksi == this.aksi &&
+          other.qty == this.qty &&
+          other.note == this.note &&
+          other.deviceCode == this.deviceCode &&
+          other.locallyModified == this.locallyModified &&
+          other.createdAt == this.createdAt);
+}
+
+class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
+  final Value<String> id;
+  final Value<String> entityType;
+  final Value<String> entryId;
+  final Value<String> aksi;
+  final Value<double> qty;
+  final Value<String?> note;
+  final Value<String?> deviceCode;
+  final Value<bool> locallyModified;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const LaciMejaEventsCompanion({
+    this.id = const Value.absent(),
+    this.entityType = const Value.absent(),
+    this.entryId = const Value.absent(),
+    this.aksi = const Value.absent(),
+    this.qty = const Value.absent(),
+    this.note = const Value.absent(),
+    this.deviceCode = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LaciMejaEventsCompanion.insert({
+    required String id,
+    required String entityType,
+    required String entryId,
+    required String aksi,
+    this.qty = const Value.absent(),
+    this.note = const Value.absent(),
+    this.deviceCode = const Value.absent(),
+    this.locallyModified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        entityType = Value(entityType),
+        entryId = Value(entryId),
+        aksi = Value(aksi);
+  static Insertable<LaciMejaEvent> custom({
+    Expression<String>? id,
+    Expression<String>? entityType,
+    Expression<String>? entryId,
+    Expression<String>? aksi,
+    Expression<double>? qty,
+    Expression<String>? note,
+    Expression<String>? deviceCode,
+    Expression<bool>? locallyModified,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (entityType != null) 'entity_type': entityType,
+      if (entryId != null) 'entry_id': entryId,
+      if (aksi != null) 'aksi': aksi,
+      if (qty != null) 'qty': qty,
+      if (note != null) 'note': note,
+      if (deviceCode != null) 'device_code': deviceCode,
+      if (locallyModified != null) 'locally_modified': locallyModified,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LaciMejaEventsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? entityType,
+      Value<String>? entryId,
+      Value<String>? aksi,
+      Value<double>? qty,
+      Value<String?>? note,
+      Value<String?>? deviceCode,
+      Value<bool>? locallyModified,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return LaciMejaEventsCompanion(
+      id: id ?? this.id,
+      entityType: entityType ?? this.entityType,
+      entryId: entryId ?? this.entryId,
+      aksi: aksi ?? this.aksi,
+      qty: qty ?? this.qty,
+      note: note ?? this.note,
+      deviceCode: deviceCode ?? this.deviceCode,
+      locallyModified: locallyModified ?? this.locallyModified,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(entityType.value);
+    }
+    if (entryId.present) {
+      map['entry_id'] = Variable<String>(entryId.value);
+    }
+    if (aksi.present) {
+      map['aksi'] = Variable<String>(aksi.value);
+    }
+    if (qty.present) {
+      map['qty'] = Variable<double>(qty.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (deviceCode.present) {
+      map['device_code'] = Variable<String>(deviceCode.value);
+    }
+    if (locallyModified.present) {
+      map['locally_modified'] = Variable<bool>(locallyModified.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LaciMejaEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('entityType: $entityType, ')
+          ..write('entryId: $entryId, ')
+          ..write('aksi: $aksi, ')
+          ..write('qty: $qty, ')
+          ..write('note: $note, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('locallyModified: $locallyModified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ProductAliasesTable extends ProductAliases
     with TableInfo<$ProductAliasesTable, ProductAliase> {
   @override
@@ -15007,6 +15499,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BorrowedItemsTable borrowedItems = $BorrowedItemsTable(this);
   late final $PreorderEntriesTable preorderEntries =
       $PreorderEntriesTable(this);
+  late final $LaciMejaEventsTable laciMejaEvents = $LaciMejaEventsTable(this);
   late final $ProductAliasesTable productAliases = $ProductAliasesTable(this);
   late final $TransactionAdjustmentLinesTable transactionAdjustmentLines =
       $TransactionAdjustmentLinesTable(this);
@@ -15047,6 +15540,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         leftBehindItems,
         borrowedItems,
         preorderEntries,
+        laciMejaEvents,
         productAliases,
         transactionAdjustmentLines
       ];
@@ -24447,6 +24941,242 @@ typedef $$PreorderEntriesTableProcessedTableManager = ProcessedTableManager<
     (PreorderEntry, $$PreorderEntriesTableReferences),
     PreorderEntry,
     PrefetchHooks Function({bool transactionId})>;
+typedef $$LaciMejaEventsTableCreateCompanionBuilder = LaciMejaEventsCompanion
+    Function({
+  required String id,
+  required String entityType,
+  required String entryId,
+  required String aksi,
+  Value<double> qty,
+  Value<String?> note,
+  Value<String?> deviceCode,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$LaciMejaEventsTableUpdateCompanionBuilder = LaciMejaEventsCompanion
+    Function({
+  Value<String> id,
+  Value<String> entityType,
+  Value<String> entryId,
+  Value<String> aksi,
+  Value<double> qty,
+  Value<String?> note,
+  Value<String?> deviceCode,
+  Value<bool> locallyModified,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$LaciMejaEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $LaciMejaEventsTable> {
+  $$LaciMejaEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get entityType => $composableBuilder(
+      column: $table.entityType, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get entryId => $composableBuilder(
+      column: $table.entryId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get aksi => $composableBuilder(
+      column: $table.aksi, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$LaciMejaEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LaciMejaEventsTable> {
+  $$LaciMejaEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get entityType => $composableBuilder(
+      column: $table.entityType, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get entryId => $composableBuilder(
+      column: $table.entryId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get aksi => $composableBuilder(
+      column: $table.aksi, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$LaciMejaEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LaciMejaEventsTable> {
+  $$LaciMejaEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get entityType => $composableBuilder(
+      column: $table.entityType, builder: (column) => column);
+
+  GeneratedColumn<String> get entryId =>
+      $composableBuilder(column: $table.entryId, builder: (column) => column);
+
+  GeneratedColumn<String> get aksi =>
+      $composableBuilder(column: $table.aksi, builder: (column) => column);
+
+  GeneratedColumn<double> get qty =>
+      $composableBuilder(column: $table.qty, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceCode => $composableBuilder(
+      column: $table.deviceCode, builder: (column) => column);
+
+  GeneratedColumn<bool> get locallyModified => $composableBuilder(
+      column: $table.locallyModified, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$LaciMejaEventsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $LaciMejaEventsTable,
+    LaciMejaEvent,
+    $$LaciMejaEventsTableFilterComposer,
+    $$LaciMejaEventsTableOrderingComposer,
+    $$LaciMejaEventsTableAnnotationComposer,
+    $$LaciMejaEventsTableCreateCompanionBuilder,
+    $$LaciMejaEventsTableUpdateCompanionBuilder,
+    (
+      LaciMejaEvent,
+      BaseReferences<_$AppDatabase, $LaciMejaEventsTable, LaciMejaEvent>
+    ),
+    LaciMejaEvent,
+    PrefetchHooks Function()> {
+  $$LaciMejaEventsTableTableManager(
+      _$AppDatabase db, $LaciMejaEventsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LaciMejaEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LaciMejaEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LaciMejaEventsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> entityType = const Value.absent(),
+            Value<String> entryId = const Value.absent(),
+            Value<String> aksi = const Value.absent(),
+            Value<double> qty = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<String?> deviceCode = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              LaciMejaEventsCompanion(
+            id: id,
+            entityType: entityType,
+            entryId: entryId,
+            aksi: aksi,
+            qty: qty,
+            note: note,
+            deviceCode: deviceCode,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String entityType,
+            required String entryId,
+            required String aksi,
+            Value<double> qty = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<String?> deviceCode = const Value.absent(),
+            Value<bool> locallyModified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              LaciMejaEventsCompanion.insert(
+            id: id,
+            entityType: entityType,
+            entryId: entryId,
+            aksi: aksi,
+            qty: qty,
+            note: note,
+            deviceCode: deviceCode,
+            locallyModified: locallyModified,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$LaciMejaEventsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $LaciMejaEventsTable,
+    LaciMejaEvent,
+    $$LaciMejaEventsTableFilterComposer,
+    $$LaciMejaEventsTableOrderingComposer,
+    $$LaciMejaEventsTableAnnotationComposer,
+    $$LaciMejaEventsTableCreateCompanionBuilder,
+    $$LaciMejaEventsTableUpdateCompanionBuilder,
+    (
+      LaciMejaEvent,
+      BaseReferences<_$AppDatabase, $LaciMejaEventsTable, LaciMejaEvent>
+    ),
+    LaciMejaEvent,
+    PrefetchHooks Function()>;
 typedef $$ProductAliasesTableCreateCompanionBuilder = ProductAliasesCompanion
     Function({
   required String id,
@@ -24981,6 +25711,8 @@ class $AppDatabaseManager {
       $$BorrowedItemsTableTableManager(_db, _db.borrowedItems);
   $$PreorderEntriesTableTableManager get preorderEntries =>
       $$PreorderEntriesTableTableManager(_db, _db.preorderEntries);
+  $$LaciMejaEventsTableTableManager get laciMejaEvents =>
+      $$LaciMejaEventsTableTableManager(_db, _db.laciMejaEvents);
   $$ProductAliasesTableTableManager get productAliases =>
       $$ProductAliasesTableTableManager(_db, _db.productAliases);
   $$TransactionAdjustmentLinesTableTableManager

@@ -9,6 +9,12 @@ import '../../core/theme/app_theme.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 
+/// Log riwayat gabungan (PLAN.md Item 54 poin 5) — dibuka lewat ikon di
+/// AppBar, BUKAN kartu filter keempat: tiga kartu atas itu "berapa yang masih
+/// menggantung sekarang", sedangkan ini catatan yang sudah SELESAI. Menaruhnya
+/// sebagai kartu keempat akan membaurkan dua makna yang berbeda.
+final _showLogProvider = StateProvider<bool>((ref) => false);
+
 final _selectedCategoryProvider =
     StateProvider<_LaciMejaCategory>((ref) => _LaciMejaCategory.titipKetinggalan);
 
@@ -117,6 +123,46 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
 
   static int _daysSince(DateTime d) => DateTime.now().difference(d).inDays;
 
+  /// Angka bulat tanpa ".0" — qty di sini hampir selalu bilangan bulat
+  /// (tabung, krat, sak), tapi kolomnya `real` jadi tetap bisa pecahan.
+  static String _n(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
+
+  /// Baris progres "sudah x dari y" + bar tipis, hanya muncul kalau memang
+  /// sudah ada yang diambil sebagian (PLAN.md Item 54 poin 1). Entri yang
+  /// belum tersentuh tidak diberi bar supaya daftar tidak jadi ramai.
+  static Widget? _progressLine({
+    required double taken,
+    required double? total,
+    required String verb,
+    required bool isDark,
+  }) {
+    if (taken <= 0 || total == null || total <= 0) return null;
+    final ratio = (taken / total).clamp(0.0, 1.0);
+    final done = taken >= total;
+    final color = done ? AppTheme.changeFg(isDark) : AppTheme.stockWarnFg(isDark);
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 4,
+              backgroundColor: AppTheme.laciBg(isDark),
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text('$verb ${_n(taken)} dari ${_n(total)}',
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(_selectedCategoryProvider);
@@ -127,9 +173,23 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final borrowed = ref.watch(borrowedItemsProvider);
     final preorder = ref.watch(preorderEntriesProvider);
 
+    final showLog = ref.watch(_showLogProvider);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Laci Meja')),
-      body: Column(
+      appBar: AppBar(
+        title: Text(showLog ? 'Riwayat Laci Meja' : 'Laci Meja'),
+        actions: [
+          IconButton(
+            tooltip: showLog ? 'Kembali ke daftar' : 'Riwayat',
+            icon: Icon(showLog ? Icons.list_alt : Icons.history),
+            onPressed: () =>
+                ref.read(_showLogProvider.notifier).state = !showLog,
+          ),
+        ],
+      ),
+      body: showLog
+          ? _buildEventLog(context, ref, isDark, scheme)
+          : Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
@@ -194,6 +254,153 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// PLAN.md Item 54 poin 5 — log gabungan ketiga kategori, urut TERBARU
+  /// dulu (kebalikan daftar "masih menggantung" yang FIFO: di sana yang
+  /// paling lama menunggu paling mendesak, di sini yang baru saja terjadi
+  /// yang paling relevan). Dikelompokkan per hari supaya mudah dibaca.
+  Widget _buildEventLog(
+      BuildContext context, WidgetRef ref, bool isDark, ColorScheme scheme) {
+    final logAsync = ref.watch(laciMejaEventLogProvider);
+    return logAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (events) {
+        if (events.isEmpty) {
+          return Center(
+              child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Belum ada riwayat.\nCatatan muncul di sini setiap ada barang '
+              'diambil, dikembalikan, atau pre-order dipenuhi.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          ));
+        }
+        // Pemisah hari: bandingkan tanggal baris ini dgn baris SEBELUMNYA.
+        String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          itemCount: events.length,
+          itemBuilder: (_, i) {
+            final e = events[i];
+            final showDay =
+                i == 0 || dayKey(events[i - 1].createdAt) != dayKey(e.createdAt);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showDay)
+                  Padding(
+                    padding: EdgeInsets.only(top: i == 0 ? 0 : 14, bottom: 6),
+                    child: Text(_dayLabel(e.createdAt),
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onSurfaceVariant)),
+                  ),
+                Card(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: e.transactionId == null
+                        ? null
+                        : () => context.push('/kasir/struk/${e.transactionId}'),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(top: 5, right: 10),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _entityColor(e.entityType, isDark),
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${e.customerName ?? 'Umum'} — '
+                                  '${_aksiLabel(e.aksi)}'
+                                  '${e.qty > 0 ? ' ${_n(e.qty)}' : ''}',
+                                  style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${_entityLabel(e.entityType)} · ${e.itemName}',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: scheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${e.createdAt.hour.toString().padLeft(2, '0')}:'
+                            '${e.createdAt.minute.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                                fontSize: 11.5, color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Nama hari & bulan Indonesia DIRAKIT MANUAL — `DateFormat` ber-locale
+  /// meledak `LocaleDataException` saat build di app ini (tidak pernah
+  /// memanggil `initializeDateFormatting`), lihat gotcha CLAUDE.md.
+  static const _idMonths = [
+    '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+  ];
+
+  static String _dayLabel(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final that = DateTime(d.year, d.month, d.day);
+    final diff = today.difference(that).inDays;
+    final tanggal = '${d.day} ${_idMonths[d.month]} ${d.year}';
+    if (diff == 0) return 'Hari ini · $tanggal';
+    if (diff == 1) return 'Kemarin · $tanggal';
+    return tanggal;
+  }
+
+  static String _aksiLabel(String aksi) => switch (aksi) {
+        'ambil' => 'diambil',
+        'kembali' => 'kembali',
+        'penuhi' => 'dipenuhi',
+        'batal' => 'dibatalkan',
+        _ => aksi,
+      };
+
+  static String _entityLabel(String type) => switch (type) {
+        'titip' => 'Titip/Ketinggalan',
+        'pinjaman' => 'Pinjaman',
+        'preorder' => 'Pre-order',
+        _ => type,
+      };
+
+  static Color _entityColor(String type, bool isDark) => switch (type) {
+        'pinjaman' => AppTheme.scanFg(isDark),
+        'preorder' => AppTheme.stockWarnFg(isDark),
+        _ => AppTheme.laciFg(isDark),
+      };
 
   Widget _buildLeftBehindList(BuildContext context, WidgetRef ref,
       List<LeftBehindItem> items, bool isDark, ColorScheme scheme) {
@@ -278,6 +485,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // sama-sama push ANTAR-RUTE DI DALAM satu ShellRoute yang sama, bukan
     // lintas batas shell (lihat dok rute 'laci-meja' di app_router.dart soal
     // kenapa layar ini pindah ke dalam shell).
+    final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull?[e.id] ?? 0;
+    final sisa = displayQty == null ? null : displayQty - taken;
     return _EntryRow(
       onTap: () => context.push('/kasir/struk/${e.transactionId}'),
       line2: Text('${e.itemName}$qtyLabel',
@@ -288,12 +497,35 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         days: days,
         isDark: isDark,
       ),
+      progress: _progressLine(
+          taken: taken, total: displayQty, verb: 'Diambil', isDark: isDark),
       trailing: _CollectButton(
         onTap: () async {
           final db = ref.read(databaseProvider);
           final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+          final deviceCode = ref.read(deviceProvider).deviceCode;
+          // Entri dgn qty > 1 boleh diambil sebagian; qty 1 atau entri lama
+          // tanpa angka acuan langsung ditutup spt sebelumnya (tidak ada yang
+          // bisa dipecah, dialog cuma jadi langkah ekstra sia-sia).
+          if (sisa != null && sisa > 1) {
+            final qty = await _showQtyDialog(
+              context,
+              title: 'Ambil — ${e.itemName}',
+              sisaLabel: 'Sisa belum diambil: ${_n(sisa)} dari ${_n(displayQty!)}',
+              sisa: sisa,
+              actionLabel: 'Ambil',
+            );
+            if (qty == null || qty <= 0) return;
+            await db.collectLeftBehindQty(e.id, qty,
+                total: displayQty,
+                locallyModified: locallyModified,
+                deviceCode: deviceCode);
+            return;
+          }
           await db.markLeftBehindCollected(e.id,
-              locallyModified: locallyModified);
+              locallyModified: locallyModified,
+              sisaQty: sisa,
+              deviceCode: deviceCode);
         },
       ),
     );
@@ -365,14 +597,13 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, BorrowedItem e, bool isDark) {
     final days = _daysSince(e.createdAt);
     final sisa = e.qty - e.qtyReturned;
-    String n(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
     // Tiap baris tetap tertaut ke transactionId MASING-MASING (satu grup
     // pelanggan bisa berisi baris dari nota yang BERBEDA-BEDA).
     return _EntryRow(
       onTap: () => context.push('/kasir/struk/${e.transactionId}'),
       // Baris ke-2 = barang + "yang sevariabel dgn qty" utk pinjaman
       // (permintaan user): sisa vs total pinjaman.
-      line2: Text('${e.itemName} · Sisa ${n(sisa)} dari ${n(e.qty)}',
+      line2: Text('${e.itemName} · Sisa ${_n(sisa)} dari ${_n(e.qty)}',
           style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
       meta: _metaLine(
         leading: 'Dipinjam',
@@ -380,6 +611,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         days: days,
         isDark: isDark,
       ),
+      progress: _progressLine(
+          taken: e.qtyReturned,
+          total: e.qty,
+          verb: 'Kembali',
+          isDark: isDark),
       trailing: TextButton(
         onPressed: () => _showReturnDialog(context, ref, e),
         child: const Text('Kembali'),
@@ -387,35 +623,78 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showReturnDialog(
-      BuildContext context, WidgetRef ref, BorrowedItem e) async {
-    final sisa = e.qty - e.qtyReturned;
-    final controller = TextEditingController(text: sisa.toStringAsFixed(0));
-    final qty = await showDialog<double>(
+  /// Dialog "ambil/kembali/penuhi sebagian" — dipakai ketiga kategori
+  /// (PLAN.md Item 54 poin 1). Prefill SELURUH sisa (kasus paling umum: ambil
+  /// semuanya sekaligus), tinggal dikurangi kalau cuma sebagian.
+  ///
+  /// Hanya DUA tombol dalam satu baris — `AlertDialog.content` selalu
+  /// dibungkus `IntrinsicWidth` & lebarnya jauh lebih sempit dari layar, 3
+  /// tombol custom bisa sama sekali tidak muat di HP (gotcha CLAUDE.md).
+  static Future<double?> _showQtyDialog(
+    BuildContext context, {
+    required String title,
+    required String sisaLabel,
+    required double sisa,
+    required String actionLabel,
+  }) async {
+    final controller = TextEditingController(
+        text: sisa % 1 == 0 ? sisa.toInt().toString() : '$sisa');
+    return showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Kembali — ${e.itemName}'),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Jumlah kembali (sisa $sisa)'),
-          autofocus: true,
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(sisaLabel,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Jumlah'),
+              autofocus: true,
+            ),
+          ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
-            onPressed: () =>
-                Navigator.pop(ctx, double.tryParse(controller.text.trim())),
-            child: const Text('Simpan'),
+            onPressed: () {
+              final v = double.tryParse(controller.text.trim().replaceAll(',', '.'));
+              if (v == null || v <= 0) return Navigator.pop(ctx);
+              // Tidak boleh melebihi sisa — kelebihan input diam-diam
+              // dipotong, bukan bikin sisa jadi negatif.
+              Navigator.pop(ctx, v > sisa ? sisa : v);
+            },
+            child: Text(actionLabel),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _showReturnDialog(
+      BuildContext context, WidgetRef ref, BorrowedItem e) async {
+    final sisa = e.qty - e.qtyReturned;
+    final qty = await _showQtyDialog(
+      context,
+      title: 'Kembali — ${e.itemName}',
+      sisaLabel: 'Sisa belum kembali: ${_n(sisa)} dari ${_n(e.qty)}',
+      sisa: sisa,
+      actionLabel: 'Kembali',
+    );
     if (qty == null || qty <= 0) return;
     final db = ref.read(databaseProvider);
     final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-    await db.returnBorrowedItemQty(e.id, qty, locallyModified: locallyModified);
+    await db.returnBorrowedItemQty(e.id, qty,
+        locallyModified: locallyModified,
+        deviceCode: ref.read(deviceProvider).deviceCode);
   }
 
   /// Item 52 redesain (permintaan user, screenshot device asli) — barang
@@ -560,6 +839,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final depositStr = e.depositQty > 0
         ? ' - ${e.depositQty % 1 == 0 ? e.depositQty.toInt() : e.depositQty} jaminan'
         : '';
+    final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull?[e.id] ?? 0;
+    final sisa = e.qtyOrdered - taken;
     return _EntryRow(
       // Permintaan user: qty & nama produk dibedakan bold dari sisa baris
       // (jaminan, status bayar).
@@ -587,6 +868,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         days: _daysSince(e.createdAt),
         isDark: isDark,
       ),
+      progress: _progressLine(
+          taken: taken,
+          total: e.qtyOrdered,
+          verb: 'Dipenuhi',
+          isDark: isDark),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -598,15 +884,33 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
               final db = ref.read(databaseProvider);
               final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
               await db.cancelPreorderEntry(e.id,
-                  locallyModified: locallyModified);
+                  locallyModified: locallyModified,
+                  deviceCode: ref.read(deviceProvider).deviceCode);
             },
           ),
           TextButton(
             onPressed: () async {
               final db = ref.read(databaseProvider);
               final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+              final deviceCode = ref.read(deviceProvider).deviceCode;
+              // Pre-order boleh dipenuhi bertahap (kasus user: antri 5 LPG,
+              // datang 3 dulu).
+              if (sisa > 1) {
+                final qty = await _showQtyDialog(
+                  context,
+                  title: 'Penuhi — $productName',
+                  sisaLabel:
+                      'Sisa belum dipenuhi: ${_n(sisa)} dari ${_n(e.qtyOrdered)}',
+                  sisa: sisa,
+                  actionLabel: 'Penuhi',
+                );
+                if (qty == null || qty <= 0) return;
+                await db.fulfillPreorderQty(e.id, qty,
+                    locallyModified: locallyModified, deviceCode: deviceCode);
+                return;
+              }
               await db.fulfillPreorderEntry(e.id,
-                  locallyModified: locallyModified);
+                  locallyModified: locallyModified, deviceCode: deviceCode);
             },
             child: const Text('Penuhi'),
           ),
@@ -632,12 +936,18 @@ class _EntryRow extends StatelessWidget {
     required this.meta,
     this.onTap,
     this.trailing,
+    this.progress,
   });
 
   final Widget line2;
   final Widget meta;
   final VoidCallback? onTap;
   final Widget? trailing;
+
+  /// Baris progres "sudah x dari y" — hanya terisi kalau entri sudah diambil
+  /// SEBAGIAN (PLAN.md Item 54 poin 1). Ditaruh di bawah [meta] supaya urutan
+  /// 3 tingkat hasil redesain (nama/barang/timestamp) tidak terganggu.
+  final Widget? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -648,7 +958,12 @@ class _EntryRow extends StatelessWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [line2, const SizedBox(height: 3), meta],
+              children: [
+                line2,
+                const SizedBox(height: 3),
+                meta,
+                if (progress != null) progress!,
+              ],
             ),
           ),
           if (trailing != null) ...[const SizedBox(width: 8), trailing!],

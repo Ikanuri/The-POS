@@ -64,6 +64,12 @@ void main() {
     // Host & klien PERSIS sama (owner sudah approve usulan "Dipenuhi" ini
     // sebelumnya) — tapi locally_modified klien masih macet true (blm
     // sempat menerima balik baris resmi host).
+    //
+    // `eventId` DISAMAKAN eksplisit di kedua sisi (PLAN.md Item 54): sejak
+    // ada log kejadian, "Dipenuhi" juga menulis satu baris `laci_meja_events`.
+    // Kalau id-nya dibiarkan auto-generate, kedua sisi menghasilkan baris log
+    // BERBEDA dan klien memang PUNYA sesuatu yang baru utk diusulkan — bukan
+    // lagi kondisi "persis sama" yang mau diuji di sini.
     final txIdHost = await seedTransaction(hostDb, 'tx1');
     await hostDb.addPreorderEntry(
         id: 'p1',
@@ -72,7 +78,7 @@ void main() {
         transactionId: txIdHost,
         customerName: 'Budi',
         qtyOrdered: 2);
-    await hostDb.fulfillPreorderEntry('p1');
+    await hostDb.fulfillPreorderEntry('p1', eventId: 'ev1');
 
     final txIdClient = await seedTransaction(clientDb, 'tx1');
     await clientDb.addPreorderEntry(
@@ -83,7 +89,8 @@ void main() {
         customerName: 'Budi',
         qtyOrdered: 2,
         locallyModified: true);
-    await clientDb.fulfillPreorderEntry('p1', locallyModified: true);
+    await clientDb.fulfillPreorderEntry('p1',
+        locallyModified: true, eventId: 'ev1');
 
     final (_, token) =
         await LanSyncService.startHost(db: hostDb, storeKey: 'shared-key');

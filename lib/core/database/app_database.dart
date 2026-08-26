@@ -157,6 +157,24 @@ typedef LaciMejaPending = ({
 const LaciMejaPending kEmptyLaciMejaPending =
     (titip: 0, ketinggalan: 0, pinjaman: 0, preorders: []);
 
+/// Satu baris log Laci Meja yang SUDAH diperkaya nama barang & pelanggan —
+/// dipakai layar "Riwayat" (PLAN.md Item 54 poin 5). Bentuk record (bukan
+/// `LaciMejaEvent` mentah) karena tampilan butuh data dari tabel induk yang
+/// berbeda-beda per kategori; menjoinnya sekali di SQL jauh lebih murah
+/// daripada N+1 di layar. Lihat `AppDatabase.watchLaciMejaEventLog`.
+typedef LaciMejaEventView = ({
+  String id,
+  String entityType,
+  String entryId,
+  String aksi,
+  double qty,
+  String? note,
+  DateTime createdAt,
+  String itemName,
+  String? customerName,
+  String? transactionId,
+});
+
 /// Barcode yang mau dipakai ternyata masih dipegang produk LAIN yang aktif.
 /// Dilempar dari dalam transaksi [AppDatabase.saveProduct] supaya seluruh
 /// penyimpanan di-rollback (tidak ada produk setengah tersimpan), dan supaya
@@ -214,6 +232,7 @@ class BarcodeConflictException implements Exception {
   LeftBehindItems,
   BorrowedItems,
   PreorderEntries,
+  LaciMejaEvents,
   ProductAliases,
   TransactionAdjustmentLines,
 ])
@@ -228,7 +247,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 33;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -551,6 +570,36 @@ class AppDatabase extends _$AppDatabase {
             // `TransactionPayments.sisaAfter`).
             await m.addColumn(transactionPayments, transactionPayments.sisaAfter);
             await m.createTable(transactionAdjustmentLines);
+          }
+          if (from < 33) {
+            // PLAN.md Item 54 — log kejadian Laci Meja (ambil/kembali/
+            // penuhi/batal), lihat dok `LaciMejaEvents`.
+            await m.createTable(laciMejaEvents);
+            // BACKFILL: pinjaman SUDAH bisa kembali sebagian sejak dulu lewat
+            // kolom akumulator `qty_returned`, tapi TANPA jejak per-momen.
+            // Tanpa backfill, entri lama yang qty-nya sudah berkurang akan
+            // tampil "belum pernah ada pengembalian" di riwayat baru —
+            // seolah datanya hilang. Satu baris log historis per entri
+            // mewakili SELURUH akumulasi yang sudah terjadi (momen aslinya
+            // memang tidak pernah tercatat, jadi tidak bisa dipecah).
+            // Waktunya pakai `updated_at` baris itu = perkiraan terbaik kapan
+            // pengembalian terakhir tercatat. Id deterministik (`bf-<id>`)
+            // supaya migrasi yang terulang tidak menggandakan baris.
+            final tables = (await customSelect(
+                    "SELECT name FROM sqlite_master WHERE type='table'")
+                .get())
+                .map((r) => r.data['name'] as String)
+                .toSet();
+            if (tables.contains('borrowed_items')) {
+              await customStatement(
+                "INSERT OR IGNORE INTO laci_meja_events "
+                "(id, entity_type, entry_id, aksi, qty, note, device_code, "
+                " locally_modified, created_at) "
+                "SELECT 'bf-' || id, 'pinjaman', id, 'kembali', qty_returned, "
+                "'Dicatat sebelum riwayat per-momen ada', NULL, 0, updated_at "
+                "FROM borrowed_items WHERE qty_returned > 0",
+              );
+            }
           }
         },
         beforeOpen: (details) async {
@@ -5191,6 +5240,10 @@ class AppDatabase extends _$AppDatabase {
     'left_behind_items',
     'borrowed_items',
     'preorder_entries',
+    // Log kejadian Laci Meja (PLAN.md Item 54) — SETELAH ketiga tabel di atas
+    // (induknya via `entry_id`, walau bukan FK fisik) supaya urutan insert
+    // tetap parent-dulu.
+    'laci_meja_events',
     // Kamus belajar penerimaan barang — ikut backup/Alihkan Owner supaya
     // pemetaan yang sudah dipelajari tidak hilang saat pindah device.
     'product_aliases',
@@ -5320,6 +5373,12 @@ class AppDatabase extends _$AppDatabase {
       'left_behind_items',
       'borrowed_items',
       'preorder_entries',
+      // Log kejadian Laci Meja (PLAN.md Item 54) — append-only BENTUKNYA
+      // (baris tidak pernah di-update), tapi jalur sync-nya sengaja ikut
+      // master data + antrian persetujuan owner spt 3 tabel induknya, BUKAN
+      // auto-merge klien->host ala `appendOnly`. Delta-nya by `created_at`
+      // saja krn tabel ini memang tidak punya `updated_at`.
+      'laci_meja_events',
       // Metode bayar & pegawai: master data owner yang selama ini TIDAK
       // pernah menyebar — owner menambah rekening/QRIS atau pegawai baru,
       // device kasir tidak pernah mendapatkannya.
@@ -5390,6 +5449,16 @@ class AppDatabase extends _$AppDatabase {
           final rows = await customSelect(
             'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
             variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
+          ).get();
+          dump[t] = rows.map((r) => r.data).toList();
+        } else if (t == 'laci_meja_events') {
+          // Baris log tidak pernah di-update, jadi `created_at` saja sudah
+          // cukup jadi delta — dan full-dump TIDAK boleh dipakai di sini
+          // (tabel ini tumbuh terus seiring waktu, beda dari price_tiers dkk
+          // yang ukurannya terikat jumlah produk).
+          final rows = await customSelect(
+            'SELECT * FROM "$t" WHERE created_at >= ?',
+            variables: [Variable.withInt(sinceSec)],
           ).get();
           dump[t] = rows.map((r) => r.data).toList();
         } else {
@@ -6455,14 +6524,32 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .watch();
 
-  Future<void> markLeftBehindCollected(String id, {bool locallyModified = false}) =>
-      (update(leftBehindItems)..where((t) => t.id.equals(id))).write(
-        LeftBehindItemsCompanion(
-          collectedAt: Value(DateTime.now()),
-          locallyModified: Value(locallyModified),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  /// Tandai SELESAI seluruhnya. Tetap mencatat baris log (PLAN.md Item 54)
+  /// supaya "ambil semua" ikut muncul di riwayat & log global — [sisaQty]
+  /// adalah jumlah yang berpindah pada momen ini (null kalau qty entri
+  /// memang tidak tercatat, log dicatat dgn qty 0).
+  Future<void> markLeftBehindCollected(String id,
+      {bool locallyModified = false,
+      double? sisaQty,
+      String? eventId,
+      String? deviceCode}) async {
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'titip',
+      entryId: id,
+      aksi: 'ambil',
+      qty: sisaQty ?? 0,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+    await (update(leftBehindItems)..where((t) => t.id.equals(id))).write(
+      LeftBehindItemsCompanion(
+        collectedAt: Value(DateTime.now()),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 
   // ── Pinjaman Barang ──
 
@@ -6501,11 +6588,29 @@ class AppDatabase extends _$AppDatabase {
   /// [qtyReturnedDelta] ditambahkan ke `qtyReturned` yang sudah ada (bisa
   /// kembali sebagian bertahap). `fullyReturnedAt` di-set otomatis begitu
   /// total yang kembali >= qty yang dipinjam.
+  ///
+  /// PLAN.md Item 54: tiap pengembalian sekarang JUGA menulis baris log, dan
+  /// `qtyReturned` DIHITUNG ULANG dari log (bukan `+= delta` spt dulu) —
+  /// dengan begitu kolom itu jadi cache murni dari satu sumber kebenaran,
+  /// tidak bisa menyimpang dari riwayat yang ditampilkan. Migrasi v33 sudah
+  /// mem-backfill akumulasi lama jadi satu baris log historis, jadi hasil
+  /// hitung ulangnya sama dgn nilai sebelumnya utk data lama.
   Future<void> returnBorrowedItemQty(String id, double qtyReturnedDelta,
-      {bool locallyModified = false}) async {
+      {bool locallyModified = false,
+      String? eventId,
+      String? deviceCode}) async {
     final row =
         await (select(borrowedItems)..where((t) => t.id.equals(id))).getSingle();
-    final newReturned = row.qtyReturned + qtyReturnedDelta;
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'pinjaman',
+      entryId: id,
+      aksi: 'kembali',
+      qty: qtyReturnedDelta,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+    final newReturned = (await getLaciMejaTakenQty([id]))[id] ?? 0;
     await (update(borrowedItems)..where((t) => t.id.equals(id))).write(
       BorrowedItemsCompanion(
         qtyReturned: Value(newReturned),
@@ -6561,23 +6666,251 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .watch();
 
-  Future<void> fulfillPreorderEntry(String id, {bool locallyModified = false}) =>
-      (update(preorderEntries)..where((t) => t.id.equals(id))).write(
-        PreorderEntriesCompanion(
-          fulfilledAt: Value(DateTime.now()),
-          locallyModified: Value(locallyModified),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  /// Penuhi SELURUH sisa sekaligus — pelengkap [fulfillPreorderQty] utk kasus
+  /// paling umum. Sisa yang belum tercatat di log ikut ditulis sbg satu baris
+  /// 'penuhi' supaya riwayatnya tidak bolong.
+  Future<void> fulfillPreorderEntry(String id,
+      {bool locallyModified = false,
+      String? eventId,
+      String? deviceCode}) async {
+    final row = await (select(preorderEntries)..where((t) => t.id.equals(id)))
+        .getSingle();
+    final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
+    final sisa = row.qtyOrdered - taken;
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'preorder',
+      entryId: id,
+      aksi: 'penuhi',
+      qty: sisa > 0 ? sisa : 0,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+    await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+      PreorderEntriesCompanion(
+        fulfilledAt: Value(DateTime.now()),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 
-  Future<void> cancelPreorderEntry(String id, {bool locallyModified = false}) =>
-      (update(preorderEntries)..where((t) => t.id.equals(id))).write(
-        PreorderEntriesCompanion(
-          cancelledAt: Value(DateTime.now()),
-          locallyModified: Value(locallyModified),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  /// Batalkan pre-order. Baris log `aksi = 'batal'` qty-nya 0 — pembatalan
+  /// menutup sisa TANPA ada barang berpindah (lihat dok `LaciMejaEvents`),
+  /// jadi tidak boleh ikut terhitung sbg "sudah dipenuhi".
+  Future<void> cancelPreorderEntry(String id,
+      {bool locallyModified = false,
+      String? eventId,
+      String? deviceCode}) async {
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'preorder',
+      entryId: id,
+      aksi: 'batal',
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+    await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+      PreorderEntriesCompanion(
+        cancelledAt: Value(DateTime.now()),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  // ── Log kejadian Laci Meja (PLAN.md Item 54) ──
+  //
+  // Log ini SUMBER KEBENARAN utk "sudah berapa yang diambil/kembali/dipenuhi".
+  // Kolom `borrowedItems.qtyReturned` dipertahankan sbg CACHE (banyak pembaca
+  // lama bergantung padanya) dan SELALU dihitung ulang dari log — lihat
+  // [returnBorrowedItemQty]. Titip/ketinggalan & pre-order TIDAK punya kolom
+  // akumulator sejenis; sisanya dihitung on-the-fly lewat [getLaciMejaTakenQty]
+  // supaya tidak ada cache kedua yang bisa menyimpang.
+
+  /// Catat satu kejadian. Tidak pernah meng-update baris lama (lihat dok
+  /// `LaciMejaEvents`) — pembatalan pun baris baru.
+  Future<void> recordLaciMejaEvent({
+    required String id,
+    required String entityType,
+    required String entryId,
+    required String aksi,
+    double qty = 0,
+    String? note,
+    String? deviceCode,
+    bool locallyModified = false,
+  }) =>
+      into(laciMejaEvents).insert(LaciMejaEventsCompanion.insert(
+        id: id,
+        entityType: entityType,
+        entryId: entryId,
+        aksi: aksi,
+        qty: Value(qty),
+        note: Value(note),
+        deviceCode: Value(deviceCode),
+        locallyModified: Value(locallyModified),
+      ));
+
+  /// Total qty yang SUDAH terproses per entri (`aksi = 'batal'` tidak ikut —
+  /// pembatalan menutup sisa tanpa ada barang berpindah). Satu query agregat
+  /// utk banyak entri sekaligus, bukan N+1.
+  Future<Map<String, double>> getLaciMejaTakenQty(List<String> entryIds) async {
+    if (entryIds.isEmpty) return {};
+    final rows = await (selectOnly(laciMejaEvents)
+          ..addColumns([laciMejaEvents.entryId, laciMejaEvents.qty.sum()])
+          ..where(laciMejaEvents.entryId.isIn(entryIds) &
+              laciMejaEvents.aksi.equals('batal').not())
+          ..groupBy([laciMejaEvents.entryId]))
+        .get();
+    return {
+      for (final r in rows)
+        r.read(laciMejaEvents.entryId)!: r.read(laciMejaEvents.qty.sum()) ?? 0,
+    };
+  }
+
+  /// Riwayat per entri (terlama dulu, spt Riwayat Pembayaran) — dipakai kartu
+  /// riwayat di layar nota.
+  Future<Map<String, List<LaciMejaEvent>>> getLaciMejaEventsForEntries(
+      List<String> entryIds) async {
+    if (entryIds.isEmpty) return {};
+    final rows = await (select(laciMejaEvents)
+          ..where((t) => t.entryId.isIn(entryIds))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    final out = <String, List<LaciMejaEvent>>{};
+    for (final r in rows) {
+      (out[r.entryId] ??= []).add(r);
+    }
+    return out;
+  }
+
+  /// Baris `PreorderEntries` milik satu nota — pelengkap
+  /// [getBorrowedForTransaction]/[getLeftBehindWithoutLineForTransaction]
+  /// supaya layar nota bisa menampilkan kartu riwayat pre-order juga
+  /// (sebelumnya pre-order satu-satunya kategori tanpa kartu di nota).
+  ///
+  /// Sengaja TIDAK memfilter `fulfilledAt`/`cancelledAt`, alasan identik
+  /// [getBorrowedForTransaction]: nota adalah bukti historis permanen.
+  Future<List<PreorderEntry>> getPreorderForTransaction(String transactionId) =>
+      (select(preorderEntries)
+            ..where((t) => t.transactionId.equals(transactionId))
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+
+  /// Log gabungan ketiga kategori utk layar "Riwayat" Laci Meja — sudah
+  /// diperkaya nama barang & nama pelanggan supaya layar tidak perlu N+1.
+  ///
+  /// Nama pelanggan dibaca HIDUP dari nota (pola sama
+  /// [getCustomerNamesForTransactions]) lalu jatuh ke salinan beku entri —
+  /// biar konsisten dgn dashboard, yang namanya juga ikut nota.
+  Stream<List<LaciMejaEventView>> watchLaciMejaEventLog({int limit = 300}) {
+    return customSelect(
+      'SELECT e.id AS id, e.entity_type AS entity_type, e.entry_id AS entry_id, '
+      '  e.aksi AS aksi, e.qty AS qty, e.note AS note, '
+      '  e.created_at AS created_at, '
+      '  COALESCE(l.item_name, b.item_name, pr.name, p.product_id) AS item_name, '
+      '  COALESCE('
+      '    CASE WHEN t.customer_id IS NOT NULL THEN c.name ELSE t.customer_name END, '
+      '    l.customer_name_text, b.customer_name_text, p.customer_name'
+      '  ) AS customer_name, '
+      '  COALESCE(l.transaction_id, b.transaction_id, p.transaction_id) AS transaction_id '
+      'FROM laci_meja_events e '
+      "LEFT JOIN left_behind_items l ON e.entity_type = 'titip' AND l.id = e.entry_id "
+      "LEFT JOIN borrowed_items b ON e.entity_type = 'pinjaman' AND b.id = e.entry_id "
+      "LEFT JOIN preorder_entries p ON e.entity_type = 'preorder' AND p.id = e.entry_id "
+      'LEFT JOIN products pr ON pr.id = p.product_id '
+      'LEFT JOIN transactions t ON t.id = COALESCE(l.transaction_id, b.transaction_id, p.transaction_id) '
+      'LEFT JOIN customers c ON c.id = t.customer_id '
+      'ORDER BY e.created_at DESC LIMIT $limit',
+      readsFrom: {
+        laciMejaEvents,
+        leftBehindItems,
+        borrowedItems,
+        preorderEntries,
+        products,
+        transactions,
+        customers,
+      },
+    ).watch().map((rows) => rows
+        .map((r) => (
+              id: r.data['id'] as String,
+              entityType: r.data['entity_type'] as String,
+              entryId: r.data['entry_id'] as String,
+              aksi: r.data['aksi'] as String,
+              qty: (r.data['qty'] as num?)?.toDouble() ?? 0,
+              note: r.data['note'] as String?,
+              createdAt: DateTime.fromMillisecondsSinceEpoch(
+                  (r.data['created_at'] as int) * 1000),
+              itemName: (r.data['item_name'] as String?) ?? '-',
+              customerName: r.data['customer_name'] as String?,
+              transactionId: r.data['transaction_id'] as String?,
+            ))
+        .toList());
+  }
+
+  /// Ambil SEBAGIAN barang titip/ketinggalan. [total] = jumlah yang seharusnya
+  /// ada (null utk entri lama yang qty-nya tidak tercatat) — begitu akumulasi
+  /// log mencapai [total], entri ditandai selesai (`collectedAt`). Kalau
+  /// [total] null, satu pengambilan langsung dianggap menutup entri (perilaku
+  /// lama, tidak ada angka yang bisa dijadikan acuan sisa).
+  Future<void> collectLeftBehindQty(
+    String id,
+    double qtyTaken, {
+    double? total,
+    String? eventId,
+    String? deviceCode,
+    bool locallyModified = false,
+  }) async {
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'titip',
+      entryId: id,
+      aksi: 'ambil',
+      qty: qtyTaken,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+    final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
+    final done = total == null || taken >= total;
+    await (update(leftBehindItems)..where((t) => t.id.equals(id))).write(
+      LeftBehindItemsCompanion(
+        collectedAt: Value(done ? DateTime.now() : null),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Penuhi SEBAGIAN pre-order. Selesai (`fulfilledAt`) begitu akumulasi log
+  /// mencapai `qtyOrdered`.
+  Future<void> fulfillPreorderQty(
+    String id,
+    double qtyFulfilled, {
+    String? eventId,
+    String? deviceCode,
+    bool locallyModified = false,
+  }) async {
+    final row = await (select(preorderEntries)..where((t) => t.id.equals(id)))
+        .getSingle();
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'preorder',
+      entryId: id,
+      aksi: 'penuhi',
+      qty: qtyFulfilled,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+    final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
+    await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+      PreorderEntriesCompanion(
+        fulfilledAt:
+            Value(taken >= row.qtyOrdered ? DateTime.now() : null),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 
   /// Badge gabungan 3 kategori utk ikon Kasir (bottom nav) & kartu dashboard.
   /// Query gabungan tunggal (bukan 3 stream dikombinasi) supaya tidak perlu
@@ -6606,6 +6939,11 @@ class AppDatabase extends _$AppDatabase {
       'left_behind_items',
       'borrowed_items',
       'preorder_entries',
+      // Log kejadian (PLAN.md Item 54) — ikut jalur usulan yang SAMA, sesuai
+      // keputusan user (pengambilan dari HP kasir tetap perlu persetujuan
+      // owner). Ditaruh TERAKHIR supaya entri induknya diterapkan lebih dulu
+      // dalam satu batch — lihat guard `entry_id` di applyLaciMejaProposals.
+      'laci_meja_events',
     ]) {
       final rows = await customSelect(
         'SELECT * FROM "$t" WHERE locally_modified = 1',
@@ -6751,8 +7089,41 @@ class AppDatabase extends _$AppDatabase {
             }
           }
 
+          // Guard sejenis utk log kejadian: `entry_id` menunjuk baris di salah
+          // satu dari 3 tabel induk (polimorfik, jadi TIDAK bisa FK fisik).
+          // Kalau induknya belum ada di host, baris log ini akan jadi yatim
+          // dan tampil tanpa nama barang di layar Riwayat — lewati saja,
+          // `locally_modified`-nya tetap 1 di device asal jadi otomatis
+          // diusulkan ulang sync berikutnya begitu induknya masuk.
+          if (entry.key == 'laci_meja_events') {
+            const parentTable = {
+              'titip': 'left_behind_items',
+              'pinjaman': 'borrowed_items',
+              'preorder': 'preorder_entries',
+            };
+            final parent = parentTable[cleaned['entity_type']];
+            final entryId = cleaned['entry_id'];
+            if (parent == null || entryId is! String) continue;
+            final found = await customSelect(
+              'SELECT 1 FROM "$parent" WHERE id = ? LIMIT 1',
+              variables: [Variable.withString(entryId)],
+            ).get();
+            if (found.isEmpty) {
+              skippedReasons.add(
+                  'Riwayat Laci Meja: entri terkait belum tersinkron ke perangkat ini');
+              continue;
+            }
+          }
+
           cleaned['locally_modified'] = 0;
-          cleaned['updated_at'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          // `updated_at` HANYA dicap ulang kalau tabelnya memang punya kolom
+          // itu — `laci_meja_events` tidak punya (baris log tidak pernah
+          // di-update, deltanya by `created_at`). Tanpa cek ini, insert-nya
+          // gagal "no such column".
+          if (localColumns.contains('updated_at')) {
+            cleaned['updated_at'] =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          }
           final cols = cleaned.keys.map((k) => '"$k"').join(', ');
           final placeholders = cleaned.values.map((_) => '?').join(', ');
           await customInsert(

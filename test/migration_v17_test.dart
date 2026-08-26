@@ -98,7 +98,7 @@ void main() {
     expect(item.subtotal, 10000);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 32); // schemaVersion terkini
+    expect(ver.data.values.first, 33); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

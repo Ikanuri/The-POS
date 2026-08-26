@@ -23,6 +23,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sebelumnya latarnya tetap terang mencolok walau app dipakai dalam
   mode gelap, sekarang latarnya jadi lebih redup & menyatu dengan tema.
 
+### 🎉 Fitur Baru
+- **Barang di Laci Meja bisa diambil sebagian** — misal pelanggan
+  menitipkan 5 tabung LPG lalu hanya mengambil 3, sisanya (2) tetap
+  tercatat menggantung, lengkap dengan bar progres "Diambil 3 dari 5".
+  Berlaku juga untuk pinjaman barang dan pre-order.
+- **Riwayat pengambilan di tiap nota** — buka notanya, sekarang terlihat
+  kapan barang dicatat dan kapan saja diambil/dikembalikan/dipenuhi,
+  beserta jumlahnya. Pre-order yang sebelumnya tidak muncul sama sekali
+  di nota kini punya bagiannya sendiri.
+- **Layar Riwayat Laci Meja** — ikon jam di pojok kanan atas Laci Meja
+  menampilkan seluruh catatan pengambilan ketiga kategori jadi satu,
+  urut dari yang terbaru dan dikelompokkan per hari.
+
 ### 🔧 Perbaikan
 - **Laci Meja: nama pelanggan sekarang ikut notanya** — dulu kalau nota
   diubah dari pembeli umum ke nama pelanggan (atau sebaliknya), entri
