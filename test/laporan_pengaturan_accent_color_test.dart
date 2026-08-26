@@ -43,21 +43,21 @@ void main() {
     await db.close();
   });
 
+  // Seksi "Eksperimental" (dulu amber) SUDAH TIDAK ADA — satu-satunya isinya,
+  // "Import dari Griyo POS", dihapus atas permintaan user, jadi seksinya ikut
+  // dibuang. Assersi amber-nya SUPERSEDED, bukan regresi.
   testWidgets(
-      'Pengaturan: kartu seksi "Sinkronisasi" ungu, "Eksperimental" amber, '
-      '"Manajemen Data" merah', (tester) async {
+      'Pengaturan: kartu seksi "Sinkronisasi" ungu, "Manajemen Data" merah',
+      (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     await pumpWithFakeApp(tester, db: db, child: const PengaturanScreen());
 
     final syncBg = AppTheme.riwayatBg(isDark);
-    final expBg = AppTheme.stockWarnBg(isDark);
     final dataMgmtBg = AppTheme.debtBg(isDark);
     final cards = tester.widgetList<Card>(find.byType(Card));
 
     expect(cards.where((c) => c.color == syncBg), isNotEmpty,
         reason: 'kartu seksi Sinkronisasi harus pakai latar ungu');
-    expect(cards.where((c) => c.color == expBg), isNotEmpty,
-        reason: 'kartu seksi Eksperimental harus pakai latar amber');
     expect(cards.where((c) => c.color == dataMgmtBg), isNotEmpty,
         reason: 'kartu seksi Manajemen Data harus pakai latar merah');
 

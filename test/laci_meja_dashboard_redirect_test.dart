@@ -81,7 +81,9 @@ void main() {
     await tester.tap(find.text('Pinjaman'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Galon Aqua'));
+    // Redesain kartu: baris pinjaman sekarang "<barang> · Sisa x dari y",
+    // jadi teksnya tidak lagi persis nama barang saja.
+    await tester.tap(find.textContaining('Galon Aqua'));
     await tester.pumpAndSettle();
 
     expect(find.text('Layar Struk tx1'), findsOneWidget);

@@ -6298,6 +6298,47 @@ class AppDatabase extends _$AppDatabase {
     };
   }
 
+  /// Nama pelanggan TERKINI milik sekumpulan nota — dipakai dashboard Laci
+  /// Meja supaya nama yang tampil selalu ikut nota rujukannya.
+  ///
+  /// Dilaporkan user: pre-order LPG dibuat saat nota masih memakai pembeli
+  /// ad-hoc, lalu notanya diubah ke pelanggan terdaftar — di Laci Meja
+  /// namanya TETAP yang lama. Akarnya: ketiga tabel Laci Meja menyimpan nama
+  /// pelanggan sebagai SALINAN BEKU saat entri dicatat
+  /// (`customerNameText`/`customerName`), tidak pernah dicap ulang saat nota
+  /// berubah. Alih-alih menambah jalur "cap ulang" (yang untuk device kasir
+  /// berarti mutasi master-data -> antrian persetujuan owner, lihat dok
+  /// `dumpLaciMejaProposals`), nama cukup DIBACA HIDUP dari notanya di sisi
+  /// tampilan — otomatis benar juga untuk entri lama yang terlanjur salah,
+  /// tanpa migrasi & tanpa backfill.
+  ///
+  /// Mengikuti model tiga-keadaan `Transactions` apa adanya (lihat dok
+  /// `Transactions.customerName`): `customerId` menang, lalu `customerName`
+  /// ad-hoc, dan nota tanpa keduanya TIDAK masuk hasil sama sekali —
+  /// pemanggil yang memutuskan cadangannya (salinan beku lama, atau "Umum").
+  Future<Map<String, String>> getCustomerNamesForTransactions(
+      List<String> transactionIds) async {
+    if (transactionIds.isEmpty) return {};
+    final rows = await (select(transactions).join([
+      leftOuterJoin(customers, customers.id.equalsExp(transactions.customerId)),
+    ])
+          ..where(transactions.id.isIn(transactionIds)))
+        .get();
+    final out = <String, String>{};
+    for (final row in rows) {
+      final tx = row.readTable(transactions);
+      // Pelanggan terdaftar bisa saja sudah dihapus (soft-delete) — kalau
+      // baris `customers`-nya tidak ketemu, jangan diam-diam jatuh ke
+      // `customerName` nota (kolom itu justru diabaikan saat customerId
+      // terisi); biarkan kosong supaya pemanggil pakai cadangannya sendiri.
+      final name = tx.customerId != null
+          ? row.readTableOrNull(customers)?.name
+          : tx.customerName;
+      if (name != null && name.trim().isNotEmpty) out[tx.id] = name.trim();
+    }
+    return out;
+  }
+
   /// Baris `BorrowedItems` (pinjaman) milik SATU nota — dipakai struk in-app
   /// menampilkan SECTION "Pinjaman Barang" ("rujukan kebenaran" permintaan
   /// user: staf bisa cek nota asli utk konfirmasi barang apa yang memang

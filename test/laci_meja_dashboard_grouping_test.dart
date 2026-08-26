@@ -39,6 +39,17 @@ TextSpan? findBoldableSpan(WidgetTester tester, String text) {
   return null;
 }
 
+/// Jumlah baris entri di dalam [of] — redesain kartu (nama pelanggan jadi
+/// header, barang+qty turun ke baris ke-2, timestamp baris ke-3) membuat
+/// `ListTile` tidak lagi dipakai; peran "satu baris entri" sekarang dipegang
+/// `_EntryRow`. Pola pencocokan lewat `runtimeType.toString()` sama dgn
+/// `_MetaTabDivider`/`_VariantRow` di test lain.
+Finder findEntryRows({Finder? of}) {
+  final matcher = find
+      .byWidgetPredicate((w) => w.runtimeType.toString() == '_EntryRow');
+  return of == null ? matcher : find.descendant(of: of, matching: matcher);
+}
+
 void main() {
   late AppDatabase db;
 
@@ -109,11 +120,9 @@ void main() {
     expect(find.byType(Card), findsNWidgets(2),
         reason: '2 nota berbeda -> 2 frame (Card), bukan 3 baris rata');
 
-    // Card pertama (tx1) berisi 2 ListTile (Galon Aqua + Payung).
+    // Card pertama (tx1) berisi 2 baris entri (Galon Aqua + Payung).
     final firstCard = find.byType(Card).first;
-    expect(
-        find.descendant(of: firstCard, matching: find.byType(ListTile)),
-        findsNWidgets(2),
+    expect(findEntryRows(of: firstCard), findsNWidgets(2),
         reason: '2 barang dari nota yg SAMA harus 1 frame berisi 2 baris');
 
     await tester.pumpWidget(const SizedBox());
@@ -279,9 +288,14 @@ void main() {
           reason: '2 produk pre-order NOTA SAMA -> 1 frame, tidak kocar-kacir');
       expect(find.text('Bu Artia'), findsOneWidget,
           reason: 'header nama pelanggan tampil SEKALI per grup');
+      // Redesain (permintaan user): nama pelanggan naik jadi baris ke-1 "H1"
+      // — sengaja LEBIH tebal & lebih besar dari baris barang di bawahnya
+      // (dulu sama-sama w700), jadi assersi lama sudah tidak berlaku.
       final header = tester.widget<Text>(find.text('Bu Artia'));
-      expect(header.style?.fontWeight, FontWeight.w700,
-          reason: 'header nama pelanggan harus bold');
+      expect(header.style?.fontWeight, FontWeight.w800,
+          reason: 'header nama pelanggan = H1, lebih tebal dari baris barang');
+      expect(header.style?.fontSize, greaterThan(13.5),
+          reason: 'H1 harus lebih besar dari baris barang (13.5)');
       expect(
           find.textContaining('2 Galon Aqua', findRichText: true),
           findsOneWidget);
@@ -503,14 +517,12 @@ void main() {
           reason: 'satu pelanggan, 2 nota berbeda -> tetap 1 grup');
       expect(find.text('Pak Budi'), findsOneWidget,
           reason: 'header nama pelanggan tampil SEKALI, bukan per baris');
-      expect(
-          find.descendant(
-              of: find.byType(Card), matching: find.byType(ListTile)),
-          findsNWidgets(2),
+      expect(findEntryRows(of: find.byType(Card)), findsNWidgets(2),
           reason: '2 baris barang (dari 2 nota berbeda) di dalam 1 grup');
 
       // Tap baris Galon Aqua -> redirect ke tx1 (BUKAN tx2), walau satu grup.
-      await tester.tap(find.text('Galon Aqua'));
+      // `textContaining`: baris pinjaman sekarang "<barang> · Sisa x dari y".
+      await tester.tap(find.textContaining('Galon Aqua'));
       await tester.pumpAndSettle();
       expect(find.text('Layar Struk tx1'), findsOneWidget,
           reason: 'tiap baris redirect ke transactionId MILIKNYA sendiri');

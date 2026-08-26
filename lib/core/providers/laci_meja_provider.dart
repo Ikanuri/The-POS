@@ -69,6 +69,28 @@ final leftBehindQtyUnitProvider = FutureProvider<
   return ref.watch(databaseProvider).getQtyUnitForTransactionItems(ids);
 });
 
+/// Nama pelanggan TERKINI per `transaction_id` untuk SELURUH entri Laci Meja
+/// yang sedang tampil (ketiga kategori sekaligus, satu query) — supaya nama
+/// di dashboard selalu ikut nota rujukannya, bukan salinan beku saat entri
+/// dicatat. Lihat dok `AppDatabase.getCustomerNamesForTransactions` untuk
+/// laporan bug & alasan pendekatannya.
+///
+/// Nota yang tidak punya nama apa pun ("Umum") sengaja TIDAK masuk map —
+/// pemanggil jatuh ke salinan beku lamanya lebih dulu, baru "Umum".
+final laciMejaCustomerNamesProvider =
+    FutureProvider<Map<String, String>>((ref) async {
+  final leftBehind = ref.watch(leftBehindItemsProvider).valueOrNull ?? [];
+  final borrowed = ref.watch(borrowedItemsProvider).valueOrNull ?? [];
+  final preorder = ref.watch(preorderEntriesProvider).valueOrNull ?? [];
+  final ids = <String>{
+    ...leftBehind.map((e) => e.transactionId),
+    ...borrowed.map((e) => e.transactionId),
+    // Pre-order `transactionId` NULLABLE (titip wadah tanpa beli apa pun).
+    ...preorder.map((e) => e.transactionId).whereType<String>(),
+  }.toList();
+  return ref.watch(databaseProvider).getCustomerNamesForTransactions(ids);
+});
+
 /// Item 52 redesain — nama produk+satuan per `product_unit_id` yang muncul
 /// di daftar Pre-order dashboard, dipakai menampilkan "qty produk - jaminan"
 /// per baris (dikelompokkan per nota).

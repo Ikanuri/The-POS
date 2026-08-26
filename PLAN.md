@@ -109,6 +109,63 @@ baru match palet pastel baru) di kedua mode (grid & list).
 
 ---
 
+## Item 54 — Laci Meja: ambil parsial + riwayat per-nota + log global (poin 1, 2, 5 dari 5 usulan user — DISETUJUI, BELUM dieksekusi)
+
+User mengajukan 5 usulan sekaligus; **poin 3 (nama ikut nota) & 4 (redesain
+kartu) SUDAH SELESAI & di-commit** (lihat CHANGELOG). Sisanya di bawah —
+arah arsitekturnya sudah diputuskan user, tinggal dieksekusi.
+
+**Keputusan arsitektur (sudah dipilih user, jangan didesain ulang):**
+
+1. **Pencatatan pengambilan = TABEL LOG APPEND-ONLY**, BUKAN mengurangi
+   kolom qty. Sisa dihitung `qty − Σ log`. **Alasan (penting)**: ketiga
+   tabel Laci Meja adalah master-data yang disinkron *last-write-wins by
+   `updated_at`* — read-modify-write pada kolom qty bikin dua pengambilan
+   bersamaan (owner ambil 2, kasir ambil 1) SALING MENIMPA, salah satunya
+   hilang diam-diam. Itu ledger barang fisik, jadi selisihnya nyata. Baris
+   log tidak pernah bentrok. Pola acuan: `transaction_payments`.
+2. **Sinkronisasi log TETAP lewat antrian persetujuan owner** — pilihan
+   eksplisit user, BUKAN auto-merge ala `appendOnlyTables`. Tetap
+   kompatibel dgn log append-only: barisnya tidak saling menimpa, hanya
+   tampilan di HP owner yang baru berubah setelah approve.
+
+**Poin 1 — ambil/penuhi parsial.** `markLeftBehindCollected` &
+`fulfillPreorderEntry` sekarang semua-atau-tidak (set `collectedAt`/
+`fulfilledAt`). Pinjaman SUDAH parsial (`returnBorrowedItemQty` akumulasi
+`qtyReturned`) tapi tanpa jejak per-pengambilan. Butuh dialog qty (pola
+sama dgn `_showReturnDialog` yang sudah ada) + flag "selesai" dihitung
+ulang dari log (pola `_reconcileTransactionTotals`).
+
+**Poin 2 — riwayat + timestamp per nota, ketiga kategori.** Kartu per-nota
+utk titipan & pinjaman SUDAH ADA di `receipt_screen.dart`
+(`_buildLeftBehindOtherCard` ~3002, `_buildBorrowedCard` ~2964) tapi TANPA
+timestamp. **Pre-order belum punya kartu sama sekali** di nota — cuma
+penanda inline "· Titip n" (~418-430). Format baris meniru
+`_buildPaymentTimeline` (~3093).
+
+**Poin 5 — log riwayat keseluruhan** di Laci Meja: satu layar/tab, ketiga
+kategori bercampur urut waktu. Sumber data SAMA dgn poin 2 (satu tabel,
+dua tampilan).
+
+**Jebakan yang WAJIB dicek saat eksekusi (mudah terlewat):**
+- `tutup_buku_service.dart` (~240-254) menghapus baris Laci Meja bersama
+  notanya saat arsip — baris log baru WAJIB ikut dihapus di situ, kalau
+  tidak jadi orphan permanen. Guard "blokir arsip kalau masih ada yang
+  terbuka" (~150-164) juga perlu ditinjau ulang thd definisi "terbuka"
+  yang baru (derived dari log).
+- `dumpLaciMejaProposals` pakai `SELECT *`, dan
+  `filterUnchangedLaciMejaProposals` membandingkan per-kolom — keduanya
+  harus ikut disesuaikan utk tabel/kolom baru.
+- Data pinjaman lama (`qtyReturned` sudah terisi) perlu di-backfill jadi 1
+  baris log historis saat migrasi, kalau tidak riwayatnya tampak kosong
+  padahal qty sudah berkurang.
+- schemaVersion naik (sekarang 32) + migration test baru.
+
+**Storage**: ~150 byte/baris log; 20 pengambilan/hari ≈ 1 MB/tahun — tidak
+signifikan dibanding `transactions`.
+
+---
+
 ## Item 23 — Sisa lokasi lain yang masih pakai `paid` mentah (double-count kembalian reuse)
 
 **Konteks:** user laporkan "Sisa Tagihan" di struk salah hitung (understated)

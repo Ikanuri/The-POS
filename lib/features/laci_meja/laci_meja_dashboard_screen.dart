@@ -33,32 +33,85 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     return AppTheme.changeFg(isDark);
   }
 
-  /// Subtitle kartu: keterangan + NAMA PELANGGAN ber-aksen terracotta
-  /// (`AppTheme.accent`, aksen utama app) supaya langsung kebaca "punya
-  /// siapa" — sengaja dibedakan dari warna umur (hijau/kuning/merah) yang
-  /// menandai seberapa lama menunggu.
-  static Widget _subtitle({
+  /// Format timestamp — SENGAJA disamakan persis dgn kartu "Riwayat
+  /// Pembayaran" (`receipt_screen.dart::_formatDateTime`, permintaan user
+  /// eksplisit "timestamp sama formatnya seperti riwayat pembayaran").
+  /// Dirakit manual, BUKAN `DateFormat` ber-locale — lihat gotcha
+  /// `LocaleDataException` di CLAUDE.md.
+  static String _formatDateTime(DateTime dt) {
+    return '${dt.day.toString().padLeft(2, '0')}/'
+        '${dt.month.toString().padLeft(2, '0')}/'
+        '${dt.year} '
+        '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Baris ke-3 kartu (redesain permintaan user): keterangan + timestamp
+  /// absolut, diikuti umur relatif yang TETAP diberi warna hijau/kuning/merah
+  /// — umur berwarna itu penanda "sudah mengendap berapa lama" yang sudah
+  /// dipakai sejak awal, jadi tidak dibuang, cuma didampingi jam pastinya.
+  static Widget _metaLine({
     required String leading,
-    required String? customerName,
+    required DateTime at,
     required int days,
     required bool isDark,
+    String? trailing,
   }) {
-    final ageStyle = TextStyle(
-        fontSize: 12, color: _ageColor(days, isDark), fontWeight: FontWeight.w600);
     return Text.rich(
       TextSpan(
-        style: ageStyle,
+        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
         children: [
-          TextSpan(text: leading),
-          if (customerName != null && customerName.isNotEmpty)
+          TextSpan(
+              text: '$leading ${_formatDateTime(at)}',
+              style: TextStyle(color: AppTheme.laciFg(isDark))),
+          TextSpan(
+            text: ' · $days hari lalu',
+            style: TextStyle(
+                color: _ageColor(days, isDark), fontWeight: FontWeight.w600),
+          ),
+          if (trailing != null && trailing.isNotEmpty)
             TextSpan(
-              text: ' — $customerName',
-              style: const TextStyle(
-                  color: AppTheme.accent, fontWeight: FontWeight.w700),
-            ),
-          TextSpan(text: ' · $days hari lalu'),
+                text: ' · $trailing',
+                style: TextStyle(color: AppTheme.laciFg(isDark))),
         ],
       ),
+    );
+  }
+
+  /// Nama pelanggan yang ditampilkan: UTAMAKAN nama hidup dari nota rujukan
+  /// (lihat `laciMejaCustomerNamesProvider`), baru jatuh ke salinan beku yang
+  /// tersimpan di baris Laci Meja, terakhir "Umum". Urutan ini yang bikin
+  /// entri lama yang terlanjur menyimpan nama basi ikut terkoreksi.
+  static String _customerLabel({
+    required String? txId,
+    required Map<String, String> liveNames,
+    required String? fallback,
+  }) {
+    final live = txId == null ? null : liveNames[txId];
+    if (live != null && live.isNotEmpty) return live;
+    final fb = fallback?.trim();
+    if (fb != null && fb.isNotEmpty) return fb;
+    return 'Umum';
+  }
+
+  /// Baris ke-1 kartu (redesain permintaan user): NAMA PELANGGAN paling atas,
+  /// bold & paling besar — menggantikan nama barang yang dulu di posisi ini.
+  static Widget _cardHeader(String customerName, {Widget? trailing}) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            customerName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.1),
+          ),
+        ),
+        if (trailing != null) trailing,
+      ],
     );
   }
 
@@ -162,6 +215,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       groups.putIfAbsent(e.transactionId, () => []).add(e);
     }
     final txIds = groups.keys.toList();
+    final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
 
     return ListView.separated(
       padding: const EdgeInsets.all(12),
@@ -169,16 +223,29 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final group = groups[txIds[i]]!;
+        // Satu grup = satu nota, jadi nama pelanggannya pasti sama utk
+        // seluruh baris — cukup diambil dari baris pertama.
+        final customerName = _customerLabel(
+          txId: txIds[i],
+          liveNames: liveNames,
+          fallback: group.first.customerNameText,
+        );
         return Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              for (var j = 0; j < group.length; j++) ...[
-                if (j > 0) const Divider(height: 1),
-                _leftBehindTile(context, ref, group[j], qtyUnit, isDark),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: () => context.push('/kasir/struk/${txIds[i]}'),
+                  child: _cardHeader(customerName),
+                ),
+                for (final e in group)
+                  _leftBehindTile(context, ref, e, qtyUnit, isDark),
               ],
-            ],
+            ),
           ),
         );
       },
@@ -206,19 +273,18 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         : ' · ${displayQty % 1 == 0 ? displayQty.toInt() : displayQty}'
                 ' ${qu?.unitName ?? ''}'
             .trimRight();
-    return ListTile(
-      // Item 52 susulan — tap kartu redirect ke nota terkait, mekanisme
-      // SAMA PERSIS dgn Buku Hutang (HutangTab -> push
-      // '/kasir/struk/:txId'): sama-sama push ANTAR-RUTE DI DALAM satu
-      // ShellRoute yang sama, bukan lintas batas shell (lihat dok rute
-      // 'laci-meja' di app_router.dart soal kenapa layar ini pindah ke
-      // dalam shell).
+    // Item 52 susulan — tap baris redirect ke nota terkait, mekanisme SAMA
+    // PERSIS dgn Buku Hutang (HutangTab -> push '/kasir/struk/:txId'):
+    // sama-sama push ANTAR-RUTE DI DALAM satu ShellRoute yang sama, bukan
+    // lintas batas shell (lihat dok rute 'laci-meja' di app_router.dart soal
+    // kenapa layar ini pindah ke dalam shell).
+    return _EntryRow(
       onTap: () => context.push('/kasir/struk/${e.transactionId}'),
-      title: Text('${e.itemName}$qtyLabel',
-          style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: _subtitle(
+      line2: Text('${e.itemName}$qtyLabel',
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+      meta: _metaLine(
         leading: e.jenis == 'titip' ? 'Dititip' : 'Ketinggalan',
-        customerName: e.customerNameText,
+        at: e.createdAt,
         days: days,
         isDark: isDark,
       ),
@@ -226,7 +292,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         onTap: () async {
           final db = ref.read(databaseProvider);
           final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-          await db.markLeftBehindCollected(e.id, locallyModified: locallyModified);
+          await db.markLeftBehindCollected(e.id,
+              locallyModified: locallyModified);
         },
       ),
     );
@@ -256,6 +323,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       groups.putIfAbsent(_borrowedGroupKey(e), () => []).add(e);
     }
     final keys = groups.keys.toList();
+    final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
 
     return ListView.separated(
       padding: const EdgeInsets.all(12),
@@ -263,17 +331,26 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final group = groups[keys[i]]!;
-        final customerName = group.first.customerNameText ?? 'Umum';
+        // Grup pinjaman per-PELANGGAN (bukan per-nota), jadi barisnya bisa
+        // berasal dari nota berbeda-beda. Nama header diambil dari nota baris
+        // PERTAMA — kalau grupnya dikunci `customerId`, seluruh baris pasti
+        // menunjuk pelanggan yang sama sehingga hasilnya identik; kunci
+        // grup sendiri sengaja TIDAK diubah ke nama hidup supaya pembagian
+        // grup tidak ikut bergeser saat nota diedit.
+        final customerName = _customerLabel(
+          txId: group.first.transactionId,
+          liveNames: liveNames,
+          fallback: group.first.customerNameText,
+        );
         return Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(customerName,
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                _cardHeader(customerName),
                 for (final e in group)
                   _borrowedTile(context, ref, e, isDark),
               ],
@@ -288,15 +365,18 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, BorrowedItem e, bool isDark) {
     final days = _daysSince(e.createdAt);
     final sisa = e.qty - e.qtyReturned;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      // Tiap baris tetap tertaut ke transactionId MASING-MASING (satu grup
-      // pelanggan bisa berisi baris dari nota yang BERBEDA-BEDA).
+    String n(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
+    // Tiap baris tetap tertaut ke transactionId MASING-MASING (satu grup
+    // pelanggan bisa berisi baris dari nota yang BERBEDA-BEDA).
+    return _EntryRow(
       onTap: () => context.push('/kasir/struk/${e.transactionId}'),
-      title: Text(e.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: _subtitle(
-        leading: 'Sisa $sisa dari ${e.qty}',
-        customerName: null,
+      // Baris ke-2 = barang + "yang sevariabel dgn qty" utk pinjaman
+      // (permintaan user): sisa vs total pinjaman.
+      line2: Text('${e.itemName} · Sisa ${n(sisa)} dari ${n(e.qty)}',
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+      meta: _metaLine(
+        leading: 'Dipinjam',
+        at: e.createdAt,
         days: days,
         isDark: isDark,
       ),
@@ -410,8 +490,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
               ? Center(
                   child: Text('Tidak ada yang cocok dgn "$query".',
                       style: TextStyle(color: scheme.onSurfaceVariant)))
-              : _buildPreorderGroups(
-                  context, ref, groups, keys, labels, isDark),
+              : _buildPreorderGroups(context, ref, groups, keys, labels, isDark,
+                  ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {}),
         ),
       ],
     );
@@ -423,7 +503,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       Map<String, List<PreorderEntry>> groups,
       List<String> keys,
       Map<String, ({String productName, String unitName})> labels,
-      bool isDark) {
+      bool isDark,
+      Map<String, String> liveNames) {
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: keys.length,
@@ -431,12 +512,21 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       itemBuilder: (_, i) {
         final group = groups[keys[i]]!;
         final first = group.first;
-        final days = _daysSince(first.createdAt);
+        // Pre-order satu-satunya kategori yang menyimpan nama pelanggan TANPA
+        // `customerId` sama sekali (lihat `PreorderEntries.customerName`) —
+        // justru kategori inilah yang dilaporkan user salah nama. Nama hidup
+        // dari nota menutup itu; entri tanpa nota (titip wadah tanpa beli)
+        // memang cuma punya salinan bekunya.
+        final customerName = _customerLabel(
+          txId: first.transactionId,
+          liveNames: liveNames,
+          fallback: first.customerName,
+        );
         return Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -445,20 +535,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                       ? null
                       : () =>
                           context.push('/kasir/struk/${first.transactionId}'),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(first.customerName,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700)),
-                      ),
-                      Text('$days hari lalu',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: _ageColor(days, isDark),
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+                  child: _cardHeader(customerName),
                 ),
                 for (final e in group)
                   _preorderTile(context, ref, e, labels, isDark),
@@ -483,27 +560,36 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final depositStr = e.depositQty > 0
         ? ' - ${e.depositQty % 1 == 0 ? e.depositQty.toInt() : e.depositQty} jaminan'
         : '';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            // Permintaan user: qty & nama produk dibedakan bold dari sisa
-            // baris (jaminan, status bayar).
-            child: Text.rich(
-              TextSpan(
-                style: TextStyle(fontSize: 13, color: AppTheme.laciFg(isDark)),
-                children: [
-                  TextSpan(
-                      text: '$qtyStr $productName',
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  TextSpan(
-                      text:
-                          '$depositStr${e.paid ? ' · sudah bayar' : ''}'),
-                ],
-              ),
+    return _EntryRow(
+      // Permintaan user: qty & nama produk dibedakan bold dari sisa baris
+      // (jaminan, status bayar).
+      line2: Text.rich(
+        TextSpan(
+          style: const TextStyle(fontSize: 13.5),
+          children: [
+            // Bold ditulis EKSPLISIT di span-nya (bukan diwarisi dari style
+            // induk) supaya widget test bisa membaca ketebalannya langsung
+            // dari span ini — lihat `findBoldableSpan` di test grouping.
+            TextSpan(
+                text: '$qtyStr $productName',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            TextSpan(
+              text: '$depositStr${e.paid ? ' · sudah bayar' : ''}',
+              style: TextStyle(
+                  fontWeight: FontWeight.w500, color: AppTheme.laciFg(isDark)),
             ),
-          ),
+          ],
+        ),
+      ),
+      meta: _metaLine(
+        leading: 'Dipesan',
+        at: e.createdAt,
+        days: _daysSince(e.createdAt),
+        isDark: isDark,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           IconButton(
             tooltip: 'Batal',
             icon: const Icon(Icons.close),
@@ -511,20 +597,65 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
             onPressed: () async {
               final db = ref.read(databaseProvider);
               final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-              await db.cancelPreorderEntry(e.id, locallyModified: locallyModified);
+              await db.cancelPreorderEntry(e.id,
+                  locallyModified: locallyModified);
             },
           ),
           TextButton(
             onPressed: () async {
               final db = ref.read(databaseProvider);
               final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
-              await db.fulfillPreorderEntry(e.id, locallyModified: locallyModified);
+              await db.fulfillPreorderEntry(e.id,
+                  locallyModified: locallyModified);
             },
             child: const Text('Penuhi'),
           ),
         ],
       ),
     );
+  }
+}
+
+/// Satu baris entri di dalam kartu Laci Meja (redesain permintaan user):
+/// baris ke-2 ([line2] — nama barang + qty, bold) di atas baris ke-3
+/// ([meta] — timestamp). Nama pelanggan TIDAK di sini, dia jadi header kartu
+/// (baris ke-1) supaya tidak berulang tiap baris.
+///
+/// Kelas terpisah (bukan `Column` inline) DISENGAJA: dipakai ketiga kategori
+/// supaya tata letaknya tidak menyimpang satu sama lain, sekaligus memberi
+/// widget test satu tipe yang bisa dihitung per kartu — pola yang sama dgn
+/// `_MetaTabDivider` di `kasir_screen.dart`. Sebelumnya peran ini dipegang
+/// `ListTile`, yang sudah tidak dipakai lagi sejak baris punya 3 tingkat.
+class _EntryRow extends StatelessWidget {
+  const _EntryRow({
+    required this.line2,
+    required this.meta,
+    this.onTap,
+    this.trailing,
+  });
+
+  final Widget line2;
+  final Widget meta;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [line2, const SizedBox(height: 3), meta],
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+        ],
+      ),
+    );
+    return onTap == null ? body : InkWell(onTap: onTap, child: body);
   }
 }
 
