@@ -6,7 +6,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 23 Agustus 2026 (lanjutan — Laci Meja: nama ikut nota +
-redesain kartu), commit `<pending>`, di atas versi kerja **2.19.7+32**.
+redesain kartu), commit `32713aa`, di atas versi kerja **2.19.7+32**.
 Bagian dari **5 usulan fitur Laci Meja** yang user ajukan sekaligus.
 Analisis + mockup Playwright sudah diberikan utk KELIMA poin; user
 memilih dikerjakan **BERTAHAP — poin 3 & 4 dulu** (murah, tanpa migrasi
