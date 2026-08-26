@@ -27,6 +27,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Catatan barang titip/ketinggalan (di luar nota) kini bisa ditulis
   beberapa baris** — tekan Enter untuk membuat baris baru, cocok untuk
   mencatat lebih dari satu barang sekaligus.
+
+### 🗑️ Fitur Dihapus
+- **Tombol batal (X) di kartu Pre-order Laci Meja dihapus** — kini
+  hanya tombol "Penuhi" yang tersedia di kartu tersebut.
 - **Barang di Laci Meja bisa diambil sebagian** — misal pelanggan
   menitipkan 5 tabung LPG lalu hanya mengambil 3, sisanya (2) tetap
   tercatat menggantung, lengkap dengan bar progres "Diambil 3 dari 5".

@@ -5,6 +5,21 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi lagi — hapus tombol Batal
+di kartu Pre-order dashboard), commit `1ffe791`, versi kerja
+**2.19.11+36**. Permintaan user singkat: tombol "Batal" (ikon X,
+`cancelPreorderEntry`) di kartu Pre-order `laci_meja_dashboard_screen.
+dart` dihapus, hanya "Penuhi" tersisa. `cancelPreorderEntry` & aksi log
+`'batal'` (PLAN.md Item 54) TIDAK dihapus dari DB — masih ada jalur
+lain yang mungkin memakainya (sync/riwayat), cuma pemicu UI dari kartu
+ini yang dicabut. **Tidak ada route khusus** utk aksi ini (dicek
+`app_router.dart`, kosong) — murni `onPressed` inline, jadi tidak ada
+yang perlu dibongkar di router. Full suite 1144 lolos / 2 gagal
+(`proposal_unchanged_end_to_end_test.dart` flaky yang sudah lama
+dikenal + `CryptoService decrypt dengan key salah gagal` yang JUGA
+ternyata flaky, keduanya lolos sendiri terisolasi, tidak terkait
+perubahan sesi ini), `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi — field "Nama barang" di
 luar nota dukung multi-baris), commit `25f7090`, versi kerja
 **2.19.10+35**. Perubahan kecil: `TextField` di `_showLeftBehindDialog`
