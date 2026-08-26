@@ -5,6 +5,16 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi — field "Nama barang" di
+luar nota dukung multi-baris), commit `<pending>`, versi kerja
+**2.19.10+35**. Perubahan kecil: `TextField` di `_showLeftBehindDialog`
+(`receipt_screen.dart`) diberi `minLines:1, maxLines:null,
+keyboardType: multiline, textInputAction: newline` supaya Enter bikin
+baris baru (bukan submit/tutup keyboard) — user mau catat beberapa
+barang sekaligus dipisah per baris. HANYA field ini yang diubah (qty,
+nama pelanggan, field sejenis di dialog Pinjaman TIDAK disentuh).
+Full suite 1146 lolos, `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan — Laci Meja poin 1/2/5: ambil
 parsial + riwayat per-nota + log global), commit `39c6e7f`, versi
 kerja **2.19.9+34**. **KELIMA usulan Laci Meja user SELESAI SEMUA**
