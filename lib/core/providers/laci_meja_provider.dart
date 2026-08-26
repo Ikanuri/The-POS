@@ -91,6 +91,39 @@ final laciMejaCustomerNamesProvider =
   return ref.watch(databaseProvider).getCustomerNamesForTransactions(ids);
 });
 
+/// Total qty yang SUDAH diambil/dikembalikan/dipenuhi per entri, dihitung
+/// dari log kejadian (PLAN.md Item 54). Dipakai dashboard menampilkan sisa &
+/// progres, dan membatasi jumlah maksimum di dialog ambil sebagian.
+///
+/// Titip/ketinggalan & pre-order SENGAJA tidak punya kolom akumulator sendiri
+/// (beda dari `borrowedItems.qtyReturned` yang sudah terlanjur ada dan kini
+/// jadi cache dari log) — dihitung on-the-fly di sini supaya tidak ada cache
+/// kedua yang bisa menyimpang dari log.
+final laciMejaTakenQtyProvider =
+    FutureProvider<Map<String, double>>((ref) async {
+  final leftBehind = ref.watch(leftBehindItemsProvider).valueOrNull ?? [];
+  final preorder = ref.watch(preorderEntriesProvider).valueOrNull ?? [];
+  final ids = [
+    ...leftBehind.map((e) => e.id),
+    ...preorder.map((e) => e.id),
+  ];
+  return ref.watch(databaseProvider).getLaciMejaTakenQty(ids);
+});
+
+/// Log kejadian gabungan ketiga kategori (PLAN.md Item 54 poin 5) — layar
+/// "Riwayat" Laci Meja. Sudah diperkaya nama barang & pelanggan di SQL.
+final laciMejaEventLogProvider =
+    StreamProvider<List<LaciMejaEventView>>((ref) {
+  return ref.watch(databaseProvider).watchLaciMejaEventLog();
+});
+
+/// Riwayat kejadian per entri untuk SATU nota — dipakai kartu riwayat di
+/// layar struk (PLAN.md Item 54 poin 2). Key: id entri Laci Meja.
+final laciMejaEventsForEntriesProvider = FutureProvider.family<
+    Map<String, List<LaciMejaEvent>>, List<String>>((ref, entryIds) async {
+  return ref.watch(databaseProvider).getLaciMejaEventsForEntries(entryIds);
+});
+
 /// Item 52 redesain — nama produk+satuan per `product_unit_id` yang muncul
 /// di daftar Pre-order dashboard, dipakai menampilkan "qty produk - jaminan"
 /// per baris (dikelompokkan per nota).

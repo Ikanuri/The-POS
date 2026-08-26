@@ -87,6 +87,65 @@ class BorrowedItems extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Satu KEJADIAN pengambilan/pengembalian/pemenuhan pada salah satu entri
+/// Laci Meja (PLAN.md Item 54, poin 1/2/5 dari usulan user).
+///
+/// **Kenapa tabel log, bukan sekadar mengurangi kolom qty di 3 tabel di
+/// atas** — ketiga tabel itu master data yang disinkron *last-write-wins by
+/// `updated_at`*. Kalau "ambil 3 dari 5" ditulis sbg read-modify-write pada
+/// kolom qty, dua device yang mengambil sebelum sempat sync akan SALING
+/// MENIMPA: owner ambil 2 (5->3) dan kasir ambil 1 (5->4), yang `updated_at`
+/// -nya lebih baru menang, satu pengambilan HILANG diam-diam. Itu ledger
+/// barang FISIK, jadi selisihnya nyata di rak. Sebagai baris log terpisah,
+/// dua pengambilan itu jadi dua baris berbeda yang keduanya selamat — sisa
+/// dihitung `qty - Σ log`, selalu benar tanpa bergantung urutan sync.
+/// Pola acuannya `TransactionPayments` (satu nota, banyak momen bayar).
+///
+/// Baris di sini TIDAK PERNAH di-update, hanya ditambah — pembatalan
+/// diwakili baris `aksi = 'batal'` sendiri, bukan menghapus/mengubah baris
+/// lama (jejak audit utuh, sekaligus bikin merge sync bebas konflik).
+///
+/// **Sinkronisasi**: tetap lewat antrian persetujuan owner spt 3 tabel
+/// induknya (keputusan eksplisit user), BUKAN auto-merge ala
+/// `LanSyncService.appendOnlyTables`. Append-only di sini soal BENTUK
+/// datanya, bukan soal jalur sync-nya.
+class LaciMejaEvents extends Table {
+  TextColumn get id => text()(); // UUID
+
+  /// 'titip' | 'pinjaman' | 'preorder' — kategori entri induknya. Disimpan
+  /// eksplisit (bukan disimpulkan dari tabel mana `entryId` ada) supaya log
+  /// gabungan bisa dibaca & difilter tanpa 3x JOIN.
+  TextColumn get entityType => text()();
+
+  /// Id baris induk di `left_behind_items` / `borrowed_items` /
+  /// `preorder_entries`. SENGAJA TANPA FK: tabelnya berbeda-beda tergantung
+  /// [entityType] (SQLite tidak punya FK polimorfik), dan alasan yang sama
+  /// dgn `LeftBehindItems.customerId` berlaku — baris induk bisa saja belum
+  /// tersinkron ke host saat usulan diterapkan, FK akan bikin gagal permanen.
+  TextColumn get entryId => text()();
+
+  /// 'ambil' (titip/ketinggalan diambil) | 'kembali' (pinjaman dikembalikan)
+  /// | 'penuhi' (pre-order dipenuhi) | 'batal' (pre-order dibatalkan).
+  TextColumn get aksi => text()();
+
+  /// Jumlah pada kejadian ini. Untuk `aksi = 'batal'` nilainya 0 — pembatalan
+  /// menutup sisa yang belum terpenuhi tanpa ada barang yang berpindah.
+  RealColumn get qty => real().withDefault(const Constant(0))();
+
+  TextColumn get note => text().nullable()();
+
+  /// Device yang mencatat (`device_code`) — sekadar jejak "siapa", tidak
+  /// dipakai logika apa pun.
+  TextColumn get deviceCode => text().nullable()();
+
+  BoolColumn get locallyModified =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Pre-order/backorder untuk produk stok kosong — termasuk antrian tabung
 /// LPG (titip wadah kosong sbg jaminan, lihat `ProductUnits.
 /// requiresDeposit`). FIFO murni berdasar `createdAt`; `paid` HANYA

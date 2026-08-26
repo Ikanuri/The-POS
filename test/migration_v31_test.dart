@@ -86,7 +86,7 @@ void main() {
     expect(units.single.id, 'u-lama', reason: 'data lama tidak tersentuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 32);
+    expect(ver.data.values.first, 33);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
