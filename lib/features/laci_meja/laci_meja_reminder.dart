@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_theme.dart';
@@ -64,16 +65,45 @@ class LaciMejaReminder extends StatelessWidget {
 
   /// Varian ringkas utk cart bar: baris-baris kecil di atas Total, tanpa
   /// kotak berlatar penuh (ruang di cart bar sempit & sudah padat).
-  static Widget bar(BuildContext context, List<String> lines) {
-    if (lines.isEmpty) return const SizedBox.shrink();
+  ///
+  /// Susulan (permintaan user) — baris pre-order kini menerima [pending]
+  /// LENGKAP (bukan lagi `List<String>` hasil [linesOf]) supaya tiap produk
+  /// pre-order yang py `transactionId` bisa DIKLIK, merujuk balik ke nota
+  /// ASLI tempat pre-order itu dicatat (berguna kalau kasir/owner sewaktu-
+  /// waktu ingin cek momen nota asli, mis. pre-order tanpa DP dari beberapa
+  /// hari lalu). Baris titip/ketinggalan/pinjaman TETAP teks polos (lewat
+  /// [linesOf], tidak berubah).
+  static Widget bar(BuildContext context, LaciMejaPending? pending) {
+    if (pending == null) return const SizedBox.shrink();
+    final plainLines = linesOf((
+      titip: pending.titip,
+      ketinggalan: pending.ketinggalan,
+      pinjaman: pending.pinjaman,
+      preorders: const [],
+    ));
+    if (plainLines.isEmpty && pending.preorders.isEmpty) {
+      return const SizedBox.shrink();
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fg = AppTheme.laciFg(isDark);
+    final rows = <Widget>[
+      for (final line in plainLines)
+        Text(
+          line,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+        ),
+      if (pending.preorders.isNotEmpty)
+        _preorderRefsRow(context, pending.preorders, fg),
+    ];
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (var i = 0; i < lines.length; i++)
+          for (var i = 0; i < rows.length; i++)
             Padding(
               padding: EdgeInsets.only(top: i == 0 ? 0 : 2),
               child: Row(
@@ -86,20 +116,60 @@ class LaciMejaReminder extends StatelessWidget {
                     Icon(Icons.inbox_outlined, size: 13, color: fg),
                     const SizedBox(width: 5),
                   ],
-                  Flexible(
-                    child: Text(
-                      lines[i],
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11, fontWeight: FontWeight.w600, color: fg),
-                    ),
-                  ),
+                  Flexible(child: rows[i]),
                 ],
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Baris pre-order di cart bar — `Wrap` (bukan `Text.rich` bersambung)
+  /// krn tiap produk yang py `transactionId` perlu jadi target tap SENDIRI
+  /// (`InkWell`, bukan `TapGestureRecognizer` manual — `InkWell` dibuang
+  /// otomatis lewat siklus widget biasa, tidak perlu di-dispose manual spt
+  /// recognizer di widget stateless/statis begini).
+  static Widget _preorderRefsRow(
+      BuildContext context, List<PreorderPendingLine> preorders, Color fg) {
+    final shown = preorders.take(_maxPreorderDetail).toList();
+    final sisa = preorders.length - shown.length;
+    final plainStyle =
+        TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg);
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text('Pre-order: ', style: plainStyle),
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) Text(', ', style: plainStyle),
+          _preorderChip(context, shown[i], fg, plainStyle),
+        ],
+        if (sisa > 0) Text(' +$sisa lagi', style: plainStyle),
+      ],
+    );
+  }
+
+  static String _preorderLabel(PreorderPendingLine e) {
+    final qty = _fmtQty(e.qty);
+    final jaminan =
+        e.depositQty > 0 ? ' (jaminan ${_fmtQty(e.depositQty)})' : '';
+    return '$qty ${e.productName}$jaminan';
+  }
+
+  static Widget _preorderChip(BuildContext context, PreorderPendingLine e,
+      Color fg, TextStyle plainStyle) {
+    final label = _preorderLabel(e);
+    // Nullable `transactionId` (titip wadah tanpa beli apa pun) -> tidak ada
+    // nota utk dirujuk, tampil sbg teks biasa spt sebelumnya.
+    if (e.transactionId == null) return Text(label, style: plainStyle);
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () => context.push('/kasir/struk/${e.transactionId}'),
+      child: Text(
+        label,
+        style: plainStyle.copyWith(
+            fontWeight: FontWeight.w800, decoration: TextDecoration.underline),
       ),
     );
   }

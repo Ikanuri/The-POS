@@ -128,7 +128,15 @@ void main() {
         reason: 'line 1 — titip/ketinggalan');
     expect(find.text('1 pinjaman belum kembali'), findsOneWidget,
         reason: 'line 2 — pinjaman barang');
-    expect(find.text('Pre-order: 2 Gula Pasir (jaminan 2)'), findsOneWidget,
+    // Susulan (permintaan user) — baris pre-order sekarang `Wrap` dari
+    // beberapa fragmen (bukan lagi SATU `Text` utuh) supaya tiap produk yg
+    // py `transactionId` bisa jadi link tersendiri (lihat
+    // `LaciMejaReminder._preorderRefsRow`) — cek potongan-potongannya,
+    // bukan string gabungan persis.
+    expect(find.text('Pre-order: '), findsOneWidget,
+        reason: 'line 3 — awalan label pre-order');
+    expect(find.textContaining('2 Gula Pasir (jaminan 2)', findRichText: true),
+        findsOneWidget,
         reason: 'line 3 — pre-order WAJIB sebut produk, qty & jaminan');
 
     await tester.pumpWidget(const SizedBox());

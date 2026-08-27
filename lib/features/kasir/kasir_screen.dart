@@ -2046,10 +2046,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             : cartNotifier
                                 .effectiveQtyFor(cartNotifier.lastTouchedItem!),
                         showSwipeHint: _swipeHintVisible,
-                        laciMejaLines: LaciMejaReminder.linesOf(ref
+                        laciMejaPending: ref
                             .watch(laciMejaPendingProvider(
                                 (cartMeta.customerId, cartMeta.customerName)))
-                            .valueOrNull),
+                            .valueOrNull,
                         // Pengingat hutang akumulatif (permintaan user):
                         // di CART BAR juga, bukan cuma modal checkout.
                         customerDebt: ref
@@ -3112,7 +3112,7 @@ class _CartBar extends StatelessWidget {
     this.lastEffQty = 0,
     this.showSwipeHint = false,
     this.orderNumber,
-    this.laciMejaLines = const [],
+    this.laciMejaPending,
     this.customerDebt,
   });
 
@@ -3120,9 +3120,11 @@ class _CartBar extends StatelessWidget {
   final int count;
 
   /// Item 52 susulan — pengingat Laci Meja yang masih menggantung utk
-  /// pelanggan keranjang ini, SATU BARIS PER KATEGORI (kosong = tidak ada).
-  /// Lihat `LaciMejaReminder.linesOf`.
-  final List<String> laciMejaLines;
+  /// pelanggan keranjang ini. Diberikan LENGKAP (bukan `List<String>` hasil
+  /// `linesOf` spt sebelumnya) supaya `LaciMejaReminder.bar` bisa merender
+  /// baris pre-order sbg link yang bisa diklik ke nota asli — lihat dok
+  /// `LaciMejaReminder.bar`.
+  final LaciMejaPending? laciMejaPending;
 
   /// Hutang akumulatif pelanggan keranjang ini: (total rupiah, jumlah nota
   /// belum lunas). Null / count 0 = tidak ada hutang / pembeli tak terdaftar.
@@ -3174,8 +3176,7 @@ class _CartBar extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (laciMejaLines.isNotEmpty)
-                LaciMejaReminder.bar(context, laciMejaLines),
+              LaciMejaReminder.bar(context, laciMejaPending),
               // Total diperbesar & di-center, dengan badge jumlah item di kiri.
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,

@@ -5,6 +5,107 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi x6 — pre-order bisa dirujuk
+dari transaksi lain, usulan user langsung dari laporan bug Tempo/Lunas
+di update sebelumnya), commit `53bb405` — **BELUM di-push/merge,
+masih hanya commit LOKAL** (instruksi user masih berlaku, lihat blok di
+bawah). Versi kerja **2.19.15+40**.
+
+**Fitur**: pelanggan pre-order tanpa DP, lalu belanja lagi di nota
+BERBEDA — sekarang ada link ke nota ASLI tempat pre-order dicatat, di
+2 titik (dikonfirmasi lewat `AskUserQuestion` sebelum eksekusi):
+1. **Cart bar** — pemicu begitu nama pelanggan DIPILIH (bukan menunggu
+   produk yang sama masuk keranjang). Kalau pelanggan py >1 pre-order,
+   SEMUA ditampilkan (bukan cuma yang paling relevan), kasir pilih
+   sendiri mana yang mau dibuka.
+2. **Struk in-app** — nama item yang produknya cocok dgn pre-order
+   TERBUKA milik pelanggan nota ini (di NOTA LAIN) jadi bisa diklik.
+
+**Keputusan desain penting**: pencocokan "pelanggan yang sama" TETAP
+lewat `PreorderEntries.customerName` (text match, sama seperti
+`getLaciMejaPending` yang sudah ada) — SENGAJA TIDAK memakai resolusi
+identitas "live" via `transactions.customerId` (pola fix "nama ikut
+nota" sesi sebelumnya) krn pre-order MEMANG dari awal cuma py
+`customerName` sbg identitas, menambah mekanisme baru di sini cuma
+inkonsisten tanpa manfaat nyata.
+
+**Detail teknis yang perlu diingat**:
+- `PreorderPendingLine` dapat 2 field baru (`id`, `transactionId`) —
+  SEMUA literal record yang mengonstruksinya (termasuk di test) WAJIB
+  ikut diperbarui, Dart record tidak punya field opsional/default.
+- Cart bar: `LaciMejaReminder.bar` berubah signature dari
+  `(context, List<String> lines)` jadi `(context, LaciMejaPending?
+  pending)` — HANYA 1 caller (`_CartBar` di `kasir_screen.dart`), aman
+  diubah. Baris pre-order dirender `Wrap` dari `InkWell` (bukan
+  `TapGestureRecognizer` manual) krn `LaciMejaReminder` widget statis/
+  stateless — `InkWell` beres sendiri lewat siklus widget biasa, tidak
+  perlu field State utk dispose spt recognizer.
+- Struk in-app: SEBALIKNYA, `TapGestureRecognizer` DIPAKAI (bukan
+  `InkWell`) krn span ini menempel di `Text.rich` yang sudah ada
+  (menyatu dgn nama item, pola "Dititip"/"Titip [qty]" yang sudah ada
+  duluan) — `InkWell` butuh widget tree terpisah, tidak bisa menyatu ke
+  text-run yang sama. Recognizer DIPAKAI ULANG per `item.id`
+  (`Map<String, TapGestureRecognizer>` field State, didispose di
+  `dispose()`) — bikin baru tiap build tanpa dispose = bocor, pola sama
+  `_linkRecognizer` di `inline_banner.dart`.
+- `cart_bar_reminder_lines_test.dart` (test LAMA, bukan yang baru sesi
+  ini) ikut pecah krn baris pre-order sekarang beberapa widget terpisah
+  (`Wrap`), bukan 1 `Text` utuh — `find.text(...)` string gabungan
+  persis tidak lagi match, diganti `find.textContaining` per fragmen.
+
+Test baru `preorder_refer_previous_tx_test.dart` (11) — 3 skenario
+revert-verified (guard exclude-self, span struk, link cart bar). Full
+suite 1159 lolos / 1 gagal (flaky pre-existing, lolos terisolasi),
+`flutter analyze` 0 issue.
+
+_Update sesi 23 Agustus 2026 (lanjutan lagi x5 — fix bug status Tempo/
+Lunas pakai kolom SALAH, SEMUA pre-order tampil "Lunas"), commit
+`34a0424` — **JUGA masih hanya commit LOKAL, belum di-push/merge**
+(instruksi user eksplisit "jangan commit ke github dulu, commit di
+lokal saja sebentar lagi" — jangan push/merge sampai user minta
+lanjut). Versi
+kerja **2.19.14+39**.
+
+**Bug**: user lapor "kenapa semua transaksi preorder tampil di card
+sebagai lunas?". Akar: status Tempo/Lunas (baru ditambahkan sesi ini
+juga, lihat update di bawah) salah pakai `depositQty` (jaminan WADAH
+FISIK, mis. tabung kosong LPG) sbg penanda "sudah bayar". Ternyata
+`item_entry_sheet.dart` (~baris 480-482) OTOMATIS mengisi
+`depositQty = qty` penuh begitu toggle pre-order dinyalakan utk unit
+`requiresDeposit` — TERLEPAS dari apakah DP (uang) benar-benar dibayar.
+Hampir semua pre-order kebetulan py `depositQty > 0` → selalu "Lunas".
+
+**Fix**: pakai `e.paid` (kolom `PreorderEntries.paid`, diisi dari
+toggle "DP sudah dibayar" di form — `_dpPaid`/`preorderPaid` di
+`item_entry_sheet.dart`, yang MENGENDALIKAN `_effectivePrice`: harga
+jadi 0 kalau belum bayar). **Klarifikasi user yang PENTING utk desain
+ini**: nota bisa berstatus "lunas" krn barang LAIN di keranjang yang
+sama (pelanggan beli banyak barang), tapi baris pre-order itu SENDIRI
+harus tetap "Tempo" kalau DP-nya belum masuk — jangan pernah dibaca
+dari status nota (`transactions.status`), harus dari `paid` milik
+entri pre-order itu sendiri.
+
+**Pelajaran desain**: `depositQty` (jaminan wadah) dan `paid` (DP
+uang) adalah DUA KONSEP TOTAL BERBEDA yang kebetulan sama-sama ada di
+`PreorderEntries` — jangan pernah pakai salah satu sbg proxy yang lain
+lagi ke depan, walau namanya sama-sama terasa "soal pembayaran".
+
+Test lama (3, ditulis sesi sebelumnya dgn asumsi salah) ditulis ulang
+total, termasuk 1 test regresi baru yang PERSIS mereproduksi laporan
+user (jaminan wadah ada tapi belum bayar → harus tetap Tempo) —
+revert-verified. Full suite 1148 lolos / 1 gagal (flaky pre-existing,
+lolos terisolasi), `flutter analyze` 0 issue.
+
+**Usulan fitur baru dari user (BELUM dianalisis/didesain, sesi
+terputus di titik ini)**: link/referensi dari nota BERIKUTNYA (beda
+nota) ke nota ASLI tempat pre-order-nya dibuat — skenario: pelanggan
+dgn pre-order tanpa DP datang lagi, nama diinput di cart bar kasir,
+sistem tawarkan opsi (hyperlink atau desain lain) merujuk ke nota lama
+tempat pre-order itu dicatat, supaya kasir/owner bisa cek momen
+transaksi asli. Perlu didesain: titik pemicu (saat nama pelanggan
+dipilih di cart bar mana?), bagaimana mencocokkan "produk serupa" ke
+pre-order yang masih terbuka milik pelanggan itu, dan bentuk UI-nya.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi lagi lagi lagi — 2
 penyesuaian status Tempo/Lunas Pre-order), commit `edafd77`, versi
 kerja **2.19.13+38**. Susulan LANGSUNG dari update di bawah ini

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:drift/drift.dart' hide Column;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -163,6 +164,20 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// Riwayat kejadian per entri Laci Meja (key: id entri) — sumbernya sama
   /// dgn layar "Riwayat" di dashboard, cuma disaring ke nota ini.
   Map<String, List<LaciMejaEvent>> _laciMejaEvents = {};
+
+  /// Susulan (permintaan user) — pre-order TERBUKA milik pelanggan yang SAMA
+  /// di NOTA LAIN, per `productId`. Dipakai membuat nama item di baris ini
+  /// bisa DIKLIK, merujuk balik ke nota tempat pre-order itu dicatat —
+  /// berguna kalau kasir/owner sewaktu-waktu ingin cek momen nota asli.
+  /// Lihat dok `AppDatabase.getOpenPreorderRefsForCustomer`.
+  Map<String, ({String transactionId, DateTime createdAt})>
+      _openPreorderRefs = {};
+
+  /// Satu recognizer per item.id — DIPAKAI ULANG tiap rebuild (bukan dibuat
+  /// baru di `_itemCheckRow` yang dipanggil ulang tiap build), `onTap`-nya
+  /// yang diganti. Bikin baru tanpa dispose akan bocor (pola sama dgn
+  /// `_linkRecognizer` di `inline_banner.dart`). Dibersihkan di [dispose].
+  final Map<String, TapGestureRecognizer> _preorderLinkRecognizers = {};
 
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
@@ -339,6 +354,32 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     return rows;
   }
 
+  /// Susulan (permintaan user) — span "Pre-order sebelumnya" yang bisa
+  /// DIKLIK, dipasang di text-run nama item KALAU pelanggan nota ini punya
+  /// pre-order terbuka utk produk yang sama di nota LAIN (`_openPreorderRefs`,
+  /// lihat dok `AppDatabase.getOpenPreorderRefsForCustomer`). Tap merujuk
+  /// balik ke nota tempat pre-order itu dicatat.
+  ///
+  /// `TapGestureRecognizer` DIPAKAI ULANG per `item.id` (bukan dibuat baru
+  /// tiap build) supaya tidak bocor — lihat dok `_preorderLinkRecognizers`.
+  InlineSpan _preorderRefSpan(TransactionItem item) {
+    final ref = _openPreorderRefs[item.productId]!;
+    final recognizer = _preorderLinkRecognizers.putIfAbsent(
+        item.id, () => TapGestureRecognizer());
+    recognizer.onTap = () => context.push('/kasir/struk/${ref.transactionId}');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextSpan(
+      text: ' · Pre-order sebelumnya',
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        decoration: TextDecoration.underline,
+        color: AppTheme.laciFg(isDark),
+      ),
+      recognizer: recognizer,
+    );
+  }
+
   Widget _itemCheckRow(TransactionItem item, ColorScheme scheme,
       {required bool isVariant,
       TransactionItem? parent,
@@ -440,6 +481,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 Theme.of(context).brightness ==
                                     Brightness.dark)),
                       ),
+                    if (_openPreorderRefs[item.productId] != null)
+                      _preorderRefSpan(item),
                   ],
                 ),
                 maxLines: 1,
@@ -874,6 +917,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   @override
   void dispose() {
     _custCtrl.dispose();
+    for (final r in _preorderLinkRecognizers.values) {
+      r.dispose();
+    }
     super.dispose();
   }
 
@@ -1026,6 +1072,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       ...leftBehindOtherForTx.map((e) => e.id),
       ...preorderForTx.map((e) => e.id),
     ]);
+    // Susulan (permintaan user) — pre-order TERBUKA milik pelanggan yang SAMA
+    // di NOTA LAIN, supaya nama item di nota INI bisa dirujuk balik ke nota
+    // tempat pre-order itu dicatat. Nama pelanggan: pola SAMA dgn
+    // `_customerDisplay` (registered > ad-hoc), tapi dihitung di sini krn
+    // `_customer` belum ke-set di titik ini (masih variabel lokal `customer`).
+    final customerDisplay = customer?.name ?? tx.customerName;
+    final openPreorderRefs = (customerDisplay != null &&
+            customerDisplay.trim().isNotEmpty)
+        ? await db.getOpenPreorderRefsForCustomer(
+            customerName: customerDisplay,
+            excludeTransactionId: widget.transactionId)
+        : <String, ({String transactionId, DateTime createdAt})>{};
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -1054,6 +1112,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         _preorderForTx = preorderForTx;
         _preorderLabels = preorderLabels;
         _laciMejaEvents = laciMejaEvents;
+        _openPreorderRefs = openPreorderRefs;
         _unitNames = unitNames;
         _parentOf = parentOf;
         _customer = customer;

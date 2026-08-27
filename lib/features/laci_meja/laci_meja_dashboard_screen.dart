@@ -841,16 +841,22 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         : '';
     final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull?[e.id] ?? 0;
     final sisa = e.qtyOrdered - taken;
-    // Permintaan user: status "Tempo"/"Lunas" MENGGANTIKAN keterangan
-    // "sudah bayar" (`e.paid`) — bukan berdampingan. TANPA jaminan (DP) =
-    // "Tempo" merah, ADA jaminan = "Lunas" hijau. Ditaruh menempel PERSIS
-    // setelah kata "jaminan" (susulan permintaan user); kalau tidak ada
-    // jaminan sama sekali, menempel setelah nama produk (tidak ada "jaminan"
-    // utk ditempeli).
-    final hasDeposit = e.depositQty > 0;
-    final statusLabel = hasDeposit ? 'Lunas' : 'Tempo';
+    // Status "Tempo"/"Lunas" berdasar `e.paid` (DP RUPIAH — permintaan user
+    // eksplisit "Rp 0" = tempo), BUKAN `depositQty` (jaminan WADAH FISIK,
+    // mis. tabung kosong LPG — beda konsep total).
+    //
+    // BUG YANG SUDAH DIPERBAIKI: versi sebelumnya salah pakai `depositQty >
+    // 0` sbg penanda "sudah bayar" — ternyata SEMUA pre-order tampil
+    // "Lunas" krn `item_entry_sheet.dart` OTOMATIS mengisi penuh `depositQty
+    // = qty` begitu toggle pre-order dinyalakan utk unit yang
+    // `requiresDeposit` (baris ~480-482), TERLEPAS dari apakah DP-nya
+    // benar-benar dibayar. `paid`/`preorderPaid` (dari toggle "DP sudah
+    // dibayar" di form, mengendalikan `_effectivePrice`) adalah sinyal yang
+    // BENAR: nota bisa "lunas" krn barang LAIN di keranjang yang sama, tapi
+    // baris pre-order itu SENDIRI tetap tempo kalau DP-nya belum masuk.
+    final statusLabel = e.paid ? 'Lunas' : 'Tempo';
     final statusColor =
-        hasDeposit ? AppTheme.changeFg(isDark) : AppTheme.debtFg(isDark);
+        e.paid ? AppTheme.changeFg(isDark) : AppTheme.debtFg(isDark);
     return _EntryRow(
       // Permintaan user: qty & nama produk dibedakan bold dari sisa baris
       // (jaminan, status Tempo/Lunas).
