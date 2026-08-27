@@ -7,7 +7,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi x6 — pre-order bisa dirujuk
 dari transaksi lain, usulan user langsung dari laporan bug Tempo/Lunas
-di update sebelumnya), commit `<pending>` — **BELUM di-push/merge,
+di update sebelumnya), commit `53bb405` — **BELUM di-push/merge,
 masih hanya commit LOKAL** (instruksi user masih berlaku, lihat blok di
 bawah). Versi kerja **2.19.15+40**.
 
