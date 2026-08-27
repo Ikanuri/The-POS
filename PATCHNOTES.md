@@ -33,6 +33,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   DP-nya sudah dibayar ditandai "Lunas" (hijau), menempel setelah
   keterangan jaminan/nama barangnya. Keterangan "sudah bayar" yang lama
   dihapus karena fungsinya sudah tergantikan status ini.
+- **Pre-order kini bisa dirujuk dari transaksi lain** — kalau seorang
+  pelanggan punya pre-order yang masih terbuka, lalu belanja lagi di
+  nota yang berbeda, sekarang ada tautan yang bisa diklik (di cart bar
+  saat nama pelanggan diketik, maupun di struk untuk barang yang sama)
+  untuk langsung membuka nota asli tempat pre-order itu dicatat.
 
 ### 🗑️ Fitur Dihapus
 - **Tombol batal (X) di kartu Pre-order Laci Meja dihapus** — kini
