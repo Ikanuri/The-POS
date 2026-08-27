@@ -28,6 +28,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   beberapa baris** — tekan Enter untuk membuat baris baru, cocok untuk
   mencatat lebih dari satu barang sekaligus.
 
+- **Kartu Pre-order kini menampilkan status "Tempo"/"Lunas"** — pre-order
+  tanpa jaminan ditandai "Tempo" (merah), yang sudah ada jaminannya
+  ditandai "Lunas" (hijau), langsung di samping nama barangnya.
+
 ### 🗑️ Fitur Dihapus
 - **Tombol batal (X) di kartu Pre-order Laci Meja dihapus** — kini
   hanya tombol "Penuhi" yang tersedia di kartu tersebut.

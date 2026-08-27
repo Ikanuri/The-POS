@@ -341,6 +341,69 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
     });
+
+    testWidgets(
+        'permintaan user: TANPA jaminan (DP) -> label "Tempo" merah bold '
+        'di samping baris produk', (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'p1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Warung Sari',
+          qtyOrdered: 5,
+          transactionId: 'tx1');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tapPreorderTab(tester);
+
+      expect(find.text('Tempo'), findsOneWidget);
+      expect(find.text('Lunas'), findsNothing);
+      final label = tester.widget<Text>(find.text('Tempo'));
+      expect(label.style?.fontWeight, FontWeight.w800);
+      expect(label.style?.color, AppTheme.debtFg(false),
+          reason: 'merah — pola warna sama dgn debtFg di seluruh app');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'permintaan user: ADA jaminan (DP) -> label "Lunas" hijau bold '
+        'di samping baris produk', (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'p1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Warung Sari',
+          qtyOrdered: 5,
+          depositQty: 2,
+          transactionId: 'tx1');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tapPreorderTab(tester);
+
+      expect(find.text('Lunas'), findsOneWidget);
+      expect(find.text('Tempo'), findsNothing);
+      final label = tester.widget<Text>(find.text('Lunas'));
+      expect(label.style?.fontWeight, FontWeight.w800);
+      expect(label.style?.color, AppTheme.changeFg(false),
+          reason: 'hijau — pola warna sama dgn changeFg di seluruh app');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
   });
 
   group('Pre-order: pencarian & statistik (permintaan user)', () {

@@ -841,26 +841,48 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         : '';
     final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull?[e.id] ?? 0;
     final sisa = e.qtyOrdered - taken;
+    // Permintaan user: status pembayaran jaminan di samping baris produk —
+    // TANPA jaminan (DP) = "Tempo" merah, ADA jaminan = "Lunas" hijau. Ini
+    // sinyal BERBEDA dari `e.paid` (centang "sudah bayar" manual di form
+    // pre-order, independen dari jaminan) — keduanya sengaja tetap
+    // ditampilkan berdampingan, bukan saling menggantikan.
+    final hasDeposit = e.depositQty > 0;
+    final statusLabel = hasDeposit ? 'Lunas' : 'Tempo';
+    final statusColor =
+        hasDeposit ? AppTheme.changeFg(isDark) : AppTheme.debtFg(isDark);
     return _EntryRow(
       // Permintaan user: qty & nama produk dibedakan bold dari sisa baris
       // (jaminan, status bayar).
-      line2: Text.rich(
-        TextSpan(
-          style: const TextStyle(fontSize: 13.5),
-          children: [
-            // Bold ditulis EKSPLISIT di span-nya (bukan diwarisi dari style
-            // induk) supaya widget test bisa membaca ketebalannya langsung
-            // dari span ini — lihat `findBoldableSpan` di test grouping.
-            TextSpan(
-                text: '$qtyStr $productName',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            TextSpan(
-              text: '$depositStr${e.paid ? ' · sudah bayar' : ''}',
-              style: TextStyle(
-                  fontWeight: FontWeight.w500, color: AppTheme.laciFg(isDark)),
+      line2: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: const TextStyle(fontSize: 13.5),
+                children: [
+                  // Bold ditulis EKSPLISIT di span-nya (bukan diwarisi dari
+                  // style induk) supaya widget test bisa membaca
+                  // ketebalannya langsung dari span ini — lihat
+                  // `findBoldableSpan` di test grouping.
+                  TextSpan(
+                      text: '$qtyStr $productName',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  TextSpan(
+                    text: '$depositStr${e.paid ? ' · sudah bayar' : ''}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.laciFg(isDark)),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Text(statusLabel,
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w800, color: statusColor)),
+        ],
       ),
       meta: _metaLine(
         leading: 'Dipesan',
