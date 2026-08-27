@@ -7,7 +7,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi lagi lagi — status "Tempo"/
 "Lunas" di kartu Pre-order + jawab pertanyaan soal transaksi void),
-commit `<pending>`, versi kerja **2.19.12+37**.
+commit `570e3b5`, versi kerja **2.19.12+37**.
 
 **Pertanyaan user (dijawab, tidak ada eksekusi diminta)**: apakah data
 Laci Meja tetap ada & tersinkron kalau transaksi induknya dibatalkan
