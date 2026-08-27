@@ -7,7 +7,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi x5 — fix bug status Tempo/
 Lunas pakai kolom SALAH, SEMUA pre-order tampil "Lunas"), commit
-`<pending>` — **BELUM di-push/merge, hanya commit LOKAL atas permintaan
+`34a0424` — **BELUM di-push/merge, hanya commit LOKAL atas permintaan
 user eksplisit** ("jangan commit ke github dulu, commit di lokal saja
 sebentar lagi") — jangan push/merge sampai user minta lanjut. Versi
 kerja **2.19.14+39**.
