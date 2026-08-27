@@ -343,10 +343,9 @@ void main() {
     });
 
     testWidgets(
-        'permintaan user: TANPA jaminan (DP) -> "Tempo" merah bold menempel '
-        'setelah nama produk (tidak ada kata "jaminan" utk ditempeli), '
-        'MENGGANTIKAN keterangan "sudah bayar" (bukan berdampingan)',
-        (tester) async {
+        'BUG NYATA dilaporkan user: pre-order dgn jaminan WADAH (depositQty>0, '
+        'auto-terisi saat unit requiresDeposit) TAPI DP RUPIAH belum dibayar '
+        '(paid=false) -> harus TETAP "Tempo", bukan "Lunas"', (tester) async {
       await seedTransaction('tx1');
       await db.into(db.products).insert(
           ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
@@ -358,19 +357,20 @@ void main() {
           productUnitId: 'U1',
           customerName: 'Warung Sari',
           qtyOrdered: 5,
-          paid: true, // e.paid TIDAK lagi merender "sudah bayar" apa pun.
+          depositQty: 5, // wadah kosong dititip, BUKAN uang DP.
           transactionId: 'tx1');
 
       await tester.pumpWidget(buildApp());
       await tester.pumpAndSettle();
       await tapPreorderTab(tester);
 
-      expect(find.textContaining('5 Gas LPG 3kg Tempo', findRichText: true),
+      expect(
+          find.textContaining('5 Gas LPG 3kg - 5 jaminan Tempo',
+              findRichText: true),
           findsOneWidget,
-          reason: '"Tempo" menempel langsung setelah nama produk');
-      expect(find.textContaining('sudah bayar', findRichText: true),
-          findsNothing,
-          reason: 'fungsinya sudah digantikan status Tempo/Lunas');
+          reason: 'depositQty (jaminan wadah) TIDAK boleh disalahartikan '
+              'sbg DP sudah dibayar');
+      expect(find.textContaining('Lunas', findRichText: true), findsNothing);
 
       final span = findBoldableSpan(tester, ' Tempo');
       expect(span, isNotNull);
@@ -383,8 +383,37 @@ void main() {
     });
 
     testWidgets(
-        'permintaan user: ADA jaminan (DP) -> "Lunas" hijau bold menempel '
-        'PERSIS setelah kata "jaminan"', (tester) async {
+        'TANPA jaminan wadah sama sekali & belum bayar -> "Tempo" menempel '
+        'setelah nama produk (tidak ada kata "jaminan" utk ditempeli)',
+        (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.products).insert(
+          ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'p1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Warung Sari',
+          qtyOrdered: 5,
+          transactionId: 'tx1');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tapPreorderTab(tester);
+
+      expect(find.textContaining('5 Gas LPG 3kg Tempo', findRichText: true),
+          findsOneWidget,
+          reason: '"Tempo" menempel langsung setelah nama produk');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'DP RUPIAH sudah dibayar (paid=true) -> "Lunas" hijau bold, menempel '
+        'PERSIS setelah kata "jaminan" kalau ada jaminan wadah', (tester) async {
       await seedTransaction('tx1');
       await db.into(db.products).insert(
           ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
@@ -397,6 +426,7 @@ void main() {
           customerName: 'Warung Sari',
           qtyOrdered: 5,
           depositQty: 2,
+          paid: true,
           transactionId: 'tx1');
 
       await tester.pumpWidget(buildApp());
@@ -408,6 +438,9 @@ void main() {
               findRichText: true),
           findsOneWidget,
           reason: '"Lunas" menempel langsung setelah kata "jaminan"');
+      expect(find.textContaining('sudah bayar', findRichText: true),
+          findsNothing,
+          reason: 'keterangan lama "sudah bayar" sudah dihapus');
 
       final span = findBoldableSpan(tester, ' Lunas');
       expect(span, isNotNull);
