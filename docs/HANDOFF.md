@@ -5,6 +5,42 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi lagi lagi — status "Tempo"/
+"Lunas" di kartu Pre-order + jawab pertanyaan soal transaksi void),
+commit `<pending>`, versi kerja **2.19.12+37**.
+
+**Pertanyaan user (dijawab, tidak ada eksekusi diminta)**: apakah data
+Laci Meja tetap ada & tersinkron kalau transaksi induknya dibatalkan
+(void)? Jawaban: YA — `voidTransaction` (`app_database.dart:3069`)
+HANYA mengubah `status` jadi `'void'`, TIDAK PERNAH menghapus baris
+`transactions`. Ketiga tabel Laci Meja FK ke `transactions.id` TANPA
+cascade, jadi baris Laci Meja tetap utuh & sync-nya berjalan independen
+(last-write-wins by `updated_at`, tidak peduli status transaksi induk
+sama sekali).
+
+**Temuan sampingan yang DILAPORKAN ke user, BELUM diminta perbaiki**:
+dashboard Laci Meja (`watchLeftBehindItems`/`watchBorrowedItems`/
+`watchPreorderEntries`) TIDAK mengecualikan entri yang transaksinya
+sudah void — query-nya cuma filter status selesai
+(`collectedAt`/`fullyReturnedAt`/`fulfilledAt`), tidak join ke status
+transaksi. Jadi nota yang dibatalkan tapi Laci Meja-nya belum
+"selesai" tetap muncul menggantung di dashboard. **Kalau user minta
+ini diperbaiki nanti**: perlu join/filter tambahan ke `transactions.
+status != 'void'` di ketiga query watch, plus keputusan UX (apakah
+entri Laci Meja milik nota void otomatis ditutup, atau cuma disaring
+dari tampilan tanpa mengubah datanya).
+
+**Perubahan kecil**: kartu Pre-order dashboard sekarang menampilkan
+status "Tempo" (merah, `debtFg`) kalau TANPA jaminan/DP, atau "Lunas"
+(hijau, `changeFg`) kalau ADA jaminan — di samping baris produk (H2).
+`_preorderTile` line2 diubah dari `Text.rich` polos jadi `Row` (produk
+`Expanded` + label status di ujung kanan). Sinyal ini independen dari
+`e.paid` (checkbox manual "sudah bayar" di form pre-order) — keduanya
+sengaja tampil berdampingan.
+
+Test baru (2, revert-verified). Full suite 1147 lolos / 1 gagal (flaky
+pre-existing, lolos terisolasi), `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi lagi — hapus tombol Batal
 di kartu Pre-order dashboard), commit `1ffe791`, versi kerja
 **2.19.11+36**. Permintaan user singkat: tombol "Batal" (ikon X,
