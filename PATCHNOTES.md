@@ -30,7 +30,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 - **Kartu Pre-order kini menampilkan status "Tempo"/"Lunas"** — pre-order
   tanpa jaminan ditandai "Tempo" (merah), yang sudah ada jaminannya
-  ditandai "Lunas" (hijau), langsung di samping nama barangnya.
+  ditandai "Lunas" (hijau), menempel setelah keterangan jaminan/nama
+  barangnya. Keterangan "sudah bayar" yang lama dihapus karena
+  fungsinya sudah tergantikan status ini.
 
 ### 🗑️ Fitur Dihapus
 - **Tombol batal (X) di kartu Pre-order Laci Meja dihapus** — kini

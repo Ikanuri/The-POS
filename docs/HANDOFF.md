@@ -5,6 +5,28 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi lagi lagi lagi — 2
+penyesuaian status Tempo/Lunas Pre-order), commit `edafd77`, versi
+kerja **2.19.13+38**. Susulan LANGSUNG dari update di bawah ini
+(status Tempo/Lunas baru saja ditambahkan):
+1. Keterangan "sudah bayar" (`e.paid`) DIHAPUS dari kartu — user bilang
+   fungsinya sudah digantikan status Tempo/Lunas, dua-duanya
+   berdampingan jadi redundan.
+2. Posisi label dipindah dari ujung kanan baris (dulu `Row` terpisah)
+   jadi menempel LANGSUNG setelah kata "jaminan" — `line2` dikembalikan
+   ke `Text.rich` tunggal (desain SEBELUM percobaan `Row` di update
+   sebelumnya). Kalau tidak ada jaminan sama sekali, menempel setelah
+   nama produk (tidak ada kata "jaminan" utk ditempeli).
+
+**Pelajaran kecil**: percobaan `Row` (ujung kanan) di update
+sebelumnya ternyata bukan posisi yang diinginkan user — sekali lagi
+bukti kalau ragu soal PENEMPATAN elemen baru (bukan cuma logikanya),
+lebih aman tanya/tunggu konfirmasi daripada menebak tata letak "yang
+masuk akal".
+
+Test 2 di antaranya ditulis ulang total (posisi & isi teks berubah).
+Full suite 1148 lolos SEMUA, `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi lagi lagi — status "Tempo"/
 "Lunas" di kartu Pre-order + jawab pertanyaan soal transaksi void),
 commit `570e3b5`, versi kerja **2.19.12+37**.
