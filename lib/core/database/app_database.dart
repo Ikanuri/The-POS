@@ -139,6 +139,13 @@ typedef PreorderPendingLine = ({
   String productName,
   double qty,
   double depositQty,
+  /// Id baris `preorder_entries` & nota tempat pre-order ini dicatat —
+  /// permintaan user: cart bar bisa merujuk balik ke nota ASLI pre-order
+  /// (bukan cuma info nama+qty). `transactionId` nullable (satu-satunya
+  /// kasus: titip wadah tanpa beli apa pun sama sekali, lihat dok
+  /// `PreorderEntries.transactionId`) — link hanya ditampilkan kalau terisi.
+  String id,
+  String? transactionId,
 });
 
 /// Ringkasan Laci Meja yang masih menggantung utk SATU pelanggan — dipakai
@@ -6345,6 +6352,54 @@ class AppDatabase extends _$AppDatabase {
     return {for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty};
   }
 
+  /// Susulan (permintaan user) — pre-order TERBUKA milik pelanggan yang SAMA
+  /// tapi dicatat di NOTA LAIN, dikelompokkan per `productId`. Dipakai struk
+  /// in-app: baris item yang produknya cocok dgn pre-order terbuka pelanggan
+  /// ini jadi bisa DIKLIK, merujuk balik ke nota tempat pre-order itu
+  /// dibuat — berguna kalau kasir/owner sewaktu-waktu ingin cek momen nota
+  /// asli (mis. pelanggan pre-order tanpa DP, lalu belanja lagi di nota
+  /// terpisah beberapa hari kemudian).
+  ///
+  /// Cocokkan LEWAT NAMA saja — pola SAMA PERSIS dgn [getLaciMejaPending]
+  /// ("Pre-order: SELALU lewat nama, satu-satunya yang disimpan"), BUKAN
+  /// `getCustomerNamesForTransactions` ("nama ikut nota terkini"): kolom
+  /// `PreorderEntries.customerName` sendiri sudah jadi satu-satunya identitas
+  /// yang dipakai di SELURUH fitur pre-order sejak awal, konsisten dgn itu
+  /// lebih penting drpd menambah mekanisme identitas baru yang cuma dipakai
+  /// di sini.
+  ///
+  /// [excludeTransactionId] — nota yang SEDANG dilihat, supaya pre-order
+  /// milik nota itu sendiri tidak "merujuk ke dirinya sendiri". Baris tanpa
+  /// `transactionId` (titip wadah tanpa beli apa pun) tidak ada nota utk
+  /// dirujuk, otomatis tersaring lewat `isNotNull()`. Kalau satu produk
+  /// punya BEBERAPA pre-order terbuka, yang PALING LAMA (FIFO, konsisten dgn
+  /// urutan dashboard) yang dipakai sbg rujukan.
+  Future<Map<String, ({String transactionId, DateTime createdAt})>>
+      getOpenPreorderRefsForCustomer({
+    required String customerName,
+    required String excludeTransactionId,
+  }) async {
+    final nama = customerName.trim();
+    if (nama.isEmpty) return {};
+    final rows = await (select(preorderEntries)
+          ..where((t) =>
+              t.customerName.equals(nama) &
+              t.fulfilledAt.isNull() &
+              t.cancelledAt.isNull() &
+              t.transactionId.isNotNull() &
+              t.transactionId.equals(excludeTransactionId).not())
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    final out = <String, ({String transactionId, DateTime createdAt})>{};
+    for (final r in rows) {
+      // `orderBy` asc + `putIfAbsent` -> baris PERTAMA per productId (paling
+      // lama) yang menang, entri berikutnya utk produk yang sama diabaikan.
+      out.putIfAbsent(
+          r.productId, () => (transactionId: r.transactionId!, createdAt: r.createdAt));
+    }
+    return out;
+  }
+
   /// Item 52 redesain — nama produk+satuan utk sekumpulan `product_unit_id`
   /// (dipakai dashboard Laci Meja tab Pre-order menampilkan "qty produk -
   /// jaminan" per baris). Satu JOIN, bukan N+1.
@@ -6504,6 +6559,8 @@ class AppDatabase extends _$AppDatabase {
           productName: row.readTableOrNull(products)?.name ?? e.productId,
           qty: e.qtyOrdered,
           depositQty: e.depositQty,
+          id: e.id,
+          transactionId: e.transactionId,
         ));
       }
     }

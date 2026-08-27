@@ -158,7 +158,9 @@ void main() {
             titip: 2,
             ketinggalan: 0,
             pinjaman: 0,
-            preorders: [(productName: 'Gas', qty: 1, depositQty: 0)]
+            preorders: [
+              (productName: 'Gas', qty: 1, depositQty: 0, id: 'p1', transactionId: 'tx1')
+            ]
           )),
           ['2 barang dititip', 'Pre-order: 1 Gas']);
       expect(LaciMejaReminder.linesOf(kEmptyLaciMejaPending), isEmpty,
@@ -188,7 +190,9 @@ void main() {
         titip: 1,
         ketinggalan: 1,
         pinjaman: 2,
-        preorders: [(productName: 'Tabung Gas', qty: 2, depositQty: 2)],
+        preorders: [
+          (productName: 'Tabung Gas', qty: 2, depositQty: 2, id: 'p1', transactionId: 'tx1')
+        ],
       ));
       expect(lines, hasLength(3), reason: '3 kategori terisi -> 3 baris');
       expect(lines[0], '1 barang dititip · 1 barang ketinggalan');
@@ -204,10 +208,10 @@ void main() {
         ketinggalan: 0,
         pinjaman: 0,
         preorders: [
-          (productName: 'A', qty: 1, depositQty: 0),
-          (productName: 'B', qty: 2, depositQty: 0),
-          (productName: 'C', qty: 3, depositQty: 0),
-          (productName: 'D', qty: 4, depositQty: 0),
+          (productName: 'A', qty: 1, depositQty: 0, id: 'p1', transactionId: 'tx1'),
+          (productName: 'B', qty: 2, depositQty: 0, id: 'p2', transactionId: 'tx1'),
+          (productName: 'C', qty: 3, depositQty: 0, id: 'p3', transactionId: 'tx1'),
+          (productName: 'D', qty: 4, depositQty: 0, id: 'p4', transactionId: 'tx1'),
         ],
       ));
       expect(lines.single, 'Pre-order: 1 A, 2 B +2 lagi');
