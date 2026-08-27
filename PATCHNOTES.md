@@ -29,10 +29,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   mencatat lebih dari satu barang sekaligus.
 
 - **Kartu Pre-order kini menampilkan status "Tempo"/"Lunas"** — pre-order
-  tanpa jaminan ditandai "Tempo" (merah), yang sudah ada jaminannya
-  ditandai "Lunas" (hijau), menempel setelah keterangan jaminan/nama
-  barangnya. Keterangan "sudah bayar" yang lama dihapus karena
-  fungsinya sudah tergantikan status ini.
+  yang uang mukanya (DP) belum dibayar ditandai "Tempo" (merah), yang
+  DP-nya sudah dibayar ditandai "Lunas" (hijau), menempel setelah
+  keterangan jaminan/nama barangnya. Keterangan "sudah bayar" yang lama
+  dihapus karena fungsinya sudah tergantikan status ini.
 
 ### 🗑️ Fitur Dihapus
 - **Tombol batal (X) di kartu Pre-order Laci Meja dihapus** — kini
