@@ -343,8 +343,10 @@ void main() {
     });
 
     testWidgets(
-        'permintaan user: TANPA jaminan (DP) -> label "Tempo" merah bold '
-        'di samping baris produk', (tester) async {
+        'permintaan user: TANPA jaminan (DP) -> "Tempo" merah bold menempel '
+        'setelah nama produk (tidak ada kata "jaminan" utk ditempeli), '
+        'MENGGANTIKAN keterangan "sudah bayar" (bukan berdampingan)',
+        (tester) async {
       await seedTransaction('tx1');
       await db.into(db.products).insert(
           ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
@@ -356,17 +358,24 @@ void main() {
           productUnitId: 'U1',
           customerName: 'Warung Sari',
           qtyOrdered: 5,
+          paid: true, // e.paid TIDAK lagi merender "sudah bayar" apa pun.
           transactionId: 'tx1');
 
       await tester.pumpWidget(buildApp());
       await tester.pumpAndSettle();
       await tapPreorderTab(tester);
 
-      expect(find.text('Tempo'), findsOneWidget);
-      expect(find.text('Lunas'), findsNothing);
-      final label = tester.widget<Text>(find.text('Tempo'));
-      expect(label.style?.fontWeight, FontWeight.w800);
-      expect(label.style?.color, AppTheme.debtFg(false),
+      expect(find.textContaining('5 Gas LPG 3kg Tempo', findRichText: true),
+          findsOneWidget,
+          reason: '"Tempo" menempel langsung setelah nama produk');
+      expect(find.textContaining('sudah bayar', findRichText: true),
+          findsNothing,
+          reason: 'fungsinya sudah digantikan status Tempo/Lunas');
+
+      final span = findBoldableSpan(tester, ' Tempo');
+      expect(span, isNotNull);
+      expect(span!.style?.fontWeight, FontWeight.w800);
+      expect(span.style?.color, AppTheme.debtFg(false),
           reason: 'merah — pola warna sama dgn debtFg di seluruh app');
 
       await tester.pumpWidget(const SizedBox());
@@ -374,8 +383,8 @@ void main() {
     });
 
     testWidgets(
-        'permintaan user: ADA jaminan (DP) -> label "Lunas" hijau bold '
-        'di samping baris produk', (tester) async {
+        'permintaan user: ADA jaminan (DP) -> "Lunas" hijau bold menempel '
+        'PERSIS setelah kata "jaminan"', (tester) async {
       await seedTransaction('tx1');
       await db.into(db.products).insert(
           ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
@@ -394,11 +403,16 @@ void main() {
       await tester.pumpAndSettle();
       await tapPreorderTab(tester);
 
-      expect(find.text('Lunas'), findsOneWidget);
-      expect(find.text('Tempo'), findsNothing);
-      final label = tester.widget<Text>(find.text('Lunas'));
-      expect(label.style?.fontWeight, FontWeight.w800);
-      expect(label.style?.color, AppTheme.changeFg(false),
+      expect(
+          find.textContaining('5 Gas LPG 3kg - 2 jaminan Lunas',
+              findRichText: true),
+          findsOneWidget,
+          reason: '"Lunas" menempel langsung setelah kata "jaminan"');
+
+      final span = findBoldableSpan(tester, ' Lunas');
+      expect(span, isNotNull);
+      expect(span!.style?.fontWeight, FontWeight.w800);
+      expect(span.style?.color, AppTheme.changeFg(false),
           reason: 'hijau — pola warna sama dgn changeFg di seluruh app');
 
       await tester.pumpWidget(const SizedBox());
