@@ -6,7 +6,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi lagi lagi lagi — 2
-penyesuaian status Tempo/Lunas Pre-order), commit `<pending>`, versi
+penyesuaian status Tempo/Lunas Pre-order), commit `edafd77`, versi
 kerja **2.19.13+38**. Susulan LANGSUNG dari update di bawah ini
 (status Tempo/Lunas baru saja ditambahkan):
 1. Keterangan "sudah bayar" (`e.paid`) DIHAPUS dari kartu — user bilang
