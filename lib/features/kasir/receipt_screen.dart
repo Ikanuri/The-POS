@@ -200,6 +200,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   final TextEditingController _custCtrl = TextEditingController();
   List<Customer> _custSuggestions = [];
 
+  /// Bug dilaporkan user: dropdown saran pelanggan tidak bisa discroll.
+  /// Akarnya dropdown dulu `Column` polos — TIDAK PUNYA mekanisme scroll
+  /// SAMA SEKALI (bukan cuma "kurang tinggi"), jadi baris yang jatuh di luar
+  /// area layar yang tersisa (terutama saat keyboard terbuka) tidak pernah
+  /// bisa dijangkau. Fix ikuti pola yang SUDAH BENAR di `payment_screen.dart`
+  /// (dropdown pelanggan checkout): `ListView.builder` sungguhan dibungkus
+  /// tinggi maksimum, + `Scrollable.ensureVisible` via `_custFieldKey` supaya
+  /// field & dropdown-nya ikut naik di atas keyboard.
+  final GlobalKey _custFieldKey = GlobalKey();
+
   /// Toggle tampilkan laba per item — persisted via SharedPreferences.
   bool _showProfit = true;
 
@@ -941,6 +951,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     if (mounted) setState(() => _custSuggestions = found.take(5).toList());
   }
 
+  /// Gulir field pelanggan ke atas viewport agar field + dropdown saran
+  /// tampak di atas keyboard (pola sama `payment_screen.dart`). Diberi
+  /// sedikit delay agar keyboard sempat terpasang sebelum posisi diukur.
+  void _scrollCustIntoView({int delayMs = 0}) {
+    Future.delayed(Duration(milliseconds: delayMs), () {
+      if (!mounted) return;
+      final ctx = _custFieldKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   /// Konfirmasi nama bebas (pembeli umum) — dipanggil saat tap di luar field.
   void _commitFreeName() {
     if (!_editingCustomer) return;
@@ -1228,6 +1255,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            key: _custFieldKey,
             children: [
               Icon(Icons.person_outline,
                   size: 14, color: scheme.onSurfaceVariant),
@@ -1252,9 +1280,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             BorderSide(color: scheme.primary, width: 1.5)),
                     contentPadding: const EdgeInsets.only(bottom: 2),
                   ),
-                  onChanged: _onCustQueryChanged,
-                  onTap: () => _custCtrl.selection = TextSelection(
-                      baseOffset: 0, extentOffset: _custCtrl.text.length),
+                  onChanged: (v) {
+                    _onCustQueryChanged(v);
+                    _scrollCustIntoView(delayMs: 50);
+                  },
+                  onTap: () {
+                    _custCtrl.selection = TextSelection(
+                        baseOffset: 0, extentOffset: _custCtrl.text.length);
+                    // Beri jeda utk animasi keyboard sebelum mengukur posisi
+                    // (pola sama `payment_screen.dart`).
+                    _scrollCustIntoView(delayMs: 300);
+                  },
                 ),
               ),
             ],
@@ -1267,46 +1303,54 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 border: Border.all(color: scheme.outlineVariant),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final c in _custSuggestions)
-                    InkWell(
-                      onTap: () => _saveCustomer(id: c.id, name: null),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 7),
-                        child: Row(
-                          children: [
-                            Icon(Icons.person_outline,
-                                size: 14, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(c.name,
-                                      style: const TextStyle(fontSize: 12),
+              // Bug dilaporkan user: dropdown TIDAK BISA discroll. Sebelumnya
+              // `Column` polos (nol mekanisme scroll) — diganti
+              // `ListView.builder` sungguhan dibungkus tinggi maksimum, pola
+              // SAMA PERSIS dgn dropdown pelanggan checkout
+              // (`payment_screen.dart`).
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: _custSuggestions.length,
+                itemBuilder: (context, index) {
+                  final c = _custSuggestions[index];
+                  return InkWell(
+                    onTap: () => _saveCustomer(id: c.id, name: null),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      child: Row(
+                        children: [
+                          Icon(Icons.person_outline,
+                              size: 14, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(c.name,
+                                    style: const TextStyle(fontSize: 12),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                // Alamat di bawah nama — disambiguasi
+                                // pelanggan dengan nama sama.
+                                if ((c.address ?? '').trim().isNotEmpty)
+                                  Text(c.address!.trim(),
+                                      style: TextStyle(
+                                          fontSize: 10.5,
+                                          color: scheme.onSurfaceVariant),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis),
-                                  // Alamat di bawah nama — disambiguasi
-                                  // pelanggan dengan nama sama.
-                                  if ((c.address ?? '').trim().isNotEmpty)
-                                    Text(c.address!.trim(),
-                                        style: TextStyle(
-                                            fontSize: 10.5,
-                                            color: scheme.onSurfaceVariant),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis),
-                                ],
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
-                ],
+                  );
+                },
               ),
             ),
         ],
