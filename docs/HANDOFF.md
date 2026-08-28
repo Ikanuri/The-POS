@@ -5,11 +5,43 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi x7 — fix dropdown saran
+pelanggan di struk in-app tidak bisa discroll), commit `<pending>`,
+versi kerja **2.19.16+41**, sudah di-push & di-merge ke `main`.
+
+**Bug**: user lapor field inline edit "Pelanggan" di struk in-app
+(`_buildCustomerEditor`, `receipt_screen.dart`) — dropdown sarannya
+tidak bisa discroll sama sekali. Akar: dropdown dirender `Column` polos
+(TIDAK PUNYA mekanisme scroll SAMA SEKALI), beda dari dropdown
+pelanggan checkout (`payment_screen.dart`) yang SUDAH BENAR pakai
+`ListView.builder` dibungkus `maxHeight`. Fix menyamakan pola: `Container
+(constraints: BoxConstraints(maxHeight: 240)) > ListView.builder
+(shrinkWrap: true)`, plus `Scrollable.ensureVisible` via `GlobalKey`
+(`_scrollCustIntoView`, disalin dari `_scrollCustIntoView` milik
+`payment_screen.dart`) supaya field+dropdown ikut naik di atas keyboard.
+
+**Gotcha test BARU yang ditemukan sesi ini**: cap saran dibatasi 5
+(`_onCustQueryChanged`), dan tiap baris (nama+alamat, 2 baris teks)
+TERNYATA muat nyaman di bawah 240px pada ukuran font DEFAULT — widget
+test dgn 8 pelanggan seed awalnya gagal membuktikan drag benar-benar
+menggeser scroll (`maxScrollExtent` = 0, konten belum overflow sama
+sekali). Fix test: paksa `textScaler: TextScaler.linear(2.2)` via
+`MediaQuery` custom (BUKAN `pumpWithFakeApp` biasa) supaya overflow
+terjadi SCR DETERMINISTIK, baru drag+assert posisi scroll berubah.
+**Kalau nanti test serupa (butuh membuktikan sesuatu genuinely
+overflow/discroll) terasa flaky/pas-pasan lolos di font default,
+paksa textScaler besar dulu — jangan nebak-nebak jumlah item/panjang
+teks sampai "kebetulan" pas melebihi viewport.**
+
+Test baru `receipt_customer_dropdown_scroll_test.dart` (2) —
+revert-verified (assersi `maxHeight`/`ListView` gagal tepat sasaran
+saat `Column` polos dikembalikan). Full suite 1161 lolos / 1 gagal
+(flaky pre-existing, lolos terisolasi), `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi x6 — pre-order bisa dirujuk
 dari transaksi lain, usulan user langsung dari laporan bug Tempo/Lunas
-di update sebelumnya), commit `53bb405` — **BELUM di-push/merge,
-masih hanya commit LOKAL** (instruksi user masih berlaku, lihat blok di
-bawah). Versi kerja **2.19.15+40**.
+di update sebelumnya), commit `53bb405`, sudah di-push & di-merge ke
+`main`. Versi kerja **2.19.15+40**.
 
 **Fitur**: pelanggan pre-order tanpa DP, lalu belanja lagi di nota
 BERBEDA — sekarang ada link ke nota ASLI tempat pre-order dicatat, di
