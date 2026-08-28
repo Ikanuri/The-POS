@@ -6,7 +6,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi x7 — fix dropdown saran
-pelanggan di struk in-app tidak bisa discroll), commit `<pending>`,
+pelanggan di struk in-app tidak bisa discroll), commit `fffa8d0`,
 versi kerja **2.19.16+41**, sudah di-push & di-merge ke `main`.
 
 **Bug**: user lapor field inline edit "Pelanggan" di struk in-app
