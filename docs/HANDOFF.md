@@ -7,7 +7,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 
 _Update sesi 23 Agustus 2026 (lanjutan lagi x8 — dropdown saran
 pelanggan struk MASIH tidak bisa discroll, putaran ke-2), commit
-`<pending>`, versi kerja **2.19.17+42**, sudah di-push & di-merge ke
+`2ab6a29`, versi kerja **2.19.17+42**, sudah di-push & di-merge ke
 `main`.
 
 **Akar SEBENARNYA** (fix sebelumnya `fffa8d0` cuma menyelesaikan
