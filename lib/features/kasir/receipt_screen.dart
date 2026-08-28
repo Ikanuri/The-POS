@@ -948,7 +948,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _onCustQueryChanged(String v) async {
     final found = await ref.read(databaseProvider).searchCustomers(v.trim());
-    if (mounted) setState(() => _custSuggestions = found.take(5).toList());
+    // Bug dilaporkan user (susulan — masih terjadi setelah dropdown dibuat
+    // scrollable): daftar dulu dipotong `.take(5)`, jadi pelanggan ke-6+ yang
+    // cocok TIDAK PERNAH masuk sama sekali ke `_custSuggestions` — scroll
+    // apa pun tidak akan pernah memunculkannya, krn datanya memang sudah
+    // dibuang sebelum sempat dirender. Efeknya sama persis dgn "tidak bisa
+    // discroll" dari sudut pandang user. Cap dibuang, samakan dgn dropdown
+    // pelanggan checkout (`payment_screen.dart::_searchCustomers`) yang
+    // SUDAH BENAR menampilkan SEMUA hasil & mengandalkan scroll sungguhan.
+    if (mounted) setState(() => _custSuggestions = found);
   }
 
   /// Gulir field pelanggan ke atas viewport agar field + dropdown saran

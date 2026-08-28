@@ -46,12 +46,21 @@ Future<void> pumpWithLargeText(WidgetTester tester,
 }
 
 /// Bug dilaporkan user: dropdown saran pelanggan (inline edit di struk
-/// in-app) tidak bisa discroll. Akarnya dropdown dulu dirender `Column`
-/// polos — TIDAK PUNYA mekanisme scroll SAMA SEKALI, jadi baris yang jatuh
-/// di luar sisa ruang layar (terutama saat keyboard terbuka) mustahil
-/// dijangkau. Fix: `ListView.builder` sungguhan dibungkus tinggi maksimum
-/// (`maxHeight: 240`), pola SAMA PERSIS dgn dropdown pelanggan checkout yang
-/// SUDAH BENAR (`payment_screen.dart`).
+/// in-app) tidak bisa discroll — DUA akar penyebab, dilaporkan & diperbaiki
+/// di 2 putaran:
+///  1. Dropdown dulu dirender `Column` polos — TIDAK PUNYA mekanisme scroll
+///     SAMA SEKALI. Fix: `ListView.builder` sungguhan dibungkus tinggi
+///     maksimum (`maxHeight: 240`), pola SAMA PERSIS dgn dropdown pelanggan
+///     checkout yang SUDAH BENAR (`payment_screen.dart`).
+///  2. SETELAH #1 diperbaiki, user MASIH lapor "tidak bisa discroll" —
+///     ternyata `_onCustQueryChanged` memotong hasil pencarian `.take(5)`,
+///     jadi pelanggan ke-6+ yang cocok TIDAK PERNAH masuk `_custSuggestions`
+///     sama sekali. Scroll apa pun mustahil memunculkannya krn datanya sudah
+///     dibuang SEBELUM sempat dirender — dari sudut pandang user, efeknya
+///     identik dgn "dropdown tidak bisa discroll" walau widget-nya sendiri
+///     sudah genuinely scrollable. Fix: cap dibuang, samakan dgn
+///     `payment_screen.dart::_searchCustomers` yang SUDAH BENAR menampilkan
+///     SEMUA hasil pencarian tanpa potongan.
 void main() {
   late AppDatabase db;
   const txId = 'tx1';
@@ -83,9 +92,10 @@ void main() {
             id: 'pay1', transactionId: txId, amount: 10000, method: 'tunai'));
 
     // 8 pelanggan dgn nama+alamat yg sama-sama mengandung "Bu" & lumayan
-    // panjang — dgn cap 5 saran x ~56px/baris (nama+alamat 2 baris), totalnya
-    // jelas melewati batas 240px, membuktikan dropdown SUNGGUHAN butuh
-    // scroll (bukan cuma "kebetulan pas").
+    // panjang. Sengaja LEBIH dari 5 (bekas cap lama yg sudah dibuang) supaya
+    // kasus "pelanggan ke-6+" ikut teruji, dan totalnya jg melewati batas
+    // 240px, membuktikan dropdown SUNGGUHAN butuh scroll (bukan cuma
+    // "kebetulan pas").
     for (var i = 1; i <= 8; i++) {
       await db.into(db.customers).insert(CustomersCompanion.insert(
             id: 'c$i',
@@ -116,12 +126,19 @@ void main() {
       'sungguhan (bukan Column polos tanpa mekanisme scroll)', (tester) async {
     await openEditor(tester);
 
-    // Semua 5 saran (cap) harus ketemu -- ListView.builder membangun semua
-    // itemnya krn shrinkWrap+maxHeight terbatas, TIDAK lazy di luar viewport
-    // pendek spt ListView biasa (item count kecil, ini valid).
-    expect(find.textContaining('Bu Pelanggan Nomor', findRichText: true).evaluate().length,
-        greaterThanOrEqualTo(5),
-        reason: 'cap saran = 5 (lihat _onCustQueryChanged)');
+    // SEMUA 8 (bukan lagi dipotong 5) harus masuk sbg ITEM DATA `ListView`,
+    // walau yg SUNGGUHAN dirender di layar cuma sebagian (lazy-build khas
+    // ListView, sisanya baru dibangun begitu di-scroll ke situ — lihat test
+    // "pelanggan ke-6+" di bawah utk pembuktian scroll-nya).
+    final dropdownListFinder = find.descendant(
+        of: find.byWidgetPredicate(
+            (w) => w is Container && w.constraints?.maxHeight == 240),
+        matching: find.byType(ListView));
+    final listView = tester.widget<ListView>(dropdownListFinder);
+    final delegate = listView.childrenDelegate as SliverChildBuilderDelegate;
+    expect(delegate.childCount, 8,
+        reason: 'cap `.take(5)` lama sudah dibuang -- SEMUA hasil pencarian '
+            'harus masuk `_custSuggestions`, bukan cuma 5 pertama');
 
     final container = tester.widget<Container>(find
         .ancestor(
@@ -136,11 +153,42 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   });
 
+  testWidgets(
+      'BUG NYATA dilaporkan user (putaran ke-2): pelanggan ke-6+ yang cocok '
+      'HARUS tetap muncul di saran -- bukan dibuang diam-diam sebelum '
+      'sempat dirender', (tester) async {
+    await openEditor(tester);
+
+    final dropdownListFinder = find.descendant(
+        of: find.byWidgetPredicate(
+            (w) => w is Container && w.constraints?.maxHeight == 240),
+        matching: find.byType(ListView));
+
+    // Baris awal (belum di-scroll) sudah harus ketemu.
+    expect(find.textContaining('Bu Pelanggan Nomor 1', findRichText: true),
+        findsOneWidget);
+
+    // Scroll dropdown sampai mentok bawah -- pelanggan ke-6+ (dulu terpotong
+    // `.take(5)`, TIDAK PERNAH ada di data sama sekali) harus TERLIHAT
+    // setelah discroll, bukan cuma "ada di data tapi tidak pernah bisa
+    // dijangkau layar".
+    await tester.drag(dropdownListFinder, const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Bu Pelanggan Nomor 8', findRichText: true),
+        findsOneWidget,
+        reason: 'pelanggan ke-8 wajib bisa dijangkau via scroll -- dulu '
+            'terpotong `.take(5)`, tidak pernah masuk data sama sekali');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
   testWidgets('dropdown SUNGGUHAN bisa discroll -- drag ke atas '
       'menggeser posisi scroll-nya', (tester) async {
-    // textScaler diperbesar supaya 5 saran (cap) PASTI melebihi maxHeight
-    // 240 scr deterministik, tidak bergantung kebetulan lolos/tidaknya
-    // dgn ukuran font default.
+    // textScaler diperbesar supaya 8 saran PASTI melebihi maxHeight 240
+    // scr deterministik, tidak bergantung kebetulan lolos/tidaknya dgn
+    // ukuran font default.
     await openEditor(tester, largeText: true);
 
     final listFinder = find.descendant(
