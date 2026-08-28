@@ -59,6 +59,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   diubah dari pembeli umum ke nama pelanggan (atau sebaliknya), entri
   di Laci Meja tetap menampilkan nama lama. Sekarang namanya selalu
   mengikuti nota, termasuk untuk entri lama yang terlanjur salah.
+- **Dropdown saran nama pelanggan di struk sekarang bisa discroll** —
+  saat mengetik nama pelanggan di struk in-app, daftar saran yang
+  muncul sebelumnya tidak bisa digulir sama sekali, jadi saran yang
+  jatuh di luar layar (terutama saat keyboard terbuka) tidak terlihat.
+  Sekarang bisa digulir seperti biasa.
 
 ### ✨ Tampilan (lanjutan)
 - **Kartu Laci Meja ditata ulang** — nama pelanggan naik ke paling atas
