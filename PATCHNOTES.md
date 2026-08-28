@@ -63,7 +63,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   saat mengetik nama pelanggan di struk in-app, daftar saran yang
   muncul sebelumnya tidak bisa digulir sama sekali, jadi saran yang
   jatuh di luar layar (terutama saat keyboard terbuka) tidak terlihat.
-  Sekarang bisa digulir seperti biasa.
+  Sekarang bisa digulir seperti biasa, dan daftar sarannya juga tidak
+  lagi berhenti di 5 nama teratas — pelanggan yang cocok tapi ada di
+  urutan lebih bawah kini ikut muncul, tinggal digulir.
 
 ### ✨ Tampilan (lanjutan)
 - **Kartu Laci Meja ditata ulang** — nama pelanggan naik ke paling atas

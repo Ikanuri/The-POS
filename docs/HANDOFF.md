@@ -5,9 +5,43 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 23 Agustus 2026 (lanjutan lagi x8 — dropdown saran
+pelanggan struk MASIH tidak bisa discroll, putaran ke-2), commit
+`2ab6a29`, versi kerja **2.19.17+42**, sudah di-push & di-merge ke
+`main`.
+
+**Akar SEBENARNYA** (fix sebelumnya `fffa8d0` cuma menyelesaikan
+SEBAGIAN): `_onCustQueryChanged` (`receipt_screen.dart`) memotong hasil
+pencarian `.take(5)` — pelanggan ke-6+ yang cocok TIDAK PERNAH masuk
+`_custSuggestions` sama sekali, jadi widget-nya boleh saja SUDAH
+genuinely scrollable (fix putaran 1 benar), tapi dari sudut pandang
+user efeknya tetap identik "tidak bisa discroll" — scroll tidak akan
+pernah memunculkan data yang memang sudah dibuang sebelum sempat
+dirender. Fix: cap dibuang total, samakan dgn `payment_screen.dart::
+_searchCustomers` yang SUDAH BENAR sejak awal (tanpa potongan sama
+sekali, murni mengandalkan scroll).
+
+**Pelajaran metodologis (penting utk sesi depan)**: kalau user lapor
+bug "masih terjadi" SETELAH fix sebelumnya sudah di-merge, JANGAN
+asumsikan fix sebelumnya salah/tidak jalan — cek dulu apakah ada
+SUMBER LAIN yang menghasilkan gejala PERSIS SAMA dari sudut pandang
+user. Di sini widget scroll-nya sendiri 100% benar (test putaran 1
+masih lolos semua), akar masalah kedua ini di lapisan yang SAMA SEKALI
+BEDA (data-fetching, bukan rendering) — keduanya kebetulan
+menghasilkan keluhan yang terdengar identik ("tidak bisa discroll").
+Bandingkan implementasi dgn fitur SERUPA yang sudah established
+(`payment_screen.dart`) baris-per-baris, bukan cuma pola widget-nya.
+
+Test `receipt_customer_dropdown_scroll_test.dart` diperbarui (seed 8
+pelanggan, bukan berhenti di 5) + 1 test baru "pelanggan ke-6+ harus
+bisa dijangkau via scroll" — revert-verified. Full suite 1162 lolos /
+1 gagal (flaky pre-existing, lolos terisolasi), `flutter analyze` 0
+issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi x7 — fix dropdown saran
-pelanggan di struk in-app tidak bisa discroll), commit `fffa8d0`,
-versi kerja **2.19.16+41**, sudah di-push & di-merge ke `main`.
+pelanggan di struk in-app tidak bisa discroll, putaran 1), commit
+`fffa8d0`, versi kerja **2.19.16+41**, sudah di-push & di-merge ke
+`main`.
 
 **Bug**: user lapor field inline edit "Pelanggan" di struk in-app
 (`_buildCustomerEditor`, `receipt_screen.dart`) — dropdown sarannya
