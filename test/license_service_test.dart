@@ -277,4 +277,125 @@ void main() {
       );
     });
   });
+
+  group('LicenseNotifier.computeClockManipulated — deteksi jam device '
+      'dimundurkan SEKALI sebelum riwayat ada (celah `isClockRewound` tak '
+      'terjangkau)', () {
+    test('device jauh di BELAKANG jam server (>24 jam) → dimanipulasi', () {
+      final deviceNow = DateTime.utc(2020, 1, 1);
+      const dateHeader = 'Sat, 29 Aug 2026 08:00:00 GMT';
+      expect(
+        LicenseNotifier.computeClockManipulated(
+            dateHeaderValue: dateHeader, deviceTimeUtc: deviceNow),
+        isTrue,
+        reason: 'device thn 2020 vs server 2026 — jelas dimundurkan',
+      );
+    });
+
+    test('device sedikit meleset (di bawah toleransi 24 jam) → BUKAN '
+        'manipulasi (jam belum sempat NTP sync dianggap wajar)', () {
+      final deviceNow = DateTime.utc(2026, 8, 29, 7, 0, 0);
+      const dateHeader = 'Sat, 29 Aug 2026 08:00:00 GMT'; // beda 1 jam
+      expect(
+        LicenseNotifier.computeClockManipulated(
+            dateHeaderValue: dateHeader, deviceTimeUtc: deviceNow),
+        isFalse,
+      );
+    });
+
+    test('device LEBIH MAJU dari server → BUKAN manipulasi (tidak membantu '
+        'bypass expiry, bukan vektor yg relevan)', () {
+      final deviceNow = DateTime.utc(2030, 1, 1);
+      const dateHeader = 'Sat, 29 Aug 2026 08:00:00 GMT';
+      expect(
+        LicenseNotifier.computeClockManipulated(
+            dateHeaderValue: dateHeader, deviceTimeUtc: deviceNow),
+        isFalse,
+      );
+    });
+
+    test('header `Date` null (mis. server tidak kirim) → null, fail-open',
+        () {
+      expect(
+        LicenseNotifier.computeClockManipulated(
+            dateHeaderValue: null, deviceTimeUtc: DateTime.now().toUtc()),
+        isNull,
+      );
+    });
+
+    test('header `Date` format tidak bisa diparse → null, fail-open', () {
+      expect(
+        LicenseNotifier.computeClockManipulated(
+            dateHeaderValue: 'bukan-tanggal-valid',
+            deviceTimeUtc: DateTime.now().toUtc()),
+        isNull,
+      );
+    });
+  });
+
+  group('LicenseNotifier.computeDeviceMismatch — deteksi data lisensi '
+      'dipindah ke device fisik lain (mis. tools clone/pindah-data OEM)',
+      () {
+    test('ANDROID_ID sekarang SAMA dgn yang tercatat → tidak mismatch', () {
+      expect(
+        LicenseNotifier.computeDeviceMismatch(
+            storedAndroidId: 'abc123', currentAndroidId: 'abc123'),
+        isFalse,
+      );
+    });
+
+    test('ANDROID_ID sekarang BEDA dari yang tercatat → mismatch', () {
+      expect(
+        LicenseNotifier.computeDeviceMismatch(
+            storedAndroidId: 'abc123', currentAndroidId: 'xyz789'),
+        isTrue,
+      );
+    });
+
+    test('belum ada baseline tersimpan (null) → BUKAN mismatch (baseline '
+        'baru direkam terpisah oleh caller, bukan tugas fungsi murni ini)',
+        () {
+      expect(
+        LicenseNotifier.computeDeviceMismatch(
+            storedAndroidId: null, currentAndroidId: 'xyz789'),
+        isFalse,
+      );
+    });
+
+    test('ANDROID_ID sekarang tak terbaca (null, mis. iOS/error channel) → '
+        'fail-open, BUKAN mismatch', () {
+      expect(
+        LicenseNotifier.computeDeviceMismatch(
+            storedAndroidId: 'abc123', currentAndroidId: null),
+        isFalse,
+      );
+    });
+  });
+
+  group('LicenseState.isLocked — 2 kondisi kunci baru ikut menutup gerbang',
+      () {
+    test('clockManipulated true (nota lain sudah lunas/normal) → terkunci',
+        () {
+      const s = LicenseState(
+          fingerprint: _fp, exp: 'selamanya', clockManipulated: true);
+      expect(s.isLocked, isTrue);
+    });
+
+    test('deviceMismatch true → terkunci', () {
+      const s = LicenseState(
+          fingerprint: _fp, exp: 'selamanya', deviceMismatch: true);
+      expect(s.isLocked, isTrue);
+    });
+
+    test('semua flag baru false & lisensi selamanya valid → TIDAK terkunci',
+        () {
+      const s = LicenseState(
+        fingerprint: _fp,
+        exp: 'selamanya',
+        clockManipulated: false,
+        deviceMismatch: false,
+      );
+      expect(s.isLocked, isFalse);
+    });
+  });
 }

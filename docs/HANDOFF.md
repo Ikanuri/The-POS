@@ -5,9 +5,65 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 (lanjutan lagi x2 — 2 lapis deteksi baru
+gerbang lisensi: manipulasi jam base-offset + clone device fisik),
+commit `a539f0b`, versi kerja **2.19.19+44**, di-push & di-merge ke
+`main`.
+
+**Konteks**: susulan diskusi keamanan lisensi sesi ini (lihat entri di
+bawah utk diskusi awalnya) — user minta eksekusi 2 mitigasi yang
+sebelumnya cuma dianalisis/dirancang (sengaja TIDAK masuk `PLAN.md`,
+langsung diminta eksekusi).
+
+**1. Manipulasi jam (base-offset)**: `LicenseNotifier._fetchLiveStatus`
+(gabungan `_fetchRevokedStatus` lama, SATU request yang sama, tidak
+nambah beban) sekarang juga baca header `Date` respons `revoked.json`
+sbg jam server tepercaya, dibandingkan ke jam device
+(`computeClockManipulated`, toleransi 24 jam, null/fail-open kalau
+header hilang/gagal parse/offline). Field baru `LicenseState.
+clockManipulated`, dicek di `_checkRevocation()` rutin (BUKAN di jalur
+`activate()` — sengaja dibatasi scope spt diminta user).
+
+**2. Clone device fisik**: `Settings.Secure.ANDROID_ID` (channel native
+baru `com.thepos/device_id` di `MainActivity.kt`, wrapper Dart
+`DeviceIdService`) direkam sbg baseline SEKALI saat `load()` pertama
+kali melihat fingerprint (fresh install MAUPUN update dari versi app
+LAMA sebelum fitur ini ada — keduanya "adopt baseline baru", BUKAN
+mismatch, krn belum ada apa pun utk dibandingkan). `load()` berikutnya
+bandingkan ANDROID_ID sekarang vs baseline (`computeDeviceMismatch`) —
+beda → `deviceMismatch=true`, menutup `isLocked`. Fail-open total kalau
+channel gagal (bukan Android/error) — TIDAK PERNAH mengunci krn
+ketidaktahuan.
+
+**Keputusan desain penting**: `AktivasiScreen` TIDAK disentuh — layar
+itu SUDAH sengaja pakai pesan generik utk SEMUA alasan terkunci (dok
+di file itu: "tidak membocorkan mekanisme, tidak terkesan menuduh"),
+jadi 2 kondisi baru otomatis ikut pola yang sama tanpa kerja tambahan.
+`LicenseState` dapat method `copyWith` baru (dipakai `_touchLastSeen`/
+`activate`/`_checkRevocation`) supaya field baru tidak gampang
+kelupaan ditulis ulang di reconstruction manual yang sebelumnya
+berulang di 4 tempat.
+
+**Test**: 9 pure-logic baru (`computeClockManipulated` 5 skenario incl.
+device lebih maju/header rusak, `computeDeviceMismatch` 4 skenario,
+`isLocked` 3 skenario) di `license_service_test.dart` — semua
+revert-verified. 4 test integrasi baru `license_device_binding_load_
+test.dart` (mock `MethodChannel('com.thepos/device_id')` +
+`SharedPreferences.setMockInitialValues`): fresh-install adopt-baseline,
+match, mismatch (+ `isLocked` ikut true), channel-error fail-open — 2
+skenario terakhir revert-verified. **Channel native (Kotlin) TIDAK bisa
+diverifikasi otomatis** di sesi ini — butuh device Android asli (sama
+spt fitur printer Bluetooth lain), cuma tervalidasi lewat compile
+Kotlin (implisit via `flutter analyze`/build) + fail-open Dart-side
+sudah teruji kalau channel belum ada. Tidak ada entri PATCHNOTES.md
+(pola konsisten dgn internal lisensi lain — revoked-check awal juga
+tidak pernah masuk situ, murni plumbing keamanan bukan fitur yg
+dirasakan pengguna normal). Full suite 1181 lolos / 1 gagal (flaky
+pre-existing `proposal_unchanged_end_to_end_test.dart`, lolos
+terisolasi), `flutter analyze` 0 issue.
+
 _Update sesi 29 Agustus 2026 (lanjutan lagi — buang fitur scan kamera
-+ tambah opsi input manual di tab Data Pelanggan), commit `d3299d4`,
-di-push & di-merge ke `main`.
++ tambah opsi input manual di tab Data Pelanggan), commit `d3299d4`.
 
 **Scan kamera dibuang**: fitur scan QR sidik jari via `BarcodeDetector`
 ("Scan Serial dari HP Pelanggan") dibuang total dari
