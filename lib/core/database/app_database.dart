@@ -4787,18 +4787,55 @@ class AppDatabase extends _$AppDatabase {
   // [getTopProductsByRevenue]/[getTopCustomersByRevenue] yang jadi
   // pintu masuknya, supaya angka ringkas & detail tidak pernah berbeda.
 
+  /// Nama satuan DASAR sebuah produk (mis. "pcs"), fallback "satuan" kalau
+  /// produk tak punya baris `product_units` sama sekali atau tak ada yang
+  /// ditandai `isBaseUnit` (pakai satuan pertama sbg dasar, sama pola
+  /// [stockBreakdownText]).
+  Future<String> _baseUnitNameOf(String productId) async {
+    final units = await (select(productUnits)
+          ..where((t) => t.productId.equals(productId)))
+        .get();
+    if (units.isEmpty) return 'satuan';
+    var base = units.first;
+    for (final u in units) {
+      if (u.isBaseUnit) {
+        base = u;
+        break;
+      }
+    }
+    if (base.unitTypeId == null) return 'satuan';
+    final type = await (select(unitTypes)
+          ..where((t) => t.id.equals(base.unitTypeId!)))
+        .getSingleOrNull();
+    return type?.name ?? 'satuan';
+  }
+
   /// Ringkasan satu produk dalam rentang: qty terjual, omzet, HPP, dan
   /// jumlah NOTA yang memuatnya (bukan jumlah baris — satu nota bisa punya
   /// beberapa baris produk yang sama dgn satuan berbeda).
+  ///
+  /// Item 63 (permintaan user) — `qtySold` dulu cuma `SUM(ti.qty)` MENTAH
+  /// digabung lintas SEMUA satuan produk tanpa konversi (2 dus + 20 pcs
+  /// tampil sbg "22", padahal 1 dus bisa = puluhan pcs) — menyesatkan utk
+  /// produk yang dijual dlm >1 satuan. Fix: `qtySold` sekarang dikonversi
+  /// ke satuan DASAR (`ti.qty * ratioToBase`, satuan dasar sendiri ratio
+  /// 1.0), plus `unitBreakdown` mendaftar satuan NON-dasar yang ikut
+  /// terjual (qty MENTAH apa adanya dlm satuan itu, bukan dikonversi) —
+  /// dipakai UI utk keterangan "dari itu: 3 dus" di samping total.
   Future<ProductStatsSummary> getProductStatsSummary(
       String productId, DateTime from, DateTime to) async {
+    final unitName = await _baseUnitNameOf(productId);
+    const ratioExpr = 'CASE WHEN pu.is_base_unit = 1 '
+        'OR pu.ratio_to_base IS NULL OR pu.ratio_to_base <= 0 '
+        'THEN 1.0 ELSE pu.ratio_to_base END';
     final row = await customSelect(
-      'SELECT COALESCE(SUM(ti.qty),0) AS qty, '
+      'SELECT COALESCE(SUM(ti.qty * $ratioExpr),0) AS qty, '
       '  COALESCE(SUM(ti.subtotal),0) AS revenue, '
       '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs, '
       '  COUNT(DISTINCT ti.transaction_id) AS tx_count '
       'FROM transaction_items ti '
       'JOIN transactions t ON t.id = ti.transaction_id '
+      'LEFT JOIN product_units pu ON pu.id = ti.product_unit_id '
       "WHERE ti.product_id = ? AND t.status != 'void' "
       'AND t.created_at >= ? AND t.created_at <= ?',
       variables: [
@@ -4806,10 +4843,37 @@ class AppDatabase extends _$AppDatabase {
         Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
         Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
       ],
-      readsFrom: {transactionItems, transactions},
+      readsFrom: {transactionItems, transactions, productUnits},
     ).getSingle();
+
+    final breakdownRows = await customSelect(
+      'SELECT ut.name AS unit_name, COALESCE(SUM(ti.qty),0) AS qty '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN product_units pu ON pu.id = ti.product_unit_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      "WHERE ti.product_id = ? AND t.status != 'void' "
+      'AND t.created_at >= ? AND t.created_at <= ? '
+      'AND pu.is_base_unit = 0 '
+      'GROUP BY pu.id ORDER BY qty DESC',
+      variables: [
+        Variable.withString(productId),
+        Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
+        Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
+      ],
+      readsFrom: {transactionItems, transactions, productUnits, unitTypes},
+    ).get();
+
     return (
       qtySold: (row.data['qty'] as num).toDouble(),
+      unitName: unitName,
+      unitBreakdown: [
+        for (final r in breakdownRows)
+          (
+            unitName: r.data['unit_name'] as String? ?? 'satuan',
+            qty: (r.data['qty'] as num).toDouble(),
+          ),
+      ],
       revenue: (row.data['revenue'] as num).toInt(),
       cogs: (row.data['cogs'] as num).round(),
       txCount: (row.data['tx_count'] as num).toInt(),
@@ -4817,14 +4881,21 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Tren harian satu produk (qty & omzet per tanggal LOKAL) — pola strftime
-  /// sama [getExpenseDailyTotals].
+  /// sama [getExpenseDailyTotals]. `qty` dikonversi ke satuan dasar produk
+  /// (lihat dok [getProductStatsSummary]) supaya garis tren tidak menjumlah
+  /// mentah lintas satuan yang tidak sepadan.
   Future<List<ProductDailySales>> getProductDailySales(
       String productId, DateTime from, DateTime to) async {
+    const ratioExpr = 'CASE WHEN pu.is_base_unit = 1 '
+        'OR pu.ratio_to_base IS NULL OR pu.ratio_to_base <= 0 '
+        'THEN 1.0 ELSE pu.ratio_to_base END';
     final rows = await customSelect(
       "SELECT strftime('%Y-%m-%d', datetime(t.created_at,'unixepoch','localtime')) AS d, "
-      '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue '
+      '  COALESCE(SUM(ti.qty * $ratioExpr),0) AS qty, '
+      '  COALESCE(SUM(ti.subtotal),0) AS revenue '
       'FROM transaction_items ti '
       'JOIN transactions t ON t.id = ti.transaction_id '
+      'LEFT JOIN product_units pu ON pu.id = ti.product_unit_id '
       "WHERE ti.product_id = ? AND t.status != 'void' "
       'AND t.created_at >= ? AND t.created_at <= ? '
       'GROUP BY d ORDER BY d',
@@ -4833,7 +4904,7 @@ class AppDatabase extends _$AppDatabase {
         Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
         Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
       ],
-      readsFrom: {transactionItems, transactions},
+      readsFrom: {transactionItems, transactions, productUnits},
     ).get();
     return rows.map((r) {
       final p = (r.data['d'] as String).split('-').map(int.parse).toList();
@@ -7300,7 +7371,21 @@ typedef CashFlowSummary = ({
 /// Ringkasan statistik satu produk dalam rentang tanggal (layar detail
 /// produk, dibuka dari tab Produk di Laporan).
 typedef ProductStatsSummary = ({
+  /// Total terjual, sudah DIKONVERSI ke satuan dasar (lihat dok
+  /// `AppDatabase.getProductStatsSummary`) — bukan jumlah mentah lintas
+  /// satuan.
   double qtySold,
+
+  /// Nama satuan dasar produk ini (mis. "pcs") — satuan yang dipakai
+  /// [qtySold].
+  String unitName,
+
+  /// Satuan NON-dasar yang ikut terjual di rentang ini, qty MENTAH apa
+  /// adanya dlm satuan itu (bukan dikonversi) — mis. produk dijual sbg
+  /// "3 dus" selain sekian pcs. Kosong kalau semua penjualan sudah dlm
+  /// satuan dasar.
+  List<({String unitName, double qty})> unitBreakdown,
+
   int revenue,
   int cogs,
 

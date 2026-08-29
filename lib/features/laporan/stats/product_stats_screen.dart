@@ -93,7 +93,11 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
                             Expanded(
                                 child: StatTile(
                                     label: 'Terjual',
-                                    value: fmtQty(s.qtySold))),
+                                    value:
+                                        '${fmtQty(s.qtySold)} ${s.unitName}',
+                                    caption: s.unitBreakdown.isEmpty
+                                        ? null
+                                        : 'dari itu: ${s.unitBreakdown.map((b) => '${fmtQty(b.qty)} ${b.unitName}').join(', ')}')),
                             const SizedBox(width: 8),
                             Expanded(
                                 child: StatTile(
@@ -144,7 +148,8 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
                             (date: p.date, value: p.qty),
                         ],
                         color: scheme.primary,
-                        valueLabel: (v) => '${fmtQty(v.toDouble())} terjual',
+                        valueLabel: (v) =>
+                            '${fmtQty(v.toDouble())} ${s.unitName} terjual',
                       ),
                     ],
                     const StatsSectionTitle('Pembeli teratas'),

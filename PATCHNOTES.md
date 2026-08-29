@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 29 Agustus 2026
+
+### 🔧 Perbaikan
+- **Statistik detail produk kini akurat untuk produk dengan lebih dari
+  satu satuan** — sebelumnya angka "Terjual" & grafik tren di layar
+  detail produk (Laporan > Produk > ketuk produk) menjumlah semua
+  satuan mentah-mentah (mis. penjualan 2 dus + 20 pcs tampil sbg
+  "22", padahal 1 dus isinya puluhan pcs). Sekarang totalnya
+  dikonversi ke satuan dasar produk (mis. "100 pcs"), plus ada
+  keterangan tambahan kalau ada satuan lain yang ikut terjual
+  (mis. "dari itu: 3 dus").
+
 ## 23 Agustus 2026
 
 ### ✨ Tampilan

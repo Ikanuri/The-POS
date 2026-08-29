@@ -28,6 +28,8 @@
     --red-soft: rgba(179,38,30,.12);
     --green: #2E7D32;
     --green-soft: rgba(46,125,50,.14);
+    --yellow: #8A6D1F;
+    --yellow-soft: rgba(230,181,54,.18);
     --serif: Georgia, 'Times New Roman', ui-serif, serif;
     --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --mono: ui-monospace, 'SFMono-Regular', Consolas, Menlo, monospace;
@@ -52,6 +54,8 @@
       --red-soft: rgba(229,132,124,.16);
       --green: #7BC67E;
       --green-soft: rgba(123,198,126,.16);
+      --yellow: #E6C15C;
+      --yellow-soft: rgba(230,193,92,.18);
       color-scheme: dark;
     }
   }
@@ -120,7 +124,27 @@
   }
   .pill.ok { background: var(--green-soft); color: var(--green); }
   .pill.warn { background: var(--red-soft); color: var(--red); }
+  .pill.soon { background: var(--yellow-soft); color: var(--yellow); }
   .hint { font-size: 12px; color: var(--ink3); margin-top: 8px; line-height: 1.5; }
+  .tabbar { display: flex; gap: 6px; margin-bottom: 16px; }
+  .tabbtn {
+    flex: 1; appearance: none; border: 1px solid var(--border2); background: var(--surface-2);
+    color: var(--ink2); border-radius: 9px; padding: 10px 12px; font-size: 13px; font-weight: 600;
+    font-family: inherit; cursor: pointer;
+  }
+  .tabbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .cust-table-wrap { overflow-x: auto; }
+  table.cust-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.cust-table th, table.cust-table td { padding: 8px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  table.cust-table th { color: var(--ink3); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; }
+  .cust-empty { padding: 20px 4px; text-align: center; color: var(--ink3); font-size: 13px; }
+  .cust-note {
+    border: 1px solid transparent; background: transparent; width: 100%; min-width: 90px;
+    font: inherit; font-size: 12px; color: inherit; resize: vertical; min-height: 30px; border-radius: 6px; padding: 4px 6px;
+  }
+  .cust-note:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+  .fp-copy { cursor: pointer; }
+  .fp-copy:hover { text-decoration: underline; }
   .err { font-size: 12px; color: var(--red); margin-top: 6px; font-weight: 600; }
   .hidden { display: none !important; }
   .qr-wrap {
@@ -175,6 +199,12 @@
       </div>
     </div>
 
+    <div class="tabbar">
+      <button id="tabBtnGenerate" class="tabbtn active" type="button">Buat Kode Aktivasi</button>
+      <button id="tabBtnCustomers" class="tabbtn" type="button">Data Pelanggan <span id="custCountBadge"></span></button>
+    </div>
+
+    <div id="tabGenerate">
     <div id="scanCard" class="panel hidden">
       <div class="panel-head"><div class="panel-title">📷 Scan Serial dari HP Pelanggan</div></div>
       <div class="panel-body">
@@ -203,6 +233,12 @@
     <div id="generatorCard" class="panel hidden">
       <div class="panel-head"><div class="panel-title">Buat Kode Aktivasi</div></div>
       <div class="panel-body">
+        <label for="custNama">Nama pelanggan / toko</label>
+        <input type="text" id="custNama" class="inp" placeholder="mis. Toko Makmur" />
+
+        <label for="custDevice">Nama device (opsional — isi kalau pelanggan ini pakai lebih dari 1 HP)</label>
+        <input type="text" id="custDevice" class="inp" placeholder="mis. HP Kasir 1 / Xiaomi Redmi" />
+
         <label for="fpInput">Sidik jari device pelanggan</label>
         <input type="text" id="fpInput" class="inp" placeholder="9F3A-1B22-77CE-804A-A1F0-9C3E-5B7D-2E41" />
         <div id="fpError" class="err hidden"></div>
@@ -233,6 +269,35 @@
           <div class="qr-wrap">
             <canvas id="codeQrCanvas"></canvas>
             <div class="qr-cap">QR kode aktivasi — bisa discan langsung dari layar HP pelanggan</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div id="tabCustomers" class="hidden">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Data Pelanggan</div></div>
+        <div class="panel-body">
+          <div class="hint" style="margin-top:0;">Tercatat otomatis tiap kali kode aktivasi dibuat di tab
+          sebelah. Murni catatan LOKAL di alat ini — mengubah/menghapus baris di sini TIDAK mencabut lisensi
+          apa pun (itu tetap lewat <span class="mono" style="font-size:11px;">revoked.json</span> seperti biasa).</div>
+          <input type="text" id="custSearch" class="inp" placeholder="Cari nama, device, atau fingerprint..." style="margin-top:10px;" />
+          <div id="custDirtyHint" class="hint hidden" style="color:var(--accent-strong); font-weight:600;">
+            Ada perubahan sejak cadangan terakhir diunduh — unduh ulang cadangan (tab kunci) supaya tidak hilang.
+          </div>
+          <div class="cust-table-wrap" style="margin-top:10px;">
+            <table class="cust-table hidden" id="custTable">
+              <thead>
+                <tr><th>Nama</th><th>Device</th><th>Dibuat</th><th>Masa Berlaku</th><th>Fingerprint</th><th>Catatan</th><th></th></tr>
+              </thead>
+              <tbody id="custTableBody"></tbody>
+            </table>
+            <div id="custEmpty" class="cust-empty hidden">Belum ada data pelanggan. Buat kode aktivasi baru
+            di tab sebelah — otomatis tercatat di sini.</div>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="btnExportCsv" class="btn">Ekspor CSV</button>
           </div>
         </div>
       </div>
@@ -2540,8 +2605,15 @@ var qrcode = function() {
 <script>
 'use strict';
 const STORAGE_KEY = 'thepos_license_keypair_v1';
+const CUSTOMERS_KEY = 'thepos_license_customers_v1';
 
 function $(id){ return document.getElementById(id); }
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 
 let _toastTimer = null;
 function showToast(msg){
@@ -2581,6 +2653,106 @@ function saveStored(record) {
 
 function publicKeyBase64(jwkPub) {
   return bytesToB64(b64urlToBytes(jwkPub.x));
+}
+
+// ── Data Pelanggan — catatan LOKAL murni (localStorage), TIDAK pernah
+//    dikirim ke jaringan. Terpisah dari kunci privat (STORAGE_KEY) tapi
+//    disatukan ke file cadangan yang sama (lihat btnDownloadBackup/
+//    fileImport) supaya cuma ada SATU file yang perlu dijaga. ──
+let customersDirtySinceBackup = false;
+
+function loadCustomers() {
+  const raw = localStorage.getItem(CUSTOMERS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+function saveCustomers(list) {
+  localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(list));
+}
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function addCustomerRecord({ nama, device, fingerprint, exp }) {
+  const list = loadCustomers();
+  list.unshift({
+    id: uid(),
+    nama: nama || '',
+    device: device || '',
+    fingerprint,
+    exp,
+    createdAt: new Date().toISOString(),
+    revoked: false,
+    catatan: '',
+  });
+  saveCustomers(list);
+  customersDirtySinceBackup = true;
+  renderCustomersTab();
+}
+function deleteCustomerRecord(id) {
+  saveCustomers(loadCustomers().filter((r) => r.id !== id));
+  customersDirtySinceBackup = true;
+  renderCustomersTab();
+}
+function updateCustomerRecord(id, patch) {
+  const list = loadCustomers();
+  const idx = list.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  list[idx] = { ...list[idx], ...patch };
+  saveCustomers(list);
+  customersDirtySinceBackup = true;
+  renderCustomersTab();
+}
+
+/// Status masa berlaku DIHITUNG dari `exp` tiap render (bukan disimpan) —
+/// beda dari `revoked` (penanda manual developer, mirroring status di
+/// `revoked.json` yang sesungguhnya, TIDAK saling menulis otomatis).
+function expStatus(exp) {
+  const tgl = (d) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (exp === 'selamanya') return { label: 'Selamanya', cls: 'ok' };
+  const d = new Date(exp);
+  if (isNaN(d.getTime())) return { label: '-', cls: '' };
+  const daysLeft = Math.ceil((d - new Date()) / 86400000);
+  if (daysLeft < 0) return { label: 'Lewat (' + tgl(d) + ')', cls: 'warn' };
+  if (daysLeft <= 7) return { label: 'H-' + daysLeft + ' (' + tgl(d) + ')', cls: 'soon' };
+  return { label: tgl(d), cls: 'ok' };
+}
+
+function renderCustomersTab() {
+  const list = loadCustomers();
+  $('custCountBadge').textContent = list.length ? '(' + list.length + ')' : '';
+  $('custDirtyHint').classList.toggle('hidden', !customersDirtySinceBackup);
+  $('custTable').classList.toggle('hidden', list.length === 0);
+  $('custEmpty').classList.toggle('hidden', list.length !== 0);
+  if (list.length === 0) { $('custTableBody').innerHTML = ''; return; }
+
+  const q = ($('custSearch').value || '').trim().toLowerCase();
+  const filtered = q
+    ? list.filter((r) =>
+        (r.nama || '').toLowerCase().includes(q) ||
+        (r.device || '').toLowerCase().includes(q) ||
+        (r.fingerprint || '').toLowerCase().includes(q))
+    : list;
+
+  const tbody = $('custTableBody');
+  tbody.innerHTML = filtered.map((r) => {
+    const st = expStatus(r.exp);
+    const statusPill = r.revoked
+      ? '<span class="pill warn fp-copy" data-act="toggle-revoke" data-id="' + r.id + '" title="Klik utk tandai balik aktif (lokal saja)">Revoked</span>'
+      : '<span class="pill ' + st.cls + ' fp-copy" data-act="toggle-revoke" data-id="' + r.id + '" title="Klik utk tandai revoked (lokal saja)">' + escapeHtml(st.label) + '</span>';
+    const fpShort = r.fingerprint ? r.fingerprint.slice(0, 8) + '…' : '-';
+    const tglBuat = new Date(r.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    return (
+      '<tr>' +
+      '<td>' + escapeHtml(r.nama || '-') + '</td>' +
+      '<td>' + escapeHtml(r.device || '-') + '</td>' +
+      '<td style="white-space:nowrap;">' + tglBuat + '</td>' +
+      '<td style="white-space:nowrap;">' + statusPill + '</td>' +
+      '<td class="mono fp-copy" data-act="copy-fp" data-id="' + r.id + '" title="Klik utk salin fingerprint lengkap (mis. utk ditempel ke revoked.json)">' + fpShort + '</td>' +
+      '<td><textarea class="cust-note" data-act="note" data-id="' + r.id + '" rows="1" placeholder="catatan bebas...">' + escapeHtml(r.catatan || '') + '</textarea></td>' +
+      '<td><button class="btn sm danger" data-act="delete" data-id="' + r.id + '">Hapus</button></td>' +
+      '</tr>'
+    );
+  }).join('');
 }
 
 async function generateKeypair() {
@@ -2655,9 +2827,12 @@ $('btnDownloadBackup').addEventListener('click', () => {
     publicKeyJwk: record.jwkPub,
     publicKeyBase64: publicKeyBase64(record.jwkPub),
     dibuatPada: record.dibuatPada,
+    // Data Pelanggan disatukan ke file cadangan yang SAMA (bukan mekanisme
+    // backup terpisah) — supaya cuma ada satu file yang perlu dijaga aman.
+    customers: loadCustomers(),
     catatan: 'CADANGAN RAHASIA — jangan sebar, jangan upload ke tempat publik. ' +
-      'Simpan file ini di tempat aman. Tanpa file ini, kunci HILANG SELAMANYA ' +
-      'begitu penyimpanan browser terhapus.',
+      'Simpan file ini di tempat aman. Tanpa file ini, kunci & data pelanggan ' +
+      'HILANG SELAMANYA begitu penyimpanan browser terhapus.',
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2669,7 +2844,9 @@ $('btnDownloadBackup').addEventListener('click', () => {
   a.remove();
   URL.revokeObjectURL(url);
   backedUpThisSession = true;
+  customersDirtySinceBackup = false;
   refreshUI();
+  renderCustomersTab();
   showToast('Cadangan diunduh');
 });
 
@@ -2688,14 +2865,82 @@ $('fileImport').addEventListener('change', async (e) => {
       jwkPub: backup.publicKeyJwk,
       dibuatPada: backup.dibuatPada || new Date().toISOString(),
     });
+    // Backup lama (sebelum fitur Data Pelanggan ada) tidak punya field ini —
+    // `[]` sbg fallback, bukan error, supaya tetap bisa diimpor normal.
+    if (Array.isArray(backup.customers)) saveCustomers(backup.customers);
     backedUpThisSession = true; // file cadangan ini sendiri SUDAH jadi cadangan.
+    customersDirtySinceBackup = false;
     refreshUI();
+    renderCustomersTab();
     showToast('Cadangan berhasil diimpor — cocokkan public key sebelum membuat kode aktivasi');
   } catch (err) {
     alert('Gagal impor cadangan: ' + err.message);
   } finally {
     e.target.value = '';
   }
+});
+
+function switchTab(tab) {
+  const isGenerate = tab === 'generate';
+  $('tabBtnGenerate').classList.toggle('active', isGenerate);
+  $('tabBtnCustomers').classList.toggle('active', !isGenerate);
+  $('tabGenerate').classList.toggle('hidden', !isGenerate);
+  $('tabCustomers').classList.toggle('hidden', isGenerate);
+  if (!isGenerate) renderCustomersTab();
+}
+$('tabBtnGenerate').addEventListener('click', () => switchTab('generate'));
+$('tabBtnCustomers').addEventListener('click', () => switchTab('customers'));
+
+$('custSearch').addEventListener('input', renderCustomersTab);
+
+$('custTableBody').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const id = el.dataset.id;
+  const act = el.dataset.act;
+  const rec = loadCustomers().find((r) => r.id === id);
+  if (!rec) return;
+
+  if (act === 'delete') {
+    const ok = confirm(
+      'Hapus data "' + (rec.nama || 'pelanggan ini') + '" dari daftar?\n\n' +
+      'Ini HANYA menghapus catatan lokal di alat ini — TIDAK mencabut/merevoke ' +
+      'lisensinya. Kalau maksudnya mencabut akses, edit revoked.json seperti biasa.'
+    );
+    if (!ok) return;
+    deleteCustomerRecord(id);
+  } else if (act === 'toggle-revoke') {
+    updateCustomerRecord(id, { revoked: !rec.revoked });
+  } else if (act === 'copy-fp') {
+    navigator.clipboard.writeText(rec.fingerprint)
+      .then(() => showToast('Fingerprint disalin'))
+      .catch(() => {});
+  }
+});
+
+$('custTableBody').addEventListener('change', (e) => {
+  const el = e.target.closest('[data-act="note"]');
+  if (!el) return;
+  updateCustomerRecord(el.dataset.id, { catatan: el.value });
+});
+
+$('btnExportCsv').addEventListener('click', () => {
+  const list = loadCustomers();
+  const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const rows = [['Nama', 'Device', 'Dibuat', 'Masa Berlaku', 'Status', 'Fingerprint', 'Catatan']];
+  for (const r of list) {
+    rows.push([r.nama, r.device, r.createdAt, r.exp, r.revoked ? 'Revoked' : 'Aktif', r.fingerprint, r.catatan]);
+  }
+  const csv = rows.map((row) => row.map(esc).join(',')).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'the-pos-data-pelanggan.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 });
 
 $('fpInput').addEventListener('input', () => {
@@ -2779,6 +3024,13 @@ $('btnBuildCode').addEventListener('click', async () => {
   $('codeOut').value = code;
   $('codeResult').classList.remove('hidden');
   renderCodeQr(code);
+
+  addCustomerRecord({
+    nama: $('custNama').value.trim(),
+    device: $('custDevice').value.trim(),
+    fingerprint: cleanFp,
+    exp,
+  });
 });
 
 $('btnCopyCode').addEventListener('click', async () => {
@@ -2893,6 +3145,7 @@ $('btnScanStop').addEventListener('click', stopScan);
   }
   $('app').classList.remove('hidden');
   refreshUI();
+  renderCustomersTab();
 })();
 </script>
 </body>

@@ -5,6 +5,97 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 (lanjutan — tab Data Pelanggan di alat
+license generator), commit `4a49037`. Sedang di-push & di-merge ke
+`main` per instruksi user (setelah sempat ditahan lokal-saja beberapa
+giliran sebelumnya).
+
+**Konteks diskusi**: user tanya soal celah keamanan gerbang lisensi
+(uninstall+reaktivasi serial sama utk akali expired). Diklarifikasi:
+fingerprint acak 128-bit dibuat ulang tiap fresh-install & terikat
+kriptografis ke kode (`license_service.dart:116`), jadi vektor itu
+SUDAH gagal dgn sendirinya (bukan celah nyata). Dua celah residual yg
+lebih valid didiskusikan (freeze jam via base offset 1x-set, clone
+data app via tool bawaan pabrikan OEM) — BELUM dieksekusi (baru
+sebatas analisis, user pending review sebelum masuk `PLAN.md`).
+
+**Yang DIEKSEKUSI sesi ini**: ide lain user — manfaatkan
+`scripts/license-generator.html` (alat offline terpisah, TIDAK
+disentuh app) sbg tempat catat siapa saja yg sudah aktivasi, supaya
+developer tidak cuma mengandalkan ingatan/reminder manual utk lupa
+revoke. Tab baru "Data Pelanggan": form generate dapat 2 field baru
+(Nama Pelanggan/Toko + Nama Device opsional, device dipisah krn 1
+pelanggan bisa sah pakai >1 HP), tiap kode dibuat otomatis tercatat 1
+baris (localStorage key `thepos_license_customers_v1`), status Aktif/
+H-7/Lewat dihitung ulang tiap render dari `exp` (bukan disimpan),
+"Revoked" bisa ditandai manual (PENANDA LOKAL saja, TIDAK auto-nulis
+`revoked.json` — itu tetap manual terpisah), tombol Hapus per baris,
+cari/filter, ekspor CSV. Backup disatukan ke file cadangan kunci
+privat yg SUDAH ADA (field `customers` baru di JSON, backward-compat
+dgn backup lama tanpa field itu). Banner "cadangan tidak sinkron"
+muncul kalau ada perubahan sejak backup terakhir.
+
+**Cara diverifikasi**: file ini TIDAK masuk suite `flutter test` (HTML/
+JS statis di luar app) — dites manual via Playwright headless
+(`chromium` di `/opt/pw-browsers`, plus symlink `node_modules/
+playwright` krn `playwright` cuma terpasang global di node22, bukan
+lewat npm project lokal): generate keypair → isi nama/device/
+fingerprint → buat kode → baris otomatis muncul di tab → unduh
+cadangan (cek JSON ada `customers`) → toggle revoked → unduh cadangan
+lagi (`revoked:true` ikut) → impor di halaman fresh (`localStorage`
+dikosongkan) → data pelanggan pulih utuh, `revoked` ikut benar. Nol
+console/page error di semua langkah. Tidak bump `pubspec.yaml` (alat
+ini di luar build APK, tidak ikut versi rilis app).
+
+_Update sesi 29 Agustus 2026 — statistik detail produk kini konversi
+qty ke satuan dasar utk produk >1 satuan, commit `1b6dd8b`, versi kerja
+**2.19.18+43**.
+
+**Konteks**: user tanya "kalau produk >1 satuan (mis. Indomie pcs/dus),
+gimana tampilnya di laporan tren penjualan produk?" — jawaban investigasi:
+`getProductStatsSummary`/`getProductDailySales` (`app_database.dart`)
+cuma `SUM(ti.qty)` mentah digabung lintas SEMUA satuan tanpa konversi
+(2 dus + 20 pcs = "22", padahal 1 dus bisa puluhan pcs) — bukan bug yg
+dilaporkan sebelumnya, murni ditemukan pas baca kode. User lalu minta
+fix: total dikonversi ke satuan DASAR, plus keterangan satuan lain yg
+ikut terjual.
+
+**Fix**: `qtySold` (ringkasan & tiap titik tren harian) dikonversi ke
+satuan dasar (`ti.qty * ratioToBase`, via `LEFT JOIN product_units`,
+fallback ratio 1.0 kalau `product_unit_id` tak ketemu/`ratioToBase`
+tak valid). `ProductStatsSummary` dapat 2 field baru: `unitName`
+(nama satuan dasar, helper baru `_baseUnitNameOf`) & `unitBreakdown`
+(List satuan NON-dasar yg ikut terjual, qty MENTAH apa adanya dlm
+satuan itu sendiri — BUKAN dikonversi, ini yg jadi "keterangan"-nya).
+UI (`product_stats_screen.dart`) tampilkan value StatTile jadi "100 pcs"
++ `caption` baru "dari itu: 3 dus" kalau `unitBreakdown` tidak kosong;
+label tooltip tren ikut sertakan nama satuan. `StatTile` (`stats_common
+.dart`) dapat parameter `caption` opsional (baris kecil di bawah value).
+
+**Gotcha ditemukan saat nulis test**: `AppDatabase.beforeOpen` SUDAH
+seed `unit_types` default (`_kDefaultUnitTypes`, id 2="Pcs", id 14=
+"Dos", dkk) di SETIAP instance baru termasuk `NativeDatabase.memory()`
+test — insert `unit_types` baru dgn id manual (mis. id 1/2 sendiri)
+akan BENTROK PK dgn seed itu. Fix test: pakai `unitTypeId` yg SUDAH ada
+dari seed (2/14), jangan insert `unit_types` baru sama sekali.
+
+Test baru `detail_stats_query_test.dart` (2, revert-verified: assersi
+gagal tepat sasaran — 22 bukan 100, 1 bukan 40 — saat konversi
+dikembalikan ke SUM mentah sementara). `detail_stats_screen_test.dart`
+diperbarui (assersi `find.text('3')` → `find.text('3 satuan')`, krn
+produk uji di situ tak punya baris `product_units` sama sekali →
+fallback nama satuan "satuan"). **Kecelakaan proses sesi ini**: sempat
+salah jalankan `git checkout -- app_database.dart` utk membatalkan
+eksperimen revert-verify SEMENTARA (sengaja balikin ke SUM mentah utk
+buktikan test gagal) — perintah itu ikut membuang SEMUA perubahan fitur
+asli di file yg sama (bukan cuma eksperimen sementara), harus ditulis
+ulang dari awal. **Pelajaran: JANGAN pakai `git checkout --` utk
+undo eksperimen revert-verify kalau ada perubahan LAIN yg belum
+di-commit di file yang sama — edit manual balik (atau `git stash`)
+lebih aman.** Full suite 1165 lolos / 1 gagal (flaky pre-existing
+`proposal_unchanged_end_to_end_test.dart`, lolos terisolasi saat
+diverifikasi ulang), `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi x8 — dropdown saran
 pelanggan struk MASIH tidak bisa discroll, putaran ke-2), commit
 `2ab6a29`, versi kerja **2.19.17+42**, sudah di-push & di-merge ke
