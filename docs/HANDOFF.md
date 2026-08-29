@@ -5,10 +5,51 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 (lanjutan — tab Data Pelanggan di alat
+license generator), commit `4a49037`. Sedang di-push & di-merge ke
+`main` per instruksi user (setelah sempat ditahan lokal-saja beberapa
+giliran sebelumnya).
+
+**Konteks diskusi**: user tanya soal celah keamanan gerbang lisensi
+(uninstall+reaktivasi serial sama utk akali expired). Diklarifikasi:
+fingerprint acak 128-bit dibuat ulang tiap fresh-install & terikat
+kriptografis ke kode (`license_service.dart:116`), jadi vektor itu
+SUDAH gagal dgn sendirinya (bukan celah nyata). Dua celah residual yg
+lebih valid didiskusikan (freeze jam via base offset 1x-set, clone
+data app via tool bawaan pabrikan OEM) — BELUM dieksekusi (baru
+sebatas analisis, user pending review sebelum masuk `PLAN.md`).
+
+**Yang DIEKSEKUSI sesi ini**: ide lain user — manfaatkan
+`scripts/license-generator.html` (alat offline terpisah, TIDAK
+disentuh app) sbg tempat catat siapa saja yg sudah aktivasi, supaya
+developer tidak cuma mengandalkan ingatan/reminder manual utk lupa
+revoke. Tab baru "Data Pelanggan": form generate dapat 2 field baru
+(Nama Pelanggan/Toko + Nama Device opsional, device dipisah krn 1
+pelanggan bisa sah pakai >1 HP), tiap kode dibuat otomatis tercatat 1
+baris (localStorage key `thepos_license_customers_v1`), status Aktif/
+H-7/Lewat dihitung ulang tiap render dari `exp` (bukan disimpan),
+"Revoked" bisa ditandai manual (PENANDA LOKAL saja, TIDAK auto-nulis
+`revoked.json` — itu tetap manual terpisah), tombol Hapus per baris,
+cari/filter, ekspor CSV. Backup disatukan ke file cadangan kunci
+privat yg SUDAH ADA (field `customers` baru di JSON, backward-compat
+dgn backup lama tanpa field itu). Banner "cadangan tidak sinkron"
+muncul kalau ada perubahan sejak backup terakhir.
+
+**Cara diverifikasi**: file ini TIDAK masuk suite `flutter test` (HTML/
+JS statis di luar app) — dites manual via Playwright headless
+(`chromium` di `/opt/pw-browsers`, plus symlink `node_modules/
+playwright` krn `playwright` cuma terpasang global di node22, bukan
+lewat npm project lokal): generate keypair → isi nama/device/
+fingerprint → buat kode → baris otomatis muncul di tab → unduh
+cadangan (cek JSON ada `customers`) → toggle revoked → unduh cadangan
+lagi (`revoked:true` ikut) → impor di halaman fresh (`localStorage`
+dikosongkan) → data pelanggan pulih utuh, `revoked` ikut benar. Nol
+console/page error di semua langkah. Tidak bump `pubspec.yaml` (alat
+ini di luar build APK, tidak ikut versi rilis app).
+
 _Update sesi 29 Agustus 2026 — statistik detail produk kini konversi
 qty ke satuan dasar utk produk >1 satuan, commit `1b6dd8b`, versi kerja
-**2.19.18+43**. Belum di-push/di-merge (user minta commit lokal dulu,
-tunggu instruksi lanjut).
+**2.19.18+43**.
 
 **Konteks**: user tanya "kalau produk >1 satuan (mis. Indomie pcs/dus),
 gimana tampilnya di laporan tren penjualan produk?" — jawaban investigasi:
