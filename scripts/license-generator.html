@@ -154,8 +154,6 @@
   }
   .qr-wrap canvas { image-rendering: pixelated; }
   .qr-cap { font-size: 11.5px; color: #6b6459; text-align: center; }
-  #scanWrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 10px; }
-  #scanVideo { width: 100%; max-width: 320px; border-radius: 12px; background: #000; }
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
     background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px;
@@ -205,31 +203,6 @@
     </div>
 
     <div id="tabGenerate">
-    <div id="scanCard" class="panel hidden">
-      <div class="panel-head"><div class="panel-title">📷 Scan Serial dari HP Pelanggan</div></div>
-      <div class="panel-body">
-        <div class="hint" style="margin-top:0;">Arahkan kamera ke QR sidik jari yang tampil di layar aktivasi/
-        info-lisensi The POS — mengisi kolom di bawah otomatis, tanpa ketik manual.</div>
-        <button id="btnScanStart" class="btn wide" style="margin-top:8px;">Buka Kamera</button>
-        <div id="scanWrap" class="hidden">
-          <video id="scanVideo" autoplay playsinline muted></video>
-          <button id="btnScanStop" class="btn sm danger">Tutup Kamera</button>
-        </div>
-        <div id="scanUnsupported" class="hint hidden">Browser ini belum mendukung pemindaian QR native
-        (BarcodeDetector). Coba Chrome/Edge terbaru di Android, atau ketik sidik jari manual di bawah.</div>
-        <div id="scanInsecure" class="hint hidden" style="color:var(--red);">
-          Browser menolak izin kamera — bukan bug alat ini. Banyak browser (terutama Chrome di Android)
-          menolak otomatis TANPA menampilkan dialog izin sama sekali kalau halaman HTML dibuka langsung
-          dari file manager/Downloads (<code>file://</code>), bukan lewat alamat web.<br><br>
-          <b>Cara paling andal</b> (sekali jalan, dari folder tempat file ini disimpan):<br>
-          <span class="mono">python3 -m http.server 8000</span> (kalau ada Python) atau
-          <span class="mono">npx serve .</span> (kalau ada Node.js) — lalu buka
-          <span class="mono">http://localhost:8000/</span> di browser yang sama.<br><br>
-          Tanpa itu, ketik sidik jari manual saja di kolom bawah — tetap berfungsi normal.
-        </div>
-      </div>
-    </div>
-
     <div id="generatorCard" class="panel hidden">
       <div class="panel-head"><div class="panel-title">Buat Kode Aktivasi</div></div>
       <div class="panel-body">
@@ -282,6 +255,43 @@
           <div class="hint" style="margin-top:0;">Tercatat otomatis tiap kali kode aktivasi dibuat di tab
           sebelah. Murni catatan LOKAL di alat ini — mengubah/menghapus baris di sini TIDAK mencabut lisensi
           apa pun (itu tetap lewat <span class="mono" style="font-size:11px;">revoked.json</span> seperti biasa).</div>
+
+          <div class="row" style="margin-top:10px;">
+            <button id="btnToggleManual" class="btn" type="button">+ Tambah Manual</button>
+          </div>
+          <div id="manualAddForm" class="hidden" style="margin-top:10px; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2);">
+            <div class="hint" style="margin-top:0;">Utk pelanggan yang sudah aktivasi SEBELUM fitur pencatatan
+            ini ada — catat manual di sini, TANPA perlu generate ulang kode aktivasi.</div>
+            <label for="manualNama">Nama pelanggan / toko</label>
+            <input type="text" id="manualNama" class="inp" placeholder="mis. Toko Makmur" />
+
+            <label for="manualDevice">Nama device (opsional)</label>
+            <input type="text" id="manualDevice" class="inp" placeholder="mis. HP Kasir 1 / Xiaomi Redmi" />
+
+            <label for="manualFp">Sidik jari device (opsional — kosongkan kalau tidak tahu)</label>
+            <input type="text" id="manualFp" class="inp" placeholder="9F3A-1B22-77CE-804A-A1F0-9C3E-5B7D-2E41" />
+
+            <label for="manualExpMode">Masa berlaku</label>
+            <select id="manualExpMode" class="inp">
+              <option value="unknown" selected>Tidak diketahui / kosongkan</option>
+              <option value="date">Tanggal tertentu</option>
+              <option value="forever">Selamanya</option>
+            </select>
+            <div id="manualExpDateWrap" class="hidden">
+              <label for="manualExpDate">Tanggal habis berlaku</label>
+              <input type="date" id="manualExpDate" class="inp" />
+            </div>
+
+            <label for="manualCatatan">Catatan (opsional)</label>
+            <textarea id="manualCatatan" class="inp" rows="2"></textarea>
+            <div id="manualError" class="err hidden"></div>
+
+            <div class="row" style="margin-top:10px;">
+              <button id="btnManualSave" class="btn primary" type="button">Simpan</button>
+              <button id="btnManualCancel" class="btn" type="button">Batal</button>
+            </div>
+          </div>
+
           <input type="text" id="custSearch" class="inp" placeholder="Cari nama, device, atau fingerprint..." style="margin-top:10px;" />
           <div id="custDirtyHint" class="hint hidden" style="color:var(--accent-strong); font-weight:600;">
             Ada perubahan sejak cadangan terakhir diunduh — unduh ulang cadangan (tab kunci) supaya tidak hilang.
@@ -2672,17 +2682,17 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-function addCustomerRecord({ nama, device, fingerprint, exp }) {
+function addCustomerRecord({ nama, device, fingerprint, exp, catatan }) {
   const list = loadCustomers();
   list.unshift({
     id: uid(),
     nama: nama || '',
     device: device || '',
-    fingerprint,
-    exp,
+    fingerprint: fingerprint || '',
+    exp: exp || '',
     createdAt: new Date().toISOString(),
     revoked: false,
-    catatan: '',
+    catatan: catatan || '',
   });
   saveCustomers(list);
   customersDirtySinceBackup = true;
@@ -2770,14 +2780,12 @@ function refreshUI() {
   const record = loadStored();
   const statusEl = $('keyStatus');
   const generatorCard = $('generatorCard');
-  const scanCard = $('scanCard');
   const backupWarning = $('backupWarning');
   const downloadBtn = $('btnDownloadBackup');
 
   if (!record) {
     statusEl.innerHTML = '<span class="pill warn">Belum ada kunci</span> Klik "Buat Pasangan Kunci Baru" untuk mulai.';
     generatorCard.classList.add('hidden');
-    scanCard.classList.add('hidden');
     backupWarning.classList.add('hidden');
     downloadBtn.classList.add('hidden');
     return;
@@ -2790,12 +2798,10 @@ function refreshUI() {
 
   if (backedUpThisSession) {
     generatorCard.classList.remove('hidden');
-    scanCard.classList.remove('hidden');
     backupWarning.classList.add('hidden');
     downloadBtn.classList.add('hidden');
   } else {
     generatorCard.classList.add('hidden');
-    scanCard.classList.add('hidden');
     backupWarning.classList.remove('hidden');
     downloadBtn.classList.remove('hidden');
   }
@@ -2892,6 +2898,67 @@ $('tabBtnGenerate').addEventListener('click', () => switchTab('generate'));
 $('tabBtnCustomers').addEventListener('click', () => switchTab('customers'));
 
 $('custSearch').addEventListener('input', renderCustomersTab);
+
+function clearManualForm() {
+  $('manualNama').value = '';
+  $('manualDevice').value = '';
+  $('manualFp').value = '';
+  $('manualExpMode').value = 'unknown';
+  $('manualExpDateWrap').classList.add('hidden');
+  $('manualExpDate').value = '';
+  $('manualCatatan').value = '';
+  $('manualError').classList.add('hidden');
+}
+
+$('btnToggleManual').addEventListener('click', () => {
+  $('manualAddForm').classList.toggle('hidden');
+});
+$('btnManualCancel').addEventListener('click', () => {
+  $('manualAddForm').classList.add('hidden');
+  clearManualForm();
+});
+$('manualExpMode').addEventListener('change', () => {
+  $('manualExpDateWrap').classList.toggle('hidden', $('manualExpMode').value !== 'date');
+});
+
+$('btnManualSave').addEventListener('click', () => {
+  const errEl = $('manualError');
+  errEl.classList.add('hidden');
+
+  const nama = $('manualNama').value.trim();
+  if (!nama) {
+    errEl.textContent = 'Nama pelanggan/toko wajib diisi.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const mode = $('manualExpMode').value;
+  let exp = '';
+  if (mode === 'forever') {
+    exp = 'selamanya';
+  } else if (mode === 'date') {
+    const dateVal = $('manualExpDate').value;
+    if (!dateVal) {
+      errEl.textContent = 'Isi tanggal habis berlaku, atau pilih "Tidak diketahui".';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    exp = new Date(dateVal + 'T00:00:00').toISOString();
+  }
+  // mode === 'unknown' -> exp dibiarkan '' (expStatus merender '-').
+
+  addCustomerRecord({
+    nama,
+    device: $('manualDevice').value.trim(),
+    fingerprint: $('manualFp').value.trim().replace(/[^0-9a-fA-F]/g, '').toLowerCase(),
+    exp,
+    catatan: $('manualCatatan').value.trim(),
+  });
+
+  $('manualAddForm').classList.add('hidden');
+  clearManualForm();
+  showToast('Data pelanggan ditambahkan');
+});
 
 $('custTableBody').addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
@@ -3044,89 +3111,6 @@ $('btnCopyCode').addEventListener('click', async () => {
     showToast('Kode disalin');
   }
 });
-
-// ── SCAN QR SERIAL — BarcodeDetector native (mesin ML Kit yang sama
-//    dgn mobile_scanner Flutter di Chrome Android — bukan pure-JS lemah). ──
-let _scanStream = null;
-let _scanRAF = null;
-
-async function stopScan() {
-  if (_scanRAF) { cancelAnimationFrame(_scanRAF); _scanRAF = null; }
-  if (_scanStream) { _scanStream.getTracks().forEach(t => t.stop()); _scanStream = null; }
-  $('scanWrap').classList.add('hidden');
-  $('btnScanStart').classList.remove('hidden');
-}
-
-async function startScan() {
-  if (!('BarcodeDetector' in window)) {
-    $('scanUnsupported').classList.remove('hidden');
-    return;
-  }
-  // Kamera (getUserMedia) cuma diizinkan browser di "secure context"
-  // (https:// atau http://localhost) — file:// SELALU ditolak walau
-  // BarcodeDetector-nya sendiri didukung. Dicek DULU, sebelum minta izin,
-  // supaya errornya jelas ("dibuka lewat file, bukan bug") — bukan cuma
-  // "Permission denied" mentah dari browser yang membingungkan.
-  if (!window.isSecureContext) {
-    $('scanInsecure').classList.remove('hidden');
-    return;
-  }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    $('scanInsecure').classList.remove('hidden');
-    return;
-  }
-  try {
-    const formats = await window.BarcodeDetector.getSupportedFormats();
-    if (!formats.includes('qr_code')) {
-      $('scanUnsupported').classList.remove('hidden');
-      return;
-    }
-    const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-    _scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' },
-    });
-    const video = $('scanVideo');
-    video.srcObject = _scanStream;
-    $('btnScanStart').classList.add('hidden');
-    $('scanWrap').classList.remove('hidden');
-
-    const tick = async () => {
-      if (!_scanStream) return;
-      try {
-        const codes = await detector.detect(video);
-        if (codes.length) {
-          const raw = codes[0].rawValue.trim();
-          const cleanFp = raw.replace(/[^0-9a-fA-F]/g, '').toLowerCase();
-          if (cleanFp.length === 32) {
-            $('fpInput').value = raw;
-            $('fpError').classList.add('hidden');
-            showToast('Sidik jari terbaca dari QR');
-            await stopScan();
-            return;
-          }
-        }
-      } catch (_) { /* frame gagal didecode — coba lagi frame berikutnya */ }
-      _scanRAF = requestAnimationFrame(tick);
-    };
-    _scanRAF = requestAnimationFrame(tick);
-  } catch (err) {
-    // "NotAllowedError" di sini SERING BUKAN berarti user menolak izin
-    // lewat dialog — banyak browser (terutama Chrome Android) menolak
-    // otomatis TANPA pernah menampilkan dialog izin sama sekali kalau
-    // halamannya dibuka lewat file:// langsung dari file manager/Downloads.
-    // Arahkan ke fix praktis (localhost) alih-alih toast generik yang
-    // bikin bingung ("kok padahal saya belum sempat menolak apa-apa").
-    if (err.name === 'NotAllowedError' || err.name === 'NotFoundError') {
-      $('scanInsecure').classList.remove('hidden');
-    } else {
-      showToast('Gagal buka kamera: ' + err.message);
-    }
-    await stopScan();
-  }
-}
-
-$('btnScanStart').addEventListener('click', startScan);
-$('btnScanStop').addEventListener('click', stopScan);
 
 (async function init() {
   const supported = window.crypto && window.crypto.subtle;
