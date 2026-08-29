@@ -5,6 +5,33 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 (lanjutan lagi x3 — panel DEBUG sementara
+utk verifikasi manual binding ANDROID_ID di HP asli, user tidak punya
+laptop/adb), commit blm di-push (nunggu langkah push+merge). **PENTING
+UTK SESI DEPAN: kalau user bilang hasil test SUDAH dikonfirmasi
+berhasil, WAJIB hapus panel debug ini** — jangan biarkan menumpuk di
+`main`, itu janji eksplisit yang dibuat ke user sebelum eksekusi.
+
+Yang ditambahkan (murni utk 1x pemakaian test manual, BUKAN fitur
+rilis): `device_license_screen.dart` dapat seksi baru "Debug — Binding
+Device (hapus setelah test)" — tampil ANDROID_ID yang berhasil dibaca
+`DeviceIdService.getAndroidId()` + 2 tombol: "Simulasikan Device Lain"
+(timpa `license_android_id` tersimpan dgn nilai palsu lalu paksa
+`load()` ulang — persis efek clone data ke device fisik lain, tanpa
+perlu HP kedua/adb) dan "Reset" (hapus baseline simulasi, `load()`
+berikutnya rekam ulang device asli sbg baseline sah). 2 method baru di
+`LicenseNotifier`: `debugSimulateDeviceMismatch()`/
+`debugResetDeviceBinding()`, ditandai jelas blok komentar "DEBUG
+SEMENTARA ... HAPUS setelah dikonfirmasi". TIDAK ditambahkan test
+permanen (kodenya sendiri memang mau dihapus lagi) — dicoba smoke test
+manual sekali lewat widget test throwaway (tidak disimpan ke repo),
+sempat ke-interrupt di tengah jalan tapi logic-nya trivial (cuma
+`prefs.setString`/`prefs.remove` + panggil `load()` yang SUDAH
+teruji lengkap di `license_device_binding_load_test.dart`) — risiko
+rendah. Tidak bump versi (bukan rilis, murni alat bantu test
+sementara). `flutter analyze` 0 issue, `device_license_screen_test.dart`
+tetap lolos (4/4, tidak ada assersi count yang kena panel baru ini).
+
 _Update sesi 29 Agustus 2026 (lanjutan lagi x2 — 2 lapis deteksi baru
 gerbang lisensi: manipulasi jam base-offset + clone device fisik),
 commit `a539f0b`, versi kerja **2.19.19+44**, di-push & di-merge ke
