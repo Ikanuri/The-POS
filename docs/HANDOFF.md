@@ -5,6 +5,56 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 — statistik detail produk kini konversi
+qty ke satuan dasar utk produk >1 satuan, commit `1b6dd8b`, versi kerja
+**2.19.18+43**. Belum di-push/di-merge (user minta commit lokal dulu,
+tunggu instruksi lanjut).
+
+**Konteks**: user tanya "kalau produk >1 satuan (mis. Indomie pcs/dus),
+gimana tampilnya di laporan tren penjualan produk?" — jawaban investigasi:
+`getProductStatsSummary`/`getProductDailySales` (`app_database.dart`)
+cuma `SUM(ti.qty)` mentah digabung lintas SEMUA satuan tanpa konversi
+(2 dus + 20 pcs = "22", padahal 1 dus bisa puluhan pcs) — bukan bug yg
+dilaporkan sebelumnya, murni ditemukan pas baca kode. User lalu minta
+fix: total dikonversi ke satuan DASAR, plus keterangan satuan lain yg
+ikut terjual.
+
+**Fix**: `qtySold` (ringkasan & tiap titik tren harian) dikonversi ke
+satuan dasar (`ti.qty * ratioToBase`, via `LEFT JOIN product_units`,
+fallback ratio 1.0 kalau `product_unit_id` tak ketemu/`ratioToBase`
+tak valid). `ProductStatsSummary` dapat 2 field baru: `unitName`
+(nama satuan dasar, helper baru `_baseUnitNameOf`) & `unitBreakdown`
+(List satuan NON-dasar yg ikut terjual, qty MENTAH apa adanya dlm
+satuan itu sendiri — BUKAN dikonversi, ini yg jadi "keterangan"-nya).
+UI (`product_stats_screen.dart`) tampilkan value StatTile jadi "100 pcs"
++ `caption` baru "dari itu: 3 dus" kalau `unitBreakdown` tidak kosong;
+label tooltip tren ikut sertakan nama satuan. `StatTile` (`stats_common
+.dart`) dapat parameter `caption` opsional (baris kecil di bawah value).
+
+**Gotcha ditemukan saat nulis test**: `AppDatabase.beforeOpen` SUDAH
+seed `unit_types` default (`_kDefaultUnitTypes`, id 2="Pcs", id 14=
+"Dos", dkk) di SETIAP instance baru termasuk `NativeDatabase.memory()`
+test — insert `unit_types` baru dgn id manual (mis. id 1/2 sendiri)
+akan BENTROK PK dgn seed itu. Fix test: pakai `unitTypeId` yg SUDAH ada
+dari seed (2/14), jangan insert `unit_types` baru sama sekali.
+
+Test baru `detail_stats_query_test.dart` (2, revert-verified: assersi
+gagal tepat sasaran — 22 bukan 100, 1 bukan 40 — saat konversi
+dikembalikan ke SUM mentah sementara). `detail_stats_screen_test.dart`
+diperbarui (assersi `find.text('3')` → `find.text('3 satuan')`, krn
+produk uji di situ tak punya baris `product_units` sama sekali →
+fallback nama satuan "satuan"). **Kecelakaan proses sesi ini**: sempat
+salah jalankan `git checkout -- app_database.dart` utk membatalkan
+eksperimen revert-verify SEMENTARA (sengaja balikin ke SUM mentah utk
+buktikan test gagal) — perintah itu ikut membuang SEMUA perubahan fitur
+asli di file yg sama (bukan cuma eksperimen sementara), harus ditulis
+ulang dari awal. **Pelajaran: JANGAN pakai `git checkout --` utk
+undo eksperimen revert-verify kalau ada perubahan LAIN yg belum
+di-commit di file yang sama — edit manual balik (atau `git stash`)
+lebih aman.** Full suite 1165 lolos / 1 gagal (flaky pre-existing
+`proposal_unchanged_end_to_end_test.dart`, lolos terisolasi saat
+diverifikasi ulang), `flutter analyze` 0 issue.
+
 _Update sesi 23 Agustus 2026 (lanjutan lagi x8 — dropdown saran
 pelanggan struk MASIH tidak bisa discroll, putaran ke-2), commit
 `2ab6a29`, versi kerja **2.19.17+42**, sudah di-push & di-merge ke
