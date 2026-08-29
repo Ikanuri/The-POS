@@ -3,6 +3,7 @@ package com.thepos.the_pos
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -15,6 +16,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "com.thepos/bt_print"
         private const val CRASH_CHANNEL = "com.thepos/crash_log"
+        private const val DEVICE_ID_CHANNEL = "com.thepos/device_id"
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private const val TAG = "BtPrint"
     }
@@ -83,6 +85,24 @@ class MainActivity : FlutterActivity() {
                     "clearDownloads" -> {
                         CrashLogWriter.clearDownloads(applicationContext)
                         result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // Susulan Item 25c (binding device fisik, gerbang lisensi) —
+        // ANDROID_ID unik per (device fisik + signing key app), TIDAK ikut
+        // ter-copy walau data privat app disalin ke device lain lewat tools
+        // "Pindah Data" bawaan pabrikan (beda dari fingerprint acak yang
+        // cuma tersimpan di SharedPreferences biasa). Lihat
+        // `DeviceIdService` (Dart) & `LicenseNotifier._checkDeviceBinding`.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_ID_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getAndroidId" -> {
+                        val id = Settings.Secure.getString(
+                            contentResolver, Settings.Secure.ANDROID_ID)
+                        result.success(id)
                     }
                     else -> result.notImplemented()
                 }
