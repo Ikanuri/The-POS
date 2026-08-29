@@ -413,33 +413,6 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
     }
   }
 
-  // ═══════════════════ DEBUG SEMENTARA (Item 25c susulan) ═══════════════════
-  // Dipakai `device_license_screen.dart` utk memverifikasi binding ANDROID_ID
-  // di device fisik ASLI tanpa alat developer (adb/laptop) — user tidak
-  // punya laptop, jadi ini cara satu-satunya "clone device" bisa dites
-  // langsung dari HP. HAPUS kedua method ini + tombolnya di UI setelah user
-  // mengonfirmasi hasil test berhasil (lihat diskusi sesi 29 Agustus 2026).
-
-  /// Timpa baseline ANDROID_ID tersimpan dgn nilai palsu lalu paksa
-  /// pengecekan ulang — mensimulasikan persis situasi "data lisensi
-  /// dipindah ke device fisik lain" (nilai tersimpan ≠ ANDROID_ID device
-  /// sekarang) tanpa perlu clone sungguhan ke HP kedua.
-  Future<void> debugSimulateDeviceMismatch() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kAndroidId, 'debug-simulasi-device-lain');
-    await load();
-  }
-
-  /// Hapus baseline yang disimulasikan — `load()` berikutnya merekam ulang
-  /// ANDROID_ID device sekarang sbg baseline sah, balik normal tanpa perlu
-  /// install ulang app.
-  Future<void> debugResetDeviceBinding() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kAndroidId);
-    await load();
-  }
-  // ═══════════════════════════════════════════════════════════════════════
-
   Future<void> _checkRevocation() async {
     final live = await _fetchLiveStatus(state.fingerprint);
     // Gagal-diam — offline/timeout, jangan pernah blokir fungsi inti.

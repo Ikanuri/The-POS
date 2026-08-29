@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/providers/license_provider.dart';
-import '../../core/services/device_id_service.dart';
 import '../../core/services/license_service.dart';
 
 // Locale 'id' TIDAK pernah di-initializeDateFormatting di app ini —
@@ -126,102 +125,6 @@ class DeviceLicenseScreen extends ConsumerWidget {
                   ),
               ],
             ),
-          ),
-          // ═══════ DEBUG SEMENTARA (Item 25c susulan) — HAPUS setelah
-          // dikonfirmasi lolos test manual di device fisik. Lihat dok
-          // `LicenseNotifier.debugSimulateDeviceMismatch`/
-          // `debugResetDeviceBinding`. ═══════
-          const _SectionLabel('Debug — Binding Device (hapus setelah test)'),
-          _Panel(child: _DebugDeviceBindingPanel(scheme: scheme)),
-        ],
-      ),
-    );
-  }
-}
-
-/// DEBUG SEMENTARA — lihat dok di titik pemanggilan.
-class _DebugDeviceBindingPanel extends ConsumerStatefulWidget {
-  const _DebugDeviceBindingPanel({required this.scheme});
-  final ColorScheme scheme;
-
-  @override
-  ConsumerState<_DebugDeviceBindingPanel> createState() =>
-      _DebugDeviceBindingPanelState();
-}
-
-class _DebugDeviceBindingPanelState
-    extends ConsumerState<_DebugDeviceBindingPanel> {
-  String? _androidId;
-  bool _loadingId = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAndroidId();
-  }
-
-  Future<void> _loadAndroidId() async {
-    final id = await DeviceIdService.getAndroidId();
-    if (!mounted) return;
-    setState(() {
-      _androidId = id;
-      _loadingId = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = widget.scheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('ANDROID_ID terbaca dari channel native:',
-              style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
-          const SizedBox(height: 4),
-          Text(
-            _loadingId
-                ? 'Membaca...'
-                : (_androidId ?? '(gagal/null — channel error atau bukan Android)'),
-            style: const TextStyle(fontSize: 13, fontFeatures: [
-              FontFeature.tabularFigures(),
-            ]),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () async {
-                    await ref
-                        .read(licenseProvider.notifier)
-                        .debugSimulateDeviceMismatch();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text(
-                            'Baseline ditimpa palsu — app seharusnya '
-                            'langsung terkunci (cek layar Kasir/restart app)')));
-                  },
-                  child: const Text('Simulasikan Device Lain'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () async {
-                    await ref
-                        .read(licenseProvider.notifier)
-                        .debugResetDeviceBinding();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Baseline direset ke device ini — '
-                            'kembali normal')));
-                  },
-                  child: const Text('Reset'),
-                ),
-              ),
-            ],
           ),
         ],
       ),
