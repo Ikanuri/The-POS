@@ -88,4 +88,52 @@ void main() {
 
     expect(notifier.state.deviceMismatch, isFalse);
   });
+
+  group(
+      'LicenseNotifier.rebindDeviceId — bug produksi ditemukan user (real '
+      'device): reaktivasi valid dulu TIDAK PERNAH membersihkan '
+      'deviceMismatch, device jujur bisa terkunci PERMANEN', () {
+    test(
+        'device SUDAH ter-flag mismatch, tapi reaktivasi (disimulasikan via '
+        'rebindDeviceId) berhasil baca ANDROID_ID sekarang → baseline '
+        'ditimpa & deviceMismatch dibersihkan', () async {
+      SharedPreferences.setMockInitialValues(
+          {'license_android_id': 'device-lama-palsu'});
+      mockAndroidId('device-real-sekarang');
+
+      final notifier = LicenseNotifier();
+      await notifier.load(); // deviceMismatch jadi true (baseline beda)
+      expect(notifier.state.deviceMismatch, isTrue,
+          reason: 'prasyarat skenario: device HARUS sudah terkunci dulu');
+
+      final prefs = await SharedPreferences.getInstance();
+      final newMismatch = await notifier.rebindDeviceId(prefs);
+
+      expect(newMismatch, isFalse,
+          reason: 'ini yang dulu TIDAK terjadi — reaktivasi valid harus '
+              'membuka gerbang lagi, bukan terkunci selamanya');
+      expect(prefs.getString('license_android_id'), 'device-real-sekarang',
+          reason: 'baseline direkam ulang ke device yang SEDANG dipakai');
+    });
+
+    test(
+        'ANDROID_ID gagal terbaca saat rebind (mis. error channel) → '
+        'fail-open, pertahankan status deviceMismatch LAMA apa adanya '
+        '(tidak diam-diam disimpulkan aman)', () async {
+      SharedPreferences.setMockInitialValues(
+          {'license_android_id': 'device-lama-palsu'});
+      mockAndroidId('device-real-sekarang');
+      final notifier = LicenseNotifier();
+      await notifier.load();
+      expect(notifier.state.deviceMismatch, isTrue);
+
+      mockAndroidIdThrows(); // channel tiba2 error pas rebind dipanggil
+      final prefs = await SharedPreferences.getInstance();
+      final newMismatch = await notifier.rebindDeviceId(prefs);
+
+      expect(newMismatch, isTrue,
+          reason: 'gagal baca -> pertahankan status lama (masih true), '
+              'BUKAN diasumsikan false begitu saja');
+    });
+  });
 }
