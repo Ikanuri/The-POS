@@ -5,10 +5,26 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 (lanjutan lagi — buang fitur scan kamera
++ tambah opsi input manual di tab Data Pelanggan), commit `d3299d4`,
+di-push & di-merge ke `main`.
+
+**Scan kamera dibuang**: fitur scan QR sidik jari via `BarcodeDetector`
+("Scan Serial dari HP Pelanggan") dibuang total dari
+`scripts/license-generator.html` — dilaporkan user sudah tidak
+berfungsi. Ketik manual fingerprint (field yang sudah ada) tidak
+terpengaruh, tetap jalan normal.
+
+**Input manual Data Pelanggan**: tombol "+ Tambah Manual" di tab Data
+Pelanggan — form catat pelanggan LANGSUNG (nama wajib, device/
+fingerprint/masa-berlaku/catatan semua opsional) TANPA lewat alur
+generate kode aktivasi. Alasan: user sudah punya pelanggan yang
+aktivasi SEBELUM fitur pencatatan ada, tidak mau/perlu generate ulang
+serial cuma utk masuk daftar. `addCustomerRecord` diperluas terima
+`catatan` opsional (dipakai bareng oleh alur generate maupun manual).
+
 _Update sesi 29 Agustus 2026 (lanjutan — tab Data Pelanggan di alat
-license generator), commit `4a49037`. Sedang di-push & di-merge ke
-`main` per instruksi user (setelah sempat ditahan lokal-saja beberapa
-giliran sebelumnya).
+license generator), commit `4a49037`.
 
 **Konteks diskusi**: user tanya soal celah keamanan gerbang lisensi
 (uninstall+reaktivasi serial sama utk akali expired). Diklarifikasi:
