@@ -5,9 +5,29 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 (lanjutan lagi x5 — hapus panel debug
+binding device, DIKONFIRMASI user), commit `bbbd4f4`, di-push &
+di-merge ke `main`. **Insiden device produksi user (entri x4 di bawah)
+SUDAH SELESAI & DIKONFIRMASI**: user update ke build fix, masukkan
+ulang kode aktivasi yang sama, device terbuka normal — tidak perlu
+tindak lanjut lagi.
+
+Panel debug "Debug — Binding Device" (tampil ANDROID_ID + tombol
+"Simulasikan Device Lain"/"Reset") sudah dihapus total dari
+`device_license_screen.dart`, sesuai janji sesi sebelumnya. Method
+`LicenseNotifier.debugSimulateDeviceMismatch()`/
+`debugResetDeviceBinding()` ikut dihapus. **Logic inti fitur binding
+device TETAP AKTIF & TIDAK berubah** — `computeDeviceMismatch`,
+`rebindDeviceId`, `_checkDeviceBinding` semua masih ada persis seperti
+sebelumnya, cuma UI/method debug sementaranya yang hilang. Test
+permanen (`license_service_test.dart`/
+`license_device_binding_load_test.dart`) tetap menutupi logic inti ini
+tanpa perlu panel debug. Full suite 1183 lolos / 0 gagal, `flutter
+analyze` 0 issue.
+
 _Update sesi 29 Agustus 2026 (lanjutan lagi x4 — fix BUG PRODUKSI:
 reaktivasi valid tidak membuka device ter-flag deviceMismatch), commit
-`d2f3c6b`, versi kerja **2.19.20+45**, di-push & di-merge ke `main`.
+`d2f3c6b`, versi kerja **2.19.20+45**.
 
 **Kronologi insiden (device PRODUKSI user, data riil, bukan testing)**:
 user test panel debug binding device (entri di bawah) → device benar
