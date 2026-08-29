@@ -5,9 +5,66 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 29 Agustus 2026 (lanjutan lagi x4 — fix BUG PRODUKSI:
+reaktivasi valid tidak membuka device ter-flag deviceMismatch), commit
+`d2f3c6b`, versi kerja **2.19.20+45**, di-push & di-merge ke `main`.
+
+**Kronologi insiden (device PRODUKSI user, data riil, bukan testing)**:
+user test panel debug binding device (entri di bawah) → device benar
+terkunci (`deviceMismatch=true`, sesuai harapan). User coba pulihkan
+lewat "Hapus Data" di Setelan HP, tapi ternyata TIDAK mereset
+`license_fingerprint` (atau user belum coba fingerprint baru) — jadi
+coba reaktivasi pakai kode LAMA yang masih sama fingerprint-nya. Kode
+diterima secara kriptografis TAPI device tetap ke-redirect ke layar
+Aktivasi berulang-ulang — user (tepat) curiga ini bug, bukan expected
+behavior.
+
+**Root cause**: `activate()` (sebelum fix ini) sama sekali tidak
+menyentuh `deviceMismatch`/baseline `license_android_id` — cuma urus
+`revoked`/`exp`/`lastSeen`/`activatedAt`. Sekali `deviceMismatch=true`
+(dari `_checkDeviceBinding` di `load()`), TIDAK ADA jalan normal utk
+membersihkannya lagi selain lewat tombol debug yang (ironisnya) TIDAK
+BISA dijangkau begitu app sudah terkunci (layar Aktivasi tidak py link
+ke Pengaturan). Kalau ini kejadian ke pelanggan JUJUR (skenario paling
+realistis: ANDROID_ID BISA berubah krn update OS besar/factory reset
+resmi di beberapa OEM, BUKAN cuma krn clone) — mereka terkunci PERMANEN
+tanpa jalan keluar dari dalam app sama sekali. Bug ini murni akibat sesi
+sebelumnya lupa memikirkan "bagaimana cara device yang sudah ter-flag
+bisa pulih lewat jalur normal" saat merancang fitur binding-nya.
+
+**Fix**: `LicenseNotifier.rebindDeviceId(prefs)` (method baru, PUBLIC +
+`@visibleForTesting` — bukan private, krn `activate()` sendiri TIDAK
+BISA ditest end-to-end tanpa private key produksi asli yg memang
+sengaja tidak pernah ada di repo, jadi logic-nya diekstrak keluar
+supaya testable terpisah) dipanggil dari `activate()` SETELAH kode
+terverifikasi valid & lolos cek revoked — merekam ULANG baseline
+ANDROID_ID ke device yang SEDANG dipakai & set `deviceMismatch=false`.
+Fail-open kalau gagal baca ANDROID_ID (pertahankan status lama, bukan
+diasumsikan aman).
+
+**Trade-off yang disadari & disampaikan eksplisit ke user**: device
+hasil clone SEKARANG bisa membuka diri lagi asalkan pemegangnya JUGA
+punya kode aktivasi yang masih valid (belum revoked/expired) — user
+menerima ini krn beda kelas ancaman dari yang jadi concern awal
+("clone diam-diam TANPA jejak apa pun, developer tidak pernah tahu").
+Reaktivasi tetap butuh langkah aktif & kode sah, masih ada sinyal.
+
+**Yang belum diselesaikan di sesi ini (menunggu tindak lanjut user)**:
+device produksi user MASIH terkunci saat commit ini ditulis — user
+perlu update ke build baru (versi kerja di atas) lalu masukkan ULANG
+kode aktivasi yang SAMA yang sudah mereka punya (fingerprint tidak
+berubah krn tidak di-uninstall) — dengan fix ini, seharusnya langsung
+terbuka tanpa perlu Hapus Data/kode baru sama sekali. **Verifikasi ini
+BELUM dikonfirmasi user** — cek respons user sesi berikutnya.
+
+Test baru (2, revert-verified) di `license_device_binding_load_test.
+dart` menguji `rebindDeviceId` langsung (bukan lewat `activate()` yg
+butuh private key produksi). Full suite 1183 lolos / 0 gagal (kebetulan
+tidak kena flaky pre-existing sesi ini), `flutter analyze` 0 issue.
+
 _Update sesi 29 Agustus 2026 (lanjutan lagi x3 — panel DEBUG sementara
 utk verifikasi manual binding ANDROID_ID di HP asli, user tidak punya
-laptop/adb), commit blm di-push (nunggu langkah push+merge). **PENTING
+laptop/adb), commit `f18c8db`. **PENTING
 UTK SESI DEPAN: kalau user bilang hasil test SUDAH dikonfirmasi
 berhasil, WAJIB hapus panel debug ini** — jangan biarkan menumpuk di
 `main`, itu janji eksplisit yang dibuat ke user sebelum eksekusi.

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -296,6 +297,22 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
   /// beda dari `_checkRevocation()` rutin yang sengaja fail-open, di sini
   /// kita tidak boleh diam-diam membuka device yang sedang dicurigai
   /// revoked hanya karena jaringan kebetulan mati).
+  ///
+  /// **Susulan ke-2 (bug produksi ditemukan user, real device)**: binding
+  /// `ANDROID_ID` (`_checkDeviceBinding`, dicek di `load()`) TIDAK pernah
+  /// direset di sini sebelumnya — begitu `deviceMismatch` sekali ter-set
+  /// true (mis. ANDROID_ID device berubah krn update OS/factory reset
+  /// resmi, BUKAN cuma skenario clone), reaktivasi dgn kode VALID sekalipun
+  /// tidak membuka gerbang lagi (baseline lama tetap beda dari device
+  /// sekarang selamanya) — pelanggan JUJUR bisa terkunci PERMANEN tanpa
+  /// jalan keluar dari dalam app. Fix: aktivasi BERHASIL sekarang jadi
+  /// titik "percaya ulang" — baseline ANDROID_ID direkam ULANG ke device
+  /// yang SEDANG dipakai (tanpa syarat, menimpa baseline lama), status
+  /// `deviceMismatch` ikut dibersihkan. Trade-off yang disadari: device
+  /// hasil clone BISA membuka diri lagi kalau pemegangnya JUGA punya kode
+  /// yang masih valid (belum revoked/expired) — beda kelas ancaman dari
+  /// "clone diam-diam tanpa jejak apa pun" yang jadi concern awal fitur
+  /// ini; reaktivasi tetap butuh langkah aktif & kode sah, tetap ada sinyal.
   Future<LicenseVerifyResult> activate(String code) async {
     final result = await LicenseService.verify(
       code,
@@ -323,13 +340,34 @@ class LicenseNotifier extends StateNotifier<LicenseState> {
       activatedAt = now;
       await prefs.setString(_kActivatedAt, now.toIso8601String());
     }
+
+    final deviceMismatch = await rebindDeviceId(prefs);
+
     state = state.copyWith(
       exp: result.payload!.exp,
       lastSeen: now,
       revoked: false,
       activatedAt: activatedAt,
+      deviceMismatch: deviceMismatch,
     );
     return result;
+  }
+
+  /// Rebind baseline ANDROID_ID ke device yang SEDANG dipakai (dipanggil
+  /// dari [activate] saat reaktivasi berhasil — lihat dok di sana). Public
+  /// (`@visibleForTesting`) & diekstrak terpisah dari [activate] supaya
+  /// testable TANPA perlu kode aktivasi valid sungguhan (private key
+  /// produksi tidak pernah ada di repo, jadi `activate()` end-to-end tidak
+  /// bisa ditest langsung). Return: `deviceMismatch` BARU yang seharusnya
+  /// dipakai (false kalau rebind berhasil; nilai LAMA `state.deviceMismatch`
+  /// apa adanya kalau gagal baca ANDROID_ID — fail-open, konsisten dgn
+  /// `_checkDeviceBinding`).
+  @visibleForTesting
+  Future<bool> rebindDeviceId(SharedPreferences prefs) async {
+    final current = await DeviceIdService.getAndroidId();
+    if (current == null || current.isEmpty) return state.deviceMismatch;
+    await prefs.setString(_kAndroidId, current);
+    return false;
   }
 
   /// Ambil status revoked & indikasi manipulasi jam TERKINI dari SATU fetch
