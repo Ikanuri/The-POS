@@ -73,7 +73,9 @@ void main() {
         reason: 'baris tab Produk dulu BUNTU — sekarang harus membuka '
             'layar statistik detail');
     // Ringkasan produk terisi dari data uji (3 terjual, omzet 30.000).
-    expect(find.text('3'), findsWidgets);
+    // "satuan" krn produk uji tak punya baris `product_units` (fallback
+    // nama satuan dasar, lihat dok `AppDatabase._baseUnitNameOf`).
+    expect(find.text('3 satuan'), findsWidgets);
     expect(find.text(formatRupiah(30000)), findsWidgets);
 
     await _drain(tester);

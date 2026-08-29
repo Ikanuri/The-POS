@@ -80,11 +80,17 @@ class StatTile extends StatelessWidget {
     required this.label,
     required this.value,
     this.color,
+    this.caption,
   });
 
   final String label;
   final String value;
   final Color? color;
+
+  /// Keterangan kecil di bawah [value] — dipakai layar produk utk
+  /// merinci satuan non-dasar yang ikut terjual (mis. "dari itu: 3 dus").
+  /// Null = tidak ada baris tambahan.
+  final String? caption;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +114,15 @@ class StatTile extends StatelessWidget {
               style: AppTheme.numStyle(context,
                   size: 15, weight: FontWeight.w700, color: color),
             ),
+            if (caption != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                caption!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+              ),
+            ],
           ],
         ),
       ),

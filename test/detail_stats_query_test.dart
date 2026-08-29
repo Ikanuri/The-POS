@@ -51,17 +51,41 @@ Future<void> _item(
   required double qty,
   required int price,
   int cost = 0,
+  String? productUnitId,
 }) async {
   await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
         id: id,
         transactionId: txId,
         productId: productId,
-        productUnitId: 'u-$productId',
+        productUnitId: productUnitId ?? 'u-$productId',
         qty: qty,
         priceAtSale: price,
         originalPrice: price,
         costAtSale: Value(cost),
         subtotal: (price * qty).round(),
+      ));
+}
+
+/// Siapkan satu produk dgn 2 satuan: dasar ("Pcs", rasio 1) + non-dasar
+/// ("Dos", rasio [dusRatio] pcs per dos) — dipakai tes konversi qty lintas
+/// satuan (Item 63). Pakai `unitTypeId` yg SUDAH ada dari seed default
+/// (`_kDefaultUnitTypes` di `AppDatabase.beforeOpen`, id 2 = "Pcs", id 14 =
+/// "Dos") — jangan insert `unit_types` baru, akan bentrok PK dgn seed itu.
+Future<void> _productWithUnits(String productId, {double dusRatio = 40}) async {
+  await _product(productId, 'Indomie');
+  await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+        id: 'u-$productId-base',
+        productId: productId,
+        unitTypeId: const Value(2),
+        isBaseUnit: const Value(true),
+        ratioToBase: const Value(1.0),
+      ));
+  await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+        id: 'u-$productId-dus',
+        productId: productId,
+        unitTypeId: const Value(14),
+        isBaseUnit: const Value(false),
+        ratioToBase: Value(dusRatio),
       ));
 }
 
@@ -87,6 +111,55 @@ void main() {
       expect(s.txCount, 2,
           reason: '2 NOTA, walau ada 3 baris item — satu nota bisa memuat '
               'produk sama beberapa kali dgn satuan berbeda');
+    });
+
+    test(
+        'qty terjual lintas satuan DIKONVERSI ke satuan dasar (bukan '
+        'dijumlah mentah) + satuan non-dasar terdaftar di unitBreakdown',
+        () async {
+      await _productWithUnits('p1', dusRatio: 40);
+      await _tx('t1', total: 100000, at: DateTime(2026, 3, 1));
+      // 2 dus (@40 pcs) + 20 pcs langsung -> total dasar harus 100 pcs,
+      // BUKAN 22 (2 dus + 20 pcs dijumlah mentah tanpa konversi).
+      await _item('i1',
+          txId: 't1',
+          productId: 'p1',
+          qty: 2,
+          price: 10000,
+          productUnitId: 'u-p1-dus');
+      await _item('i2',
+          txId: 't1',
+          productId: 'p1',
+          qty: 20,
+          price: 10000,
+          productUnitId: 'u-p1-base');
+
+      final s = await db.getProductStatsSummary('p1', _from, _to);
+      expect(s.qtySold, 100,
+          reason: '2 dus x 40 pcs/dus + 20 pcs = 100 pcs (satuan dasar)');
+      expect(s.unitName, 'Pcs');
+      expect(s.unitBreakdown, hasLength(1));
+      expect(s.unitBreakdown.single.unitName, 'Dos');
+      expect(s.unitBreakdown.single.qty, 2,
+          reason: 'unitBreakdown pakai qty MENTAH dlm satuan itu sendiri '
+              '(2 dos), bukan hasil konversi');
+    });
+
+    test('tren harian qty lintas satuan juga dikonversi ke satuan dasar',
+        () async {
+      await _productWithUnits('p1', dusRatio: 40);
+      await _tx('t1', total: 100000, at: DateTime(2026, 3, 1));
+      await _item('i1',
+          txId: 't1',
+          productId: 'p1',
+          qty: 1,
+          price: 10000,
+          productUnitId: 'u-p1-dus');
+
+      final daily = await db.getProductDailySales('p1', _from, _to);
+      expect(daily, hasLength(1));
+      expect(daily.single.qty, 40,
+          reason: '1 dus x 40 pcs/dus = 40 pcs, bukan 1');
     });
 
     test('nota void TIDAK dihitung', () async {
