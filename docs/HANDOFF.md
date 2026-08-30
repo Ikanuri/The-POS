@@ -5,6 +5,62 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 30 Agustus 2026 — 3 penyesuaian yang user minta jawaban
+dulu sebelum coding ("Jawab dulu, jangan coding dulu"), lalu semuanya
+dieksekusi sekaligus ("Kerjakan semua"). Commit `6a5444f`/`4cfebd5`/
+`ba3c9b1`, versi kerja **2.19.21+46**, sudah di-push (belum di-merge ke
+`main` — cek instruksi user sesi berikutnya).
+
+**1. Chart Penjualan Per Jam (Ringkasan) — tap-to-pin** (`6a5444f`):
+rincian per-jam sekarang dibuka via TAP (bukan tekan-tahan `Tooltip`
+bawaan yang otomatis hilang), permanen sampai tap bar lain/tap area
+lain/scroll. State di `_pinnedHourProvider` (provider-level, BUKAN
+`setState` lokal) krn kedua pemicu "tutup" berasal dari widget leluhur
+`_HourlyChart` (`RingkasanScreen`/`_RingkasanBody`), bukan dari
+`_HourlyChart` sendiri — lihat dok di file itu kalau mau paham
+kenapa arsitekturnya begini. Tiap bar dapat `ValueKey('hour_bar_$h')`
+murni utk testability.
+
+**2. Toggle auto-disconnect printer setelah cetak** (`4cfebd5`):
+`PrinterSettings.autoDisconnectAfterPrint` baru, default **FALSE**
+(perilaku lama "tetap tersambung" dipertahankan — user EKSPLISIT minta
+kedua perilaku tetap bisa dipilih, bukan diganti paksa, krn tidak semua
+toko pakai >1 device BT). Toggle di Pengaturan > Printer Bluetooth >
+seksi baru "Koneksi Printer". Ketiga fungsi cetak lewat helper bersama
+`PrinterService._writeBytes`. **Tidak ada test otomatis** utk fitur ini
+(wiring native `disconnect()` yang sudah ada, percabangan trivial) —
+kalau user lapor toggle tidak berfungsi, cek dulu urutan
+write→disconnect di `_writeBytes`, bukan asumsikan test yang hilang.
+
+**3. Nama SPESIFIK metode pembayaran** (`ba3c9b1`, schemaVersion
+33→34): `Transactions.methodName`/`TransactionPayments.methodName`
+(nullable, snapshot `PaymentMethods.name` mis. "GoPay"/"BCA" — nota
+lama tetap null, fallback ke label generik di SEMUA tempat tampilan).
+Ditulis dari checkout, tambah bayar tempo (4 caller
+`addPaymentToTransaction`), lunasi gabungan (`settleMergedDebt`), refund
+(`returnPaidTransactionItems`). Ditampilkan di cetak struk
+(`printer_service.dart`), share struk & struk in-app
+(`receipt_screen.dart`). **Ripple wajib tiap kali schemaVersion naik**:
+17 test migrasi lama (literal `schemaVersion=33` hardcoded) + 8 fixture
+kurang stub tabel `transactions`/`transaction_payments` (migrasi v34
+`ALTER TABLE` keduanya) — semua sudah diperbaiki, tapi **INGAT pola ini
+utk migrasi berikutnya**: cek dulu apakah kolom baru nempel ke tabel
+yang belum tentu ada di fixture versi lama sebelum menganggap migrasi
+"pasti aman".
+
+**Laporan (transaksi_tab.dart/hutang_tab.dart) TIDAK diberi tampilan
+nama spesifik** — hanya call-site fix minimal (`methodName:` diteruskan
+ke `addPaymentToTransaction`) supaya kompilasi tidak pecah akibat
+perubahan `showDebtPaymentSheet`. User cuma minta cetak/share/in-app,
+laporan di luar scope literal permintaan — kalau user minta konsistensi
+ke situ juga nanti, cari switch generik di
+`transaksi_tab.dart:241`/`ringkasan_tab.dart:191`/
+`arus_kas_tab.dart:36`/`report_export.dart:582`.
+
+Full suite 1189 lolos / 2 gagal (flaky pre-existing —
+`proposal_unchanged_end_to_end_test.dart`, `SocketException: Address
+already in use` port 8625, bukan regresi), `flutter analyze` 0 issue.
+
 _Update sesi 29 Agustus 2026 (lanjutan lagi x5 — hapus panel debug
 binding device, DIKONFIRMASI user), commit `bbbd4f4`, di-push &
 di-merge ke `main`. **Insiden device produksi user (entri x4 di bawah)
