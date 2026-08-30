@@ -47,6 +47,7 @@ class PrinterSettings {
     this.showProductCount = true,
     this.showPaymentDetail = true,
     this.showStatusText = true,
+    this.autoDisconnectAfterPrint = false,
   });
 
   final String paperSize; // '58' | '80'
@@ -56,6 +57,14 @@ class PrinterSettings {
   final bool showProductCount; // "Produk: N"
   final bool showPaymentDetail; // baris Bayar + Kembali/Kurang
   final bool showStatusText; // "Sudah bayar" / "Kurang bayar" dll
+  // Susulan (permintaan user) — sebagian printer thermal tidak mendukung 2
+  // koneksi BT sekaligus, & toggle BT off/on lalu cetak langsung (tanpa jeda)
+  // kadang gagal walau printer sudah menyala. Opsi ini disconnect dari
+  // printer segera setelah tiap cetak sukses/gagal supaya slot koneksi bebas
+  // & percobaan cetak berikutnya mulai dari state bersih. Default FALSE
+  // (tetap tersambung) krn tidak semua toko butuh 2 device & sebagian warung
+  // justru mengutamakan cetak cepat tanpa nunggu reconnect tiap kali.
+  final bool autoDisconnectAfterPrint;
 
   int get charWidth => paperSize == '80' ? 42 : 32;
 
@@ -67,6 +76,7 @@ class PrinterSettings {
     bool? showProductCount,
     bool? showPaymentDetail,
     bool? showStatusText,
+    bool? autoDisconnectAfterPrint,
   }) =>
       PrinterSettings(
         paperSize: paperSize ?? this.paperSize,
@@ -76,6 +86,8 @@ class PrinterSettings {
         showProductCount: showProductCount ?? this.showProductCount,
         showPaymentDetail: showPaymentDetail ?? this.showPaymentDetail,
         showStatusText: showStatusText ?? this.showStatusText,
+        autoDisconnectAfterPrint:
+            autoDisconnectAfterPrint ?? this.autoDisconnectAfterPrint,
       );
 }
 
@@ -107,6 +119,8 @@ class PrinterService {
       showProductCount: p.getBool('printer_show_product_count') ?? true,
       showPaymentDetail: p.getBool('printer_show_payment_detail') ?? true,
       showStatusText: p.getBool('printer_show_status_text') ?? true,
+      autoDisconnectAfterPrint:
+          p.getBool('printer_auto_disconnect_after_print') ?? false,
     );
   }
 
@@ -119,6 +133,8 @@ class PrinterService {
     await p.setBool('printer_show_product_count', s.showProductCount);
     await p.setBool('printer_show_payment_detail', s.showPaymentDetail);
     await p.setBool('printer_show_status_text', s.showStatusText);
+    await p.setBool(
+        'printer_auto_disconnect_after_print', s.autoDisconnectAfterPrint);
   }
 
   // ── Bluetooth helpers ────────────────────────────────────────────────────
@@ -187,6 +203,26 @@ class PrinterService {
           .timeout(const Duration(seconds: 4));
     } catch (_) {}
     return true;
+  }
+
+  /// Kirim [bytes] ke printer via channel `write`, lalu disconnect kalau
+  /// [PrinterSettings.autoDisconnectAfterPrint] aktif — dipakai bersama oleh
+  /// `printReceipt`/`printProductLabel`/`printMergedReceipt` agar perilaku
+  /// toggle konsisten di ketiganya (lihat dok field itu).
+  static Future<bool> _writeBytes(
+      Uint8List bytes, PrinterSettings settings) async {
+    bool ok;
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>(
+        'write',
+        {'bytes': bytes},
+      ).timeout(const Duration(seconds: 10), onTimeout: () => null);
+      ok = res?['ok'] as bool? ?? false;
+    } catch (_) {
+      ok = false;
+    }
+    if (settings.autoDisconnectAfterPrint) await disconnect();
+    return ok;
   }
 
   // ── Test print dengan log detail ─────────────────────────────────────────
@@ -492,15 +528,7 @@ class PrinterService {
       settings: settings,
     );
 
-    try {
-      final res = await _channel.invokeMapMethod<String, dynamic>(
-        'write',
-        {'bytes': bytes},
-      ).timeout(const Duration(seconds: 10), onTimeout: () => null);
-      return res?['ok'] as bool? ?? false;
-    } catch (_) {
-      return false;
-    }
+    return _writeBytes(bytes, settings);
   }
 
   // ── Item ordering helpers ────────────────────────────────────────────────
@@ -869,11 +897,10 @@ class PrinterService {
             .where((p) => !p.voided && p.amount < 0)
             .fold<int>(0, (s, p) => s + p.amount);
         if (refundTotal > 0) {
-          final refundMethod = payments
-              .where((p) => !p.voided && p.amount < 0)
-              .lastOrNull
-              ?.method;
-          out.addAll(bodyLR('Refund ${_methodShort(refundMethod ?? '')}',
+          final refundPayment =
+              payments.where((p) => !p.voided && p.amount < 0).lastOrNull;
+          out.addAll(bodyLR(
+              'Refund ${_methodShort(refundPayment?.method ?? '', name: refundPayment?.methodName)}',
               'Rp ${_fmtNum(refundTotal)}'));
         }
       }
@@ -907,7 +934,8 @@ class PrinterService {
       out.addAll(bodySep());
       out.addAll(bodyText('Pembayaran:', styles: const PosStyles(bold: true)));
       for (final p in visiblePayments) {
-        final left = '${_fmtDateTimeFull(p.paidAt)} ${_methodShort(p.method)}';
+        final left =
+            '${_fmtDateTimeFull(p.paidAt)} ${_methodShort(p.method, name: p.methodName)}';
         out.addAll(bodyLR(left, 'Rp ${_fmtNum(p.amount)}'));
       }
     }
@@ -1029,7 +1057,14 @@ class PrinterService {
     }
   }
 
-  static String _methodShort(String m) {
+  /// Susulan (permintaan user) — [name] = nama SPESIFIK metode yang
+  /// dikonfigurasi toko sendiri (`PaymentMethods.name`, mis. "GoPay"/"BCA"),
+  /// snapshot dari `TransactionPayments.methodName`/`Transactions.
+  /// methodName`. Dipakai kalau ada & tidak kosong; fallback ke label
+  /// kategori generik utk nota lama (kolom itu null) atau baris jejak
+  /// audit internal (`edit`/`retur`) yang memang tak punya nama spesifik.
+  static String _methodShort(String m, {String? name}) {
+    if (name != null && name.trim().isNotEmpty) return _toAscii(name.trim());
     switch (m) {
       case 'tunai':
         return 'Tunai';
@@ -1074,15 +1109,7 @@ class PrinterService {
       settings: settings,
     );
 
-    try {
-      final res = await _channel.invokeMapMethod<String, dynamic>(
-        'write',
-        {'bytes': bytes},
-      ).timeout(const Duration(seconds: 10), onTimeout: () => null);
-      return res?['ok'] as bool? ?? false;
-    } catch (_) {
-      return false;
-    }
+    return _writeBytes(bytes, settings);
   }
 
   static Future<Uint8List> _buildLabelBytes({
@@ -1190,15 +1217,7 @@ class PrinterService {
       settings: settings,
     );
 
-    try {
-      final res = await _channel.invokeMapMethod<String, dynamic>(
-        'write',
-        {'bytes': bytes},
-      ).timeout(const Duration(seconds: 10), onTimeout: () => null);
-      return res?['ok'] as bool? ?? false;
-    } catch (_) {
-      return false;
-    }
+    return _writeBytes(bytes, settings);
   }
 
   static Future<Uint8List> _buildMergedBytes({

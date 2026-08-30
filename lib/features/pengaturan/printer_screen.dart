@@ -269,6 +269,9 @@ class _PrinterScreenState extends State<PrinterScreen>
         // Format Nota settings
         _buildFormatSection(context, scheme),
 
+        // Koneksi settings
+        _buildConnectionSection(context, scheme),
+
         // Header daftar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -320,13 +323,13 @@ class _PrinterScreenState extends State<PrinterScreen>
     final s = _settings;
     final subtitle = '${s.paperSize}mm · '
         '${[
-          if (s.showDateHeader) 'Tanggal',
-          if (s.showTxNumber) 'No. Nota',
-          if (s.showCustomer) 'Pelanggan',
-          if (s.showProductCount) 'Jml. Produk',
-          if (s.showPaymentDetail) 'Detail Bayar',
-          if (s.showStatusText) 'Status',
-        ].join(', ')}';
+      if (s.showDateHeader) 'Tanggal',
+      if (s.showTxNumber) 'No. Nota',
+      if (s.showCustomer) 'Pelanggan',
+      if (s.showProductCount) 'Jml. Produk',
+      if (s.showPaymentDetail) 'Detail Bayar',
+      if (s.showStatusText) 'Status',
+    ].join(', ')}';
 
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -352,8 +355,7 @@ class _PrinterScreenState extends State<PrinterScreen>
 
             // Ukuran kertas
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
                   Text('Ukuran kertas',
@@ -374,8 +376,8 @@ class _PrinterScreenState extends State<PrinterScreen>
                       padding: WidgetStateProperty.all(
                           const EdgeInsets.symmetric(horizontal: 12)),
                     ),
-                    onSelectionChanged: (sel) => _updateSettings(
-                        s.copyWith(paperSize: sel.first)),
+                    onSelectionChanged: (sel) =>
+                        _updateSettings(s.copyWith(paperSize: sel.first)),
                   ),
                 ],
               ),
@@ -390,13 +392,68 @@ class _PrinterScreenState extends State<PrinterScreen>
                 (v) => _updateSettings(s.copyWith(showCustomer: v))),
             _toggleTile('Jumlah produk', s.showProductCount,
                 (v) => _updateSettings(s.copyWith(showProductCount: v))),
-            _toggleTile('Detail pembayaran (Bayar + Kembali)',
+            _toggleTile(
+                'Detail pembayaran (Bayar + Kembali)',
                 s.showPaymentDetail,
                 (v) => _updateSettings(s.copyWith(showPaymentDetail: v))),
             _toggleTile('Status nota (Sudah bayar dll)', s.showStatusText,
                 (v) => _updateSettings(s.copyWith(showStatusText: v))),
 
             const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConnectionSection(BuildContext context, ColorScheme scheme) {
+    final s = _settings;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          leading: Icon(Icons.bluetooth_connected_outlined,
+              size: 20, color: scheme.onSurfaceVariant),
+          title: const Text('Koneksi Printer',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          subtitle: Text(
+              s.autoDisconnectAfterPrint
+                  ? 'Auto-disconnect setelah cetak'
+                  : 'Tetap tersambung setelah cetak',
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          children: [
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _toggleTile(
+                'Putuskan koneksi otomatis setelah cetak',
+                s.autoDisconnectAfterPrint,
+                (v) =>
+                    _updateSettings(s.copyWith(autoDisconnectAfterPrint: v))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Text(
+                s.autoDisconnectAfterPrint
+                    ? 'Cocok kalau printer tidak mendukung 2 perangkat '
+                        'sekaligus, atau sering gagal cetak setelah '
+                        'Bluetooth dimatikan-nyalakan. Menyambung ulang '
+                        'perlu sedikit waktu tiap cetak.'
+                    : 'Printer tetap tersambung setelah cetak — cetak '
+                        'berikutnya lebih cepat tanpa reconnect. Matikan '
+                        'kalau printer sering gagal cetak setelah '
+                        'Bluetooth dimatikan-nyalakan atau dipakai '
+                        'bergantian dgn perangkat lain.',
+                style:
+                    TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+              ),
+            ),
           ],
         ),
       ),
@@ -432,9 +489,8 @@ class _PrinterScreenState extends State<PrinterScreen>
             : scheme.surfaceContainerHighest,
         child: Icon(
           Icons.print_outlined,
-          color: isSelected
-              ? scheme.onPrimaryContainer
-              : scheme.onSurfaceVariant,
+          color:
+              isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
         ),
       ),
       title: Text(d.name.isEmpty ? 'Printer' : d.name),
@@ -474,7 +530,6 @@ class _PrinterScreenState extends State<PrinterScreen>
       ),
     );
   }
-
 }
 
 class _MessageState extends StatelessWidget {
