@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/chart_utils.dart';
+import '../stats/stats_common.dart';
+import '../stats/trend_aggregation.dart';
 
 final _ringkasanTabProvider =
     FutureProvider.family<_RingkasanTabData, DateTimeRange>((ref, range) async {
@@ -19,8 +20,7 @@ final _ringkasanTabProvider =
   // transaksi sudah sama antar-device.
   await db.rebuildStaleSummariesInRange(range.start, range.end);
   final summaries = await db.getDailySummaries(range.start, range.end);
-  final expenses =
-      await db.getNetProfitExpenseTotal(range.start, range.end);
+  final expenses = await db.getNetProfitExpenseTotal(range.start, range.end);
 
   var revenue = 0;
   var cogs = 0;
@@ -158,7 +158,8 @@ class RingkasanTab extends ConsumerWidget {
                                 color: scheme.onSurfaceVariant, fontSize: 12)),
                         const SizedBox(width: 8),
                         Text(formatRupiah(e.value),
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
                       ],
                     ),
                   );
@@ -304,62 +305,18 @@ class _DailyChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final sorted = daily.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
-    final max = sorted.map((e) => e.value).reduce((a, b) => a > b ? a : b);
     final scheme = Theme.of(context).colorScheme;
-    final total = sorted.length;
-
-    return Column(
-      children: [
-        SizedBox(
-          height: 80,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: sorted.map((e) {
-              final h = clampedBarHeight(e.value, max);
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Tooltip(
-                    message:
-                        '${e.key.day}/${e.key.month}\n${formatRupiah(e.value)}',
-                    child: Container(
-                      height: h,
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        const SizedBox(height: 3),
-        Row(
-          children: sorted.asMap().entries.map((entry) {
-            final i = entry.key;
-            final date = entry.value.key;
-            final bool show = total <= 7
-                ? true
-                : total <= 14
-                    ? i % 2 == 0
-                    : total <= 31
-                        ? i % 3 == 0 || i == total - 1
-                        : i % 7 == 0 || i == total - 1;
-            return Expanded(
-              child: Text(
-                show ? '${date.day}/${date.month}' : '',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 8, color: scheme.onSurfaceVariant),
-                overflow: TextOverflow.visible,
-                softWrap: false,
-              ),
-            );
-          }).toList(),
-        ),
-      ],
+    // Susulan (permintaan user): ganti bar-per-hari (label tanggal tumpuk di
+    // hari-hari akhir/rentang panjang, sama persis akar masalah yang sudah
+    // diperbaiki di `StatsTrendChart` — lihat dok di sana) dgn chart garis
+    // yang sama, dipakai ulang bukan reimplementasi baru.
+    final points = <TrendPoint>[
+      for (final e in sorted) (date: e.key, value: e.value),
+    ];
+    return StatsTrendChart(
+      points: points,
+      color: scheme.primary,
+      valueLabel: (v) => formatRupiah(v.toInt()),
     );
   }
 }
