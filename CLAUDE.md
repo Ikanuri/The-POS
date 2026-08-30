@@ -176,6 +176,17 @@ lib/
   membuktikan reaktivitas (lihat `product_deactivate_sync_reactive_test.
   dart`).
 
+## Versioning (`pubspec.yaml`)
+
+`MAJOR.MINOR.PATCH+BUILD` — ikuti semver sungguhan, bukan naikkan PATCH di
+tiap sesi tanpa pandang isi:
+- **MINOR** naik (PATCH reset ke 0) kalau ada fitur/perubahan baru yang
+  terlihat pengguna.
+- **PATCH** naik kalau MURNI bugfix, tanpa fitur baru.
+- **MAJOR** naik kalau ada perubahan besar/breaking.
+- **BUILD** (`+N`) SELALU naik tiap rilis, apa pun jenis perubahannya
+  (`versionCode` Android, tidak boleh turun/diulang).
+
 ## Perintah
 
 - Analisa: `/opt/flutter/bin/flutter analyze` (binary di `/opt/flutter/bin`;
