@@ -20,11 +20,19 @@ class _HistoryQuery {
     this.product = '',
     this.loadAll = false,
     this.status = 'semua',
+    this.method = 'semua',
   });
   final DateTimeRange? date;
   final String product;
   final bool loadAll;
   final String status; // 'semua' | 'lunas' | 'hutang'
+  // Susulan (permintaan user): filter by kategori metode pembayaran nota
+  // ('semua' | 'tunai' | 'bank' | 'qris' | 'ewallet' | 'tempo') — pakai
+  // kategori `Transactions.paymentMethod` (SUDAH ada, sama seperti kolom
+  // yg ditampilkan di tabel metode pembayaran nota), bukan nama spesifik
+  // (`methodName`) krn banyak nota lama null & filter per-kategori lebih
+  // masuk akal utk analisis (mis. "semua transaksi QRIS bulan ini").
+  final String method;
 
   @override
   bool operator ==(Object other) =>
@@ -32,10 +40,11 @@ class _HistoryQuery {
       other.date == date &&
       other.product == product &&
       other.loadAll == loadAll &&
-      other.status == status;
+      other.status == status &&
+      other.method == method;
 
   @override
-  int get hashCode => Object.hash(date, product, loadAll, status);
+  int get hashCode => Object.hash(date, product, loadAll, status, method);
 }
 
 final _txHistoryProvider =
@@ -53,12 +62,15 @@ final _txHistoryProvider =
   if (q.status == 'lunas') {
     sel.where((t) => t.status.equals('lunas'));
   } else if (q.status == 'hutang') {
-    sel.where((t) =>
-        t.status.equals('kurang_bayar') | t.status.equals('tempo'));
+    sel.where(
+        (t) => t.status.equals('kurang_bayar') | t.status.equals('tempo'));
+  }
+  if (q.method != 'semua') {
+    sel.where((t) => t.paymentMethod.equals(q.method));
   }
   if (q.date != null) {
-    final start = DateTime(
-        q.date!.start.year, q.date!.start.month, q.date!.start.day);
+    final start =
+        DateTime(q.date!.start.year, q.date!.start.month, q.date!.start.day);
     final end = DateTime(
         q.date!.end.year, q.date!.end.month, q.date!.end.day, 23, 59, 59, 999);
     sel.where((t) =>
@@ -109,6 +121,19 @@ final _productMatchProvider = FutureProvider.family<
   return db.findProductMatchesForQuery(query);
 });
 
+/// Label kategori metode pembayaran utk filter — sama persis pola generik
+/// yang dipakai di `_methodLabel`/`_methodShort` (receipt_screen.dart dkk),
+/// SENGAJA tidak pakai nama spesifik (`methodName`) krn ini label kategori
+/// filter, bukan nota per-transaksi.
+String _methodFilterLabel(String m) => switch (m) {
+      'tunai' => 'Tunai',
+      'bank' => 'Transfer Bank',
+      'qris' => 'QRIS',
+      'ewallet' => 'E-Wallet',
+      'tempo' => 'Tempo',
+      _ => m,
+    };
+
 /// Sheet riwayat transaksi di kasir: cari, filter status/tanggal/produk,
 /// aksi Lunasi · Batalkan · Struk.
 class TxHistorySheet extends ConsumerStatefulWidget {
@@ -121,6 +146,8 @@ class TxHistorySheet extends ConsumerStatefulWidget {
 class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   String _query = '';
   String _filter = 'semua'; // semua | lunas | hutang
+  String _methodFilter =
+      'semua'; // semua | tunai | bank | qris | ewallet | tempo
   String? _expandedId;
   DateTimeRange? _dateFilter;
   String _productQuery = '';
@@ -134,6 +161,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   bool get _hasActiveFilter =>
       _query.isNotEmpty ||
       _filter != 'semua' ||
+      _methodFilter != 'semua' ||
       _dateFilter != null ||
       _productQuery.isNotEmpty;
 
@@ -179,8 +207,8 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   /// kedua aturan sekaligus.
   void _toggleSelect(Transaction tx, List<Transaction> loaded) {
     if (_isReturTx(tx)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Nota retur tidak bisa digabung')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nota retur tidak bisa digabung')));
       return;
     }
     if (_selectedIds.contains(tx.id)) {
@@ -219,6 +247,34 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
     if (picked != null) setState(() => _dateFilter = picked);
   }
 
+  Future<void> _pickMethod() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final id in const [
+              'semua',
+              'tunai',
+              'bank',
+              'qris',
+              'ewallet',
+              'tempo',
+            ])
+              ListTile(
+                title: Text(
+                    id == 'semua' ? 'Semua Metode' : _methodFilterLabel(id)),
+                trailing: _methodFilter == id ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.of(ctx).pop(id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null) setState(() => _methodFilter = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = _HistoryQuery(
@@ -226,6 +282,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
       product: _productQuery,
       loadAll: _hasActiveFilter,
       status: _filter,
+      method: _methodFilter,
     );
     final txAsync = ref.watch(_txHistoryProvider(query));
     final namesAsync = ref.watch(_custNamesProvider);
@@ -365,6 +422,27 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                   selectedColor: scheme.primaryContainer,
                   side: BorderSide.none,
                 ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: InputChip(
+                    avatar: const Icon(Icons.payments_outlined, size: 16),
+                    label: Text(
+                      _methodFilter == 'semua'
+                          ? 'Semua Metode'
+                          : _methodFilterLabel(_methodFilter),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    selected: _methodFilter != 'semua',
+                    showCheckmark: false,
+                    onSelected: (_) => _pickMethod(),
+                    onDeleted: _methodFilter != 'semua'
+                        ? () => setState(() => _methodFilter = 'semua')
+                        : null,
+                    visualDensity: VisualDensity.compact,
+                    selectedColor: scheme.primaryContainer,
+                    side: BorderSide.none,
+                  ),
+                ),
               ],
             ),
           ),
@@ -396,8 +474,8 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                 final grouped = <Object>[];
                 DateTime? lastDay;
                 for (final tx in filtered) {
-                  final day = DateTime(tx.createdAt.year,
-                      tx.createdAt.month, tx.createdAt.day);
+                  final day = DateTime(
+                      tx.createdAt.year, tx.createdAt.month, tx.createdAt.day);
                   if (lastDay == null || day != lastDay) {
                     grouped.add(day);
                     lastDay = day;
@@ -441,22 +519,21 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                   },
                 );
               },
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
           if (_selectMode && _selectedIds.isNotEmpty)
-            _buildMergeBar(scheme, selectedTxs.length, sumTotal, sumPaid,
-                sumSisa),
+            _buildMergeBar(
+                scheme, selectedTxs.length, sumTotal, sumPaid, sumSisa),
         ],
       ),
     );
   }
 
   /// Bar aksi gabung nota: ringkasan akumulatif + cetak/bayar.
-  Widget _buildMergeBar(ColorScheme scheme, int count, int sumTotal,
-      int sumPaid, int sumSisa) {
+  Widget _buildMergeBar(
+      ColorScheme scheme, int count, int sumTotal, int sumPaid, int sumSisa) {
     return Material(
       elevation: 8,
       color: scheme.surfaceContainerHigh,
@@ -506,9 +583,8 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                           style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: sumSisa > 0
-                                  ? scheme.error
-                                  : scheme.primary)),
+                              color:
+                                  sumSisa > 0 ? scheme.error : scheme.primary)),
                     ],
                   ),
                 ),
@@ -626,8 +702,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
     final msg = change > 0
         ? 'Dibayar ${formatRupiah(applied)} · kembalian ${formatRupiah(change)}'
         : 'Dibayar ${formatRupiah(applied)}';
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     _exitSelectMode();
   }
 }
@@ -726,9 +801,8 @@ class _TxRow extends ConsumerWidget {
               Text(time, style: const TextStyle(fontSize: 11)),
               if (productMatches != null && productMatches!.isNotEmpty)
                 ...productMatches!.map((m) {
-                  final qtyStr = m.qty % 1 == 0
-                      ? m.qty.toInt().toString()
-                      : '${m.qty}';
+                  final qtyStr =
+                      m.qty % 1 == 0 ? m.qty.toInt().toString() : '${m.qty}';
                   return Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Row(
@@ -739,8 +813,8 @@ class _TxRow extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             '${m.name} · $qtyStr × ${formatRupiah(m.price)}',
-                            style: TextStyle(
-                                fontSize: 11, color: scheme.primary),
+                            style:
+                                TextStyle(fontSize: 11, color: scheme.primary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -810,7 +884,10 @@ class _TxRow extends ConsumerWidget {
         ),
         if (expanded)
           _TxDetail(
-              tx: tx, isRetur: _isRetur, netSisa: netSisa, onChanged: onChanged),
+              tx: tx,
+              isRetur: _isRetur,
+              netSisa: netSisa,
+              onChanged: onChanged),
       ],
     );
   }
@@ -841,9 +918,12 @@ class _TxDetail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isHutang = tx.status == 'kurang_bayar' || tx.status == 'tempo';
-    final names = ref.watch(_custNamesProvider).valueOrNull ?? const <String, String>{};
+    final names =
+        ref.watch(_custNamesProvider).valueOrNull ?? const <String, String>{};
     final custLabel = tx.customerName ??
-        (tx.customerId != null ? (names[tx.customerId] ?? 'Pelanggan') : 'Umum');
+        (tx.customerId != null
+            ? (names[tx.customerId] ?? 'Pelanggan')
+            : 'Umum');
 
     return Container(
       color: scheme.surfaceContainerLowest,
@@ -886,8 +966,7 @@ class _TxDetail extends ConsumerWidget {
                   Text('Dibayar: ${formatRupiah(tx.paid)}',
                       style: TextStyle(
                           fontSize: 12, color: scheme.onSurfaceVariant)),
-                  Text(
-                      'Sisa ${formatRupiah(netSisa ?? (tx.total - tx.paid))}',
+                  Text('Sisa ${formatRupiah(netSisa ?? (tx.total - tx.paid))}',
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -923,8 +1002,7 @@ class _TxDetail extends ConsumerWidget {
                   child: FilledButton.tonalIcon(
                     onPressed: () => _lunasi(context, ref),
                     icon: const Icon(Icons.payments_outlined, size: 16),
-                    label: const Text('Lunasi',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text('Lunasi', style: TextStyle(fontSize: 12)),
                     style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact),
                   ),
@@ -936,8 +1014,8 @@ class _TxDetail extends ConsumerWidget {
                   child: OutlinedButton.icon(
                     onPressed: () => _showVoidConfirm(context, ref),
                     icon: const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('Batalkan',
-                        style: TextStyle(fontSize: 12)),
+                    label:
+                        const Text('Batalkan', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         foregroundColor: scheme.error),
@@ -952,8 +1030,7 @@ class _TxDetail extends ConsumerWidget {
                     context.push('/kasir/struk/${tx.id}');
                   },
                   icon: const Icon(Icons.receipt_long_outlined, size: 16),
-                  label:
-                      const Text('Struk', style: TextStyle(fontSize: 12)),
+                  label: const Text('Struk', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                       visualDensity: VisualDensity.compact),
                 ),
@@ -1006,8 +1083,7 @@ class _TxDetail extends ConsumerWidget {
                         final c = suggestions[i];
                         return ListTile(
                           dense: true,
-                          leading:
-                              const Icon(Icons.person_outline, size: 18),
+                          leading: const Icon(Icons.person_outline, size: 18),
                           title: Text(c.name,
                               style: const TextStyle(fontSize: 13)),
                           selected: selId == c.id,
@@ -1030,15 +1106,15 @@ class _TxDetail extends ConsumerWidget {
                   child: const Text('Batal')),
               if (tx.customerId != null || tx.customerName != null)
                 TextButton(
-                  onPressed: () => Navigator.of(ctx)
-                      .pop((name: null, id: null)),
+                  onPressed: () =>
+                      Navigator.of(ctx).pop((name: null, id: null)),
                   child: const Text('Umum'),
                 ),
               FilledButton(
                 onPressed: () {
                   final name = ctrl.text.trim();
-                  Navigator.of(ctx).pop(
-                      (name: name.isEmpty ? null : name, id: selId));
+                  Navigator.of(ctx)
+                      .pop((name: name.isEmpty ? null : name, id: selId));
                 },
                 child: const Text('Simpan'),
               ),
@@ -1189,11 +1265,29 @@ class _DaySeparator extends StatelessWidget {
   final ColorScheme scheme;
 
   static const _dayNames = [
-    '', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'
+    '',
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu',
+    'Minggu'
   ];
   static const _monthNames = [
-    '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    '',
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember'
   ];
 
   @override
@@ -1241,15 +1335,18 @@ class _NoteBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+            style: TextStyle(
+                fontSize: 10, color: color, fontWeight: FontWeight.w600)),
         const SizedBox(height: 2),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(width: 3, color: color.withOpacity(0.5))),
+            border: Border(
+                left: BorderSide(width: 3, color: color.withOpacity(0.5))),
             color: color.withOpacity(0.06),
-            borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+            borderRadius:
+                const BorderRadius.horizontal(right: Radius.circular(4)),
           ),
           child: Text(text,
               style: TextStyle(fontSize: 11, color: color, height: 1.3)),
