@@ -35,7 +35,8 @@ void main() {
     expect(find.byType(LineChart), findsOneWidget);
   });
 
-  testWidgets('rentang pendek (7 titik) tetap render sebagai harian, '
+  testWidgets(
+      'rentang pendek (7 titik) tetap render sebagai harian, '
       'jumlah label wajar', (tester) async {
     final points = _dailyRange(DateTime(2026, 3, 1), 7);
 
@@ -93,6 +94,33 @@ void main() {
     await tester.tapAt(tester.getCenter(find.byType(LineChart)));
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'nominal puncak tampil PERMANEN (garis + label) tanpa perlu tap/drag',
+      (tester) async {
+    final points = [
+      (date: DateTime(2026, 3, 1), value: 5),
+      (date: DateTime(2026, 3, 2), value: 42),
+      (date: DateTime(2026, 3, 3), value: 10),
+    ];
+    await tester.pumpWidget(_wrap(StatsTrendChart(
+      points: points,
+      color: Colors.blue,
+      valueLabel: (v) => 'Rp $v',
+    )));
+    await tester.pumpAndSettle();
+
+    final chart = tester.widget<LineChart>(find.byType(LineChart));
+    final lines = chart.data.extraLinesData.horizontalLines;
+    expect(lines, hasLength(1),
+        reason: 'garis puncak harus selalu ada, tanpa perlu tap/drag dulu '
+            '("quick insight")');
+    expect(lines.single.y, 42,
+        reason: 'garis harus di level nilai PUNCAK data mentah (42), bukan '
+            'maxY chart yang sudah dikasih headroom 15%');
+    expect(lines.single.label.show, isTrue);
+    expect(lines.single.label.labelResolver(lines.single), 'Rp 42');
   });
 
   testWidgets('nilai negatif/nol semua tidak bikin maxY 0 (pembagi nol)',

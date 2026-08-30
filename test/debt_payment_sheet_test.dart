@@ -35,7 +35,8 @@ void main() {
     WidgetTester tester, {
     required int remaining,
     bool prefillRemaining = true,
-    void Function(({int amount, String method})? r)? onResult,
+    void Function(({int amount, String method, String? methodName})? r)?
+        onResult,
     // Surface default flutter_test (800x600) LEBIH PENDEK dari HP sungguhan,
     // sehingga QR + keypad tidak muat & keypad ter-render di luar viewport
     // (tap gagal "off-screen"). Pakai ukuran HP nyata supaya yang diuji
@@ -73,7 +74,7 @@ void main() {
     await db.into(db.paymentMethods).insert(PaymentMethodsCompanion.insert(
         id: 'pm-bca', type: 'bank', name: 'BCA', sortOrder: const Value(1)));
 
-    ({int amount, String method})? result;
+    ({int amount, String method, String? methodName})? result;
     await pumpSheet(tester, remaining: 50000, onResult: (r) => result = r);
 
     expect(find.text('Tunai'), findsOneWidget);
@@ -91,7 +92,7 @@ void main() {
 
   testWidgets('hanya metode Tunai → method = tunai, nominal via keypad',
       (tester) async {
-    ({int amount, String method})? result;
+    ({int amount, String method, String? methodName})? result;
     await pumpSheet(tester,
         remaining: 20000, prefillRemaining: false, onResult: (r) => result = r);
 
@@ -111,7 +112,7 @@ void main() {
 
   testWidgets('tombol "Uang Pas" mengisi nominal = sisa tagihan persis',
       (tester) async {
-    ({int amount, String method})? result;
+    ({int amount, String method, String? methodName})? result;
     await pumpSheet(tester,
         remaining: 84500, prefillRemaining: false, onResult: (r) => result = r);
 
@@ -136,8 +137,7 @@ void main() {
     expect(tester.widget<FilledButton>(payButton()).onPressed, isNotNull);
   });
 
-  testWidgets(
-      'HP sempit 360x800: tidak overflow & tombol tetap di dalam layar',
+  testWidgets('HP sempit 360x800: tidak overflow & tombol tetap di dalam layar',
       (tester) async {
     // AppTheme menyetel minimumSize Outlined/FilledButton lebar penuh —
     // dua tombol dalam satu Row WAJIB override sempit. Surface default
@@ -162,7 +162,8 @@ void main() {
     expect(tester.takeException(), isNull,
         reason: 'QR statis + keypad tidak boleh bikin overflow');
 
-    final screenW = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final screenW =
+        tester.view.physicalSize.width / tester.view.devicePixelRatio;
     expect(tester.getRect(payButton()).right, lessThanOrEqualTo(screenW));
   });
 
@@ -179,7 +180,8 @@ void main() {
 
     // Jarak diukur dari sisi bawah keypad ke sisi atas tombol Bayar.
     double gap() =>
-        tester.getRect(payButton()).top - tester.getRect(find.text('000')).bottom;
+        tester.getRect(payButton()).top -
+        tester.getRect(find.text('000')).bottom;
 
     final before = gap();
 
@@ -205,16 +207,15 @@ void main() {
         qrValue: const Value(staticQris),
         sortOrder: const Value(1)));
 
-    ({int amount, String method})? result;
+    ({int amount, String method, String? methodName})? result;
     var resultCalled = false;
     await pumpSheet(tester,
         remaining: 50000,
         prefillRemaining: false,
-        surface: const Size(360, 800),
-        onResult: (r) {
-          result = r;
-          resultCalled = true;
-        });
+        surface: const Size(360, 800), onResult: (r) {
+      result = r;
+      resultCalled = true;
+    });
 
     // Masuk ke state QRIS statis (QR + keypad sekaligus) — inilah state
     // overflow yang dikeluhkan tidak bisa ditutup via swipe.
@@ -241,7 +242,10 @@ void main() {
           data: const Value('1234-5678-9012'),
           sortOrder: const Value(1)));
       await db.into(db.paymentMethods).insert(PaymentMethodsCompanion.insert(
-          id: 'pm-ovo', type: 'ewallet', name: 'OVO', sortOrder: const Value(2)));
+          id: 'pm-ovo',
+          type: 'ewallet',
+          name: 'OVO',
+          sortOrder: const Value(2)));
     });
 
     testWidgets(
@@ -263,7 +267,7 @@ void main() {
     testWidgets(
         'ketuk lagi chip yang terpilih → chip lain muncul kembali & metode '
         'balik ke tunai', (tester) async {
-      ({int amount, String method})? result;
+      ({int amount, String method, String? methodName})? result;
       await pumpSheet(tester, remaining: 50000, onResult: (r) => result = r);
 
       await tester.tap(find.text('BCA'));
@@ -315,7 +319,7 @@ void main() {
     testWidgets(
         'ketik nominal di statis lalu geser ke Nominal → keypad hilang, QR '
         'membawa nominal yang tadi diketik', (tester) async {
-      ({int amount, String method})? result;
+      ({int amount, String method, String? methodName})? result;
       await pumpSheet(tester,
           remaining: 50000,
           prefillRemaining: false,
@@ -369,7 +373,7 @@ void main() {
     testWidgets(
         'geser ke Nominal TANPA mengetik apa pun → QR & nota pakai sisa penuh',
         (tester) async {
-      ({int amount, String method})? result;
+      ({int amount, String method, String? methodName})? result;
       await pumpSheet(tester,
           remaining: 50000,
           prefillRemaining: false,

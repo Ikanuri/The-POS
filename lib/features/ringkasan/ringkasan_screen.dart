@@ -96,6 +96,12 @@ final _stockOverviewForRingkasanProvider =
   return ref.watch(databaseProvider).watchStockOverview(groupId: groupId);
 });
 
+/// Jam yang sedang "dipin" di chart Penjualan Per Jam (permintaan user:
+/// rincian dibuka via TAP — bukan tekan-tahan `Tooltip` bawaan Flutter yang
+/// otomatis hilang begitu jari dilepas — dan tetap tampil sampai user tap
+/// area lain atau scroll layar). null = tidak ada yang dipin.
+final _pinnedHourProvider = StateProvider<int?>((ref) => null);
+
 class RingkasanScreen extends ConsumerWidget {
   const RingkasanScreen({super.key});
 
@@ -115,20 +121,30 @@ class RingkasanScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const SyncStatusBanner(),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async => ref.invalidate(_ringkasanProvider),
-              child: dataAsync.when(
-                data: (data) => _RingkasanBody(data: data),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
+      // Tap di mana pun di layar ini menutup rincian jam yang sedang dipin
+      // (lihat dok `_pinnedHourProvider`) — GestureDetector di sini kalah
+      // arena thd tap yang sudah ditangani widget anak (tombol/kartu/bar
+      // chart sendiri), jadi cuma menutup kalau tap benar2 jatuh di area
+      // kosong, tidak mengganggu interaksi lain di layar.
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => ref.read(_pinnedHourProvider.notifier).state = null,
+        child: Column(
+          children: [
+            const SyncStatusBanner(),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async => ref.invalidate(_ringkasanProvider),
+                child: dataAsync.when(
+                  data: (data) => _RingkasanBody(data: data),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Center(child: Text('Error: $e')),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -152,117 +168,132 @@ class _RingkasanBody extends ConsumerWidget {
     final produkBg = AppTheme.scanBg(isDark);
     final stokBg = AppTheme.stockWarnBg(isDark); // Stok → amber
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // KPI Cards
-        Row(
-          children: [
-            Expanded(
-                child: _KpiCard(
-              label: 'Hari Ini',
-              value: formatRupiah(data.todayRevenue),
-              sub: '${data.todayTransactions} transaksi',
-              icon: Icons.today_outlined,
-              color: uangFg,
-              bg: uangBg,
-            )),
-            const SizedBox(width: 12),
-            Expanded(
-                child: _KpiCard(
-              label: 'Minggu Ini',
-              value: formatRupiah(data.weekRevenue),
-              icon: Icons.date_range_outlined,
-              color: uangFg,
-              bg: uangBg,
-            )),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-                child: _KpiCard(
-              label: 'Bulan Ini',
-              value: formatRupiah(data.monthRevenue),
-              icon: Icons.calendar_month_outlined,
-              color: uangFg,
-              bg: uangBg,
-            )),
-            const SizedBox(width: 12),
-            Expanded(
-                child: _KpiCard(
-              label: 'Rata-rata/Hari',
-              value: formatRupiah(
-                  data.monthRevenue ~/ DateTime.now().day.clamp(1, 31)),
-              icon: Icons.trending_up_outlined,
-              color: uangFg,
-              bg: uangBg,
-            )),
-          ],
-        ),
-        const SizedBox(height: 20),
-
-        // Hourly chart — netral, bukan kartu per-fungsi.
-        Text('Penjualan Per Jam (Hari Ini)',
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: _HourlyChart(hourly: data.hourly),
+    // Scroll juga menutup rincian jam yang dipin di _HourlyChart (permintaan
+    // user) — NotificationListener di sini ADALAH ancestor Scrollable-nya
+    // (ListView di bawah), jadi menangkap ScrollNotification yang di-dispatch
+    // olehnya (beda dari kalau listener dipasang di dalam/descendant chart,
+    // yang tidak akan pernah melihat notifikasi dari Scrollable leluhurnya).
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (n is ScrollStartNotification) {
+          ref.read(_pinnedHourProvider.notifier).state = null;
+        }
+        return false;
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // KPI Cards
+          Row(
+            children: [
+              Expanded(
+                  child: _KpiCard(
+                label: 'Hari Ini',
+                value: formatRupiah(data.todayRevenue),
+                sub: '${data.todayTransactions} transaksi',
+                icon: Icons.today_outlined,
+                color: uangFg,
+                bg: uangBg,
+              )),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _KpiCard(
+                label: 'Minggu Ini',
+                value: formatRupiah(data.weekRevenue),
+                icon: Icons.date_range_outlined,
+                color: uangFg,
+                bg: uangBg,
+              )),
+            ],
           ),
-        ),
-        const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                  child: _KpiCard(
+                label: 'Bulan Ini',
+                value: formatRupiah(data.monthRevenue),
+                icon: Icons.calendar_month_outlined,
+                color: uangFg,
+                bg: uangBg,
+              )),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _KpiCard(
+                label: 'Rata-rata/Hari',
+                value: formatRupiah(
+                    data.monthRevenue ~/ DateTime.now().day.clamp(1, 31)),
+                icon: Icons.trending_up_outlined,
+                color: uangFg,
+                bg: uangBg,
+              )),
+            ],
+          ),
+          const SizedBox(height: 20),
 
-        // Item 30(a) — kartu cek cepat stok (fungsi: Stok → amber).
-        Text('Kontrol Stok', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        _StockQuickCheckCard(bg: stokBg),
-        const SizedBox(height: 20),
-
-        // Top products (fungsi: Produk & Data → biru).
-        if (data.topProducts.isNotEmpty) ...[
-          Text('Produk Terlaris Hari Ini',
+          // Hourly chart — netral, bukan kartu per-fungsi.
+          Text('Penjualan Per Jam (Hari Ini)',
               style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           Card(
-            color: produkBg,
-            child: Column(
-              children: data.topProducts.asMap().entries.map((e) {
-                final rank = e.key + 1;
-                final prod = e.value;
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor:
-                        rank == 1 ? produkFg : scheme.surfaceContainerHighest,
-                    child: Text(
-                      '$rank',
-                      style: TextStyle(
-                          color: rank == 1
-                              ? scheme.onPrimary
-                              : scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13),
-                    ),
-                  ),
-                  title: Text(prod.name.isNotEmpty ? prod.name : prod.productId,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(
-                      '${prod.sold % 1 == 0 ? prod.sold.toInt() : prod.sold} terjual',
-                      style: TextStyle(
-                          color: scheme.onSurfaceVariant, fontSize: 11)),
-                  trailing: Text(
-                    formatRupiah(prod.revenue),
-                    style:
-                        TextStyle(color: produkFg, fontWeight: FontWeight.w600),
-                  ),
-                );
-              }).toList(),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: _HourlyChart(hourly: data.hourly),
             ),
           ),
+          const SizedBox(height: 20),
+
+          // Item 30(a) — kartu cek cepat stok (fungsi: Stok → amber).
+          Text('Kontrol Stok', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          _StockQuickCheckCard(bg: stokBg),
+          const SizedBox(height: 20),
+
+          // Top products (fungsi: Produk & Data → biru).
+          if (data.topProducts.isNotEmpty) ...[
+            Text('Produk Terlaris Hari Ini',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Card(
+              color: produkBg,
+              child: Column(
+                children: data.topProducts.asMap().entries.map((e) {
+                  final rank = e.key + 1;
+                  final prod = e.value;
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor:
+                          rank == 1 ? produkFg : scheme.surfaceContainerHighest,
+                      child: Text(
+                        '$rank',
+                        style: TextStyle(
+                            color: rank == 1
+                                ? scheme.onPrimary
+                                : scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13),
+                      ),
+                    ),
+                    title: Text(
+                        prod.name.isNotEmpty ? prod.name : prod.productId,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                        '${prod.sold % 1 == 0 ? prod.sold.toInt() : prod.sold} terjual',
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant, fontSize: 11)),
+                    trailing: Text(
+                      formatRupiah(prod.revenue),
+                      style: TextStyle(
+                          color: produkFg, fontWeight: FontWeight.w600),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -319,12 +350,20 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _HourlyChart extends StatelessWidget {
+/// Susulan permintaan user — rincian per-jam dulu pakai `Tooltip` bawaan
+/// Flutter (tekan-tahan, otomatis hilang begitu jari dilepas). Sekarang
+/// TAP (bukan hold) & PERMANEN — tetap tampil sampai user tap area lain di
+/// layar (`_pinnedHourProvider` di-clear dari `RingkasanScreen`) atau scroll
+/// (di-clear dari `NotificationListener<ScrollNotification>` di
+/// `_RingkasanBody`). State-nya sengaja provider-level (bukan `setState`
+/// lokal) krn kedua pemicu "clear" itu berasal dari widget LELUHUR yang
+/// terpisah dari widget ini.
+class _HourlyChart extends ConsumerWidget {
   const _HourlyChart({required this.hourly});
   final List<int> hourly;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final max = hourly.reduce((a, b) => a > b ? a : b);
     if (max == 0) {
       return const Padding(
@@ -334,9 +373,22 @@ class _HourlyChart extends StatelessWidget {
       );
     }
     final scheme = Theme.of(context).colorScheme;
+    final pinned = ref.watch(_pinnedHourProvider);
 
     return Column(
       children: [
+        if (pinned != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              '${pinned.toString().padLeft(2, '0')}:00 — '
+              '${formatRupiah(hourly[pinned])}',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.primary),
+            ),
+          ),
         SizedBox(
           height: 80,
           child: Row(
@@ -345,17 +397,23 @@ class _HourlyChart extends StatelessWidget {
               final h = e.key;
               final v = e.value;
               final height = clampedBarHeight(v, max, emptyHeight: 0);
+              final isPinned = pinned == h;
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: Tooltip(
-                    message: '$h:00\n${formatRupiah(v)}',
+                  child: GestureDetector(
+                    key: ValueKey('hour_bar_$h'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => ref.read(_pinnedHourProvider.notifier).state =
+                        isPinned ? null : h,
                     child: Container(
                       height: height + 2,
                       decoration: BoxDecoration(
-                        color: v > 0
+                        color: isPinned
                             ? scheme.primary
-                            : scheme.surfaceContainerHighest,
+                            : v > 0
+                                ? scheme.primary.withOpacity(0.55)
+                                : scheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),

@@ -4231,6 +4231,12 @@ class $TransactionsTable extends Transactions
   late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
       'payment_method', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _methodNameMeta =
+      const VerificationMeta('methodName');
+  @override
+  late final GeneratedColumn<String> methodName = GeneratedColumn<String>(
+      'method_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _internalNoteMeta =
       const VerificationMeta('internalNote');
   @override
@@ -4299,6 +4305,7 @@ class $TransactionsTable extends Transactions
         paid,
         changeAmount,
         paymentMethod,
+        methodName,
         internalNote,
         strukNote,
         employeeName,
@@ -4379,6 +4386,12 @@ class $TransactionsTable extends Transactions
     } else if (isInserting) {
       context.missing(_paymentMethodMeta);
     }
+    if (data.containsKey('method_name')) {
+      context.handle(
+          _methodNameMeta,
+          methodName.isAcceptableOrUnknown(
+              data['method_name']!, _methodNameMeta));
+    }
     if (data.containsKey('internal_note')) {
       context.handle(
           _internalNoteMeta,
@@ -4450,6 +4463,8 @@ class $TransactionsTable extends Transactions
           .read(DriftSqlType.int, data['${effectivePrefix}change_amount'])!,
       paymentMethod: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}payment_method'])!,
+      methodName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}method_name']),
       internalNote: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}internal_note']),
       strukNote: attachedDatabase.typeMapping
@@ -4491,6 +4506,15 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final int paid;
   final int changeAmount;
   final String paymentMethod;
+
+  /// Nama SPESIFIK metode pembayaran yang dikonfigurasi toko sendiri (mis.
+  /// "GoPay", "BCA", "Dana" — dari `PaymentMethods.name`), snapshot pada
+  /// saat pembayaran PERTAMA nota ini dibuat. Beda dari [paymentMethod] yang
+  /// cuma kategori generik. null = nota lama (sebelum kolom ini ada) atau
+  /// metode tanpa nama spesifik tersimpan saat itu — semua tempat tampilan
+  /// (cetak/share/in-app struk) WAJIB fallback ke label generik dari
+  /// [paymentMethod] kalau ini null, jangan pernah menampilkan string kosong.
+  final String? methodName;
   final String? internalNote;
   final String? strukNote;
 
@@ -4525,6 +4549,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       required this.paid,
       required this.changeAmount,
       required this.paymentMethod,
+      this.methodName,
       this.internalNote,
       this.strukNote,
       this.employeeName,
@@ -4552,6 +4577,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     map['paid'] = Variable<int>(paid);
     map['change_amount'] = Variable<int>(changeAmount);
     map['payment_method'] = Variable<String>(paymentMethod);
+    if (!nullToAbsent || methodName != null) {
+      map['method_name'] = Variable<String>(methodName);
+    }
     if (!nullToAbsent || internalNote != null) {
       map['internal_note'] = Variable<String>(internalNote);
     }
@@ -4591,6 +4619,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       paid: Value(paid),
       changeAmount: Value(changeAmount),
       paymentMethod: Value(paymentMethod),
+      methodName: methodName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(methodName),
       internalNote: internalNote == null && nullToAbsent
           ? const Value.absent()
           : Value(internalNote),
@@ -4626,6 +4657,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       paid: serializer.fromJson<int>(json['paid']),
       changeAmount: serializer.fromJson<int>(json['changeAmount']),
       paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
+      methodName: serializer.fromJson<String?>(json['methodName']),
       internalNote: serializer.fromJson<String?>(json['internalNote']),
       strukNote: serializer.fromJson<String?>(json['strukNote']),
       employeeName: serializer.fromJson<String?>(json['employeeName']),
@@ -4650,6 +4682,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'paid': serializer.toJson<int>(paid),
       'changeAmount': serializer.toJson<int>(changeAmount),
       'paymentMethod': serializer.toJson<String>(paymentMethod),
+      'methodName': serializer.toJson<String?>(methodName),
       'internalNote': serializer.toJson<String?>(internalNote),
       'strukNote': serializer.toJson<String?>(strukNote),
       'employeeName': serializer.toJson<String?>(employeeName),
@@ -4672,6 +4705,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           int? paid,
           int? changeAmount,
           String? paymentMethod,
+          Value<String?> methodName = const Value.absent(),
           Value<String?> internalNote = const Value.absent(),
           Value<String?> strukNote = const Value.absent(),
           Value<String?> employeeName = const Value.absent(),
@@ -4692,6 +4726,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         paid: paid ?? this.paid,
         changeAmount: changeAmount ?? this.changeAmount,
         paymentMethod: paymentMethod ?? this.paymentMethod,
+        methodName: methodName.present ? methodName.value : this.methodName,
         internalNote:
             internalNote.present ? internalNote.value : this.internalNote,
         strukNote: strukNote.present ? strukNote.value : this.strukNote,
@@ -4723,6 +4758,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       paymentMethod: data.paymentMethod.present
           ? data.paymentMethod.value
           : this.paymentMethod,
+      methodName:
+          data.methodName.present ? data.methodName.value : this.methodName,
       internalNote: data.internalNote.present
           ? data.internalNote.value
           : this.internalNote,
@@ -4756,6 +4793,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('paid: $paid, ')
           ..write('changeAmount: $changeAmount, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('methodName: $methodName, ')
           ..write('internalNote: $internalNote, ')
           ..write('strukNote: $strukNote, ')
           ..write('employeeName: $employeeName, ')
@@ -4780,6 +4818,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       paid,
       changeAmount,
       paymentMethod,
+      methodName,
       internalNote,
       strukNote,
       employeeName,
@@ -4802,6 +4841,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.paid == this.paid &&
           other.changeAmount == this.changeAmount &&
           other.paymentMethod == this.paymentMethod &&
+          other.methodName == this.methodName &&
           other.internalNote == this.internalNote &&
           other.strukNote == this.strukNote &&
           other.employeeName == this.employeeName &&
@@ -4823,6 +4863,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<int> paid;
   final Value<int> changeAmount;
   final Value<String> paymentMethod;
+  final Value<String?> methodName;
   final Value<String?> internalNote;
   final Value<String?> strukNote;
   final Value<String?> employeeName;
@@ -4843,6 +4884,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.paid = const Value.absent(),
     this.changeAmount = const Value.absent(),
     this.paymentMethod = const Value.absent(),
+    this.methodName = const Value.absent(),
     this.internalNote = const Value.absent(),
     this.strukNote = const Value.absent(),
     this.employeeName = const Value.absent(),
@@ -4864,6 +4906,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     required int paid,
     required int changeAmount,
     required String paymentMethod,
+    this.methodName = const Value.absent(),
     this.internalNote = const Value.absent(),
     this.strukNote = const Value.absent(),
     this.employeeName = const Value.absent(),
@@ -4891,6 +4934,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<int>? paid,
     Expression<int>? changeAmount,
     Expression<String>? paymentMethod,
+    Expression<String>? methodName,
     Expression<String>? internalNote,
     Expression<String>? strukNote,
     Expression<String>? employeeName,
@@ -4912,6 +4956,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (paid != null) 'paid': paid,
       if (changeAmount != null) 'change_amount': changeAmount,
       if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (methodName != null) 'method_name': methodName,
       if (internalNote != null) 'internal_note': internalNote,
       if (strukNote != null) 'struk_note': strukNote,
       if (employeeName != null) 'employee_name': employeeName,
@@ -4935,6 +4980,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       Value<int>? paid,
       Value<int>? changeAmount,
       Value<String>? paymentMethod,
+      Value<String?>? methodName,
       Value<String?>? internalNote,
       Value<String?>? strukNote,
       Value<String?>? employeeName,
@@ -4955,6 +5001,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       paid: paid ?? this.paid,
       changeAmount: changeAmount ?? this.changeAmount,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      methodName: methodName ?? this.methodName,
       internalNote: internalNote ?? this.internalNote,
       strukNote: strukNote ?? this.strukNote,
       employeeName: employeeName ?? this.employeeName,
@@ -5000,6 +5047,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (paymentMethod.present) {
       map['payment_method'] = Variable<String>(paymentMethod.value);
     }
+    if (methodName.present) {
+      map['method_name'] = Variable<String>(methodName.value);
+    }
     if (internalNote.present) {
       map['internal_note'] = Variable<String>(internalNote.value);
     }
@@ -5043,6 +5093,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('paid: $paid, ')
           ..write('changeAmount: $changeAmount, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('methodName: $methodName, ')
           ..write('internalNote: $internalNote, ')
           ..write('strukNote: $strukNote, ')
           ..write('employeeName: $employeeName, ')
@@ -5758,6 +5809,12 @@ class $TransactionPaymentsTable extends TransactionPayments
   late final GeneratedColumn<String> method = GeneratedColumn<String>(
       'method', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _methodNameMeta =
+      const VerificationMeta('methodName');
+  @override
+  late final GeneratedColumn<String> methodName = GeneratedColumn<String>(
+      'method_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _paidAtMeta = const VerificationMeta('paidAt');
   @override
   late final GeneratedColumn<DateTime> paidAt = GeneratedColumn<DateTime>(
@@ -5817,6 +5874,7 @@ class $TransactionPaymentsTable extends TransactionPayments
         transactionId,
         amount,
         method,
+        methodName,
         paidAt,
         kasirId,
         note,
@@ -5859,6 +5917,12 @@ class $TransactionPaymentsTable extends TransactionPayments
           method.isAcceptableOrUnknown(data['method']!, _methodMeta));
     } else if (isInserting) {
       context.missing(_methodMeta);
+    }
+    if (data.containsKey('method_name')) {
+      context.handle(
+          _methodNameMeta,
+          methodName.isAcceptableOrUnknown(
+              data['method_name']!, _methodNameMeta));
     }
     if (data.containsKey('paid_at')) {
       context.handle(_paidAtMeta,
@@ -5909,6 +5973,8 @@ class $TransactionPaymentsTable extends TransactionPayments
           .read(DriftSqlType.int, data['${effectivePrefix}amount'])!,
       method: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}method'])!,
+      methodName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}method_name']),
       paidAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}paid_at'])!,
       kasirId: attachedDatabase.typeMapping
@@ -5938,6 +6004,14 @@ class TransactionPayment extends DataClass
   final String transactionId;
   final int amount;
   final String method;
+
+  /// Nama SPESIFIK metode pembayaran (lihat dok `Transactions.methodName`,
+  /// pola sama) — snapshot per BARIS pembayaran ini (satu nota bisa punya
+  /// beberapa pembayaran dgn metode berbeda-beda, mis. bayar sebagian tunai
+  /// lalu sisanya transfer). null utk baris jejak audit internal
+  /// (`method: 'edit'`/`'retur'`, amount 0) yang memang bukan pembayaran
+  /// nasabah sungguhan, atau data lama sebelum kolom ini ada.
+  final String? methodName;
   final DateTime paidAt;
   final String? kasirId;
   final String? note;
@@ -5983,6 +6057,7 @@ class TransactionPayment extends DataClass
       required this.transactionId,
       required this.amount,
       required this.method,
+      this.methodName,
       required this.paidAt,
       this.kasirId,
       this.note,
@@ -5997,6 +6072,9 @@ class TransactionPayment extends DataClass
     map['transaction_id'] = Variable<String>(transactionId);
     map['amount'] = Variable<int>(amount);
     map['method'] = Variable<String>(method);
+    if (!nullToAbsent || methodName != null) {
+      map['method_name'] = Variable<String>(methodName);
+    }
     map['paid_at'] = Variable<DateTime>(paidAt);
     if (!nullToAbsent || kasirId != null) {
       map['kasir_id'] = Variable<String>(kasirId);
@@ -6017,6 +6095,9 @@ class TransactionPayment extends DataClass
       transactionId: Value(transactionId),
       amount: Value(amount),
       method: Value(method),
+      methodName: methodName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(methodName),
       paidAt: Value(paidAt),
       kasirId: kasirId == null && nullToAbsent
           ? const Value.absent()
@@ -6037,6 +6118,7 @@ class TransactionPayment extends DataClass
       transactionId: serializer.fromJson<String>(json['transactionId']),
       amount: serializer.fromJson<int>(json['amount']),
       method: serializer.fromJson<String>(json['method']),
+      methodName: serializer.fromJson<String?>(json['methodName']),
       paidAt: serializer.fromJson<DateTime>(json['paidAt']),
       kasirId: serializer.fromJson<String?>(json['kasirId']),
       note: serializer.fromJson<String?>(json['note']),
@@ -6054,6 +6136,7 @@ class TransactionPayment extends DataClass
       'transactionId': serializer.toJson<String>(transactionId),
       'amount': serializer.toJson<int>(amount),
       'method': serializer.toJson<String>(method),
+      'methodName': serializer.toJson<String?>(methodName),
       'paidAt': serializer.toJson<DateTime>(paidAt),
       'kasirId': serializer.toJson<String?>(kasirId),
       'note': serializer.toJson<String?>(note),
@@ -6069,6 +6152,7 @@ class TransactionPayment extends DataClass
           String? transactionId,
           int? amount,
           String? method,
+          Value<String?> methodName = const Value.absent(),
           DateTime? paidAt,
           Value<String?> kasirId = const Value.absent(),
           Value<String?> note = const Value.absent(),
@@ -6081,6 +6165,7 @@ class TransactionPayment extends DataClass
         transactionId: transactionId ?? this.transactionId,
         amount: amount ?? this.amount,
         method: method ?? this.method,
+        methodName: methodName.present ? methodName.value : this.methodName,
         paidAt: paidAt ?? this.paidAt,
         kasirId: kasirId.present ? kasirId.value : this.kasirId,
         note: note.present ? note.value : this.note,
@@ -6097,6 +6182,8 @@ class TransactionPayment extends DataClass
           : this.transactionId,
       amount: data.amount.present ? data.amount.value : this.amount,
       method: data.method.present ? data.method.value : this.method,
+      methodName:
+          data.methodName.present ? data.methodName.value : this.methodName,
       paidAt: data.paidAt.present ? data.paidAt.value : this.paidAt,
       kasirId: data.kasirId.present ? data.kasirId.value : this.kasirId,
       note: data.note.present ? data.note.value : this.note,
@@ -6116,6 +6203,7 @@ class TransactionPayment extends DataClass
           ..write('transactionId: $transactionId, ')
           ..write('amount: $amount, ')
           ..write('method: $method, ')
+          ..write('methodName: $methodName, ')
           ..write('paidAt: $paidAt, ')
           ..write('kasirId: $kasirId, ')
           ..write('note: $note, ')
@@ -6128,8 +6216,8 @@ class TransactionPayment extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(id, transactionId, amount, method, paidAt,
-      kasirId, note, changeGiven, changeTaken, voided, sisaAfter);
+  int get hashCode => Object.hash(id, transactionId, amount, method, methodName,
+      paidAt, kasirId, note, changeGiven, changeTaken, voided, sisaAfter);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6138,6 +6226,7 @@ class TransactionPayment extends DataClass
           other.transactionId == this.transactionId &&
           other.amount == this.amount &&
           other.method == this.method &&
+          other.methodName == this.methodName &&
           other.paidAt == this.paidAt &&
           other.kasirId == this.kasirId &&
           other.note == this.note &&
@@ -6152,6 +6241,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
   final Value<String> transactionId;
   final Value<int> amount;
   final Value<String> method;
+  final Value<String?> methodName;
   final Value<DateTime> paidAt;
   final Value<String?> kasirId;
   final Value<String?> note;
@@ -6165,6 +6255,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.transactionId = const Value.absent(),
     this.amount = const Value.absent(),
     this.method = const Value.absent(),
+    this.methodName = const Value.absent(),
     this.paidAt = const Value.absent(),
     this.kasirId = const Value.absent(),
     this.note = const Value.absent(),
@@ -6179,6 +6270,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     required String transactionId,
     required int amount,
     required String method,
+    this.methodName = const Value.absent(),
     this.paidAt = const Value.absent(),
     this.kasirId = const Value.absent(),
     this.note = const Value.absent(),
@@ -6196,6 +6288,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     Expression<String>? transactionId,
     Expression<int>? amount,
     Expression<String>? method,
+    Expression<String>? methodName,
     Expression<DateTime>? paidAt,
     Expression<String>? kasirId,
     Expression<String>? note,
@@ -6210,6 +6303,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       if (transactionId != null) 'transaction_id': transactionId,
       if (amount != null) 'amount': amount,
       if (method != null) 'method': method,
+      if (methodName != null) 'method_name': methodName,
       if (paidAt != null) 'paid_at': paidAt,
       if (kasirId != null) 'kasir_id': kasirId,
       if (note != null) 'note': note,
@@ -6226,6 +6320,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       Value<String>? transactionId,
       Value<int>? amount,
       Value<String>? method,
+      Value<String?>? methodName,
       Value<DateTime>? paidAt,
       Value<String?>? kasirId,
       Value<String?>? note,
@@ -6239,6 +6334,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       transactionId: transactionId ?? this.transactionId,
       amount: amount ?? this.amount,
       method: method ?? this.method,
+      methodName: methodName ?? this.methodName,
       paidAt: paidAt ?? this.paidAt,
       kasirId: kasirId ?? this.kasirId,
       note: note ?? this.note,
@@ -6264,6 +6360,9 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     }
     if (method.present) {
       map['method'] = Variable<String>(method.value);
+    }
+    if (methodName.present) {
+      map['method_name'] = Variable<String>(methodName.value);
     }
     if (paidAt.present) {
       map['paid_at'] = Variable<DateTime>(paidAt.value);
@@ -6299,6 +6398,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
           ..write('transactionId: $transactionId, ')
           ..write('amount: $amount, ')
           ..write('method: $method, ')
+          ..write('methodName: $methodName, ')
           ..write('paidAt: $paidAt, ')
           ..write('kasirId: $kasirId, ')
           ..write('note: $note, ')
@@ -19129,6 +19229,7 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   required int paid,
   required int changeAmount,
   required String paymentMethod,
+  Value<String?> methodName,
   Value<String?> internalNote,
   Value<String?> strukNote,
   Value<String?> employeeName,
@@ -19151,6 +19252,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<int> paid,
   Value<int> changeAmount,
   Value<String> paymentMethod,
+  Value<String?> methodName,
   Value<String?> internalNote,
   Value<String?> strukNote,
   Value<String?> employeeName,
@@ -19289,6 +19391,9 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get paymentMethod => $composableBuilder(
       column: $table.paymentMethod, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get methodName => $composableBuilder(
+      column: $table.methodName, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get internalNote => $composableBuilder(
       column: $table.internalNote, builder: (column) => ColumnFilters(column));
@@ -19463,6 +19568,9 @@ class $$TransactionsTableOrderingComposer
       column: $table.paymentMethod,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get methodName => $composableBuilder(
+      column: $table.methodName, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get internalNote => $composableBuilder(
       column: $table.internalNote,
       builder: (column) => ColumnOrderings(column));
@@ -19530,6 +19638,9 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<String> get paymentMethod => $composableBuilder(
       column: $table.paymentMethod, builder: (column) => column);
+
+  GeneratedColumn<String> get methodName => $composableBuilder(
+      column: $table.methodName, builder: (column) => column);
 
   GeneratedColumn<String> get internalNote => $composableBuilder(
       column: $table.internalNote, builder: (column) => column);
@@ -19701,6 +19812,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<int> paid = const Value.absent(),
             Value<int> changeAmount = const Value.absent(),
             Value<String> paymentMethod = const Value.absent(),
+            Value<String?> methodName = const Value.absent(),
             Value<String?> internalNote = const Value.absent(),
             Value<String?> strukNote = const Value.absent(),
             Value<String?> employeeName = const Value.absent(),
@@ -19722,6 +19834,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             paid: paid,
             changeAmount: changeAmount,
             paymentMethod: paymentMethod,
+            methodName: methodName,
             internalNote: internalNote,
             strukNote: strukNote,
             employeeName: employeeName,
@@ -19743,6 +19856,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             required int paid,
             required int changeAmount,
             required String paymentMethod,
+            Value<String?> methodName = const Value.absent(),
             Value<String?> internalNote = const Value.absent(),
             Value<String?> strukNote = const Value.absent(),
             Value<String?> employeeName = const Value.absent(),
@@ -19764,6 +19878,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             paid: paid,
             changeAmount: changeAmount,
             paymentMethod: paymentMethod,
+            methodName: methodName,
             internalNote: internalNote,
             strukNote: strukNote,
             employeeName: employeeName,
@@ -20288,6 +20403,7 @@ typedef $$TransactionPaymentsTableCreateCompanionBuilder
   required String transactionId,
   required int amount,
   required String method,
+  Value<String?> methodName,
   Value<DateTime> paidAt,
   Value<String?> kasirId,
   Value<String?> note,
@@ -20303,6 +20419,7 @@ typedef $$TransactionPaymentsTableUpdateCompanionBuilder
   Value<String> transactionId,
   Value<int> amount,
   Value<String> method,
+  Value<String?> methodName,
   Value<DateTime> paidAt,
   Value<String?> kasirId,
   Value<String?> note,
@@ -20349,6 +20466,9 @@ class $$TransactionPaymentsTableFilterComposer
 
   ColumnFilters<String> get method => $composableBuilder(
       column: $table.method, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get methodName => $composableBuilder(
+      column: $table.methodName, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get paidAt => $composableBuilder(
       column: $table.paidAt, builder: (column) => ColumnFilters(column));
@@ -20410,6 +20530,9 @@ class $$TransactionPaymentsTableOrderingComposer
   ColumnOrderings<String> get method => $composableBuilder(
       column: $table.method, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get methodName => $composableBuilder(
+      column: $table.methodName, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get paidAt => $composableBuilder(
       column: $table.paidAt, builder: (column) => ColumnOrderings(column));
 
@@ -20469,6 +20592,9 @@ class $$TransactionPaymentsTableAnnotationComposer
 
   GeneratedColumn<String> get method =>
       $composableBuilder(column: $table.method, builder: (column) => column);
+
+  GeneratedColumn<String> get methodName => $composableBuilder(
+      column: $table.methodName, builder: (column) => column);
 
   GeneratedColumn<DateTime> get paidAt =>
       $composableBuilder(column: $table.paidAt, builder: (column) => column);
@@ -20542,6 +20668,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<String> transactionId = const Value.absent(),
             Value<int> amount = const Value.absent(),
             Value<String> method = const Value.absent(),
+            Value<String?> methodName = const Value.absent(),
             Value<DateTime> paidAt = const Value.absent(),
             Value<String?> kasirId = const Value.absent(),
             Value<String?> note = const Value.absent(),
@@ -20556,6 +20683,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             transactionId: transactionId,
             amount: amount,
             method: method,
+            methodName: methodName,
             paidAt: paidAt,
             kasirId: kasirId,
             note: note,
@@ -20570,6 +20698,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             required String transactionId,
             required int amount,
             required String method,
+            Value<String?> methodName = const Value.absent(),
             Value<DateTime> paidAt = const Value.absent(),
             Value<String?> kasirId = const Value.absent(),
             Value<String?> note = const Value.absent(),
@@ -20584,6 +20713,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             transactionId: transactionId,
             amount: amount,
             method: method,
+            methodName: methodName,
             paidAt: paidAt,
             kasirId: kasirId,
             note: note,

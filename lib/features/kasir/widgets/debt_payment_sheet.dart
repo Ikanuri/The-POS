@@ -8,10 +8,13 @@ import 'payment_qris_view.dart';
 /// Sheet pelunasan / tambah bayar hutang — kalkulator gaya checkout, plus
 /// pemilihan metode bayar & tampilan QRIS/metadata langsung di dalamnya.
 ///
-/// Mengembalikan `(amount, method)` atau null bila dibatalkan. [method] =
-/// `PaymentMethod.type` metode terpilih (konsisten dgn cara transaksi awal
-/// menyimpan `paymentMethod` — lihat payment_screen `_selectedMethodType`).
-/// Default = 'tunai' (metode Tunai selalu ada & tak bisa dinonaktifkan).
+/// Mengembalikan `(amount, method, methodName)` atau null bila dibatalkan.
+/// [method] = `PaymentMethod.type` metode terpilih (konsisten dgn cara
+/// transaksi awal menyimpan `paymentMethod` — lihat payment_screen
+/// `_selectedMethodType`). [methodName] = nama SPESIFIK metode terpilih
+/// (mis. "GoPay") — null utk Tunai/metode tanpa nama spesifik, dipakai
+/// caller utk snapshot `TransactionPayments.methodName`. Default =
+/// 'tunai'/null (metode Tunai selalu ada & tak bisa dinonaktifkan).
 ///
 /// Menggantikan `showDebtPaymentDialog` (AlertDialog sempit) di SEMUA
 /// pemanggil — pelunasan satu nota (struk/riwayat/daftar transaksi) maupun
@@ -20,7 +23,7 @@ import 'payment_qris_view.dart';
 /// dibungkus `IntrinsicWidth` oleh framework & lebarnya dipotong
 /// inset/content padding — QR 200px + metadata + keypad TIDAK muat di sana
 /// (file dialog lama sendiri sudah pernah kena overflow 3-tombol).
-Future<({int amount, String method})?> showDebtPaymentSheet(
+Future<({int amount, String method, String? methodName})?> showDebtPaymentSheet(
   BuildContext context,
   AppDatabase db, {
   required int remaining,
@@ -35,7 +38,8 @@ Future<({int amount, String method})?> showDebtPaymentSheet(
   // default awalnya SELALU statis (lihat dok `_DebtPaymentSheet._qrDynamic`).
   final qrisEnabled = (await db.getSetting('qris_dynamic_enabled')) != '0';
   if (!context.mounted) return null;
-  return showModalBottomSheet<({int amount, String method})>(
+  return showModalBottomSheet<
+      ({int amount, String method, String? methodName})>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -429,7 +433,8 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
                                 onPressed: _payEnabled
                                     ? () => Navigator.of(ctx).pop((
                                           amount: _payAmount,
-                                          method: _selectedType
+                                          method: _selectedType,
+                                          methodName: _selected?.name,
                                         ))
                                     : null,
                                 child: Text(_payLabel,

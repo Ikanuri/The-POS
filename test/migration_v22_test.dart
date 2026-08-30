@@ -57,6 +57,8 @@ void main() {
     v21.execute('CREATE TABLE products(id TEXT PRIMARY KEY, name TEXT);');
     // customers diperlukan agar migrasi v28 (addColumn locally_modified) tak gagal.
     v21.execute('CREATE TABLE customers(id TEXT PRIMARY KEY);');
+    // transactions diperlukan agar migrasi v34 (addColumn method_name) tak gagal.
+    v21.execute('CREATE TABLE transactions(id TEXT PRIMARY KEY);');
     v21.execute('''
       CREATE TABLE product_units (
         id TEXT NOT NULL PRIMARY KEY,
@@ -107,7 +109,7 @@ void main() {
     }
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 33); // schemaVersion terkini
+    expect(ver.data.values.first, 34); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

@@ -24,8 +24,7 @@ class StatsRangeBar extends StatelessWidget {
   final DateTimeRange range;
   final ValueChanged<DateTimeRange> onChanged;
 
-  static String fmt(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/'
+  static String fmt(DateTime d) => '${d.day.toString().padLeft(2, '0')}/'
       '${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   Future<void> _pick(BuildContext context) async {
@@ -104,8 +103,7 @@ class StatTile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(label,
-                style: TextStyle(
-                    fontSize: 11, color: scheme.onSurfaceVariant)),
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
             const SizedBox(height: 4),
             Text(
               value,
@@ -186,11 +184,13 @@ class StatsTrendChart extends StatelessWidget {
 
     final maxY = data.map((e) => e.value).reduce((a, b) => a > b ? a : b);
     final spots = [
-      for (var i = 0; i < n; i++) FlSpot(i.toDouble(), data[i].value.toDouble()),
+      for (var i = 0; i < n; i++)
+        FlSpot(i.toDouble(), data[i].value.toDouble()),
     ];
     // Interval label: target ~5 label terlihat, minimal 1 (hindari
     // ArgumentError fl_chart kalau interval 0 pada n kecil).
-    final labelInterval = n <= 1 ? 1.0 : ((n - 1) / 5).clamp(1, n - 1).toDouble();
+    final labelInterval =
+        n <= 1 ? 1.0 : ((n - 1) / 5).clamp(1, n - 1).toDouble();
 
     return SizedBox(
       height: 140,
@@ -211,6 +211,29 @@ class StatsTrendChart extends StatelessWidget {
                   FlLine(color: scheme.outlineVariant, strokeWidth: 0.5),
             ),
             borderData: FlBorderData(show: false),
+            // Susulan (permintaan user): nominal PUNCAK selalu tampil di kiri
+            // atas TANPA perlu tap/drag ("quick insight") — garis putus-putus
+            // di level maxY (data mentah, BUKAN maxY chart yg sudah dikasih
+            // headroom 15%) + label nilainya.
+            extraLinesData: ExtraLinesData(horizontalLines: [
+              HorizontalLine(
+                y: maxY.toDouble(),
+                color: color.withOpacity(0.4),
+                strokeWidth: 1,
+                dashArray: const [4, 4],
+                label: HorizontalLineLabel(
+                  show: true,
+                  alignment: Alignment.topLeft,
+                  padding: const EdgeInsets.only(bottom: 4, left: 2),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                  labelResolver: (_) => valueLabel(maxY),
+                ),
+              ),
+            ]),
             titlesData: FlTitlesData(
               leftTitles:
                   const AxisTitles(sideTitles: SideTitles(showTitles: false)),

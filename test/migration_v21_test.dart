@@ -59,6 +59,8 @@ void main() {
     v20.execute('CREATE TABLE product_units(id TEXT PRIMARY KEY);');
     // customers diperlukan agar migrasi v28 (addColumn locally_modified) tak gagal.
     v20.execute('CREATE TABLE customers(id TEXT PRIMARY KEY);');
+    // transactions diperlukan agar migrasi v34 (addColumn method_name) tak gagal.
+    v20.execute('CREATE TABLE transactions(id TEXT PRIMARY KEY);');
     v20.execute('''
       CREATE TABLE sync_upload_queue (
         id TEXT NOT NULL PRIMARY KEY,
@@ -103,7 +105,7 @@ void main() {
     expect(rows.single.deviceCode, isNull);
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 33); // schemaVersion terkini
+    expect(ver.data.values.first, 34); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

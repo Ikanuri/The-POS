@@ -8,6 +8,35 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 30 Agustus 2026
+
+### ✨ Fitur Baru
+- **Riwayat Transaksi sekarang bisa difilter berdasarkan metode
+  pembayaran** (Tunai/Transfer Bank/QRIS/E-Wallet/Tempo) — chip baru
+  di samping filter status & tanggal yang sudah ada.
+
+### 🔧 Perbaikan
+- **Chart "Penjualan Harian" di Laporan tidak lagi tumpuk labelnya**
+  untuk rentang tanggal panjang (mis. sebulan penuh) — diganti jadi
+  chart garis, sama seperti chart "Tren penjualan" di detail produk.
+  Sekalian, kedua chart ini sekarang menampilkan nominal PUNCAK
+  langsung di layar (garis putus-putus + angkanya) tanpa perlu tap
+  atau geser dulu.
+- **Rincian jam di chart "Penjualan Per Jam" (Ringkasan) sekarang dibuka
+  dengan sekali TAP** — sebelumnya harus tekan-tahan dan otomatis hilang
+  begitu jari dilepas. Sekarang tap satu batang untuk melihat detailnya,
+  tetap tampil sampai kamu tap batang lain, tap area lain di layar, atau
+  scroll.
+- **Metode pembayaran di struk (cetak, share, & tampilan in-app) sekarang
+  menampilkan nama spesifik yang kamu atur sendiri** (mis. "GoPay", "BCA")
+  — bukan cuma kategori umum "E-Wallet"/"Transfer Bank". Nota lama (sebelum
+  pembaruan ini) tetap tampil dengan label umum seperti biasa.
+- **Opsi baru di Pengaturan > Printer Bluetooth: "Putuskan koneksi otomatis
+  setelah cetak"** — berguna kalau printer kamu tidak mendukung 2 perangkat
+  sekaligus, atau sering gagal cetak setelah Bluetooth dimatikan-nyalakan.
+  Default tetap seperti sebelumnya (printer tetap tersambung setelah cetak)
+  supaya yang biasa cetak cepat tanpa reconnect tidak terganggu.
+
 ## 29 Agustus 2026
 
 ### 🔧 Perbaikan

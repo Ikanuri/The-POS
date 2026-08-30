@@ -19,6 +19,15 @@ class Transactions extends Table {
   IntColumn get changeAmount => integer()();
   TextColumn get paymentMethod =>
       text()(); // tunai | transfer | qris | ewallet | tempo
+
+  /// Nama SPESIFIK metode pembayaran yang dikonfigurasi toko sendiri (mis.
+  /// "GoPay", "BCA", "Dana" — dari `PaymentMethods.name`), snapshot pada
+  /// saat pembayaran PERTAMA nota ini dibuat. Beda dari [paymentMethod] yang
+  /// cuma kategori generik. null = nota lama (sebelum kolom ini ada) atau
+  /// metode tanpa nama spesifik tersimpan saat itu — semua tempat tampilan
+  /// (cetak/share/in-app struk) WAJIB fallback ke label generik dari
+  /// [paymentMethod] kalau ini null, jangan pernah menampilkan string kosong.
+  TextColumn get methodName => text().nullable()();
   TextColumn get internalNote => text().nullable()();
   TextColumn get strukNote => text().nullable()();
 
@@ -86,6 +95,14 @@ class TransactionPayments extends Table {
   TextColumn get transactionId => text().references(Transactions, #id)();
   IntColumn get amount => integer()();
   TextColumn get method => text()();
+
+  /// Nama SPESIFIK metode pembayaran (lihat dok `Transactions.methodName`,
+  /// pola sama) — snapshot per BARIS pembayaran ini (satu nota bisa punya
+  /// beberapa pembayaran dgn metode berbeda-beda, mis. bayar sebagian tunai
+  /// lalu sisanya transfer). null utk baris jejak audit internal
+  /// (`method: 'edit'`/`'retur'`, amount 0) yang memang bukan pembayaran
+  /// nasabah sungguhan, atau data lama sebelum kolom ini ada.
+  TextColumn get methodName => text().nullable()();
   DateTimeColumn get paidAt => dateTime().withDefault(currentDateAndTime)();
   TextColumn get kasirId => text().nullable()();
   TextColumn get note => text().nullable()();

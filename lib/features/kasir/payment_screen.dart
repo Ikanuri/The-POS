@@ -86,6 +86,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
     if (mounted) setState(() => _laciMejaPending = pending);
   }
+
   final _custCtrl = TextEditingController();
   // Untuk menggulir field pelanggan ke atas viewport agar dropdown saran tidak
   // tertutup keyboard saat mengetik.
@@ -93,6 +94,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   List<PaymentMethod> _methods = [];
   bool _isSaving = false;
+
+  /// Metode terpilih SAAT INI — dipakai utk snapshot nama spesifik (mis.
+  /// "GoPay", "BCA") ke `Transactions.methodName`/`TransactionPayments.
+  /// methodName` saat nota/pembayaran dibuat (lihat dok kolom itu).
+  PaymentMethod? get _selectedMethod =>
+      _methods.where((m) => m.id == _selectedMethodId).firstOrNull;
 
   /// Mode QR QRIS: true = sisipkan nominal transaksi ke payload (lihat
   /// `qris_dynamic.dart`), false = tampilkan QRIS statis polos. Persisten
@@ -495,9 +502,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // TIDAK BOLEH menggagalkan checkout — jatuh ke nomor bebas berikutnya
       // saja. Lebih baik nomor nota lompat daripada penjualan tidak bisa
       // ditutup.
-      final localId = (reservedId != null && !await db.isLocalIdTaken(reservedId))
-          ? reservedId
-          : await db.generateUniqueLocalId(device.deviceCode, now);
+      final localId =
+          (reservedId != null && !await db.isLocalIdTaken(reservedId))
+              ? reservedId
+              : await db.generateUniqueLocalId(device.deviceCode, now);
 
       final isTempo = _selectedMethodType == 'tempo';
       final paidAmount = isTempo ? 0 : _paid;
@@ -581,6 +589,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         paid: paidAmount,
         changeAmount: _change,
         paymentMethod: _selectedMethodType,
+        methodName: Value(_selectedMethod?.name),
         employeeName: Value(_selectedEmployee?.name),
         pointsEarned: Value(pointsEarned),
         createdAt: Value(now),
@@ -596,6 +605,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 transactionId: txId,
                 amount: paidAmount,
                 method: _selectedMethodType,
+                methodName: Value(_selectedMethod?.name),
                 paidAt: Value(now),
                 kasirId: Value(device.deviceCode),
                 // Transaksi baru → tidak ada pembayaran sebelumnya, jadi
@@ -757,6 +767,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             transactionId: txId,
             amount: paidAmount,
             method: _selectedMethodType,
+            methodName: Value(_selectedMethod?.name),
             paidAt: Value(now),
             kasirId: Value(device.deviceCode),
             note: const Value('Tambah belanjaan'),
@@ -1069,7 +1080,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                             ],
                                           ),
                                         ),
-                                      LaciMejaReminder(pending: _laciMejaPending),
+                                      LaciMejaReminder(
+                                          pending: _laciMejaPending),
                                     ] else ...[
                                       TextField(
                                         key: _custFieldKey,
@@ -2130,8 +2142,8 @@ class _PaymentMetadataDisplay extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('$label — ${method.name}',
-                      style:
-                          TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
                   const SizedBox(height: 2),
                   SelectableText(data,
                       style: const TextStyle(
