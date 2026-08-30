@@ -170,8 +170,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// bisa DIKLIK, merujuk balik ke nota tempat pre-order itu dicatat —
   /// berguna kalau kasir/owner sewaktu-waktu ingin cek momen nota asli.
   /// Lihat dok `AppDatabase.getOpenPreorderRefsForCustomer`.
-  Map<String, ({String transactionId, DateTime createdAt})>
-      _openPreorderRefs = {};
+  Map<String, ({String transactionId, DateTime createdAt})> _openPreorderRefs =
+      {};
 
   /// Satu recognizer per item.id — DIPAKAI ULANG tiap rebuild (bukan dibuat
   /// baru di `_itemCheckRow` yang dipanggil ulang tiap build), `onTap`-nya
@@ -274,6 +274,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// Method refund yang dipakai (dari pembayaran refund TERAKHIR).
   String? get _refundMethod =>
       _payments.where((p) => !p.voided && p.amount < 0).lastOrNull?.method;
+
+  /// Nama SPESIFIK metode refund (lihat dok `_methodLabel`) — pasangan
+  /// [_refundMethod], sama sumber baris.
+  String? get _refundMethodName =>
+      _payments.where((p) => !p.voided && p.amount < 0).lastOrNull?.methodName;
 
   /// Item induk dari sebuah baris (null bila baris ini bukan varian atau
   /// induknya tidak ada di transaksi ini).
@@ -646,7 +651,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       // Item 49g — nota lunas: nilai turun -> refund
                       // sungguhan (uang sudah pernah masuk), bukan hutang.
                       ? 'Nota sudah lunas — nilai yang berkurang dikembalikan '
-                          'sbg refund ${_methodLabel(_tx!.paymentMethod)}.'
+                          'sbg refund ${_methodLabel(_tx!.paymentMethod, name: _tx!.methodName)}.'
                       : 'Nota belum lunas — perubahan langsung menyesuaikan total & hutang.',
                   style:
                       TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
@@ -895,7 +900,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Batalkan Pembayaran?'),
         content: Text(
-          'Pembayaran ${formatRupiah(payment.amount)} (${_methodLabel(payment.method)}) '
+          'Pembayaran ${formatRupiah(payment.amount)} (${_methodLabel(payment.method, name: payment.methodName)}) '
           'pada ${_formatDateTime(payment.paidAt)} akan dibatalkan. Nota '
           'kembali berstatus belum lunas — barang & stok TIDAK berubah.',
           style: const TextStyle(fontSize: 13),
@@ -1113,12 +1118,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // `_customerDisplay` (registered > ad-hoc), tapi dihitung di sini krn
     // `_customer` belum ke-set di titik ini (masih variabel lokal `customer`).
     final customerDisplay = customer?.name ?? tx.customerName;
-    final openPreorderRefs = (customerDisplay != null &&
-            customerDisplay.trim().isNotEmpty)
-        ? await db.getOpenPreorderRefsForCustomer(
-            customerName: customerDisplay,
-            excludeTransactionId: widget.transactionId)
-        : <String, ({String transactionId, DateTime createdAt})>{};
+    final openPreorderRefs =
+        (customerDisplay != null && customerDisplay.trim().isNotEmpty)
+            ? await db.getOpenPreorderRefsForCustomer(
+                customerName: customerDisplay,
+                excludeTransactionId: widget.transactionId)
+            : <String, ({String transactionId, DateTime createdAt})>{};
     final storeAddress = await db.getSetting('store_address') ?? '';
     final storePhone = await db.getSetting('store_phone') ?? '';
     final storeWhatsapp = await db.getSetting('store_whatsapp') ?? '';
@@ -1366,14 +1371,21 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     );
   }
 
-  String _methodLabel(String method) => switch (method) {
-        'tunai' => 'Tunai',
-        'bank' => 'Transfer',
-        'qris' => 'QRIS',
-        'ewallet' => 'E-Wallet',
-        'tempo' => 'Tempo',
-        _ => method,
-      };
+  /// Susulan (permintaan user) — [name] = nama SPESIFIK metode yang
+  /// dikonfigurasi toko (`PaymentMethods.name`, mis. "GoPay"/"BCA"), dipakai
+  /// kalau ada & tidak kosong. Fallback ke label kategori generik utk nota
+  /// lama (kolom `methodName` null) atau baris jejak audit internal.
+  String _methodLabel(String method, {String? name}) {
+    if (name != null && name.trim().isNotEmpty) return name.trim();
+    return switch (method) {
+      'tunai' => 'Tunai',
+      'bank' => 'Transfer',
+      'qris' => 'QRIS',
+      'ewallet' => 'E-Wallet',
+      'tempo' => 'Tempo',
+      _ => method,
+    };
+  }
 
   Future<void> _showTambahBayar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -1393,6 +1405,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         txId: widget.transactionId,
         amount: result.amount,
         method: result.method,
+        methodName: result.methodName,
         kasirId: device.deviceCode,
       );
       await _load();
@@ -1743,14 +1756,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     if (returns.isEmpty) return;
 
     // Terjemahkan id metode terpilih kembali ke `type` (yang disimpan DB).
-    final refundMethod =
-        paymentMethods.where((m) => m.id == refundMethodId).firstOrNull?.type ??
-            'tunai';
+    final refundMethodMatch =
+        paymentMethods.where((m) => m.id == refundMethodId).firstOrNull;
     await db.returnPaidTransactionItems(
       txId: _tx!.id,
       returns: returns,
       kasirId: device.deviceCode,
-      refundMethod: refundMethod,
+      refundMethod: refundMethodMatch?.type ?? 'tunai',
+      refundMethodName: refundMethodMatch?.name,
     );
     // Nota berubah (baris retur baru & total berkurang) — muat ulang agar
     // layar (footer breakdown Total awal/Retur/dst) tidak menampilkan data
@@ -2867,7 +2880,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           if (tx.paid > 0)
                             _SummaryRow(
                                 'Dibayar',
-                                '${_methodLabel(tx.paymentMethod)} · '
+                                '${_methodLabel(tx.paymentMethod, name: tx.methodName)} · '
                                     '${formatRupiah(dibayarDisplay(tx, _payments, _latestPayment?.changeGiven ?? 0))}'),
                           // Item 49b — ringkasan disederhanakan jadi 3 baris
                           // inti (state akhir akumulatif): Total / Dibayar /
@@ -2895,7 +2908,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             ),
                           if (_hasRetur && _refundTotal > 0)
                             _SummaryRow(
-                              'Refund ${_methodLabel(_refundMethod ?? '')}',
+                              'Refund ${_methodLabel(_refundMethod ?? '', name: _refundMethodName)}',
                               formatRupiah(_refundTotal),
                               color: scheme.error,
                             ),
@@ -3312,8 +3325,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     : '';
                 return _laciMejaEntryBlock(
                   fg: fg,
-                  headline:
-                      '${_fmtQtyShort(p.qtyOrdered)} $nama$jaminan',
+                  headline: '${_fmtQtyShort(p.qtyOrdered)} $nama$jaminan',
                   createdLabel: 'Dipesan',
                   createdAt: p.createdAt,
                   events: events,
@@ -3429,7 +3441,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                       : null)),
                         ),
                         const SizedBox(width: 8),
-                        Text(_methodLabel(p.method),
+                        Text(_methodLabel(p.method, name: p.methodName),
                             style: TextStyle(
                                 fontSize: 12,
                                 color: scheme.onSurfaceVariant,
@@ -3622,6 +3634,9 @@ class _ReceiptPaper extends StatelessWidget {
 
   String? get _refundMethod =>
       payments.where((p) => !p.voided && p.amount < 0).lastOrNull?.method;
+
+  String? get _refundMethodName =>
+      payments.where((p) => !p.voided && p.amount < 0).lastOrNull?.methodName;
 
   /// Item terurut: induk diikuti varian-variannya.
   List<TransactionItem> get _ordered {
@@ -3875,7 +3890,8 @@ class _ReceiptPaper extends StatelessWidget {
                 // "Total awal"/"Retur" — cegah overflow di container lebar
                 // tetap (300px).
                 Expanded(
-                  child: Text('Refund ${_methodShort(_refundMethod ?? '')}',
+                  child: Text(
+                      'Refund ${_methodShort(_refundMethod ?? '', name: _refundMethodName)}',
                       style: _mono),
                 ),
                 Text('Rp ${_fmtNum(_refundTotal)}', style: _mono),
@@ -3891,7 +3907,7 @@ class _ReceiptPaper extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                          '${_fmtDateTime(p.paidAt)} ${_methodShort(p.method)}',
+                          '${_fmtDateTime(p.paidAt)} ${_methodShort(p.method, name: p.methodName)}',
                           style: _mono.copyWith(fontSize: 11)),
                     ),
                     Text('Rp ${_fmtNum(p.amount)}',
@@ -3963,13 +3979,18 @@ class _ReceiptPaper extends StatelessWidget {
   String _fmtDateTime(DateTime dt) => '${dt.day}/${dt.month} '
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
-  String _methodShort(String m) => switch (m) {
-        'tunai' => 'Tunai',
-        'bank' => 'Transfer',
-        'qris' => 'QRIS',
-        'ewallet' => 'E-Wallet',
-        _ => m,
-      };
+  /// Susulan (permintaan user) — lihat dok pasangan `_methodLabel` di
+  /// `_ReceiptScreenState`.
+  String _methodShort(String m, {String? name}) {
+    if (name != null && name.trim().isNotEmpty) return name.trim();
+    return switch (m) {
+      'tunai' => 'Tunai',
+      'bank' => 'Transfer',
+      'qris' => 'QRIS',
+      'ewallet' => 'E-Wallet',
+      _ => m,
+    };
+  }
 
   String _fmtNum(int v) {
     final s = v.toString();

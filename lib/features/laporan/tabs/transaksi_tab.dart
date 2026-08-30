@@ -232,6 +232,7 @@ class _TxTile extends ConsumerWidget {
         txId: tx.id,
         amount: result.amount,
         method: result.method,
+        methodName: result.methodName,
         kasirId: device.deviceCode,
       );
       if (ctx.mounted) Navigator.of(ctx).pop();

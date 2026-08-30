@@ -1084,6 +1084,7 @@ class _TxDetail extends ConsumerWidget {
       txId: tx.id,
       amount: result.amount,
       method: result.method,
+      methodName: result.methodName,
       kasirId: device.deviceCode,
     );
     final newRemaining = (await db.getNetSisaForTxIds([tx.id]))[tx.id] ?? 0;

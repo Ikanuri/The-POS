@@ -54,6 +54,8 @@ void main() {
     ''');
     // customers diperlukan agar migrasi v28 (addColumn locally_modified) tak gagal.
     v22.execute('CREATE TABLE customers(id TEXT PRIMARY KEY);');
+    // transactions diperlukan agar migrasi v34 (addColumn method_name) tak gagal.
+    v22.execute('CREATE TABLE transactions(id TEXT PRIMARY KEY);');
     v22.execute('''
       CREATE TABLE left_behind_items (
         id TEXT NOT NULL PRIMARY KEY,
@@ -131,7 +133,7 @@ void main() {
         reason: 'entri lama memang tidak punya tautan ke baris nota');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 33); // schemaVersion terkini
+    expect(ver.data.values.first, 34); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

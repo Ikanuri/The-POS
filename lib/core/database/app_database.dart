@@ -139,6 +139,7 @@ typedef PreorderPendingLine = ({
   String productName,
   double qty,
   double depositQty,
+
   /// Id baris `preorder_entries` & nota tempat pre-order ini dicatat —
   /// permintaan user: cart bar bisa merujuk balik ke nota ASLI pre-order
   /// (bukan cuma info nama+qty). `transactionId` nullable (satu-satunya
@@ -254,7 +255,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 34;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -337,23 +338,20 @@ class AppDatabase extends _$AppDatabase {
   /// tabel+kolom yang ditarget di sini semuanya sudah ada sejak
   /// schemaVersion 1 di DB produksi nyata manapun.
   Future<void> _createIndexesIfTableExists(List<String> statements) async {
-    final existingTables = (await customSelect(
-            "SELECT name FROM sqlite_master WHERE type='table'")
-        .get())
-        .map((r) => r.data['name'] as String)
-        .toSet();
+    final existingTables =
+        (await customSelect("SELECT name FROM sqlite_master WHERE type='table'")
+                .get())
+            .map((r) => r.data['name'] as String)
+            .toSet();
     for (final stmt in statements) {
-      final match =
-          RegExp(r'\sON\s+(\w+)\s*\(([^)]+)\)').firstMatch(stmt);
+      final match = RegExp(r'\sON\s+(\w+)\s*\(([^)]+)\)').firstMatch(stmt);
       final table = match?.group(1);
       if (table == null || !existingTables.contains(table)) continue;
       final cols = (await customSelect("PRAGMA table_info('$table')").get())
           .map((r) => r.data['name'] as String)
           .toSet();
-      final wantedCols = match!
-          .group(2)!
-          .split(',')
-          .map((c) => c.trim().split(' ').first);
+      final wantedCols =
+          match!.group(2)!.split(',').map((c) => c.trim().split(' ').first);
       if (wantedCols.any((c) => !cols.contains(c))) continue;
       await customStatement(stmt);
     }
@@ -442,8 +440,10 @@ class AppDatabase extends _$AppDatabase {
             // Kembalian per-pembayaran (bukan cuma per-transaksi) — tiap
             // baris transaction_payments punya kembaliannya sendiri +
             // status sudah-diambil sendiri.
-            await m.addColumn(transactionPayments, transactionPayments.changeGiven);
-            await m.addColumn(transactionPayments, transactionPayments.changeTaken);
+            await m.addColumn(
+                transactionPayments, transactionPayments.changeGiven);
+            await m.addColumn(
+                transactionPayments, transactionPayments.changeTaken);
           }
           if (from < 14) {
             // Tanda cepat "stok habis" manual per produk (Item 25a).
@@ -521,8 +521,7 @@ class AppDatabase extends _$AppDatabase {
             // transactionItemId`). Guard `from >= 22`: upgrade dari versi
             // < 22 sudah dapat definisi tabel TERKINI dari `createTable`
             // di step v22.
-            await m.addColumn(
-                borrowedItems, borrowedItems.transactionItemId);
+            await m.addColumn(borrowedItems, borrowedItems.transactionItemId);
           }
           if (from < 25 && from >= 22) {
             // Item 52 susulan lagi — qty parsial Titip/Ketinggalan (bisa
@@ -575,7 +574,8 @@ class AppDatabase extends _$AppDatabase {
             // Riwayat Pembayaran: rincian per-produk retur/edit + sisa
             // tempo per momen (lihat dok `TransactionAdjustmentLines` &
             // `TransactionPayments.sisaAfter`).
-            await m.addColumn(transactionPayments, transactionPayments.sisaAfter);
+            await m.addColumn(
+                transactionPayments, transactionPayments.sisaAfter);
             await m.createTable(transactionAdjustmentLines);
           }
           if (from < 33) {
@@ -593,8 +593,8 @@ class AppDatabase extends _$AppDatabase {
             // pengembalian terakhir tercatat. Id deterministik (`bf-<id>`)
             // supaya migrasi yang terulang tidak menggandakan baris.
             final tables = (await customSelect(
-                    "SELECT name FROM sqlite_master WHERE type='table'")
-                .get())
+                        "SELECT name FROM sqlite_master WHERE type='table'")
+                    .get())
                 .map((r) => r.data['name'] as String)
                 .toSet();
             if (tables.contains('borrowed_items')) {
@@ -607,6 +607,16 @@ class AppDatabase extends _$AppDatabase {
                 "FROM borrowed_items WHERE qty_returned > 0",
               );
             }
+          }
+          if (from < 34) {
+            // Susulan (permintaan user) — nama SPESIFIK metode pembayaran
+            // (mis. "GoPay", "BCA"), bukan cuma kategori generik yang sudah
+            // ada. Lihat dok `Transactions.methodName`/
+            // `TransactionPayments.methodName`. Nota lama tetap null —
+            // seluruh tempat tampilan WAJIB fallback ke label generik.
+            await m.addColumn(transactions, transactions.methodName);
+            await m.addColumn(
+                transactionPayments, transactionPayments.methodName);
           }
         },
         beforeOpen: (details) async {
@@ -823,8 +833,7 @@ class AppDatabase extends _$AppDatabase {
   /// siap-tampil untuk produk yang stok satuan dasarnya kini <= ambang
   /// minStock (ambang hanya di satuan dasar, Item 11). Kosong bila tak ada
   /// yang menipis.
-  Future<List<String>> lowStockAlertsForProducts(
-      Set<String> productIds) async {
+  Future<List<String>> lowStockAlertsForProducts(Set<String> productIds) async {
     final msgs = <String>[];
     for (final pid in productIds) {
       final units = await (select(productUnits)
@@ -1042,7 +1051,7 @@ class AppDatabase extends _$AppDatabase {
   /// (lihat dok `adoptReservedLocalId` soal bagaimana itu bisa terjadi).
   Future<bool> isLocalIdTaken(String localId) async =>
       (await (select(transactions)..where((t) => t.localId.equals(localId)))
-              .getSingleOrNull()) !=
+          .getSingleOrNull()) !=
       null;
 
   String _localIdPrefix(String deviceCode, DateTime at) {
@@ -1122,8 +1131,7 @@ class AppDatabase extends _$AppDatabase {
   /// Set id produk yang stoknya menipis (untuk filter daftar Produk).
   Future<Set<String>> getLowStockProductIds() async {
     final rows = await customSelect(_lowStockSql,
-            readsFrom: {productUnits, products, stockLedger})
-        .get();
+        readsFrom: {productUnits, products, stockLedger}).get();
     return rows.map((r) => r.data['pid'] as String).toSet();
   }
 
@@ -1167,12 +1175,14 @@ class AppDatabase extends _$AppDatabase {
   /// kelihatan perlu dicek/diisi) — bukan disembunyikan spt di Item 29.
   Stream<List<StockOverviewRow>> watchStockOverview({int? groupId}) {
     final variables = <Variable<Object>>[];
-    var where = 'pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1';
+    var where =
+        'pu.is_base_unit = 1 AND pu.is_non_stock = 0 AND p.is_active = 1';
     if (groupId != null) {
       where += ' AND p.product_group_id = ?';
       variables.add(Variable<Object>(groupId));
     }
-    return customSelect('''
+    return customSelect(
+            '''
       SELECT pu.id AS unit_id, pu.product_id AS pid, p.name AS name,
         p.product_group_id AS group_id, pu.min_stock AS min_stock,
         p.marked_out_of_stock AS marked_out_of_stock,
@@ -1184,7 +1194,9 @@ class AppDatabase extends _$AppDatabase {
       JOIN products p ON p.id = pu.product_id
       WHERE $where
       ORDER BY stock ASC
-    ''', variables: variables, readsFrom: {productUnits, products, stockLedger})
+    ''',
+            variables: variables,
+            readsFrom: {productUnits, products, stockLedger})
         .watch()
         .map((rows) => rows
             .map((r) => (
@@ -1194,8 +1206,7 @@ class AppDatabase extends _$AppDatabase {
                   groupId: r.data['group_id'] as int?,
                   stock: (r.data['stock'] as num).toDouble(),
                   minStock: (r.data['min_stock'] as num?)?.toDouble(),
-                  markedOutOfStock:
-                      (r.data['marked_out_of_stock'] as int) == 1,
+                  markedOutOfStock: (r.data['marked_out_of_stock'] as int) == 1,
                   requiresDeposit: (r.data['requires_deposit'] as int) == 1,
                 ))
             .toList());
@@ -1391,8 +1402,7 @@ class AppDatabase extends _$AppDatabase {
   /// penyesuaian stok manual biasa ("Penyesuaian manual").
   Future<List<OpnameSessionSummary>> getOpnameSessions() async {
     final rows = await (select(stockLedger)
-          ..where((t) =>
-              t.type.equals('adjustment') & t.note.like('Opname %'))
+          ..where((t) => t.type.equals('adjustment') & t.note.like('Opname %'))
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .get();
     final grouped = <String, List<StockLedgerData>>{};
@@ -1403,8 +1413,8 @@ class AppDatabase extends _$AppDatabase {
     // HPP per satuan diambil SEKALI utk seluruh unit yang tersentuh (bukan
     // per-sesi/per-baris) — hindari N+1 di layar riwayat yang bisa berisi
     // puluhan sesi × puluhan baris.
-    final costByUnit = await _costPriceByUnitIds(
-        rows.map((r) => r.productUnitId).toSet());
+    final costByUnit =
+        await _costPriceByUnitIds(rows.map((r) => r.productUnitId).toSet());
     final sessions = grouped.values
         .map((list) => (
               createdAt: list.first.createdAt,
@@ -1413,7 +1423,8 @@ class AppDatabase extends _$AppDatabase {
               valueChange: list.fold<int>(
                   0,
                   (s, r) =>
-                      s + (r.qtyChange * (costByUnit[r.productUnitId] ?? 0))
+                      s +
+                      (r.qtyChange * (costByUnit[r.productUnitId] ?? 0))
                           .round()),
             ))
         .toList()
@@ -1465,8 +1476,9 @@ class AppDatabase extends _$AppDatabase {
     final costByUnit = await _costPriceByUnitIds(unitIds.toSet());
     final out = ledgerRows.map((r) {
       final pid = productIdByUnit[r.productUnitId];
-      final name =
-          pid != null ? (nameByProduct[pid] ?? r.productUnitId) : r.productUnitId;
+      final name = pid != null
+          ? (nameByProduct[pid] ?? r.productUnitId)
+          : r.productUnitId;
       final cost = costByUnit[r.productUnitId] ?? 0;
       return (
         productName: name,
@@ -1485,13 +1497,24 @@ class AppDatabase extends _$AppDatabase {
   static String buildOpnameNote(DateTime at, {String? categoryLabel}) {
     final tgl = '${at.day.toString().padLeft(2, '0')} '
         '${_bulanIndo[at.month - 1]} ${at.year}';
-    final scope = categoryLabel == null ? 'Seluruh' : 'Kategori: $categoryLabel';
+    final scope =
+        categoryLabel == null ? 'Seluruh' : 'Kategori: $categoryLabel';
     return 'Opname $tgl ($scope)';
   }
 
   static const _bulanIndo = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
   ];
 
   /// Baris mentah utk laporan nilai inventori (Item 30(c), tab Laporan) —
@@ -1728,14 +1751,17 @@ class AppDatabase extends _$AppDatabase {
     // saja secara data krn `AltPrices` sudah di-key per `productUnitId`,
     // dan varian sudah punya `ProductUnits` sendiri sejak awal.
     List<({String label, int price})>? altPrices,
+
     /// Jenis satuan DASAR varian (jangkar, pemegang stok). Hanya dipakai
     /// bila [contentPerUnit] != 1 — selain itu satuan dasar sekaligus satuan
     /// jual, jadi jenisnya = [unitTypeId]. Null → ikut [unitTypeId].
     int? baseUnitTypeId,
+
     /// Isi satu satuan jual dalam satuan dasar varian (mis. 1 Renteng = 10).
     /// 1.0 (default) = varian dijual dalam satuan dasarnya sendiri, cukup
     /// SATU baris `product_units` persis seperti varian sebelum fitur ini.
     double contentPerUnit = 1.0,
+
     /// Item 53 (permintaan user) — true = harga dasar varian ini otomatis
     /// ikut berubah setiap kali harga satuan dasar produk induk (yg
     /// jenisnya sama dgn [baseUnitTypeId]/[unitTypeId]) diubah. Lihat
@@ -1840,10 +1866,13 @@ class AppDatabase extends _$AppDatabase {
     // Harga Lain); list (termasuk kosong) = SELALU ganti seluruh baris,
     // pola identik `saveProduct`.
     List<({String label, int price})>? altPrices,
+
     /// Jenis satuan JUAL varian (mis. Renteng/Dus). Null = tidak disentuh.
     int? unitTypeId,
+
     /// Isi satu satuan jual dalam satuan dasar varian. Null = tidak disentuh.
     double? contentPerUnit,
+
     /// Item 53 — null = tidak disentuh.
     bool? followsParentPrice,
   }) async {
@@ -1900,8 +1929,8 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (followsParentPrice != null) {
-        await (update(productUnits)..where((t) => t.id.equals(unitId)))
-            .write(ProductUnitsCompanion(
+        await (update(productUnits)..where((t) => t.id.equals(unitId))).write(
+            ProductUnitsCompanion(
                 followsParentPrice: Value(followsParentPrice)));
       }
       if (unitTypeId != null) {
@@ -2007,8 +2036,8 @@ class AppDatabase extends _$AppDatabase {
     final query = select(productUnits).join([
       leftOuterJoin(
         unitTypes,
-        unitTypes.id.equalsExp(
-            coalesce([productUnits.unitTypeId, const Constant(1)])),
+        unitTypes.id
+            .equalsExp(coalesce([productUnits.unitTypeId, const Constant(1)])),
       ),
     ])
       ..where(productUnits.productId.isIn(productIds))
@@ -2046,14 +2075,14 @@ class AppDatabase extends _$AppDatabase {
   /// Item 54 — kategori terurut `sortOrder` (tie-break nama) untuk chip
   /// kategori tab Kasir, reaktif terhadap hasil drag-reorder
   /// ([reorderProductGroups]) TANPA perlu tutup-buka layar.
-  Stream<List<ProductGroup>> watchProductGroupsForKasir() => (select(
-          productGroups)
-        ..where((t) => t.name.isNotNull())
-        ..orderBy([
-          (t) => OrderingTerm.asc(t.sortOrder),
-          (t) => OrderingTerm.asc(t.name),
-        ]))
-      .watch();
+  Stream<List<ProductGroup>> watchProductGroupsForKasir() =>
+      (select(productGroups)
+            ..where((t) => t.name.isNotNull())
+            ..orderBy([
+              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.name),
+            ]))
+          .watch();
 
   /// Item 54 — simpan urutan baru chip kategori Kasir setelah drag-reorder.
   /// [orderedIds] adalah urutan tampil BARU secara utuh (index 0 = paling
@@ -2061,8 +2090,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> reorderProductGroups(List<int> orderedIds) async {
     await transaction(() async {
       for (var i = 0; i < orderedIds.length; i++) {
-        await (update(productGroups)
-              ..where((t) => t.id.equals(orderedIds[i])))
+        await (update(productGroups)..where((t) => t.id.equals(orderedIds[i])))
             .write(ProductGroupsCompanion(sortOrder: Value(i)));
       }
     });
@@ -2089,9 +2117,9 @@ class AppDatabase extends _$AppDatabase {
     // Item 54 — kategori baru selalu ditaruh PALING AKHIR urutan chip Kasir
     // (bukan 0) — begitu kategori lain sudah pernah di-reorder manual,
     // default 0 akan melompat kategori baru ke paling depan tanpa alasan.
-    final maxOrderRow = await customSelect(
-            'SELECT MAX(sort_order) as mx FROM product_groups')
-        .getSingleOrNull();
+    final maxOrderRow =
+        await customSelect('SELECT MAX(sort_order) as mx FROM product_groups')
+            .getSingleOrNull();
     final nextOrder = (maxOrderRow?.data['mx'] as int? ?? -1) + 1;
 
     final emptySlot = await (select(productGroups)
@@ -2149,8 +2177,7 @@ class AppDatabase extends _$AppDatabase {
         productGroupId: const Value(null),
         updatedAt: Value(DateTime.now()),
       ));
-      await (delete(productGroupTags)..where((t) => t.groupId.equals(id)))
-          .go();
+      await (delete(productGroupTags)..where((t) => t.groupId.equals(id))).go();
       await (update(productGroups)..where((t) => t.id.equals(id)))
           .write(const ProductGroupsCompanion(name: Value(null)));
     });
@@ -2357,8 +2384,8 @@ class AppDatabase extends _$AppDatabase {
     for (final v in variants) {
       final vUnits = await getProductUnits(v.id);
       if (vUnits.isEmpty) continue;
-      final vBase = vUnits.firstWhere((u) => u.isBaseUnit,
-          orElse: () => vUnits.first);
+      final vBase =
+          vUnits.firstWhere((u) => u.isBaseUnit, orElse: () => vUnits.first);
       if (vBase.unitTypeId != anchorUnitTypeId) continue;
       final saleUnit = variantSaleUnit(vUnits)!;
       if (!saleUnit.followsParentPrice) continue;
@@ -2604,6 +2631,7 @@ class AppDatabase extends _$AppDatabase {
     required List<({String productUnitId, double qty, String note})> stockItems,
     TransactionPaymentsCompanion? payment,
     String? kasirId,
+
     /// Id `transaction_items` (dari [items]) yang sudah dicentang kasir di
     /// keranjang. Di-GABUNG (union) dengan `transactions.checkedItemIds` yang
     /// sudah ada, BUKAN menimpa — barang nota lama yang sudah dicentang di
@@ -2719,9 +2747,8 @@ class AppDatabase extends _$AppDatabase {
       // Belum ada baris pembayaran sama sekali untuk nota ini (nota
       // legacy/pre-backfill) — jatuhkan ke header `transactions.paid`,
       // konsisten dengan fallback yang sama di `_reconcileTransactionTotals`.
-      final tx =
-          await (select(transactions)..where((t) => t.id.equals(txId)))
-              .getSingleOrNull();
+      final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+          .getSingleOrNull();
       priorPaid = tx?.paid ?? 0;
     }
     final aggregateChange = (priorPaid + newPaymentAmount) - currentTotal;
@@ -2771,14 +2798,13 @@ class AppDatabase extends _$AppDatabase {
   /// Sekalian mengembalikan `sisaAfter` — sisi sebaliknya, dipakai KHUSUS
   /// nota tempo/kurang_bayar (retur/edit yang MENGURANGI total tapi masih
   /// menyisakan hutang) — lihat dok [_computePaymentDelta].
-  Future<({int changeGiven, int sisaAfter})>
-      _paymentDeltaAfterUnpaidItemChange(String txId) =>
-          _sumItemSubtotals(txId).then((remainingTotal) =>
-              _computePaymentDelta(
-                txId: txId,
-                newPaymentAmount: 0,
-                currentTotal: remainingTotal,
-              ));
+  Future<({int changeGiven, int sisaAfter})> _paymentDeltaAfterUnpaidItemChange(
+          String txId) =>
+      _sumItemSubtotals(txId).then((remainingTotal) => _computePaymentDelta(
+            txId: txId,
+            newPaymentAmount: 0,
+            currentTotal: remainingTotal,
+          ));
 
   /// Nama produk & label satuan SAAT INI untuk [productUnitId] — dipakai
   /// men-snapshot [TransactionAdjustmentLines.productName]/`unitName` supaya
@@ -3426,8 +3452,9 @@ class AppDatabase extends _$AppDatabase {
           .getSingleOrNull();
       if (item == null || item.transactionId != txId) return;
 
-      final clampedQty =
-          tx.paid == 0 ? newQty.clamp(0.0, double.infinity) : newQty.clamp(0.0, item.qty);
+      final clampedQty = tx.paid == 0
+          ? newQty.clamp(0.0, double.infinity)
+          : newQty.clamp(0.0, item.qty);
       final now = DateTime.now();
 
       // Qty berkurang (termasuk ke 0 = hapus) → stok yang tidak jadi
@@ -3571,6 +3598,7 @@ class AppDatabase extends _$AppDatabase {
     required List<({String transactionItemId, double qty})> returns,
     required String kasirId,
     required String refundMethod,
+    String? refundMethodName,
   }) async {
     if (returns.isEmpty) return;
     await transaction(() async {
@@ -3666,6 +3694,7 @@ class AppDatabase extends _$AppDatabase {
         transactionId: txId,
         amount: -refundTotal,
         method: refundMethod,
+        methodName: Value(refundMethodName),
         paidAt: Value(now),
         kasirId: Value(kasirId),
         note: const Value('Refund retur (nota lunas)'),
@@ -3878,7 +3907,8 @@ class AppDatabase extends _$AppDatabase {
               t.status.isIn(['kurang_bayar', 'tempo']))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
-    final paymentsByTx = await getPaymentsForTxs(rows.map((t) => t.id).toList());
+    final paymentsByTx =
+        await getPaymentsForTxs(rows.map((t) => t.id).toList());
     return rows.map((t) {
       final sumChangeGiven = (paymentsByTx[t.id] ?? const [])
           .where((p) => !p.voided)
@@ -3968,8 +3998,8 @@ class AppDatabase extends _$AppDatabase {
   /// (satu momen retur/edit bisa punya beberapa produk) — dipakai kartu
   /// "Riwayat Pembayaran" in-app utk menampilkan baris produk di bawah
   /// momen retur/edit terkait. Lihat dok `TransactionAdjustmentLines`.
-  Future<Map<String, List<TransactionAdjustmentLine>>>
-      getAdjustmentLinesForTx(String txId) async {
+  Future<Map<String, List<TransactionAdjustmentLine>>> getAdjustmentLinesForTx(
+      String txId) async {
     final rows = await (select(transactionAdjustmentLines)
           ..where((t) => t.transactionId.equals(txId))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
@@ -4013,6 +4043,7 @@ class AppDatabase extends _$AppDatabase {
     required int amount,
     required String method,
     required String kasirId,
+    String? methodName,
     String? note,
     DateTime? now,
   }) async {
@@ -4033,6 +4064,7 @@ class AppDatabase extends _$AppDatabase {
         transactionId: txId,
         amount: amount,
         method: method,
+        methodName: Value(methodName),
         paidAt: Value(ts),
         kasirId: Value(kasirId),
         note: Value(note),
@@ -4112,8 +4144,7 @@ class AppDatabase extends _$AppDatabase {
       amount: amount,
       note: Value(note),
       kasirId: Value(kasirId),
-      createdAt:
-          createdAt == null ? const Value.absent() : Value(createdAt),
+      createdAt: createdAt == null ? const Value.absent() : Value(createdAt),
     ));
   }
 
@@ -4191,8 +4222,7 @@ class AppDatabase extends _$AppDatabase {
     ).get();
     final out = <DateTime, int>{};
     for (final r in rows) {
-      final parts =
-          (r.data['d'] as String).split('-').map(int.parse).toList();
+      final parts = (r.data['d'] as String).split('-').map(int.parse).toList();
       out[DateTime(parts[0], parts[1], parts[2])] =
           (r.data['total'] as num).round();
     }
@@ -4213,6 +4243,7 @@ class AppDatabase extends _$AppDatabase {
     required int amount,
     required String method,
     required String kasirId,
+    String? methodName,
   }) async {
     if (txIds.isEmpty || amount <= 0) return (0, 0);
     return transaction(() async {
@@ -4249,6 +4280,7 @@ class AppDatabase extends _$AppDatabase {
             transactionId: tx.id,
             amount: applied,
             method: method,
+            methodName: Value(methodName),
             paidAt: Value(now),
             kasirId: Value(kasirId),
             note: Value('Gabung: $label'),
@@ -4290,7 +4322,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> backfillMissingPayments() async {
     final rows = await customSelect(
       'SELECT t.id AS id, t.paid AS paid, t.total AS total, '
-      't.payment_method AS method, '
+      't.payment_method AS method, t.method_name AS method_name, '
       't.kasir_id AS kasir, t.created_at AS created, '
       't.change_amount AS change_amount, t.change_taken AS change_taken '
       'FROM transactions t '
@@ -4315,6 +4347,7 @@ class AppDatabase extends _$AppDatabase {
             transactionId: r.data['id'] as String,
             amount: paid,
             method: (r.data['method'] as String?) ?? 'tunai',
+            methodName: Value(r.data['method_name'] as String?),
             paidAt: Value(paidAt),
             kasirId: Value(r.data['kasir'] as String?),
             note: const Value('Migrasi data lama'),
@@ -4530,9 +4563,9 @@ class AppDatabase extends _$AppDatabase {
     final fromSec =
         DateTime(from.year, from.month, from.day).millisecondsSinceEpoch ~/
             1000;
-    final toSec =
-        DateTime(to.year, to.month, to.day, 23, 59, 59).millisecondsSinceEpoch ~/
-            1000;
+    final toSec = DateTime(to.year, to.month, to.day, 23, 59, 59)
+            .millisecondsSinceEpoch ~/
+        1000;
     // Jumlah & omzet transaksi valid AKTUAL per tanggal (lokal).
     final actualRows = await customSelect(
       "SELECT strftime('%Y-%m-%d', datetime(created_at,'unixepoch','localtime')) AS d, "
@@ -4697,7 +4730,8 @@ class AppDatabase extends _$AppDatabase {
     ).get();
     final out = <String, int>{};
     for (final r in rows) {
-      final net = (r.data['amt'] as num).toInt() - (r.data['chg'] as num).toInt();
+      final net =
+          (r.data['amt'] as num).toInt() - (r.data['chg'] as num).toInt();
       if (net == 0) continue;
       out[r.data['method'] as String] = net;
     }
@@ -4735,7 +4769,8 @@ class AppDatabase extends _$AppDatabase {
     }
 
     final cashIn = <DateTime, int>{
-      for (final r in inRows) parse(r.data['d'] as String): (r.data['net'] as num).toInt(),
+      for (final r in inRows)
+        parse(r.data['d'] as String): (r.data['net'] as num).toInt(),
     };
     final cashOut = <DateTime, int>{
       for (final r in outRows)
@@ -4751,8 +4786,7 @@ class AppDatabase extends _$AppDatabase {
   /// Ringkasan arus kas satu rentang: kas masuk (dipecah tunai vs non-tunai)
   /// dan kas keluar (dari `expenses`, semua jenis — ini "ke mana uang
   /// mengalir", bukan P&L, jadi TIDAK memakai [netProfitExpenseTypes]).
-  Future<CashFlowSummary> getCashFlowSummary(
-      DateTime from, DateTime to) async {
+  Future<CashFlowSummary> getCashFlowSummary(DateTime from, DateTime to) async {
     final byMethod = await getCashInByMethod(from, to);
     // 'tempo' = penanda nota berhutang, BUKAN uang yang berpindah. Kalau
     // pun muncul sbg method di baris pembayaran, nilainya tidak boleh
@@ -5013,8 +5047,8 @@ class AppDatabase extends _$AppDatabase {
   /// Daftar nota satu pelanggan dalam rentang (terbaru dulu) — dipakai
   /// layar statistik pelanggan supaya bisa langsung dibuka ke struknya.
   Future<List<Transaction>> getCustomerTransactions(
-      String customerId, DateTime from, DateTime to,
-      {int limit = 200}) =>
+          String customerId, DateTime from, DateTime to,
+          {int limit = 200}) =>
       (select(transactions)
             ..where((t) =>
                 t.customerId.equals(customerId) &
@@ -5220,14 +5254,12 @@ class AppDatabase extends _$AppDatabase {
     required String tablesSummary,
   }) =>
       transaction(() async {
-        final slotKey = (deviceCode != null && deviceCode.isNotEmpty)
-            ? deviceCode
-            : fromIp;
+        final slotKey =
+            (deviceCode != null && deviceCode.isNotEmpty) ? deviceCode : fromIp;
         await (delete(syncUploadQueue)
-              ..where((t) =>
-                  (deviceCode != null && deviceCode.isNotEmpty
-                      ? t.deviceCode.equals(slotKey)
-                      : t.fromIp.equals(slotKey) & t.deviceCode.isNull())))
+              ..where((t) => (deviceCode != null && deviceCode.isNotEmpty
+                  ? t.deviceCode.equals(slotKey)
+                  : t.fromIp.equals(slotKey) & t.deviceCode.isNull())))
             .go();
         await into(syncUploadQueue).insert(SyncUploadQueueCompanion.insert(
           id: id,
@@ -5240,8 +5272,7 @@ class AppDatabase extends _$AppDatabase {
       });
 
   Future<List<SyncUploadQueueData>> listSyncUploadQueue() =>
-      (select(syncUploadQueue)
-            ..orderBy([(t) => OrderingTerm.asc(t.arrivedAt)]))
+      (select(syncUploadQueue)..orderBy([(t) => OrderingTerm.asc(t.arrivedAt)]))
           .get();
 
   /// Cari item antrian upload yang MASIH menunggu approve owner utk slot
@@ -5396,7 +5427,8 @@ class AppDatabase extends _$AppDatabase {
   /// terbuka dgn key yang benar).
   Future<void> rekey(String newKeyHex) async {
     if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(newKeyHex)) {
-      throw ArgumentError('Encryption key harus hex murni; nilai tidak valid ditolak.');
+      throw ArgumentError(
+          'Encryption key harus hex murni; nilai tidak valid ditolak.');
     }
     await customStatement("PRAGMA rekey = '$newKeyHex';");
   }
@@ -5692,17 +5724,18 @@ class AppDatabase extends _$AppDatabase {
           );
         }
         if (rows.isEmpty) continue;
-        final localColumns = (await customSelect('PRAGMA table_info("$table")')
-                .get())
-            .map((r) => r.data['name'] as String)
-            .toSet();
+        final localColumns =
+            (await customSelect('PRAGMA table_info("$table")').get())
+                .map((r) => r.data['name'] as String)
+                .toSet();
         for (final row in rows) {
           if (table == 'products') {
             if (!approvedProductIds.contains(row['id'])) continue;
           } else if (table == 'product_units') {
             if (!approvedProductIds.contains(row['product_id'])) continue;
             approvedUnitIds.add(row['id'] as String);
-            final isBase = row['is_base_unit'] == 1 || row['is_base_unit'] == true;
+            final isBase =
+                row['is_base_unit'] == 1 || row['is_base_unit'] == true;
             if (isBase) {
               baseUnitOfProduct[row['product_id'] as String] = (
                 unitId: row['id'] as String,
@@ -5831,18 +5864,13 @@ class AppDatabase extends _$AppDatabase {
             .toList()
           ..sort())
         .join(',');
-    String altSigs(List<Map<String, Object?>> alts) => (alts
-            .map((a) => '${a['label']}|${a['price']}')
-            .toSet()
-            .toList()
-          ..sort())
-        .join(',');
-    String barcodeSigs(List<Map<String, Object?>> codes) => (codes
-            .map((b) => '${b['barcode']}')
-            .toSet()
-            .toList()
-          ..sort())
-        .join(',');
+    String altSigs(List<Map<String, Object?>> alts) =>
+        (alts.map((a) => '${a['label']}|${a['price']}').toSet().toList()
+              ..sort())
+            .join(',');
+    String barcodeSigs(List<Map<String, Object?>> codes) =>
+        (codes.map((b) => '${b['barcode']}').toSet().toList()..sort())
+            .join(',');
 
     final changedProductIds = <String>{};
     for (final p in productRows) {
@@ -6004,8 +6032,7 @@ class AppDatabase extends _$AppDatabase {
   /// host push versi lama pelanggan itu. Ledger-nya sendiri sinkron dengan
   /// benar (append-only, PK dedup); rebuild ini menurunkan kolom saldo yang
   /// dipakai di layar langsung dari ledger, bukan dari `updated_at` LWW.
-  Future<void> rebuildLoyaltyPointsForCustomers(
-      Set<String> customerIds) async {
+  Future<void> rebuildLoyaltyPointsForCustomers(Set<String> customerIds) async {
     if (customerIds.isEmpty) return;
     await transaction(() async {
       for (final cid in customerIds) {
@@ -6042,9 +6069,7 @@ class AppDatabase extends _$AppDatabase {
     // ditolak walau dump pengirimnya tidak bisa dipercaya. Lihat dok
     // [syncableSettingKeys].
     if (tableName == 'app_settings') {
-      rows = rows
-          .where((r) => syncableSettingKeys.contains(r['key']))
-          .toList();
+      rows = rows.where((r) => syncableSettingKeys.contains(r['key'])).toList();
       if (rows.isEmpty) return 0;
     }
     // customStatement/customInsert lewat raw SQL tidak diketahui Drift tabel
@@ -6065,10 +6090,10 @@ class AppDatabase extends _$AppDatabase {
     // bukan cuma baris/kolom itu. Baca kolom fisik via PRAGMA (bukan definisi
     // tabel Drift yang statis di kode) supaya benar-benar mencerminkan skema
     // SQLite yang sungguhan berjalan di device ini saat ini.
-    final localColumns = (await customSelect('PRAGMA table_info("$tableName")')
-            .get())
-        .map((r) => r.data['name'] as String)
-        .toSet();
+    final localColumns =
+        (await customSelect('PRAGMA table_info("$tableName")').get())
+            .map((r) => r.data['name'] as String)
+            .toSet();
 
     // Bug nyata dilaporkan user (audit "sync harga di tab produk, aman
     // bolak-balik?"): kalau asisten edit harga (products.locallyModified
@@ -6092,7 +6117,8 @@ class AppDatabase extends _$AppDatabase {
     };
     Set<String>? protectedUnitIds;
     if (!isAppendOnly &&
-        (tableName == 'product_units' || guardedUnitTables.contains(tableName))) {
+        (tableName == 'product_units' ||
+            guardedUnitTables.contains(tableName))) {
       final protectedRows = await customSelect(
         'SELECT pu.id AS unit_id FROM product_units pu '
         'JOIN products p ON p.id = pu.product_id '
@@ -6110,9 +6136,8 @@ class AppDatabase extends _$AppDatabase {
         if (row.isEmpty) continue;
 
         if (protectedUnitIds != null) {
-          final unitId = tableName == 'product_units'
-              ? row['id']
-              : row['product_unit_id'];
+          final unitId =
+              tableName == 'product_units' ? row['id'] : row['product_unit_id'];
           if (unitId is String && protectedUnitIds.contains(unitId)) continue;
         }
 
@@ -6263,9 +6288,8 @@ class AppDatabase extends _$AppDatabase {
       // Payload yang diterima = kebenaran LENGKAP saat ini, jadi aman
       // hapus semua baris lokal yang TIDAK ada di dalamnya.
       if (!isAppendOnly && tableName == 'product_group_tags') {
-        final incomingKeys = rows
-            .map((r) => '${r['product_id']}|${r['group_id']}')
-            .toSet();
+        final incomingKeys =
+            rows.map((r) => '${r['product_id']}|${r['group_id']}').toSet();
         final existing = await customSelect(
           'SELECT product_id, group_id FROM product_group_tags',
         ).get();
@@ -6294,7 +6318,11 @@ class AppDatabase extends _$AppDatabase {
       // lokal yang id-nya tak ada di dalamnya — KECUALI baris milik unit yang
       // sedang diproteksi (`protectedUnitIds`, usulan lokal blm di-approve),
       // supaya edit lokal yang belum di-review owner tidak ikut kehapus.
-      const orphanCleanupTables = {'product_barcodes', 'price_tiers', 'alt_prices'};
+      const orphanCleanupTables = {
+        'product_barcodes',
+        'price_tiers',
+        'alt_prices'
+      };
       if (!isAppendOnly && orphanCleanupTables.contains(tableName)) {
         final incomingIds =
             rows.map((r) => r['id']).whereType<String>().toSet();
@@ -6387,8 +6415,7 @@ class AppDatabase extends _$AppDatabase {
     final rows = await (select(transactionItems).join([
       leftOuterJoin(productUnits,
           productUnits.id.equalsExp(transactionItems.productUnitId)),
-      leftOuterJoin(
-          unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
+      leftOuterJoin(unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
     ])
           ..where(transactionItems.id.isIn(transactionItemIds)))
         .get();
@@ -6420,7 +6447,9 @@ class AppDatabase extends _$AppDatabase {
               t.fulfilledAt.isNull() &
               t.cancelledAt.isNull()))
         .get();
-    return {for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty};
+    return {
+      for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty
+    };
   }
 
   /// Susulan (permintaan user) — pre-order TERBUKA milik pelanggan yang SAMA
@@ -6465,8 +6494,8 @@ class AppDatabase extends _$AppDatabase {
     for (final r in rows) {
       // `orderBy` asc + `putIfAbsent` -> baris PERTAMA per productId (paling
       // lama) yang menang, entri berikutnya utk produk yang sama diabaikan.
-      out.putIfAbsent(
-          r.productId, () => (transactionId: r.transactionId!, createdAt: r.createdAt));
+      out.putIfAbsent(r.productId,
+          () => (transactionId: r.transactionId!, createdAt: r.createdAt));
     }
     return out;
   }
@@ -6479,8 +6508,7 @@ class AppDatabase extends _$AppDatabase {
     if (productUnitIds.isEmpty) return {};
     final rows = await (select(productUnits).join([
       innerJoin(products, products.id.equalsExp(productUnits.productId)),
-      leftOuterJoin(
-          unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
+      leftOuterJoin(unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
     ])
           ..where(productUnits.id.isIn(productUnitIds)))
         .get();
@@ -6609,8 +6637,7 @@ class AppDatabase extends _$AppDatabase {
             .get()
         : await (select(borrowedItems)
               ..where((t) =>
-                  t.customerNameText.equals(nama) &
-                  t.fullyReturnedAt.isNull()))
+                  t.customerNameText.equals(nama) & t.fullyReturnedAt.isNull()))
             .get();
 
     // Pre-order: SELALU lewat nama (satu-satunya yang disimpan), + JOIN
@@ -6618,7 +6645,8 @@ class AppDatabase extends _$AppDatabase {
     final preorders = <PreorderPendingLine>[];
     if (nama.isNotEmpty) {
       final rows = await (select(preorderEntries).join([
-        leftOuterJoin(products, products.id.equalsExp(preorderEntries.productId)),
+        leftOuterJoin(
+            products, products.id.equalsExp(preorderEntries.productId)),
       ])
             ..where(preorderEntries.customerName.equals(nama) &
                 preorderEntries.fulfilledAt.isNull() &
@@ -6648,7 +6676,9 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<LeftBehindItem>> watchLeftBehindItems(
           {bool includeCollected = false}) =>
       (select(leftBehindItems)
-            ..where((t) => includeCollected ? const Constant(true) : t.collectedAt.isNull())
+            ..where((t) => includeCollected
+                ? const Constant(true)
+                : t.collectedAt.isNull())
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .watch();
 
@@ -6727,8 +6757,8 @@ class AppDatabase extends _$AppDatabase {
       {bool locallyModified = false,
       String? eventId,
       String? deviceCode}) async {
-    final row =
-        await (select(borrowedItems)..where((t) => t.id.equals(id))).getSingle();
+    final row = await (select(borrowedItems)..where((t) => t.id.equals(id)))
+        .getSingle();
     await recordLaciMejaEvent(
       id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
       entityType: 'pinjaman',
@@ -7032,8 +7062,7 @@ class AppDatabase extends _$AppDatabase {
     final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
     await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
       PreorderEntriesCompanion(
-        fulfilledAt:
-            Value(taken >= row.qtyOrdered ? DateTime.now() : null),
+        fulfilledAt: Value(taken >= row.qtyOrdered ? DateTime.now() : null),
         locallyModified: Value(locallyModified),
         updatedAt: Value(DateTime.now()),
       ),
@@ -7061,7 +7090,8 @@ class AppDatabase extends _$AppDatabase {
   /// tapi PARALEL: tidak menyentuh `dumpLocalProposals`/`applyProductProposals`
   /// milik produk sama sekali, supaya alur usulan produk yang sudah matang
   /// tidak ikut berisiko).
-  Future<Map<String, List<Map<String, Object?>>>> dumpLaciMejaProposals() async {
+  Future<Map<String, List<Map<String, Object?>>>>
+      dumpLaciMejaProposals() async {
     final result = <String, List<Map<String, Object?>>>{};
     for (final t in const [
       'left_behind_items',
@@ -7192,11 +7222,10 @@ class AppDatabase extends _$AppDatabase {
       for (final entry in proposals.entries) {
         final approved = approvedIds[entry.key] ?? const {};
         if (approved.isEmpty) continue;
-        final localColumns = (await customSelect(
-                'PRAGMA table_info("${entry.key}")')
-            .get())
-            .map((r) => r.data['name'] as String)
-            .toSet();
+        final localColumns =
+            (await customSelect('PRAGMA table_info("${entry.key}")').get())
+                .map((r) => r.data['name'] as String)
+                .toSet();
         final table = tablesByName[entry.key];
         for (final row in entry.value) {
           if (!approved.contains(row['id'])) continue;
@@ -7307,10 +7336,10 @@ class AppDatabase extends _$AppDatabase {
       List<Map<String, Object?>> rows, Set<String> approvedIds) async {
     if (approvedIds.isEmpty) return 0;
     var count = 0;
-    final localColumns = (await customSelect('PRAGMA table_info("customers")')
-            .get())
-        .map((r) => r.data['name'] as String)
-        .toSet();
+    final localColumns =
+        (await customSelect('PRAGMA table_info("customers")').get())
+            .map((r) => r.data['name'] as String)
+            .toSet();
     await transaction(() async {
       for (final row in rows) {
         if (!approvedIds.contains(row['id'])) continue;
@@ -7385,7 +7414,6 @@ typedef ProductStatsSummary = ({
   /// "3 dus" selain sekian pcs. Kosong kalau semua penjualan sudah dlm
   /// satuan dasar.
   List<({String unitName, double qty})> unitBreakdown,
-
   int revenue,
   int cogs,
 

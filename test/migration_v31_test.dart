@@ -50,6 +50,8 @@ void main() {
       );
     ''');
     v30.execute('CREATE TABLE customers(id TEXT PRIMARY KEY);');
+    // transactions diperlukan agar migrasi v34 (addColumn method_name) tak gagal.
+    v30.execute('CREATE TABLE transactions(id TEXT PRIMARY KEY);');
     v30.execute('''
       CREATE TABLE product_units (
         id TEXT NOT NULL PRIMARY KEY,
@@ -86,7 +88,7 @@ void main() {
     expect(units.single.id, 'u-lama', reason: 'data lama tidak tersentuh');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 33);
+    expect(ver.data.values.first, 34);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

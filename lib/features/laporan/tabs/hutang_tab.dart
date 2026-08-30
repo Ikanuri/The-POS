@@ -236,6 +236,7 @@ class _HutangTabState extends ConsumerState<HutangTab> {
       txIds: txIds,
       amount: result.amount,
       method: result.method,
+      methodName: result.methodName,
       kasirId: device.deviceCode,
     );
     ref.invalidate(_debtBookProvider);
