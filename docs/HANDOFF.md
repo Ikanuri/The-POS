@@ -5,6 +5,53 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 30 Agustus 2026 (lanjutan lagi — 3 penyesuaian susulan
+langsung dari fitur nama metode pembayaran & chart tap-to-pin sesi
+sebelumnya), commit `e3216f9`/`ddaa631`, versi kerja **2.19.22+47**,
+sudah di-push (belum di-merge ke `main`).
+
+**1. Chart "Penjualan Harian" (screenshot user) diganti ke garis**
+(`e3216f9`): user tunjukkan chart bar-per-hari tumpuk labelnya di
+hari-hari akhir bulan — SAMA PERSIS akar masalah yang sudah pernah
+diperbaiki di `StatsTrendChart` (chart "Tren penjualan" produk, lihat
+dok panjang di `stats_common.dart`). Fix: `_DailyChart`
+(`ringkasan_tab.dart`) sekarang murni convert `Map<DateTime,int>` jadi
+`List<TrendPoint>` lalu DELEGASI ke `StatsTrendChart` yang sudah ada —
+BUKAN reimplementasi baru. **Pola penting utk sesi depan**: kalau ada
+chart baru yang butuh render tren tanggal, cek dulu apakah
+`StatsTrendChart` bisa dipakai ulang sebelum menulis chart baru dari
+nol — sudah 2x dipakai ulang (produk, lalu Penjualan Harian).
+
+**2. Label nominal PUNCAK permanen** (`e3216f9`, sama commit):
+`StatsTrendChart` dapat `ExtraLinesData(horizontalLines: [...])` — garis
+putus-putus + label di level `maxY` DATA MENTAH (bukan `maxY` chart yg
+sudah dikasih headroom 15%), pakai `HorizontalLineLabel` bawaan
+fl_chart (`alignment: Alignment.topLeft` default). Berlaku OTOMATIS di
+KEDUA pemakai widget ini (Penjualan Harian & Tren Penjualan produk) —
+tidak perlu ubah kedua caller-nya sama sekali, cukup ubah widget
+bersama.
+
+**3. Filter Riwayat Transaksi by metode pembayaran** (`ddaa631`):
+`tx_history_sheet.dart` (`_HistoryQuery`) dapat field `method` baru,
+difilter di level query DB (`t.paymentMethod.equals(...)`), UI chip
+`InputChip` + picker `showModalBottomSheet` sederhana (pola sama
+seperti chip filter tanggal yang sudah ada). **Keputusan desain**:
+filter pakai KATEGORI (`Transactions.paymentMethod`: tunai/bank/qris/
+ewallet/tempo), BUKAN nama spesifik (`methodName`, fitur susulan sesi
+sebelumnya) — banyak nota lama `methodName`-nya null, & filter
+per-kategori lebih masuk akal utk analisis semacam "semua transaksi
+QRIS bulan ini". Kalau user nanti minta filter by nama spesifik jg
+("filter GoPay doang, bukan semua E-Wallet"), perlu query tambahan yg
+JOIN/filter `methodName` dgn fallback ke kategori kalau null.
+
+Test baru: 1 di `stats_trend_chart_test.dart` (garis+label puncak,
+posisi & nilai benar) + 1 di `ringkasan_tab_daily_chart_test.dart`
+(LineChart menggantikan bar chart lama) + 2 di
+`tx_history_method_filter_test.dart` (filter aktif menyembunyikan nota
+lain, lepas filter menampilkan semua lagi) — SEMUA revert-verified.
+Full suite 1194 lolos / 1 gagal (flaky pre-existing —
+`proposal_unchanged_end_to_end_test.dart`), `flutter analyze` 0 issue.
+
 _Update sesi 30 Agustus 2026 — 3 penyesuaian yang user minta jawaban
 dulu sebelum coding ("Jawab dulu, jangan coding dulu"), lalu semuanya
 dieksekusi sekaligus ("Kerjakan semua"). Commit `6a5444f`/`4cfebd5`/

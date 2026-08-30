@@ -11,6 +11,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 30 Agustus 2026
 
 ### ✨ Fitur Baru
+- **Riwayat Transaksi sekarang bisa difilter berdasarkan metode
+  pembayaran** (Tunai/Transfer Bank/QRIS/E-Wallet/Tempo) — chip baru
+  di samping filter status & tanggal yang sudah ada.
+
+### 🔧 Perbaikan
+- **Chart "Penjualan Harian" di Laporan tidak lagi tumpuk labelnya**
+  untuk rentang tanggal panjang (mis. sebulan penuh) — diganti jadi
+  chart garis, sama seperti chart "Tren penjualan" di detail produk.
+  Sekalian, kedua chart ini sekarang menampilkan nominal PUNCAK
+  langsung di layar (garis putus-putus + angkanya) tanpa perlu tap
+  atau geser dulu.
 - **Rincian jam di chart "Penjualan Per Jam" (Ringkasan) sekarang dibuka
   dengan sekali TAP** — sebelumnya harus tekan-tahan dan otomatis hilang
   begitu jari dilepas. Sekarang tap satu batang untuk melihat detailnya,
