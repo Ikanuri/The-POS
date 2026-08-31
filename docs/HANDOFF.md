@@ -5,19 +5,32 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 31 Agustus 2026 (lanjutan lagi x4 — kartu statistik
-pre-order dipadatkan jadi satu baris). Versi kerja **2.23.1+54**._
+_Update sesi 31 Agustus 2026 (lanjutan lagi x5 — kartu statistik
+pre-order: chip mini gradasi label/angka, bukan teks polos). Versi
+kerja **2.23.2+55**._
 
-Iterasi lanjutan atas redesain sebelumnya: user masih merasa kartu
-"Total produk"/"Total jaminan" kebesaran. `_PreorderStats`/`_StatTile`
-DIHAPUS TOTAL, diganti `_PreorderStatsLine` — satu baris teks ("N
-entri · X produk · Y jaminan") + tombol Kuota di baris yang sama.
-Rincian jaminan per produk pindah ke `Tooltip` (tap-triggered) lewat
-ikon info kecil, bukan daftar di dalam kartu. **Kalau nanti ada
-permintaan serupa lagi** (elemen dashboard dirasa masih besar): pola
-yang sudah terbukti dipakai berkali-kali di layar ini adalah teks
-ringkas + tooltip utk detail, bukan kartu terpisah — pertimbangkan pola
-yang sama duluan sebelum desain baru dari nol.
+Iterasi KEDUA atas redesain statistik pre-order. Riwayat percobaan
+(supaya tidak diulang lagi kalau ada feedback lanjutan):
+1. Kartu besar (`_PreorderStats`/`_StatTile`, Container tinggi dgn
+   Column label/value/sub) — user: "terlalu besar, asal tempel".
+2. Teks polos satu baris ("N entri · X produk · Y jaminan") — user:
+   "terlalu ringkas", gradasi visual (label normal + angka BOLD) yang
+   disukai dari versi kartu justru hilang.
+3. **Solusi yang dipakai sekarang** (`_PreorderStatsLine`/`_StatChip`
+   baru): chip mini per angka — border+bg tipis (identitas "kartu"
+   dipertahankan) TAPI satu baris `Text.rich` (bukan Container
+   tinggi). Ini yang benar: kecil (memenuhi keluhan #1) SEKALIGUS
+   pertahankan gradasi bold/normal (memenuhi keluhan #2).
+
+**Pelajaran utk kasus serupa ke depan**: kalau user bilang sesuatu
+"terlalu besar", jangan langsung lompat ke "hapus visual/ganti teks
+polos" — tanya/pertimbangkan dulu APA yang disukai dari desain lama
+(di sini: gradasi bold), lalu pangkas cuma bagian yang benar-benar
+makan tempat (di sini: padding Container + Column multi-baris), bukan
+seluruh identitas visualnya.
+
+Rincian jaminan per produk tetap di `Tooltip` (tap-triggered) lewat
+ikon info kecil, tidak berubah dari iterasi sebelumnya.
 
 ---
 
