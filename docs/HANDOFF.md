@@ -5,6 +5,66 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Agustus 2026 (lanjutan — 4 penyesuaian Laci Meja +
+aksen pelanggan tetap vs ad-hoc). Versi kerja **2.22.0+50**,
+schemaVersion **34→35**._
+
+**Alur sesi ini**: user mengusulkan 4 hal sekaligus (kuota antrian
+pre-order, semua atribut Laci Meja jadi editable, filter produk, pin
+kartu pinjaman), minta **diusulkan dulu logikanya** ("jangan coding
+dulu"), lalu bertanya soal pembedaan pelanggan tetap vs ad-hoc di
+kartu Laci Meja / cart bar / nota. Setelah usul disetujui: dicatat ke
+task manager (#6–#9), dieksekusi, di-merge ke `main`.
+
+**Keputusan desain yang masih berlaku:**
+
+1. **Garis pembatas kuota pre-order DIHITUNG ULANG tiap render**, tidak
+   pernah disimpan sbg posisi. Ini permintaan eksplisit user: "jika
+   ada pre-order terbaru tiba-tiba dipenuhi untuk alasan tertentu,
+   padahal set line jumlah sudah ditetapkan, itu tetap menyesuaikan
+   dengan antrian". Karena `preorderIdsBeyondQuota` murni turunan dari
+   daftar entri TERBUKA (yang dipenuhi/dibatalkan otomatis hilang),
+   garisnya bergeser sendiri tanpa logika antre-ulang. **Jangan
+   diubah jadi kolom/snapshot** — itu membatalkan seluruh sifatnya.
+   Ambangnya sendiri disimpan sbg blob JSON di tabel settings (key
+   `preorder_quota_thresholds`), bukan kolom DB — konfigurasi
+   operasional, bukan data transaksi.
+2. **`last_edited_at` SENGAJA terpisah dari `updated_at`**.
+   `updated_at` ikut tersentuh aksi operasional & sync, jadi tidak
+   bisa menjawab "kapan isinya terakhir diubah orang". Toggle `pinned`
+   juga TIDAK menstempelnya (menyematkan bukan mengubah isi).
+3. **Edit entri Laci Meja tidak boleh menurunkan qty di bawah yang
+   sudah tercatat di log** (`_laciMejaTakenQty`) — kalau tidak, sisa
+   entri jadi negatif & ledger barang fisiknya ngawur. Tiap edit
+   menulis baris log `aksi = 'edit'` (qty 0) berisi ringkasan
+   perubahan — alasan fitur ini ada justru menjaga audit tetap jujur.
+   Produk/satuan/nota SENGAJA tidak bisa diedit (setara hapus-buat-
+   ulang, persis yang dihindari).
+4. **Pin pinjaman disimpan per BARIS tapi di-toggle per GRUP
+   pelanggan** — kartu dashboard dikelompokkan per pelanggan, kalau
+   per baris kartunya bisa "setengah tersemat" & urutannya tidak bisa
+   dijelaskan ke user.
+5. **Pembeda pelanggan terdaftar vs ad-hoc = `customerId` (null =
+   ad-hoc)**, ikon terisi + `AppTheme.accent` vs ikon garis + warna
+   netral. Ikon dipakai sbg pembeda utama, bukan warna saja.
+   `preorder_entries.customer_id` ditambahkan di v35 (kolom ini sudah
+   lama ada di 2 tabel Laci Meja lain). User **menolak** tambahan
+   snackbar/badge yang memberi tahu saat QR handoff menjatuhkan
+   `customerId` karena pelanggannya belum tersinkron di penerima —
+   "cukup visual saja"; downgrade-nya sudah otomatis terlihat dari
+   warna ikon di perangkat penerima.
+
+**Catatan test**: `Future.delayed` di dalam `testWidgets` TIDAK PERNAH
+selesai (fake clock) → test menggantung sampai timeout 10 menit. Untuk
+menyiapkan urutan `createdAt`, tulis kolomnya EKSPLISIT lewat
+`Companion.insert`, jangan mengandalkan jeda antar insert. Selain itu:
+di layar ber-`StreamProvider`, `drain()` harus dijalankan SEBELUM
+assert (simpan hasil finder ke variabel dulu) — kalau assert gagal
+duluan, `tearDown` menutup DB saat widget masih mounted dan test
+menggantung tanpa batas.
+
+---
+
 _Update sesi 31 Agustus 2026 — user minta review menyeluruh logika
 retur/kembalian ("terutama retur - tambah pembelian berkali-kali"),
 lalu 2 fitur laci-meja tambahan didiskusikan & dieksekusi sekaligus.

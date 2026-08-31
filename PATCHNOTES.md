@@ -11,13 +11,36 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 31 Agustus 2026
 
 ### ✨ Fitur Baru
+- **Batas jumlah (kuota) antrian pre-order per produk** — misalnya
+  kiriman normal LPG dari pangkalan 70 tabung: setel angkanya lewat
+  tombol kuota di dashboard Laci Meja → Pre-order, lalu pilih chip
+  produknya. Daftar antrian akan diberi garis "Batas kiriman normal"
+  di posisi yang pas, plus nomor antrian tiap pelanggan, jadi jelas
+  siapa saja yang bisa dilayani dari kiriman berikutnya. Garisnya
+  otomatis bergeser sendiri kalau ada pesanan yang dipenuhi duluan —
+  tidak perlu disetel ulang.
+- **Filter produk di daftar pre-order** — kalau ada lebih dari satu
+  produk yang sedang diantri, bisa dipilih satu per satu.
+- **Semua catatan Laci Meja sekarang bisa diedit** (titip/ketinggalan,
+  pinjaman, maupun pre-order) — lewat ikon pensil di kartunya pada
+  struk in-app. Jumlah, nama, telepon, jaminan, dan catatan bisa
+  dibetulkan tanpa harus "dipenuhi lalu dibuat ulang" seperti dulu,
+  jadi riwayatnya tetap jujur. Kartu yang pernah diedit menampilkan
+  keterangan "Terakhir diedit" beserta waktunya. Jumlah tidak bisa
+  diturunkan di bawah yang sudah terlanjur diambil/dikembalikan.
+- **Kartu Pinjaman bisa disematkan (pin) ke atas daftar** — untuk
+  pinjaman yang perlu terus terlihat, tanpa terpengaruh urutan waktu.
+- **Pelanggan terdaftar kini dibedakan tampilannya dari nama biasa** —
+  di bar keranjang kasir, kartu Laci Meja, dan header nota: ikon orang
+  terisi + warna aksen untuk pelanggan yang punya data tersimpan,
+  ikon garis + warna netral untuk nama yang hanya diketik saat itu.
 - **Bisa menandai barang di nota yang sudah tersimpan sebagai pre-order**
   — untuk kasus lupa input pre-order saat checkout (mis. stok LPG
   ternyata kosong, baru sadar setelah nota lunas/tempo tersimpan).
-  Tahan (long-press) baris barangnya di struk in-app, pilih "Jadikan
-  Pre-order", isi jumlah & catatan — nota itu sendiri tidak berubah,
-  cuma dicatat sebagai pre-order yang bisa dikelola dari dashboard
-  Laci Meja.
+  Tap baris barangnya di struk in-app, pilih "Jadikan Pre-order", isi
+  jumlah (dan jumlah jaminan bila produknya pakai jaminan) — nota itu
+  sendiri tidak berubah, cuma dicatat sebagai pre-order yang bisa
+  dikelola dari dashboard Laci Meja.
 
 ### 🔧 Perbaikan
 - **Retur barang yang sama di lebih dari satu baris nota** (mis. beli
