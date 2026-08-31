@@ -12088,6 +12088,12 @@ class $LeftBehindItemsTable extends LeftBehindItems
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _lastEditedAtMeta =
+      const VerificationMeta('lastEditedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastEditedAt = GeneratedColumn<DateTime>(
+      'last_edited_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _collectedAtMeta =
       const VerificationMeta('collectedAt');
   @override
@@ -12108,6 +12114,7 @@ class $LeftBehindItemsTable extends LeftBehindItems
         locallyModified,
         createdAt,
         updatedAt,
+        lastEditedAt,
         collectedAt
       ];
   @override
@@ -12185,6 +12192,12 @@ class $LeftBehindItemsTable extends LeftBehindItems
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     }
+    if (data.containsKey('last_edited_at')) {
+      context.handle(
+          _lastEditedAtMeta,
+          lastEditedAt.isAcceptableOrUnknown(
+              data['last_edited_at']!, _lastEditedAtMeta));
+    }
     if (data.containsKey('collected_at')) {
       context.handle(
           _collectedAtMeta,
@@ -12224,6 +12237,8 @@ class $LeftBehindItemsTable extends LeftBehindItems
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      lastEditedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}last_edited_at']),
       collectedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}collected_at']),
     );
@@ -12273,6 +12288,13 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
   final bool locallyModified;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// SENGAJA terpisah dari [updatedAt]. `updatedAt` ikut tersentuh aksi
+  /// operasional biasa (ambil sebagian, sync, dsb) sehingga tidak bisa
+  /// dipakai menjawab "kapan isinya terakhir DIUBAH orang". Kolom ini HANYA
+  /// distempel saat user benar-benar mengedit atribut entri lewat sheet edit
+  /// di struk — null berarti entri belum pernah diedit sejak dibuat.
+  final DateTime? lastEditedAt;
   final DateTime? collectedAt;
   const LeftBehindItem(
       {required this.id,
@@ -12287,6 +12309,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       required this.locallyModified,
       required this.createdAt,
       required this.updatedAt,
+      this.lastEditedAt,
       this.collectedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -12313,6 +12336,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
     map['locally_modified'] = Variable<bool>(locallyModified);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || lastEditedAt != null) {
+      map['last_edited_at'] = Variable<DateTime>(lastEditedAt);
+    }
     if (!nullToAbsent || collectedAt != null) {
       map['collected_at'] = Variable<DateTime>(collectedAt);
     }
@@ -12339,6 +12365,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       locallyModified: Value(locallyModified),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      lastEditedAt: lastEditedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastEditedAt),
       collectedAt: collectedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(collectedAt),
@@ -12362,6 +12391,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       locallyModified: serializer.fromJson<bool>(json['locallyModified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      lastEditedAt: serializer.fromJson<DateTime?>(json['lastEditedAt']),
       collectedAt: serializer.fromJson<DateTime?>(json['collectedAt']),
     );
   }
@@ -12381,6 +12411,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       'locallyModified': serializer.toJson<bool>(locallyModified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'lastEditedAt': serializer.toJson<DateTime?>(lastEditedAt),
       'collectedAt': serializer.toJson<DateTime?>(collectedAt),
     };
   }
@@ -12398,6 +12429,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           bool? locallyModified,
           DateTime? createdAt,
           DateTime? updatedAt,
+          Value<DateTime?> lastEditedAt = const Value.absent(),
           Value<DateTime?> collectedAt = const Value.absent()}) =>
       LeftBehindItem(
         id: id ?? this.id,
@@ -12416,6 +12448,8 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
         locallyModified: locallyModified ?? this.locallyModified,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        lastEditedAt:
+            lastEditedAt.present ? lastEditedAt.value : this.lastEditedAt,
         collectedAt: collectedAt.present ? collectedAt.value : this.collectedAt,
       );
   LeftBehindItem copyWithCompanion(LeftBehindItemsCompanion data) {
@@ -12441,6 +12475,9 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           : this.locallyModified,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      lastEditedAt: data.lastEditedAt.present
+          ? data.lastEditedAt.value
+          : this.lastEditedAt,
       collectedAt:
           data.collectedAt.present ? data.collectedAt.value : this.collectedAt,
     );
@@ -12461,6 +12498,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastEditedAt: $lastEditedAt, ')
           ..write('collectedAt: $collectedAt')
           ..write(')'))
         .toString();
@@ -12480,6 +12518,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
       locallyModified,
       createdAt,
       updatedAt,
+      lastEditedAt,
       collectedAt);
   @override
   bool operator ==(Object other) =>
@@ -12497,6 +12536,7 @@ class LeftBehindItem extends DataClass implements Insertable<LeftBehindItem> {
           other.locallyModified == this.locallyModified &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.lastEditedAt == this.lastEditedAt &&
           other.collectedAt == this.collectedAt);
 }
 
@@ -12513,6 +12553,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
   final Value<bool> locallyModified;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> lastEditedAt;
   final Value<DateTime?> collectedAt;
   final Value<int> rowid;
   const LeftBehindItemsCompanion({
@@ -12528,6 +12569,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastEditedAt = const Value.absent(),
     this.collectedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -12544,6 +12586,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastEditedAt = const Value.absent(),
     this.collectedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
@@ -12563,6 +12606,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     Expression<bool>? locallyModified,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? lastEditedAt,
     Expression<DateTime>? collectedAt,
     Expression<int>? rowid,
   }) {
@@ -12579,6 +12623,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       if (locallyModified != null) 'locally_modified': locallyModified,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (lastEditedAt != null) 'last_edited_at': lastEditedAt,
       if (collectedAt != null) 'collected_at': collectedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -12597,6 +12642,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       Value<bool>? locallyModified,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
+      Value<DateTime?>? lastEditedAt,
       Value<DateTime?>? collectedAt,
       Value<int>? rowid}) {
     return LeftBehindItemsCompanion(
@@ -12612,6 +12658,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
       locallyModified: locallyModified ?? this.locallyModified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      lastEditedAt: lastEditedAt ?? this.lastEditedAt,
       collectedAt: collectedAt ?? this.collectedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -12656,6 +12703,9 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (lastEditedAt.present) {
+      map['last_edited_at'] = Variable<DateTime>(lastEditedAt.value);
+    }
     if (collectedAt.present) {
       map['collected_at'] = Variable<DateTime>(collectedAt.value);
     }
@@ -12680,6 +12730,7 @@ class LeftBehindItemsCompanion extends UpdateCompanion<LeftBehindItem> {
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastEditedAt: $lastEditedAt, ')
           ..write('collectedAt: $collectedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -12749,6 +12800,15 @@ class $BorrowedItemsTable extends BorrowedItems
   late final GeneratedColumn<String> note = GeneratedColumn<String>(
       'note', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+      'pinned', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("pinned" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _locallyModifiedMeta =
       const VerificationMeta('locallyModified');
   @override
@@ -12775,6 +12835,12 @@ class $BorrowedItemsTable extends BorrowedItems
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _lastEditedAtMeta =
+      const VerificationMeta('lastEditedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastEditedAt = GeneratedColumn<DateTime>(
+      'last_edited_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _fullyReturnedAtMeta =
       const VerificationMeta('fullyReturnedAt');
   @override
@@ -12792,9 +12858,11 @@ class $BorrowedItemsTable extends BorrowedItems
         qty,
         qtyReturned,
         note,
+        pinned,
         locallyModified,
         createdAt,
         updatedAt,
+        lastEditedAt,
         fullyReturnedAt
       ];
   @override
@@ -12860,6 +12928,10 @@ class $BorrowedItemsTable extends BorrowedItems
       context.handle(
           _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
     }
+    if (data.containsKey('pinned')) {
+      context.handle(_pinnedMeta,
+          pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta));
+    }
     if (data.containsKey('locally_modified')) {
       context.handle(
           _locallyModifiedMeta,
@@ -12873,6 +12945,12 @@ class $BorrowedItemsTable extends BorrowedItems
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('last_edited_at')) {
+      context.handle(
+          _lastEditedAtMeta,
+          lastEditedAt.isAcceptableOrUnknown(
+              data['last_edited_at']!, _lastEditedAtMeta));
     }
     if (data.containsKey('fully_returned_at')) {
       context.handle(
@@ -12907,12 +12985,16 @@ class $BorrowedItemsTable extends BorrowedItems
           .read(DriftSqlType.double, data['${effectivePrefix}qty_returned'])!,
       note: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      pinned: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}pinned'])!,
       locallyModified: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      lastEditedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}last_edited_at']),
       fullyReturnedAt: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime, data['${effectivePrefix}fully_returned_at']),
     );
@@ -12944,9 +13026,20 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
   final double qty;
   final double qtyReturned;
   final String? note;
+
+  /// Kartu pinjaman yang disematkan ke atas daftar dashboard, mengabaikan
+  /// urutan FIFO `createdAt` — untuk pinjaman yang perlu terus terlihat
+  /// (mis. wadah mahal yang sudah lama belum kembali). Disimpan per BARIS,
+  /// tapi UI menyalakan/mematikannya untuk seluruh baris dalam satu grup
+  /// pelanggan sekaligus (kartu dashboard dikelompokkan per pelanggan).
+  final bool pinned;
   final bool locallyModified;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Lihat komentar di `LeftBehindItems.lastEditedAt`. Toggle [pinned] TIDAK
+  /// menstempel kolom ini (menyematkan kartu bukan mengubah isi entri).
+  final DateTime? lastEditedAt;
   final DateTime? fullyReturnedAt;
   const BorrowedItem(
       {required this.id,
@@ -12958,9 +13051,11 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       required this.qty,
       required this.qtyReturned,
       this.note,
+      required this.pinned,
       required this.locallyModified,
       required this.createdAt,
       required this.updatedAt,
+      this.lastEditedAt,
       this.fullyReturnedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -12982,9 +13077,13 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    map['pinned'] = Variable<bool>(pinned);
     map['locally_modified'] = Variable<bool>(locallyModified);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || lastEditedAt != null) {
+      map['last_edited_at'] = Variable<DateTime>(lastEditedAt);
+    }
     if (!nullToAbsent || fullyReturnedAt != null) {
       map['fully_returned_at'] = Variable<DateTime>(fullyReturnedAt);
     }
@@ -13008,9 +13107,13 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       qty: Value(qty),
       qtyReturned: Value(qtyReturned),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      pinned: Value(pinned),
       locallyModified: Value(locallyModified),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      lastEditedAt: lastEditedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastEditedAt),
       fullyReturnedAt: fullyReturnedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(fullyReturnedAt),
@@ -13031,9 +13134,11 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       qty: serializer.fromJson<double>(json['qty']),
       qtyReturned: serializer.fromJson<double>(json['qtyReturned']),
       note: serializer.fromJson<String?>(json['note']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
       locallyModified: serializer.fromJson<bool>(json['locallyModified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      lastEditedAt: serializer.fromJson<DateTime?>(json['lastEditedAt']),
       fullyReturnedAt: serializer.fromJson<DateTime?>(json['fullyReturnedAt']),
     );
   }
@@ -13050,9 +13155,11 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       'qty': serializer.toJson<double>(qty),
       'qtyReturned': serializer.toJson<double>(qtyReturned),
       'note': serializer.toJson<String?>(note),
+      'pinned': serializer.toJson<bool>(pinned),
       'locallyModified': serializer.toJson<bool>(locallyModified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'lastEditedAt': serializer.toJson<DateTime?>(lastEditedAt),
       'fullyReturnedAt': serializer.toJson<DateTime?>(fullyReturnedAt),
     };
   }
@@ -13067,9 +13174,11 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
           double? qty,
           double? qtyReturned,
           Value<String?> note = const Value.absent(),
+          bool? pinned,
           bool? locallyModified,
           DateTime? createdAt,
           DateTime? updatedAt,
+          Value<DateTime?> lastEditedAt = const Value.absent(),
           Value<DateTime?> fullyReturnedAt = const Value.absent()}) =>
       BorrowedItem(
         id: id ?? this.id,
@@ -13085,9 +13194,12 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
         qty: qty ?? this.qty,
         qtyReturned: qtyReturned ?? this.qtyReturned,
         note: note.present ? note.value : this.note,
+        pinned: pinned ?? this.pinned,
         locallyModified: locallyModified ?? this.locallyModified,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        lastEditedAt:
+            lastEditedAt.present ? lastEditedAt.value : this.lastEditedAt,
         fullyReturnedAt: fullyReturnedAt.present
             ? fullyReturnedAt.value
             : this.fullyReturnedAt,
@@ -13111,11 +13223,15 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       qtyReturned:
           data.qtyReturned.present ? data.qtyReturned.value : this.qtyReturned,
       note: data.note.present ? data.note.value : this.note,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
       locallyModified: data.locallyModified.present
           ? data.locallyModified.value
           : this.locallyModified,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      lastEditedAt: data.lastEditedAt.present
+          ? data.lastEditedAt.value
+          : this.lastEditedAt,
       fullyReturnedAt: data.fullyReturnedAt.present
           ? data.fullyReturnedAt.value
           : this.fullyReturnedAt,
@@ -13134,9 +13250,11 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
           ..write('qty: $qty, ')
           ..write('qtyReturned: $qtyReturned, ')
           ..write('note: $note, ')
+          ..write('pinned: $pinned, ')
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastEditedAt: $lastEditedAt, ')
           ..write('fullyReturnedAt: $fullyReturnedAt')
           ..write(')'))
         .toString();
@@ -13153,9 +13271,11 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
       qty,
       qtyReturned,
       note,
+      pinned,
       locallyModified,
       createdAt,
       updatedAt,
+      lastEditedAt,
       fullyReturnedAt);
   @override
   bool operator ==(Object other) =>
@@ -13170,9 +13290,11 @@ class BorrowedItem extends DataClass implements Insertable<BorrowedItem> {
           other.qty == this.qty &&
           other.qtyReturned == this.qtyReturned &&
           other.note == this.note &&
+          other.pinned == this.pinned &&
           other.locallyModified == this.locallyModified &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.lastEditedAt == this.lastEditedAt &&
           other.fullyReturnedAt == this.fullyReturnedAt);
 }
 
@@ -13186,9 +13308,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
   final Value<double> qty;
   final Value<double> qtyReturned;
   final Value<String?> note;
+  final Value<bool> pinned;
   final Value<bool> locallyModified;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> lastEditedAt;
   final Value<DateTime?> fullyReturnedAt;
   final Value<int> rowid;
   const BorrowedItemsCompanion({
@@ -13201,9 +13325,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     this.qty = const Value.absent(),
     this.qtyReturned = const Value.absent(),
     this.note = const Value.absent(),
+    this.pinned = const Value.absent(),
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastEditedAt = const Value.absent(),
     this.fullyReturnedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -13217,9 +13343,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     required double qty,
     this.qtyReturned = const Value.absent(),
     this.note = const Value.absent(),
+    this.pinned = const Value.absent(),
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastEditedAt = const Value.absent(),
     this.fullyReturnedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
@@ -13236,9 +13364,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     Expression<double>? qty,
     Expression<double>? qtyReturned,
     Expression<String>? note,
+    Expression<bool>? pinned,
     Expression<bool>? locallyModified,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? lastEditedAt,
     Expression<DateTime>? fullyReturnedAt,
     Expression<int>? rowid,
   }) {
@@ -13252,9 +13382,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
       if (qty != null) 'qty': qty,
       if (qtyReturned != null) 'qty_returned': qtyReturned,
       if (note != null) 'note': note,
+      if (pinned != null) 'pinned': pinned,
       if (locallyModified != null) 'locally_modified': locallyModified,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (lastEditedAt != null) 'last_edited_at': lastEditedAt,
       if (fullyReturnedAt != null) 'fully_returned_at': fullyReturnedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -13270,9 +13402,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
       Value<double>? qty,
       Value<double>? qtyReturned,
       Value<String?>? note,
+      Value<bool>? pinned,
       Value<bool>? locallyModified,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
+      Value<DateTime?>? lastEditedAt,
       Value<DateTime?>? fullyReturnedAt,
       Value<int>? rowid}) {
     return BorrowedItemsCompanion(
@@ -13285,9 +13419,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
       qty: qty ?? this.qty,
       qtyReturned: qtyReturned ?? this.qtyReturned,
       note: note ?? this.note,
+      pinned: pinned ?? this.pinned,
       locallyModified: locallyModified ?? this.locallyModified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      lastEditedAt: lastEditedAt ?? this.lastEditedAt,
       fullyReturnedAt: fullyReturnedAt ?? this.fullyReturnedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -13323,6 +13459,9 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
     if (locallyModified.present) {
       map['locally_modified'] = Variable<bool>(locallyModified.value);
     }
@@ -13331,6 +13470,9 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
     }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (lastEditedAt.present) {
+      map['last_edited_at'] = Variable<DateTime>(lastEditedAt.value);
     }
     if (fullyReturnedAt.present) {
       map['fully_returned_at'] = Variable<DateTime>(fullyReturnedAt.value);
@@ -13353,9 +13495,11 @@ class BorrowedItemsCompanion extends UpdateCompanion<BorrowedItem> {
           ..write('qty: $qty, ')
           ..write('qtyReturned: $qtyReturned, ')
           ..write('note: $note, ')
+          ..write('pinned: $pinned, ')
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastEditedAt: $lastEditedAt, ')
           ..write('fullyReturnedAt: $fullyReturnedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -13395,6 +13539,12 @@ class $PreorderEntriesTable extends PreorderEntries
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('REFERENCES transactions (id)'));
+  static const VerificationMeta _customerIdMeta =
+      const VerificationMeta('customerId');
+  @override
+  late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
+      'customer_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _customerNameMeta =
       const VerificationMeta('customerName');
   @override
@@ -13460,6 +13610,12 @@ class $PreorderEntriesTable extends PreorderEntries
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _lastEditedAtMeta =
+      const VerificationMeta('lastEditedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastEditedAt = GeneratedColumn<DateTime>(
+      'last_edited_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _fulfilledAtMeta =
       const VerificationMeta('fulfilledAt');
   @override
@@ -13478,6 +13634,7 @@ class $PreorderEntriesTable extends PreorderEntries
         productId,
         productUnitId,
         transactionId,
+        customerId,
         customerName,
         phone,
         qtyOrdered,
@@ -13487,6 +13644,7 @@ class $PreorderEntriesTable extends PreorderEntries
         locallyModified,
         createdAt,
         updatedAt,
+        lastEditedAt,
         fulfilledAt,
         cancelledAt
       ];
@@ -13524,6 +13682,12 @@ class $PreorderEntriesTable extends PreorderEntries
           _transactionIdMeta,
           transactionId.isAcceptableOrUnknown(
               data['transaction_id']!, _transactionIdMeta));
+    }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+          _customerIdMeta,
+          customerId.isAcceptableOrUnknown(
+              data['customer_id']!, _customerIdMeta));
     }
     if (data.containsKey('customer_name')) {
       context.handle(
@@ -13573,6 +13737,12 @@ class $PreorderEntriesTable extends PreorderEntries
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     }
+    if (data.containsKey('last_edited_at')) {
+      context.handle(
+          _lastEditedAtMeta,
+          lastEditedAt.isAcceptableOrUnknown(
+              data['last_edited_at']!, _lastEditedAtMeta));
+    }
     if (data.containsKey('fulfilled_at')) {
       context.handle(
           _fulfilledAtMeta,
@@ -13602,6 +13772,8 @@ class $PreorderEntriesTable extends PreorderEntries
           DriftSqlType.string, data['${effectivePrefix}product_unit_id'])!,
       transactionId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}transaction_id']),
+      customerId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}customer_id']),
       customerName: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}customer_name'])!,
       phone: attachedDatabase.typeMapping
@@ -13620,6 +13792,8 @@ class $PreorderEntriesTable extends PreorderEntries
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      lastEditedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}last_edited_at']),
       fulfilledAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}fulfilled_at']),
       cancelledAt: attachedDatabase.typeMapping
@@ -13641,6 +13815,14 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
   /// NULLABLE — satu-satunya kasus null: pembeli cuma titip wadah tanpa
   /// membeli apa pun (tidak ada transaksi lain berjalan saat itu).
   final String? transactionId;
+
+  /// SENGAJA TANPA FK ke `Customers` — alasan identik dengan
+  /// `LeftBehindItems.customerId`. Nullable: null = nama manual/ad-hoc
+  /// (pembeli umum bernama, tanpa record pelanggan), terisi = pelanggan
+  /// terdaftar. Dipakai UI membedakan aksen pelanggan tetap vs ad-hoc.
+  /// Entri lama (sebelum kolom ini ada) selalu null — tampil sbg ad-hoc,
+  /// aman karena [customerName] memang satu-satunya info yang pernah ada.
+  final String? customerId;
   final String customerName;
   final String? phone;
   final double qtyOrdered;
@@ -13653,6 +13835,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
   final bool locallyModified;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Lihat komentar di `LeftBehindItems.lastEditedAt`.
+  final DateTime? lastEditedAt;
   final DateTime? fulfilledAt;
   final DateTime? cancelledAt;
   const PreorderEntry(
@@ -13660,6 +13845,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       required this.productId,
       required this.productUnitId,
       this.transactionId,
+      this.customerId,
       required this.customerName,
       this.phone,
       required this.qtyOrdered,
@@ -13669,6 +13855,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       required this.locallyModified,
       required this.createdAt,
       required this.updatedAt,
+      this.lastEditedAt,
       this.fulfilledAt,
       this.cancelledAt});
   @override
@@ -13679,6 +13866,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
     map['product_unit_id'] = Variable<String>(productUnitId);
     if (!nullToAbsent || transactionId != null) {
       map['transaction_id'] = Variable<String>(transactionId);
+    }
+    if (!nullToAbsent || customerId != null) {
+      map['customer_id'] = Variable<String>(customerId);
     }
     map['customer_name'] = Variable<String>(customerName);
     if (!nullToAbsent || phone != null) {
@@ -13693,6 +13883,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
     map['locally_modified'] = Variable<bool>(locallyModified);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || lastEditedAt != null) {
+      map['last_edited_at'] = Variable<DateTime>(lastEditedAt);
+    }
     if (!nullToAbsent || fulfilledAt != null) {
       map['fulfilled_at'] = Variable<DateTime>(fulfilledAt);
     }
@@ -13710,6 +13903,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       transactionId: transactionId == null && nullToAbsent
           ? const Value.absent()
           : Value(transactionId),
+      customerId: customerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerId),
       customerName: Value(customerName),
       phone:
           phone == null && nullToAbsent ? const Value.absent() : Value(phone),
@@ -13720,6 +13916,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       locallyModified: Value(locallyModified),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      lastEditedAt: lastEditedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastEditedAt),
       fulfilledAt: fulfilledAt == null && nullToAbsent
           ? const Value.absent()
           : Value(fulfilledAt),
@@ -13737,6 +13936,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       productId: serializer.fromJson<String>(json['productId']),
       productUnitId: serializer.fromJson<String>(json['productUnitId']),
       transactionId: serializer.fromJson<String?>(json['transactionId']),
+      customerId: serializer.fromJson<String?>(json['customerId']),
       customerName: serializer.fromJson<String>(json['customerName']),
       phone: serializer.fromJson<String?>(json['phone']),
       qtyOrdered: serializer.fromJson<double>(json['qtyOrdered']),
@@ -13746,6 +13946,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       locallyModified: serializer.fromJson<bool>(json['locallyModified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      lastEditedAt: serializer.fromJson<DateTime?>(json['lastEditedAt']),
       fulfilledAt: serializer.fromJson<DateTime?>(json['fulfilledAt']),
       cancelledAt: serializer.fromJson<DateTime?>(json['cancelledAt']),
     );
@@ -13758,6 +13959,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       'productId': serializer.toJson<String>(productId),
       'productUnitId': serializer.toJson<String>(productUnitId),
       'transactionId': serializer.toJson<String?>(transactionId),
+      'customerId': serializer.toJson<String?>(customerId),
       'customerName': serializer.toJson<String>(customerName),
       'phone': serializer.toJson<String?>(phone),
       'qtyOrdered': serializer.toJson<double>(qtyOrdered),
@@ -13767,6 +13969,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       'locallyModified': serializer.toJson<bool>(locallyModified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'lastEditedAt': serializer.toJson<DateTime?>(lastEditedAt),
       'fulfilledAt': serializer.toJson<DateTime?>(fulfilledAt),
       'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
     };
@@ -13777,6 +13980,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           String? productId,
           String? productUnitId,
           Value<String?> transactionId = const Value.absent(),
+          Value<String?> customerId = const Value.absent(),
           String? customerName,
           Value<String?> phone = const Value.absent(),
           double? qtyOrdered,
@@ -13786,6 +13990,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           bool? locallyModified,
           DateTime? createdAt,
           DateTime? updatedAt,
+          Value<DateTime?> lastEditedAt = const Value.absent(),
           Value<DateTime?> fulfilledAt = const Value.absent(),
           Value<DateTime?> cancelledAt = const Value.absent()}) =>
       PreorderEntry(
@@ -13794,6 +13999,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
         productUnitId: productUnitId ?? this.productUnitId,
         transactionId:
             transactionId.present ? transactionId.value : this.transactionId,
+        customerId: customerId.present ? customerId.value : this.customerId,
         customerName: customerName ?? this.customerName,
         phone: phone.present ? phone.value : this.phone,
         qtyOrdered: qtyOrdered ?? this.qtyOrdered,
@@ -13803,6 +14009,8 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
         locallyModified: locallyModified ?? this.locallyModified,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        lastEditedAt:
+            lastEditedAt.present ? lastEditedAt.value : this.lastEditedAt,
         fulfilledAt: fulfilledAt.present ? fulfilledAt.value : this.fulfilledAt,
         cancelledAt: cancelledAt.present ? cancelledAt.value : this.cancelledAt,
       );
@@ -13816,6 +14024,8 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       transactionId: data.transactionId.present
           ? data.transactionId.value
           : this.transactionId,
+      customerId:
+          data.customerId.present ? data.customerId.value : this.customerId,
       customerName: data.customerName.present
           ? data.customerName.value
           : this.customerName,
@@ -13831,6 +14041,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           : this.locallyModified,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      lastEditedAt: data.lastEditedAt.present
+          ? data.lastEditedAt.value
+          : this.lastEditedAt,
       fulfilledAt:
           data.fulfilledAt.present ? data.fulfilledAt.value : this.fulfilledAt,
       cancelledAt:
@@ -13845,6 +14058,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           ..write('productId: $productId, ')
           ..write('productUnitId: $productUnitId, ')
           ..write('transactionId: $transactionId, ')
+          ..write('customerId: $customerId, ')
           ..write('customerName: $customerName, ')
           ..write('phone: $phone, ')
           ..write('qtyOrdered: $qtyOrdered, ')
@@ -13854,6 +14068,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastEditedAt: $lastEditedAt, ')
           ..write('fulfilledAt: $fulfilledAt, ')
           ..write('cancelledAt: $cancelledAt')
           ..write(')'))
@@ -13866,6 +14081,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       productId,
       productUnitId,
       transactionId,
+      customerId,
       customerName,
       phone,
       qtyOrdered,
@@ -13875,6 +14091,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       locallyModified,
       createdAt,
       updatedAt,
+      lastEditedAt,
       fulfilledAt,
       cancelledAt);
   @override
@@ -13885,6 +14102,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           other.productId == this.productId &&
           other.productUnitId == this.productUnitId &&
           other.transactionId == this.transactionId &&
+          other.customerId == this.customerId &&
           other.customerName == this.customerName &&
           other.phone == this.phone &&
           other.qtyOrdered == this.qtyOrdered &&
@@ -13894,6 +14112,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           other.locallyModified == this.locallyModified &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.lastEditedAt == this.lastEditedAt &&
           other.fulfilledAt == this.fulfilledAt &&
           other.cancelledAt == this.cancelledAt);
 }
@@ -13903,6 +14122,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
   final Value<String> productId;
   final Value<String> productUnitId;
   final Value<String?> transactionId;
+  final Value<String?> customerId;
   final Value<String> customerName;
   final Value<String?> phone;
   final Value<double> qtyOrdered;
@@ -13912,6 +14132,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
   final Value<bool> locallyModified;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> lastEditedAt;
   final Value<DateTime?> fulfilledAt;
   final Value<DateTime?> cancelledAt;
   final Value<int> rowid;
@@ -13920,6 +14141,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     this.productId = const Value.absent(),
     this.productUnitId = const Value.absent(),
     this.transactionId = const Value.absent(),
+    this.customerId = const Value.absent(),
     this.customerName = const Value.absent(),
     this.phone = const Value.absent(),
     this.qtyOrdered = const Value.absent(),
@@ -13929,6 +14151,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastEditedAt = const Value.absent(),
     this.fulfilledAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -13938,6 +14161,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     required String productId,
     required String productUnitId,
     this.transactionId = const Value.absent(),
+    this.customerId = const Value.absent(),
     required String customerName,
     this.phone = const Value.absent(),
     required double qtyOrdered,
@@ -13947,6 +14171,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastEditedAt = const Value.absent(),
     this.fulfilledAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -13960,6 +14185,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     Expression<String>? productId,
     Expression<String>? productUnitId,
     Expression<String>? transactionId,
+    Expression<String>? customerId,
     Expression<String>? customerName,
     Expression<String>? phone,
     Expression<double>? qtyOrdered,
@@ -13969,6 +14195,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     Expression<bool>? locallyModified,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? lastEditedAt,
     Expression<DateTime>? fulfilledAt,
     Expression<DateTime>? cancelledAt,
     Expression<int>? rowid,
@@ -13978,6 +14205,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       if (productId != null) 'product_id': productId,
       if (productUnitId != null) 'product_unit_id': productUnitId,
       if (transactionId != null) 'transaction_id': transactionId,
+      if (customerId != null) 'customer_id': customerId,
       if (customerName != null) 'customer_name': customerName,
       if (phone != null) 'phone': phone,
       if (qtyOrdered != null) 'qty_ordered': qtyOrdered,
@@ -13987,6 +14215,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       if (locallyModified != null) 'locally_modified': locallyModified,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (lastEditedAt != null) 'last_edited_at': lastEditedAt,
       if (fulfilledAt != null) 'fulfilled_at': fulfilledAt,
       if (cancelledAt != null) 'cancelled_at': cancelledAt,
       if (rowid != null) 'rowid': rowid,
@@ -13998,6 +14227,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       Value<String>? productId,
       Value<String>? productUnitId,
       Value<String?>? transactionId,
+      Value<String?>? customerId,
       Value<String>? customerName,
       Value<String?>? phone,
       Value<double>? qtyOrdered,
@@ -14007,6 +14237,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       Value<bool>? locallyModified,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
+      Value<DateTime?>? lastEditedAt,
       Value<DateTime?>? fulfilledAt,
       Value<DateTime?>? cancelledAt,
       Value<int>? rowid}) {
@@ -14015,6 +14246,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       productId: productId ?? this.productId,
       productUnitId: productUnitId ?? this.productUnitId,
       transactionId: transactionId ?? this.transactionId,
+      customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
       phone: phone ?? this.phone,
       qtyOrdered: qtyOrdered ?? this.qtyOrdered,
@@ -14024,6 +14256,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       locallyModified: locallyModified ?? this.locallyModified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      lastEditedAt: lastEditedAt ?? this.lastEditedAt,
       fulfilledAt: fulfilledAt ?? this.fulfilledAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
       rowid: rowid ?? this.rowid,
@@ -14044,6 +14277,9 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     }
     if (transactionId.present) {
       map['transaction_id'] = Variable<String>(transactionId.value);
+    }
+    if (customerId.present) {
+      map['customer_id'] = Variable<String>(customerId.value);
     }
     if (customerName.present) {
       map['customer_name'] = Variable<String>(customerName.value);
@@ -14072,6 +14308,9 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (lastEditedAt.present) {
+      map['last_edited_at'] = Variable<DateTime>(lastEditedAt.value);
+    }
     if (fulfilledAt.present) {
       map['fulfilled_at'] = Variable<DateTime>(fulfilledAt.value);
     }
@@ -14091,6 +14330,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
           ..write('productId: $productId, ')
           ..write('productUnitId: $productUnitId, ')
           ..write('transactionId: $transactionId, ')
+          ..write('customerId: $customerId, ')
           ..write('customerName: $customerName, ')
           ..write('phone: $phone, ')
           ..write('qtyOrdered: $qtyOrdered, ')
@@ -14100,6 +14340,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastEditedAt: $lastEditedAt, ')
           ..write('fulfilledAt: $fulfilledAt, ')
           ..write('cancelledAt: $cancelledAt, ')
           ..write('rowid: $rowid')
@@ -23849,6 +24090,7 @@ typedef $$LeftBehindItemsTableCreateCompanionBuilder = LeftBehindItemsCompanion
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastEditedAt,
   Value<DateTime?> collectedAt,
   Value<int> rowid,
 });
@@ -23866,6 +24108,7 @@ typedef $$LeftBehindItemsTableUpdateCompanionBuilder = LeftBehindItemsCompanion
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastEditedAt,
   Value<DateTime?> collectedAt,
   Value<int> rowid,
 });
@@ -23933,6 +24176,9 @@ class $$LeftBehindItemsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get collectedAt => $composableBuilder(
       column: $table.collectedAt, builder: (column) => ColumnFilters(column));
@@ -24003,6 +24249,10 @@ class $$LeftBehindItemsTableOrderingComposer
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get collectedAt => $composableBuilder(
       column: $table.collectedAt, builder: (column) => ColumnOrderings(column));
 
@@ -24069,6 +24319,9 @@ class $$LeftBehindItemsTableAnnotationComposer
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get collectedAt => $composableBuilder(
       column: $table.collectedAt, builder: (column) => column);
 
@@ -24129,6 +24382,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastEditedAt = const Value.absent(),
             Value<DateTime?> collectedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -24145,6 +24399,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastEditedAt: lastEditedAt,
             collectedAt: collectedAt,
             rowid: rowid,
           ),
@@ -24161,6 +24416,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastEditedAt = const Value.absent(),
             Value<DateTime?> collectedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -24177,6 +24433,7 @@ class $$LeftBehindItemsTableTableManager extends RootTableManager<
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastEditedAt: lastEditedAt,
             collectedAt: collectedAt,
             rowid: rowid,
           ),
@@ -24248,9 +24505,11 @@ typedef $$BorrowedItemsTableCreateCompanionBuilder = BorrowedItemsCompanion
   required double qty,
   Value<double> qtyReturned,
   Value<String?> note,
+  Value<bool> pinned,
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastEditedAt,
   Value<DateTime?> fullyReturnedAt,
   Value<int> rowid,
 });
@@ -24265,9 +24524,11 @@ typedef $$BorrowedItemsTableUpdateCompanionBuilder = BorrowedItemsCompanion
   Value<double> qty,
   Value<double> qtyReturned,
   Value<String?> note,
+  Value<bool> pinned,
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastEditedAt,
   Value<DateTime?> fullyReturnedAt,
   Value<int> rowid,
 });
@@ -24326,6 +24587,9 @@ class $$BorrowedItemsTableFilterComposer
   ColumnFilters<String> get note => $composableBuilder(
       column: $table.note, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<bool> get pinned => $composableBuilder(
+      column: $table.pinned, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<bool> get locallyModified => $composableBuilder(
       column: $table.locallyModified,
       builder: (column) => ColumnFilters(column));
@@ -24335,6 +24599,9 @@ class $$BorrowedItemsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get fullyReturnedAt => $composableBuilder(
       column: $table.fullyReturnedAt,
@@ -24396,6 +24663,9 @@ class $$BorrowedItemsTableOrderingComposer
   ColumnOrderings<String> get note => $composableBuilder(
       column: $table.note, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+      column: $table.pinned, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get locallyModified => $composableBuilder(
       column: $table.locallyModified,
       builder: (column) => ColumnOrderings(column));
@@ -24405,6 +24675,10 @@ class $$BorrowedItemsTableOrderingComposer
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<DateTime> get fullyReturnedAt => $composableBuilder(
       column: $table.fullyReturnedAt,
@@ -24464,6 +24738,9 @@ class $$BorrowedItemsTableAnnotationComposer
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
 
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
   GeneratedColumn<bool> get locallyModified => $composableBuilder(
       column: $table.locallyModified, builder: (column) => column);
 
@@ -24472,6 +24749,9 @@ class $$BorrowedItemsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get fullyReturnedAt => $composableBuilder(
       column: $table.fullyReturnedAt, builder: (column) => column);
@@ -24529,9 +24809,11 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             Value<double> qty = const Value.absent(),
             Value<double> qtyReturned = const Value.absent(),
             Value<String?> note = const Value.absent(),
+            Value<bool> pinned = const Value.absent(),
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastEditedAt = const Value.absent(),
             Value<DateTime?> fullyReturnedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -24545,9 +24827,11 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             qty: qty,
             qtyReturned: qtyReturned,
             note: note,
+            pinned: pinned,
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastEditedAt: lastEditedAt,
             fullyReturnedAt: fullyReturnedAt,
             rowid: rowid,
           ),
@@ -24561,9 +24845,11 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             required double qty,
             Value<double> qtyReturned = const Value.absent(),
             Value<String?> note = const Value.absent(),
+            Value<bool> pinned = const Value.absent(),
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastEditedAt = const Value.absent(),
             Value<DateTime?> fullyReturnedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -24577,9 +24863,11 @@ class $$BorrowedItemsTableTableManager extends RootTableManager<
             qty: qty,
             qtyReturned: qtyReturned,
             note: note,
+            pinned: pinned,
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastEditedAt: lastEditedAt,
             fullyReturnedAt: fullyReturnedAt,
             rowid: rowid,
           ),
@@ -24646,6 +24934,7 @@ typedef $$PreorderEntriesTableCreateCompanionBuilder = PreorderEntriesCompanion
   required String productId,
   required String productUnitId,
   Value<String?> transactionId,
+  Value<String?> customerId,
   required String customerName,
   Value<String?> phone,
   required double qtyOrdered,
@@ -24655,6 +24944,7 @@ typedef $$PreorderEntriesTableCreateCompanionBuilder = PreorderEntriesCompanion
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastEditedAt,
   Value<DateTime?> fulfilledAt,
   Value<DateTime?> cancelledAt,
   Value<int> rowid,
@@ -24665,6 +24955,7 @@ typedef $$PreorderEntriesTableUpdateCompanionBuilder = PreorderEntriesCompanion
   Value<String> productId,
   Value<String> productUnitId,
   Value<String?> transactionId,
+  Value<String?> customerId,
   Value<String> customerName,
   Value<String?> phone,
   Value<double> qtyOrdered,
@@ -24674,6 +24965,7 @@ typedef $$PreorderEntriesTableUpdateCompanionBuilder = PreorderEntriesCompanion
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastEditedAt,
   Value<DateTime?> fulfilledAt,
   Value<DateTime?> cancelledAt,
   Value<int> rowid,
@@ -24717,6 +25009,9 @@ class $$PreorderEntriesTableFilterComposer
   ColumnFilters<String> get productUnitId => $composableBuilder(
       column: $table.productUnitId, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get customerName => $composableBuilder(
       column: $table.customerName, builder: (column) => ColumnFilters(column));
 
@@ -24744,6 +25039,9 @@ class $$PreorderEntriesTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get fulfilledAt => $composableBuilder(
       column: $table.fulfilledAt, builder: (column) => ColumnFilters(column));
@@ -24791,6 +25089,9 @@ class $$PreorderEntriesTableOrderingComposer
       column: $table.productUnitId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get customerName => $composableBuilder(
       column: $table.customerName,
       builder: (column) => ColumnOrderings(column));
@@ -24819,6 +25120,10 @@ class $$PreorderEntriesTableOrderingComposer
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<DateTime> get fulfilledAt => $composableBuilder(
       column: $table.fulfilledAt, builder: (column) => ColumnOrderings(column));
@@ -24865,6 +25170,9 @@ class $$PreorderEntriesTableAnnotationComposer
   GeneratedColumn<String> get productUnitId => $composableBuilder(
       column: $table.productUnitId, builder: (column) => column);
 
+  GeneratedColumn<String> get customerId => $composableBuilder(
+      column: $table.customerId, builder: (column) => column);
+
   GeneratedColumn<String> get customerName => $composableBuilder(
       column: $table.customerName, builder: (column) => column);
 
@@ -24891,6 +25199,9 @@ class $$PreorderEntriesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastEditedAt => $composableBuilder(
+      column: $table.lastEditedAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get fulfilledAt => $composableBuilder(
       column: $table.fulfilledAt, builder: (column) => column);
@@ -24947,6 +25258,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             Value<String> productId = const Value.absent(),
             Value<String> productUnitId = const Value.absent(),
             Value<String?> transactionId = const Value.absent(),
+            Value<String?> customerId = const Value.absent(),
             Value<String> customerName = const Value.absent(),
             Value<String?> phone = const Value.absent(),
             Value<double> qtyOrdered = const Value.absent(),
@@ -24956,6 +25268,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastEditedAt = const Value.absent(),
             Value<DateTime?> fulfilledAt = const Value.absent(),
             Value<DateTime?> cancelledAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -24965,6 +25278,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             productId: productId,
             productUnitId: productUnitId,
             transactionId: transactionId,
+            customerId: customerId,
             customerName: customerName,
             phone: phone,
             qtyOrdered: qtyOrdered,
@@ -24974,6 +25288,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastEditedAt: lastEditedAt,
             fulfilledAt: fulfilledAt,
             cancelledAt: cancelledAt,
             rowid: rowid,
@@ -24983,6 +25298,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             required String productId,
             required String productUnitId,
             Value<String?> transactionId = const Value.absent(),
+            Value<String?> customerId = const Value.absent(),
             required String customerName,
             Value<String?> phone = const Value.absent(),
             required double qtyOrdered,
@@ -24992,6 +25308,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastEditedAt = const Value.absent(),
             Value<DateTime?> fulfilledAt = const Value.absent(),
             Value<DateTime?> cancelledAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -25001,6 +25318,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             productId: productId,
             productUnitId: productUnitId,
             transactionId: transactionId,
+            customerId: customerId,
             customerName: customerName,
             phone: phone,
             qtyOrdered: qtyOrdered,
@@ -25010,6 +25328,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             locallyModified: locallyModified,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastEditedAt: lastEditedAt,
             fulfilledAt: fulfilledAt,
             cancelledAt: cancelledAt,
             rowid: rowid,

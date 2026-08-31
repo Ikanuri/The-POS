@@ -668,6 +668,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           customerName: _selectedCustomer?.name ?? customerName ?? 'Umum',
           qtyOrdered: effQty(item),
           transactionId: txId,
+          // Ikut menyimpan id pelanggan terdaftar (null = nama ad-hoc) supaya
+          // kartu Laci Meja bisa membedakan keduanya, sama spt 2 kategori
+          // Laci Meja lain yang sudah lama punya kolom ini.
+          customerId: _selectedCustomer?.id,
           depositQty: item.depositQty ?? 0,
           paid: item.preorderPaid,
           locallyModified: locallyModifiedLaci,
@@ -819,6 +823,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         customerName: preorderCustomerName,
         qtyOrdered: effQty(item),
         transactionId: txId,
+        customerId: updatedTx?.customerId,
         depositQty: item.depositQty ?? 0,
         paid: item.preorderPaid,
         locallyModified: locallyModifiedLaci,

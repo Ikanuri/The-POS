@@ -424,7 +424,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
 
     return GestureDetector(
-      onLongPress: isPlaceholder ? null : () => _showItemActionsMenu(item),
+      onLongPress: isPlaceholder ? null : () => _editItemNote(item),
       child: ListTile(
         dense: true,
         contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 12),
@@ -590,44 +590,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       .where((p) => p.productUnitId == productUnitId)
       .fold<double>(0, (s, p) => s + p.qtyOrdered);
 
-  /// Susulan (permintaan user): long-press baris item sekarang buka pilihan
-  /// aksi (bukan langsung "Edit Catatan") — "Jadikan Pre-order" ditambah utk
-  /// skenario nyata: kasir lupa input pre-order saat checkout (mis. stok LPG
-  /// ternyata kosong, baru sadar setelah nota lunas/tempo tersimpan).
-  Future<void> _showItemActionsMenu(TransactionItem item) async {
-    final remaining = item.qty - _alreadyPreorderedQty(item.productUnitId);
-    final canPreorder = _tx!.status != 'void' && remaining > 0;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_note_outlined),
-              title: const Text('Edit Catatan'),
-              onTap: () => Navigator.pop(ctx, 'note'),
-            ),
-            if (canPreorder)
-              ListTile(
-                leading: const Icon(Icons.hourglass_empty),
-                title: const Text('Jadikan Pre-order'),
-                subtitle: const Text(
-                    'Barang ternyata belum bisa diserahkan (mis. stok kosong)'),
-                onTap: () => Navigator.pop(ctx, 'preorder'),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || choice == null) return;
-    if (choice == 'note') {
-      await _editItemNote(item);
-    } else if (choice == 'preorder') {
-      await _showJadikanPreorderDialog(item);
-    }
-  }
-
   /// Menandai SEBAGIAN/SELURUH qty baris [item] (nota SUDAH tersimpan,
   /// lunas ATAU tempo) sbg pre-order — dipakai saat kasir baru sadar
   /// belakangan barangnya belum bisa diserahkan (permintaan user, skenario
@@ -648,6 +610,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     var qty = maxQty;
     final qtyCtrl = TextEditingController(text: _fmtQtyShort(qty));
     final noteCtrl = TextEditingController();
+
+    // Susulan (permintaan user) — produk dgn toggle jaminan (mis. tabung gas
+    // kosong dititip sbg wadah) butuh field "Jumlah jaminan dititip" juga di
+    // sini, sama pola dgn `item_entry_sheet.dart` (default = qty pesanan).
+    final db = ref.read(databaseProvider);
+    final unit = await (db.select(db.productUnits)
+          ..where((t) => t.id.equals(item.productUnitId)))
+        .getSingleOrNull();
+    final requiresDeposit = unit?.requiresDeposit ?? false;
+    if (!mounted) return;
+    var depositQty = qty;
+    final depositCtrl = TextEditingController(text: _fmtQtyShort(depositQty));
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -709,6 +683,33 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ),
                 Text('Maks ${_fmtQtyShort(maxQty)}',
                     style: const TextStyle(fontSize: 11)),
+                if (requiresDeposit) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Jumlah jaminan dititip')),
+                      SizedBox(
+                        width: 70,
+                        child: TextField(
+                          controller: depositCtrl,
+                          textAlign: TextAlign.center,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          onChanged: (v) {
+                            final parsed = double.tryParse(v);
+                            if (parsed != null && parsed >= 0) {
+                              setDialogState(() => depositQty = parsed);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
                 TextField(
                   controller: noteCtrl,
@@ -735,19 +736,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     final note = noteCtrl.text.trim();
     qtyCtrl.dispose();
+    depositCtrl.dispose();
     noteCtrl.dispose();
     if (confirmed != true || qty <= 0 || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
 
-    final db = ref.read(databaseProvider);
     await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
           id: const Uuid().v4(),
           productId: item.productId,
           productUnitId: item.productUnitId,
           transactionId: Value(_tx!.id),
           customerName: _customerDisplay(_tx!),
+          // null = nama ad-hoc; dipakai kartu Laci Meja membedakan pelanggan
+          // terdaftar dari nama yang cuma diketik saat itu.
+          customerId: Value(_tx!.customerId),
           qtyOrdered: qty,
           paid: const Value(true),
+          depositQty: requiresDeposit ? Value(depositQty) : const Value(0),
           note: Value(note.isEmpty ? null : note),
         ));
     await _load();
@@ -805,8 +810,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         text: ThousandsSeparatorFormatter.format(item.priceAtSale));
     final noteCtrl = TextEditingController(text: item.itemNote ?? '');
     var qty = item.qty;
+    // Susulan (permintaan user) — jalur "Jadikan Pre-order" pindah ke SINI
+    // (tap item, sheet yang sudah ada), bukan long-press terpisah. Sisa qty
+    // yang belum pernah ditandai pre-order sebelumnya — lihat dok
+    // `_alreadyPreorderedQty`/`_showJadikanPreorderDialog`.
+    final canPreorder =
+        item.qty - _alreadyPreorderedQty(item.productUnitId) > 0;
 
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
@@ -885,6 +896,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                if (canPreorder) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(ctx).pop('preorder'),
+                    icon: const Icon(Icons.hourglass_empty),
+                    label: const Text('Jadikan Pre-order'),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () => setSheet(() => qty = 0),
@@ -895,7 +914,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ),
                 const SizedBox(height: 8),
                 FilledButton(
-                  onPressed: () => Navigator.of(ctx).pop(true),
+                  onPressed: () => Navigator.of(ctx).pop('save'),
                   child: Text(qty <= 0 ? 'Hapus' : 'Simpan Perubahan'),
                 ),
               ],
@@ -905,8 +924,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       },
     );
 
+    if (saved == 'preorder') {
+      priceCtrl.dispose();
+      noteCtrl.dispose();
+      if (!mounted) return;
+      await _showJadikanPreorderDialog(item);
+      return;
+    }
     priceCtrl.dispose();
-    if (saved != true || !mounted) return;
+    if (saved != 'save' || !mounted) return;
 
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
@@ -2907,8 +2933,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                               onTap: _enterEditCustomer,
                               child: Row(
                                 children: [
-                                  Icon(Icons.person_outline,
-                                      size: 14, color: scheme.onSurfaceVariant),
+                                  // Ikon terisi + aksen = pelanggan
+                                  // TERDAFTAR, garis = nama ad-hoc yang cuma
+                                  // diketik di nota ini (lihat dok
+                                  // `Transactions.customerId`).
+                                  Icon(
+                                      tx.customerId != null
+                                          ? Icons.person
+                                          : Icons.person_outline,
+                                      size: 14,
+                                      color: tx.customerId != null
+                                          ? AppTheme.accent
+                                          : scheme.onSurfaceVariant),
                                   const SizedBox(width: 6),
                                   Text('Pelanggan: ',
                                       style: TextStyle(
@@ -3387,6 +3423,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 createdLabel: 'Dipinjam',
                 createdAt: b.createdAt,
                 events: _laciMejaEvents[b.id] ?? const [],
+                lastEditedAt: b.lastEditedAt,
+                onEdit: () => _editBorrowedEntry(b),
                 status: b.fullyReturnedAt != null
                     ? (text: 'Selesai — semua sudah kembali', done: true)
                     : (
@@ -3412,6 +3450,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     required DateTime createdAt,
     required List<LaciMejaEvent> events,
     required ({String text, bool done}) status,
+    DateTime? lastEditedAt,
+    VoidCallback? onEdit,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
@@ -3419,11 +3459,38 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(headline,
-              style: TextStyle(
-                  fontSize: 12.5, fontWeight: FontWeight.w700, color: fg)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(headline,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: fg)),
+              ),
+              if (onEdit != null)
+                IconButton(
+                  tooltip: 'Ubah',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: Icon(Icons.edit_outlined, size: 15, color: fg),
+                  onPressed: onEdit,
+                ),
+            ],
+          ),
           Text('$createdLabel ${_formatDateTime(createdAt)}',
               style: TextStyle(fontSize: 11, color: fg.withOpacity(0.75))),
+          // Hanya muncul kalau entri memang pernah diedit — `lastEditedAt`
+          // sengaja terpisah dari `updatedAt` (yang ikut tersentuh aksi
+          // operasional/sync) supaya baris ini benar-benar berarti "isinya
+          // pernah diubah orang".
+          if (lastEditedAt != null)
+            Text('Terakhir diedit ${_formatDateTime(lastEditedAt)}',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: fg.withOpacity(0.75))),
           for (final e in events)
             Padding(
               padding: const EdgeInsets.only(top: 3),
@@ -3467,8 +3534,273 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         'kembali' => 'Kembali',
         'penuhi' => 'Dipenuhi',
         'batal' => 'Dibatalkan',
+        'edit' => 'Diubah',
         _ => aksi,
       };
+
+  /// Jumlah yang SUDAH terlanjur diambil/dikembalikan/dipenuhi untuk satu
+  /// entri — batas bawah qty saat entri diedit. Menurunkan qty di bawah angka
+  /// ini akan bikin sisa entri negatif (ledger barang fisik jadi ngawur).
+  double _laciMejaTakenQty(String entryId) =>
+      (_laciMejaEvents[entryId] ?? const <LaciMejaEvent>[])
+          .where((e) => e.aksi != 'batal')
+          .fold<double>(0, (s, e) => s + e.qty);
+
+  /// Sheet edit atribut entri Laci Meja (permintaan user). Sebelum ini, entri
+  /// yang salah input hanya bisa "diperbaiki" dgn dipenuhi/diambil lalu
+  /// dibuat ulang — riwayat audit jadi mencatat kejadian fisik yang TIDAK
+  /// pernah terjadi. Produk/satuan/nota TIDAK bisa diubah di sini: mengubah
+  /// identitas entri sama saja dgn hapus-buat-ulang, persis yang dihindari.
+  Future<
+      ({
+        String customerName,
+        String? phone,
+        double qty,
+        double depositQty,
+        String? note
+      })?> _showLaciMejaEditSheet({
+    required String title,
+    required String customerName,
+    required double qty,
+    required double minQty,
+    String? phone,
+    double? depositQty,
+    String? note,
+    bool showPhone = false,
+    bool showDeposit = false,
+  }) async {
+    final nameCtrl = TextEditingController(text: customerName);
+    final phoneCtrl = TextEditingController(text: phone ?? '');
+    final qtyCtrl = TextEditingController(text: _fmtQtyShort(qty));
+    final depositCtrl = TextEditingController(text: _fmtQtyShort(depositQty ?? 0));
+    final noteCtrl = TextEditingController(text: note ?? '');
+    String? qtyError;
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Nama pelanggan',
+                      border: OutlineInputBorder()),
+                ),
+                if (showPhone) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                        labelText: 'Telepon', border: OutlineInputBorder()),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                TextField(
+                  controller: qtyCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: 'Jumlah',
+                    border: const OutlineInputBorder(),
+                    errorText: qtyError,
+                    helperText: minQty > 0
+                        ? 'Minimal ${_fmtQtyShort(minQty)} (sudah tercatat '
+                            'di riwayat)'
+                        : null,
+                  ),
+                  onChanged: (_) {
+                    if (qtyError != null) setSheetState(() => qtyError = null);
+                  },
+                ),
+                if (showDeposit) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: depositCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Jumlah jaminan dititip',
+                        border: OutlineInputBorder()),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Catatan', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 14),
+                // Dua tombol dalam satu Row WAJIB override minimumSize —
+                // tombol tema app ini default lebar penuh (gotcha CLAUDE.md).
+                Row(
+                  children: [
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(88, 44)),
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Batal'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 44)),
+                        onPressed: () {
+                          final parsed =
+                              double.tryParse(qtyCtrl.text.trim());
+                          if (parsed == null || parsed <= 0) {
+                            setSheetState(
+                                () => qtyError = 'Jumlah tidak valid');
+                            return;
+                          }
+                          if (parsed < minQty) {
+                            setSheetState(() => qtyError =
+                                'Tidak boleh kurang dari yang sudah '
+                                'tercatat (${_fmtQtyShort(minQty)})');
+                            return;
+                          }
+                          Navigator.of(ctx).pop(true);
+                        },
+                        child: const Text('Simpan'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final result = saved != true
+        ? null
+        : (
+            customerName: nameCtrl.text.trim(),
+            phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+            qty: double.tryParse(qtyCtrl.text.trim()) ?? qty,
+            depositQty: double.tryParse(depositCtrl.text.trim()) ?? 0,
+            note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+          );
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    qtyCtrl.dispose();
+    depositCtrl.dispose();
+    noteCtrl.dispose();
+    return result;
+  }
+
+  /// Ringkasan perubahan yang ikut ditulis ke log `aksi = 'edit'` — riwayat
+  /// harus bisa menjelaskan KENAPA angkanya berubah, bukan cuma bahwa
+  /// berubah.
+  static String? _laciMejaChangeSummary(Map<String, (Object?, Object?)> diff) {
+    final parts = [
+      for (final e in diff.entries)
+        if (e.value.$1.toString() != e.value.$2.toString())
+          '${e.key} ${e.value.$1} -> ${e.value.$2}',
+    ];
+    return parts.isEmpty ? null : parts.join(', ');
+  }
+
+  Future<void> _editBorrowedEntry(BorrowedItem b) async {
+    final result = await _showLaciMejaEditSheet(
+      title: 'Ubah pinjaman — ${b.itemName}',
+      customerName: b.customerNameText ?? _customerDisplay(_tx!),
+      qty: b.qty,
+      minQty: _laciMejaTakenQty(b.id),
+      note: b.note,
+    );
+    if (result == null || !mounted) return;
+    await ref.read(databaseProvider).editBorrowedItem(
+          b.id,
+          customerNameText: result.customerName,
+          qty: result.qty,
+          note: result.note,
+          changeSummary: _laciMejaChangeSummary({
+            'jumlah': (_fmtQtyShort(b.qty), _fmtQtyShort(result.qty)),
+            'nama': (b.customerNameText ?? '-', result.customerName),
+            'catatan': (b.note ?? '-', result.note ?? '-'),
+          }),
+          locallyModified: ref.read(laciMejaLocallyModifiedProvider),
+          deviceCode: ref.read(deviceProvider).deviceCode,
+        );
+    await _load();
+  }
+
+  Future<void> _editLeftBehindEntry(LeftBehindItem l) async {
+    final result = await _showLaciMejaEditSheet(
+      title: 'Ubah titip/ketinggalan — ${l.itemName}',
+      customerName: l.customerNameText ?? _customerDisplay(_tx!),
+      qty: l.qty ?? 1,
+      minQty: _laciMejaTakenQty(l.id),
+      note: l.note,
+    );
+    if (result == null || !mounted) return;
+    await ref.read(databaseProvider).editLeftBehindItem(
+          l.id,
+          customerNameText: result.customerName,
+          qty: result.qty,
+          note: result.note,
+          changeSummary: _laciMejaChangeSummary({
+            'jumlah': (_fmtQtyShort(l.qty ?? 1), _fmtQtyShort(result.qty)),
+            'nama': (l.customerNameText ?? '-', result.customerName),
+            'catatan': (l.note ?? '-', result.note ?? '-'),
+          }),
+          locallyModified: ref.read(laciMejaLocallyModifiedProvider),
+          deviceCode: ref.read(deviceProvider).deviceCode,
+        );
+    await _load();
+  }
+
+  Future<void> _editPreorderEntry(PreorderEntry p, String productName) async {
+    final result = await _showLaciMejaEditSheet(
+      title: 'Ubah pre-order — $productName',
+      customerName: p.customerName,
+      phone: p.phone,
+      qty: p.qtyOrdered,
+      minQty: _laciMejaTakenQty(p.id),
+      depositQty: p.depositQty,
+      note: p.note,
+      showPhone: true,
+      showDeposit: true,
+    );
+    if (result == null || !mounted) return;
+    await ref.read(databaseProvider).editPreorderEntry(
+          p.id,
+          customerName: result.customerName,
+          phone: result.phone,
+          qtyOrdered: result.qty,
+          depositQty: result.depositQty,
+          note: result.note,
+          changeSummary: _laciMejaChangeSummary({
+            'jumlah': (_fmtQtyShort(p.qtyOrdered), _fmtQtyShort(result.qty)),
+            'jaminan':
+                (_fmtQtyShort(p.depositQty), _fmtQtyShort(result.depositQty)),
+            'nama': (p.customerName, result.customerName),
+            'telepon': (p.phone ?? '-', result.phone ?? '-'),
+            'catatan': (p.note ?? '-', result.note ?? '-'),
+          }),
+          locallyModified: ref.read(laciMejaLocallyModifiedProvider),
+          deviceCode: ref.read(deviceProvider).deviceCode,
+        );
+    await _load();
+  }
 
   /// Susulan (permintaan user) — barang titip/ketinggalan yang BUKAN baris
   /// nota (diketik bebas lewat "Atau barang lain (di luar nota)" di
@@ -3501,6 +3833,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     l.jenis == 'titip' ? 'Dititip' : 'Ketinggalan sejak',
                 createdAt: l.createdAt,
                 events: _laciMejaEvents[l.id] ?? const [],
+                lastEditedAt: l.lastEditedAt,
+                onEdit: () => _editLeftBehindEntry(l),
                 status: l.collectedAt != null
                     ? (text: 'Selesai — sudah diambil', done: true)
                     : (text: 'Belum diambil', done: false),
@@ -3553,6 +3887,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   createdLabel: 'Dipesan',
                   createdAt: p.createdAt,
                   events: events,
+                  lastEditedAt: p.lastEditedAt,
+                  onEdit: () => _editPreorderEntry(p, nama),
                   status: p.cancelledAt != null
                       ? (text: 'Dibatalkan', done: true)
                       : p.fulfilledAt != null

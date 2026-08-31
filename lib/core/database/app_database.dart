@@ -255,7 +255,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 35;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -355,6 +355,20 @@ class AppDatabase extends _$AppDatabase {
       if (wantedCols.any((c) => !cols.contains(c))) continue;
       await customStatement(stmt);
     }
+  }
+
+  /// `addColumn` yang melewati tabel yang belum ada & kolom yang sudah ada.
+  /// Keduanya kondisi SAH di sini, bukan bug yang disembunyikan: langkah
+  /// migrasi `alterTable` (v26) merekonstruksi tabel dari definisi Dart
+  /// TERKINI sehingga kolom yang "baru" bisa sudah terbawa duluan, dan
+  /// fixture test migrasi lama sengaja cuma berisi tabel yang relevan.
+  Future<void> _addColumnIfMissing(String tableName, String columnName,
+      TableInfo table, GeneratedColumn column, Migrator m) async {
+    final cols = (await customSelect("PRAGMA table_info('$tableName')").get())
+        .map((r) => r.data['name'] as String)
+        .toSet();
+    if (cols.isEmpty || cols.contains(columnName)) return;
+    await m.addColumn(table, column);
   }
 
   @override
@@ -539,8 +553,25 @@ class AppDatabase extends _$AppDatabase {
             // definisi Dart TERKINI (sudah tanpa FK itu, lihat
             // laci_meja_tables.dart) — data lama ikut disalin apa adanya,
             // tidak ada yang hilang.
-            await m.alterTable(TableMigration(leftBehindItems));
-            await m.alterTable(TableMigration(borrowedItems));
+            //
+            // `columnTransformer` WAJIB utk kolom yang baru ditambahkan di
+            // migrasi SESUDAH v26 (`pinned`, v35): `alterTable` merekonstruksi
+            // tabel dari definisi Dart TERKINI, jadi tabel barunya sudah punya
+            // kolom itu sementara tabel lamanya belum — tanpa nilai pengganti,
+            // salinannya NULL dan melanggar CHECK boolean-nya.
+            await m.alterTable(TableMigration(
+              leftBehindItems,
+              columnTransformer: {
+                leftBehindItems.lastEditedAt: const Constant<DateTime>(null),
+              },
+            ));
+            await m.alterTable(TableMigration(
+              borrowedItems,
+              columnTransformer: {
+                borrowedItems.pinned: const Constant(false),
+                borrowedItems.lastEditedAt: const Constant<DateTime>(null),
+              },
+            ));
           }
           if (from < 27) {
             // Item 53 (permintaan user) — saklar "ikut harga satuan dasar"
@@ -617,6 +648,32 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(transactions, transactions.methodName);
             await m.addColumn(
                 transactionPayments, transactionPayments.methodName);
+          }
+          if (from < 35) {
+            // Laci Meja lanjutan (permintaan user): atribut entri jadi bisa
+            // diedit (butuh `last_edited_at` TERPISAH dari `updated_at` yang
+            // ikut tersentuh aksi operasional/sync), kartu pinjaman bisa
+            // disematkan (`pinned`), dan pre-order ikut membedakan pelanggan
+            // terdaftar vs nama ad-hoc (`customer_id`, kolom yang sudah lama
+            // ada di 2 tabel Laci Meja lain). Semua aditif & nullable/
+            // berdefault — entri lama tetap valid apa adanya.
+            //
+            // Defensif thd tabel/kolom yang SUDAH ada: langkah v26 memakai
+            // `alterTable` yang merekonstruksi tabel dari definisi Dart
+            // terkini — DB yang naik dari versi <26 karena itu sudah membawa
+            // kolom-kolom ini sebelum sampai ke sini. Fixture test migrasi
+            // lama juga sengaja minimal (bisa belum punya tabelnya sama
+            // sekali).
+            await _addColumnIfMissing('left_behind_items', 'last_edited_at',
+                leftBehindItems, leftBehindItems.lastEditedAt, m);
+            await _addColumnIfMissing('borrowed_items', 'last_edited_at',
+                borrowedItems, borrowedItems.lastEditedAt, m);
+            await _addColumnIfMissing('borrowed_items', 'pinned', borrowedItems,
+                borrowedItems.pinned, m);
+            await _addColumnIfMissing('preorder_entries', 'last_edited_at',
+                preorderEntries, preorderEntries.lastEditedAt, m);
+            await _addColumnIfMissing('preorder_entries', 'customer_id',
+                preorderEntries, preorderEntries.customerId, m);
           }
         },
         beforeOpen: (details) async {
@@ -6786,13 +6843,18 @@ class AppDatabase extends _$AppDatabase {
         locallyModified: Value(locallyModified),
       ));
 
+  /// Kartu yang disematkan (`pinned`) naik ke atas, sisanya tetap FIFO
+  /// `createdAt` seperti kategori Laci Meja lain.
   Stream<List<BorrowedItem>> watchBorrowedItems(
           {bool includeFullyReturned = false}) =>
       (select(borrowedItems)
             ..where((t) => includeFullyReturned
                 ? const Constant(true)
                 : t.fullyReturnedAt.isNull())
-            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            ..orderBy([
+              (t) => OrderingTerm.desc(t.pinned),
+              (t) => OrderingTerm.asc(t.createdAt),
+            ]))
           .watch();
 
   /// [qtyReturnedDelta] ditambahkan ke `qtyReturned` yang sudah ada (bisa
@@ -6840,6 +6902,7 @@ class AppDatabase extends _$AppDatabase {
     required String customerName,
     required double qtyOrdered,
     String? transactionId,
+    String? customerId,
     String? phone,
     double depositQty = 0,
     bool paid = false,
@@ -6853,6 +6916,7 @@ class AppDatabase extends _$AppDatabase {
         customerName: customerName,
         qtyOrdered: qtyOrdered,
         transactionId: Value(transactionId),
+        customerId: Value(customerId),
         phone: Value(phone),
         depositQty: Value(depositQty),
         paid: Value(paid),
@@ -6923,6 +6987,154 @@ class AppDatabase extends _$AppDatabase {
     await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
       PreorderEntriesCompanion(
         cancelledAt: Value(DateTime.now()),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  // ── Edit atribut entri Laci Meja (permintaan user) ──
+  //
+  // Alasan fitur ini ada: sebelumnya entri yang SALAH input hanya bisa
+  // "diperbaiki" dengan memenuhi/mengambilnya lalu membuat entri baru —
+  // yang berarti riwayat audit mencatat kejadian yang TIDAK PERNAH TERJADI
+  // secara fisik. Mengedit di tempat menjaga log tetap jujur.
+  //
+  // Aturan bersama ketiga fungsi di bawah:
+  //  * `lastEditedAt` distempel HANYA di sini (bukan di aksi ambil/kembali/
+  //    penuhi/pin) — itulah gunanya kolom ini terpisah dari `updatedAt`.
+  //  * Tiap edit menulis satu baris log `aksi = 'edit'` (qty 0, tidak ada
+  //    barang berpindah) berisi ringkasan perubahan, supaya riwayat tetap
+  //    utuh menjelaskan kenapa angkanya berubah.
+  //  * Pemanggil WAJIB sudah memastikan qty baru >= qty yang sudah terlanjur
+  //    diambil/dikembalikan/dipenuhi (dihitung dari log) — kalau tidak, sisa
+  //    entri jadi negatif dan ledger barang fisiknya ngawur.
+
+  Future<void> editLeftBehindItem(
+    String id, {
+    String? customerNameText,
+    double? qty,
+    String? note,
+    String? changeSummary,
+    bool locallyModified = false,
+    String? eventId,
+    String? deviceCode,
+  }) async {
+    await (update(leftBehindItems)..where((t) => t.id.equals(id))).write(
+      LeftBehindItemsCompanion(
+        customerNameText: Value(customerNameText),
+        qty: qty == null ? const Value.absent() : Value(qty),
+        note: Value(note),
+        lastEditedAt: Value(DateTime.now()),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'titip',
+      entryId: id,
+      aksi: 'edit',
+      note: changeSummary,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+  }
+
+  Future<void> editBorrowedItem(
+    String id, {
+    String? customerNameText,
+    double? qty,
+    String? note,
+    String? changeSummary,
+    bool locallyModified = false,
+    String? eventId,
+    String? deviceCode,
+  }) async {
+    await (update(borrowedItems)..where((t) => t.id.equals(id))).write(
+      BorrowedItemsCompanion(
+        customerNameText: Value(customerNameText),
+        qty: qty == null ? const Value.absent() : Value(qty),
+        note: Value(note),
+        lastEditedAt: Value(DateTime.now()),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    // Menurunkan qty bisa membuat jumlah yang sudah kembali PERSIS menutup
+    // pinjaman — status "sudah kembali semua" harus ikut menyesuaikan,
+    // begitu juga sebaliknya kalau qty dinaikkan.
+    if (qty != null) {
+      final returned = (await getLaciMejaTakenQty([id]))[id] ?? 0;
+      await (update(borrowedItems)..where((t) => t.id.equals(id))).write(
+        BorrowedItemsCompanion(
+          fullyReturnedAt:
+              Value(returned >= qty ? DateTime.now() : null),
+        ),
+      );
+    }
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'pinjaman',
+      entryId: id,
+      aksi: 'edit',
+      note: changeSummary,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+  }
+
+  Future<void> editPreorderEntry(
+    String id, {
+    String? customerName,
+    String? phone,
+    double? qtyOrdered,
+    double? depositQty,
+    String? note,
+    String? changeSummary,
+    bool locallyModified = false,
+    String? eventId,
+    String? deviceCode,
+  }) async {
+    await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+      PreorderEntriesCompanion(
+        customerName: customerName == null
+            ? const Value.absent()
+            : Value(customerName),
+        phone: Value(phone),
+        qtyOrdered:
+            qtyOrdered == null ? const Value.absent() : Value(qtyOrdered),
+        depositQty:
+            depositQty == null ? const Value.absent() : Value(depositQty),
+        note: Value(note),
+        lastEditedAt: Value(DateTime.now()),
+        locallyModified: Value(locallyModified),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    await recordLaciMejaEvent(
+      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
+      entityType: 'preorder',
+      entryId: id,
+      aksi: 'edit',
+      note: changeSummary,
+      deviceCode: deviceCode,
+      locallyModified: locallyModified,
+    );
+  }
+
+  /// Sematkan/lepas sematan sekumpulan baris pinjaman sekaligus. UI
+  /// mengelompokkan kartu pinjaman PER PELANGGAN, jadi satu ketukan pin
+  /// mengenai semua baris dalam grup itu — kalau tidak, kartu bisa "setengah
+  /// tersemat" dan urutannya jadi tidak bisa dijelaskan ke user.
+  ///
+  /// TIDAK menyentuh `lastEditedAt`: menyematkan bukan mengubah isi entri.
+  Future<void> setBorrowedPinned(List<String> ids, bool pinned,
+      {bool locallyModified = false}) async {
+    if (ids.isEmpty) return;
+    await (update(borrowedItems)..where((t) => t.id.isIn(ids))).write(
+      BorrowedItemsCompanion(
+        pinned: Value(pinned),
         locallyModified: Value(locallyModified),
         updatedAt: Value(DateTime.now()),
       ),

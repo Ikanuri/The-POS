@@ -50,6 +50,13 @@ class LeftBehindItems extends Table {
       boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// SENGAJA terpisah dari [updatedAt]. `updatedAt` ikut tersentuh aksi
+  /// operasional biasa (ambil sebagian, sync, dsb) sehingga tidak bisa
+  /// dipakai menjawab "kapan isinya terakhir DIUBAH orang". Kolom ini HANYA
+  /// distempel saat user benar-benar mengedit atribut entri lewat sheet edit
+  /// di struk — null berarti entri belum pernah diedit sejak dibuat.
+  DateTimeColumn get lastEditedAt => dateTime().nullable()();
   DateTimeColumn get collectedAt => dateTime().nullable()();
 
   @override
@@ -77,10 +84,21 @@ class BorrowedItems extends Table {
   RealColumn get qty => real()();
   RealColumn get qtyReturned => real().withDefault(const Constant(0))();
   TextColumn get note => text().nullable()();
+
+  /// Kartu pinjaman yang disematkan ke atas daftar dashboard, mengabaikan
+  /// urutan FIFO `createdAt` — untuk pinjaman yang perlu terus terlihat
+  /// (mis. wadah mahal yang sudah lama belum kembali). Disimpan per BARIS,
+  /// tapi UI menyalakan/mematikannya untuk seluruh baris dalam satu grup
+  /// pelanggan sekaligus (kartu dashboard dikelompokkan per pelanggan).
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
   BoolColumn get locallyModified =>
       boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Lihat komentar di `LeftBehindItems.lastEditedAt`. Toggle [pinned] TIDAK
+  /// menstempel kolom ini (menyematkan kartu bukan mengubah isi entri).
+  DateTimeColumn get lastEditedAt => dateTime().nullable()();
   DateTimeColumn get fullyReturnedAt => dateTime().nullable()();
 
   @override
@@ -159,6 +177,13 @@ class PreorderEntries extends Table {
   /// membeli apa pun (tidak ada transaksi lain berjalan saat itu).
   TextColumn get transactionId =>
       text().nullable().references(Transactions, #id)();
+  /// SENGAJA TANPA FK ke `Customers` — alasan identik dengan
+  /// `LeftBehindItems.customerId`. Nullable: null = nama manual/ad-hoc
+  /// (pembeli umum bernama, tanpa record pelanggan), terisi = pelanggan
+  /// terdaftar. Dipakai UI membedakan aksen pelanggan tetap vs ad-hoc.
+  /// Entri lama (sebelum kolom ini ada) selalu null — tampil sbg ad-hoc,
+  /// aman karena [customerName] memang satu-satunya info yang pernah ada.
+  TextColumn get customerId => text().nullable()();
   TextColumn get customerName => text()();
   TextColumn get phone => text().nullable()();
   RealColumn get qtyOrdered => real()();
@@ -172,6 +197,9 @@ class PreorderEntries extends Table {
       boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Lihat komentar di `LeftBehindItems.lastEditedAt`.
+  DateTimeColumn get lastEditedAt => dateTime().nullable()();
   DateTimeColumn get fulfilledAt => dateTime().nullable()();
   DateTimeColumn get cancelledAt => dateTime().nullable()();
 

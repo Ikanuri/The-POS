@@ -3617,9 +3617,17 @@ class _CartMetaTab extends ConsumerWidget {
                 flex: 4,
                 child: segment(
                   child: _MetaChip(
-                    icon: Icons.person_outline,
+                    // Ikon terisi = pelanggan TERDAFTAR (`customerId`
+                    // terisi), garis = nama ad-hoc yang cuma diketik saat itu
+                    // (lihat dok `CartMeta.customerId`). Bedanya penting:
+                    // yang ad-hoc tidak punya riwayat/hutang/pinjaman yang
+                    // bisa ditelusuri, dan tidak ikut tersinkron ke owner.
+                    icon: meta.customerId != null
+                        ? Icons.person
+                        : Icons.person_outline,
                     label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
                     active: meta.hasCustomer,
+                    accent: meta.customerId != null,
                     onTap: () => _pickCustomer(context, ref),
                     onClear: meta.hasCustomer
                         ? () => notifier.clearCustomer()
@@ -3720,6 +3728,7 @@ class _MetaChip extends StatelessWidget {
     required this.active,
     required this.onTap,
     this.onClear,
+    this.accent = false,
   });
 
   final IconData icon;
@@ -3727,6 +3736,10 @@ class _MetaChip extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
   final VoidCallback? onClear;
+
+  /// Ikon diberi warna aksen terracotta, bukan `primary` biasa — dipakai
+  /// membedakan pelanggan terdaftar dari nama ad-hoc.
+  final bool accent;
 
   @override
   Widget build(BuildContext context) {
@@ -3742,7 +3755,11 @@ class _MetaChip extends StatelessWidget {
           // dijatah `_CartMetaTab`, jadi lebarnya TETAP walau labelnya
           // berubah. Inilah yang bikin layout tidak lagi bergeser-geser.
           children: [
-            Icon(icon, size: 16, color: active ? cs.primary : fg),
+            Icon(icon,
+                size: 16,
+                color: accent
+                    ? AppTheme.accent
+                    : (active ? cs.primary : fg)),
             const SizedBox(width: 4),
             Expanded(
               child: _MarqueeText(

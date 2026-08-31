@@ -8,16 +8,19 @@ import 'package:the_pos/features/kasir/receipt_screen.dart';
 import 'helpers/pump_app.dart';
 
 /// Fitur baru (permintaan user): kasir kadang lupa input pre-order saat
-/// checkout (mis. LPG lupa dicek stok, nota keburu lunas/tempo). Long-press
-/// baris item di struk in-app sekarang bisa "Jadikan Pre-order" — mencatat
-/// `PreorderEntries` baru bertaut ke nota INI, TANPA mengubah nota itu
-/// sendiri (total/paid/item tetap apa adanya).
+/// checkout (mis. LPG lupa dicek stok, nota keburu lunas/tempo). TAP baris
+/// item di struk in-app (bukan long-press — itu tetap "Edit Catatan") membuka
+/// sheet "Edit Barang" yang sudah ada, dengan tombol baru "Jadikan Pre-order"
+/// di dalamnya — mencatat `PreorderEntries` baru bertaut ke nota INI, TANPA
+/// mengubah nota itu sendiri (total/paid/item tetap apa adanya).
 void main() {
   late AppDatabase db;
   const txId = 'tx1';
 
   Future<void> seedTx(String status,
-      {int total = 50000, int paid = 50000}) async {
+      {int total = 50000,
+      int paid = 50000,
+      bool requiresDeposit = false}) async {
     db = AppDatabase(NativeDatabase.memory());
     await db.into(db.transactions).insert(TransactionsCompanion.insert(
           id: txId,
@@ -31,6 +34,12 @@ void main() {
     await db
         .into(db.products)
         .insert(ProductsCompanion.insert(id: 'P1', name: 'LPG 3kg'));
+    await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1',
+          productId: 'P1',
+          isBaseUnit: const Value(true),
+          requiresDeposit: Value(requiresDeposit),
+        ));
     await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
         id: 'i1',
         transactionId: txId,
@@ -50,17 +59,16 @@ void main() {
   tearDown(() async => db.close());
 
   testWidgets(
-      'nota LUNAS: long-press item -> "Jadikan Pre-order" -> konfirmasi -> '
-      'PreorderEntries baru bertaut ke nota ini, kartu Pre-order muncul',
-      (tester) async {
+      'nota LUNAS: tap item -> sheet edit barang -> "Jadikan Pre-order" -> '
+      'konfirmasi -> PreorderEntries baru bertaut ke nota ini, kartu '
+      'Pre-order muncul', (tester) async {
     await seedTx('lunas');
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
 
-    await tester.longPress(find.text('LPG 3kg'));
+    await tester.tap(find.text('LPG 3kg'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Jadikan Pre-order'), findsOneWidget);
     await tester.tap(find.text('Jadikan Pre-order'));
     await tester.pumpAndSettle();
 
@@ -92,13 +100,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   });
 
-  testWidgets('nota TEMPO: opsi "Jadikan Pre-order" tetap tersedia',
-      (tester) async {
+  testWidgets(
+      'nota TEMPO: tap item -> sheet edit barang tetap punya tombol '
+      '"Jadikan Pre-order"', (tester) async {
     await seedTx('tempo', total: 50000, paid: 0);
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
 
-    await tester.longPress(find.text('LPG 3kg'));
+    await tester.tap(find.text('LPG 3kg'));
     await tester.pumpAndSettle();
 
     expect(find.text('Jadikan Pre-order'), findsOneWidget);
@@ -108,8 +117,8 @@ void main() {
   });
 
   testWidgets(
-      'sisa qty baris SUDAH habis dijadikan pre-order -> opsi tidak muncul '
-      'lagi (cegah dobel-tandai)', (tester) async {
+      'sisa qty baris SUDAH habis dijadikan pre-order -> tombol tidak '
+      'muncul lagi (cegah dobel-tandai)', (tester) async {
     await seedTx('lunas');
     await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
           id: 'po1',
@@ -122,12 +131,59 @@ void main() {
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
 
-    await tester.longPress(find.text('LPG 3kg'));
+    await tester.tap(find.text('LPG 3kg'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit Catatan'), findsOneWidget);
     expect(find.text('Jadikan Pre-order'), findsNothing,
         reason: 'seluruh qty baris (5) sudah dijadikan pre-order sebelumnya');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'produk dgn toggle jaminan (requiresDeposit) -> dialog Jadikan '
+      'Pre-order punya field "Jumlah jaminan dititip", default = qty, '
+      'tersimpan ke depositQty', (tester) async {
+    await seedTx('lunas', requiresDeposit: true);
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.text('LPG 3kg'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jadikan Pre-order'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jumlah jaminan dititip'), findsOneWidget);
+    // Default deposit qty = qty pesanan penuh (5).
+    final depositField = tester.widget<TextField>(find
+        .byWidgetPredicate((w) => w is TextField && w.controller?.text == '5')
+        .last);
+    expect(depositField.controller!.text, '5');
+
+    await tester.tap(find.text('Jadikan Pre-order').last);
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.preorderEntries).get();
+    expect(rows.single.depositQty, 5);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'produk TANPA toggle jaminan -> dialog Jadikan Pre-order TIDAK '
+      'punya field "Jumlah jaminan dititip"', (tester) async {
+    await seedTx('lunas', requiresDeposit: false);
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: txId));
+
+    await tester.tap(find.text('LPG 3kg'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jadikan Pre-order'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jumlah jaminan dititip'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
