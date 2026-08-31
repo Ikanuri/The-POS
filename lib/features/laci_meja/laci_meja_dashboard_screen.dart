@@ -796,16 +796,24 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // (`items`, bukan `filtered`) — kata kunci pencarian tidak boleh menggeser
     // posisi antrian, dan entri yang sudah dipenuhi/dibatalkan memang sudah
     // tidak ada di `items` sehingga garisnya ikut maju dengan sendirinya.
-    final quota = productFilter == null ? null : quotas[productFilter];
+    //
+    // Kalau HANYA satu produk yang punya antrian, produk itu dianggap terpilih
+    // dengan sendirinya — chip filternya memang sengaja disembunyikan di
+    // kondisi ini (tidak ada yang perlu disaring), dan justru inilah kondisi
+    // paling lazim di toko (cuma LPG yang diantri). Tanpa ini, garis
+    // pembatasnya TIDAK PERNAH muncul walau kuotanya sudah disetel.
+    final effectiveProduct = productFilter ??
+        (productNames.length == 1 ? productNames.keys.first : null);
+    final quota = effectiveProduct == null ? null : quotas[effectiveProduct];
     final beyondQuota = quota == null
         ? const <String>{}
-        : preorderIdsBeyondQuota(items, productFilter!, quota);
+        : preorderIdsBeyondQuota(items, effectiveProduct!, quota);
     // Nomor antrian per entri, juga dihitung dari antrian penuh produk itu.
     final queueNumbers = <String, int>{};
-    if (productFilter != null) {
+    if (effectiveProduct != null) {
       var n = 0;
       for (final e in items) {
-        if (e.productId != productFilter) continue;
+        if (e.productId != effectiveProduct) continue;
         queueNumbers[e.id] = ++n;
       }
     }
