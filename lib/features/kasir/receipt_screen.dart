@@ -424,7 +424,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
 
     return GestureDetector(
-      onLongPress: isPlaceholder ? null : () => _showItemActionsMenu(item),
+      onLongPress: isPlaceholder ? null : () => _editItemNote(item),
       child: ListTile(
         dense: true,
         contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 12),
@@ -590,44 +590,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       .where((p) => p.productUnitId == productUnitId)
       .fold<double>(0, (s, p) => s + p.qtyOrdered);
 
-  /// Susulan (permintaan user): long-press baris item sekarang buka pilihan
-  /// aksi (bukan langsung "Edit Catatan") — "Jadikan Pre-order" ditambah utk
-  /// skenario nyata: kasir lupa input pre-order saat checkout (mis. stok LPG
-  /// ternyata kosong, baru sadar setelah nota lunas/tempo tersimpan).
-  Future<void> _showItemActionsMenu(TransactionItem item) async {
-    final remaining = item.qty - _alreadyPreorderedQty(item.productUnitId);
-    final canPreorder = _tx!.status != 'void' && remaining > 0;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_note_outlined),
-              title: const Text('Edit Catatan'),
-              onTap: () => Navigator.pop(ctx, 'note'),
-            ),
-            if (canPreorder)
-              ListTile(
-                leading: const Icon(Icons.hourglass_empty),
-                title: const Text('Jadikan Pre-order'),
-                subtitle: const Text(
-                    'Barang ternyata belum bisa diserahkan (mis. stok kosong)'),
-                onTap: () => Navigator.pop(ctx, 'preorder'),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || choice == null) return;
-    if (choice == 'note') {
-      await _editItemNote(item);
-    } else if (choice == 'preorder') {
-      await _showJadikanPreorderDialog(item);
-    }
-  }
-
   /// Menandai SEBAGIAN/SELURUH qty baris [item] (nota SUDAH tersimpan,
   /// lunas ATAU tempo) sbg pre-order — dipakai saat kasir baru sadar
   /// belakangan barangnya belum bisa diserahkan (permintaan user, skenario
@@ -648,6 +610,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     var qty = maxQty;
     final qtyCtrl = TextEditingController(text: _fmtQtyShort(qty));
     final noteCtrl = TextEditingController();
+
+    // Susulan (permintaan user) — produk dgn toggle jaminan (mis. tabung gas
+    // kosong dititip sbg wadah) butuh field "Jumlah jaminan dititip" juga di
+    // sini, sama pola dgn `item_entry_sheet.dart` (default = qty pesanan).
+    final db = ref.read(databaseProvider);
+    final unit = await (db.select(db.productUnits)
+          ..where((t) => t.id.equals(item.productUnitId)))
+        .getSingleOrNull();
+    final requiresDeposit = unit?.requiresDeposit ?? false;
+    if (!mounted) return;
+    var depositQty = qty;
+    final depositCtrl = TextEditingController(text: _fmtQtyShort(depositQty));
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -709,6 +683,33 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ),
                 Text('Maks ${_fmtQtyShort(maxQty)}',
                     style: const TextStyle(fontSize: 11)),
+                if (requiresDeposit) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Jumlah jaminan dititip')),
+                      SizedBox(
+                        width: 70,
+                        child: TextField(
+                          controller: depositCtrl,
+                          textAlign: TextAlign.center,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          onChanged: (v) {
+                            final parsed = double.tryParse(v);
+                            if (parsed != null && parsed >= 0) {
+                              setDialogState(() => depositQty = parsed);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
                 TextField(
                   controller: noteCtrl,
@@ -735,11 +736,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     final note = noteCtrl.text.trim();
     qtyCtrl.dispose();
+    depositCtrl.dispose();
     noteCtrl.dispose();
     if (confirmed != true || qty <= 0 || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
 
-    final db = ref.read(databaseProvider);
     await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
           id: const Uuid().v4(),
           productId: item.productId,
@@ -748,6 +749,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           customerName: _customerDisplay(_tx!),
           qtyOrdered: qty,
           paid: const Value(true),
+          depositQty: requiresDeposit ? Value(depositQty) : const Value(0),
           note: Value(note.isEmpty ? null : note),
         ));
     await _load();
@@ -805,8 +807,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         text: ThousandsSeparatorFormatter.format(item.priceAtSale));
     final noteCtrl = TextEditingController(text: item.itemNote ?? '');
     var qty = item.qty;
+    // Susulan (permintaan user) — jalur "Jadikan Pre-order" pindah ke SINI
+    // (tap item, sheet yang sudah ada), bukan long-press terpisah. Sisa qty
+    // yang belum pernah ditandai pre-order sebelumnya — lihat dok
+    // `_alreadyPreorderedQty`/`_showJadikanPreorderDialog`.
+    final canPreorder =
+        item.qty - _alreadyPreorderedQty(item.productUnitId) > 0;
 
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
@@ -885,6 +893,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                if (canPreorder) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(ctx).pop('preorder'),
+                    icon: const Icon(Icons.hourglass_empty),
+                    label: const Text('Jadikan Pre-order'),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () => setSheet(() => qty = 0),
@@ -895,7 +911,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 ),
                 const SizedBox(height: 8),
                 FilledButton(
-                  onPressed: () => Navigator.of(ctx).pop(true),
+                  onPressed: () => Navigator.of(ctx).pop('save'),
                   child: Text(qty <= 0 ? 'Hapus' : 'Simpan Perubahan'),
                 ),
               ],
@@ -905,8 +921,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       },
     );
 
+    if (saved == 'preorder') {
+      priceCtrl.dispose();
+      noteCtrl.dispose();
+      if (!mounted) return;
+      await _showJadikanPreorderDialog(item);
+      return;
+    }
     priceCtrl.dispose();
-    if (saved != true || !mounted) return;
+    if (saved != 'save' || !mounted) return;
 
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
