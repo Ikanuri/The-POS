@@ -5,6 +5,30 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Agustus 2026 (lanjutan lagi x2 — 3 penyesuaian fitur
+kuota pre-order dari feedback screenshot user). Versi kerja
+**2.22.2+52**._
+
+**Feedback user via screenshot setelah kuota dirilis**: (1) "Abdul
+Ghani tidak naik, setelah satu jaminan milik orang lain terpenuhi" —
+maksudnya entri YANG DIPENUHI SEBAGIAN (progress "Dipenuhi 4 dari 5")
+tetap membebani kuota dgn `qtyOrdered` PENUH (5), bukan sisanya (1) —
+`preorderIdsBeyondQuota` diperbaiki pakai parameter `takenQty` baru,
+kumulatif sekarang `qtyOrdered - taken`. (2) ganti garis solid+kuning
+jadi putus-putus (`_DashedLine`, `CustomPaint` manual) + abu-abu
+netral, buang kata "normal" dari label. (3) "berikan update sisa
+terakhir... card total pinjaman juga sinkronkan" — baris kartu
+pre-order & 2 kartu statistik atas ("Total produk"/"Total jaminan")
+sekarang menampilkan SISA (bukan angka pesanan awal yang basi begitu
+ada pemenuhan sebagian). **Asumsi baru yang perlu diketahui**: jaminan
+diasumsikan konsumsi 1:1 dgn item (tabung kosong ditukar isi) —
+`sisaDeposit = depositQty - taken` pakai `taken` yang SAMA dgn qty
+item, BUKAN akumulator terpisah. Kalau nanti ada kasus toko yang rasio
+jaminan≠item, ini perlu didesain ulang (belum ada laporan seperti itu
+sejauh ini).
+
+---
+
 _Update sesi 31 Agustus 2026 (lanjutan — 4 penyesuaian Laci Meja +
 aksen pelanggan tetap vs ad-hoc). Versi kerja **2.22.0+50**,
 schemaVersion **34→35**._
