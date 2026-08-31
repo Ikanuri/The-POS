@@ -43,6 +43,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dikelola dari dashboard Laci Meja.
 
 ### 🔧 Perbaikan
+- **Tampilan filter produk & kartu statistik di dashboard Laci Meja
+  → Pre-order dirapikan** — filter dan kartu "Total produk"/"Total
+  jaminan" sekarang jadi satu panel yang rapi, tombol "Kuota" diberi
+  label yang jelas.
+- **Kuota antrian pre-order sekarang benar-benar tersinkron ke semua
+  perangkat** (owner ↔ kasir) — sebelumnya kuota yang disetel di satu
+  perangkat tidak pernah sampai ke perangkat lain, termasuk perubahan
+  pada beberapa pengaturan toko lain yang sudah lama ada (mis. nama
+  toko) yang diubah setelah pernah tersinkron sekali.
 - **Garis batas kuota pre-order sekarang ikut mempertimbangkan
   pesanan yang sudah diambil sebagian** — sebelumnya pesanan yang
   sudah diserahkan sebagian (mis. 4 dari 5 tabung) tetap dianggap

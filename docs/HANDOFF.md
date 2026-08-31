@@ -5,6 +5,48 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Agustus 2026 (lanjutan lagi x3 — audit cakupan sync +
+redesain tata letak filter/statistik pre-order). Versi kerja
+**2.23.0+53**._
+
+**Audit sync (permintaan user)**: ditemukan 2 gap nyata, keduanya
+sudah diperbaiki (`723b292`):
+1. `preorder_quota_thresholds` belum ada di `syncableSettingKeys` —
+   ditambahkan (kebijakan toko, bukan scratchpad lokal spt
+   `saved_catalogs`).
+2. **Bug LEBIH LUAS**: `setSetting` (satu-satunya jalur tulis
+   `app_settings`) tidak menstempel `updatedAt` eksplisit saat
+   UPDATE — persis gotcha yang sudah didokumentasikan utk
+   master-data lain di CLAUDE.md, TERNYATA berlaku juga di sini.
+   Efeknya: MENGUBAH setting yang sudah pernah tersinkron sebelumnya
+   (owner setel ulang kuota, ganti nama toko, dll) tidak akan lolos
+   filter `dumpSince` lagi — bug ini SUDAH ADA dari awal utk seluruh
+   isi `syncableSettingKeys`, cuma baru ketahuan sekarang krn kuota
+   pre-order wajar diubah berkali-kali (setting lain jarang diubah
+   setelah setup awal, jadi gejalanya nyaris tidak pernah muncul).
+   **Kalau nanti nambah key baru ke `syncableSettingKeys`, cek juga
+   apakah nilainya akan sering di-UPDATE setelah pertama kali dibuat
+   — kalau ya, fix ini (updatedAt eksplisit) sudah menutupnya, tidak
+   perlu fix baru lagi.**
+5 kolom Laci Meja lain (`last_edited_at` x3, `pinned`, `customer_id`)
+diverifikasi SUDAH terikut otomatis lewat `SELECT *` — tidak disentuh.
+
+**Redesain tata letak** (`b3262e2`, permintaan user "jangan asal
+taruh"): filter chip + kartu statistik pre-order dibungkus jadi satu
+panel dgn border+padding seragam, tombol kuota dapat label. **Jebakan
+test baru**: panel yang lebih tinggi mendorong entri ListView keluar
+viewport test default (800×600) — WAJIB `setSurfaceSize` generus di
+test manapun yang merender `LaciMejaDashboardScreen` langsung (bukan
+lewat harness `pumpWithFakeApp` yang sudah otomatis generus). Juga:
+tap ke widget di dalam `SingleChildScrollView` horizontal yang
+mungkin ter-clip (chip di luar viewport awal) WAJIB `ensureVisible`
+dulu — tanpa itu tap jatuh ke koordinat yang sama tapi kebetulan
+ditempati widget LAIN (kejadian nyata: tap chip malah membuka sheet
+kuota krn tombol "Kuota" ada di koordinat yang sama dgn chip yg
+ter-clip).
+
+---
+
 _Update sesi 31 Agustus 2026 (lanjutan lagi x2 — 3 penyesuaian fitur
 kuota pre-order dari feedback screenshot user). Versi kerja
 **2.22.2+52**._

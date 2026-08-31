@@ -140,10 +140,18 @@ void main() {
           ));
     }
 
+    // Surface generus (konvensi CLAUDE.md) — panel filter+statistik yang
+    // lebih tinggi (redesain permintaan user) bisa mendorong entri terakhir
+    // di ListView keluar viewport 800x600 default, dan ListView.separated
+    // lazy-build item di luar viewport (tidak akan ditemukan finder).
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(buildApp());
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Pre-order').first);
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -191,6 +199,12 @@ void main() {
           ));
     }
 
+    // Surface generus (konvensi CLAUDE.md) — panel filter+statistik yang
+    // lebih tinggi (redesain permintaan user) bisa mendorong entri terakhir
+    // di ListView keluar viewport 800x600 default, dan ListView.separated
+    // lazy-build item di luar viewport (tidak akan ditemukan finder).
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(buildApp());
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
@@ -205,6 +219,12 @@ void main() {
         find.textContaining('Batas kiriman').evaluate().length;
 
     // Chip filter produk: labelnya ikut menampilkan kuota yang aktif.
+    // `ensureVisible` WAJIB — chip ada di dalam `SingleChildScrollView`
+    // horizontal yang bisa memotong kontennya di luar viewport awal; tap ke
+    // posisi ter-clip itu jatuh ke widget LAIN yang kebetulan ada di
+    // koordinat yang sama (di sini: tombol "Kuota" di sebelahnya).
+    await tester.ensureVisible(find.text('LPG 3kg · maks 70'));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('LPG 3kg · maks 70'));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
@@ -267,6 +287,12 @@ void main() {
           createdAt: Value(DateTime(2026, 1, 3)),
         ));
 
+    // Surface generus (konvensi CLAUDE.md) — panel filter+statistik yang
+    // lebih tinggi (redesain permintaan user) bisa mendorong entri terakhir
+    // di ListView keluar viewport 800x600 default, dan ListView.separated
+    // lazy-build item di luar viewport (tidak akan ditemukan finder).
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(buildApp());
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
