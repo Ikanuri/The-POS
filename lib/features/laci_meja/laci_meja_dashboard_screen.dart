@@ -1527,10 +1527,13 @@ class _DashedLinePainter extends CustomPainter {
 /// & total jaminan dititip, SENGAJA dipisah jadi dua angka (satuannya beda
 /// maknanya: barang yang ditunggu vs wadah yang dipegang toko).
 /// Statistik + tombol Kuota SATU BARIS (permintaan user — 2 kartu besar
-/// sebelumnya kebanyakan makan tempat vertikal). Teks ringkas menggantikan
-/// kartu; rincian jaminan per produk (kalau ada >1 produk berjaminan)
-/// dipindah ke tooltip lewat ikon info supaya detailnya tidak hilang tapi
-/// tidak menambah tinggi baris.
+/// sebelumnya kebanyakan makan tempat vertikal). Gradasi label-normal +
+/// angka-bold dari kartu LAMA dipertahankan (disukai user), cuma dipadatkan
+/// jadi "chip" mini satu baris — bukan diganti teks polos rata (versi
+/// sebelumnya "terlalu ringkas", kehilangan penekanan visual pada angka).
+/// Rincian jaminan per produk (kalau ada >1 produk berjaminan) dipindah ke
+/// tooltip lewat ikon info supaya detailnya tidak hilang tapi tidak
+/// menambah tinggi baris.
 class _PreorderStatsLine extends StatelessWidget {
   const _PreorderStatsLine({
     required this.totalQty,
@@ -1554,10 +1557,6 @@ class _PreorderStatsLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = AppTheme.laciFg(isDark);
-    // Produk & jaminan SENGAJA tetap dipisah (permintaan user lama: satuan
-    // berbeda maknanya) tapi kini di satu baris teks, bukan dua kartu.
-    final summary = StringBuffer('$entryCount entri · ${_fmt(totalQty)} produk');
-    if (totalDeposit > 0) summary.write(' · ${_fmt(totalDeposit)} jaminan');
     final breakdown = depositByProduct.entries
         .map((e) => '${e.key}: ${_fmt(e.value)} jaminan')
         .join('\n');
@@ -1565,28 +1564,25 @@ class _PreorderStatsLine extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(summary.toString(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: fg)),
-              ),
-              if (breakdown.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Tooltip(
-                  message: 'Jaminan per produk:\n$breakdown',
-                  triggerMode: TooltipTriggerMode.tap,
-                  child: Icon(Icons.info_outline,
-                      size: 15, color: fg.withOpacity(0.7)),
-                ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                Text('$entryCount entri',
+                    style: TextStyle(fontSize: 11, color: fg.withOpacity(0.7))),
+                const SizedBox(width: 6),
+                _StatChip(label: 'Produk', value: _fmt(totalQty), fg: fg),
+                if (totalDeposit > 0) ...[
+                  const SizedBox(width: 6),
+                  _StatChip(
+                    label: 'Jaminan',
+                    value: _fmt(totalDeposit),
+                    fg: fg,
+                    tooltip: breakdown.isEmpty ? null : breakdown,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -1605,6 +1601,64 @@ class _PreorderStatsLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Chip statistik mini — label BIASA + angka BOLD (gradasi yang disukai
+/// user dari kartu lama), dikemas jadi satu `Text.rich` (satu widget, satu
+/// baris) supaya ukurannya sekecil mungkin. Border+background tipis
+/// mempertahankan identitas visual "kartu" tanpa tinggi kartu sungguhan.
+class _StatChip extends StatelessWidget {
+  const _StatChip(
+      {required this.label,
+      required this.value,
+      required this.fg,
+      this.tooltip});
+
+  final String label;
+  final String value;
+  final Color fg;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: fg.withOpacity(0.18)),
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+                text: '$label: ',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: fg.withOpacity(0.8))),
+            TextSpan(
+                text: value,
+                style: TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w800, color: fg)),
+          ],
+        ),
+      ),
+    );
+    if (tooltip == null) return chip;
+    return Tooltip(
+      message: 'Jaminan per produk:\n$tooltip',
+      triggerMode: TooltipTriggerMode.tap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          chip,
+          const SizedBox(width: 3),
+          Icon(Icons.info_outline, size: 13, color: fg.withOpacity(0.6)),
+        ],
+      ),
     );
   }
 }

@@ -300,11 +300,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Statistik sekarang satu baris teks ringkas ("N entri · X produk · Y
-    // jaminan"), bukan lagi 2 kartu besar — lihat `_PreorderStatsLine`.
-    // Sebelum dipenuhi: total penuh (1+1+5=7 produk, jaminan sama).
-    final produkAwal = find.textContaining('7 produk').evaluate().length;
-    final jaminanAwal = find.textContaining('7 jaminan').evaluate().length;
+    // Statistik sekarang chip mini "Produk: N"/"Jaminan: N" (satu `Text.rich`
+    // per chip, label normal + angka bold) — bukan lagi 2 kartu besar, lihat
+    // `_PreorderStatsLine`/`_StatChip`. Sebelum dipenuhi: total penuh
+    // (1+1+5=7 produk, jaminan sama).
+    final produkAwal =
+        find.textContaining('Produk: 7', findRichText: true).evaluate().length;
+    final jaminanAwal = find
+        .textContaining('Jaminan: 7', findRichText: true)
+        .evaluate()
+        .length;
 
     await db.fulfillPreorderQty('ghani', 4,
         locallyModified: false, deviceCode: null);
@@ -314,8 +319,12 @@ void main() {
     final sisaBaris = find.textContaining('1 Lpg - 1 jaminan').evaluate().length;
     // "5 Lpg" (angka awal) TIDAK boleh tampil lagi — harus sudah jadi sisa.
     final angkaAwalMasihAda = find.textContaining('5 Lpg').evaluate().length;
-    final produkSetelah = find.textContaining('3 produk').evaluate().length;
-    final jaminanSetelah = find.textContaining('3 jaminan').evaluate().length;
+    final produkSetelah =
+        find.textContaining('Produk: 3', findRichText: true).evaluate().length;
+    final jaminanSetelah = find
+        .textContaining('Jaminan: 3', findRichText: true)
+        .evaluate()
+        .length;
     final garisMasihAda = find.textContaining('Batas kiriman').evaluate().length;
 
     await tester.pumpWidget(const SizedBox());

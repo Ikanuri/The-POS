@@ -500,10 +500,13 @@ void main() {
       await openPreorderTab(tester);
 
       // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 jaminan — SENGAJA dua angka
-      // terpisah dalam satu baris teks, bukan dijumlahkan jadi satu.
+      // terpisah (chip "Produk"/"Jaminan" sendiri-sendiri), bukan
+      // dijumlahkan jadi satu.
       expect(find.textContaining('2 entri'), findsOneWidget);
-      expect(find.textContaining('5 produk'), findsOneWidget);
-      expect(find.textContaining('3 jaminan'), findsOneWidget);
+      expect(find.textContaining('Produk: 5', findRichText: true),
+          findsOneWidget);
+      expect(find.textContaining('Jaminan: 3', findRichText: true),
+          findsOneWidget);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -516,8 +519,11 @@ void main() {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      final tooltip =
-          tester.widget<Tooltip>(find.byType(Tooltip).first);
+      // `find.byType(Tooltip)` bisa kena tooltip LAIN (mis. `IconButton`
+      // AppBar juga pakai `Tooltip` internal) — cari yang pesannya cocok.
+      final tooltip = tester
+          .widgetList<Tooltip>(find.byType(Tooltip))
+          .firstWhere((t) => t.message?.contains('Jaminan per produk') == true);
       expect(tooltip.message, contains('Tabung Gas: 2 jaminan'),
           reason: 'jaminan Tabung Gas (P1) 2, terpisah dari Galon Aqua');
       expect(tooltip.message, contains('Galon Aqua: 1 jaminan'),
@@ -537,10 +543,11 @@ void main() {
 
       expect(find.text('Pak Budi'), findsOneWidget);
       expect(find.text('Bu Artia'), findsNothing);
-      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan. "· " di depan
-      // membedakan dari teks jaminan di baris item (" - 1 jaminan").
-      expect(find.textContaining('· 3 produk'), findsOneWidget);
-      expect(find.textContaining('· 1 jaminan'), findsOneWidget);
+      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan.
+      expect(find.textContaining('Produk: 3', findRichText: true),
+          findsOneWidget);
+      expect(find.textContaining('Jaminan: 1', findRichText: true),
+          findsOneWidget);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
