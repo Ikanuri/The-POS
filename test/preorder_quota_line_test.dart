@@ -100,6 +100,47 @@ void main() {
   }
 
   testWidgets(
+      'HANYA SATU produk yang diantri (chip filter sengaja disembunyikan) -> '
+      'garis pembatas TETAP muncul tanpa perlu memilih filter apa pun',
+      timeout: const Timeout(Duration(seconds: 40)), (tester) async {
+    // Kondisi paling lazim di toko: cuma LPG yang punya antrian. Dulu garis
+    // pembatasnya tidak pernah muncul di sini krn perhitungannya menunggu
+    // filter produk dipilih, padahal chip-nya memang tidak dirender.
+    await seedProduct('P1', 'LPG 3kg');
+    await db.setSetting('preorder_quota_thresholds', '{"P1": 2}');
+    for (var i = 0; i < 3; i++) {
+      await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
+            id: 'po$i',
+            productId: 'P1',
+            productUnitId: 'U-P1',
+            customerName: 'Pelanggan $i',
+            qtyOrdered: 1, // kumulatif 1/2/3 -> entri ke-3 melewati 2
+            createdAt: Value(DateTime(2026, 1, 1 + i)),
+          ));
+    }
+
+    await tester.pumpWidget(buildApp());
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Pre-order').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final chips = find.byType(ChoiceChip).evaluate().length;
+    final garis = find.text('Batas kiriman normal (2)').evaluate().length;
+    final nomorAntrian = find.textContaining('#3').evaluate().length;
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(chips, 0, reason: 'satu produk saja -> chip filter disembunyikan');
+    expect(garis, 1,
+        reason: 'garis pembatas tetap harus muncul walau filter produk tidak '
+            'bisa dipilih');
+    expect(nomorAntrian, 1, reason: 'nomor antrian ikut muncul');
+  });
+
+  testWidgets(
       'kuota aktif + filter produk -> garis "Batas kiriman normal" muncul '
       'di daftar', timeout: const Timeout(Duration(seconds: 40)), (tester) async {
     await seedProduct('P1', 'LPG 3kg');
