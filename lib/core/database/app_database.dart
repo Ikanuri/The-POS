@@ -4103,12 +4103,28 @@ class AppDatabase extends _$AppDatabase {
   /// Item & stok TIDAK disentuh (beda dari void transaksi/`voidTransaction`
   /// yang membatalkan SELURUH nota). Nota `void` / baris sudah dibatalkan /
   /// tidak ditemukan → tidak melakukan apa pun.
+  ///
+  /// Bug ditemukan saat review logika retur/kembalian (permintaan user):
+  /// baris refund retur (`amount` negatif, uang fisik SUDAH keluar & stok
+  /// SUDAH dikembalikan lewat `returnPaidTransactionItems`/
+  /// `editPaidTransactionItem`) atau marker retur nota belum-lunas
+  /// (`method` 'retur'/'edit') TIDAK BOLEH ikut dibatalkan di sini — asumsi
+  /// "item & stok TIDAK disentuh" di atas SALAH untuk baris itu (sudah
+  /// berubah PERMANEN sbg bagian dari retur, di baris/tabel lain yang tidak
+  /// ikut dibatalkan kalau baris ini yang dibatalkan). Efeknya kalau
+  /// dibiarkan: `paid` balik naik tanpa `total`/item ikut balik → kembalian
+  /// HANTU (dihitung ulang seolah harus diserahkan lagi, padahal sudah
+  /// pernah). Guard di sini (bukan cuma sembunyikan tombol UI) supaya
+  /// caller lain di masa depan tidak bisa kena bug yang sama.
   Future<void> voidPayment(String paymentId) async {
     await transaction(() async {
       final pay = await (select(transactionPayments)
             ..where((t) => t.id.equals(paymentId)))
           .getSingleOrNull();
       if (pay == null || pay.voided) return;
+      if (pay.amount < 0 || pay.method == 'retur' || pay.method == 'edit') {
+        return;
+      }
       final tx = await (select(transactions)
             ..where((t) => t.id.equals(pay.transactionId)))
           .getSingleOrNull();

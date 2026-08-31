@@ -43,7 +43,8 @@ void main() {
     return id;
   }
 
-  test('voidPayment pada nota lunas (1 pembayaran): paid balik ke 0, status '
+  test(
+      'voidPayment pada nota lunas (1 pembayaran): paid balik ke 0, status '
       'balik ke kurang_bayar, baris pembayaran TETAP ada (voided=true)',
       () async {
     final txId = await addTx(total: 50000, paid: 50000, status: 'lunas');
@@ -53,9 +54,9 @@ void main() {
 
     await db.voidPayment('p1');
 
-    final tx =
-        await (db.select(db.transactions)..where((t) => t.id.equals(txId)))
-            .getSingle();
+    final tx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingle();
     expect(tx.paid, 0);
     expect(tx.status, 'kurang_bayar');
 
@@ -66,7 +67,8 @@ void main() {
     expect(payments.single.amount, 50000, reason: 'nominal historis utuh');
   });
 
-  test('voidPayment membatalkan SATU dari DUA pembayaran: paid dihitung '
+  test(
+      'voidPayment membatalkan SATU dari DUA pembayaran: paid dihitung '
       'ulang dari sisa yang tidak dibatalkan saja', () async {
     final txId = await addTx(total: 50000, paid: 50000, status: 'lunas');
     await db.into(db.transactionPayments).insert(
@@ -78,9 +80,9 @@ void main() {
 
     await db.voidPayment('p1');
 
-    final tx =
-        await (db.select(db.transactions)..where((t) => t.id.equals(txId)))
-            .getSingle();
+    final tx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingle();
     expect(tx.paid, 30000, reason: 'cuma p2 yang masih dihitung');
     expect(tx.status, 'kurang_bayar');
 
@@ -90,7 +92,8 @@ void main() {
     expect(payments.firstWhere((p) => p.id == 'p2').voided, isFalse);
   });
 
-  test('voidPayment pada pembayaran yang menghasilkan kembalian: '
+  test(
+      'voidPayment pada pembayaran yang menghasilkan kembalian: '
       'changeGiven baris itu ikut dikeluarkan dari perhitungan status',
       () async {
     final txId = await addTx(total: 30000, paid: 40000, status: 'lunas');
@@ -104,14 +107,15 @@ void main() {
 
     await db.voidPayment('p1');
 
-    final tx =
-        await (db.select(db.transactions)..where((t) => t.id.equals(txId)))
-            .getSingle();
+    final tx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingle();
     expect(tx.paid, 0);
     expect(tx.status, 'kurang_bayar');
   });
 
-  test('voidPayment pada pembayaran yang sudah dibatalkan: tidak melakukan '
+  test(
+      'voidPayment pada pembayaran yang sudah dibatalkan: tidak melakukan '
       'apa-apa (idempoten)', () async {
     final txId = await addTx(total: 50000, paid: 50000, status: 'lunas');
     await db.into(db.transactionPayments).insert(
@@ -120,13 +124,73 @@ void main() {
     await db.voidPayment('p1');
     await db.voidPayment('p1'); // kedua kali — no-op.
 
-    final tx =
-        await (db.select(db.transactions)..where((t) => t.id.equals(txId)))
-            .getSingle();
+    final tx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingle();
     expect(tx.paid, 0, reason: 'tidak berubah lagi, tidak error');
   });
 
-  test('voidPayment pada nota yang statusnya sudah void: tidak melakukan '
+  test(
+      'voidPayment pada baris REFUND retur (amount negatif): DITOLAK — '
+      'kalau tidak, kembalian hantu (paid naik lagi tapi item/stok/total '
+      'tidak ikut balik)', () async {
+    // Nota lunas 50rb sudah pernah diretur sebagian: refund tunai 20rb
+    // (uang fisik sudah keluar + stok sudah dikembalikan lewat baris
+    // transaction_items lain yang TIDAK disentuh voidPayment) — total nota
+    // sekarang 30rb, paid 30rb, konsisten.
+    final txId = await addTx(total: 30000, paid: 30000, status: 'lunas');
+    await db.into(db.transactionPayments).insert(
+        TransactionPaymentsCompanion.insert(
+            id: 'p1', transactionId: txId, amount: 50000, method: 'tunai'));
+    await db.into(db.transactionPayments).insert(
+        TransactionPaymentsCompanion.insert(
+            id: 'p2',
+            transactionId: txId,
+            amount: -20000,
+            method: 'tunai',
+            note: const Value('Refund retur (nota lunas)')));
+
+    await db.voidPayment('p2');
+
+    final tx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingle();
+    expect(tx.paid, 30000,
+        reason: 'refund TIDAK boleh ikut dibatalkan — paid harus tetap '
+            'konsisten dgn item yang sudah permanen berkurang');
+    expect(tx.status, 'lunas');
+    expect(tx.changeAmount, 0,
+        reason: 'tanpa guard ini, changeAmount jadi 20000 (kembalian '
+            'hantu) krn paid balik naik tanpa total ikut balik');
+
+    final payments = await db.getPaymentsForTx(txId);
+    expect(payments.firstWhere((p) => p.id == 'p2').voided, isFalse,
+        reason: 'baris refund tidak boleh berubah jadi voided');
+  });
+
+  test(
+      'voidPayment pada marker retur nota belum-lunas (method retur/edit): '
+      'DITOLAK', () async {
+    final txId = await addTx(total: 20000, paid: 20000, status: 'lunas');
+    await db.into(db.transactionPayments).insert(
+        TransactionPaymentsCompanion.insert(
+            id: 'p1', transactionId: txId, amount: 20000, method: 'tunai'));
+    await db.into(db.transactionPayments).insert(
+        TransactionPaymentsCompanion.insert(
+            id: 'p2',
+            transactionId: txId,
+            amount: 0,
+            method: 'retur',
+            changeGiven: const Value(5000)));
+
+    await db.voidPayment('p2');
+
+    final payments = await db.getPaymentsForTx(txId);
+    expect(payments.firstWhere((p) => p.id == 'p2').voided, isFalse);
+  });
+
+  test(
+      'voidPayment pada nota yang statusnya sudah void: tidak melakukan '
       'apa-apa', () async {
     final txId = await addTx(total: 50000, paid: 50000, status: 'void');
     await db.into(db.transactionPayments).insert(

@@ -424,7 +424,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
 
     return GestureDetector(
-      onLongPress: isPlaceholder ? null : () => _editItemNote(item),
+      onLongPress: isPlaceholder ? null : () => _showItemActionsMenu(item),
       child: ListTile(
         dense: true,
         contentPadding: EdgeInsets.only(left: isVariant ? 28 : 4, right: 12),
@@ -580,6 +580,182 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               ),
       ),
     );
+  }
+
+  /// Qty baris [item] yang SUDAH pernah dijadikan pre-order sebelumnya di
+  /// nota ini (lintas semua entri `PreorderEntries` unit yang sama) —
+  /// mencegah dobel-tandai unit yang sama. Lihat dok
+  /// `_showJadikanPreorderDialog`.
+  double _alreadyPreorderedQty(String productUnitId) => _preorderForTx
+      .where((p) => p.productUnitId == productUnitId)
+      .fold<double>(0, (s, p) => s + p.qtyOrdered);
+
+  /// Susulan (permintaan user): long-press baris item sekarang buka pilihan
+  /// aksi (bukan langsung "Edit Catatan") — "Jadikan Pre-order" ditambah utk
+  /// skenario nyata: kasir lupa input pre-order saat checkout (mis. stok LPG
+  /// ternyata kosong, baru sadar setelah nota lunas/tempo tersimpan).
+  Future<void> _showItemActionsMenu(TransactionItem item) async {
+    final remaining = item.qty - _alreadyPreorderedQty(item.productUnitId);
+    final canPreorder = _tx!.status != 'void' && remaining > 0;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_note_outlined),
+              title: const Text('Edit Catatan'),
+              onTap: () => Navigator.pop(ctx, 'note'),
+            ),
+            if (canPreorder)
+              ListTile(
+                leading: const Icon(Icons.hourglass_empty),
+                title: const Text('Jadikan Pre-order'),
+                subtitle: const Text(
+                    'Barang ternyata belum bisa diserahkan (mis. stok kosong)'),
+                onTap: () => Navigator.pop(ctx, 'preorder'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'note') {
+      await _editItemNote(item);
+    } else if (choice == 'preorder') {
+      await _showJadikanPreorderDialog(item);
+    }
+  }
+
+  /// Menandai SEBAGIAN/SELURUH qty baris [item] (nota SUDAH tersimpan,
+  /// lunas ATAU tempo) sbg pre-order — dipakai saat kasir baru sadar
+  /// belakangan barangnya belum bisa diserahkan (permintaan user, skenario
+  /// nyata: LPG lupa dicek stok, nota keburu lunas/tempo). TIDAK menyentuh
+  /// `transaction_items`/total/paid nota sama sekali — murni catatan
+  /// tambahan `PreorderEntries` bertaut `transactionId` ke nota INI
+  /// (field-nya sudah nullable & ada, tidak perlu migrasi). `paid: true`
+  /// krn uangnya sudah tercatat lunas/menempel via nota ini sendiri, beda
+  /// dari pre-order normal (dicatat SEBELUM checkout) yang `paid` bisa
+  /// false. Otomatis muncul di kartu "Pre-order" struk ini (`_preorderForTx`
+  /// query by `transactionId`) & dashboard Laci Meja begitu `_load()` ulang.
+  Future<void> _showJadikanPreorderDialog(TransactionItem item) async {
+    final maxQty = (item.qty - _alreadyPreorderedQty(item.productUnitId)).clamp(
+      0.0,
+      item.qty,
+    );
+    if (maxQty <= 0) return;
+    var qty = maxQty;
+    final qtyCtrl = TextEditingController(text: _fmtQtyShort(qty));
+    final noteCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Jadikan Pre-order'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_productNames[item.productId] ?? item.productId} '
+                  'belum bisa diserahkan (mis. stok kosong) — dicatat '
+                  'sbg pre-order, TANPA mengubah nota ini.',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Text('Qty'),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline, size: 20),
+                      onPressed: qty <= 0
+                          ? null
+                          : () => setDialogState(() {
+                                qty = (qty - 1).clamp(0.0, maxQty);
+                                qtyCtrl.text = _fmtQtyShort(qty);
+                              }),
+                    ),
+                    SizedBox(
+                      width: 56,
+                      child: TextField(
+                        controller: qtyCtrl,
+                        textAlign: TextAlign.center,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        onChanged: (v) {
+                          final parsed = double.tryParse(v);
+                          if (parsed != null &&
+                              parsed >= 0 &&
+                              parsed <= maxQty) {
+                            setDialogState(() => qty = parsed);
+                          }
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, size: 20),
+                      onPressed: qty >= maxQty
+                          ? null
+                          : () => setDialogState(() {
+                                qty = (qty + 1).clamp(0.0, maxQty);
+                                qtyCtrl.text = _fmtQtyShort(qty);
+                              }),
+                    ),
+                  ],
+                ),
+                Text('Maks ${_fmtQtyShort(maxQty)}',
+                    style: const TextStyle(fontSize: 11)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'Catatan (opsional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
+            FilledButton(
+              onPressed: qty > 0 ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Jadikan Pre-order'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final note = noteCtrl.text.trim();
+    qtyCtrl.dispose();
+    noteCtrl.dispose();
+    if (confirmed != true || qty <= 0 || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final db = ref.read(databaseProvider);
+    await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
+          id: const Uuid().v4(),
+          productId: item.productId,
+          productUnitId: item.productUnitId,
+          transactionId: Value(_tx!.id),
+          customerName: _customerDisplay(_tx!),
+          qtyOrdered: qty,
+          paid: const Value(true),
+          note: Value(note.isEmpty ? null : note),
+        ));
+    await _load();
+    if (mounted) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Ditandai sebagai pre-order — kelola dari '
+              'dashboard Laci Meja')));
+    }
   }
 
   Future<void> _editItemNote(TransactionItem item) async {
@@ -875,6 +1051,20 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         .write(TransactionPaymentsCompanion(changeTaken: Value(value)));
     await _load();
   }
+
+  /// Bug ditemukan saat review logika retur/kembalian (permintaan user):
+  /// baris refund retur (`returnPaidTransactionItems`/
+  /// `editPaidTransactionItem`, `amount` negatif — uang fisik SUDAH keluar
+  /// & stok SUDAH dikembalikan) atau marker retur nota belum-lunas
+  /// (`method` 'retur'/'edit', `amount` 0 tapi `changeGiven`/`sisaAfter`
+  /// bisa nonzero) TIDAK BOLEH dibatalkan lewat "Batalkan Pembayaran" —
+  /// dialognya bilang "barang & stok TIDAK berubah" yang SALAH untuk baris
+  /// ini (item/stok/poin sudah berubah PERMANEN sbg bagian dari retur itu
+  /// sendiri, di baris/tabel lain yang tidak ikut dibatalkan). Efeknya:
+  /// `paid` balik naik tanpa `total`/item ikut balik → kembalian HANTU
+  /// (dihitung ulang seolah harus diserahkan lagi, padahal sudah pernah).
+  bool _isReturLinkedPayment(TransactionPayment p) =>
+      p.amount < 0 || p.method == 'retur' || p.method == 'edit';
 
   /// Item 4 — "Batalkan Pembayaran". Sama gerbang izin dgn `showVoidTransaction
   /// Dialog` (`batal_transaksi`) — ini juga aksi finansial yang membatalkan
@@ -1460,10 +1650,34 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     if (!context.mounted) return;
 
-    // Sisa qty yang masih boleh diretur per baris item.
-    double remainingFor(TransactionItem item) =>
-        (item.qty - (alreadyReturned[item.productUnitId] ?? 0))
-            .clamp(0.0, item.qty);
+    // Sisa qty yang masih boleh diretur per baris item — POOL BERSAMA per
+    // productUnitId (bisa gabungan baris asli + beberapa baris "Tambahan"
+    // dari sesi Tambah Belanjaan), dikurangi retur SEBELUMNYA
+    // (alreadyReturned, dari sesi retur yg SUDAH tersimpan) DAN qty yang
+    // SUDAH dipilih di baris LAIN unit yang sama dalam sheet retur yang
+    // SEDANG dibuka ini (returnQty). Bug ditemukan saat review logika
+    // retur/kembalian (permintaan user): versi lama mengurangi
+    // `alreadyReturned[unit]` dari `item.qty` MASING-MASING baris secara
+    // independen — kalau produk yang sama tersebar di >1 baris (skenario
+    // retur → tambah belanjaan → retur berkali-kali), total yang bisa
+    // dipilih dalam SATU sesi buka-sheet jadi lebih kecil dari sisa
+    // sebenarnya (mis. sisa asli 7, tapi UI cuma izinkan 4 krn tiap baris
+    // sama-sama dipotong 3 secara terpisah). DB (`returnPaidTransactionItems`)
+    // sendiri sudah benar mengakumulasi lintas baris DALAM SATU panggilan —
+    // ini murni memperbaiki batas UI supaya konsisten dgn itu.
+    double remainingFor(TransactionItem item) {
+      final poolBought = returnableItems
+          .where((i) => i.productUnitId == item.productUnitId)
+          .fold(0.0, (s, i) => s + i.qty);
+      final selectedOtherRows = returnableItems
+          .where(
+              (i) => i.productUnitId == item.productUnitId && i.id != item.id)
+          .fold(0.0, (s, i) => s + (returnQty[i.id] ?? 0));
+      final poolRemaining = poolBought -
+          (alreadyReturned[item.productUnitId] ?? 0) -
+          selectedOtherRows;
+      return poolRemaining.clamp(0.0, item.qty);
+    }
 
     // Default refund = metode aktif pertama yang bertipe sama dengan
     // transaksi asal. Dropdown di-key pakai `id` metode (unik), BUKAN `type`:
@@ -1511,8 +1725,18 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         shrinkWrap: true,
                         children: returnableItems.map((item) {
                           final maxQty = remainingFor(item);
-                          final q = returnQty[item.id] ?? 0;
                           final qtyCtrl = returnQtyControllers[item.id]!;
+                          // Pool bersama bisa MENYUSUT saat baris LAIN unit
+                          // yang sama dinaikkan qty-nya (lihat dok
+                          // `remainingFor`) — kalau nilai baris ini jadi
+                          // melebihi batas baru, turunkan diam-diam supaya
+                          // total pilihan tidak pernah melebihi sisa
+                          // sebenarnya.
+                          if ((returnQty[item.id] ?? 0) > maxQty) {
+                            returnQty[item.id] = maxQty;
+                            qtyCtrl.text = _fmtQtyShort(maxQty);
+                          }
+                          final q = returnQty[item.id] ?? 0;
                           // Set nilai qty baru dari AKSI EKSPLISIT (stepper) —
                           // timpa teks field-nya juga. Ketikan manual TIDAK
                           // lewat sini (lihat onChanged TextField di bawah)
@@ -3464,7 +3688,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                       ? TextDecoration.lineThrough
                                       : null)),
                         ],
-                        if (!p.voided && !isVoid)
+                        if (!p.voided && !isVoid && !_isReturLinkedPayment(p))
                           IconButton(
                             icon: const Icon(Icons.cancel_outlined, size: 16),
                             tooltip: 'Batalkan Pembayaran',
