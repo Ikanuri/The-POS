@@ -31,8 +31,11 @@ TextSpan? _findSpanWithText(InlineSpan span, String text) {
   return null;
 }
 
-TextSpan? findBoldableSpan(WidgetTester tester, String text) {
-  for (final rt in tester.widgetList<RichText>(find.byType(RichText))) {
+TextSpan? findBoldableSpan(WidgetTester tester, String text, {Finder? of}) {
+  final scope = of == null
+      ? find.byType(RichText)
+      : find.descendant(of: of, matching: find.byType(RichText));
+  for (final rt in tester.widgetList<RichText>(scope)) {
     final found = _findSpanWithText(rt.text, text);
     if (found != null) return found;
   }
@@ -522,16 +525,20 @@ void main() {
           reason: 'jaminan Galon Aqua (P2) 1, terpisah dari Tabung Gas');
 
       // Permintaan user: nama produk & qty di rincian jaminan BOLD, ": "
-      // dan " jaminan" TIDAK bold.
-      final nameSpan = findBoldableSpan(tester, 'Tabung Gas');
+      // dan " jaminan" TIDAK bold. Pencarian span DIBATASI ke kartu
+      // statistik: chip filter produk (fitur kuota pre-order) juga memuat
+      // nama produk apa adanya, dan span-nya memang tidak bold.
+      final stats = find.byWidgetPredicate(
+          (w) => w.runtimeType.toString() == '_PreorderStats');
+      final nameSpan = findBoldableSpan(tester, 'Tabung Gas', of: stats);
       expect(nameSpan, isNotNull);
       expect(nameSpan!.style?.fontWeight, FontWeight.w700,
           reason: 'nama produk di rincian jaminan harus bold');
-      final qtySpan = findBoldableSpan(tester, '2');
+      final qtySpan = findBoldableSpan(tester, '2', of: stats);
       expect(qtySpan, isNotNull);
       expect(qtySpan!.style?.fontWeight, FontWeight.w700,
           reason: 'qty di rincian jaminan harus bold');
-      final connectorSpan = findBoldableSpan(tester, ' jaminan');
+      final connectorSpan = findBoldableSpan(tester, ' jaminan', of: stats);
       expect(connectorSpan, isNotNull);
       expect(connectorSpan!.style?.fontWeight, isNot(FontWeight.w700),
           reason: 'kata "jaminan" TIDAK ikut bold');

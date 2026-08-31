@@ -6,6 +6,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/theme/app_theme.dart';
+import 'preorder_quota_store.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 
@@ -22,6 +23,13 @@ final _selectedCategoryProvider =
 /// PELANGGAN maupun NAMA PRODUK sekaligus, karena staf bisa datang dari dua
 /// arah: "siapa yang antri Gas?" vs "Bu Artia antri apa saja?".
 final _preorderSearchProvider = StateProvider<String>((ref) => '');
+
+/// Filter produk tab Pre-order (permintaan user) — PELENGKAP pencarian, bukan
+/// penggantinya: garis pembatas kuota hanya masuk akal untuk SATU produk
+/// (tiap produk kuotanya sendiri-sendiri), jadi butuh pilihan yang tegas
+/// "produk ini", bukan kata kunci yang bisa mengenai beberapa produk. null =
+/// semua produk.
+final _preorderProductFilterProvider = StateProvider<String?>((ref) => null);
 
 /// Item 52 ("Laci Meja") — dashboard 3 kartu tappable (sekaligus filter):
 /// Titip/Ketinggalan, Pinjaman Barang, Pre-order. Rancangan lengkap:
@@ -102,9 +110,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
 
   /// Baris ke-1 kartu (redesain permintaan user): NAMA PELANGGAN paling atas,
   /// bold & paling besar — menggantikan nama barang yang dulu di posisi ini.
-  static Widget _cardHeader(String customerName, {Widget? trailing}) {
+  static Widget _cardHeader(String customerName,
+      {Widget? trailing, Widget? leading}) {
     return Row(
       children: [
+        if (leading != null) ...[leading, const SizedBox(width: 6)],
         Expanded(
           child: Text(
             customerName,
@@ -118,6 +128,24 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         ),
         if (trailing != null) trailing,
       ],
+    );
+  }
+
+  /// Penanda pelanggan TERDAFTAR vs nama ad-hoc (permintaan user). Sinyalnya
+  /// `customerId`: terisi = pelanggan yang punya record (riwayat, hutang,
+  /// pinjaman lamanya bisa ditelusuri), null = nama yang cuma diketik saat
+  /// itu (lihat `CartMeta`/`Transactions.customerName`). Perbedaan ini
+  /// penting saat menagih wadah/pre-order — yang ad-hoc tidak punya jejak
+  /// lain untuk dihubungi.
+  ///
+  /// Ikon dipakai sbg pembeda utama (bukan warna saja) supaya tetap terbaca
+  /// di layar HP murah/kontras rendah maupun bagi yang sulit membedakan warna.
+  static Widget _customerTypeIcon(String? customerId, bool isDark) {
+    final terdaftar = customerId != null && customerId.isNotEmpty;
+    return Icon(
+      terdaftar ? Icons.person : Icons.person_outline,
+      size: 16,
+      color: terdaftar ? AppTheme.accent : AppTheme.laciFg(isDark),
     );
   }
 
@@ -447,7 +475,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
               children: [
                 InkWell(
                   onTap: () => context.push('/kasir/struk/${txIds[i]}'),
-                  child: _cardHeader(customerName),
+                  child: _cardHeader(
+                    customerName,
+                    leading:
+                        _customerTypeIcon(group.first.customerId, isDark),
+                  ),
                 ),
                 for (final e in group)
                   _leftBehindTile(context, ref, e, qtyUnit, isDark),
@@ -574,6 +606,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           liveNames: liveNames,
           fallback: group.first.customerNameText,
         );
+        // Sematan disimpan per baris, tapi dinyalakan/dimatikan sekaligus
+        // untuk seluruh grup — lihat dok `setBorrowedPinned`.
+        final pinned = group.any((e) => e.pinned);
         return Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
@@ -582,7 +617,27 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _cardHeader(customerName),
+                _cardHeader(
+                  customerName,
+                  leading: _customerTypeIcon(group.first.customerId, isDark),
+                  trailing: IconButton(
+                    tooltip: pinned ? 'Lepas sematan' : 'Sematkan ke atas',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                      size: 18,
+                      color: pinned ? AppTheme.accent : null,
+                    ),
+                    onPressed: () => ref
+                        .read(databaseProvider)
+                        .setBorrowedPinned(
+                          [for (final e in group) e.id],
+                          !pinned,
+                          locallyModified:
+                              ref.read(laciMejaLocallyModifiedProvider),
+                        ),
+                  ),
+                ),
                 for (final e in group)
                   _borrowedTile(context, ref, e, isDark),
               ],
@@ -713,20 +768,47 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     }
     final labels = ref.watch(preorderProductUnitLabelsProvider).valueOrNull ?? {};
     final query = ref.watch(_preorderSearchProvider).trim().toLowerCase();
+    final productFilter = ref.watch(_preorderProductFilterProvider);
+    final quotas = ref.watch(preorderQuotaProvider);
+
+    String productNameOf(PreorderEntry e) =>
+        labels[e.productUnitId]?.productName ?? e.productId;
+
+    // Daftar produk yang PUNYA antrian terbuka — sumber chip filter sekaligus
+    // daftar produk yang kuotanya bisa diatur.
+    final productNames = <String, String>{};
+    for (final e in items) {
+      productNames[e.productId] = productNameOf(e);
+    }
 
     // Pencarian (permintaan user): cocokkan ke NAMA PELANGGAN atau NAMA
     // PRODUK. Statistik di bawah dihitung dari hasil TERSARING — supaya
     // saat mencari "Gas", angkanya menjawab "berapa Gas yang diantri",
     // bukan total seluruh pre-order (yang sudah terlihat di kartu atas).
-    final filtered = query.isEmpty
-        ? items
-        : items.where((e) {
-            final produk =
-                (labels[e.productUnitId]?.productName ?? e.productId)
-                    .toLowerCase();
-            return e.customerName.toLowerCase().contains(query) ||
-                produk.contains(query);
-          }).toList();
+    final filtered = items.where((e) {
+      if (productFilter != null && e.productId != productFilter) return false;
+      if (query.isEmpty) return true;
+      return e.customerName.toLowerCase().contains(query) ||
+          productNameOf(e).toLowerCase().contains(query);
+    }).toList();
+
+    // Garis pembatas kuota. Dihitung dari SELURUH antrian terbuka produk itu
+    // (`items`, bukan `filtered`) — kata kunci pencarian tidak boleh menggeser
+    // posisi antrian, dan entri yang sudah dipenuhi/dibatalkan memang sudah
+    // tidak ada di `items` sehingga garisnya ikut maju dengan sendirinya.
+    final quota = productFilter == null ? null : quotas[productFilter];
+    final beyondQuota = quota == null
+        ? const <String>{}
+        : preorderIdsBeyondQuota(items, productFilter!, quota);
+    // Nomor antrian per entri, juga dihitung dari antrian penuh produk itu.
+    final queueNumbers = <String, int>{};
+    if (productFilter != null) {
+      var n = 0;
+      for (final e in items) {
+        if (e.productId != productFilter) continue;
+        queueNumbers[e.id] = ++n;
+      }
+    }
 
     // Statistik akumulatif — produk & jaminan SENGAJA dipisah (permintaan
     // user): keduanya satuan berbeda maknanya (barang dipesan vs wadah
@@ -757,6 +839,15 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           onChanged: (v) =>
               ref.read(_preorderSearchProvider.notifier).state = v,
         ),
+        _PreorderProductFilter(
+          productNames: productNames,
+          selected: productFilter,
+          quotas: quotas,
+          onSelected: (id) =>
+              ref.read(_preorderProductFilterProvider.notifier).state = id,
+          onManageQuota: () =>
+              _showQuotaSheet(context, ref, productNames, quotas),
+        ),
         _PreorderStats(
           totalQty: totalQty,
           totalDeposit: totalDeposit,
@@ -767,12 +858,89 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         Expanded(
           child: keys.isEmpty
               ? Center(
-                  child: Text('Tidak ada yang cocok dgn "$query".',
+                  child: Text(
+                      query.isEmpty
+                          ? 'Tidak ada pre-order untuk produk ini.'
+                          : 'Tidak ada yang cocok dgn "$query".',
                       style: TextStyle(color: scheme.onSurfaceVariant)))
-              : _buildPreorderGroups(context, ref, groups, keys, labels, isDark,
-                  ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {}),
+              : _buildPreorderGroups(
+                  context,
+                  ref,
+                  groups,
+                  keys,
+                  labels,
+                  isDark,
+                  ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {},
+                  beyondQuota: beyondQuota,
+                  queueNumbers: queueNumbers,
+                  quota: quota,
+                ),
         ),
       ],
+    );
+  }
+
+  /// Sheet pengaturan kuota per produk. Hanya produk yang punya antrian
+  /// terbuka yang ditawarkan — kuota untuk produk tanpa antrian tidak ada
+  /// gunanya dan cuma bikin daftarnya panjang.
+  static Future<void> _showQuotaSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, String> productNames,
+    Map<String, double> quotas,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Kuota Pre-order',
+                  style:
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(
+                'Batas jumlah yang bisa dilayani sekali kirim. Antrian yang '
+                'melewati batas diberi garis pemisah — posisinya ikut '
+                'menyesuaikan tiap ada yang dipenuhi.',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final entry in productNames.entries)
+                      _QuotaRow(
+                        productName: entry.value,
+                        threshold: quotas[entry.key],
+                        onChanged: (v) {
+                          final store =
+                              ref.read(preorderQuotaProvider.notifier);
+                          if (v == null) {
+                            store.clearThreshold(entry.key);
+                          } else {
+                            store.setThreshold(entry.key, v);
+                          }
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -783,7 +951,17 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       List<String> keys,
       Map<String, ({String productName, String unitName})> labels,
       bool isDark,
-      Map<String, String> liveNames) {
+      Map<String, String> liveNames,
+      {Set<String> beyondQuota = const {},
+      Map<String, int> queueNumbers = const {},
+      double? quota}) {
+    // Kartu PERTAMA yang isinya sudah melewati kuota — garis pembatas
+    // disisipkan tepat di atasnya. Dihitung dari urutan kartu yang benar-benar
+    // dirender, jadi ikut bergeser saat antrian berubah.
+    final firstBeyondIndex = quota == null
+        ? -1
+        : keys.indexWhere(
+            (k) => groups[k]!.any((e) => beyondQuota.contains(e.id)));
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: keys.length,
@@ -791,6 +969,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       itemBuilder: (_, i) {
         final group = groups[keys[i]]!;
         final first = group.first;
+        final quotaDivider = quota != null && i == firstBeyondIndex
+            ? _QuotaDivider(quota: quota, isDark: isDark)
+            : null;
         // Pre-order satu-satunya kategori yang menyimpan nama pelanggan TANPA
         // `customerId` sama sekali (lihat `PreorderEntries.customerName`) —
         // justru kategori inilah yang dilaporkan user salah nama. Nama hidup
@@ -801,7 +982,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           liveNames: liveNames,
           fallback: first.customerName,
         );
-        return Card(
+        final card = Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
           child: Padding(
@@ -814,13 +995,23 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                       ? null
                       : () =>
                           context.push('/kasir/struk/${first.transactionId}'),
-                  child: _cardHeader(customerName),
+                  child: _cardHeader(
+                    customerName,
+                    leading: _customerTypeIcon(first.customerId, isDark),
+                  ),
                 ),
                 for (final e in group)
-                  _preorderTile(context, ref, e, labels, isDark),
+                  _preorderTile(context, ref, e, labels, isDark,
+                      queueNumber: queueNumbers[e.id],
+                      beyondQuota: beyondQuota.contains(e.id)),
               ],
             ),
           ),
+        );
+        if (quotaDivider == null) return card;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [quotaDivider, const SizedBox(height: 8), card],
         );
       },
     );
@@ -831,7 +1022,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       WidgetRef ref,
       PreorderEntry e,
       Map<String, ({String productName, String unitName})> labels,
-      bool isDark) {
+      bool isDark,
+      {int? queueNumber,
+      bool beyondQuota = false}) {
     final label = labels[e.productUnitId];
     final productName = label?.productName ?? e.productId;
     final qtyStr =
@@ -864,6 +1057,18 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         TextSpan(
           style: const TextStyle(fontSize: 13.5),
           children: [
+            // Nomor antrian hanya muncul saat difilter ke satu produk —
+            // di daftar campur, "#3" tidak punya makna (antrian tiap produk
+            // jalan sendiri-sendiri).
+            if (queueNumber != null)
+              TextSpan(
+                text: '#$queueNumber ',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: beyondQuota
+                        ? AppTheme.stockWarnFg(isDark)
+                        : AppTheme.laciFg(isDark)),
+              ),
             // Bold ditulis EKSPLISIT di span-nya (bukan diwarisi dari style
             // induk) supaya widget test bisa membaca ketebalannya langsung
             // dari span ini — lihat `findBoldableSpan` di test grouping.
@@ -1039,6 +1244,185 @@ class _PreorderSearchFieldState extends State<_PreorderSearchField> {
         ),
         onTapOutside: (_) => FocusScope.of(context).unfocus(),
       ),
+    );
+  }
+}
+
+/// Baris chip filter produk + pintu masuk pengaturan kuota (permintaan user).
+/// Chip produk yang kuotanya aktif diberi angka batasnya langsung di label,
+/// supaya staf tahu ada garis pembatas tanpa harus membuka sheet pengaturan.
+class _PreorderProductFilter extends StatelessWidget {
+  const _PreorderProductFilter({
+    required this.productNames,
+    required this.selected,
+    required this.quotas,
+    required this.onSelected,
+    required this.onManageQuota,
+  });
+
+  final Map<String, String> productNames;
+  final String? selected;
+  final Map<String, double> quotas;
+  final ValueChanged<String?> onSelected;
+  final VoidCallback onManageQuota;
+
+  @override
+  Widget build(BuildContext context) {
+    // Satu produk saja = tidak ada yang perlu disaring; chip-nya cuma makan
+    // tempat. Tombol kuota tetap ditampilkan karena batas kirimannya justru
+    // paling sering dipakai di kondisi ini (mis. hanya LPG yang diantri).
+    final showChips = productNames.length > 1;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+      child: Row(
+        children: [
+          if (showChips)
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Semua'),
+                      selected: selected == null,
+                      onSelected: (_) => onSelected(null),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    for (final e in productNames.entries) ...[
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: Text(quotas[e.key] == null
+                            ? e.value
+                            : '${e.value} · maks ${_fmt(quotas[e.key]!)}'),
+                        selected: selected == e.key,
+                        onSelected: (_) => onSelected(e.key),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            )
+          else
+            const Spacer(),
+          IconButton(
+            tooltip: 'Kuota pre-order',
+            icon: const Icon(Icons.rule, size: 20),
+            onPressed: onManageQuota,
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _fmt(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
+}
+
+/// Satu baris pengaturan kuota di sheet "Kuota Pre-order": toggle aktif +
+/// angka batas. Mematikan toggle MENGHAPUS kuotanya (bukan menyimpan 0) —
+/// lihat dok `PreorderQuotaStore`.
+class _QuotaRow extends StatefulWidget {
+  const _QuotaRow({
+    required this.productName,
+    required this.threshold,
+    required this.onChanged,
+  });
+
+  final String productName;
+  final double? threshold;
+  final ValueChanged<double?> onChanged;
+
+  @override
+  State<_QuotaRow> createState() => _QuotaRowState();
+}
+
+class _QuotaRowState extends State<_QuotaRow> {
+  late final TextEditingController _ctrl = TextEditingController(
+      text: widget.threshold == null ? '' : _fmt(widget.threshold!));
+  late bool _enabled = widget.threshold != null;
+
+  static String _fmt(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _commit() {
+    if (!_enabled) {
+      widget.onChanged(null);
+      return;
+    }
+    final parsed = double.tryParse(_ctrl.text.trim());
+    widget.onChanged(parsed != null && parsed > 0 ? parsed : null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Switch(
+            value: _enabled,
+            onChanged: (v) {
+              setState(() => _enabled = v);
+              _commit();
+            },
+          ),
+          Expanded(
+            child: Text(widget.productName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          SizedBox(
+            width: 80,
+            child: TextField(
+              controller: _ctrl,
+              enabled: _enabled,
+              textAlign: TextAlign.center,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                isDense: true,
+                hintText: 'mis. 70',
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
+              ),
+              onChanged: (_) => _commit(),
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Garis pembatas kuota di tengah daftar antrian. Posisinya dihitung ulang
+/// tiap render dari antrian yang masih terbuka — lihat
+/// `preorderIdsBeyondQuota`.
+class _QuotaDivider extends StatelessWidget {
+  const _QuotaDivider({required this.quota, required this.isDark});
+
+  final double quota;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppTheme.stockWarnFg(isDark);
+    final label = quota % 1 == 0 ? quota.toInt().toString() : '$quota';
+    return Row(
+      children: [
+        Expanded(child: Divider(color: color, thickness: 1.2)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text('Batas kiriman normal ($label)',
+              style: TextStyle(
+                  fontSize: 11.5, fontWeight: FontWeight.w800, color: color)),
+        ),
+        Expanded(child: Divider(color: color, thickness: 1.2)),
+      ],
     );
   }
 }
