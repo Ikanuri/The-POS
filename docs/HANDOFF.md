@@ -5,6 +5,22 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Agustus 2026 (lanjutan lagi x4 — kartu statistik
+pre-order dipadatkan jadi satu baris). Versi kerja **2.23.1+54**._
+
+Iterasi lanjutan atas redesain sebelumnya: user masih merasa kartu
+"Total produk"/"Total jaminan" kebesaran. `_PreorderStats`/`_StatTile`
+DIHAPUS TOTAL, diganti `_PreorderStatsLine` — satu baris teks ("N
+entri · X produk · Y jaminan") + tombol Kuota di baris yang sama.
+Rincian jaminan per produk pindah ke `Tooltip` (tap-triggered) lewat
+ikon info kecil, bukan daftar di dalam kartu. **Kalau nanti ada
+permintaan serupa lagi** (elemen dashboard dirasa masih besar): pola
+yang sudah terbukti dipakai berkali-kali di layar ini adalah teks
+ringkas + tooltip utk detail, bukan kartu terpisah — pertimbangkan pola
+yang sama duluan sebelum desain baru dari nol.
+
+---
+
 _Update sesi 31 Agustus 2026 (lanjutan lagi x3 — audit cakupan sync +
 redesain tata letak filter/statistik pre-order). Versi kerja
 **2.23.0+53**._

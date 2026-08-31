@@ -879,23 +879,33 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _PreorderProductFilter(
-                  productNames: productNames,
-                  selected: productFilter,
-                  quotas: quotas,
-                  onSelected: (id) => ref
-                      .read(_preorderProductFilterProvider.notifier)
-                      .state = id,
-                  onManageQuota: () =>
-                      _showQuotaSheet(context, ref, productNames, quotas),
-                ),
-                const SizedBox(height: 10),
-                _PreorderStats(
+                // Chip filter HANYA saat >1 produk (tidak ada yang perlu
+                // disaring kalau cuma 1) — baris sendiri krn bisa perlu
+                // scroll horizontal, beda kebutuhan dari baris statistik.
+                if (productNames.length > 1) ...[
+                  _PreorderProductFilter(
+                    productNames: productNames,
+                    selected: productFilter,
+                    quotas: quotas,
+                    onSelected: (id) => ref
+                        .read(_preorderProductFilterProvider.notifier)
+                        .state = id,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                // Statistik + tombol Kuota SATU BARIS (permintaan user:
+                // kartu total sebelumnya terlalu besar/makan tempat) — teks
+                // ringkas menggantikan 2 kartu besar, sisa jaminan per
+                // produk (kalau ada) dipindah ke tooltip ikon info supaya
+                // detailnya tidak hilang tapi tidak makan baris tambahan.
+                _PreorderStatsLine(
                   totalQty: totalQty,
                   totalDeposit: totalDeposit,
                   entryCount: filtered.length,
                   depositByProduct: depositByProduct,
                   isDark: isDark,
+                  onManageQuota: () =>
+                      _showQuotaSheet(context, ref, productNames, quotas),
                 ),
               ],
             ),
@@ -1303,82 +1313,52 @@ class _PreorderSearchFieldState extends State<_PreorderSearchField> {
 /// Baris chip filter produk + pintu masuk pengaturan kuota (permintaan user).
 /// Chip produk yang kuotanya aktif diberi angka batasnya langsung di label,
 /// supaya staf tahu ada garis pembatas tanpa harus membuka sheet pengaturan.
+/// Chip filter produk — dipanggil HANYA saat >1 produk (parent sudah
+/// mengecek), jadi tidak perlu tangani kasus "sembunyi" di sini lagi.
+/// Tombol Kuota TIDAK di sini lagi (permintaan user: gabung satu baris dgn
+/// statistik, lihat `_PreorderStatsLine`) — dulu ganda dgn baris statistik
+/// jadi 2 baris toolbar yang makan tempat.
 class _PreorderProductFilter extends StatelessWidget {
   const _PreorderProductFilter({
     required this.productNames,
     required this.selected,
     required this.quotas,
     required this.onSelected,
-    required this.onManageQuota,
   });
 
   final Map<String, String> productNames;
   final String? selected;
   final Map<String, double> quotas;
   final ValueChanged<String?> onSelected;
-  final VoidCallback onManageQuota;
 
   @override
   Widget build(BuildContext context) {
-    // Satu produk saja = tidak ada yang perlu disaring; chip-nya cuma makan
-    // tempat. Tombol kuota tetap ditampilkan karena batas kirimannya justru
-    // paling sering dipakai di kondisi ini (mis. hanya LPG yang diantri).
-    final showChips = productNames.length > 1;
-    // Tombol kuota diberi LABEL + border (bukan ikon telanjang) supaya jelas
-    // ini sebuah aksi, bukan hiasan yang nyasar — permintaan user: tata
-    // letak filter jangan terasa "asal tempel". Padding horizontal DISAMAKAN
-    // dgn search field & kartu statistik di atas/bawahnya (12 kiri-kanan),
-    // sebelumnya tombol ini terjepit sendiri di sisi kanan dgn margin beda.
-    final quotaButton = OutlinedButton.icon(
-      onPressed: onManageQuota,
-      icon: const Icon(Icons.rule, size: 16),
-      label: const Text('Kuota'),
-      style: OutlinedButton.styleFrom(
-        visualDensity: VisualDensity.compact,
-        minimumSize: const Size(0, 36),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        foregroundColor: AppTheme.accent,
-        side: BorderSide(color: AppTheme.accent.withOpacity(0.5)),
-      ),
-    );
     // TANPA Padding sendiri — widget ini dipanggil dari dalam panel yang
     // sudah punya padding seragam (lihat pembungkusnya di `_buildPreorderList`).
-    return showChips
-        ? Row(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Semua'),
-                        selected: selected == null,
-                        onSelected: (_) => onSelected(null),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      for (final e in productNames.entries) ...[
-                        const SizedBox(width: 6),
-                        ChoiceChip(
-                          label: Text(quotas[e.key] == null
-                              ? e.value
-                              : '${e.value} · maks ${_fmt(quotas[e.key]!)}'),
-                          selected: selected == e.key,
-                          onSelected: (_) => onSelected(e.key),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              quotaButton,
-            ],
-          )
-        // Tanpa chip: tombol kuota sendirian rata kanan, konsisten dgn
-        // posisinya saat chip ADA (bukan melompat ke kiri/tengah).
-        : Align(alignment: Alignment.centerRight, child: quotaButton);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          ChoiceChip(
+            label: const Text('Semua'),
+            selected: selected == null,
+            onSelected: (_) => onSelected(null),
+            visualDensity: VisualDensity.compact,
+          ),
+          for (final e in productNames.entries) ...[
+            const SizedBox(width: 6),
+            ChoiceChip(
+              label: Text(quotas[e.key] == null
+                  ? e.value
+                  : '${e.value} · maks ${_fmt(quotas[e.key]!)}'),
+              selected: selected == e.key,
+              onSelected: (_) => onSelected(e.key),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   static String _fmt(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
@@ -1546,13 +1526,19 @@ class _DashedLinePainter extends CustomPainter {
 /// Statistik akumulasi tab Pre-order (permintaan user) — total produk dipesan
 /// & total jaminan dititip, SENGAJA dipisah jadi dua angka (satuannya beda
 /// maknanya: barang yang ditunggu vs wadah yang dipegang toko).
-class _PreorderStats extends StatelessWidget {
-  const _PreorderStats({
+/// Statistik + tombol Kuota SATU BARIS (permintaan user — 2 kartu besar
+/// sebelumnya kebanyakan makan tempat vertikal). Teks ringkas menggantikan
+/// kartu; rincian jaminan per produk (kalau ada >1 produk berjaminan)
+/// dipindah ke tooltip lewat ikon info supaya detailnya tidak hilang tapi
+/// tidak menambah tinggi baris.
+class _PreorderStatsLine extends StatelessWidget {
+  const _PreorderStatsLine({
     required this.totalQty,
     required this.totalDeposit,
     required this.entryCount,
     required this.depositByProduct,
     required this.isDark,
+    required this.onManageQuota,
   });
 
   final double totalQty;
@@ -1560,6 +1546,7 @@ class _PreorderStats extends StatelessWidget {
   final int entryCount;
   final Map<String, double> depositByProduct;
   final bool isDark;
+  final VoidCallback onManageQuota;
 
   static String _fmt(double q) =>
       q % 1 == 0 ? q.toInt().toString() : q.toString();
@@ -1567,114 +1554,57 @@ class _PreorderStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = AppTheme.laciFg(isDark);
+    // Produk & jaminan SENGAJA tetap dipisah (permintaan user lama: satuan
+    // berbeda maknanya) tapi kini di satu baris teks, bukan dua kartu.
+    final summary = StringBuffer('$entryCount entri · ${_fmt(totalQty)} produk');
+    if (totalDeposit > 0) summary.write(' · ${_fmt(totalDeposit)} jaminan');
     final breakdown = depositByProduct.entries
-        .map((e) => (name: e.key, qty: _fmt(e.value)))
-        .toList();
-    // TANPA Padding sendiri — dipanggil dari dalam panel yang sudah punya
-    // padding seragam (lihat `_buildPreorderList`).
+        .map((e) => '${e.key}: ${_fmt(e.value)} jaminan')
+        .join('\n');
+
     return Row(
       children: [
         Expanded(
-          child: _StatTile(
-              icon: Icons.inventory_2_outlined,
-              label: 'Total produk',
-              value: _fmt(totalQty),
-              sub: '$entryCount entri',
-              fg: fg,
-              isDark: isDark),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatTile(
-              icon: Icons.shield_outlined,
-              label: 'Total jaminan',
-              value: _fmt(totalDeposit),
-              sub: 'jaminan dititip',
-              breakdown: breakdown,
-              fg: fg,
-              isDark: isDark),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.sub,
-    this.breakdown = const [],
-    required this.fg,
-    required this.isDark,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final String sub;
-  final List<({String name, String qty})> breakdown;
-  final Color fg;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    // Kartu SURFACE (bukan `laciBg` lagi) — sengaja beda dari warna panel
-    // pembungkusnya (permintaan user: kartu statistik sebelumnya terasa
-    // menyatu rata dgn sekitarnya, bukan "menonjol" sbg satu kesatuan yang
-    // jelas). Ikon kecil di header memberi identitas visual tanpa perlu baca
-    // labelnya dulu.
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: fg.withOpacity(0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 13, color: fg.withOpacity(0.8)),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(label,
+              Flexible(
+                child: Text(summary.toString(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: fg.withOpacity(0.8))),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: fg)),
               ),
+              if (breakdown.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: 'Jaminan per produk:\n$breakdown',
+                  triggerMode: TooltipTriggerMode.tap,
+                  child: Icon(Icons.info_outline,
+                      size: 15, color: fg.withOpacity(0.7)),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 4),
-          Text(value,
-              style: AppTheme.numStyle(context,
-                  size: 18, weight: FontWeight.w700, color: fg)),
-          Text(sub,
-              style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75))),
-          for (final line in breakdown)
-            Text.rich(
-              TextSpan(
-                style: TextStyle(fontSize: 10, color: fg.withOpacity(0.75)),
-                children: [
-                  TextSpan(
-                      text: line.name,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  const TextSpan(text: ': '),
-                  TextSpan(
-                      text: line.qty,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  const TextSpan(text: ' jaminan'),
-                ],
-              ),
-            ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        // Tombol kuota diberi LABEL + border (bukan ikon telanjang) supaya
+        // jelas ini sebuah aksi, bukan hiasan yang nyasar.
+        OutlinedButton.icon(
+          onPressed: onManageQuota,
+          icon: const Icon(Icons.rule, size: 16),
+          label: const Text('Kuota'),
+          style: OutlinedButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            minimumSize: const Size(0, 34),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            foregroundColor: AppTheme.accent,
+            side: BorderSide(color: AppTheme.accent.withOpacity(0.5)),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -492,56 +492,36 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('statistik memisahkan total produk vs total jaminan',
+    testWidgets(
+        'statistik ringkas satu baris memisahkan total produk vs total '
+        'jaminan (permintaan user: 2 kartu besar diganti 1 baris teks)',
         (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      expect(find.text('Total produk'), findsOneWidget);
-      expect(find.text('Total jaminan'), findsOneWidget);
       // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 jaminan — SENGAJA dua angka
-      // terpisah, bukan dijumlahkan jadi satu.
-      expect(find.text('5'), findsOneWidget, reason: 'total produk dipesan');
-      expect(find.text('3'), findsOneWidget, reason: 'total jaminan dititip');
+      // terpisah dalam satu baris teks, bukan dijumlahkan jadi satu.
+      expect(find.textContaining('2 entri'), findsOneWidget);
+      expect(find.textContaining('5 produk'), findsOneWidget);
+      expect(find.textContaining('3 jaminan'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
     });
 
     testWidgets(
-        'rincian jaminan per produk (mis. "Tabung Gas: 2 jaminan") muncul di '
-        'bawah Total jaminan, bukan cuma satu angka gabungan',
+        'rincian jaminan per produk (mis. "Tabung Gas: 2 jaminan") tersedia '
+        'lewat tooltik ikon info, bukan cuma satu angka gabungan',
         (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      expect(
-          find.text('Tabung Gas: 2 jaminan', findRichText: true),
-          findsOneWidget,
+      final tooltip =
+          tester.widget<Tooltip>(find.byType(Tooltip).first);
+      expect(tooltip.message, contains('Tabung Gas: 2 jaminan'),
           reason: 'jaminan Tabung Gas (P1) 2, terpisah dari Galon Aqua');
-      expect(
-          find.text('Galon Aqua: 1 jaminan', findRichText: true),
-          findsOneWidget,
+      expect(tooltip.message, contains('Galon Aqua: 1 jaminan'),
           reason: 'jaminan Galon Aqua (P2) 1, terpisah dari Tabung Gas');
-
-      // Permintaan user: nama produk & qty di rincian jaminan BOLD, ": "
-      // dan " jaminan" TIDAK bold. Pencarian span DIBATASI ke kartu
-      // statistik: chip filter produk (fitur kuota pre-order) juga memuat
-      // nama produk apa adanya, dan span-nya memang tidak bold.
-      final stats = find.byWidgetPredicate(
-          (w) => w.runtimeType.toString() == '_PreorderStats');
-      final nameSpan = findBoldableSpan(tester, 'Tabung Gas', of: stats);
-      expect(nameSpan, isNotNull);
-      expect(nameSpan!.style?.fontWeight, FontWeight.w700,
-          reason: 'nama produk di rincian jaminan harus bold');
-      final qtySpan = findBoldableSpan(tester, '2', of: stats);
-      expect(qtySpan, isNotNull);
-      expect(qtySpan!.style?.fontWeight, FontWeight.w700,
-          reason: 'qty di rincian jaminan harus bold');
-      final connectorSpan = findBoldableSpan(tester, ' jaminan', of: stats);
-      expect(connectorSpan, isNotNull);
-      expect(connectorSpan!.style?.fontWeight, isNot(FontWeight.w700),
-          reason: 'kata "jaminan" TIDAK ikut bold');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -557,9 +537,10 @@ void main() {
 
       expect(find.text('Pak Budi'), findsOneWidget);
       expect(find.text('Bu Artia'), findsNothing);
-      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan.
-      expect(find.text('3'), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
+      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan. "· " di depan
+      // membedakan dari teks jaminan di baris item (" - 1 jaminan").
+      expect(find.textContaining('· 3 produk'), findsOneWidget);
+      expect(find.textContaining('· 1 jaminan'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));

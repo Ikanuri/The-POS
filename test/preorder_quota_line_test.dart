@@ -300,19 +300,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
-    List<String?> statValuesNow() => tester
-        .widgetList<Text>(find.descendant(
-            of: find.byWidgetPredicate(
-                (w) => w.runtimeType.toString() == '_StatTile'),
-            matching:
-                find.byWidgetPredicate((w) => w is Text && w.style?.fontSize == 18)))
-        .map((t) => t.data)
-        .toList();
-
-    // Sebelum dipenuhi: statistik = total penuh (1+1+5=7 produk, jaminan sama).
-    expect(statValuesNow(), ['7', '7'],
-        reason: 'Total produk & Total jaminan sama-sama 7 sebelum ada '
-            'pemenuhan');
+    // Statistik sekarang satu baris teks ringkas ("N entri · X produk · Y
+    // jaminan"), bukan lagi 2 kartu besar — lihat `_PreorderStatsLine`.
+    // Sebelum dipenuhi: total penuh (1+1+5=7 produk, jaminan sama).
+    final produkAwal = find.textContaining('7 produk').evaluate().length;
+    final jaminanAwal = find.textContaining('7 jaminan').evaluate().length;
 
     await db.fulfillPreorderQty('ghani', 4,
         locallyModified: false, deviceCode: null);
@@ -322,20 +314,27 @@ void main() {
     final sisaBaris = find.textContaining('1 Lpg - 1 jaminan').evaluate().length;
     // "5 Lpg" (angka awal) TIDAK boleh tampil lagi — harus sudah jadi sisa.
     final angkaAwalMasihAda = find.textContaining('5 Lpg').evaluate().length;
-    final statValues = statValuesNow();
+    final produkSetelah = find.textContaining('3 produk').evaluate().length;
+    final jaminanSetelah = find.textContaining('3 jaminan').evaluate().length;
     final garisMasihAda = find.textContaining('Batas kiriman').evaluate().length;
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
 
+    expect(produkAwal, 1,
+        reason: 'Total produk = 7 sebelum ada pemenuhan');
+    expect(jaminanAwal, 1,
+        reason: 'Total jaminan = 7 sebelum ada pemenuhan');
     expect(angkaAwalMasihAda, 0,
         reason: 'kartu Abdul Ghani harus menampilkan SISA (1), bukan qty '
             'pesanan awal (5) yang sudah basi begitu dipenuhi sebagian');
     expect(sisaBaris, greaterThanOrEqualTo(1),
         reason: 'sisa Abdul Ghani (1 Lpg - 1 jaminan) harus tampil di kartu');
-    expect(statValues, ['3', '3'],
-        reason: 'Total produk & Total jaminan turun jadi 1+1+1=3 (sinkron '
-            'dgn sisa per kartu, bukan angka penuh 7 yang sudah tidak akurat)');
+    expect(produkSetelah, 1,
+        reason: 'Total produk turun jadi 1+1+1=3 (sinkron dgn sisa per '
+            'kartu, bukan angka penuh 7 yang sudah tidak akurat)');
+    expect(jaminanSetelah, 1,
+        reason: 'Total jaminan turun jadi 3 dgn alasan yang sama');
     expect(garisMasihAda, 0,
         reason: 'sisa kumulatif tinggal 3 (<=4) -> tidak ada lagi yang '
             'melewati kuota, garis pembatas hilang');

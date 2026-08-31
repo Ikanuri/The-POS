@@ -43,6 +43,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dikelola dari dashboard Laci Meja.
 
 ### 🔧 Perbaikan
+- **Kartu "Total produk"/"Total jaminan" di dashboard Laci Meja →
+  Pre-order dipadatkan jadi satu baris teks ringkas** (digabung dgn
+  tombol "Kuota") — sebelumnya masih terlalu besar & makan banyak
+  tempat. Rincian jaminan per produk tetap bisa dilihat lewat ikon
+  info di sebelahnya.
 - **Tampilan filter produk & kartu statistik di dashboard Laci Meja
   → Pre-order dirapikan** — filter dan kartu "Total produk"/"Total
   jaminan" sekarang jadi satu panel yang rapi, tombol "Kuota" diberi
