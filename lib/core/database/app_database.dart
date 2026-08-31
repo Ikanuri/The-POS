@@ -5563,15 +5563,37 @@ class AppDatabase extends _$AppDatabase {
     }
     // Master data & izin kasir hanya disertakan saat mengalir ke bawah (host
     // → bawahan). Saat klien mengirim ke atas, dilewati agar tidak menimpa.
+    // Susulan (permintaan user) — atribut Laci Meja (titip/pinjaman/
+    // pre-order) milik transaksi yang SUDAH di-void tidak boleh ikut
+    // tersinkron ke host: kewajibannya sudah tidak relevan lagi begitu
+    // nota induknya dibatalkan. `voidTransaction` SENGAJA tidak menghapus
+    // baris-baris ini secara lokal (jejak audit tetap ada, pola soft-delete
+    // yang konsisten di seluruh app) — jadi filternya di SINI, di titik
+    // keluarnya data, bukan dengan menghapus data lokal. Baris dgn
+    // `transaction_id` NULL (mis. titip wadah tanpa membeli apa pun) tetap
+    // lolos apa adanya, tidak pernah terkait transaksi jadi tidak mungkin
+    // "void". TIDAK menutup celah data yg SUDAH kadung tersinkron SEBELUM
+    // notanya di-void (di luar cakupan — laci-meja belum punya mekanisme
+    // retract/tombstone).
+    const excludeVoidTx = 'AND (transaction_id IS NULL OR transaction_id '
+        "NOT IN (SELECT id FROM transactions WHERE status = 'void'))";
     if (includeMasterData) {
       for (final t in masterData) {
+        final laciMejaWithTx = t == 'left_behind_items' ||
+            t == 'borrowed_items' ||
+            t == 'preorder_entries';
         final hasUpdated = t == 'products' ||
             t == 'customers' ||
-            t == 'left_behind_items' ||
-            t == 'borrowed_items' ||
-            t == 'preorder_entries' ||
+            laciMejaWithTx ||
             t == 'employees';
-        if (hasUpdated) {
+        if (laciMejaWithTx) {
+          final rows = await customSelect(
+            'SELECT * FROM "$t" WHERE (updated_at >= ? OR created_at >= ?) '
+            '$excludeVoidTx',
+            variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
+          ).get();
+          dump[t] = rows.map((r) => r.data).toList();
+        } else if (hasUpdated) {
           final rows = await customSelect(
             'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
             variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
@@ -5581,9 +5603,23 @@ class AppDatabase extends _$AppDatabase {
           // Baris log tidak pernah di-update, jadi `created_at` saja sudah
           // cukup jadi delta — dan full-dump TIDAK boleh dipakai di sini
           // (tabel ini tumbuh terus seiring waktu, beda dari price_tiers dkk
-          // yang ukurannya terikat jumlah produk).
+          // yang ukurannya terikat jumlah produk). `entryId` polimorfik
+          // (dok di atas) — kecualikan baris yang entri induknya (di salah
+          // satu dari 3 tabel sesuai `entityType`) barusan ikut dikecualikan
+          // di atas krn milik transaksi void, supaya log tidak jadi yatim
+          // menunjuk entri yang tidak pernah sampai ke host.
           final rows = await customSelect(
-            'SELECT * FROM "$t" WHERE created_at >= ?',
+            'SELECT * FROM "$t" WHERE created_at >= ? AND NOT ('
+            "(entity_type = 'titip' AND entry_id IN "
+            '(SELECT id FROM left_behind_items WHERE transaction_id IN '
+            "(SELECT id FROM transactions WHERE status = 'void'))) OR "
+            "(entity_type = 'pinjaman' AND entry_id IN "
+            '(SELECT id FROM borrowed_items WHERE transaction_id IN '
+            "(SELECT id FROM transactions WHERE status = 'void'))) OR "
+            "(entity_type = 'preorder' AND entry_id IN "
+            '(SELECT id FROM preorder_entries WHERE transaction_id IN '
+            "(SELECT id FROM transactions WHERE status = 'void')))"
+            ')',
             variables: [Variable.withInt(sinceSec)],
           ).get();
           dump[t] = rows.map((r) => r.data).toList();
