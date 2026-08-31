@@ -5,6 +5,99 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Agustus 2026 — user minta review menyeluruh logika
+retur/kembalian ("terutama retur - tambah pembelian berkali-kali"),
+lalu 2 fitur laci-meja tambahan didiskusikan & dieksekusi sekaligus.
+Commit `49985ff`/`31a7376`/`73338c8`, versi kerja **2.21.0+49**, sudah
+di-push & di-merge ke `main`. **Konvensi versioning baru mulai
+diterapkan sesi ini** (lihat entri sebelumnya) — MINOR naik krn ada
+fitur baru (poin 3 di bawah).
+
+**Metodologi sesi ini, penting utk pola serupa ke depan**: user minta
+"catat itu ke task manager anda dulu, bukan di plan.md" — temuan dari
+review kode (bug + fitur yang didiskusikan) dicatat via `TaskCreate`
+(bukan `PLAN.md`) selama masih tahap diskusi/menunggu keputusan user,
+baru dieksekusi satu-satu setelah user bilang "boleh, eksekusi". Semua
+5 task sudah `completed`, tidak ada lagi yang menggantung di task
+manager terkait sesi ini.
+
+**Temuan 1 (bug, FINANSIAL) — `49985ff`**: tombol "Batalkan Pembayaran"
+& `AppDatabase.voidPayment` sebelumnya tidak membedakan pembayaran
+NORMAL vs baris REFUND RETUR (`returnPaidTransactionItems`/
+`editPaidTransactionItem`, `amount` negatif — uang fisik & stok SUDAH
+permanen berubah lewat retur) atau marker retur nota belum-lunas
+(`method` 'retur'/'edit'). Membatalkan baris refund itu bikin `paid`
+naik lagi TANPA `total`/item ikut balik → kembalian HANTU (sistem
+menghitung seolah harus diserahkan lagi, padahal sudah pernah) —
+dialognya bahkan salah bilang "barang & stok TIDAK berubah". **Fix 2
+lapis**: sembunyikan tombol UI (`_isReturLinkedPayment`, cek
+`amount<0 || method in ('retur','edit')`) + guard IDENTIK langsung di
+`voidPayment` (defense-in-depth, supaya caller lain di masa depan
+tidak kena bug yang sama meski lewat jalur lain, bukan cuma UI).
+
+**Temuan 2 (bug, UX) — `49985ff`**: sheet retur (`remainingFor` di
+`receipt_screen.dart`) salah hitung sisa returnable saat produk yang
+sama ada di >1 baris nota (baris asli + baris "Tambahan" dari sesi
+Tambah Belanjaan) — skenario PERSIS yang ditanya user ("retur - tambah
+pembelian berkali-kali"). Versi lama mengurangi retur SEBELUMNYA dari
+qty MASING-MASING baris secara independen (bukan pool bersama) —
+totalnya jadi lebih kecil dari sisa sebenarnya, kasir harus buka-tutup
+sheet berkali-kali. **Bukan bug uang** — DB (`returnPaidTransactionItems`)
+sendiri sudah benar. Fix: pool bersama per `productUnitId` yang
+menyusut dinamis antar baris (dikurangi qty yang SUDAH dipilih di
+baris lain dalam sesi sheet yang sama), diklem-ulang otomatis kalau
+baris lain menyusutkan pool sesudah baris ini terisi.
+
+**Fitur baru "Jadikan Pre-order" — `49985ff`**: skenario nyata dari
+user — kasir lupa input pre-order saat checkout (LPG lupa dicek stok),
+nota keburu lunas/tempo. Long-press baris item di struk in-app → menu
+aksi baru (selain "Edit Catatan" yang sudah ada) → "Jadikan Pre-order"
+→ dialog qty (default = sisa qty baris yang belum pernah ditandai,
+dihitung dari SEMUA `PreorderEntries` unit yang sama di nota ini,
+cegah dobel-tandai) + catatan opsional → insert `PreorderEntries` baru
+bertaut `transactionId` LANGSUNG ke nota ini (field sudah ada &
+nullable, TIDAK perlu migrasi), `paid: true` (uang sudah tercatat
+lunas/tempo via nota ini sendiri, beda dari pre-order normal yg `paid`
+bisa false). **TIDAK menyentuh** `transaction_items`/total/paid nota
+sama sekali — murni catatan tambahan. Otomatis muncul di kartu
+"Pre-order" struk (`_buildPreorderCard` sudah query by `transactionId`,
+tidak perlu kerja tambahan) & dashboard Laci Meja. **Keputusan user**:
+boleh di nota tempo (bukan cuma lunas), TIDAK perlu gerbang izin utk
+sementara.
+
+**Fix susulan — `31a7376`**: toggle "Pre-order?"/"DP?" di
+`item_entry_sheet.dart` ternyata TIDAK PERNAH prefill dari cart line
+yang sudah ada (`_load()` cuma prefill qty/harga/catatan, lupa 3 field
+pre-order) — reopen item yg SUDAH pre-order di cart selalu tampil
+toggle "Tidak" walau datanya masih "Ya". User klarifikasi: LOGIKA-nya
+sendiri (data tetap pre-order selama sheet belum di-save ulang) SUDAH
+BENAR & diinginkan — yang salah murni tampilan toggle yang membingungkan,
+DAN kalau kasir tetap tap "Tambah ke Keranjang" tanpa sadar toggle
+salah, status pre-order ASLI beneran hilang. Fix: prefill 3 field itu
+sama seperti field lain yang sudah benar.
+
+**Fix susulan lain — `73338c8`**: diminta user — atribut Laci Meja
+(titip/pinjaman/pre-order) milik transaksi yang SUDAH di-void TIDAK
+BOLEH ikut tersinkron ke host lagi. `voidTransaction` sengaja tidak
+menghapus baris-baris itu (jejak audit, pola soft-delete konsisten di
+app ini), jadi fixnya di titik KELUAR data (`dumpSince`, filter thd
+status transaksi induk via subquery), BUKAN hapus data lokal — user
+pilih ini eksplisit setelah ditanya "opsi mana yang lebih aman"
+(alasan: reversibel, tidak ada mekanisme delete-propagation utk tabel
+laci-meja jadi hapus lokal berisiko device lain tidak ikut tahu).
+`laci_meja_events` (log kejadian, `entry_id` polimorfik ke 3 tabel
+laci-meja) ikut difilter biar tidak jadi log yatim. **Gap yang
+disepakati diterima**: data yang SUDAH kadung tersinkron ke host
+SEBELUM notanya di-void tidak ikut terhapus balik (di luar cakupan,
+laci-meja belum punya mekanisme retract/tombstone).
+
+15 test baru total (2 DB voidPayment + 1 widget cancel-button-hidden +
+1 widget pool-bersama-retur + 3 widget jadikan-preorder + 1 widget
+prefill-toggle + 3 DB dumpSince-void-laci-meja + beberapa DB tambahan)
+— SEMUA revert-verified satu-satu. Full suite 1206 lolos SEMUA (bukan
+cuma "flaky pre-existing lolos", kali ini genuinely 0 gagal),
+`flutter analyze` 0 issue.
+
 _Update sesi 30 Agustus 2026 (lanjutan lagi — 3 penyesuaian susulan
 langsung dari fitur nama metode pembayaran & chart tap-to-pin sesi
 sebelumnya), commit `e3216f9`/`ddaa631`, versi kerja **2.19.22+47**,
