@@ -292,6 +292,12 @@ class AppDatabase extends _$AppDatabase {
     'receipt_show_employee',
     // Perilaku katalog pesanan.
     'katalog_wa_direct',
+    // Kuota antrian pre-order per produk — ditetapkan owner, dibaca kasir
+    // saat memutuskan siapa yang diprioritaskan di dashboard Laci Meja.
+    // BEDA dari `saved_catalogs` (scratchpad pribadi per device, sengaja
+    // lokal): ini kebijakan toko, harus seragam di semua device spt
+    // `allow_negative_stock`.
+    'preorder_quota_thresholds',
   };
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
@@ -757,9 +763,21 @@ class AppDatabase extends _$AppDatabase {
     return row?.value;
   }
 
+  /// `updatedAt` distempel EKSPLISIT (bukan cuma `withDefault`) — kolom itu
+  /// cuma berlaku otomatis saat INSERT, tidak pernah tersentuh saat baris
+  /// yang sudah ada di-UPDATE lewat `insertOnConflictUpdate` (gotcha yang
+  /// sama persis dgn soft-delete master-data lain, lihat CLAUDE.md). Tanpa
+  /// ini, mengubah setting yang SUDAH pernah tersinkron sebelumnya
+  /// (mis. kuota pre-order disetel ulang) tidak akan pernah lewat filter
+  /// `dumpSince` `WHERE updated_at >= ?` lagi — perubahan diam-diam TIDAK
+  /// PERNAH sampai ke device lain walau nilainya sendiri sudah benar lokal.
   Future<void> setSetting(String key, String value) =>
       into(appSettings).insertOnConflictUpdate(
-        AppSettingsCompanion.insert(key: key, value: value),
+        AppSettingsCompanion.insert(
+          key: key,
+          value: value,
+          updatedAt: Value(DateTime.now()),
+        ),
       );
 
   // ───────────────────────── Pricing queries ─────────────────────────

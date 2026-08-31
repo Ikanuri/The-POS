@@ -39,6 +39,42 @@ void main() {
       ]));
     });
 
+    test('kuota pre-order (preorder_quota_thresholds) ikut dump — kebijakan '
+        'owner, dibaca kasir', () async {
+      await db.setSetting('preorder_quota_thresholds', '{"P1": 70}');
+      final dump = await db.dumpSince(DateTime(2000));
+      final keys =
+          (dump['app_settings'] ?? []).map((r) => r['key'] as String).toSet();
+      expect(keys, contains('preorder_quota_thresholds'));
+    });
+
+    test(
+        'setSetting yang MENGUBAH nilai lama (bukan baru pertama kali) tetap '
+        'terdeteksi dump berikutnya — updated_at wajib ikut distempel ulang',
+        () async {
+      // Reproduksi gotcha CLAUDE.md: `insertOnConflictUpdate` TIDAK
+      // menstempel ulang `updated_at` di UPDATE kecuali diminta eksplisit —
+      // kalau `setSetting` lupa itu, mengubah setting yang sudah pernah
+      // tersinkron sebelumnya (mis. owner menyetel ulang kuota) akan
+      // diam-diam TIDAK PERNAH lagi lolos filter `dumpSince` berikutnya.
+      await db.setSetting('preorder_quota_thresholds', '{"P1": 70}');
+      final watermarkSetelahPertama = DateTime.now();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      await db.setSetting('preorder_quota_thresholds', '{"P1": 100}');
+
+      final dump = await db.dumpSince(watermarkSetelahPertama);
+      final row = (dump['app_settings'] ?? [])
+          .cast<Map<String, dynamic>>()
+          .where((r) => r['key'] == 'preorder_quota_thresholds')
+          .toList();
+      expect(row, hasLength(1),
+          reason: 'perubahan nilai kedua harus tetap muncul di dump yang '
+              'watermark-nya SUDAH LEWAT dari saat setting itu dibuat '
+              'pertama kali');
+      expect(row.single['value'], '{"P1": 100}');
+    });
+
     test('IDENTITAS/STATE DEVICE tidak pernah ikut dump', () async {
       await db.setSetting('store_key', 'RAHASIA');
       await db.setSetting('store_uuid', 'uuid-toko');
