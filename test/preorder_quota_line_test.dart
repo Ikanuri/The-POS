@@ -72,6 +72,27 @@ void main() {
           reason: 'kumulatif tinggal 50, garis pembatas ikut bergeser — '
               'bukan tetap menandai "c" seperti hitungan lama');
     });
+
+    test(
+        'PEMENUHAN SEBAGIAN (bukan hilang dari daftar) juga mengurangi '
+        'kumulatif — bukan cuma pemenuhan penuh',
+        () {
+      // Dilaporkan user via screenshot: entri ke-3 (5 dari kuota 4) tetap
+      // "tidak naik" walau salah satu entri SEBELUMNYA sudah dipenuhi
+      // sebagian (bukan penuh, jadi tetap ada di daftar terbuka).
+      final antrian = [entry('a', 1), entry('b', 1), entry('c', 5)];
+      expect(preorderIdsBeyondQuota(antrian, 'P1', 4), {'c'},
+          reason: 'kumulatif penuh 1+1+5=7 > 4');
+
+      // 'c' sendiri dipenuhi 4 dari 5 (progress bar "Dipenuhi 4 dari 5") —
+      // sisa yang MASIH membebani kuota tinggal 1, bukan 5 lagi.
+      expect(
+          preorderIdsBeyondQuota(antrian, 'P1', 4,
+              takenQty: {'c': 4}),
+          isEmpty,
+          reason: 'sisa "c" tinggal 1 -> kumulatif sisa 1+1+1=3, tidak lagi '
+              'melewati kuota 4');
+    });
   });
 
   Widget buildApp() {
@@ -127,7 +148,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     final chips = find.byType(ChoiceChip).evaluate().length;
-    final garis = find.text('Batas kiriman normal (2)').evaluate().length;
+    final garis = find.text('Batas kiriman (2)').evaluate().length;
     final nomorAntrian = find.textContaining('#3').evaluate().length;
 
     await tester.pumpWidget(const SizedBox());
@@ -141,7 +162,7 @@ void main() {
   });
 
   testWidgets(
-      'kuota aktif + filter produk -> garis "Batas kiriman normal" muncul '
+      'kuota aktif + filter produk -> garis "Batas kiriman" muncul '
       'di daftar', timeout: const Timeout(Duration(seconds: 40)), (tester) async {
     await seedProduct('P1', 'LPG 3kg');
     // Produk kedua supaya chip filter memang dirender (dgn satu produk saja
@@ -181,7 +202,7 @@ void main() {
 
     // Tanpa filter produk garis TIDAK muncul (kuota itu per produk).
     final garisSebelumFilter =
-        find.textContaining('Batas kiriman normal').evaluate().length;
+        find.textContaining('Batas kiriman').evaluate().length;
 
     // Chip filter produk: labelnya ikut menampilkan kuota yang aktif.
     await tester.tap(find.text('LPG 3kg · maks 70'));
@@ -189,7 +210,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     final garisSetelahFilter =
-        find.text('Batas kiriman normal (70)').evaluate().length;
+        find.text('Batas kiriman (70)').evaluate().length;
     final nomorAntrian = find.textContaining('#3').evaluate().length;
 
     // Drain WAJIB sebelum assert: layar ini punya StreamProvider, dan
@@ -205,5 +226,92 @@ void main() {
     expect(garisSetelahFilter, 1);
     expect(nomorAntrian, 1,
         reason: 'nomor antrian muncul saat difilter ke satu produk');
+  });
+
+  testWidgets(
+      'pemenuhan sebagian: baris & statistik tampilkan SISA (bukan angka '
+      'awal), dan entri di bawah kuota ikut naik kalau sisanya sudah cukup',
+      timeout: const Timeout(Duration(seconds: 40)), (tester) async {
+    // Reproduksi skenario screenshot user: kuota 4, tiga entri (1, 1, 5) —
+    // entri ke-3 (Abdul Ghani) awalnya di bawah garis krn kumulatif penuh
+    // 1+1+5=7 > 4. Begitu 4 dari 5 tabungnya sendiri dipenuhi (progress bar
+    // "Dipenuhi 4 dari 5"), sisa yang membebani kuota tinggal 1 — kumulatif
+    // sisa jadi 1+1+1=3, harusnya TIDAK lagi melewati kuota.
+    await seedProduct('P1', 'Lpg');
+    await db.setSetting('preorder_quota_thresholds', '{"P1": 4}');
+    await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
+          id: 'sum',
+          productId: 'P1',
+          productUnitId: 'U-P1',
+          customerName: 'Sum',
+          qtyOrdered: 1,
+          depositQty: const Value(1),
+          createdAt: Value(DateTime(2026, 1, 1)),
+        ));
+    await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
+          id: 'kampong',
+          productId: 'P1',
+          productUnitId: 'U-P1',
+          customerName: 'Buk Kampong',
+          qtyOrdered: 1,
+          depositQty: const Value(1),
+          createdAt: Value(DateTime(2026, 1, 2)),
+        ));
+    await db.into(db.preorderEntries).insert(PreorderEntriesCompanion.insert(
+          id: 'ghani',
+          productId: 'P1',
+          productUnitId: 'U-P1',
+          customerName: 'Abdul Ghani',
+          qtyOrdered: 5,
+          depositQty: const Value(5),
+          createdAt: Value(DateTime(2026, 1, 3)),
+        ));
+
+    await tester.pumpWidget(buildApp());
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Pre-order').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    List<String?> statValuesNow() => tester
+        .widgetList<Text>(find.descendant(
+            of: find.byWidgetPredicate(
+                (w) => w.runtimeType.toString() == '_StatTile'),
+            matching:
+                find.byWidgetPredicate((w) => w is Text && w.style?.fontSize == 18)))
+        .map((t) => t.data)
+        .toList();
+
+    // Sebelum dipenuhi: statistik = total penuh (1+1+5=7 produk, jaminan sama).
+    expect(statValuesNow(), ['7', '7'],
+        reason: 'Total produk & Total jaminan sama-sama 7 sebelum ada '
+            'pemenuhan');
+
+    await db.fulfillPreorderQty('ghani', 4,
+        locallyModified: false, deviceCode: null);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final sisaBaris = find.textContaining('1 Lpg - 1 jaminan').evaluate().length;
+    // "5 Lpg" (angka awal) TIDAK boleh tampil lagi — harus sudah jadi sisa.
+    final angkaAwalMasihAda = find.textContaining('5 Lpg').evaluate().length;
+    final statValues = statValuesNow();
+    final garisMasihAda = find.textContaining('Batas kiriman').evaluate().length;
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(angkaAwalMasihAda, 0,
+        reason: 'kartu Abdul Ghani harus menampilkan SISA (1), bukan qty '
+            'pesanan awal (5) yang sudah basi begitu dipenuhi sebagian');
+    expect(sisaBaris, greaterThanOrEqualTo(1),
+        reason: 'sisa Abdul Ghani (1 Lpg - 1 jaminan) harus tampil di kartu');
+    expect(statValues, ['3', '3'],
+        reason: 'Total produk & Total jaminan turun jadi 1+1+1=3 (sinkron '
+            'dgn sisa per kartu, bukan angka penuh 7 yang sudah tidak akurat)');
+    expect(garisMasihAda, 0,
+        reason: 'sisa kumulatif tinggal 3 (<=4) -> tidak ada lagi yang '
+            'melewati kuota, garis pembatas hilang');
   });
 }

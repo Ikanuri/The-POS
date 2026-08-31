@@ -69,13 +69,22 @@ final preorderQuotaProvider =
 ///
 /// [entries] HARUS sudah terurut FIFO (`createdAt` menaik) dan hanya berisi
 /// entri terbuka — persis yang dikeluarkan `watchPreorderEntries`.
+///
+/// [takenQty] = sudah berapa yang DIPENUHI SEBAGIAN per entri (dari
+/// `laciMejaTakenQtyProvider`). Kumulatifnya memakai SISA yang belum
+/// dipenuhi (`qtyOrdered - taken`), bukan `qtyOrdered` mentah — kalau tidak,
+/// entri yang sudah dipenuhi sebagian (mis. 4 dari 5) tetap membebani kuota
+/// seolah-olah belum tersentuh sama sekali, dan entri di bawahnya tidak
+/// pernah "naik" walau barangnya sudah sebagian besar keluar.
 Set<String> preorderIdsBeyondQuota(
-    List<PreorderEntry> entries, String productId, double threshold) {
+    List<PreorderEntry> entries, String productId, double threshold,
+    {Map<String, double> takenQty = const {}}) {
   final out = <String>{};
   var running = 0.0;
   for (final e in entries) {
     if (e.productId != productId) continue;
-    running += e.qtyOrdered;
+    final sisa = (e.qtyOrdered - (takenQty[e.id] ?? 0)).clamp(0.0, e.qtyOrdered);
+    running += sisa;
     if (running > threshold) out.add(e.id);
   }
   return out;
