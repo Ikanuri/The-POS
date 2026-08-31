@@ -43,6 +43,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dikelola dari dashboard Laci Meja.
 
 ### 🔧 Perbaikan
+- **Garis batas kuota pre-order sekarang ikut mempertimbangkan
+  pesanan yang sudah diambil sebagian** — sebelumnya pesanan yang
+  sudah diserahkan sebagian (mis. 4 dari 5 tabung) tetap dianggap
+  utuh saat menghitung kuota, jadi antrian di bawahnya seolah tidak
+  pernah "naik" walau barangnya sudah nyaris habis diserahkan.
+- **Jumlah barang & jaminan di kartu pre-order kini menampilkan
+  SISA yang belum diserahkan**, bukan angka pesanan awal yang jadi
+  basi begitu ada pengambilan sebagian — kartu statistik "Total
+  produk"/"Total jaminan" ikut disesuaikan.
+- **Garis batas kuota diganti jadi putus-putus abu-abu**
+  (sebelumnya solid & berwarna kuning/oranye), dan label "Batas
+  kiriman normal" disingkat jadi "Batas kiriman".
 - **Garis batas kuota pre-order kini muncul juga saat cuma satu produk
   yang sedang diantri** (mis. hanya LPG) — sebelumnya garisnya tidak
   pernah tampil di kondisi itu walau kuotanya sudah disetel.

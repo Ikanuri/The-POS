@@ -770,6 +770,18 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final query = ref.watch(_preorderSearchProvider).trim().toLowerCase();
     final productFilter = ref.watch(_preorderProductFilterProvider);
     final quotas = ref.watch(preorderQuotaProvider);
+    final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull ?? {};
+
+    // Sisa yang BELUM dipenuhi — dipakai di mana pun angka "berapa yang
+    // masih harus diserahkan" ditampilkan (kuota, statistik, baris entri),
+    // supaya pemenuhan sebagian langsung tercermin di semuanya, bukan cuma
+    // progress bar. Jaminan diasumsikan konsumsi 1:1 dgn item (tabung kosong
+    // ditukar tabung isi) — asumsi yang sudah dipakai default toggle
+    // jaminan di `item_entry_sheet.dart`/dialog "Jadikan Pre-order".
+    double sisaQty(PreorderEntry e) =>
+        (e.qtyOrdered - (taken[e.id] ?? 0)).clamp(0.0, e.qtyOrdered);
+    double sisaDeposit(PreorderEntry e) =>
+        e.depositQty <= 0 ? 0.0 : (e.depositQty - (taken[e.id] ?? 0)).clamp(0.0, e.depositQty);
 
     String productNameOf(PreorderEntry e) =>
         labels[e.productUnitId]?.productName ?? e.productId;
@@ -807,7 +819,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final quota = effectiveProduct == null ? null : quotas[effectiveProduct];
     final beyondQuota = quota == null
         ? const <String>{}
-        : preorderIdsBeyondQuota(items, effectiveProduct!, quota);
+        : preorderIdsBeyondQuota(items, effectiveProduct!, quota,
+            takenQty: taken);
     // Nomor antrian per entri, juga dihitung dari antrian penuh produk itu.
     final queueNumbers = <String, int>{};
     if (effectiveProduct != null) {
@@ -821,16 +834,19 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // Statistik akumulatif — produk & jaminan SENGAJA dipisah (permintaan
     // user): keduanya satuan berbeda maknanya (barang dipesan vs wadah
     // dititip sbg jaminan), menjumlahkannya jadi satu angka menyesatkan.
-    final totalQty = filtered.fold<double>(0, (s, e) => s + e.qtyOrdered);
-    final totalDeposit = filtered.fold<double>(0, (s, e) => s + e.depositQty);
+    // Dihitung dari SISA (bukan qty penuh) supaya sinkron dgn angka yang
+    // ditampilkan per kartu — pemenuhan sebagian langsung mengurangi total.
+    final totalQty = filtered.fold<double>(0, (s, e) => s + sisaQty(e));
+    final totalDeposit = filtered.fold<double>(0, (s, e) => s + sisaDeposit(e));
 
     // Rincian jaminan per produk (permintaan user, mis. "LPG: 20 jaminan") —
     // hanya entri yang benar-benar punya jaminan (>0) yang dihitung.
     final depositByProduct = <String, double>{};
     for (final e in filtered) {
-      if (e.depositQty <= 0) continue;
+      final sisa = sisaDeposit(e);
+      if (sisa <= 0) continue;
       final name = labels[e.productUnitId]?.productName ?? e.productId;
-      depositByProduct[name] = (depositByProduct[name] ?? 0) + e.depositQty;
+      depositByProduct[name] = (depositByProduct[name] ?? 0) + sisa;
     }
 
     // transactionId NULLABLE (satu-satunya kasus: titip wadah tanpa beli
@@ -1035,13 +1051,19 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       bool beyondQuota = false}) {
     final label = labels[e.productUnitId];
     final productName = label?.productName ?? e.productId;
-    final qtyStr =
-        e.qtyOrdered % 1 == 0 ? e.qtyOrdered.toInt().toString() : '${e.qtyOrdered}';
-    final depositStr = e.depositQty > 0
-        ? ' - ${e.depositQty % 1 == 0 ? e.depositQty.toInt() : e.depositQty} jaminan'
-        : '';
     final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull?[e.id] ?? 0;
-    final sisa = e.qtyOrdered - taken;
+    final sisa = (e.qtyOrdered - taken).clamp(0.0, e.qtyOrdered);
+    // Angka yang tampil di baris SELALU sisa yang belum diserahkan, bukan
+    // jumlah pesanan awal — begitu ada pengambilan sebagian, kartu langsung
+    // menunjukkan "berapa lagi", bukan angka basi yang butuh dihitung manual
+    // dari progress bar. Jaminan diasumsikan konsumsi 1:1 dgn item (lihat
+    // dok `sisaDeposit` di `_buildPreorderList`).
+    final qtyStr = sisa % 1 == 0 ? sisa.toInt().toString() : '$sisa';
+    final sisaDeposit =
+        e.depositQty <= 0 ? 0.0 : (e.depositQty - taken).clamp(0.0, e.depositQty);
+    final depositStr = sisaDeposit > 0
+        ? ' - ${sisaDeposit % 1 == 0 ? sisaDeposit.toInt() : sisaDeposit} jaminan'
+        : '';
     // Status "Tempo"/"Lunas" berdasar `e.paid` (DP RUPIAH — permintaan user
     // eksplisit "Rp 0" = tempo), BUKAN `depositQty` (jaminan WADAH FISIK,
     // mis. tabung kosong LPG — beda konsep total).
@@ -1418,21 +1440,71 @@ class _QuotaDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = AppTheme.stockWarnFg(isDark);
+    // Abu-abu netral (permintaan user) — sebelumnya warna peringatan
+    // (kuning/oranye), yang terlalu "alarm" untuk sekadar penanda posisi
+    // antrian.
+    final color = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9E9E9E);
     final label = quota % 1 == 0 ? quota.toInt().toString() : '$quota';
     return Row(
       children: [
-        Expanded(child: Divider(color: color, thickness: 1.2)),
+        Expanded(child: _DashedLine(color: color)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Text('Batas kiriman normal ($label)',
+          child: Text('Batas kiriman ($label)',
               style: TextStyle(
-                  fontSize: 11.5, fontWeight: FontWeight.w800, color: color)),
+                  fontSize: 11.5, fontWeight: FontWeight.w700, color: color)),
         ),
-        Expanded(child: Divider(color: color, thickness: 1.2)),
+        Expanded(child: _DashedLine(color: color)),
       ],
     );
   }
+}
+
+/// Garis putus-putus horizontal (permintaan user, pembeda visual dari garis
+/// solid `Divider` biasa yang dipakai di tempat lain). Flutter tidak punya
+/// varian putus-putus bawaan — digambar manual lewat `CustomPaint` daripada
+/// menambah dependency baru (app ini offline-first, tiap dependency = beban
+/// rilis).
+class _DashedLine extends StatelessWidget {
+  const _DashedLine({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 1.2,
+      child: CustomPaint(
+        painter: _DashedLinePainter(color: color),
+        size: const Size(double.infinity, 1.2),
+      ),
+    );
+  }
+}
+
+class _DashedLinePainter extends CustomPainter {
+  const _DashedLinePainter({required this.color});
+
+  final Color color;
+  static const _dashWidth = 5.0;
+  static const _gapWidth = 4.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.height;
+    var x = 0.0;
+    while (x < size.width) {
+      canvas.drawLine(
+          Offset(x, size.height / 2), Offset(x + _dashWidth, size.height / 2), paint);
+      x += _dashWidth + _gapWidth;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedLinePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 /// Statistik akumulasi tab Pre-order (permintaan user) — total produk dipesan
