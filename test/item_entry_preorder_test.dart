@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/widgets/item_entry_sheet.dart';
@@ -24,8 +25,8 @@ void main() {
         productId: 'p1',
         isBaseUnit: const Value(true),
         requiresDeposit: Value(requiresDeposit)));
-    await db.into(db.priceTiers).insert(
-        PriceTiersCompanion.insert(id: 't1', productUnitId: 'u1', price: 25000));
+    await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+        id: 't1', productUnitId: 'u1', price: 25000));
     return (await db.searchProducts('')).first;
   }
 
@@ -133,8 +134,8 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(
-            home: Scaffold(body: ItemEntrySheet(product: product))),
+        child:
+            MaterialApp(home: Scaffold(body: ItemEntrySheet(product: product))),
       ),
     );
     await tester.pumpAndSettle();
@@ -176,8 +177,8 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(
-            home: Scaffold(body: ItemEntrySheet(product: product))),
+        child:
+            MaterialApp(home: Scaffold(body: ItemEntrySheet(product: product))),
       ),
     );
     await tester.pumpAndSettle();
@@ -197,6 +198,71 @@ void main() {
     expect(item.preorderPaid, isTrue);
     expect(item.price, isNot(0),
         reason: 'DP Ya -> harga penuh terisi, dibayar lunas sekarang');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'buka lagi item yg SUDAH pre-order di cart -> toggle Pre-order?/DP? '
+      'prefill "Ya" (bukan reset ke Tidak)', (tester) async {
+    final product = await seedProduct();
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider.overrideWith((ref) => DeviceNotifier()
+        ..state = const DeviceIdentity(
+          storeUuid: 's',
+          storeKey: 'k',
+          storeName: 'Toko',
+          deviceName: 'Dev',
+          deviceCode: 'K1',
+          deviceRole: 'owner',
+        )),
+    ]);
+    addTearDown(container.dispose);
+    // Cart SUDAH berisi item ini sbg pre-order dgn DP sudah dibayar —
+    // persis kondisi "sudah diset pre-order, lalu tap lagi item" yg
+    // dilaporkan user.
+    container.read(cartProvider(kMainCartId).notifier).setItem(const CartItem(
+          productId: 'p1',
+          productUnitId: 'u1',
+          productName: 'Galon Aqua',
+          unitName: 'Satuan',
+          qty: 1,
+          price: 25000,
+          originalPrice: 25000,
+          costPrice: 0,
+          isPreorder: true,
+          preorderPaid: true,
+        ));
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child:
+            MaterialApp(home: Scaffold(body: ItemEntrySheet(product: product))),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // "DP? (bayar lunas sekarang)" HANYA dirender saat _isPreorder true —
+    // muncul TANPA perlu tap "Ya" dulu membuktikan toggle sudah prefill
+    // benar dari cart line yang ada.
+    expect(find.text('DP? (bayar lunas sekarang)'), findsOneWidget,
+        reason: 'toggle Pre-order? harus prefill "Ya" dari cart, bukan '
+            'default "Tidak"');
+
+    // Tap konfirmasi TANPA menyentuh toggle apa pun (skenario "cuma mau
+    // lihat/ubah hal lain") — status pre-order TIDAK boleh ikut hilang.
+    await tester.tap(find.text('Tambah ke Keranjang'));
+    await tester.pumpAndSettle();
+
+    final cart = container.read(cartProvider(kMainCartId));
+    final item = cart.firstWhere((c) => c.productId == 'p1');
+    expect(item.isPreorder, isTrue,
+        reason: 'Simpan tanpa ubah toggle TIDAK boleh menghapus status '
+            'pre-order yang sudah ada');
+    expect(item.preorderPaid, isTrue);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
