@@ -43,6 +43,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dikelola dari dashboard Laci Meja.
 
 ### 🔧 Perbaikan
+- **Garis batas kuota pre-order kini muncul juga saat cuma satu produk
+  yang sedang diantri** (mis. hanya LPG) — sebelumnya garisnya tidak
+  pernah tampil di kondisi itu walau kuotanya sudah disetel.
 - **Retur barang yang sama di lebih dari satu baris nota** (mis. beli
   lagi lewat "Tambah Belanjaan") sekarang bisa diretur penuh dalam satu
   kali buka menu Retur — sebelumnya jumlah yang bisa diretur sekaligus
