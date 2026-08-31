@@ -90,8 +90,10 @@ class _VariantOption {
 class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   bool _loading = true;
   bool _canOverride = false;
+
   /// Tombol edit produk hanya untuk owner/asisten (bukan kasir). Item 20.
   bool _canEditProduct = false;
+
   /// Item 25a — tanda cepat "stok habis" manual, terpisah dari sistem stok
   /// resmi. Semua role bisa toggle (akses cepat, bukan izin ter-audit).
   late bool _markedOutOfStock = widget.product.markedOutOfStock;
@@ -121,6 +123,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   /// [_markedOutOfStock] true. Default Tidak (opt-in eksplisit, konsisten
   /// dgn pola "aman/tidak mengasumsikan" fitur Laci Meja lain).
   bool _isPreorder = false;
+
   /// "DP?" — Ya berarti harga penuh terisi & dibayar lunas sekarang; Tidak
   /// (default) berarti harga 0, dicatat dulu, bayar nanti saat barang
   /// datang.
@@ -248,6 +251,17 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     bool overridden = false;
     bool exists = false;
     String note = '';
+    // Bug ditemukan saat review logika laci-meja (permintaan user): sebelum
+    // ini, toggle "Pre-order?"/"DP?" SELALU mulai dari default (Tidak) tiap
+    // sheet dibuka, walau item yang SAMA sudah tersimpan di cart sbg
+    // pre-order — toggle-nya jadi menampilkan state yg SALAH (membingungkan
+    // kasir), dan kalau kasir tetap tap Simpan tanpa sadar (mis. cuma mau
+    // ubah qty), status pre-order aslinya BENERAN hilang krn `_submit()`
+    // menulis ulang cart line dgn `_isPreorder` yg sudah salah. Sekarang
+    // di-prefill sama seperti qty/harga/catatan di atas.
+    var isPreorder = false;
+    var dpPaid = false;
+    double depositQty = 0;
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
     for (var i = 0; i < opts.length; i++) {
       final existing =
@@ -260,6 +274,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         overridden = existing.priceOverridden;
         note = existing.itemNote ?? '';
         exists = true;
+        isPreorder = existing.isPreorder;
+        dpPaid = existing.preorderPaid;
+        depositQty = existing.depositQty ?? 0;
         break;
       }
     }
@@ -279,6 +296,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _priceCtrl.text = ThousandsSeparatorFormatter.format(price);
       _qtyCtrl.text = _fmtQty(qty);
       _noteCtrl.text = note;
+      _isPreorder = isPreorder;
+      _dpPaid = dpPaid;
+      _depositQty = depositQty;
+      _depositQtyCtrl.text = _fmtQty(depositQty);
     });
   }
 
@@ -833,10 +854,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       style: TextStyle(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600,
-                                          color: AppTheme.laciFg(Theme.of(
-                                                      context)
-                                                  .brightness ==
-                                              Brightness.dark))),
+                                          color: AppTheme.laciFg(
+                                              Theme.of(context).brightness ==
+                                                  Brightness.dark))),
                                 ),
                                 _YesNoToggle(
                                   value: _isPreorder,
@@ -852,10 +872,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                     child: Text('DP? (bayar lunas sekarang)',
                                         style: TextStyle(
                                             fontSize: 13,
-                                            color: AppTheme.laciFg(Theme.of(
-                                                        context)
-                                                    .brightness ==
-                                                Brightness.dark))),
+                                            color: AppTheme.laciFg(
+                                                Theme.of(context).brightness ==
+                                                    Brightness.dark))),
                                   ),
                                   _YesNoToggle(
                                     value: _dpPaid,
@@ -871,30 +890,28 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                                       child: Text('Jumlah jaminan dititip',
                                           style: TextStyle(
                                               fontSize: 13,
-                                              color: AppTheme.laciFg(Theme.of(
-                                                          context)
-                                                      .brightness ==
-                                                  Brightness.dark))),
+                                              color: AppTheme.laciFg(
+                                                  Theme.of(context)
+                                                          .brightness ==
+                                                      Brightness.dark))),
                                     ),
                                     SizedBox(
                                       width: 90,
                                       child: TextField(
                                         controller: _depositQtyCtrl,
                                         textAlign: TextAlign.center,
-                                        keyboardType:
-                                            const TextInputType
-                                                    .numberWithOptions(
-                                                decimal: true),
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(
-                                              vertical: 8),
+                                          contentPadding:
+                                              EdgeInsets.symmetric(vertical: 8),
                                         ),
                                         onChanged: (v) {
                                           final q = double.tryParse(v.trim());
                                           if (q != null) {
-                                            setState(() => _depositQty =
-                                                q.clamp(0, 9999));
+                                            setState(() =>
+                                                _depositQty = q.clamp(0, 9999));
                                           }
                                         },
                                       ),
@@ -1035,8 +1052,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               onChanged: (v2) {
                                 final parsed = double.tryParse(v2);
                                 if (parsed != null && parsed >= 0) {
-                                  setState(() =>
-                                      _variantQty[v.product.id] = parsed);
+                                  setState(
+                                      () => _variantQty[v.product.id] = parsed);
                                 }
                               },
                             ),
@@ -1406,10 +1423,17 @@ class _YesNoToggle extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _YesNoButton(label: 'Ya', selected: value, color: fg, onTap: () => onChanged(true)),
+        _YesNoButton(
+            label: 'Ya',
+            selected: value,
+            color: fg,
+            onTap: () => onChanged(true)),
         const SizedBox(width: 6),
         _YesNoButton(
-            label: 'Tidak', selected: !value, color: fg, onTap: () => onChanged(false)),
+            label: 'Tidak',
+            selected: !value,
+            color: fg,
+            onTap: () => onChanged(false)),
       ],
     );
   }
@@ -1448,9 +1472,7 @@ class _YesNoButton extends StatelessWidget {
               ],
               Text(label,
                   style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: color)),
+                      fontSize: 12, fontWeight: FontWeight.w600, color: color)),
             ],
           ),
         ),

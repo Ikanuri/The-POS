@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 31 Agustus 2026
+
+### ✨ Fitur Baru
+- **Bisa menandai barang di nota yang sudah tersimpan sebagai pre-order**
+  — untuk kasus lupa input pre-order saat checkout (mis. stok LPG
+  ternyata kosong, baru sadar setelah nota lunas/tempo tersimpan).
+  Tahan (long-press) baris barangnya di struk in-app, pilih "Jadikan
+  Pre-order", isi jumlah & catatan — nota itu sendiri tidak berubah,
+  cuma dicatat sebagai pre-order yang bisa dikelola dari dashboard
+  Laci Meja.
+
+### 🔧 Perbaikan
+- **Retur barang yang sama di lebih dari satu baris nota** (mis. beli
+  lagi lewat "Tambah Belanjaan") sekarang bisa diretur penuh dalam satu
+  kali buka menu Retur — sebelumnya jumlah yang bisa diretur sekaligus
+  bisa lebih sedikit dari yang seharusnya.
+
 ## 30 Agustus 2026
 
 ### ✨ Fitur Baru
