@@ -300,17 +300,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Statistik sekarang chip mini "Produk: N" (`_StatChip`) + chip jaminan
-    // yang menampilkan LANGSUNG satu produk ("Lpg: N", produk tunggal di
-    // sini jadi tanpa dropdown) + total keseluruhan sbg teks polos "N
-    // jaminan" di sebelahnya — lihat `_PreorderStatsLine`/`_JaminanDropdown
-    // Chip`. Sebelum dipenuhi: total penuh (1+1+5=7 produk, jaminan sama).
+    // Statistik sekarang chip mini "Produk: N" (`_StatChip`) + chip pemilih
+    // produk (nama polos, "Lpg" — produk tunggal di sini jadi tanpa
+    // dropdown) + chip "Jaminan: N" yang angkanya DINAMIS ikut produk yang
+    // ditampilkan — lihat `_PreorderStatsLine`/`_ProductPickerChip`. Sebelum
+    // dipenuhi: total penuh (1+1+5=7 produk, jaminan sama krn 1 produk).
     final produkAwal =
         find.textContaining('Produk: 7', findRichText: true).evaluate().length;
-    final chipJaminanAwal =
-        find.textContaining('Lpg: 7', findRichText: true).evaluate().length;
-    final totalJaminanAwal =
-        find.textContaining('7 jaminan').evaluate().length;
+    final namaChipAwal = find.text('Lpg').evaluate().length;
+    final jaminanAwal =
+        find.textContaining('Jaminan: 7', findRichText: true).evaluate().length;
 
     await db.fulfillPreorderQty('ghani', 4,
         locallyModified: false, deviceCode: null);
@@ -322,10 +321,8 @@ void main() {
     final angkaAwalMasihAda = find.textContaining('5 Lpg').evaluate().length;
     final produkSetelah =
         find.textContaining('Produk: 3', findRichText: true).evaluate().length;
-    final chipJaminanSetelah =
-        find.textContaining('Lpg: 3', findRichText: true).evaluate().length;
-    final totalJaminanSetelah =
-        find.textContaining('3 jaminan').evaluate().length;
+    final jaminanSetelah =
+        find.textContaining('Jaminan: 3', findRichText: true).evaluate().length;
     final garisMasihAda = find.textContaining('Batas kiriman').evaluate().length;
 
     await tester.pumpWidget(const SizedBox());
@@ -333,10 +330,10 @@ void main() {
 
     expect(produkAwal, 1,
         reason: 'Total produk = 7 sebelum ada pemenuhan');
-    expect(chipJaminanAwal, 1,
-        reason: 'chip jaminan menampilkan Lpg: 7 sebelum ada pemenuhan');
-    expect(totalJaminanAwal, greaterThanOrEqualTo(1),
-        reason: 'total keseluruhan jaminan = 7 sbg teks polos');
+    expect(namaChipAwal, 1,
+        reason: 'chip pemilih menampilkan nama produk (Lpg)');
+    expect(jaminanAwal, 1,
+        reason: 'angka jaminan (Lpg) = 7 sebelum ada pemenuhan');
     expect(angkaAwalMasihAda, 0,
         reason: 'kartu Abdul Ghani harus menampilkan SISA (1), bukan qty '
             'pesanan awal (5) yang sudah basi begitu dipenuhi sebagian');
@@ -345,10 +342,8 @@ void main() {
     expect(produkSetelah, 1,
         reason: 'Total produk turun jadi 1+1+1=3 (sinkron dgn sisa per '
             'kartu, bukan angka penuh 7 yang sudah tidak akurat)');
-    expect(chipJaminanSetelah, 1,
-        reason: 'chip jaminan ikut turun jadi Lpg: 3');
-    expect(totalJaminanSetelah, greaterThanOrEqualTo(1),
-        reason: 'total keseluruhan jaminan turun jadi 3 dgn alasan yang sama');
+    expect(jaminanSetelah, 1,
+        reason: 'angka jaminan (Lpg) ikut turun jadi 3 dgn alasan yang sama');
     expect(garisMasihAda, 0,
         reason: 'sisa kumulatif tinggal 3 (<=4) -> tidak ada lagi yang '
             'melewati kuota, garis pembatas hilang');

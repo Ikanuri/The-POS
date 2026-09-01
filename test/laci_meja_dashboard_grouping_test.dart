@@ -53,6 +53,23 @@ Finder findEntryRows({Finder? of}) {
   return of == null ? matcher : find.descendant(of: of, matching: matcher);
 }
 
+/// Nama produk di dalam chip pemilih jaminan (`_ProductPickerChip`) —
+/// DIBATASI ke widget itu krn nama produk yang sama juga muncul sbg label
+/// chip filter produk (`_PreorderProductFilter`, ChoiceChip biasa) begitu
+/// ada >1 produk pre-order aktif; keduanya sama-sama `Text(namaPersis)`.
+Finder findJaminanPickerText(String name) => find.descendant(
+    of: find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_ProductPickerChip'),
+    matching: find.text(name));
+
+/// Nama produk di dalam SATU baris dropdown jaminan (`_ProductPickerMenuRow`)
+/// — dropdown-nya sendiri didesain khusus (bukan `ListTile` bawaan), lihat
+/// dok `_ProductPickerChip`.
+Finder findJaminanMenuText(String text) => find.descendant(
+    of: find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_ProductPickerMenuRow'),
+    matching: find.text(text));
+
 void main() {
   late AppDatabase db;
 
@@ -501,17 +518,19 @@ void main() {
 
       // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 jaminan — SENGAJA dua angka
       // terpisah, bukan dijumlahkan jadi satu. Produk PERTAMA yang punya
-      // jaminan (Tabung Gas, P1) ditampilkan langsung di chip jaminan tanpa
-      // perlu tap apa pun; total keseluruhan (3) jadi teks polos di
-      // sebelahnya (permintaan user, gaya sama dgn teks "N entri").
+      // jaminan (Tabung Gas, P1) ditampilkan langsung di chip pemilih tanpa
+      // perlu tap apa pun; angka "Jaminan: N" DINAMIS ikut produk yang
+      // ditampilkan (2, bukan total 3) — permintaan user eksplisit, bukan
+      // dijumlah semua produk.
       expect(find.textContaining('2 entri'), findsOneWidget);
       expect(find.textContaining('Produk: 5', findRichText: true),
           findsOneWidget);
-      expect(find.textContaining('Tabung Gas: 2', findRichText: true),
-          findsOneWidget,
+      expect(findJaminanPickerText('Tabung Gas'), findsOneWidget,
           reason: 'produk pertama berjaminan ditampilkan default di chip');
-      expect(find.textContaining('3 jaminan'), findsWidgets,
-          reason: 'total keseluruhan jaminan (2+1=3) sbg teks polos');
+      expect(find.textContaining('Jaminan: 2', findRichText: true),
+          findsOneWidget,
+          reason: 'angka jaminan ikut produk yang ditampilkan (Tabung Gas '
+              '= 2), BUKAN total semua produk (3)');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -519,32 +538,39 @@ void main() {
 
     testWidgets(
         'chip jaminan bisa DIGANTI produk yang ditampilkan lewat dropdown '
-        '(permintaan user) tanpa perlu tap tooltip berulang',
+        'custom (permintaan user, bukan tampilan default flutter), angka '
+        '"Jaminan: N" ikut berubah',
         (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      // Default: Tabung Gas (produk pertama berjaminan).
-      expect(find.textContaining('Tabung Gas: 2', findRichText: true),
+      // Default: Tabung Gas (produk pertama berjaminan), Jaminan: 2.
+      expect(findJaminanPickerText('Tabung Gas'), findsOneWidget);
+      expect(find.textContaining('Jaminan: 2', findRichText: true),
           findsOneWidget);
 
-      // Tap chip -> dropdown muncul, tampilkan kedua pilihan.
+      // Tap chip -> dropdown custom muncul, tampilkan kedua pilihan (nama +
+      // badge qty terpisah, lihat `_ProductPickerMenuRow`).
       await tester.tap(find.byType(PopupMenuButton<String>));
       await tester.pumpAndSettle();
 
-      expect(find.text('Tabung Gas: 2 jaminan'), findsOneWidget);
-      expect(find.text('Galon Aqua: 1 jaminan'), findsOneWidget,
+      expect(findJaminanMenuText('Galon Aqua'), findsOneWidget,
           reason: 'produk LAIN yang berjaminan tetap bisa dipilih lewat '
               'dropdown, tidak cuma yang sedang ditampilkan');
+      expect(findJaminanMenuText('1 jaminan'), findsOneWidget,
+          reason: 'badge qty per produk di menu dropdown, desain sendiri '
+              '(bukan ListTile bawaan)');
 
-      // Pilih Galon Aqua -> chip berganti tampilkan produk itu.
-      await tester.tap(find.text('Galon Aqua: 1 jaminan'));
+      // Pilih Galon Aqua -> chip & angka "Jaminan: N" berganti.
+      await tester.tap(findJaminanMenuText('Galon Aqua'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Galon Aqua: 1', findRichText: true),
-          findsOneWidget,
+      expect(findJaminanPickerText('Galon Aqua'), findsOneWidget,
           reason: 'chip sekarang menampilkan Galon Aqua tanpa perlu tap '
               'tooltip lagi');
+      expect(find.textContaining('Jaminan: 1', findRichText: true),
+          findsOneWidget,
+          reason: 'angka jaminan ikut berubah jadi milik Galon Aqua (1)');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -564,7 +590,8 @@ void main() {
       // -> chip tanpa dropdown, krn tidak ada produk lain utk dipilih).
       expect(find.textContaining('Produk: 3', findRichText: true),
           findsOneWidget);
-      expect(find.textContaining('Galon Aqua: 1', findRichText: true),
+      expect(findJaminanPickerText('Galon Aqua'), findsOneWidget);
+      expect(find.textContaining('Jaminan: 1', findRichText: true),
           findsOneWidget);
       expect(find.byType(PopupMenuButton<String>), findsNothing,
           reason: 'cuma 1 produk berjaminan -> tidak ada gunanya dropdown');

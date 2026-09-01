@@ -843,8 +843,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // dititip sbg jaminan), menjumlahkannya jadi satu angka menyesatkan.
     // Dihitung dari SISA (bukan qty penuh) supaya sinkron dgn angka yang
     // ditampilkan per kartu — pemenuhan sebagian langsung mengurangi total.
+    // Jaminan TIDAK dijumlah lintas produk (permintaan user) — angkanya
+    // mengikuti produk yang sedang dipilih, dihitung di `_PreorderStatsLine`.
     final totalQty = filtered.fold<double>(0, (s, e) => s + sisaQty(e));
-    final totalDeposit = filtered.fold<double>(0, (s, e) => s + sisaDeposit(e));
 
     // Rincian jaminan per produk (permintaan user, mis. "LPG: 20 jaminan") —
     // hanya entri yang benar-benar punya jaminan (>0) yang dihitung. Kunci
@@ -914,12 +915,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                 ],
                 // Statistik + tombol Kuota SATU BARIS (permintaan user:
                 // kartu total sebelumnya terlalu besar/makan tempat). Chip
-                // jaminan langsung menampilkan SATU produk (dropdown utk
-                // ganti), total keseluruhan jaminan pindah jadi teks polos
-                // di sebelah chip — tidak perlu tap apa pun lagi utk lihat.
+                // "Jaminan: N" menampilkan angka produk yang SEDANG dipilih
+                // (dinamis, bukan dijumlah semua produk) — dipilih lewat
+                // chip nama produk di sebelahnya, tanpa perlu tap tooltip.
                 _PreorderStatsLine(
                   totalQty: totalQty,
-                  totalDeposit: totalDeposit,
                   entryCount: filtered.length,
                   depositByProduct: depositByProduct,
                   selectedJaminanId: effectiveJaminanId,
@@ -1560,7 +1560,6 @@ class _DashedLinePainter extends CustomPainter {
 class _PreorderStatsLine extends StatelessWidget {
   const _PreorderStatsLine({
     required this.totalQty,
-    required this.totalDeposit,
     required this.entryCount,
     required this.depositByProduct,
     required this.selectedJaminanId,
@@ -1570,7 +1569,6 @@ class _PreorderStatsLine extends StatelessWidget {
   });
 
   final double totalQty;
-  final double totalDeposit;
   final int entryCount;
   final Map<String, ({String name, double qty})> depositByProduct;
   final String? selectedJaminanId;
@@ -1584,6 +1582,16 @@ class _PreorderStatsLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = AppTheme.laciFg(isDark);
+    final hasDeposit = depositByProduct.isNotEmpty;
+    final selectedId = hasDeposit
+        ? (depositByProduct.containsKey(selectedJaminanId)
+            ? selectedJaminanId!
+            : depositByProduct.keys.first)
+        : null;
+    // Angka DINAMIS ikut produk yang sedang dipilih di dropdown (permintaan
+    // user) — BUKAN dijumlahkan dari seluruh produk. Beda produk = beda
+    // angka, persis spt "Produk: X" tapi utk jaminan.
+    final selectedQty = selectedId == null ? 0.0 : depositByProduct[selectedId]!.qty;
 
     return Row(
       children: [
@@ -1596,21 +1604,20 @@ class _PreorderStatsLine extends StatelessWidget {
                     style: TextStyle(fontSize: 11, color: fg.withOpacity(0.7))),
                 const SizedBox(width: 6),
                 _StatChip(label: 'Produk', value: _fmt(totalQty), fg: fg),
-                if (totalDeposit > 0) ...[
+                if (hasDeposit) ...[
                   const SizedBox(width: 6),
-                  _JaminanDropdownChip(
+                  // Pemilih produk (nama saja, custom dropdown) TERPISAH
+                  // dari angkanya — angkanya sendiri jadi chip "Jaminan: N"
+                  // yang ikut berubah begitu pilihan produk diganti.
+                  _ProductPickerChip(
                     entries: depositByProduct,
-                    selectedId: selectedJaminanId,
+                    selectedId: selectedId,
                     onSelected: onSelectJaminan,
                     fg: fg,
                   ),
-                  const SizedBox(width: 4),
-                  // Total keseluruhan jaminan (permintaan user) — dipindah
-                  // KELUAR dari chip, jadi teks polos di sebelahnya, gaya
-                  // sama dgn "N entri" di sebelah chip "Produk".
-                  Text('${_fmt(totalDeposit)} jaminan',
-                      style: TextStyle(
-                          fontSize: 11, color: fg.withOpacity(0.7))),
+                  const SizedBox(width: 6),
+                  _StatChip(
+                      label: 'Jaminan', value: _fmt(selectedQty), fg: fg),
                 ],
               ],
             ),
@@ -1684,8 +1691,15 @@ class _StatChip extends StatelessWidget {
 /// (`PopupMenuButton`) yang muncul begitu chip di-tap — hanya kalau memang
 /// ada >1 produk berjaminan, kalau cuma 1 tidak ada gunanya menawarkan
 /// pilihan yang isinya itu-itu saja.
-class _JaminanDropdownChip extends StatelessWidget {
-  const _JaminanDropdownChip({
+/// Pemilih PRODUK (bukan angka — angkanya ada di chip "Jaminan: N" sebelah
+/// ini, lihat `_PreorderStatsLine`) utk menentukan produk mana yang jaminan-
+/// nya sedang ditampilkan. Dropdown-nya didesain sendiri (permintaan user
+/// eksplisit "bukan default flutter") — bukan `PopupMenuItem` polos putih
+/// dgn `ListTile` bawaan, tapi kartu aksen dgn indikator radio & badge qty.
+/// Tetap pakai mekanisme `PopupMenuButton` (posisi/dismiss/keyboard sudah
+/// teruji Flutter sendiri), yang di-custom total cuma tampilannya.
+class _ProductPickerChip extends StatelessWidget {
+  const _ProductPickerChip({
     required this.entries,
     required this.selectedId,
     required this.onSelected,
@@ -1704,40 +1718,32 @@ class _JaminanDropdownChip extends StatelessWidget {
   Widget build(BuildContext context) {
     if (entries.isEmpty) return const SizedBox.shrink();
     final id = entries.containsKey(selectedId) ? selectedId! : entries.keys.first;
-    final selected = entries[id]!;
+    final selectedName = entries[id]!.name;
     final hasOthers = entries.length > 1;
 
     final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: EdgeInsets.fromLTRB(8, 4, hasOthers ? 4 : 8, 4),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.accent.withOpacity(0.14),
+            AppTheme.accent.withOpacity(0.05),
+          ],
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: fg.withOpacity(0.18)),
+        border: Border.all(color: AppTheme.accent.withOpacity(0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                    text: '${selected.name}: ',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: fg.withOpacity(0.8))),
-                TextSpan(
-                    text: _fmt(selected.qty),
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: fg)),
-              ],
-            ),
-          ),
+          const Icon(Icons.inventory_2_outlined, size: 12, color: AppTheme.accent),
+          const SizedBox(width: 4),
+          Text(selectedName,
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
           if (hasOthers) ...[
-            const SizedBox(width: 1),
-            Icon(Icons.arrow_drop_down, size: 16, color: fg.withOpacity(0.6)),
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more, size: 16, color: AppTheme.accent),
           ],
         ],
       ),
@@ -1749,15 +1755,90 @@ class _JaminanDropdownChip extends StatelessWidget {
     return PopupMenuButton<String>(
       tooltip: 'Pilih produk jaminan',
       padding: EdgeInsets.zero,
+      offset: const Offset(0, 6),
+      elevation: 6,
+      color: Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: AppTheme.accent.withOpacity(0.25)),
+      ),
+      constraints: const BoxConstraints(minWidth: 180),
       onSelected: onSelected,
       itemBuilder: (context) => [
         for (final e in entries.entries)
           PopupMenuItem<String>(
             value: e.key,
-            child: Text('${e.value.name}: ${_fmt(e.value.qty)} jaminan'),
+            padding: EdgeInsets.zero,
+            height: 0,
+            child: _ProductPickerMenuRow(
+              name: e.value.name,
+              qty: _fmt(e.value.qty),
+              selected: e.key == id,
+              fg: fg,
+            ),
           ),
       ],
       child: chip,
+    );
+  }
+}
+
+/// Satu baris pilihan di dropdown `_ProductPickerChip` — desain sendiri:
+/// indikator radio (bukan cuma teks polos), nama produk, badge qty bulat
+/// beraksen. Baris yang sedang dipilih diberi tint latar supaya langsung
+/// kelihatan tanpa perlu baca radio-nya.
+class _ProductPickerMenuRow extends StatelessWidget {
+  const _ProductPickerMenuRow({
+    required this.name,
+    required this.qty,
+    required this.selected,
+    required this.fg,
+  });
+
+  final String name;
+  final String qty;
+  final bool selected;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      color: selected ? AppTheme.accent.withOpacity(0.1) : null,
+      child: Row(
+        children: [
+          Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 16,
+              color: selected ? AppTheme.accent : fg.withOpacity(0.35)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: fg)),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text('$qty jaminan',
+                style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.accent)),
+          ),
+        ],
+      ),
     );
   }
 }
