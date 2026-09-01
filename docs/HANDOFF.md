@@ -5,6 +5,49 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 1 September 2026 (lanjutan lagi — fitur "Reset Stok",
+proposal UI/UX di-review & disetujui user sebelum coding). Versi kerja
+**2.28.0+62**._
+
+**Fitur baru** (`ca1590d`): "Reset Stok" — timpa stok seluruh/kategori
+produk jadi 0 sekaligus (`lib/features/produk/reset_stock_screen.dart`,
+`ResetStockScreen`). **Keputusan arsitektur penting**: TIDAK menulis
+jalur DB baru — numpang `AppDatabase.commitOpname` yang sudah ada
+(Stock Opname, Item 36), karena "reset ke 0" secara konsep adalah kasus
+KHUSUS opname (hitung fisik = 0 utk semua produk terpilih). Otomatis
+dapat gratis: atomic write per sesi, jejak audit `stock_ledger`, DAN
+muncul di layar "Riwayat Opname" yang sudah ada TANPA perlu layar
+riwayat baru — `AppDatabase.buildOpnameNote` dapat param `isReset`
+(note TETAP diawali `"Opname "` supaya lolos filter `getOpnameSessions`,
+scope-nya ditandai `"Reset ke 0 - ..."` biar bisa dibedakan saat
+ditinjau).
+
+**Kalau nanti ada fitur serupa** ("terapkan X ke semua/sebagian
+produk sekaligus") — cek dulu apa itu bisa dimodelkan sbg kasus khusus
+mekanisme existing (opname, proposal produk, dst) sebelum bikin jalur
+data baru; pola ini baru kepakai 2x (aksen pelanggan reuse marquee,
+sekarang reset-stok reuse opname) & terbukti hemat kode + otomatis
+dapat infrastruktur (audit trail, riwayat) yang sudah teruji.
+
+Alur: pilih cakupan (chip kategori/"Semua", reuse pola Stock Opname
+persis) → LANGSUNG ke review (BEDA dari opname biasa: tidak ada tahap
+hitung buta, karena target akhir SELALU 0) menampilkan Sistem vs Baru=0
+per produk → tombol "Reset ke 0" (styling merah/error) → dialog wajib
+ketik "RESET" (case-sensitive) sebelum tombol commit aktif → commit.
+Produk yang stoknya SUDAH 0 otomatis disaring dari daftar & hitungan
+(tidak ada selisih, tidak perlu ditulis ke ledger).
+
+**Gerbang akses**: ikon "Reset Stok" baru di app bar Cek Stok,
+OWNER-ONLY (`device.isOwner` — LEBIH KETAT dari `canSeeReports` yg
+mengizinkan asisten juga) — blast radius-nya store-wide/kategori
+sekaligus, jauh lebih destruktif drpd opname biasa yang cuma mengoreksi
+ke hasil hitung wajar. Kalau user minta perluas akses ke asisten
+nanti, ini titik yang perlu diubah.
+
+Tidak ada pekerjaan menggantung dari sesi ini.
+
+---
+
 _Update sesi 1 September 2026 (lanjutan lagi — alamat pelanggan di
 kartu Laci Meja + ganti ikon Bagikan Pratinjau; ada juga diskusi
 QRIS auto-detect, TIDAK diimplementasi). Versi kerja **2.27.0+61**._
