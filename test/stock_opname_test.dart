@@ -135,4 +135,43 @@ void main() {
     expect(AppDatabase.buildOpnameNote(at, categoryLabel: 'Sembako'),
         'Opname 17 Jul 2026 (Kategori: Sembako)');
   });
+
+  /// Susulan (permintaan user): fitur "Reset Stok" numpang mekanisme
+  /// opname yang sudah ada (`commitOpname`), TIDAK menulis jalur baru —
+  /// note-nya WAJIB tetap diawali "Opname " (lihat `getOpnameSessions`)
+  /// supaya sesi reset otomatis muncul di riwayat opname yang sudah ada.
+  test('buildOpnameNote(isReset: true) tetap diawali "Opname " (masuk '
+      'riwayat opname) tapi scope-nya menandai ini sesi reset', () {
+    final at = DateTime(2026, 9, 1);
+    expect(AppDatabase.buildOpnameNote(at, isReset: true),
+        'Opname 01 Sep 2026 (Reset ke 0 - Seluruh)');
+    expect(
+        AppDatabase.buildOpnameNote(at,
+            categoryLabel: 'Rokok', isReset: true),
+        'Opname 01 Sep 2026 (Reset ke 0 - Kategori: Rokok)');
+  });
+
+  test('sesi Reset Stok (commitOpname newQty 0) muncul di getOpnameSessions '
+      'sama seperti sesi opname biasa', () async {
+    final u1 = await addProduct('Rokok A', initialStock: 12);
+    final u2 = await addProduct('Rokok B', initialStock: 5);
+    await settle();
+
+    final note = AppDatabase.buildOpnameNote(DateTime.now(),
+        categoryLabel: 'Rokok', isReset: true);
+    await db.commitOpname(
+      entries: [
+        (productUnitId: u1, newQty: 0.0),
+        (productUnitId: u2, newQty: 0.0),
+      ],
+      note: note,
+    );
+
+    expect(await db.currentStock(u1), 0);
+    expect(await db.currentStock(u2), 0);
+    final sessions = await db.getOpnameSessions();
+    expect(sessions.length, 1);
+    expect(sessions.first.note, contains('Reset ke 0'));
+    expect(sessions.first.itemCount, 2);
+  });
 }
