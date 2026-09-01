@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 1 September 2026
+
+### ✨ Fitur Baru
+- **Bisa membagikan pratinjau keranjang ke pelanggan sebelum checkout**
+  — kalau pelanggan minta lihat rincian & estimasi total dulu (mis.
+  lewat WhatsApp), tap ikon share baru di header keranjang ("Bagikan
+  Pratinjau"). Struknya sengaja dibuat beda tampilan dari struk asli
+  (banner "PRATINJAU KERANJANG", label "Estimasi Total") supaya tidak
+  tertukar dengan struk resmi. Bisa juga sertakan QR QRIS dengan
+  nominal yang otomatis mengikuti estimasi total saat ini, kalau
+  pelanggan mau langsung transfer.
+
 ## 31 Agustus 2026
 
 ### ✨ Fitur Baru

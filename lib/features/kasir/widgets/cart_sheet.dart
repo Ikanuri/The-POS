@@ -1,14 +1,20 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/database/app_database.dart';
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/providers/theme_provider.dart';
@@ -20,7 +26,9 @@ import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 import 'add_control.dart';
 import 'cart_meta_pickers.dart';
+import 'cart_preview_paper.dart';
 import 'paste_order_sheet.dart';
+import 'payment_qris_view.dart';
 
 /// Susulan (permintaan user): posisi scroll TERAKHIR per keranjang (key:
 /// `cartId`) — supaya kalau sheet ditutup (mis. misclick tap item yang
@@ -254,6 +262,217 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     if (ctx.mounted) Navigator.of(ctx).pop();
   }
 
+  Future<
+      ({
+        String name,
+        String address,
+        String phone,
+        String whatsapp,
+        String telegram,
+        String header,
+        String footer,
+      })> _getStorePrefsForPreview() async {
+    final db = ref.read(databaseProvider);
+    return (
+      name: await db.getSetting('store_name') ?? '',
+      address: await db.getSetting('store_address') ?? '',
+      phone: await db.getSetting('store_phone') ?? '',
+      whatsapp: await db.getSetting('store_whatsapp') ?? '',
+      telegram: await db.getSetting('store_telegram') ?? '',
+      header: await db.getSetting('receipt_header') ?? '',
+      footer: await db.getSetting('receipt_note') ?? '',
+    );
+  }
+
+  /// Metode QRIS aktif pertama yang payload statisnya sudah diisi — sama
+  /// persis pola `_activeQrisMethod` di receipt_screen.dart, tapi TANPA
+  /// syarat status nota (di titik ini memang belum ada nota sama sekali).
+  Future<PaymentMethod?> _activeQrisMethodForPreview() async {
+    final db = ref.read(databaseProvider);
+    final methods = await (db.select(db.paymentMethods)
+          ..where((t) => t.isActive.equals(true)))
+        .get();
+    for (final m in methods) {
+      if (m.type == 'qris' && (m.qrValue?.trim().isNotEmpty ?? false)) {
+        return m;
+      }
+    }
+    return null;
+  }
+
+  /// Susulan (permintaan user): "kadang pelanggan minta preview serta
+  /// estimasi total" sebelum checkout — sheet share struk "Pratinjau
+  /// Keranjang" (`CartPreviewPaper`), pola sheet & toggle QR SAMA persis
+  /// dgn "Bagikan Struk" di receipt_screen.dart, tapi toggle-nya
+  /// disimpan di key SharedPreferences terpisah (`cart_preview_show_qr`)
+  /// — preferensi ini per-device utk pratinjau BELUM-checkout, tidak
+  /// boleh ikut membocorkan/menimpa preferensi QR nota asli (mis. owner
+  /// mau QR selalu tampil di pratinjau tapi tidak di struk lunas).
+  Future<void> _showCartPreviewShareSheet(BuildContext ctx) async {
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
+    final items = List<CartItem>.from(ref.read(cartProvider(widget.cartId)));
+    final meta = ref.read(cartMetaProvider(widget.cartId));
+    final totalAmount = notifier.totalAmount;
+    final customerName = (meta.customerName?.trim().isNotEmpty ?? false)
+        ? meta.customerName!.trim()
+        : 'Umum';
+
+    final prefs = await _getStorePrefsForPreview();
+    final device = ref.read(deviceProvider);
+    if (!ctx.mounted) return;
+
+    final qrisMethod = await _activeQrisMethodForPreview();
+    if (!ctx.mounted) return;
+    final sharedPrefs = await SharedPreferences.getInstance();
+    var showQr = qrisMethod != null &&
+        (sharedPrefs.getBool('cart_preview_show_qr') ?? false);
+    var qrDynamic = sharedPrefs.getBool('cart_preview_qr_dynamic') ?? true;
+
+    String? resolveQr() {
+      if (!showQr || qrisMethod == null) return null;
+      return resolveQrisPayload(
+        staticPayload: qrisMethod.qrValue!,
+        amount: totalAmount,
+        dynamicMode: qrDynamic,
+      ).data;
+    }
+
+    final boundaryKey = GlobalKey();
+    var dragOverscroll = 0.0;
+    if (!ctx.mounted) return;
+    await showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(sheetCtx).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Text('Bagikan Pratinjau',
+                    style: Theme.of(sheetCtx).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n is OverscrollNotification &&
+                          n.dragDetails != null) {
+                        dragOverscroll += n.overscroll;
+                        if (dragOverscroll < -60) {
+                          Navigator.of(sheetCtx).maybePop();
+                        }
+                      } else if (n is ScrollEndNotification) {
+                        dragOverscroll = 0;
+                      }
+                      return false;
+                    },
+                    child: SingleChildScrollView(
+                      child: RepaintBoundary(
+                        key: boundaryKey,
+                        child: CartPreviewPaper(
+                          items: items,
+                          effectiveQtyOf: notifier.effectiveQtyFor,
+                          totalAmount: totalAmount,
+                          customerName: customerName,
+                          storeName: prefs.name.isNotEmpty
+                              ? prefs.name
+                              : device.storeName,
+                          storeAddress: prefs.address,
+                          storePhone: prefs.phone,
+                          storeWhatsapp: prefs.whatsapp,
+                          storeTelegram: prefs.telegram,
+                          receiptHeader: prefs.header,
+                          receiptFooter: prefs.footer,
+                          qrData: resolveQr(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (qrisMethod != null) ...[
+                  const SizedBox(height: 4),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Tampilkan QR QRIS'),
+                    subtitle: const Text(
+                        'Muncul di pratinjau, nominal ikut estimasi total',
+                        style: TextStyle(fontSize: 11)),
+                    value: showQr,
+                    onChanged: (v) {
+                      setSheetState(() => showQr = v);
+                      sharedPrefs.setBool('cart_preview_show_qr', v);
+                    },
+                  ),
+                  if (showQr)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('QR Dinamis'),
+                      subtitle: const Text(
+                          'Nominal estimasi terkunci di QR — mati = QR statis polos',
+                          style: TextStyle(fontSize: 11)),
+                      value: qrDynamic,
+                      onChanged: (v) {
+                        setSheetState(() => qrDynamic = v);
+                        sharedPrefs.setBool('cart_preview_qr_dynamic', v);
+                      },
+                    ),
+                ],
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () =>
+                      _captureAndShareCartPreview(sheetCtx, boundaryKey),
+                  icon: const Icon(Icons.share),
+                  label: const Text('Bagikan Gambar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _captureAndShareCartPreview(
+      BuildContext sheetCtx, GlobalKey boundaryKey) async {
+    try {
+      final boundary = boundaryKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+
+      final dir = await getTemporaryDirectory();
+      final file = File(
+          '${dir.path}/pratinjau_keranjang_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(byteData.buffer.asUint8List());
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'image/png')],
+        text: 'Pratinjau Keranjang',
+      );
+      if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+    } catch (e) {
+      if (sheetCtx.mounted) {
+        ScaffoldMessenger.of(sheetCtx).showSnackBar(
+          SnackBar(content: Text('Gagal membagikan: $e')),
+        );
+      }
+    }
+  }
+
   /// Susulan (permintaan user): dialog "Pengaturan Keranjang" — berisi
   /// posisi checkbox verifikasi (`CartCheckboxPosition`) DAN toggle
   /// konfirmasi tombol minus stepper (`cartMinusConfirmProvider`, mencegah
@@ -300,10 +519,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Konfirmasi sebelum kurangi qty'),
-                    subtitle: const Text(
-                        'Tap pertama tombol minus cuma bergetar sbg '
-                        'peringatan; tap berikutnya (selama stepper masih '
-                        'membesar) baru benar-benar mengurangi qty'),
+                    subtitle:
+                        const Text('Tap pertama tombol minus cuma bergetar sbg '
+                            'peringatan; tap berikutnya (selama stepper masih '
+                            'membesar) baru benar-benar mengurangi qty'),
                     onChanged: (v) => dialogRef
                         .read(cartMinusConfirmProvider.notifier)
                         .set(v),
@@ -390,77 +609,110 @@ class _CartSheetState extends ConsumerState<CartSheet> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Text('Keranjang',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  if (meta.displayOrderNumber != null) ...[
-                    const SizedBox(width: 8),
-                    Text('#${meta.displayOrderNumber}',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurfaceVariant)),
-                  ],
-                  const Spacer(),
-                  // Susulan (permintaan user): "Tahan Pesanan" langsung dari
-                  // header keranjang, di SAMPING KIRI "Tempel Pesanan" —
-                  // gerbang sama persis dgn tab folder `_CartMetaTab` di
-                  // kasir_screen.dart (cuma `kMainCartId`; mode Katalog
-                  // bukan transaksi sungguhan, mode Tambah Belanjaan ikut
-                  // transaksi asli yang tidak bisa ditahan terpisah).
-                  if (widget.cartId == kMainCartId)
-                    IconButton(
-                      tooltip: 'Tahan Pesanan',
-                      onPressed: cart.isEmpty
-                          ? null
-                          : () => _holdCurrent(ctx, ref),
-                      icon: const Icon(Icons.pause_circle_outline),
-                    ),
-                  // Susulan (permintaan user): "Tempel Pesanan" juga bisa
-                  // dipakai LANGSUNG dari keranjang yang sedang terbuka —
-                  // berguna kalau ada pesanan tambahan (dari pelanggan via
-                  // katalog HTML, atau pegawai tanpa izin terima_pembayaran
-                  // yang mau menambah pesanan) sebelum keranjang ini
-                  // di-checkout. Tidak tersedia di mode Katalog (bukan
-                  // transaksi sungguhan). `PasteOrderSheet` sudah generik
-                  // per-cartId & langsung merge ke keranjang ini (bukan
-                  // bikin held_order baru) — tidak perlu logika baru.
-                  if (widget.cartId != kCatalogCartId)
-                    IconButton(
-                      tooltip: 'Tempel Pesanan',
-                      onPressed: () => showModalBottomSheet(
-                        context: ctx,
-                        isScrollControlled: true,
-                        builder: (_) => PasteOrderSheet(cartId: widget.cartId),
+              // Susulan (permintaan user): tombol "Bagikan Pratinjau"
+              // menambah baris ikon jadi sampai 6 IconButton sekaligus —
+              // dgn padding/minimumSize default (48dp) row ini OVERFLOW di
+              // layar sempit sungguhan (360dp, lihat
+              // cart_sheet_header_overflow_test.dart & gotcha overflow
+              // tombol di CLAUDE.md). Persempit SEMUA IconButton di baris
+              // ini via theme lokal (bukan satu-satu) supaya konsisten &
+              // tombol baru berikutnya otomatis ikut sempit juga.
+              child: IconButtonTheme(
+                data: IconButtonThemeData(
+                  style: IconButton.styleFrom(
+                    padding: const EdgeInsets.all(4),
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(36, 36),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text('Keranjang',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    if (meta.displayOrderNumber != null) ...[
+                      const SizedBox(width: 8),
+                      Text('#${meta.displayOrderNumber}',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurfaceVariant)),
+                    ],
+                    const Spacer(),
+                    // Susulan (permintaan user): "Tahan Pesanan" langsung dari
+                    // header keranjang, di SAMPING KIRI "Tempel Pesanan" —
+                    // gerbang sama persis dgn tab folder `_CartMetaTab` di
+                    // kasir_screen.dart (cuma `kMainCartId`; mode Katalog
+                    // bukan transaksi sungguhan, mode Tambah Belanjaan ikut
+                    // transaksi asli yang tidak bisa ditahan terpisah).
+                    if (widget.cartId == kMainCartId)
+                      IconButton(
+                        tooltip: 'Tahan Pesanan',
+                        onPressed:
+                            cart.isEmpty ? null : () => _holdCurrent(ctx, ref),
+                        icon: const Icon(Icons.pause_circle_outline),
                       ),
-                      icon: const Icon(Icons.content_paste_go),
-                    ),
-                  // Susulan (permintaan user): tombol pengaturan keranjang —
-                  // untuk sekarang isinya cuma posisi checkbox verifikasi
-                  // (lihat `CartCheckboxPosition`), tapi dibuat generik
-                  // ("Pengaturan Keranjang") supaya opsi lain bisa ditambah
-                  // ke dialog yang sama nanti tanpa tombol baru lagi.
-                  IconButton(
-                    tooltip: 'Pengaturan Keranjang',
-                    onPressed: () => _showCartSettingsDialog(ctx),
-                    icon: const Icon(Icons.settings_outlined),
-                  ),
-                  if (canTransfer)
+                    // Susulan (permintaan user): "Tempel Pesanan" juga bisa
+                    // dipakai LANGSUNG dari keranjang yang sedang terbuka —
+                    // berguna kalau ada pesanan tambahan (dari pelanggan via
+                    // katalog HTML, atau pegawai tanpa izin terima_pembayaran
+                    // yang mau menambah pesanan) sebelum keranjang ini
+                    // di-checkout. Tidak tersedia di mode Katalog (bukan
+                    // transaksi sungguhan). `PasteOrderSheet` sudah generik
+                    // per-cartId & langsung merge ke keranjang ini (bukan
+                    // bikin held_order baru) — tidak perlu logika baru.
+                    if (widget.cartId != kCatalogCartId)
+                      IconButton(
+                        tooltip: 'Tempel Pesanan',
+                        onPressed: () => showModalBottomSheet(
+                          context: ctx,
+                          isScrollControlled: true,
+                          builder: (_) =>
+                              PasteOrderSheet(cartId: widget.cartId),
+                        ),
+                        icon: const Icon(Icons.content_paste_go),
+                      ),
+                    // Susulan (permintaan user): "Bagikan Pratinjau" — kadang
+                    // pelanggan minta lihat rincian & estimasi total SEBELUM
+                    // checkout (mis. lewat WhatsApp). Struk gambarnya SENGAJA
+                    // widget terpisah (`CartPreviewPaper`, bukan `_ReceiptPaper`
+                    // dari receipt_screen.dart) supaya tidak ada risiko
+                    // logic status lunas/tempo nota ASLI ikut kecampur dgn
+                    // "belum checkout". Tidak tersedia di mode Katalog (bukan
+                    // keranjang transaksi sungguhan).
+                    if (widget.cartId != kCatalogCartId)
+                      IconButton(
+                        tooltip: 'Bagikan Pratinjau',
+                        onPressed: cart.isEmpty
+                            ? null
+                            : () => _showCartPreviewShareSheet(ctx),
+                        icon: const Icon(Icons.ios_share),
+                      ),
+                    // Susulan (permintaan user): tombol pengaturan keranjang —
+                    // untuk sekarang isinya cuma posisi checkbox verifikasi
+                    // (lihat `CartCheckboxPosition`), tapi dibuat generik
+                    // ("Pengaturan Keranjang") supaya opsi lain bisa ditambah
+                    // ke dialog yang sama nanti tanpa tombol baru lagi.
                     IconButton(
-                      tooltip: 'Transfer via QR',
-                      onPressed: cart.isEmpty
-                          ? null
-                          : () => _showHandoffQr(ctx, ref, cart),
-                      icon: const _QrTransferIcon(),
+                      tooltip: 'Pengaturan Keranjang',
+                      onPressed: () => _showCartSettingsDialog(ctx),
+                      icon: const Icon(Icons.settings_outlined),
                     ),
-                  IconButton(
-                    tooltip: 'Kosongkan',
-                    onPressed:
-                        cart.isEmpty ? null : () => _confirmClear(ctx, ref),
-                    icon: Icon(Icons.delete_outline, color: scheme.error),
-                  ),
-                ],
+                    if (canTransfer)
+                      IconButton(
+                        tooltip: 'Transfer via QR',
+                        onPressed: cart.isEmpty
+                            ? null
+                            : () => _showHandoffQr(ctx, ref, cart),
+                        icon: const _QrTransferIcon(),
+                      ),
+                    IconButton(
+                      tooltip: 'Kosongkan',
+                      onPressed:
+                          cart.isEmpty ? null : () => _confirmClear(ctx, ref),
+                      icon: Icon(Icons.delete_outline, color: scheme.error),
+                    ),
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1),
