@@ -5,6 +5,51 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 1 September 2026 (lanjutan lagi — alamat pelanggan di
+kartu Laci Meja + ganti ikon Bagikan Pratinjau; ada juga diskusi
+QRIS auto-detect, TIDAK diimplementasi). Versi kerja **2.27.0+61**._
+
+**Fitur baru** (`3be9a9e`): alamat pelanggan TERDAFTAR ditampilkan sbg
+baris kecil di bawah nama di SEMUA 3 jenis kartu Laci Meja (permintaan
+user: cegah nama kembar-tapi-beda-alamat tertukar). `_cardHeader`
+dapat param baru `address`/`isDark`; alamat diambil via provider baru
+`laciMejaCustomerAddressProvider` (keyed `customerId`, BEDA dari
+`laciMejaCustomerNamesProvider` yang keyed `transactionId` — alamat
+menempel ke pelanggan, bukan ke nota tertentu). Pelanggan ad-hoc
+(customerId null) otomatis tidak dapat alamat sama sekali — tidak
+punya record `Customers`.
+
+**Fix kecil**: ikon tombol "Bagikan Pratinjau" (fitur sesi sebelumnya)
+diganti `Icons.ios_share` → `Icons.share_outlined`, disamakan dgn ikon
+"Bagikan Struk" yang sudah ada di receipt_screen.dart — user menegur
+saya tidak punya alasan kuat pakai `ios_share`, jadi konsistensi
+menang.
+
+**Ditanya tapi TIDAK diimplementasi** — user tanya apakah app bisa
+otomatis tahu QRIS sudah dibayar, mengingat app ini offline/tanpa
+backend. Jawaban yang diberikan: TIDAK bisa reliable tanpa salah satu
+dari (a) API/webhook payment gateway (perlu backend cloud — bertentangan
+dgn desain app ini), atau (b) `NotificationListenerService` Android yg
+membaca notifikasi pembayaran bank/e-wallet di HP yang sama (fragile,
+sensitif privasi, butuh permission berat) — direkomendasikan TETAP
+konfirmasi manual (kasir tap "sudah dibayar" setelah lihat notifikasi
+sendiri). Kalau user minta dieksplorasi lebih lanjut nanti, ini
+titik mulainya.
+
+**Skip (bukan menggantung)**: user sempat minta referensi UI ordering
+dari `esborder.qs.esb.co.id` via Playwright — situsnya di belakang
+Cloudflare bot-challenge, screenshot otomatis tidak bisa (percobaan
+`net::ERR_CONNECTION_RESET`/403 lewat curl & Playwright, terverifikasi
+itu memang proteksi Cloudflare bukan masalah proxy sesi ini). User
+memilih skip, bukan minta cara lain — jangan diulang tanpa diminta.
+
+**MENGGANTUNG — user eksplisit minta "Tawarkan UI UX nya dulu"**: opsi
+reset stok (seluruh produk ATAU grup produk tertentu) jadi 0 sekaligus.
+BELUM ada proposal desain yang diajukan ke user di sesi ini — item
+berikutnya yang harus dikerjakan begitu sesi lanjut.
+
+---
+
 _Update sesi 1 September 2026 (lanjutan — polish tombol Kuota + marquee
 jaminan). Versi kerja **2.26.1+60**._
 
