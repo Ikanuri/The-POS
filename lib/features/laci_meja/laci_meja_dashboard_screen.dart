@@ -31,6 +31,13 @@ final _preorderSearchProvider = StateProvider<String>((ref) => '');
 /// semua produk.
 final _preorderProductFilterProvider = StateProvider<String?>((ref) => null);
 
+/// Produk yang jaminannya DITAMPILKAN LANGSUNG di chip statistik (permintaan
+/// user) — sebelumnya rincian per produk cuma bisa dilihat lewat tooltip yang
+/// harus di-tap tiap kali. null = belum dipilih, jatuh ke produk PERTAMA yang
+/// punya jaminan (lihat `_buildPreorderList`). Produk lain tetap bisa dilihat
+/// lewat dropdown di chip yang sama.
+final _preorderJaminanDisplayProvider = StateProvider<String?>((ref) => null);
+
 /// Item 52 ("Laci Meja") — dashboard 3 kartu tappable (sekaligus filter):
 /// Titip/Ketinggalan, Pinjaman Barang, Pre-order. Rancangan lengkap:
 /// PLAN.md Item 52.
@@ -840,14 +847,26 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final totalDeposit = filtered.fold<double>(0, (s, e) => s + sisaDeposit(e));
 
     // Rincian jaminan per produk (permintaan user, mis. "LPG: 20 jaminan") —
-    // hanya entri yang benar-benar punya jaminan (>0) yang dihitung.
-    final depositByProduct = <String, double>{};
+    // hanya entri yang benar-benar punya jaminan (>0) yang dihitung. Kunci
+    // per productId (bukan nama) supaya provider di bawah bisa MENYIMPAN
+    // pilihan produk yang ditampilkan dgn stabil (nama bisa berubah/sama
+    // antar produk berbeda, id tidak).
+    final depositByProduct = <String, ({String name, double qty})>{};
     for (final e in filtered) {
       final sisa = sisaDeposit(e);
       if (sisa <= 0) continue;
       final name = labels[e.productUnitId]?.productName ?? e.productId;
-      depositByProduct[name] = (depositByProduct[name] ?? 0) + sisa;
+      final prev = depositByProduct[e.productId];
+      depositByProduct[e.productId] = (name: name, qty: (prev?.qty ?? 0) + sisa);
     }
+    // Produk yang ditampilkan langsung di chip jaminan (permintaan user):
+    // pilihan tersimpan kalau masih ada di daftar terkini, kalau tidak
+    // (produk itu sudah tidak lagi punya jaminan terbuka) jatuh ke produk
+    // PERTAMA yang tersedia.
+    final jaminanSelected = ref.watch(_preorderJaminanDisplayProvider);
+    final effectiveJaminanId = depositByProduct.containsKey(jaminanSelected)
+        ? jaminanSelected
+        : (depositByProduct.isEmpty ? null : depositByProduct.keys.first);
 
     // transactionId NULLABLE (satu-satunya kasus: titip wadah tanpa beli
     // apa pun) — baris begini masing-masing jadi grup sendiri (kunci per id).
@@ -894,15 +913,19 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                   const SizedBox(height: 8),
                 ],
                 // Statistik + tombol Kuota SATU BARIS (permintaan user:
-                // kartu total sebelumnya terlalu besar/makan tempat) — teks
-                // ringkas menggantikan 2 kartu besar, sisa jaminan per
-                // produk (kalau ada) dipindah ke tooltip ikon info supaya
-                // detailnya tidak hilang tapi tidak makan baris tambahan.
+                // kartu total sebelumnya terlalu besar/makan tempat). Chip
+                // jaminan langsung menampilkan SATU produk (dropdown utk
+                // ganti), total keseluruhan jaminan pindah jadi teks polos
+                // di sebelah chip — tidak perlu tap apa pun lagi utk lihat.
                 _PreorderStatsLine(
                   totalQty: totalQty,
                   totalDeposit: totalDeposit,
                   entryCount: filtered.length,
                   depositByProduct: depositByProduct,
+                  selectedJaminanId: effectiveJaminanId,
+                  onSelectJaminan: (id) => ref
+                      .read(_preorderJaminanDisplayProvider.notifier)
+                      .state = id,
                   isDark: isDark,
                   onManageQuota: () =>
                       _showQuotaSheet(context, ref, productNames, quotas),
@@ -1540,6 +1563,8 @@ class _PreorderStatsLine extends StatelessWidget {
     required this.totalDeposit,
     required this.entryCount,
     required this.depositByProduct,
+    required this.selectedJaminanId,
+    required this.onSelectJaminan,
     required this.isDark,
     required this.onManageQuota,
   });
@@ -1547,7 +1572,9 @@ class _PreorderStatsLine extends StatelessWidget {
   final double totalQty;
   final double totalDeposit;
   final int entryCount;
-  final Map<String, double> depositByProduct;
+  final Map<String, ({String name, double qty})> depositByProduct;
+  final String? selectedJaminanId;
+  final ValueChanged<String> onSelectJaminan;
   final bool isDark;
   final VoidCallback onManageQuota;
 
@@ -1557,9 +1584,6 @@ class _PreorderStatsLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = AppTheme.laciFg(isDark);
-    final breakdown = depositByProduct.entries
-        .map((e) => '${e.key}: ${_fmt(e.value)} jaminan')
-        .join('\n');
 
     return Row(
       children: [
@@ -1574,12 +1598,19 @@ class _PreorderStatsLine extends StatelessWidget {
                 _StatChip(label: 'Produk', value: _fmt(totalQty), fg: fg),
                 if (totalDeposit > 0) ...[
                   const SizedBox(width: 6),
-                  _StatChip(
-                    label: 'Jaminan',
-                    value: _fmt(totalDeposit),
+                  _JaminanDropdownChip(
+                    entries: depositByProduct,
+                    selectedId: selectedJaminanId,
+                    onSelected: onSelectJaminan,
                     fg: fg,
-                    tooltip: breakdown.isEmpty ? null : breakdown,
                   ),
+                  const SizedBox(width: 4),
+                  // Total keseluruhan jaminan (permintaan user) — dipindah
+                  // KELUAR dari chip, jadi teks polos di sebelahnya, gaya
+                  // sama dgn "N entri" di sebelah chip "Produk".
+                  Text('${_fmt(totalDeposit)} jaminan',
+                      style: TextStyle(
+                          fontSize: 11, color: fg.withOpacity(0.7))),
                 ],
               ],
             ),
@@ -1611,19 +1642,15 @@ class _PreorderStatsLine extends StatelessWidget {
 /// mempertahankan identitas visual "kartu" tanpa tinggi kartu sungguhan.
 class _StatChip extends StatelessWidget {
   const _StatChip(
-      {required this.label,
-      required this.value,
-      required this.fg,
-      this.tooltip});
+      {required this.label, required this.value, required this.fg});
 
   final String label;
   final String value;
   final Color fg;
-  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
-    final chip = Container(
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -1647,18 +1674,90 @@ class _StatChip extends StatelessWidget {
         ),
       ),
     );
-    if (tooltip == null) return chip;
-    return Tooltip(
-      message: 'Jaminan per produk:\n$tooltip',
-      triggerMode: TooltipTriggerMode.tap,
+  }
+}
+
+/// Chip jaminan yang bisa GANTI PRODUK yang ditampilkan (permintaan user) —
+/// sebelumnya rincian per produk cuma bisa dilihat lewat tooltip yang harus
+/// di-tap ulang tiap kali. Sekarang satu produk ditampilkan LANGSUNG (tanpa
+/// perlu tap apa pun), produk lain tetap bisa dilihat/dipilih lewat dropdown
+/// (`PopupMenuButton`) yang muncul begitu chip di-tap — hanya kalau memang
+/// ada >1 produk berjaminan, kalau cuma 1 tidak ada gunanya menawarkan
+/// pilihan yang isinya itu-itu saja.
+class _JaminanDropdownChip extends StatelessWidget {
+  const _JaminanDropdownChip({
+    required this.entries,
+    required this.selectedId,
+    required this.onSelected,
+    required this.fg,
+  });
+
+  final Map<String, ({String name, double qty})> entries;
+  final String? selectedId;
+  final ValueChanged<String> onSelected;
+  final Color fg;
+
+  static String _fmt(double q) =>
+      q % 1 == 0 ? q.toInt().toString() : q.toString();
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) return const SizedBox.shrink();
+    final id = entries.containsKey(selectedId) ? selectedId! : entries.keys.first;
+    final selected = entries[id]!;
+    final hasOthers = entries.length > 1;
+
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: fg.withOpacity(0.18)),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          chip,
-          const SizedBox(width: 3),
-          Icon(Icons.info_outline, size: 13, color: fg.withOpacity(0.6)),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                    text: '${selected.name}: ',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: fg.withOpacity(0.8))),
+                TextSpan(
+                    text: _fmt(selected.qty),
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: fg)),
+              ],
+            ),
+          ),
+          if (hasOthers) ...[
+            const SizedBox(width: 1),
+            Icon(Icons.arrow_drop_down, size: 16, color: fg.withOpacity(0.6)),
+          ],
         ],
       ),
+    );
+
+    // Tanpa produk lain, chip cuma tampilan — tidak ada yang perlu dipilih.
+    if (!hasOthers) return chip;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Pilih produk jaminan',
+      padding: EdgeInsets.zero,
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final e in entries.entries)
+          PopupMenuItem<String>(
+            value: e.key,
+            child: Text('${e.value.name}: ${_fmt(e.value.qty)} jaminan'),
+          ),
+      ],
+      child: chip,
     );
   }
 }

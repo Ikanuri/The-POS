@@ -500,34 +500,51 @@ void main() {
       await openPreorderTab(tester);
 
       // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 jaminan — SENGAJA dua angka
-      // terpisah (chip "Produk"/"Jaminan" sendiri-sendiri), bukan
-      // dijumlahkan jadi satu.
+      // terpisah, bukan dijumlahkan jadi satu. Produk PERTAMA yang punya
+      // jaminan (Tabung Gas, P1) ditampilkan langsung di chip jaminan tanpa
+      // perlu tap apa pun; total keseluruhan (3) jadi teks polos di
+      // sebelahnya (permintaan user, gaya sama dgn teks "N entri").
       expect(find.textContaining('2 entri'), findsOneWidget);
       expect(find.textContaining('Produk: 5', findRichText: true),
           findsOneWidget);
-      expect(find.textContaining('Jaminan: 3', findRichText: true),
-          findsOneWidget);
+      expect(find.textContaining('Tabung Gas: 2', findRichText: true),
+          findsOneWidget,
+          reason: 'produk pertama berjaminan ditampilkan default di chip');
+      expect(find.textContaining('3 jaminan'), findsWidgets,
+          reason: 'total keseluruhan jaminan (2+1=3) sbg teks polos');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
     });
 
     testWidgets(
-        'rincian jaminan per produk (mis. "Tabung Gas: 2 jaminan") tersedia '
-        'lewat tooltik ikon info, bukan cuma satu angka gabungan',
+        'chip jaminan bisa DIGANTI produk yang ditampilkan lewat dropdown '
+        '(permintaan user) tanpa perlu tap tooltip berulang',
         (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      // `find.byType(Tooltip)` bisa kena tooltip LAIN (mis. `IconButton`
-      // AppBar juga pakai `Tooltip` internal) — cari yang pesannya cocok.
-      final tooltip = tester
-          .widgetList<Tooltip>(find.byType(Tooltip))
-          .firstWhere((t) => t.message?.contains('Jaminan per produk') == true);
-      expect(tooltip.message, contains('Tabung Gas: 2 jaminan'),
-          reason: 'jaminan Tabung Gas (P1) 2, terpisah dari Galon Aqua');
-      expect(tooltip.message, contains('Galon Aqua: 1 jaminan'),
-          reason: 'jaminan Galon Aqua (P2) 1, terpisah dari Tabung Gas');
+      // Default: Tabung Gas (produk pertama berjaminan).
+      expect(find.textContaining('Tabung Gas: 2', findRichText: true),
+          findsOneWidget);
+
+      // Tap chip -> dropdown muncul, tampilkan kedua pilihan.
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tabung Gas: 2 jaminan'), findsOneWidget);
+      expect(find.text('Galon Aqua: 1 jaminan'), findsOneWidget,
+          reason: 'produk LAIN yang berjaminan tetap bisa dipilih lewat '
+              'dropdown, tidak cuma yang sedang ditampilkan');
+
+      // Pilih Galon Aqua -> chip berganti tampilkan produk itu.
+      await tester.tap(find.text('Galon Aqua: 1 jaminan'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Galon Aqua: 1', findRichText: true),
+          findsOneWidget,
+          reason: 'chip sekarang menampilkan Galon Aqua tanpa perlu tap '
+              'tooltip lagi');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -543,11 +560,14 @@ void main() {
 
       expect(find.text('Pak Budi'), findsOneWidget);
       expect(find.text('Bu Artia'), findsNothing);
-      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan.
+      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan (cuma Galon Aqua
+      // -> chip tanpa dropdown, krn tidak ada produk lain utk dipilih).
       expect(find.textContaining('Produk: 3', findRichText: true),
           findsOneWidget);
-      expect(find.textContaining('Jaminan: 1', findRichText: true),
+      expect(find.textContaining('Galon Aqua: 1', findRichText: true),
           findsOneWidget);
+      expect(find.byType(PopupMenuButton<String>), findsNothing,
+          reason: 'cuma 1 produk berjaminan -> tidak ada gunanya dropdown');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
