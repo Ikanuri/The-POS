@@ -4431,10 +4431,19 @@ class _ReceiptPaper extends StatelessWidget {
               ],
             ),
           // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total /
-          // Dibayar / Kembalian-ATAU-Sisa (mutually exclusive — baris teks
-          // "Sudah bayar"/"Sisa hutang" yg SELALU tampil apa pun kondisinya
-          // DIHAPUS, diganti baris "Sisa" kondisional yg konsisten dgn
-          // struk in-app/cetak).
+          // Dibayar / Kembali / Sisa. Baris teks "Sudah bayar"/"Sisa
+          // hutang" yg SELALU tampil apa pun kondisinya DIHAPUS, diganti
+          // baris "Sisa" kondisional yg konsisten dgn struk in-app/cetak.
+          //
+          // BUG DIPERBAIKI (dilaporkan user): Kembali & Sisa sebelumnya
+          // if/else-if (SALING MENIADAKAN) — nota yang masih tempo/
+          // kurang_bayar TAPI pembayaran terakhirnya SEMPAT memberi
+          // kembalian (mis. dibayar lebih dari cukup, lalu total naik lagi
+          // krn tambah belanjaan) kehilangan baris "Sisa" sama sekali di
+          // struk share — padahal tempo-nya nyata & tetap harus ditagih.
+          // Ringkasan on-screen (`isKurangBayar`+`_ChangeTakenRow` di atas
+          // layar ini) sudah benar pakai 2 `if` independen; widget struk
+          // gambar ini yang menyimpang. Sama fix dgn `printer_service.dart`.
           if (latestChangeGiven(payments) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4446,8 +4455,8 @@ class _ReceiptPaper extends StatelessWidget {
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
-            )
-          else if (remaining > 0)
+            ),
+          if (remaining > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
