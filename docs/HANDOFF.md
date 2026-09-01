@@ -5,6 +5,41 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 1 September 2026 — fitur "Pratinjau Keranjang"
+diimplementasikan (mockup sesi sebelumnya sudah di-approve user lewat
+"continue"). Versi kerja **2.26.0+59**._
+
+**Fitur baru selesai** (`e3bf02e`): tombol "Bagikan Pratinjau" di
+header `CartSheet` → sheet share struk `CartPreviewPaper`
+(`lib/features/kasir/widgets/cart_preview_paper.dart`), widget TERPISAH
+TOTAL dari `_ReceiptPaper` (bukan dipakai-ulang dgn parameter
+kondisional — supaya logic status lunas/tempo nota ASLI tidak pernah
+kecampur dgn kondisi "belum checkout"). Visual sengaja tidak mungkin
+disalahartikan struk resmi (banner terracotta, watermark diagonal,
+tanpa nomor nota, label "Estimasi Total", disclaimer). QR QRIS dinamis
+opsional (toggle terpisah dari toggle struk asli, key SharedPreferences
+`cart_preview_show_qr`/`cart_preview_qr_dynamic`) pakai modul
+`resolveQrisPayload`/`QrisQrBox` yang sudah ada (dipakai bareng
+checkout & pelunasan hutang) — tidak ada kode QRIS baru, murni reuse.
+
+**Ketemu & diperbaiki saat implementasi** (bukan bug lama, murni akibat
+tombol baru): baris header `CartSheet` sudah padat 5 IconButton
+(Tahan/Tempel/Pengaturan/Transfer QR/Kosongkan); nambah yang ke-6
+("Bagikan Pratinjau") OVERFLOW 33px di lebar 360dp (dibuktikan test
+`cart_sheet_header_overflow_test.dart` SEBELUM fix). Fix: baris itu
+sekarang dibungkus `IconButtonTheme` lokal (padding 4,
+`VisualDensity.compact`, minimumSize 36×36) — kalau nambah tombol lagi
+ke baris ini di masa depan, otomatis ikut sempit, TIDAK PERLU sentuh
+tiap `IconButton` satu-satu. **Kalau baris ini masih terasa padat ke
+depannya (mis. nambah tombol lagi), pertimbangkan pindah sebagian ke
+dalam dialog "Pengaturan Keranjang" yang sudah ada, bukan nambah ikon
+lagi selamanya.**
+
+Tidak ada pekerjaan menggantung dari sesi ini — task #10 (Pratinjau
+Keranjang) selesai & di-merge.
+
+---
+
 _Update sesi 31 Agustus 2026 (lanjutan lagi x8 — bug tempo hilang saat
 ada kembalian; mockup "Pratinjau Keranjang" menunggu approval). Versi
 kerja **2.25.1+58**._
