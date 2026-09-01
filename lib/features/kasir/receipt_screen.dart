@@ -2951,26 +2951,44 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                           fontSize: 12,
                                           color: scheme.onSurfaceVariant)),
                                   Expanded(
-                                    child: Text(
-                                      _customerDisplay(tx),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: _customer != null ||
-                                                tx.customerName != null
-                                            ? scheme.primary
-                                            : scheme.onSurfaceVariant,
-                                        fontWeight: _customer != null ||
-                                                tx.customerName != null
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                        fontStyle: (_customer == null &&
-                                                tx.customerName == null)
-                                            ? FontStyle.italic
-                                            : FontStyle.normal,
-                                      ),
-                                    ),
+                                    child: Builder(builder: (_) {
+                                      final hasName = _customer != null ||
+                                          tx.customerName != null;
+                                      // Pelanggan TERDAFTAR ikut aksen
+                                      // terracotta di TEKS juga (permintaan
+                                      // user), bukan cuma ikonnya. PENTING:
+                                      // `scheme.primary` di tema app ini
+                                      // SAMA PERSIS dgn `AppTheme.accent`
+                                      // (lihat `primary: accent` di
+                                      // app_theme.dart) — memakainya utk
+                                      // nama ad-hoc yang cuma diketik
+                                      // (bukan pelanggan terdaftar) akan
+                                      // menghasilkan warna IDENTIK dgn yang
+                                      // terdaftar, menghapus bedanya sama
+                                      // sekali. `onSurface` dipakai supaya
+                                      // ad-hoc tetap tebal/jelas tapi TIDAK
+                                      // beraksen.
+                                      final registered = tx.customerId != null;
+                                      return Text(
+                                        _customerDisplay(tx),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: registered
+                                              ? AppTheme.accent
+                                              : (hasName
+                                                  ? scheme.onSurface
+                                                  : scheme.onSurfaceVariant),
+                                          fontWeight: hasName
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                          fontStyle: hasName
+                                              ? FontStyle.normal
+                                              : FontStyle.italic,
+                                        ),
+                                      );
+                                    }),
                                   ),
                                   Icon(Icons.edit_outlined,
                                       size: 12, color: scheme.primary),

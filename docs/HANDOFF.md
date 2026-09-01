@@ -5,6 +5,39 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Agustus 2026 (lanjutan lagi x7 — dropdown custom-desain
++ fix angka jaminan dinamis + aksen teks pelanggan diperluas ke SEMUA
+tempat). Versi kerja **2.25.0+57**._
+
+**3 permintaan susulan cepat** dari user setelah iterasi dropdown
+jaminan sebelumnya:
+1. Dropdown-nya diminta desain sendiri ("bukan default flutter") —
+   `_ProductPickerChip`/`_ProductPickerMenuRow` baru, tetap pakai
+   mekanisme `PopupMenuButton` (cuma tampilan yg di-custom total lewat
+   `shape`/`color`/`elevation`+child custom, BUKAN dibangun ulang dari
+   nol pakai `OverlayEntry` manual — pertimbangan risiko: posisi/
+   dismiss/keyboard `PopupMenuButton` sudah teruji Flutter sendiri).
+2. Bug ketauan dari feedback: angka "Jaminan: N" ternyata SELALU total
+   semua produk, BUKAN produk yg sedang dipilih di dropdown — padahal
+   itu justru inti permintaan sebelumnya. Fix: `_StatChip` "Jaminan: N"
+   dipisah dari `_ProductPickerChip` (pemilih nama), angkanya diambil
+   langsung dari `depositByProduct[selectedId]`.
+3. Aksen pelanggan terdaftar (dari sesi sebelumnya) DIPERLUAS: bukan
+   cuma ikon, TEKS nama-nya juga ikut terracotta — di cart bar, SEMUA
+   3 kartu Laci Meja (dashboard), dan header nota. **Jebakan penting
+   yg ketemu**: `scheme.primary` di tema app ini SAMA PERSIS dgn
+   `AppTheme.accent` (`primary: accent` di app_theme.dart) — kalau ada
+   kode LAIN yang pakai `scheme.primary` utk "menonjolkan" sesuatu yg
+   BUKAN soal pelanggan-terdaftar (mis. nama ad-hoc yg cuma terisi),
+   itu akan ikut ke-render terracotta juga tanpa disengaja. Sudah
+   kena di header nota (diperbaiki, ganti `scheme.onSurface`) — kalau
+   nambah aksen serupa di tempat lain, WAJIB cek dulu apa warna yg
+   dipakai utk kasus "bukan target aksen" itu benar2 beda hex dari
+   `AppTheme.accent`, jangan asumsi `scheme.primary`/`onSurface`/dkk
+   otomatis netral.
+
+---
+
 _Update sesi 31 Agustus 2026 (lanjutan lagi x6 — chip jaminan bisa
 ganti produk lewat dropdown). Versi kerja **2.24.0+56**._
 

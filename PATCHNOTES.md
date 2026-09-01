@@ -43,10 +43,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   dikelola dari dashboard Laci Meja.
 
 ### ✨ Fitur Baru
+- **Pelanggan yang sudah terdaftar kini ditandai dengan warna
+  terracotta juga di NAMA-nya** — sebelumnya cuma ikon kecil, sekarang
+  namanya sendiri ikut berwarna di cart bar kasir, kartu Laci Meja,
+  dan header struk in-app, jadi lebih mudah dikenali sekilas.
 - **Chip jaminan di dashboard Laci Meja → Pre-order kini bisa diganti
-  produk yang ditampilkan** — tinggal tap chip-nya untuk memilih dari
-  dropdown, tanpa perlu buka tooltip berulang kali tiap mau lihat
-  produk lain. Total keseluruhan jaminan tetap tampil di sebelahnya.
+  produk yang ditampilkan**, dengan tampilan dropdown yang dirancang
+  ulang lebih rapi — tinggal tap chip-nya untuk memilih, tanpa perlu
+  buka tooltip berulang kali tiap mau lihat produk lain.
 
 ### 🔧 Perbaikan
 - **Angka "Produk"/"Jaminan" di dashboard Laci Meja → Pre-order kini
