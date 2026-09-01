@@ -685,7 +685,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         onPressed: cart.isEmpty
                             ? null
                             : () => _showCartPreviewShareSheet(ctx),
-                        icon: const Icon(Icons.ios_share),
+                        // `share_outlined`, bukan `ios_share` — disamakan dgn
+                        // ikon "Bagikan Struk" di receipt_screen.dart (tombol
+                        // yg fungsinya identik: buka sheet share, bukan aksi
+                        // share langsung), supaya konsisten satu app.
+                        icon: const Icon(Icons.share_outlined),
                       ),
                     // Susulan (permintaan user): tombol pengaturan keranjang —
                     // untuk sekarang isinya cuma posisi checkbox verifikasi

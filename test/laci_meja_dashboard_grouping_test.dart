@@ -689,6 +689,113 @@ void main() {
     });
   });
 
+  group(
+      'Alamat pelanggan di bawah nama (permintaan user: cegah nama kembar '
+      'tertukar)', () {
+    testWidgets(
+        'pelanggan TERDAFTAR dgn alamat terisi -> alamat tampil di bawah '
+        'nama di kartu Titip/Ketinggalan', (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.customers).insert(CustomersCompanion.insert(
+          id: 'c1',
+          name: 'Bu Sri',
+          address: const Value('Jl. Merdeka No. 12')));
+      await db.addLeftBehindItem(
+          id: 'l1',
+          transactionId: 'tx1',
+          itemName: 'Galon Aqua',
+          jenis: 'titip',
+          customerId: 'c1',
+          customerNameText: 'Bu Sri');
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bu Sri'), findsOneWidget);
+      expect(find.text('Jl. Merdeka No. 12'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'pelanggan TERDAFTAR TANPA alamat terisi -> tidak ada baris '
+        'alamat kosong', (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.customers).insert(
+          CustomersCompanion.insert(id: 'c1', name: 'Bu Sri'));
+      await db.addLeftBehindItem(
+          id: 'l1',
+          transactionId: 'tx1',
+          itemName: 'Galon Aqua',
+          jenis: 'titip',
+          customerId: 'c1',
+          customerNameText: 'Bu Sri');
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bu Sri'), findsOneWidget);
+      expect(find.textContaining('Jl.'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'pelanggan AD-HOC (customerId null) -> tidak ada alamat sama '
+        'sekali ditampilkan (tidak punya record Customers)', (tester) async {
+      await seedTransaction('tx1');
+      await db.addLeftBehindItem(
+          id: 'l1',
+          transactionId: 'tx1',
+          itemName: 'Galon Aqua',
+          jenis: 'titip',
+          customerNameText: 'Bu Sri Manual');
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bu Sri Manual'), findsOneWidget);
+      expect(find.textContaining('Jl.'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'dua pelanggan NAMA SAMA tapi alamat beda -> masing2 kartu '
+        'menampilkan alamatnya sendiri (skenario nama kembar)',
+        (tester) async {
+      await seedTransaction('tx1');
+      await seedTransaction('tx2');
+      await db.into(db.customers).insert(CustomersCompanion.insert(
+          id: 'c1', name: 'Bu Sri', address: const Value('Jl. Melati 1')));
+      await db.into(db.customers).insert(CustomersCompanion.insert(
+          id: 'c2', name: 'Bu Sri', address: const Value('Jl. Kenanga 2')));
+      await db.addLeftBehindItem(
+          id: 'l1',
+          transactionId: 'tx1',
+          itemName: 'Galon Aqua',
+          jenis: 'titip',
+          customerId: 'c1',
+          customerNameText: 'Bu Sri');
+      await db.addLeftBehindItem(
+          id: 'l2',
+          transactionId: 'tx2',
+          itemName: 'Galon Aqua',
+          jenis: 'titip',
+          customerId: 'c2',
+          customerNameText: 'Bu Sri');
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bu Sri'), findsNWidgets(2));
+      expect(find.text('Jl. Melati 1'), findsOneWidget);
+      expect(find.text('Jl. Kenanga 2'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+  });
+
   group('Pinjaman (permintaan user putaran terbaru — group by pelanggan)', () {
     Future<void> tapPinjamanTab(WidgetTester tester) async {
       await tester.tap(find.text('Pinjaman'));

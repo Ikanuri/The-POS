@@ -27,6 +27,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   jaminan sekarang berjalan (mirip nama pelanggan di cart bar) alih-alih
   mendorong angka jaminan keluar layar.
 
+### ✨ Fitur Baru
+- **Alamat pelanggan terdaftar sekarang tampil di bawah namanya di
+  semua kartu Laci Meja** (Titip/Ketinggalan, Pinjaman, Pre-order) —
+  berguna kalau ada dua pelanggan dengan nama yang sama persis, alamat
+  jadi pembeda tanpa perlu buka nota dulu.
+
 ## 31 Agustus 2026
 
 ### ✨ Fitur Baru

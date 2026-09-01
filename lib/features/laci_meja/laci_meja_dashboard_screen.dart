@@ -118,24 +118,61 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
 
   /// Baris ke-1 kartu (redesain permintaan user): NAMA PELANGGAN paling atas,
   /// bold & paling besar — menggantikan nama barang yang dulu di posisi ini.
+  ///
+  /// [address] (susulan, permintaan user) — alamat pelanggan TERDAFTAR
+  /// ditampilkan sbg baris ke-2 kecil di bawah nama, kalau ada. Mencegah
+  /// nama KEMBAR (dua pelanggan beda alamat, nama sama persis) tertukar
+  /// tanpa harus buka nota rujukannya dulu. null/kosong = tidak ditampilkan
+  /// (pelanggan ad-hoc tidak punya alamat tersimpan sama sekali).
   static Widget _cardHeader(String customerName,
-      {Widget? trailing, Widget? leading, bool accent = false}) {
+      {Widget? trailing,
+      Widget? leading,
+      bool accent = false,
+      String? address,
+      bool isDark = false}) {
+    final hasAddress = address != null && address.trim().isNotEmpty;
     return Row(
+      crossAxisAlignment:
+          hasAddress ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        if (leading != null) ...[leading, const SizedBox(width: 6)],
+        if (leading != null) ...[
+          Padding(
+            padding: EdgeInsets.only(top: hasAddress ? 2 : 0),
+            child: leading,
+          ),
+          const SizedBox(width: 6),
+        ],
         Expanded(
-          child: Text(
-            customerName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-                fontSize: 15.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.1,
-                // Nama pelanggan TERDAFTAR ikut aksen terracotta juga
-                // (permintaan user), bukan cuma ikon di depannya — dulu
-                // ikonnya kecil di pinggir, gampang terlewat.
-                color: accent ? AppTheme.accent : null),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                customerName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.1,
+                    // Nama pelanggan TERDAFTAR ikut aksen terracotta juga
+                    // (permintaan user), bukan cuma ikon di depannya — dulu
+                    // ikonnya kecil di pinggir, gampang terlewat.
+                    color: accent ? AppTheme.accent : null),
+              ),
+              if (hasAddress)
+                Text(
+                  address.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: accent
+                          ? AppTheme.accent.withOpacity(0.75)
+                          : AppTheme.laciFg(isDark).withOpacity(0.65)),
+                ),
+            ],
           ),
         ),
         if (trailing != null) trailing,
@@ -466,6 +503,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     }
     final txIds = groups.keys.toList();
     final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
+    final addresses =
+        ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
 
     return ListView.separated(
       padding: const EdgeInsets.all(12),
@@ -495,6 +534,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                     leading:
                         _customerTypeIcon(group.first.customerId, isDark),
                     accent: _isRegisteredCustomer(group.first.customerId),
+                    address: addresses[group.first.customerId],
+                    isDark: isDark,
                   ),
                 ),
                 for (final e in group)
@@ -604,6 +645,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     }
     final keys = groups.keys.toList();
     final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
+    final addresses =
+        ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
 
     return ListView.separated(
       padding: const EdgeInsets.all(12),
@@ -637,6 +680,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                   customerName,
                   leading: _customerTypeIcon(group.first.customerId, isDark),
                   accent: _isRegisteredCustomer(group.first.customerId),
+                  address: addresses[group.first.customerId],
+                  isDark: isDark,
                   trailing: IconButton(
                     tooltip: pinned ? 'Lepas sematan' : 'Sematkan ke atas',
                     visualDensity: VisualDensity.compact,
@@ -1044,6 +1089,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       {Set<String> beyondQuota = const {},
       Map<String, int> queueNumbers = const {},
       double? quota}) {
+    final addresses =
+        ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
     // Kartu PERTAMA yang isinya sudah melewati kuota — garis pembatas
     // disisipkan tepat di atasnya. Dihitung dari urutan kartu yang benar-benar
     // dirender, jadi ikut bergeser saat antrian berubah.
@@ -1088,6 +1135,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                     customerName,
                     leading: _customerTypeIcon(first.customerId, isDark),
                     accent: _isRegisteredCustomer(first.customerId),
+                    address: addresses[first.customerId],
+                    isDark: isDark,
                   ),
                 ),
                 for (final e in group)

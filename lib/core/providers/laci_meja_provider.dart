@@ -91,6 +91,26 @@ final laciMejaCustomerNamesProvider =
   return ref.watch(databaseProvider).getCustomerNamesForTransactions(ids);
 });
 
+/// Susulan (permintaan user) — alamat pelanggan TERDAFTAR yang sedang
+/// tampil di dashboard, keyed lewat `customerId` (BUKAN `transactionId`
+/// spt `laciMejaCustomerNamesProvider` — alamat menempel ke pelanggan,
+/// bukan ke nota). Dipakai menampilkan alamat di bawah nama supaya nama
+/// KEMBAR (dua pelanggan beda alamat, nama sama) bisa dibedakan tanpa
+/// buka nota. Pelanggan ad-hoc (`customerId` null) otomatis tidak masuk
+/// hasil — tidak punya record `Customers` sama sekali.
+final laciMejaCustomerAddressProvider =
+    FutureProvider<Map<String, String>>((ref) async {
+  final leftBehind = ref.watch(leftBehindItemsProvider).valueOrNull ?? [];
+  final borrowed = ref.watch(borrowedItemsProvider).valueOrNull ?? [];
+  final preorder = ref.watch(preorderEntriesProvider).valueOrNull ?? [];
+  final ids = <String>{
+    ...leftBehind.map((e) => e.customerId).whereType<String>(),
+    ...borrowed.map((e) => e.customerId).whereType<String>(),
+    ...preorder.map((e) => e.customerId).whereType<String>(),
+  }.toList();
+  return ref.watch(databaseProvider).getCustomerAddressesForIds(ids);
+});
+
 /// Total qty yang SUDAH diambil/dikembalikan/dipenuhi per entri, dihitung
 /// dari log kejadian (PLAN.md Item 54). Dipakai dashboard menampilkan sisa &
 /// progres, dan membatasi jumlah maksimum di dialog ambil sebagian.
