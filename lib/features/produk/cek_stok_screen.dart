@@ -9,6 +9,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import 'receive_goods_screen.dart';
+import 'reset_stock_screen.dart';
 import 'stock_opname_screen.dart';
 
 /// Item 30(b) — layar kontrol stok terpisah dari daftar Produk (fokus
@@ -277,6 +278,7 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final device = ref.watch(deviceProvider);
     final groupId = ref.watch(_cekStokGroupProvider);
     final statusFilter = ref.watch(_cekStokFilterProvider);
     final excludedGroups = ref.watch(_cekStokExcludedGroupsProvider);
@@ -325,6 +327,20 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
               builder: (_) => const StockOpnameScreen(),
             )),
           ),
+          // Susulan (permintaan user): "Reset Stok" — menimpa stok
+          // seluruh/sekelompok produk jadi 0 sekaligus, TANPA hitung
+          // fisik (beda dari Stock Opname). Owner-only (bukan
+          // `canSeeReports`/asisten) — blast radius-nya store-wide,
+          // jauh lebih destruktif drpd opname biasa yang mengoreksi ke
+          // hasil hitung wajar.
+          if (device.isOwner)
+            IconButton(
+              icon: const Icon(Icons.restore),
+              tooltip: 'Reset Stok',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const ResetStockScreen(),
+              )),
+            ),
         ],
       ),
       body: Column(

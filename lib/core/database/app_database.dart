@@ -1569,11 +1569,20 @@ class AppDatabase extends _$AppDatabase {
 
   /// Konvensi penamaan note sesi opname (Item 36) — dipakai saat commit DAN
   /// saat filter riwayat ([getOpnameSessions]), harus selalu sinkron.
-  static String buildOpnameNote(DateTime at, {String? categoryLabel}) {
+  ///
+  /// [isReset] (susulan, permintaan user) — sesi "Reset Stok" (fitur
+  /// terpisah dari opname biasa, semua produk terpilih ditimpa jadi 0
+  /// tanpa hitung fisik) TETAP diawali `"Opname "` supaya otomatis muncul
+  /// di [getOpnameSessions]/riwayat yang sudah ada — tidak perlu layar
+  /// riwayat baru, cukup label scope-nya beda ("Reset ke 0 - ...") supaya
+  /// tetap bisa dibedakan dari opname sungguhan saat ditinjau.
+  static String buildOpnameNote(DateTime at,
+      {String? categoryLabel, bool isReset = false}) {
     final tgl = '${at.day.toString().padLeft(2, '0')} '
         '${_bulanIndo[at.month - 1]} ${at.year}';
-    final scope =
+    final scopeBase =
         categoryLabel == null ? 'Seluruh' : 'Kategori: $categoryLabel';
+    final scope = isReset ? 'Reset ke 0 - $scopeBase' : scopeBase;
     return 'Opname $tgl ($scope)';
   }
 

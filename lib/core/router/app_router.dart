@@ -34,6 +34,7 @@ import '../../features/pengaturan/tutup_buku_screen.dart';
 import '../services/price_match_service.dart';
 import '../../features/produk/cek_stok_screen.dart';
 import '../../features/produk/receive_goods_screen.dart';
+import '../../features/produk/reset_stock_screen.dart';
 import '../../features/produk/stock_opname_screen.dart';
 import '../../features/produk/price_preview_screen.dart';
 import '../../features/produk/price_sync_screen.dart';
@@ -209,6 +210,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'stock-opname',
                 builder: (_, __) => const StockOpnameScreen(),
+              ),
+              GoRoute(
+                path: 'reset-stok',
+                builder: (_, __) => const ResetStockScreen(),
               ),
               GoRoute(
                 path: 'penerimaan',

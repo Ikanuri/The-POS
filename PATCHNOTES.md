@@ -32,6 +32,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   semua kartu Laci Meja** (Titip/Ketinggalan, Pinjaman, Pre-order) —
   berguna kalau ada dua pelanggan dengan nama yang sama persis, alamat
   jadi pembeda tanpa perlu buka nota dulu.
+- **"Reset Stok" — bisa menimpa stok seluruh produk atau satu kategori
+  jadi 0 sekaligus** (khusus owner) — lewat ikon baru di layar Cek Stok.
+  Sebelum benar-benar disimpan, ada daftar review yang menunjukkan
+  persis produk apa saja yang akan berubah, lalu wajib ketik "RESET"
+  di dialog konfirmasi supaya tidak ke-tap tidak sengaja. Riwayatnya
+  ikut tercatat di "Riwayat Opname" yang sudah ada.
 
 ## 31 Agustus 2026
 
