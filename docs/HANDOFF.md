@@ -5,6 +5,41 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 1 September 2026 (lanjutan — polish tombol Kuota + marquee
+jaminan). Versi kerja **2.26.1+60**._
+
+**Perbaikan** (`0d08b26`), dari screenshot user atas dashboard Laci
+Meja → Pre-order: baris statistik ("Produk: N" / "Jaminan: N" / tombol
+Kuota) kepotong di layar sempit. (1) Tombol "Kuota" (`OutlinedButton.
+icon` berlabel) diringkas jadi `IconButton` simbol saja (tooltip tetap
+ada) — membebaskan lebar tetap yang sebelumnya dipakai labelnya. (2)
+Nama produk di `_ProductPickerChip` (chip pemilih jaminan) sekarang
+dibatasi lebar (96px) & BERJALAN (marquee) kalau kepanjangan, alih-alih
+melebar tak terbatas & mendorong chip lain keluar jangkauan scroll
+horizontal.
+
+**Refactor penting**: widget marquee (`_MarqueeText`, animasi teks
+berjalan) SEBELUMNYA privat di `kasir_screen.dart` (dipakai cart bar
+utk nama pelanggan) — diekstrak jadi `MarqueeText` PUBLIK di
+`lib/core/widgets/marquee_text.dart` supaya bisa dipakai bareng
+Laci Meja tanpa duplikasi logic animasi/pengukuran overflow yang sudah
+teruji (termasuk 2 gotcha halus yang didokumentasikan di kelasnya:
+`textScaler` global & `DefaultTextStyle` ambient wajib diikutkan saat
+mengukur overflow, kalau tidak marquee salah simpul "muat" & teks
+kepotong permanen). **Kalau nambah teks yang berpotensi kepanjangan di
+layar lain, cek dulu `MarqueeText` ini sebelum bikin solusi baru** —
+sudah teruji & battery-conscious (animasi dibatasi per putaran-nyala +
+istirahat, bukan `repeat()` abadi).
+
+**Ketemu saat refactor**: 1 test (`cart_bar_customer_accent_test.dart`)
+mencari widget lewat `runtimeType.toString() == '_MarqueeText'` (nama
+class lama) — diperbaiki ke `'MarqueeText'`. Kalau nanti ada test lain
+yang gagal aneh dgn pesan "No element" setelah refactor serupa
+(rename/pindah widget privat->publik), cek dulu apakah ada test yang
+mencocokkan lewat string nama class mentah spt ini.
+
+---
+
 _Update sesi 1 September 2026 — fitur "Pratinjau Keranjang"
 diimplementasikan (mockup sesi sebelumnya sudah di-approve user lewat
 "continue"). Versi kerja **2.26.0+59**._
