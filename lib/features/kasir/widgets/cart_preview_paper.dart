@@ -211,9 +211,8 @@ class CartPreviewPaper extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: _mono.copyWith(fontSize: 20, fontWeight: FontWeight.w900)),
                 Text(
-                    'Harga & total masih bisa berubah (mis. diskon, stok, '
-                    'atau item ditambah/dikurangi) sampai transaksi '
-                    'benar-benar diselesaikan di kasir.',
+                    'Harga & total masih bisa berubah sampai transaksi '
+                    'diselesaikan di kasir.',
                     textAlign: TextAlign.center,
                     style: _mono.copyWith(fontSize: 10, color: const Color(0xFF6B6156))),
                 if (qrData != null && qrData!.isNotEmpty) ...[

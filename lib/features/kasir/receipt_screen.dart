@@ -2075,6 +2075,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       receiptFooter: prefs.footer,
       strukNote: _tx!.strukNote,
       parentOf: _parentOf,
+      preorderDeposit: _preorderDeposit,
       qrData: qrData,
     );
     if (!mounted) return;
@@ -2683,6 +2684,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           receiptFooter: prefs.footer,
                           parentOf: _parentOf,
                           checkedIds: _checkedIds,
+                          preorderDeposit: _preorderDeposit,
                           qrData: resolveQr(),
                         ),
                       ),
@@ -4148,6 +4150,7 @@ class _ReceiptPaper extends StatelessWidget {
     this.receiptFooter = '',
     this.parentOf = const {},
     this.checkedIds = const {},
+    this.preorderDeposit = const {},
     this.qrData,
   });
 
@@ -4168,6 +4171,14 @@ class _ReceiptPaper extends StatelessWidget {
   final String receiptHeader;
   final String receiptFooter;
   final Set<String> checkedIds;
+
+  /// Susulan (permintaan user): "jika ada pre-order dengan jaminan
+  /// dititip, tulis keterangan titip juga di samping nama item" —
+  /// diperluas dari struk in-app (yang sudah punya penanda ini, lihat
+  /// `_preorderDeposit` di `_ReceiptScreenState`) ke struk share. Key
+  /// `'$productId|$productUnitId'` -> qty jaminan dititip, pola SAMA
+  /// PERSIS dgn provider on-screen-nya.
+  final Map<String, double> preorderDeposit;
 
   /// Item 62 susulan — payload QR pelunasan SUDAH JADI (hasil
   /// `resolveQrisPayload`, dinamis dgn nominal sisa tagihan atau statis
@@ -4329,9 +4340,20 @@ class _ReceiptPaper extends StatelessWidget {
                 );
               }
             }
+            // Susulan (permintaan user) — pre-order dgn jaminan dititip
+            // ("· Titip N" di struk in-app) ikut ditampilkan di struk
+            // share, bukan cuma layar. Key SAMA PERSIS dgn provider
+            // on-screen-nya.
+            final depositQty = preorderDeposit[
+                '${item.productId}|${item.productUnitId}'];
+            final depositSuffix = depositQty != null
+                ? ' · Titip ${depositQty % 1 == 0 ? depositQty.toInt() : depositQty}'
+                : '';
             return [
               if (sep != null) sep,
-              Text('$mark$namePrefix${productNames[item.productId] ?? ''}',
+              Text(
+                  '$mark$namePrefix${productNames[item.productId] ?? ''}'
+                  '$depositSuffix',
                   style: _mono.copyWith(
                       fontWeight: isVar ? FontWeight.w400 : FontWeight.w700)),
               if (!isPlaceholder)

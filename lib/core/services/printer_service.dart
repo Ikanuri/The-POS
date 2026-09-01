@@ -493,6 +493,10 @@ class PrinterService {
     String receiptHeader = '',
     String receiptFooter = '',
     Map<String, String?> parentOf = const {},
+    // Susulan (permintaan user) — pre-order dgn jaminan dititip ("· Titip
+    // N" di struk in-app/share) ikut dicetak. Key SAMA PERSIS dgn provider
+    // on-screen/share: `'$productId|$productUnitId'` -> qty dititip.
+    Map<String, double> preorderDeposit = const {},
     // Item 62 susulan — QR pelunasan (dinamis/statis) utk nota tempo/kurang
     // bayar, PAYLOAD SUDAH JADI (hasil `resolveQrisPayload` di
     // receipt_screen.dart — pemanggil yg tahu status nota/setting toko/nominal
@@ -524,6 +528,7 @@ class PrinterService {
       receiptFooter: receiptFooter,
       strukNote: strukNote,
       parentOf: parentOf,
+      preorderDeposit: preorderDeposit,
       qrData: qrData,
       settings: settings,
     );
@@ -643,6 +648,7 @@ class PrinterService {
     String receiptHeader = '',
     String receiptFooter = '',
     Map<String, String?> parentOf = const {},
+    Map<String, double> preorderDeposit = const {},
     String? qrData,
     required PrinterSettings settings,
   }) async {
@@ -769,8 +775,17 @@ class PrinterService {
 
       final rawName = _toAscii(productNames[item.productId] ?? 'Produk');
       final prefix = isVar ? '  > ' : '';
-      out.addAll(
-          bodyText('$prefix$rawName', styles: const PosStyles(bold: true)));
+      // Susulan (permintaan user) — pre-order dgn jaminan dititip ikut
+      // dicetak di samping nama item (sama spt struk in-app/share).
+      // ASCII polos ("- Titip N"), BUKAN "·" — printer ESC/POS tidak
+      // dijamin dukung non-ASCII (lihat gotcha `_toAscii` di file ini).
+      final depositQty =
+          preorderDeposit['${item.productId}|${item.productUnitId}'];
+      final depositSuffix = depositQty != null
+          ? ' - Titip ${depositQty % 1 == 0 ? depositQty.toInt() : depositQty}'
+          : '';
+      out.addAll(bodyText('$prefix$rawName$depositSuffix',
+          styles: const PosStyles(bold: true)));
 
       if (item.itemNote != null && item.itemNote!.isNotEmpty) {
         // Item 49c — catatan barang bisa multi-baris (maxLines:2 di UI);
