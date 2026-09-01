@@ -119,7 +119,7 @@ void main() {
         .read(cartMetaProvider(kMainCartId).notifier)
         .setCustomer('c1', 'Bu Artia');
     // JANGAN pumpAndSettle di sini: nama pelanggan yang tidak muat memicu
-    // teks berjalan (`_MarqueeText`) yang animasinya BERULANG selamanya —
+    // teks berjalan (`MarqueeText`) yang animasinya BERULANG selamanya —
     // pumpAndSettle akan timeout. Pump beberapa frame berdurasi tetap saja.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -167,7 +167,7 @@ void main() {
         .read(cartMetaProvider(kMainCartId).notifier)
         .setCustomer('c1', 'Bu Artia');
     // JANGAN pumpAndSettle di sini: nama pelanggan yang tidak muat memicu
-    // teks berjalan (`_MarqueeText`) yang animasinya BERULANG selamanya —
+    // teks berjalan (`MarqueeText`) yang animasinya BERULANG selamanya —
     // pumpAndSettle akan timeout. Pump beberapa frame berdurasi tetap saja.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -190,7 +190,7 @@ void main() {
         .read(cartMetaProvider(kMainCartId).notifier)
         .setCustomer('c1', 'Bu Artia');
     // JANGAN pumpAndSettle di sini: nama pelanggan yang tidak muat memicu
-    // teks berjalan (`_MarqueeText`) yang animasinya BERULANG selamanya —
+    // teks berjalan (`MarqueeText`) yang animasinya BERULANG selamanya —
     // pumpAndSettle akan timeout. Pump beberapa frame berdurasi tetap saja.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));

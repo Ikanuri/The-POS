@@ -6,6 +6,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/marquee_text.dart';
 import 'preorder_quota_store.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
@@ -1633,19 +1634,22 @@ class _PreorderStatsLine extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        // Tombol kuota diberi LABEL + border (bukan ikon telanjang) supaya
-        // jelas ini sebuah aksi, bukan hiasan yang nyasar.
-        OutlinedButton.icon(
+        const SizedBox(width: 4),
+        // Susulan (permintaan user): tombol kuota diringkas jadi SIMBOL saja
+        // (sebelumnya `OutlinedButton.icon` berlabel "Kuota") — baris
+        // statistik ini padat & scroll horizontal, label teks tetap
+        // memakan lebar tetap yang mengurangi ruang utk chip lain (mis.
+        // "234 12"/"Jaminan: N" ikut terpotong, dilaporkan user via
+        // screenshot). Tooltip tetap menjelaskan fungsinya utk aksesibilitas.
+        IconButton(
           onPressed: onManageQuota,
-          icon: const Icon(Icons.rule, size: 16),
-          label: const Text('Kuota'),
-          style: OutlinedButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            minimumSize: const Size(0, 34),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+          tooltip: 'Kuota',
+          icon: const Icon(Icons.rule, size: 18),
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
             foregroundColor: AppTheme.accent,
             side: BorderSide(color: AppTheme.accent.withOpacity(0.5)),
+            minimumSize: const Size(34, 34),
           ),
         ),
       ],
@@ -1748,9 +1752,20 @@ class _ProductPickerChip extends StatelessWidget {
         children: [
           const Icon(Icons.inventory_2_outlined, size: 12, color: AppTheme.accent),
           const SizedBox(width: 4),
-          Text(selectedName,
+          // Susulan (permintaan user): nama produk dibatasi lebarnya &
+          // dibuat berjalan (marquee, pola sama dgn nama pelanggan di cart
+          // bar) kalau kepanjangan — dulu chip ini bisa melebar tak
+          // terbatas (Row `mainAxisSize.min`) & mendorong chip lain
+          // ("Jaminan: N", tombol Kuota) keluar layar tanpa tanda ada
+          // konten terpotong.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 96),
+            child: MarqueeText(
+              text: selectedName,
               style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+                  fontSize: 12, fontWeight: FontWeight.w700, color: fg),
+            ),
+          ),
           if (hasOthers) ...[
             const SizedBox(width: 2),
             const Icon(Icons.expand_more, size: 16, color: AppTheme.accent),

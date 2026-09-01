@@ -345,7 +345,7 @@ void main() {
     final db = await seedDb();
     addTearDown(() async => db.close());
 
-    // `OverflowBox` HANYA dipakai di jalur marquee overflow (`_MarqueeText`)
+    // `OverflowBox` HANYA dipakai di jalur marquee overflow (`MarqueeText`)
     // di seluruh codebase ini — penanda struktural yg jauh lebih spesifik
     // drpd `Transform` polos (halaman ini jg punya Transform lain dari
     // animasi transisi rute Material 3/ZoomPageTransitionsBuilder).
@@ -355,7 +355,7 @@ void main() {
         .isNotEmpty;
 
     // Batas dicari EMPIRIS thd widget sungguhan (BUKAN konstanta hardcode —
-    // konstanta jadi basi tiap pengukuran `_MarqueeText` diperbaiki): prefix
+    // konstanta jadi basi tiap pengukuran `MarqueeText` diperbaiki): prefix
     // TERPANJANG yg masih MUAT di skala 1.0.
     const base = 'Kartikawulandarisetiawanpratamahandayanisuhermanaminah';
     final c1 = await pumpKasir(tester, db, deviceRole: 'owner');
@@ -375,7 +375,7 @@ void main() {
     // Teks yg SAMA di skala 1.4x (mis. aksesibilitas font besar) HARUS
     // overflow: hurufnya melebar 40% DAN chip lain (Tahan/Bayar) juga
     // melebar shg porsi Pelanggan menyempit. Tanpa fix `textScaler` di
-    // `_MarqueeText`, pengukuran tetap memakai skala 1.0 & keliru simpul
+    // `MarqueeText`, pengukuran tetap memakai skala 1.0 & keliru simpul
     // "masih muat" — nama terjebak di Text terpotong permanen, persis bug
     // yg dilaporkan user.
     final c2 =
@@ -424,7 +424,7 @@ void main() {
     // Sekarang lebarkan teks lewat style AMBIENT (proxy fontFamily tema —
     // lihat dok `ambientLetterSpacing` di `pumpKasir`). Lebar SUNGGUHAN teks
     // jadi melebihi porsi chip, jadi marquee HARUS aktif. Tanpa fix
-    // (`DefaultTextStyle.of(context).style.merge(...)` di `_MarqueeText`),
+    // (`DefaultTextStyle.of(context).style.merge(...)` di `MarqueeText`),
     // `TextPainter` tidak melihat pelebaran ini, mengukur teks lebih SEMPIT
     // dari kenyataan, menyimpulkan "muat", lalu jatuh ke cabang `Text` biasa.
     final c2 = await pumpKasir(tester, db,

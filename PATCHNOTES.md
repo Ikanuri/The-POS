@@ -20,6 +20,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   nominal yang otomatis mengikuti estimasi total saat ini, kalau
   pelanggan mau langsung transfer.
 
+### 🔧 Perbaikan
+- **Baris "Produk"/"Jaminan"/tombol Kuota di dashboard Laci Meja →
+  Pre-order tidak lagi terpotong di layar sempit** — tombol Kuota
+  diringkas jadi simbol saja, dan nama produk yang panjang di chip
+  jaminan sekarang berjalan (mirip nama pelanggan di cart bar) alih-alih
+  mendorong angka jaminan keluar layar.
+
 ## 31 Agustus 2026
 
 ### ✨ Fitur Baru
