@@ -5,9 +5,28 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 31 Agustus 2026 (lanjutan lagi x5 — kartu statistik
-pre-order: chip mini gradasi label/angka, bukan teks polos). Versi
-kerja **2.23.2+55**._
+_Update sesi 31 Agustus 2026 (lanjutan lagi x6 — chip jaminan bisa
+ganti produk lewat dropdown). Versi kerja **2.24.0+56**._
+
+Iterasi KETIGA (terakhir sejauh ini) atas statistik pre-order. Chip
+"Jaminan" yang tadinya cuma tampilkan TOTAL (+ tooltip rincian per
+produk) sekarang menampilkan SATU produk langsung (default: produk
+pertama berjaminan terbuka — urutan sama dgn FIFO `createdAt`),
+diganti via dropdown `PopupMenuButton` yang cuma muncul kalau memang
+ada >1 produk berjaminan. Total keseluruhan pindah jadi teks polos di
+LUAR chip, gaya sama dgn "N entri" yang duluan ada di sebelah chip
+"Produk". Provider `_preorderJaminanDisplayProvider` (baru) menyimpan
+pilihan per productId (BUKAN nama — lihat komentar di kode kenapa),
+fallback ke produk pertama kalau produk yang dipilih sudah tidak lagi
+punya jaminan terbuka (mis. sudah dipenuhi semua).
+
+**Kalau ada permintaan serupa lagi di elemen dashboard lain** (mis.
+kategori Titip/Pinjaman juga minta rincian per-X yang bisa dipilih):
+pola dropdown-tetap-di-satu-baris ini (bukan expand-ke-multi-baris)
+sudah terbukti dipakai berkali-kali, pertimbangkan dulu sebelum desain
+baru dari nol — lihat riwayat 3 iterasi statistik pre-order di entri
+sebelumnya (kartu besar → teks polos → chip gradasi → chip+dropdown)
+utk pelajaran soal apa yang disukai/tidak disukai user tiap iterasi.
 
 Iterasi KEDUA atas redesain statistik pre-order. Riwayat percobaan
 (supaya tidak diulang lagi kalau ada feedback lanjutan):

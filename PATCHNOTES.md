@@ -42,6 +42,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   sendiri tidak berubah, cuma dicatat sebagai pre-order yang bisa
   dikelola dari dashboard Laci Meja.
 
+### ✨ Fitur Baru
+- **Chip jaminan di dashboard Laci Meja → Pre-order kini bisa diganti
+  produk yang ditampilkan** — tinggal tap chip-nya untuk memilih dari
+  dropdown, tanpa perlu buka tooltip berulang kali tiap mau lihat
+  produk lain. Total keseluruhan jaminan tetap tampil di sebelahnya.
+
 ### 🔧 Perbaikan
 - **Angka "Produk"/"Jaminan" di dashboard Laci Meja → Pre-order kini
   tampil sbg chip kecil** (label biasa + angka tebal, gaya kartu lama
