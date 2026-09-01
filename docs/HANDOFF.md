@@ -5,6 +5,38 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 1 September 2026 (lanjutan lagi — penanda "Titip N" pre-
+order ikut ke print/share struk; persingkat teks disclaimer Pratinjau
+Keranjang). Versi kerja **2.29.0+63**._
+
+**Fitur baru** (`369697c`): pre-order dgn jaminan dititip ("· Titip N",
+sudah ada di struk in-app sejak lama) sekarang ikut ditandai di struk
+GAMBAR (share, `_ReceiptPaper` — param baru `preorderDeposit`) DAN cetak
+ESC/POS (`printer_service.dart` — param sama, tapi dicetak "- Titip N"
+ASCII polos, bukan "·", krn printer thermal tidak dijamin dukung
+non-ASCII).
+
+**Gap testing yang PENTING utk sesi mendatang**: mencoba menguji
+`printer_service.dart` di level byte ESC/POS (seam `debugBuildBytes`,
+sudah DIHAPUS lagi) — `CapabilityProfile.load()` dari paket
+`esc_pos_utils_plus` HANG TANPA BATAS (`TimeoutException` 10 menit)
+di sandbox test lingkungan REMOTE ini. Tidak ada satu pun test di
+seluruh repo yang pernah memanggil jalur `_buildBytes`/`printReceipt`
+utk alasan yang sama — kalau nanti mau menguji perubahan
+`printer_service.dart` secara otomatis, JANGAN ulangi pendekatan ini;
+verifikasi manual (baca kode, bandingkan dgn jalur `_ReceiptPaper` yg
+sepadan & sudah teruji) adalah satu-satunya cara yang terbukti aman di
+sini sejauh ini.
+
+**Polish kecil** (`28349d0`): teks disclaimer "Harga & total masih bisa
+berubah..." di struk Pratinjau Keranjang dipersingkat — buang
+parenthetical "(mis. diskon, stok, atau item ditambah/dikurangi)"
+(permintaan user).
+
+Tidak ada pekerjaan menggantung dari sesi ini.
+
+---
+
 _Update sesi 1 September 2026 (lanjutan lagi — fitur "Reset Stok",
 proposal UI/UX di-review & disetujui user sebelum coding). Versi kerja
 **2.28.0+62**._

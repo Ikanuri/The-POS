@@ -38,6 +38,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   persis produk apa saja yang akan berubah, lalu wajib ketik "RESET"
   di dialog konfirmasi supaya tidak ke-tap tidak sengaja. Riwayatnya
   ikut tercatat di "Riwayat Opname" yang sudah ada.
+- **Barang pre-order dengan jaminan yang dititip sekarang ditandai juga
+  di struk cetak & bagikan** — bukan cuma di struk in-app seperti
+  sebelumnya. Keterangan "Titip [jumlah]" muncul di samping nama
+  barangnya.
+
+### 🔧 Perbaikan
+- Keterangan di struk "Pratinjau Keranjang" dipersingkat, tetap jelas.
 
 ## 31 Agustus 2026
 
