@@ -75,7 +75,7 @@ void main() {
   Text findMetaChipText(WidgetTester tester, String text) => tester
       .widgetList<Text>(find.descendant(
           of: find.byWidgetPredicate(
-              (w) => w.runtimeType.toString() == '_MarqueeText'),
+              (w) => w.runtimeType.toString() == 'MarqueeText'),
           matching: find.text(text)))
       .single;
 

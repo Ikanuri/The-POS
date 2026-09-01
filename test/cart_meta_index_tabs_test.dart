@@ -149,7 +149,7 @@ void main() {
       'TIDAK bikin layout meledak', (tester) async {
     // Regresi kelas bug nyata: versi pertama redesain ini menyamakan tinggi
     // tab pakai `IntrinsicHeight`, dan itu melempar "LayoutBuilder does not
-    // support returning intrinsic dimensions" begitu isinya `_MarqueeText`.
+    // support returning intrinsic dimensions" begitu isinya `MarqueeText`.
     // Tinggi tab sekarang dihitung eksplisit, tanpa kueri intrinsik.
     final db = await seedDb();
     addTearDown(() async => db.close());

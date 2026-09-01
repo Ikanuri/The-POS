@@ -630,6 +630,63 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
     });
+
+    testWidgets(
+        'susulan (permintaan user, screenshot): tombol Kuota diringkas jadi '
+        'SIMBOL saja (bukan label teks) supaya baris statistik tidak '
+        'memotong chip lain, tapi tetap bisa dibuka lewat tooltip-nya',
+        (tester) async {
+      await seedPreorders();
+      await openPreorderTab(tester);
+
+      expect(find.text('Kuota'), findsNothing,
+          reason: 'label teks "Kuota" dibuang, ganti simbol + tooltip');
+      expect(find.byTooltip('Kuota'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Kuota'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kuota Pre-order'), findsOneWidget,
+          reason: 'tombol simbol tetap membuka sheet pengaturan kuota');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    testWidgets(
+        'susulan (permintaan user): nama produk yang KEPANJANGAN di chip '
+        'jaminan berjalan (marquee), bukan mendorong chip lain keluar '
+        'layar', (tester) async {
+      await seedTransaction('tx1');
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'P1', name: 'Tabung Gas LPG 12kg Non-Subsidi Merah'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'po1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Bu Artia',
+          qtyOrdered: 2,
+          depositQty: 2,
+          transactionId: 'tx1');
+      await openPreorderTab(tester);
+
+      // Nama panjang -> MarqueeText mendeteksi overflow & merender lewat
+      // jalur animasi (`AnimatedBuilder`+`OverflowBox`), BUKAN `Text` biasa
+      // yang softWrap:false bisa terpotong tanpa indikasi.
+      expect(
+          find.descendant(
+              of: find.byWidgetPredicate(
+                  (w) => w.runtimeType.toString() == '_ProductPickerChip'),
+              matching: find.byType(AnimatedBuilder)),
+          findsOneWidget,
+          reason: 'nama produk kepanjangan harus jalan lewat MarqueeText, '
+              'bukan Text polos yang diam kepotong');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
   });
 
   group('Pinjaman (permintaan user putaran terbaru — group by pelanggan)', () {
