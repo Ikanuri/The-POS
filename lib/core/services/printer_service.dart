@@ -880,13 +880,24 @@ class PrinterService {
       out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(bayar)}'));
 
       // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total /
-      // Bayar / Kembali-ATAU-Sisa. Baris "Uang Diterima" (uang tender
+      // Bayar / Kembali / Sisa. Baris "Uang Diterima" (uang tender
       // kotor, Item 9 lama) DIHAPUS — riwayat pembayaran (timeline di
       // bawah, bila ada) sudah simpan info itu.
+      //
+      // BUG DIPERBAIKI (dilaporkan user): Kembali & Sisa sebelumnya
+      // if/else-if (SALING MENIADAKAN) — nota yang statusnya masih
+      // tempo/kurang_bayar TAPI pembayaran terakhirnya SEMPAT memberi
+      // kembalian (mis. dibayar lebih dari cukup utk pembayaran itu,
+      // lalu total naik lagi krn tambah belanjaan) kehilangan baris
+      // "Sisa" sama sekali di struk cetak — padahal tempo-nya nyata &
+      // tetap harus ditagih. Layar in-app (`_ChangeTakenRow`/`isKurang
+      // Bayar` di atas, `receipt_screen.dart`) SUDAH BENAR pakai 2 `if`
+      // independen sejak awal; jalur cetak ini yang menyimpang.
       if (latestWithChange != null) {
         out.addAll(bodyText('Kembali', styles: const PosStyles(bold: true)));
         out.addAll(wideNominal('Rp ${_fmtNum(latestWithChange.changeGiven)}'));
-      } else if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
+      }
+      if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
         final remaining = tx.total - netPaid;
         out.addAll(bodyText('Sisa', styles: const PosStyles(bold: true)));
         out.addAll(wideNominal('Rp ${_fmtNum(remaining > 0 ? remaining : 0)}'));
@@ -1386,10 +1397,15 @@ class PrinterService {
         : grandPaid;
     out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandBayar)}', w)));
 
+    // Sama fix dgn struk tunggal di atas: Kembalian & Sisa BUKAN saling
+    // meniadakan — nota gabungan yang pembayaran terakhirnya sempat
+    // memberi kembalian TAPI masih menyisakan tagihan (mis. sisa dari
+    // nota lain dlm gabungan itu) wajib menampilkan KEDUANYA.
     if (latestWithChange != null) {
       out.addAll(gen.text('Kembalian', styles: const PosStyles(bold: true)));
       out.addAll(wideNominal('Rp ${_fmtNum(latestWithChange.changeGiven)}'));
-    } else if (grandSisa > 0) {
+    }
+    if (grandSisa > 0) {
       out.addAll(gen.text('Sisa', styles: const PosStyles(bold: true)));
       out.addAll(wideNominal('Rp ${_fmtNum(grandSisa)}'));
     }

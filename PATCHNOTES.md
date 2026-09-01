@@ -53,6 +53,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   buka tooltip berulang kali tiap mau lihat produk lain.
 
 ### 🔧 Perbaikan
+- **Jumlah tempo (Sisa) yang sebelumnya bisa hilang dari struk cetak/
+  bagikan saat nota juga punya kembalian** — kalau nota sempat dibayar
+  lebih (dapat kembalian) lalu ditambah belanjaan lagi hingga jadi
+  tempo, struk sekarang tetap menampilkan Kembali DAN Sisa
+  bersamaan, tidak lagi saling menghilangkan.
 - **Angka "Produk"/"Jaminan" di dashboard Laci Meja → Pre-order kini
   tampil sbg chip kecil** (label biasa + angka tebal, gaya kartu lama
   yang disukai tetap dipertahankan) berdampingan dgn tombol "Kuota" —

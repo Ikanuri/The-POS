@@ -5,6 +5,32 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 31 Agustus 2026 (lanjutan lagi x8 — bug tempo hilang saat
+ada kembalian; mockup "Pratinjau Keranjang" menunggu approval). Versi
+kerja **2.25.1+58**._
+
+**Bug diperbaiki** (`3afab62`): baris "Kembali"/"Sisa" di 3 tempat
+(cetak ESC/POS tunggal, nota gabungan — `printer_service.dart`; struk
+share `_ReceiptPaper` — `receipt_screen.dart`) pakai if/else-if,
+padahal keduanya BUKAN saling meniadakan — nota bisa kurang_bayar/
+tempo LAGI setelah sempat lunas+kembalian (tambah belanjaan naikkan
+total lagi). Ringkasan on-screen sudah benar dari awal (2 `if`
+independen); disamakan.
+
+**MENGGANTUNG — nunggu jawaban user**: mockup HTML "Struk Pratinjau
+Keranjang" (fitur baru: share preview+estimasi total dari KERANJANG,
+sebelum checkout — beda tampilan dari struk lunas/tempo asli, coba
+sertakan QR QRIS dinamis krn app ini sudah bisa menyisipkan nominal ke
+payload QRIS statis MURNI OFFLINE tanpa perlu transaksi tercatat dulu,
+lihat `lib/core/utils/qris_dynamic.dart`) sudah dikirim ke user via
+screenshot (`/tmp/.../scratchpad/cart_share_mockup/`), BELUM
+diimplementasi — tunggu approval/revisi desain dulu sebelum coding.
+Rencana implementasi kalau approve: tombol baru di keranjang, widget
+struk BARU terpisah dari `_ReceiptPaper` (supaya tidak kecampur logic
+status lunas/tempo nota sungguhan), opsi toggle QRIS di Pengaturan.
+
+---
+
 _Update sesi 31 Agustus 2026 (lanjutan lagi x7 — dropdown custom-desain
 + fix angka jaminan dinamis + aksen teks pelanggan diperluas ke SEMUA
 tempat). Versi kerja **2.25.0+57**._
