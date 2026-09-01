@@ -52,8 +52,9 @@ void main() {
           ));
 
   testWidgets(
-      'kartu Laci Meja: pelanggan terdaftar pakai ikon terisi + aksen, '
-      'ad-hoc pakai ikon garis', (tester) async {
+      'kartu Laci Meja: NAMA pelanggan terdaftar juga ikut aksen terracotta '
+      '(bukan cuma ikonnya), ad-hoc pakai ikon garis + warna netral',
+      (tester) async {
     await seedTx('tx1');
     await seedTx('tx2');
     await db.into(db.customers).insert(
@@ -85,6 +86,16 @@ void main() {
         .where((i) => i.color == AppTheme.accent)
         .length;
     final garis = find.byIcon(Icons.person_outline).evaluate().length;
+    // Nama pelanggan sendiri (header kartu, bukan ikonnya) — permintaan
+    // user susulan: aksen jangan cuma di ikon kecil yang gampang terlewat.
+    final namaTerdaftarBeraksen = tester
+        .widgetList<Text>(find.text('Bu Ani Terdaftar'))
+        .where((t) => t.style?.color == AppTheme.accent)
+        .length;
+    final namaAdhocBeraksen = tester
+        .widgetList<Text>(find.text('Orang lewat'))
+        .where((t) => t.style?.color == AppTheme.accent)
+        .length;
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -92,6 +103,10 @@ void main() {
     expect(terisi, 1,
         reason: 'satu kartu pelanggan terdaftar -> ikon terisi + aksen');
     expect(garis, 1, reason: 'satu kartu nama ad-hoc -> ikon garis');
+    expect(namaTerdaftarBeraksen, 1,
+        reason: 'teks nama pelanggan terdaftar harus ikut warna aksen');
+    expect(namaAdhocBeraksen, 0,
+        reason: 'teks nama ad-hoc TIDAK boleh ikut aksen');
   });
 
   test('pre-order menyimpan customerId supaya bisa dibedakan juga', () async {

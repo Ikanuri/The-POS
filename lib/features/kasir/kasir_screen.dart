@@ -3737,14 +3737,19 @@ class _MetaChip extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onClear;
 
-  /// Ikon diberi warna aksen terracotta, bukan `primary` biasa — dipakai
-  /// membedakan pelanggan terdaftar dari nama ad-hoc.
+  /// Ikon DAN teks diberi warna aksen terracotta, bukan `primary`/netral
+  /// biasa — dipakai membedakan pelanggan terdaftar dari nama ad-hoc.
+  /// Hanya berlaku saat [active] juga true (chip kosong tetap abu-abu
+  /// netral, `accent` semata tidak bermakna tanpa isi).
   final bool accent;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final fg = active ? cs.onSurface : cs.onSurfaceVariant;
+    final showAccent = accent && active;
+    final fg = showAccent
+        ? AppTheme.accent
+        : (active ? cs.onSurface : cs.onSurfaceVariant);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -3757,9 +3762,7 @@ class _MetaChip extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 16,
-                color: accent
-                    ? AppTheme.accent
-                    : (active ? cs.primary : fg)),
+                color: showAccent ? AppTheme.accent : (active ? cs.primary : fg)),
             const SizedBox(width: 4),
             Expanded(
               child: _MarqueeText(

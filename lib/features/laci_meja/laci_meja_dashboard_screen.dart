@@ -118,7 +118,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
   /// Baris ke-1 kartu (redesain permintaan user): NAMA PELANGGAN paling atas,
   /// bold & paling besar — menggantikan nama barang yang dulu di posisi ini.
   static Widget _cardHeader(String customerName,
-      {Widget? trailing, Widget? leading}) {
+      {Widget? trailing, Widget? leading, bool accent = false}) {
     return Row(
       children: [
         if (leading != null) ...[leading, const SizedBox(width: 6)],
@@ -127,16 +127,23 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
             customerName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 15.5,
                 fontWeight: FontWeight.w800,
-                letterSpacing: -0.1),
+                letterSpacing: -0.1,
+                // Nama pelanggan TERDAFTAR ikut aksen terracotta juga
+                // (permintaan user), bukan cuma ikon di depannya — dulu
+                // ikonnya kecil di pinggir, gampang terlewat.
+                color: accent ? AppTheme.accent : null),
           ),
         ),
         if (trailing != null) trailing,
       ],
     );
   }
+
+  static bool _isRegisteredCustomer(String? customerId) =>
+      customerId != null && customerId.isNotEmpty;
 
   /// Penanda pelanggan TERDAFTAR vs nama ad-hoc (permintaan user). Sinyalnya
   /// `customerId`: terisi = pelanggan yang punya record (riwayat, hutang,
@@ -148,7 +155,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
   /// Ikon dipakai sbg pembeda utama (bukan warna saja) supaya tetap terbaca
   /// di layar HP murah/kontras rendah maupun bagi yang sulit membedakan warna.
   static Widget _customerTypeIcon(String? customerId, bool isDark) {
-    final terdaftar = customerId != null && customerId.isNotEmpty;
+    final terdaftar = _isRegisteredCustomer(customerId);
     return Icon(
       terdaftar ? Icons.person : Icons.person_outline,
       size: 16,
@@ -486,6 +493,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                     customerName,
                     leading:
                         _customerTypeIcon(group.first.customerId, isDark),
+                    accent: _isRegisteredCustomer(group.first.customerId),
                   ),
                 ),
                 for (final e in group)
@@ -627,6 +635,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                 _cardHeader(
                   customerName,
                   leading: _customerTypeIcon(group.first.customerId, isDark),
+                  accent: _isRegisteredCustomer(group.first.customerId),
                   trailing: IconButton(
                     tooltip: pinned ? 'Lepas sematan' : 'Sematkan ke atas',
                     visualDensity: VisualDensity.compact,
@@ -1077,6 +1086,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                   child: _cardHeader(
                     customerName,
                     leading: _customerTypeIcon(first.customerId, isDark),
+                    accent: _isRegisteredCustomer(first.customerId),
                   ),
                 ),
                 for (final e in group)
