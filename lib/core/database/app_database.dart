@@ -6689,6 +6689,26 @@ class AppDatabase extends _$AppDatabase {
     return out;
   }
 
+  /// Susulan (permintaan user): alamat pelanggan TERDAFTAR utk sekumpulan
+  /// `customerId` — dipakai dashboard Laci Meja menampilkan alamat di bawah
+  /// nama, supaya nama KEMBAR (mis. dua "Bu Sri" beda alamat) bisa
+  /// dibedakan tanpa harus buka nota. Cuma utk pelanggan terdaftar (baris
+  /// Laci Meja punya `customerId`) — pelanggan ad-hoc tidak punya record
+  /// `Customers` sama sekali, jadi tidak ada alamat yang bisa diambil.
+  Future<Map<String, String>> getCustomerAddressesForIds(
+      List<String> customerIds) async {
+    if (customerIds.isEmpty) return {};
+    final rows = await (select(customers)
+          ..where((t) => t.id.isIn(customerIds)))
+        .get();
+    final out = <String, String>{};
+    for (final c in rows) {
+      final addr = c.address?.trim();
+      if (addr != null && addr.isNotEmpty) out[c.id] = addr;
+    }
+    return out;
+  }
+
   /// Baris `BorrowedItems` (pinjaman) milik SATU nota — dipakai struk in-app
   /// menampilkan SECTION "Pinjaman Barang" ("rujukan kebenaran" permintaan
   /// user: staf bisa cek nota asli utk konfirmasi barang apa yang memang

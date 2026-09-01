@@ -108,6 +108,13 @@ void main() {
     addTearDown(() async => db.close());
 
     expect(find.byTooltip('Bagikan Pratinjau'), findsOneWidget);
+    // Susulan (permintaan user): ikonnya `share_outlined`, disamakan dgn
+    // tombol "Bagikan Struk" di receipt_screen.dart — bukan `ios_share`.
+    final triggerButton = tester.widget<IconButton>(find.ancestor(
+        of: find.byTooltip('Bagikan Pratinjau'),
+        matching: find.byType(IconButton)));
+    expect((triggerButton.icon as Icon).icon, Icons.share_outlined);
+
     await tester.tap(find.byTooltip('Bagikan Pratinjau'));
     await tester.pumpAndSettle();
 
