@@ -10,6 +10,7 @@ import '../../core/theme/app_theme.dart';
 import '../kasir/widgets/debt_payment_sheet.dart';
 import 'laci_meja_date_utils.dart';
 import 'laci_meja_expandable_search.dart';
+import 'preorder_calc.dart';
 import 'preorder_quota_store.dart';
 import 'preorder_report.dart';
 import 'product_picker_dropdown.dart';
@@ -707,8 +708,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // jaminan di `item_entry_sheet.dart`/dialog "Jadikan Pre-order".
     double sisaQty(PreorderEntry e) =>
         (e.qtyOrdered - (taken[e.id] ?? 0)).clamp(0.0, e.qtyOrdered);
-    double sisaDeposit(PreorderEntry e) =>
-        e.depositQty <= 0 ? 0.0 : (e.depositQty - (taken[e.id] ?? 0)).clamp(0.0, e.depositQty);
+    double sisaDepositOf(PreorderEntry e) =>
+        sisaDeposit(e, taken[e.id] ?? 0);
 
     String productNameOf(PreorderEntry e) =>
         labels[e.productUnitId]?.productName ?? e.productId;
@@ -774,7 +775,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // antar produk berbeda, id tidak).
     final depositByProduct = <String, ({String name, double qty})>{};
     for (final e in filtered) {
-      final sisa = sisaDeposit(e);
+      final sisa = sisaDepositOf(e);
       if (sisa <= 0) continue;
       final name = labels[e.productUnitId]?.productName ?? e.productId;
       final prev = depositByProduct[e.productId];
@@ -1105,12 +1106,12 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // jumlah pesanan awal — begitu ada pengambilan sebagian, kartu langsung
     // menunjukkan "berapa lagi", bukan angka basi yang butuh dihitung manual
     // dari progress bar. Jaminan diasumsikan konsumsi 1:1 dgn item (lihat
-    // dok `sisaDeposit` di `_buildPreorderList`).
+    // `sisaDeposit` di `preorder_calc.dart`, dipakai jg oleh
+    // `preorder_report.dart`).
     final qtyStr = sisa % 1 == 0 ? sisa.toInt().toString() : '$sisa';
-    final sisaDeposit =
-        e.depositQty <= 0 ? 0.0 : (e.depositQty - taken).clamp(0.0, e.depositQty);
-    final depositStr = sisaDeposit > 0
-        ? ' - ${sisaDeposit % 1 == 0 ? sisaDeposit.toInt() : sisaDeposit} jaminan'
+    final tileSisaDeposit = sisaDeposit(e, taken);
+    final depositStr = tileSisaDeposit > 0
+        ? ' - ${tileSisaDeposit % 1 == 0 ? tileSisaDeposit.toInt() : tileSisaDeposit} jaminan'
         : '';
     // Status "Tempo"/"Lunas" berdasar `e.paid` (DP RUPIAH — permintaan user
     // eksplisit "Rp 0" = tempo), BUKAN `depositQty` (jaminan WADAH FISIK,

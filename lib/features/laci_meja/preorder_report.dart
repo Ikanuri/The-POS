@@ -1,5 +1,6 @@
 import '../../core/database/app_database.dart';
 import 'laci_meja_date_utils.dart';
+import 'preorder_calc.dart';
 
 /// Susulan dashboard Laci Meja tab Pre-order (permintaan user) — tombol
 /// "salin laporan" yang merangkum antrian pre-order TERBUKA jadi teks siap
@@ -29,15 +30,24 @@ import 'laci_meja_date_utils.dart';
 ///   sekadar duplikat baris entri itu sendiri — dihilangkan biar tidak
 ///   berulang, contoh yang disetujui user: "Beras 25kg (1 pesanan)" tanpa
 ///   angka qty/jaminan sama sekali karena grup itu cuma 1 entri).
-/// - "N jaminan" di tiap baris ENTRI (bukan baris total) memakai
-///   `depositQty` MENTAH (jumlah wadah yang dititip sbg jaminan saat
-///   pre-order dibuat), BUKAN versi "sisa" yang sudah dikurangi asumsi
-///   konsumsi 1:1 dgn qty yang sudah diambil (beda dari `_preorderTile` di
-///   dashboard) — konsisten dgn contoh yang disetujui user (mis. entri
-///   "Dipenuhi 2 dari 5" tetap menampilkan "5 jaminan", bukan "3 jaminan").
-///   Begitu juga total qty/jaminan di baris header ATAS & header grup:
-///   dijumlah dari `qtyOrdered`/`depositQty` MENTAH tiap entri (bukan sisa)
-///   — beda metrik dari "Sisa" per-entri yang memang menampilkan sisa.
+/// - "N jaminan" — baik per-entri, header grup, maupun total atas/bawah —
+///   memakai jaminan SISA (`sisaDeposit` dari `preorder_calc.dart`, SATU
+///   logic yang sama dipakai dashboard `_preorderTile`/`_buildPreorderList`),
+///   BUKAN `depositQty` mentah. `depositQty` mentah cuma dipakai utk qty
+///   yang MEMANG menampilkan angka pesanan awal (mis. total qty barang di
+///   header, beda konsep dari jaminan wadah).
+///
+///   BUG YANG SUDAH DIPERBAIKI: versi sebelumnya (komentar lama di sini
+///   sempat mengklaim ini "keputusan disetujui user") memakai `depositQty`
+///   MENTAH tanpa dikurangi walau pre-order sudah dipenuhi sebagian —
+///   klaim itu SALAH, itu cuma kebetulan dari contoh dummy yang dipakai
+///   asisten sesi sebelumnya saat implementasi (bukan keputusan desain user
+///   sungguhan), yang kebetulan tidak menunjukkan kasus "dipenuhi
+///   sebagian" jadi lolos tanpa ketahuan sampai user sendiri menyadarinya
+///   (entri "Dipenuhi 2 dari 5" salah tampil "5 jaminan" mentah, bukan
+///   "3 jaminan" sisa — padahal 2 wadah sudah kembali). Perilaku APLIKASI
+///   (dashboard, mengurangi jaminan seiring dipenuhi) itu yang BENAR;
+///   laporan salin-teks sekarang ikut itu. Lihat CHANGELOG.
 /// - Status "Tempo"/"Lunas" memakai `e.paid` (field yang SAMA PERSIS dipakai
 ///   `_preorderTile` dashboard — field ini sengaja diperbaiki dari bug lama
 ///   yang salah pakai `depositQty > 0`, lihat komentar di
@@ -70,6 +80,7 @@ String buildPreorderReportText({
   double takenOf(PreorderEntry e) => takenQty[e.id] ?? 0;
   double sisaOf(PreorderEntry e) =>
       (e.qtyOrdered - takenOf(e)).clamp(0.0, e.qtyOrdered);
+  double sisaDepositOf(PreorderEntry e) => sisaDeposit(e, takenOf(e));
 
   String customerLabelOf(PreorderEntry e) {
     final live =
@@ -96,7 +107,7 @@ String buildPreorderReportText({
       scope.isEmpty || (productFilter == null && distinctProducts.length > 1);
 
   final entryCount = scope.length;
-  final totalDeposit = scope.fold<double>(0, (s, e) => s + e.depositQty);
+  final totalDeposit = scope.fold<double>(0, (s, e) => s + sisaDepositOf(e));
   final printed = _fmtDateTimeLong(now);
 
   final buf = StringBuffer();
@@ -119,8 +130,9 @@ String buildPreorderReportText({
     for (var i = 0; i < scope.length; i++) {
       final e = scope[i];
       final sisa = sisaOf(e);
+      final entryDeposit = sisaDepositOf(e);
       final depositStr =
-          e.depositQty > 0 ? ' - ${_fmtNum(e.depositQty)} jaminan' : '';
+          entryDeposit > 0 ? ' - ${_fmtNum(entryDeposit)} jaminan' : '';
       final status = statusOf(e);
       final statusStr = status != null ? ' - $status' : '';
       final line2 = 'Pesan ${_fmtNum(e.qtyOrdered)} ${productNameOf(e)} - '
@@ -161,7 +173,7 @@ String buildPreorderReportText({
       if (count > 1) {
         final qtySum = groupEntries.fold<double>(0, (s, e) => s + e.qtyOrdered);
         final depositSum =
-            groupEntries.fold<double>(0, (s, e) => s + e.depositQty);
+            groupEntries.fold<double>(0, (s, e) => s + sisaDepositOf(e));
         final parts = <String>['$count pesanan'];
         final qtyPart = unitWord.isEmpty
             ? _fmtNum(qtySum)
@@ -181,8 +193,9 @@ String buildPreorderReportText({
         final sisaStr = taken > 0
             ? 'Sisa ${_fmtNum(sisa)} dari ${_fmtNum(e.qtyOrdered)}'
             : 'Sisa ${_fmtNum(sisa)}';
+        final entryDeposit = sisaDepositOf(e);
         final depositStr =
-            e.depositQty > 0 ? ' - ${_fmtNum(e.depositQty)} jaminan' : '';
+            entryDeposit > 0 ? ' - ${_fmtNum(entryDeposit)} jaminan' : '';
         final status = statusOf(e);
         final statusStr = status != null ? ' - $status' : '';
         final days = calendarDaysSince(e.createdAt, now: now);

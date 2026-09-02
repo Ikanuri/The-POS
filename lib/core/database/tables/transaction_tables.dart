@@ -54,6 +54,17 @@ class Transactions extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
 
+  /// Item 62 — dicap ulang di SETIAP `update(transactions)` yang menyentuh
+  /// field yang genuinely tidak bisa direkonstruksi dari tabel anak
+  /// (`status` void, `customerName`/`customerId`, `pointsEarned`). Tabel ini
+  /// diperlakukan sbg append-only murni oleh `dumpSince`/`mergeRows` —
+  /// tanpa kolom ini, perubahan pada baris yang SUDAH pernah tersinkron
+  /// (created_at sudah lewat watermark) tidak pernah terkirim lagi ke
+  /// device lain (bug nyata: nota yang di-void di satu device tetap
+  /// terlihat valid di device lain). null = baris lama sebelum kolom ini
+  /// ada, atau belum pernah di-update sejak dibuat.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
