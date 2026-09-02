@@ -188,6 +188,18 @@ class PreorderEntries extends Table {
   TextColumn get phone => text().nullable()();
   RealColumn get qtyOrdered => real()();
 
+  /// Susulan (permintaan user) — id baris `transaction_items` yang DP/
+  /// harganya dikunci Rp 0 saat checkout (lihat `_effectivePrice` di
+  /// `item_entry_sheet.dart`: `isPreorder && !dpPaid` -> harga 0). Tautan
+  /// PRESISI ke baris nota (bukan cocok-nama/produk+satuan), pola identik
+  /// `LeftBehindItems.transactionItemId`/`BorrowedItems.transactionItemId`
+  /// (alasan sama: produk+satuan yang SAMA bisa muncul >1 kali di satu
+  /// nota) — dipakai `collectPreorderDeposit` menemukan baris yang harus
+  /// dinaikkan dari Rp 0 ke harga asli saat DP akhirnya dibayar. Nullable
+  /// utk entri lama (dibuat sebelum kolom ini ada) DAN pre-order titip
+  /// wadah tanpa membeli apa pun (tidak ada baris nota utk ditaut).
+  TextColumn get transactionItemId => text().nullable()();
+
   /// Jumlah wadah dititip sbg jaminan — wajib >0 kalau satuan produknya
   /// `requiresDeposit = true` (divalidasi di layer aplikasi, bukan DB).
   RealColumn get depositQty => real().withDefault(const Constant(0))();

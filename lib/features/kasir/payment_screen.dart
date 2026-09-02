@@ -577,6 +577,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             );
           }(),
       ];
+      // Susulan (permintaan user) — tautan PRESISI dari pre-order ke baris
+      // nota yang harganya dikunci Rp 0 (lihat dok
+      // `PreorderEntries.transactionItemId`), dipakai `collectPreorderDeposit`
+      // saat DP akhirnya dikumpulkan. Dibangun dari daftar yang SAMA persis
+      // & urutan SAMA dgn `itemCompanions` (bukan query ulang).
+      final txItemIdByProductUnit = <String, String>{
+        for (var i = 0; i < allocatedLines.length; i++)
+          '${allocatedLines[i].item.productId}|${allocatedLines[i].item.productUnitId}':
+              itemCompanions[i].id.value,
+      };
 
       final txCompanion = TransactionsCompanion.insert(
         id: txId,
@@ -675,6 +685,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           depositQty: item.depositQty ?? 0,
           paid: item.preorderPaid,
           locallyModified: locallyModifiedLaci,
+          transactionItemId:
+              txItemIdByProductUnit['${item.productId}|${item.productUnitId}'],
         );
       }
 
@@ -753,6 +765,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           );
         }(),
     ];
+    // Lihat dok setara di `_confirmPayment` — tautan presisi pre-order ke
+    // baris nota, dibangun dari daftar & urutan yang SAMA dgn `itemCompanions`.
+    final txItemIdByProductUnit = <String, String>{
+      for (var i = 0; i < allocatedLines.length; i++)
+        '${allocatedLines[i].item.productId}|${allocatedLines[i].item.productUnitId}':
+            itemCompanions[i].id.value,
+    };
 
     // Item 52 redesain pre-order — sama spt checkout normal: item pre-order
     // dikecualikan dari pengurangan stok (belum ada fisik di toko).
@@ -827,6 +846,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         depositQty: item.depositQty ?? 0,
         paid: item.preorderPaid,
         locallyModified: locallyModifiedLaci,
+        transactionItemId:
+            txItemIdByProductUnit['${item.productId}|${item.productUnitId}'],
       );
     }
 

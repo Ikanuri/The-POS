@@ -255,7 +255,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -680,6 +680,15 @@ class AppDatabase extends _$AppDatabase {
                 preorderEntries, preorderEntries.lastEditedAt, m);
             await _addColumnIfMissing('preorder_entries', 'customer_id',
                 preorderEntries, preorderEntries.customerId, m);
+          }
+          if (from < 36) {
+            // Susulan (permintaan user) — kumpulkan pembayaran DP/jaminan
+            // pre-order yang tadinya dikunci Rp 0 saat checkout, begitu
+            // pre-order dipenuhi. Butuh tautan PRESISI ke baris nota (lihat
+            // dok kolom), pola identik migrasi v35 utk 2 tabel Laci Meja
+            // lain yang sudah lebih dulu punya kolom serupa.
+            await _addColumnIfMissing('preorder_entries', 'transaction_item_id',
+                preorderEntries, preorderEntries.transactionItemId, m);
           }
         },
         beforeOpen: (details) async {
@@ -6955,6 +6964,11 @@ class AppDatabase extends _$AppDatabase {
     bool paid = false,
     String? note,
     bool locallyModified = false,
+    // Susulan (permintaan user) — lihat dok kolom di
+    // `PreorderEntries.transactionItemId`. Diisi pemanggil checkout
+    // (payment_screen.dart) yang tahu persis id baris nota terkait;
+    // null aman utk pre-order titip wadah tanpa membeli apa pun.
+    String? transactionItemId,
   }) =>
       into(preorderEntries).insert(PreorderEntriesCompanion.insert(
         id: id,
@@ -6969,6 +6983,7 @@ class AppDatabase extends _$AppDatabase {
         paid: Value(paid),
         note: Value(note),
         locallyModified: Value(locallyModified),
+        transactionItemId: Value(transactionItemId),
       ));
 
   /// FIFO MURNI berdasar `createdAt` — `paid` HANYA informatif, TIDAK PERNAH
@@ -7168,6 +7183,124 @@ class AppDatabase extends _$AppDatabase {
       deviceCode: deviceCode,
       locallyModified: locallyModified,
     );
+  }
+
+  /// Nominal DP/jaminan pre-order yang MASIH harus dikumpulkan — baris nota
+  /// yang harganya dikunci Rp 0 saat checkout (`_effectivePrice = 0` di
+  /// `item_entry_sheet.dart` saat `isPreorder && !dpPaid`). Null kalau tidak
+  /// ada apa pun yg perlu dikumpulkan: entri tidak tertaut ke baris nota
+  /// (`transactionItemId` null — mis. entri lama sebelum kolom ini ada,
+  /// atau titip wadah tanpa membeli apa pun), baris nota sudah dihapus, atau
+  /// harganya sudah bukan Rp 0 lagi (sudah pernah dikumpulkan).
+  Future<int?> getPreorderDepositOwed(String preorderEntryId) async {
+    final entry = await (select(preorderEntries)
+          ..where((t) => t.id.equals(preorderEntryId)))
+        .getSingleOrNull();
+    final itemId = entry?.transactionItemId;
+    if (entry == null || itemId == null) return null;
+    final item = await (select(transactionItems)
+          ..where((t) => t.id.equals(itemId)))
+        .getSingleOrNull();
+    if (item == null) return null;
+    final owed = (item.originalPrice * item.qty).round() - item.subtotal;
+    return owed > 0 ? owed : null;
+  }
+
+  /// Kumpulkan pembayaran DP/jaminan pre-order yang tadinya dikunci Rp 0
+  /// saat checkout — dipanggil dari dashboard Laci Meja saat pre-order
+  /// akhirnya DIPENUHI & pelanggan bayar (permintaan user).
+  ///
+  /// Menaikkan `priceAtSale`/`subtotal` baris nota TERTAUT (lihat dok
+  /// `PreorderEntries.transactionItemId`) dari Rp 0 ke `originalPrice` —
+  /// SATU-SATUNYA kasus baris nota LUNAS boleh naik nilainya, beda dari
+  /// `editPaidTransactionItem` yang SENGAJA cuma izinkan turun (baris ITU
+  /// utk koreksi umum yang berisiko disalahgunakan menambah tagihan nota
+  /// yang sudah genuinely settled — baris pre-order INI beda: dia memang
+  /// belum PERNAH benar-benar dibayar sejak awal, meski status nota
+  /// globalnya sempat "lunas" krn item lain menutup total). Lalu:
+  ///   1. Rekonsiliasi total/status nota (`_reconcileTransactionTotals`,
+  ///      pola sama `addItemsToTransaction`) — nota bisa balik jadi
+  ///      "kurang_bayar" utk selisihnya, KONSISTEN dgn perbaikan "Kembali/
+  ///      Sisa bisa muncul bersamaan" sesi sebelumnya.
+  ///   2. Catat pembayaran via `addPaymentToTransaction` — muncul otomatis
+  ///      di "Riwayat Pembayaran" struk (permintaan user), tanpa jalur baru.
+  ///   3. Tandai `preorderEntries.paid = true` — dashboard Laci Meja
+  ///      berhenti menampilkan "Tempo" utk entri ini.
+  ///   4. Catat event `aksi: 'bayar'` (`qty: 0` SENGAJA — supaya TIDAK ikut
+  ///      kehitung `getLaciMejaTakenQty`/progress bar, nominalnya di
+  ///      `note`) — muncul di kartu "riwayat" pre-order di nota (permintaan
+  ///      user).
+  ///
+  /// Return nominal yang benar² terkumpul (owed SAAT dipanggil, BUKAN
+  /// [amount] mentah — bisa beda kalau kasir bayar lebih/kurang), atau null
+  /// kalau tidak ada apa pun yg perlu dikumpulkan (lihat
+  /// [getPreorderDepositOwed]) — pemanggil UI menafsirkan null sbg
+  /// "sudah beres, tidak perlu sheet pembayaran".
+  Future<int?> collectPreorderDeposit({
+    required String preorderEntryId,
+    required int amount,
+    required String method,
+    String? methodName,
+    required String kasirId,
+  }) async {
+    return transaction(() async {
+      final entry = await (select(preorderEntries)
+            ..where((t) => t.id.equals(preorderEntryId)))
+          .getSingleOrNull();
+      final itemId = entry?.transactionItemId;
+      final txId = entry?.transactionId;
+      if (entry == null || itemId == null || txId == null) return null;
+      final item = await (select(transactionItems)
+            ..where((t) => t.id.equals(itemId)))
+          .getSingleOrNull();
+      if (item == null) return null;
+      final newSubtotal = (item.originalPrice * item.qty).round();
+      final owed = newSubtotal - item.subtotal;
+      if (owed <= 0) return null;
+
+      await (update(transactionItems)..where((t) => t.id.equals(item.id)))
+          .write(TransactionItemsCompanion(
+        priceAtSale: Value(item.originalPrice),
+        subtotal: Value(newSubtotal),
+      ));
+      await _reconcileTransactionTotals(txId);
+      await addPaymentToTransaction(
+        txId: txId,
+        amount: amount,
+        method: method,
+        methodName: methodName,
+        kasirId: kasirId,
+        note: 'DP/jaminan pre-order',
+      );
+
+      final now = DateTime.now();
+      await (update(preorderEntries)
+            ..where((t) => t.id.equals(preorderEntryId)))
+          .write(PreorderEntriesCompanion(
+        paid: const Value(true),
+        updatedAt: Value(now),
+      ));
+      await recordLaciMejaEvent(
+        id: '$preorderEntryId-bayar-${now.microsecondsSinceEpoch}',
+        entityType: 'preorder',
+        entryId: preorderEntryId,
+        aksi: 'bayar',
+        qty: 0,
+        note: 'DP dibayar ${_fmtRupiahPlain(amount)}',
+        deviceCode: kasirId,
+      );
+      return owed;
+    });
+  }
+
+  static String _fmtRupiahPlain(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
+      buf.write(s[i]);
+    }
+    return 'Rp $buf';
   }
 
   /// Sematkan/lepas sematan sekumpulan baris pinjaman sekaligus. UI

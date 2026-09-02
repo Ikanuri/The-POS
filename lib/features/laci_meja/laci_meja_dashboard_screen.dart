@@ -7,6 +7,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/marquee_text.dart';
+import '../kasir/widgets/debt_payment_sheet.dart';
 import 'preorder_quota_store.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
@@ -1268,10 +1269,31 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
             if (qty == null || qty <= 0) return;
             await db.fulfillPreorderQty(e.id, qty,
                 locallyModified: locallyModified, deviceCode: deviceCode);
-            return;
+          } else {
+            await db.fulfillPreorderEntry(e.id,
+                locallyModified: locallyModified, deviceCode: deviceCode);
           }
-          await db.fulfillPreorderEntry(e.id,
-              locallyModified: locallyModified, deviceCode: deviceCode);
+          // Susulan (permintaan user) — begitu pre-order dipenuhi, tawarkan
+          // langsung kumpulkan DP/jaminan yang tadinya dikunci Rp 0 saat
+          // checkout (kasus: LPG jaminan belum bayar, nota sudah lunas utk
+          // item lain). Kalau tidak ada yang perlu dikumpulkan (tidak
+          // tertaut baris nota, atau sudah dibayar), tidak ada apa-apa.
+          final owed = await db.getPreorderDepositOwed(e.id);
+          if (owed == null || !context.mounted) return;
+          final result = await showDebtPaymentSheet(
+            context,
+            db,
+            remaining: owed,
+            title: 'DP/Jaminan — $productName',
+          );
+          if (result == null) return;
+          await db.collectPreorderDeposit(
+            preorderEntryId: e.id,
+            amount: result.amount,
+            method: result.method,
+            methodName: result.methodName,
+            kasirId: deviceCode,
+          );
         },
         child: const Text('Penuhi'),
       ),
