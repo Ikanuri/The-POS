@@ -71,6 +71,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   AWAL, tidak berkurang walau sebagian pesanan sudah diambil (padahal
   di dashboard, angkanya sudah benar berkurang). Sekarang laporan
   salin-teks memakai angka yang sama dengan dashboard.
+- **Cari pelanggan di Riwayat Transaksi lalu persempit ke bulan
+  tertentu — bulan itu sekarang selalu muncul kalau memang ada
+  transaksinya** — sebelumnya, di toko yang cukup ramai (banyak
+  transaksi dari berbagai pelanggan dalam satu bulan), mencari nama
+  satu pelanggan lalu memilih rentang tanggal ke bulan tertentu bisa
+  membuat transaksi pelanggan itu di bulan tersebut sama sekali tidak
+  muncul di hasil — padahal transaksinya ada. Sekarang pencarian nama
+  langsung diterapkan saat mengambil data dari database, bukan
+  disaring belakangan, jadi tidak ada lagi transaksi yang "hilang"
+  krn tertimbun transaksi pelanggan lain yang lebih banyak.
 
 ## 1 September 2026
 
