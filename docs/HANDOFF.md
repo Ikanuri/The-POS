@@ -5,6 +5,85 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 (lanjutan, sesi ketiga hari yg sama, dikerjakan
+via agen background) — item pending "tombol copy laporan pre-order" (lihat
+blok sesi sebelumnya di bawah) SUDAH DISELESAIKAN, plus 1 tugas susulan yg
+disisipkan coordinator di tengah sesi. Versi kerja **2.32.0+68**,
+schemaVersion TETAP 36 (tidak ada migrasi baru)._
+
+**Tugas 1 (DIIMPLEMENTASIKAN, `2e6bd69`) — tombol "Salin Laporan" pre-order**:
+format teks (Format A satu-produk / Format B multi-produk) SUDAH DISETUJUI
+user lewat draft sesi sebelumnya (lihat blok lama di bawah utk isi draftnya),
+tidak didesain ulang. Logic murni ada di `lib/features/laci_meja/
+preorder_report.dart` (`buildPreorderReportText`), dipanggil dari tombol
+ikon baru "Salin Laporan" (`_PreorderStatsLine`, sebelah tombol Kuota) di
+`laci_meja_dashboard_screen.dart` → `Clipboard.setData` + SnackBar.
+
+**Keputusan yang diambil sendiri saat implementasi (spek user ada
+ambiguitas/kontradiksi kecil dgn kode nyata — sesi berjalan otomatis di
+background, diputuskan sendiri, dicatat di sini + komentar kode
+`preorder_report.dart`)**:
+- **Status Tempo/Lunas**: spek awal minta ambil dari `transactions.status`
+  via `transactionId`. Ternyata dashboard nyata (`_preorderTile`) SUDAH
+  PAKAI `e.paid` (field yg SENGAJA diperbaiki dari bug lama yg salah pakai
+  `depositQty > 0`, lihat komentar existing di `laci_meja_dashboard_screen.
+  dart` baris ~1030). Diputuskan REUSE `e.paid` (bukan query baru ke
+  `transactions.status`) — sesuai prinsip CLAUDE.md "reuse logic yg sudah
+  teruji, jangan hitung ulang dari sumber lain". Guard "sembunyikan kalau
+  `transactionId` null" dari spek awal TETAP dipakai (kasus titip wadah
+  tanpa nota rujukan — `e.paid` tidak bermakna di situ).
+- **"N jaminan" per-entri & total header pakai `depositQty` MENTAH**, BUKAN
+  versi "sisa" (dikurangi asumsi konsumsi 1:1 dgn qty yg sudah diambil) yg
+  dipakai `_preorderTile` dashboard. Contoh yg disetujui user eksplisit:
+  entri "Dipenuhi 2 dari 5" tetap tampil "5 jaminan" (bukan "3"). Beda
+  metrik dari "Sisa" per-entri yg memang menampilkan sisa qty.
+- **Header grup `=== Produk (...) ===` di Format B**: token qty/jaminan
+  agregat HANYA muncul kalau grup itu >1 entri (contoh disetujui user:
+  grup 1-entri "Beras 25kg (1 pesanan)" TANPA angka qty/jaminan sama
+  sekali) — disimpulkan dari pola contoh, tidak dinyatakan eksplisit di
+  prosa spek.
+- **Nama pelanggan ad-hoc** (`customerId` null) diberi akhiran " (Umum)"
+  supaya laporan teks (tanpa ikon pembeda spt dashboard) tetap bisa
+  membedakan terdaftar vs ad-hoc — kecuali kalau namanya sendiri sudah
+  "Umum" (tidak jadi "Umum (Umum)").
+- **"N hari lalu" pakai selisih HARI KALENDER**, bukan `Duration.inDays`
+  literal — lihat Tugas 2 di bawah (ditemukan SAAT verifikasi manual
+  terhadap contoh yg disetujui user: Siti 30/08 16:40 vs "Dicetak" 02/09
+  14:35 harus "3 hari lalu", tapi `inDays` mentah cuma kasih 2).
+
+Cakupan laporan mengikuti **filter produk** dashboard (bukan kata kunci
+pencarian) — sesuai spek eksplisit.
+
+**Tugas 2 (DIIMPLEMENTASIKAN, sama commit `2e6bd69`) — susulan coordinator
+di tengah sesi**: SEMUA perhitungan "N hari lalu" fitur Laci Meja (yg
+sebelumnya 3 salinan logic berbeda: `_daysSince` di
+`laci_meja_dashboard_screen.dart`, inline di `riwayat_laci_meja_screen.
+dart`, dan yg baru ditulis di `preorder_report.dart`) disatukan jadi SATU
+helper `calendarDaysSince` di file baru `lib/features/laci_meja/
+laci_meja_date_utils.dart`. Bug yg diperbaiki: versi lama pakai
+`DateTime.now().difference(x).inDays` — selisih LITERAL 24 jam, salah utk
+kasus lewat tengah malam (entri kemarin 23:50, dilihat hari ini 00:10 →
+harusnya "1 hari lalu", `inDays` mentah bilang "0"). Fix: normalisasi
+kedua tanggal ke tengah malam (buang jam/menit/detik) SEBELUM
+diselisihkan. `laci_meja_reminder.dart` DICEK juga (disebut coordinator)
+tapi TIDAK menghitung hari sendiri — cuma menyebut konsep di komentar,
+tidak ada perubahan di file itu.
+
+**Test**: 18 test baru (14 kasus `buildPreorderReportText` di
+`preorder_report_test.dart`, 1 widget test tombol di
+`preorder_report_copy_button_test.dart`, 4 kasus `calendarDaysSince` di
+`laci_meja_calendar_days_test.dart` termasuk kasus lewat-tengah-malam
+eksplisit) — SEMUA revert-verified (logic sengaja dirusak dulu, terbukti
+gagal dgn pesan masuk akal, baru dikembalikan). `flutter analyze` bersih.
+Seluruh `flutter test` (1285 test) lolos kecuali
+`proposal_unchanged_end_to_end_test.dart` (flaky pre-existing, TIDAK
+terkait perubahan sesi ini — sudah dikonfirmasi sebelumnya juga flaky
+tanpa perubahan apa pun).
+
+**Tidak ada item menggantung baru dari sesi ini.**
+
+---
+
 _Update sesi 2 September 2026 (lanjutan, sesi kedua hari yg sama) —
 2 tugas terpisah dikerjakan berurutan sesuai instruksi user via agen
 background. Versi kerja **2.31.0+67**, schemaVersion TETAP 36 (tidak

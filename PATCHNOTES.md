@@ -11,6 +11,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 2 September 2026
 
 ### ✨ Fitur Baru
+- **Tombol "Salin Laporan" di dashboard Laci Meja tab Pre-order** —
+  ikon salin baru di sebelah tombol Kuota. Sekali tap, ringkasan
+  antrian pre-order yang masih terbuka (nama pelanggan, jumlah
+  pesanan, sisa, jaminan, status Tempo/Lunas, kapan dipesan) langsung
+  tersalin ke clipboard, siap tempel ke WhatsApp atau dicatat manual.
+  Laporannya otomatis mengikuti filter produk yang sedang aktif — kalau
+  cuma melihat LPG, laporan cuma berisi LPG; kalau "Semua Produk",
+  laporan dikelompokkan rapi per produk.
 - **Layar "Riwayat Laci Meja" baru** — sekarang ada layar riwayat
   tersendiri (buka lewat ikon jam di pojok kanan atas dashboard Laci
   Meja) yang memisahkan riwayat Titip/Ketinggalan, Pinjaman Barang, dan
@@ -27,6 +35,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Meja ditekan, aplikasi otomatis menawarkan sheet pembayaran kalau
   masih ada DP yang harus ditagih. Pembayarannya langsung tercatat di
   Riwayat Pembayaran nota dan riwayat kartu pre-order di struk.
+
+### 🐛 Perbaikan
+- **Hitungan "N hari lalu" di Laci Meja kini akurat lewat tengah
+  malam** — sebelumnya kalau barang dititip/dipesan malam hari (mis.
+  jam 23:50) dan dicek lagi sesaat setelah lewat tengah malam, masih
+  tertulis "0 hari lalu" walau tanggalnya sudah berganti. Sekarang
+  dihitung berdasar tanggal kalender, jadi begitu lewat tengah malam
+  langsung terhitung "1 hari lalu".
 
 ## 1 September 2026
 
