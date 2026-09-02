@@ -676,3 +676,25 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
    ini. Item ini dicatat murni sbg opsi upgrade masa depan, TIDAK ada
    rencana eksekusi sampai user angkat lagi secara eksplisit.
 
+## Item 55 — Filter produk di Riwayat Transaksi punya pola bug yang sama
+   dgn bug filter pelanggan yang baru diperbaiki (2 September 2026)
+
+   Ditemukan saat investigasi bug "filter riwayat SATU PELANGGAN dari awal
+   lalu persempit ke bulan tertentu -> bulan itu tidak muncul" (lihat
+   CHANGELOG/HANDOFF sesi 2 September 2026, fix search nama pelanggan
+   dipindah ke SQL `WHERE`). **Filter "Filter produk…" di layar yang SAMA
+   (`tx_history_sheet.dart`, `_HistoryQuery.product` -> `findTxIdsWithProduct`)
+   punya akar bug PERSIS SAMA**: hasil `productTxIds` (set id transaksi yg
+   mengandung produk itu) dipakai utk MENYARING baris SETELAH query SQL
+   utama (`ORDER BY created_at DESC LIMIT 1000/100`) sudah dipotong —
+   bukan SEBELUM. Kalau rentang tanggal yg aktif (atau tanpa filter tanggal
+   sama sekali) punya >1000 transaksi TOTAL (dari produk apa pun), transaksi
+   yg mengandung produk yg dicari bisa tertimbun di luar limit itu SEBELUM
+   sempat disaring — bulan/transaksi yg mengandung produk itu bisa tidak
+   muncul sama sekali, sama persis gejalanya dgn bug pelanggan yg sudah
+   diperbaiki. **BELUM diperbaiki** — di luar lingkup laporan user
+   sebelumnya (spesifik soal filter pelanggan+tanggal), butuh keputusan
+   fix terpisah (kandidat: pindahkan `findTxIdsWithProduct` jadi subquery
+   `WHERE t.id IN (...)` di SQL utama, bukan post-filter di Dart — mirip
+   pola JOIN `customers` yg dipakai utk fix filter pelanggan).
+
