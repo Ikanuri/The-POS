@@ -153,3 +153,64 @@ final preorderProductUnitLabelsProvider = FutureProvider<
   final ids = items.map((e) => e.productUnitId).toSet().toList();
   return ref.watch(databaseProvider).getProductUnitLabelsFor(ids);
 });
+
+// ── Riwayat Laci Meja (layar arsip, BEDA dari dashboard) ──
+//
+// Dashboard di atas (`leftBehindItemsProvider` dkk.) HANYA mengambil entri
+// yang MASIH TERBUKA (parameter `includeX` default false) — cocok utk "apa
+// yang masih menggantung", tapi salah utk layar Riwayat yang justru harus
+// menampilkan entri SELESAI juga. Provider di bawah ini query yang SAMA
+// PERSIS, cuma dgn `includeCollected`/`includeFullyReturned`/`includeClosed:
+// true` — bukan query baru, param-nya sudah lama ada di `AppDatabase` (lihat
+// `laci_meja_db_test.dart`), cuma belum pernah dipakai UI manapun.
+
+final riwayatLeftBehindAllProvider = StreamProvider<List<LeftBehindItem>>((ref) {
+  return ref.watch(databaseProvider).watchLeftBehindItems(includeCollected: true);
+});
+
+final riwayatBorrowedAllProvider = StreamProvider<List<BorrowedItem>>((ref) {
+  return ref.watch(databaseProvider).watchBorrowedItems(includeFullyReturned: true);
+});
+
+final riwayatPreorderAllProvider = StreamProvider<List<PreorderEntry>>((ref) {
+  return ref.watch(databaseProvider).watchPreorderEntries(includeClosed: true);
+});
+
+/// Sama seperti `laciMejaTakenQtyProvider`, tapi dihitung dari daftar
+/// LENGKAP (`riwayat*AllProvider`) supaya entri yang masih terbuka DI DALAM
+/// riwayat tetap menunjukkan progres sebagian yang benar (bukan cuma entri
+/// yang sudah tertutup total yang butuh angka ini).
+final riwayatTakenQtyProvider = FutureProvider<Map<String, double>>((ref) async {
+  final leftBehind = ref.watch(riwayatLeftBehindAllProvider).valueOrNull ?? [];
+  final preorder = ref.watch(riwayatPreorderAllProvider).valueOrNull ?? [];
+  final ids = [
+    ...leftBehind.map((e) => e.id),
+    ...preorder.map((e) => e.id),
+  ];
+  return ref.watch(databaseProvider).getLaciMejaTakenQty(ids);
+});
+
+/// Sama seperti `preorderProductUnitLabelsProvider`, tapi sumbernya daftar
+/// LENGKAP (termasuk yang sudah dipenuhi/dibatalkan) — dipakai layar Riwayat
+/// tab Pre-order utk nama produk & chip filter produk.
+final riwayatPreorderProductUnitLabelsProvider = FutureProvider<
+    Map<String, ({String productName, String unitName})>>((ref) async {
+  final items = ref.watch(riwayatPreorderAllProvider).valueOrNull ?? [];
+  final ids = items.map((e) => e.productUnitId).toSet().toList();
+  return ref.watch(databaseProvider).getProductUnitLabelsFor(ids);
+});
+
+/// Sama seperti `laciMejaCustomerNamesProvider`, tapi sumbernya daftar
+/// LENGKAP ketiga kategori (termasuk entri yang sudah selesai) — dipakai
+/// layar Riwayat supaya nama pelanggan tetap ikut nota terkini.
+final riwayatCustomerNamesProvider = FutureProvider<Map<String, String>>((ref) async {
+  final leftBehind = ref.watch(riwayatLeftBehindAllProvider).valueOrNull ?? [];
+  final borrowed = ref.watch(riwayatBorrowedAllProvider).valueOrNull ?? [];
+  final preorder = ref.watch(riwayatPreorderAllProvider).valueOrNull ?? [];
+  final ids = <String>{
+    ...leftBehind.map((e) => e.transactionId),
+    ...borrowed.map((e) => e.transactionId),
+    ...preorder.map((e) => e.transactionId).whereType<String>(),
+  }.toList();
+  return ref.watch(databaseProvider).getCustomerNamesForTransactions(ids);
+});

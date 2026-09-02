@@ -12,12 +12,6 @@ import 'preorder_quota_store.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 
-/// Log riwayat gabungan (PLAN.md Item 54 poin 5) — dibuka lewat ikon di
-/// AppBar, BUKAN kartu filter keempat: tiga kartu atas itu "berapa yang masih
-/// menggantung sekarang", sedangkan ini catatan yang sudah SELESAI. Menaruhnya
-/// sebagai kartu keempat akan membaurkan dua makna yang berbeda.
-final _showLogProvider = StateProvider<bool>((ref) => false);
-
 final _selectedCategoryProvider =
     StateProvider<_LaciMejaCategory>((ref) => _LaciMejaCategory.titipKetinggalan);
 
@@ -254,23 +248,23 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final borrowed = ref.watch(borrowedItemsProvider);
     final preorder = ref.watch(preorderEntriesProvider);
 
-    final showLog = ref.watch(_showLogProvider);
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(showLog ? 'Riwayat Laci Meja' : 'Laci Meja'),
+        title: const Text('Laci Meja'),
         actions: [
+          // Layar arsip TERPISAH (permintaan user "pisahkan ketiga
+          // kategori", "tambah pencarian/filter tanggal/filter produk") —
+          // BUKAN toggle inline lagi spt sebelumnya (log gabungan tanpa
+          // pemisah kategori/pencarian/filter), lihat
+          // `riwayat_laci_meja_screen.dart`.
           IconButton(
-            tooltip: showLog ? 'Kembali ke daftar' : 'Riwayat',
-            icon: Icon(showLog ? Icons.list_alt : Icons.history),
-            onPressed: () =>
-                ref.read(_showLogProvider.notifier).state = !showLog,
+            tooltip: 'Riwayat',
+            icon: const Icon(Icons.history),
+            onPressed: () => context.push('/kasir/laci-meja/riwayat'),
           ),
         ],
       ),
-      body: showLog
-          ? _buildEventLog(context, ref, isDark, scheme)
-          : Column(
+      body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
@@ -335,153 +329,6 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       ),
     );
   }
-
-  /// PLAN.md Item 54 poin 5 — log gabungan ketiga kategori, urut TERBARU
-  /// dulu (kebalikan daftar "masih menggantung" yang FIFO: di sana yang
-  /// paling lama menunggu paling mendesak, di sini yang baru saja terjadi
-  /// yang paling relevan). Dikelompokkan per hari supaya mudah dibaca.
-  Widget _buildEventLog(
-      BuildContext context, WidgetRef ref, bool isDark, ColorScheme scheme) {
-    final logAsync = ref.watch(laciMejaEventLogProvider);
-    return logAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
-      data: (events) {
-        if (events.isEmpty) {
-          return Center(
-              child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Belum ada riwayat.\nCatatan muncul di sini setiap ada barang '
-              'diambil, dikembalikan, atau pre-order dipenuhi.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-          ));
-        }
-        // Pemisah hari: bandingkan tanggal baris ini dgn baris SEBELUMNYA.
-        String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-          itemCount: events.length,
-          itemBuilder: (_, i) {
-            final e = events[i];
-            final showDay =
-                i == 0 || dayKey(events[i - 1].createdAt) != dayKey(e.createdAt);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (showDay)
-                  Padding(
-                    padding: EdgeInsets.only(top: i == 0 ? 0 : 14, bottom: 6),
-                    child: Text(_dayLabel(e.createdAt),
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                            color: scheme.onSurfaceVariant)),
-                  ),
-                Card(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: e.transactionId == null
-                        ? null
-                        : () => context.push('/kasir/struk/${e.transactionId}'),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: const EdgeInsets.only(top: 5, right: 10),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _entityColor(e.entityType, isDark),
-                            ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${e.customerName ?? 'Umum'} — '
-                                  '${_aksiLabel(e.aksi)}'
-                                  '${e.qty > 0 ? ' ${_n(e.qty)}' : ''}',
-                                  style: const TextStyle(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${_entityLabel(e.entityType)} · ${e.itemName}',
-                                  style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: scheme.onSurfaceVariant),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${e.createdAt.hour.toString().padLeft(2, '0')}:'
-                            '${e.createdAt.minute.toString().padLeft(2, '0')}',
-                            style: TextStyle(
-                                fontSize: 11.5, color: scheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// Nama hari & bulan Indonesia DIRAKIT MANUAL — `DateFormat` ber-locale
-  /// meledak `LocaleDataException` saat build di app ini (tidak pernah
-  /// memanggil `initializeDateFormatting`), lihat gotcha CLAUDE.md.
-  static const _idMonths = [
-    '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-  ];
-
-  static String _dayLabel(DateTime d) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final that = DateTime(d.year, d.month, d.day);
-    final diff = today.difference(that).inDays;
-    final tanggal = '${d.day} ${_idMonths[d.month]} ${d.year}';
-    if (diff == 0) return 'Hari ini · $tanggal';
-    if (diff == 1) return 'Kemarin · $tanggal';
-    return tanggal;
-  }
-
-  static String _aksiLabel(String aksi) => switch (aksi) {
-        'ambil' => 'diambil',
-        'kembali' => 'kembali',
-        'penuhi' => 'dipenuhi',
-        'batal' => 'dibatalkan',
-        _ => aksi,
-      };
-
-  static String _entityLabel(String type) => switch (type) {
-        'titip' => 'Titip/Ketinggalan',
-        'pinjaman' => 'Pinjaman',
-        'preorder' => 'Pre-order',
-        _ => type,
-      };
-
-  static Color _entityColor(String type, bool isDark) => switch (type) {
-        'pinjaman' => AppTheme.scanFg(isDark),
-        'preorder' => AppTheme.stockWarnFg(isDark),
-        _ => AppTheme.laciFg(isDark),
-      };
 
   Widget _buildLeftBehindList(BuildContext context, WidgetRef ref,
       List<LeftBehindItem> items, bool isDark, ColorScheme scheme) {
