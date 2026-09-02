@@ -51,6 +51,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Riwayat Pembayaran nota dan riwayat kartu pre-order di struk.
 
 ### 🐛 Perbaikan
+- **Mengubah jumlah pre-order lewat tombol pensil sekarang tidak bisa
+  melebihi jumlah barang yang tercatat di notanya** — sebelumnya, entri
+  pre-order yang tertaut ke satu baris nota bisa diedit jumlahnya
+  (dan jaminannya) melebihi angka di baris nota itu sendiri, bikin
+  kartu Pre-order menghitung "titipan" lebih banyak dari barang fisik
+  yang sebenarnya tercatat terjual di nota. Sekarang jumlah maksimal
+  yang bisa diedit dikunci sesuai baris nota — kalau memang mau
+  menambah pre-order untuk produk yang sama, pakai "Tambah Belanjaan"
+  seperti biasa (bukan menaikkan angka di sheet edit). Entri pre-order
+  lama yang tidak tertaut ke baris nota mana pun tidak terpengaruh,
+  tetap bisa diedit bebas seperti sebelumnya.
 - **Nota yang dibuat perangkat lain tidak lagi tertulis "Kasir: [nama
   HP ini]"** — sebelumnya, nota buatan HP asisten (nomor nota A1-...)
   yang dibuka di HP owner tertulis "Kasir: Owner", seolah owner yang

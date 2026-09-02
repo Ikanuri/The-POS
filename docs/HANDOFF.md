@@ -5,6 +5,36 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 (sesi kesembilan hari yg sama). Versi kerja
+**2.33.5+74**, schemaVersion TETAP 37 (tidak ada migrasi — murni UI)._
+
+**Item 56 SELESAI (`e71d66d`)** — keputusan user sudah diambil (lihat sesi
+sebelumnya di bawah, poin "4b" — dulu "BUTUH KEPUTUSAN USER"): "edit tidak
+melebihi item produk... untuk penambahan entri produk baru, harusnya lewat
+tambah pesanan/barang." Sheet "Ubah pre-order" (`_showLaciMejaEditSheet`
+dipanggil dari `_editPreorderEntry`, `receipt_screen.dart`) sekarang terima
+param `maxQty` opsional — kalau entri punya `transactionItemId`, qty (dan
+jaminan, terikat ke qty YANG BERLAKU setelah cap) dikunci maksimal = qty
+baris nota tertaut, DITOLAK dgn pesan jelas (bukan clamp diam-diam) kalau
+dilanggar. Entri tanpa `transactionItemId` (lama, atau titip wadah tanpa
+beli) TIDAK terpengaruh — tidak ada baris nota utk dibandingkan. 2 kategori
+lain (titip/ketinggalan, pinjaman) TIDAK tersentuh, `maxQty` default null di
+situ. 4 test widget baru `preorder_edit_max_qty_test.dart`, revert-verified.
+
+Catatan test yang mungkin berguna sesi depan kalau menulis widget test baru
+utk sheet ini: tapping 'Batal'/'Simpan' sesudah `tester.enterText` ke field
+sheet ini bisa memicu `TextEditingController used after being disposed`
+(cascading exceptions) kalau field masih fokus saat sheet ditutup — fix-nya
+`FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();`
+SEBELUM tap tombol penutup sheet. Bukan bug produksi (tidak terjadi di HP
+asli, cuma race kondisi test binding), tapi WAJIB dipasang di test manapun
+yg mengetik lalu menutup sheet ini.
+
+Item 56 sudah dihapus dari `PLAN.md`. Item 57/58 (audit sesi sebelumnya,
+catatan desain — bukan bug data) masih menggantung, BELUM diputuskan user.
+
+---
+
 _Update sesi 2 September 2026 (sesi kedelapan hari yg sama). Versi kerja
 **2.33.4+73**, schemaVersion TETAP 37 (tidak ada migrasi — murni query/UI)._
 
