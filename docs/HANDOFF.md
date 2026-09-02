@@ -5,9 +5,35 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 2 September 2026 (sesi keenam hari yg sama — 2 pekerjaan
-independen digabung 1 commit kode: `e6076c5`). Versi kerja **2.33.2+71**,
-schemaVersion **37** (naik dari 36 — kolom baru `transactions.updatedAt`)._
+_Update sesi 2 September 2026 (sesi ketujuh hari yg sama). Versi kerja
+**2.33.3+72**, schemaVersion TETAP 37 (tidak ada migrasi — murni query)._
+
+**Bug dilaporkan user — SELESAI**: "Riwayat Transaksi" (`tx_history_sheet.
+dart`) — cari SATU PELANGGAN (search box) TANPA filter tanggal dulu ("dari
+awal"/lihat keseluruhan), lalu persempit ke BULAN TERTENTU -> bulan itu tidak
+muncul sama sekali walau transaksinya ada. Diinvestigasi mendalam dgn 2 test
+widget nyata (`AppDatabase` sungguhan, bukan mock) sebelum menyimpulkan akar
+masalah — hipotesis PERTAMA (limit 1000 tanpa filter tanggal aktif krn search
+aktif, LALU tetap salah setelah tanggal dipersempit) **TERBUKTI SALAH** lewat
+test nyata: begitu tanggal dipersempit, query SQL baru re-run bersih & benar
+(`test/tx_history_customer_search_no_date_test.dart`, awalnya ditulis sbg
+repro, ternyata PASS bahkan SEBELUM fix). Akar masalah SEBENARNYA ketemu di
+variasi lain: teks search (nama pelanggan/no. transaksi) difilter
+CLIENT-SIDE **setelah** SQL `LIMIT 1000`/`100` diterapkan — kalau rentang
+tanggal yg dipilih (bulan tertentu) SENDIRI sudah punya >1000 transaksi dari
+SEMUA pelanggan (toko cukup ramai), transaksi pelanggan target yang lebih
+"tua" di dalam rentang itu tertindih transaksi pelanggan LAIN yang lebih
+baru SEBELUM sempat difilter namanya — sama sekali tidak muncul. Dibuktikan
+GAGAL dulu (revert-verified) via
+`test/tx_history_busy_month_search_limit_test.dart`. Fix: filter nama
+pelanggan/no. transaksi dipindah jadi bagian SQL `WHERE` (LEFT JOIN ke
+`customers` utk pelanggan terdaftar + cek `customerName` snapshot + `localId`
+langsung di query, field baru `_HistoryQuery.search`) — sama pola dgn kenapa
+`getCustomerTransactions` (statistik pelanggan) tidak pernah kena bug ini
+(SUDAH `WHERE customer_id = ?` di SQL). Filter produk (`_HistoryQuery.
+product`) punya POLA BUG YANG SAMA (`productTxIds` difilter SETELAH limit
+juga) — **BELUM diperbaiki di sesi ini** (di luar lingkup laporan user, yg
+spesifik soal pelanggan+tanggal) — dicatat di PLAN.md sbg follow-up.
 
 **Pekerjaan 1 (PRIORITAS, bug finansial/administrasi serius) — SELESAI**:
 tabel `transactions` tidak punya `updated_at` sama sekali, `dumpSince`

@@ -21,6 +21,7 @@ class _HistoryQuery {
     this.loadAll = false,
     this.status = 'semua',
     this.method = 'semua',
+    this.search = '',
   });
   final DateTimeRange? date;
   final String product;
@@ -34,6 +35,11 @@ class _HistoryQuery {
   // masuk akal utk analisis (mis. "semua transaksi QRIS bulan ini").
   final String method;
 
+  /// Teks search box (nama pelanggan / no. transaksi) — SEBAGIAN dari SQL
+  /// WHERE (bukan cuma filter client-side, lihat dok bug di bawah), jadi
+  /// HARUS jadi bagian key provider supaya query re-run saat teks berubah.
+  final String search;
+
   @override
   bool operator ==(Object other) =>
       other is _HistoryQuery &&
@@ -41,12 +47,35 @@ class _HistoryQuery {
       other.product == product &&
       other.loadAll == loadAll &&
       other.status == status &&
-      other.method == method;
+      other.method == method &&
+      other.search == search;
 
   @override
-  int get hashCode => Object.hash(date, product, loadAll, status, method);
+  int get hashCode =>
+      Object.hash(date, product, loadAll, status, method, search);
 }
 
+/// Bug dilaporkan user: cari SATU PELANGGAN (search box) TANPA filter
+/// tanggal dulu ("dari awal"/lihat keseluruhan), lalu persempit ke BULAN
+/// TERTENTU — bulan itu tidak muncul sama sekali walau transaksinya ada.
+///
+/// Akar masalah (dibuktikan lewat test widget nyata thd `AppDatabase`
+/// sungguhan, `test/tx_history_busy_month_search_limit_test.dart`): teks
+/// search dulu DIFILTER CLIENT-SIDE *setelah* baris SQL diterima — tapi baris
+/// SQL itu sendiri sudah dipotong `LIMIT 1000`/`100` (`orderBy created_at
+/// DESC`) SEBELUM filter nama diterapkan. Kalau dalam rentang tanggal yang
+/// dipilih ada >1000 transaksi (dari SEMUA pelanggan, bukan cuma satu),
+/// transaksi pelanggan target yang lebih "tua" di dalam rentang itu bisa
+/// KETINDIH transaksi pelanggan LAIN yang lebih baru sebelum sempat difilter
+/// namanya — sama sekali tidak muncul, bukan cuma sebagian. Sekadar
+/// menaikkan angka limit tidak menutup bug ini (tetap ada rentang data besar
+/// apa pun nilainya) — akar masalahnya FILTER nama jalan setelah LIMIT,
+/// bukan limitnya kekecilan. Fix: pindahkan filter nama/no.transaksi ke SQL
+/// WHERE (JOIN ke `customers` utk nama pelanggan terdaftar) supaya limit
+/// diterapkan SETELAH scope-nya sudah sempit ke pelanggan yang dicari —
+/// sama pola dgn kenapa `getCustomerTransactions` (statistik pelanggan) tidak
+/// pernah kena bug ini: query itu SUDAH `WHERE customer_id = ?` di SQL,
+/// bukan filter belakangan.
 final _txHistoryProvider =
     FutureProvider.family<List<Transaction>, _HistoryQuery>((ref, q) async {
   final db = ref.watch(databaseProvider);
@@ -57,31 +86,47 @@ final _txHistoryProvider =
     if (productTxIds.isEmpty) return const [];
   }
 
-  final sel = db.select(db.transactions)
-    ..where((t) => t.status.isNotValue('void'));
+  final searchQ = q.search.trim().toLowerCase();
+
+  // LEFT JOIN ke `customers` (bukan cuma pakai `customerName` snapshot di
+  // transaksi) supaya pencarian nama tetap kena utk transaksi lama yang
+  // `customer_name`-nya null tapi `customer_id` terisi — termasuk pelanggan
+  // yang sudah di-soft-delete (baris `customers` tetap ada, sama seperti
+  // `getAllCustomerNamesIncludingInactive`, TIDAK ada filter `isActive` di
+  // sini).
+  final sel = db.select(db.transactions).join([
+    leftOuterJoin(
+        db.customers, db.customers.id.equalsExp(db.transactions.customerId)),
+  ])
+    ..where(db.transactions.status.isNotValue('void'));
   if (q.status == 'lunas') {
-    sel.where((t) => t.status.equals('lunas'));
+    sel.where(db.transactions.status.equals('lunas'));
   } else if (q.status == 'hutang') {
-    sel.where(
-        (t) => t.status.equals('kurang_bayar') | t.status.equals('tempo'));
+    sel.where(db.transactions.status.equals('kurang_bayar') |
+        db.transactions.status.equals('tempo'));
   }
   if (q.method != 'semua') {
-    sel.where((t) => t.paymentMethod.equals(q.method));
+    sel.where(db.transactions.paymentMethod.equals(q.method));
   }
   if (q.date != null) {
     final start =
         DateTime(q.date!.start.year, q.date!.start.month, q.date!.start.day);
     final end = DateTime(
         q.date!.end.year, q.date!.end.month, q.date!.end.day, 23, 59, 59, 999);
-    sel.where((t) =>
-        t.createdAt.isBiggerOrEqualValue(start) &
-        t.createdAt.isSmallerOrEqualValue(end));
+    sel.where(db.transactions.createdAt.isBiggerOrEqualValue(start) &
+        db.transactions.createdAt.isSmallerOrEqualValue(end));
+  }
+  if (searchQ.isNotEmpty) {
+    sel.where(db.transactions.localId.lower().contains(searchQ) |
+        db.transactions.customerName.lower().contains(searchQ) |
+        db.customers.name.lower().contains(searchQ));
   }
   sel
-    ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+    ..orderBy([OrderingTerm.desc(db.transactions.createdAt)])
     ..limit(q.loadAll ? 1000 : 100);
 
-  var rows = await sel.get();
+  var rows =
+      (await sel.get()).map((r) => r.readTable(db.transactions)).toList();
   if (productTxIds != null) {
     rows = rows.where((t) => productTxIds!.contains(t.id)).toList();
   }
@@ -283,6 +328,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
       loadAll: _hasActiveFilter,
       status: _filter,
       method: _methodFilter,
+      search: _query,
     );
     final txAsync = ref.watch(_txHistoryProvider(query));
     final namesAsync = ref.watch(_custNamesProvider);
@@ -451,16 +497,11 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
           Expanded(
             child: txAsync.when(
               data: (txs) {
-                final filtered = txs.where((tx) {
-                  if (_query.isEmpty) return true;
-                  final q = _query.toLowerCase();
-                  final name = tx.customerName ??
-                      (tx.customerId != null
-                          ? (names[tx.customerId] ?? '')
-                          : '');
-                  return tx.localId.toLowerCase().contains(q) ||
-                      name.toLowerCase().contains(q);
-                }).toList();
+                // Filter search box (nama pelanggan/no. transaksi) SUDAH
+                // diterapkan di SQL (lihat dok `_txHistoryProvider`) —
+                // TIDAK difilter ulang di sini supaya limit hasil query
+                // benar-benar berlaku SETELAH pencarian nama, bukan sebelum.
+                final filtered = txs;
 
                 if (filtered.isEmpty) {
                   return Center(
