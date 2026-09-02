@@ -5,6 +5,59 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 (sesi keenam hari yg sama — 2 pekerjaan
+independen digabung 1 commit kode: `e6076c5`). Versi kerja **2.33.2+71**,
+schemaVersion **37** (naik dari 36 — kolom baru `transactions.updatedAt`)._
+
+**Pekerjaan 1 (PRIORITAS, bug finansial/administrasi serius) — SELESAI**:
+tabel `transactions` tidak punya `updated_at` sama sekali, `dumpSince`
+memperlakukannya append-only murni (`created_at >= since`), `mergeRows`
+SKIP baris yang PK-nya sudah ada. Begitu nota sudah pernah tersinkron
+sekali, perubahan SETELAH itu ke baris `transactions` itu sendiri (status
+void, ganti pelanggan, poin loyalitas) tidak pernah terkirim lagi ke device
+lain. Fix: kolom `updatedAt` nullable baru (migrasi v36→v37), dicap ulang
+eksplisit di SEMUA titik `update(transactions)` yang genuinely butuh
+propagasi lintas-device — `voidTransaction`, `changeTransactionCustomer`
+(2 titik), `awardLoyaltyPointsIfEligible`, `_reconcileTransactionTotals`,
+`addPaymentToTransaction`, `settleMergedDebt`, 2 titik "lunas setelah
+retur/edit item". **`checkedItemIds` SENGAJA TIDAK dicap** — field itu
+sendiri sudah terdokumentasi "murni per-perangkat, tidak ikut sync" (sama
+seperti `changeTaken`) — kalau ke depan ada yang ingin field itu ikut sync,
+itu perubahan desain baru, bukan bagian dari fix ini. `dumpSince` dapat
+case khusus `'transactions'` (`OR updated_at >= since`). `mergeRows` dapat
+case khusus: baris `transactions` yang PK-nya sudah ada di-UPDATE
+(last-write-wins by `updated_at`, kolom status/customer_id/customer_name/
+points_earned) alih-alih di-skip total. Test `transaction_updated_at_sync_
+test.dart` (DB nyata, `dumpSince`+`mergeRows` host→klien: void & ganti nama
+pelanggan setelah sync pertama) — revert-verified. **Konsekuensi rutin**:
+17 file `migration_vX_test.dart` yang hardcode `schemaVersion=36` diupdate
+ke 37 (pola SELALU terjadi tiap migrasi baru — cek ini lebih dulu kalau
+migration test tiba-tiba merah tanpa perubahan logic terkait).
+
+**Pekerjaan 2 — SELESAI**: `buildPreorderReportText` (`preorder_report.
+dart`) memakai `depositQty` MENTAH utk "N jaminan" — tidak berkurang
+seiring pre-order dipenuhi sebagian, beda dari dashboard yang sudah benar
+(`sisaDeposit = depositQty - taken`, 1:1 dgn qty diambil). Komentar lama di
+file itu yang mengklaim ini "keputusan disetujui user" **SALAH** — itu
+kebetulan dari contoh dummy sesi sebelumnya yang tidak menunjukkan kasus
+dipenuhi sebagian, bukan keputusan desain user sungguhan. Fix: logic
+`sisaDeposit` diekstrak ke `lib/features/laci_meja/preorder_calc.dart`,
+dipakai BERSAMA oleh dashboard (`_preorderTile`, `depositByProduct` di
+`laci_meja_dashboard_screen.dart`) dan laporan salin-teks — **kalau ke
+depan mengubah rumus jaminan sisa, cukup ubah di SATU tempat itu**. Audit
+tambahan diminta user (bandingkan `preorder_report.dart` vs dashboard satu
+per satu) — semua SUDAH diverifikasi konsisten, tidak ada perbedaan lain
+selain jaminan: `sisaOf` (qty, bukan deposit) sudah sama; status Tempo/
+Lunas sama-sama pakai `e.paid`; resolusi nama pelanggan (live via
+`laciMejaCustomerNamesProvider` keyed `transactionId`, fallback ke salinan
+beku, lalu "Umum") sama persis; cakupan filter sama-sama dari
+`watchPreorderEntries()` default (`includeClosed=false`, hanya entri
+terbuka); urutan FIFO sama-sama `orderBy created_at asc` di level query DB.
+`preorder_report_test.dart` diperbarui (2 contoh "disetujui user" lama
+sekarang salah — recompute manual dgn `sisaDeposit`, revert-verified).
+
+---
+
 _Update sesi 2 September 2026 (sesi kelima hari yg sama, dikerjakan via agen
 background PARALEL dgn agen lain di branch yg sama — session ini ADALAH
 sesi "tombol salin laporan pre-order" yg berlanjut mengerjakan tugas UI

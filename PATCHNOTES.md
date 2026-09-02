@@ -57,6 +57,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   tertulis "0 hari lalu" walau tanggalnya sudah berganti. Sekarang
   dihitung berdasar tanggal kalender, jadi begitu lewat tengah malam
   langsung terhitung "1 hari lalu".
+- **Perubahan nota SETELAH tersinkron sekarang benar-benar sampai ke
+  perangkat lain** — nota yang dibatalkan (void), diganti nama
+  pelanggannya, atau dapat penambahan poin loyalitas SETELAH nota itu
+  pernah tersinkron ke perangkat lain sebelumnya, sebelumnya diam-diam
+  TIDAK PERNAH terkirim ulang: perangkat lain terus menganggap nota
+  itu masih valid apa adanya, padahal sudah dibatalkan di perangkat
+  asalnya. Ini bisa membuat laporan/omzet di perangkat lain jadi tidak
+  akurat. Sekarang perubahan itu ikut tersinkron di sinkron berikutnya.
+- **"N jaminan" di laporan salin pre-order sekarang ikut berkurang
+  seiring pesanan dipenuhi** — sebelumnya angka jaminan yang tersalin
+  ke laporan (WhatsApp/nota manual) selalu menampilkan jumlah jaminan
+  AWAL, tidak berkurang walau sebagian pesanan sudah diambil (padahal
+  di dashboard, angkanya sudah benar berkurang). Sekarang laporan
+  salin-teks memakai angka yang sama dengan dashboard.
 
 ## 1 September 2026
 
