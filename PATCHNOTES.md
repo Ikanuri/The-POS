@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 2 September 2026
+
+### ✨ Fitur Baru
+- **Bisa mengumpulkan pembayaran DP/jaminan pre-order yang tertunda**
+  — sebelumnya kalau ada pre-order dengan jaminan/DP yang belum dibayar
+  (misal LPG yang harganya masih Rp 0 di nota, sementara barang lain di
+  nota yang sama sudah lunas), tidak ada cara untuk menagih DP itu saat
+  pre-order akhirnya dipenuhi. Sekarang, begitu tombol "Penuhi" di Laci
+  Meja ditekan, aplikasi otomatis menawarkan sheet pembayaran kalau
+  masih ada DP yang harus ditagih. Pembayarannya langsung tercatat di
+  Riwayat Pembayaran nota dan riwayat kartu pre-order di struk.
+
 ## 1 September 2026
 
 ### ✨ Fitur Baru
