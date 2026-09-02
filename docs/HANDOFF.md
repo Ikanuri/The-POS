@@ -5,6 +5,86 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 (sesi kelima hari yg sama, dikerjakan via agen
+background PARALEL dgn agen lain di branch yg sama — session ini ADALAH
+sesi "tombol salin laporan pre-order" yg berlanjut mengerjakan tugas UI
+susulan dari coordinator di tengah sesi yg sama; sesi "reorder metode
+pembayaran" di blok bawah adalah agen LAIN yg berjalan paralel & sempat
+push+merge duluan — REBASE manual dilakukan saat commit, lihat catatan
+"⚠️ konflik multi-agen" di bawah). Tugas "expandable search + dropdown
+filter produk" (2 layar Laci Meja) SUDAH DISELESAIKAN. Versi kerja
+**2.33.1+70**, schemaVersion TETAP 36 (tidak ada migrasi — murni UI)._
+
+**Diimplementasikan (`952382f`)**: 2 widget reusable baru di
+`lib/features/laci_meja/`:
+- `LaciMejaExpandableSearch` (`laci_meja_expandable_search.dart`) — field
+  cari collapsed (ikon)/expanded (TextField penuh), PERILAKU (bukan
+  implementasi teknis — lihat komentar di file) direplikasi dari
+  `_KasirTopbar` yg sudah ada di `kasir_screen.dart`. Controlled component:
+  status `expanded` dipegang PEMANGGIL (StateProvider di dashboard, field
+  `State` biasa di Riwayat — SENGAJA beda krn dashboard sudah pakai
+  Riverpod utk state serupa, Riwayat sudah `ConsumerStatefulWidget` dgn
+  field lokal — konsisten dgn pola tiap layar, bukan dipaksa seragam).
+  Dipakai ULANG di 2 layar (dashboard tab Pre-order + Riwayat), TIDAK
+  diduplikasi.
+- `ProductPickerDropdown` (`product_picker_dropdown.dart`) — diekstrak dari
+  `_ProductPickerChip`/`_ProductPickerMenuRow` yg SUDAH ADA (dulu cuma
+  dipakai pemilih jaminan) jadi widget publik reusable, dipakai skrg di 3
+  tempat: pemilih jaminan dashboard (badge "N jaminan"), filter produk
+  dashboard (badge "maks N" dari kuota, plus opsi "Semua Produk"), filter
+  produk tab Pre-order Riwayat (tanpa badge, plus opsi "Semua Produk").
+  MENGGANTIKAN TOTAL baris chip `ChoiceChip` horizontal yg dulu dipakai
+  filter produk (permintaan user eksplisit: satu pola dropdown, bukan
+  gaya beda-beda per tempat).
+
+**Bug ditemukan & diperbaiki (BUKAN dari task asli, ketemu sendiri via
+widget test)**: `PopupMenuButton<T>` Flutter menganggap hasil rute `null`
+sbg "dibatalkan" (`onCanceled`, bukan `onSelected`) — opsi "Semua Produk"
+yg tadinya `PopupMenuItem<String?>(value: null)` TIDAK PERNAH terpilih.
+Fix: sentinel string `_allSentinel` dipetakan balik ke `null` sebelum
+diteruskan ke `onSelected` milik pemanggil. **Kalau ke depan ada widget
+lain yg butuh PopupMenuButton dgn opsi "kosongkan pilihan"/null, JANGAN
+pasang `value: null` langsung — pakai pola sentinel yg sama.**
+
+**Filter tanggal Riwayat** DICEK sesuai instruksi tugas — SUDAH satu
+chip/tombol tunggal sejak awal dibuat (tap buka date-range picker, tombol
+hapus muncul saat aktif). TIDAK diubah, dikonfirmasi sudah sesuai.
+
+**Test**: 18 test baru/diperbarui — `laci_meja_expandable_search_test.dart`
+& `product_picker_dropdown_test.dart` (widget test MURNI, tanpa DB/router,
+utk 2 widget baru) + 3 file test existing (`laci_meja_dashboard_grouping_
+test.dart`, `preorder_quota_line_test.dart`, `laci_meja_partial_and_log_
+test.dart`) diperbaiki krn reference widget lama (`ChoiceChip`,
+`_ProductPickerChip`, `TextField` full-width) yg sudah tidak ada — SEMUA
+revert-verified. **Ditemukan saat debug**: `PopupMenuButton` butuh DUA
+`pump(300ms)` (bukan satu) sebelum tap ke item menu-nya di widget test —
+satu pump belum genap menyelesaikan animasi masuk `_kMenuDuration` (300ms),
+tap ke koordinat menu yg masih mid-animasi bisa meleset (dikonfirmasi via
+debug `RenderBox.localToGlobal`, BUKAN bug UI sungguhan — begitu animasi
+selesai, posisi menu selalu tepat sejajar tombol, tidak pernah render di
+luar layar). `flutter analyze` bersih. Seluruh `flutter test` (1303 test)
+lolos TERMASUK `proposal_unchanged_end_to_end_test.dart` (flaky
+pre-existing, kebetulan hijau di run ini).
+
+**⚠️ Konflik multi-agen (info penting utk sesi berikutnya)**: sesi ini
+berjalan PARALEL dgn agen lain (worktree terpisah) yg mengerjakan "reorder
+metode pembayaran" di BRANCH YANG SAMA. Agen itu push+merge LEBIH DULU
+(`326e39d`+`1599f90`, versi 2.33.0+69) SAAT sesi ini masih bekerja — akibatnya
+index/HEAD lokal sesi ini sempat DESYNC (working tree commit lama, HEAD
+sudah maju krn shared git dir), yg KALAU LANGSUNG commit akan MEREVERT
+pekerjaan agen lain itu tanpa sengaja. Ditangani manual: `git checkout
+HEAD -- <file-file tak terkait>` utk file yg BUKAN bagian tugas sesi ini,
+`git reset HEAD --` utk unstage index basi, versi di-rebase ke baseline
+HEAD terkini (2.33.0+69 → 2.33.1+70, BUKAN 2.32.0+68 → 2.32.1+69 spt
+rencana awal) SEBELUM commit. **Pelajaran utk sesi mendatang yg jalan
+paralel di branch sama**: SELALU `git status`+`git log --oneline -5`
+dulu SESAAT SEBELUM commit (bukan cuma di awal sesi) — HEAD bisa sudah
+maju di tengah jalan tanpa sesi ini melakukan apa pun.
+
+**Tidak ada item pending dari tugas UI sesi ini.**
+
+---
+
 _Update sesi 2 September 2026 (sesi keempat hari yg sama, dikerjakan via agen
 background, PARALEL dgn agen lain di branch yg sama — cek konflik saat
 push/merge) — tugas "reorder metode pembayaran" (owner minta bisa ubah
