@@ -698,3 +698,68 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
    `WHERE t.id IN (...)` di SQL utama, bukan post-filter di Dart — mirip
    pola JOIN `customers` yg dipakai utk fix filter pelanggan).
 
+
+## Item 56 — Edit qty/jaminan entri pre-order TIDAK menyentuh baris nota
+   terkait (audit 2 September 2026 — BUTUH KEPUTUSAN USER)
+
+   `editPreorderEntry` (tombol pensil kartu Pre-order di nota) mengubah
+   `qtyOrdered`/`depositQty` entri saja; baris `transaction_items` yang
+   tertaut (`transactionItemId`) tetap qty lama. Kasus nyata user (nota
+   `A1-20260902-0014`): entri diedit 1 -> 2 LPG, baris nota tetap 1 LPG.
+   Konsekuensi uang: `getPreorderDepositOwed`/`collectPreorderDeposit`
+   menghitung DP dari `item.originalPrice * item.qty` BARIS NOTA (1 LPG),
+   bukan qty entri (2) — saat pre-order dipenuhi & DP ditagih, nominalnya
+   utk 1 LPG saja. Ini BUKAN bug hitung (baris nota memang cuma
+   mencatat 1 yang "dijual"), tapi jebakan alur: cara yang benar utk
+   menambah jumlah adalah "Tambah Belanjaan" (yang membuat baris nota +
+   entri baru, seperti yang user lakukan utk LPG ke-3 jam 09:06), BUKAN
+   edit qty entri. Opsi: (a) sheet edit pre-order tampilkan peringatan
+   kalau qty diubah utk entri yang tertaut baris nota ("jumlah di nota
+   tidak ikut berubah — pakai Tambah Belanjaan utk menambah"); (b) edit
+   qty otomatis menyesuaikan qty baris nota (berisiko: nota lunas naik
+   nilainya — bertentangan dgn constraint `editPaidTransactionItem`);
+   (c) sembunyikan field qty utk entri tertaut. Rekomendasi: (a) —
+   murah, tidak mengubah aturan uang. Jangan eksekusi sebelum user
+   memilih.
+
+## Item 57 — `laci_meja_events` klien: `locally_modified` TIDAK PERNAH
+   direset -> payload usulan tumbuh terus (audit 2 September 2026,
+   catatan desain, bukan bug data)
+
+   Entri induk (3 tabel) direset flag-nya saat baris host ter-merge balik
+   (`applyLaciMejaProposals` cap `updated_at=now` -> lolos `dumpSince` ->
+   `mergeRows` INSERT OR REPLACE). Event TIDAK punya `updated_at`, delta
+   host->klien by `created_at >= since` — event yang klien buat SEBELUM
+   watermark sync-nya tidak pernah dikirim balik, dan kalaupun dikirim
+   `mergeRows` append-only `INSERT OR IGNORE` tidak menyentuh baris yang
+   sudah ada. Akibat: SEMUA event yang pernah dibuat klien terus dikirim
+   ulang tiap sync selamanya. Kebenaran data AMAN — host membuang yang
+   identik via `filterUnchangedLaciMejaProposals`, dan `INSERT OR
+   REPLACE` by id (`'$entryId-$micros'`) tidak menggandakan — tapi ukuran
+   payload `laciMejaProposals` tumbuh linier dgn jumlah event seumur
+   device. Kandidat fix: host balas daftar id event yang sudah ada/diterapkan
+   -> klien set `locally_modified=0`; atau `mergeRows` append-only utk
+   `laci_meja_events` meng-UPDATE flag ke 0 kalau baris masuk dgn
+   `locally_modified=0` (perlu `dumpSince` host juga menyertakan event
+   klien yang baru diterapkan — mis. filter tambahan `OR id IN (baru
+   diterapkan)`). Tidak mendesak selama toko belum ribuan event.
+
+## Item 58 — Pre-order cocokkan pelanggan LEWAT NAMA (risiko nama kembar,
+   audit 2 September 2026 — catatan risiko, JANGAN ubah tanpa persetujuan)
+
+   `getLaciMejaPending` (pengingat cart bar) & `getOpenPreorderRefsForCustomer`
+   (rujukan baris item ke nota pre-order asal) mencocokkan pre-order
+   SELALU lewat `customerName` persis (bukan `customerId`, walau kolom
+   `PreorderEntries.customerId` sudah ada & terisi utk pelanggan
+   terdaftar). Dua pelanggan terdaftar bernama sama -> pengingat & rujukan
+   saling tercampur (user pernah minta alamat ditampilkan di dropdown
+   pelanggan karena kasus nama kembar ini nyata). Titip/Pinjaman sudah
+   cocokkan lewat id dulu (fallback nama). Kandidat: pre-order ikut pola
+   yang sama — `customerId` dulu kalau ada, fallback nama utk entri lama/
+   ad-hoc. Perubahan perilaku yang terlihat user -> minta persetujuan
+   dulu. Catatan agregasi terkait (audit 4a, konsisten, TIDAK diubah):
+   headline kartu Pre-order di nota & subtitle Riwayat Laci Meja memakai
+   `depositQty`/`qtyOrdered` MENTAH sbg deskripsi pesanan (status/sisa
+   di baris terpisah) — sengaja, bukan bug; `getLaciMejaPending.
+   preorders.depositQty` (pengingat cart bar) juga mentah — kalau ingin
+   "sisa" di pengingat, ikutkan `getLaciMejaTakenQty` di sana.
