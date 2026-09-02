@@ -699,29 +699,6 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
    pola JOIN `customers` yg dipakai utk fix filter pelanggan).
 
 
-## Item 56 — Edit qty/jaminan entri pre-order TIDAK menyentuh baris nota
-   terkait (audit 2 September 2026 — BUTUH KEPUTUSAN USER)
-
-   `editPreorderEntry` (tombol pensil kartu Pre-order di nota) mengubah
-   `qtyOrdered`/`depositQty` entri saja; baris `transaction_items` yang
-   tertaut (`transactionItemId`) tetap qty lama. Kasus nyata user (nota
-   `A1-20260902-0014`): entri diedit 1 -> 2 LPG, baris nota tetap 1 LPG.
-   Konsekuensi uang: `getPreorderDepositOwed`/`collectPreorderDeposit`
-   menghitung DP dari `item.originalPrice * item.qty` BARIS NOTA (1 LPG),
-   bukan qty entri (2) — saat pre-order dipenuhi & DP ditagih, nominalnya
-   utk 1 LPG saja. Ini BUKAN bug hitung (baris nota memang cuma
-   mencatat 1 yang "dijual"), tapi jebakan alur: cara yang benar utk
-   menambah jumlah adalah "Tambah Belanjaan" (yang membuat baris nota +
-   entri baru, seperti yang user lakukan utk LPG ke-3 jam 09:06), BUKAN
-   edit qty entri. Opsi: (a) sheet edit pre-order tampilkan peringatan
-   kalau qty diubah utk entri yang tertaut baris nota ("jumlah di nota
-   tidak ikut berubah — pakai Tambah Belanjaan utk menambah"); (b) edit
-   qty otomatis menyesuaikan qty baris nota (berisiko: nota lunas naik
-   nilainya — bertentangan dgn constraint `editPaidTransactionItem`);
-   (c) sembunyikan field qty utk entri tertaut. Rekomendasi: (a) —
-   murah, tidak mengubah aturan uang. Jangan eksekusi sebelum user
-   memilih.
-
 ## Item 57 — `laci_meja_events` klien: `locally_modified` TIDAK PERNAH
    direset -> payload usulan tumbuh terus (audit 2 September 2026,
    catatan desain, bukan bug data)
