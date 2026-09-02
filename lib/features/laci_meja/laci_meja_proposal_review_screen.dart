@@ -218,6 +218,12 @@ class _LaciMejaProposalReviewScreenState
                       'kembali' => 'Dikembalikan $qty',
                       'penuhi' => 'Dipenuhi $qty',
                       'batal' => 'Dibatalkan',
+                      // Susulan (permintaan user) — pembayaran DP/jaminan
+                      // pre-order yang tadinya dikunci Rp 0 saat checkout.
+                      // qty SENGAJA 0 di event ini (nominalnya ada di
+                      // `note`) supaya tidak ikut kehitung sbg qty barang
+                      // diambil/dipenuhi.
+                      'bayar' => 'DP Dibayar',
                       _ => aksi,
                     };
                     return _row(

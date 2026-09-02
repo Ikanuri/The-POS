@@ -13562,6 +13562,12 @@ class $PreorderEntriesTable extends PreorderEntries
   late final GeneratedColumn<double> qtyOrdered = GeneratedColumn<double>(
       'qty_ordered', aliasedName, false,
       type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _transactionItemIdMeta =
+      const VerificationMeta('transactionItemId');
+  @override
+  late final GeneratedColumn<String> transactionItemId =
+      GeneratedColumn<String>('transaction_item_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _depositQtyMeta =
       const VerificationMeta('depositQty');
   @override
@@ -13638,6 +13644,7 @@ class $PreorderEntriesTable extends PreorderEntries
         customerName,
         phone,
         qtyOrdered,
+        transactionItemId,
         depositQty,
         paid,
         note,
@@ -13708,6 +13715,12 @@ class $PreorderEntriesTable extends PreorderEntries
               data['qty_ordered']!, _qtyOrderedMeta));
     } else if (isInserting) {
       context.missing(_qtyOrderedMeta);
+    }
+    if (data.containsKey('transaction_item_id')) {
+      context.handle(
+          _transactionItemIdMeta,
+          transactionItemId.isAcceptableOrUnknown(
+              data['transaction_item_id']!, _transactionItemIdMeta));
     }
     if (data.containsKey('deposit_qty')) {
       context.handle(
@@ -13780,6 +13793,8 @@ class $PreorderEntriesTable extends PreorderEntries
           .read(DriftSqlType.string, data['${effectivePrefix}phone']),
       qtyOrdered: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}qty_ordered'])!,
+      transactionItemId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}transaction_item_id']),
       depositQty: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}deposit_qty'])!,
       paid: attachedDatabase.typeMapping
@@ -13827,6 +13842,18 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
   final String? phone;
   final double qtyOrdered;
 
+  /// Susulan (permintaan user) — id baris `transaction_items` yang DP/
+  /// harganya dikunci Rp 0 saat checkout (lihat `_effectivePrice` di
+  /// `item_entry_sheet.dart`: `isPreorder && !dpPaid` -> harga 0). Tautan
+  /// PRESISI ke baris nota (bukan cocok-nama/produk+satuan), pola identik
+  /// `LeftBehindItems.transactionItemId`/`BorrowedItems.transactionItemId`
+  /// (alasan sama: produk+satuan yang SAMA bisa muncul >1 kali di satu
+  /// nota) — dipakai `collectPreorderDeposit` menemukan baris yang harus
+  /// dinaikkan dari Rp 0 ke harga asli saat DP akhirnya dibayar. Nullable
+  /// utk entri lama (dibuat sebelum kolom ini ada) DAN pre-order titip
+  /// wadah tanpa membeli apa pun (tidak ada baris nota utk ditaut).
+  final String? transactionItemId;
+
   /// Jumlah wadah dititip sbg jaminan — wajib >0 kalau satuan produknya
   /// `requiresDeposit = true` (divalidasi di layer aplikasi, bukan DB).
   final double depositQty;
@@ -13849,6 +13876,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       required this.customerName,
       this.phone,
       required this.qtyOrdered,
+      this.transactionItemId,
       required this.depositQty,
       required this.paid,
       this.note,
@@ -13875,6 +13903,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       map['phone'] = Variable<String>(phone);
     }
     map['qty_ordered'] = Variable<double>(qtyOrdered);
+    if (!nullToAbsent || transactionItemId != null) {
+      map['transaction_item_id'] = Variable<String>(transactionItemId);
+    }
     map['deposit_qty'] = Variable<double>(depositQty);
     map['paid'] = Variable<bool>(paid);
     if (!nullToAbsent || note != null) {
@@ -13910,6 +13941,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       phone:
           phone == null && nullToAbsent ? const Value.absent() : Value(phone),
       qtyOrdered: Value(qtyOrdered),
+      transactionItemId: transactionItemId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionItemId),
       depositQty: Value(depositQty),
       paid: Value(paid),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
@@ -13940,6 +13974,8 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       customerName: serializer.fromJson<String>(json['customerName']),
       phone: serializer.fromJson<String?>(json['phone']),
       qtyOrdered: serializer.fromJson<double>(json['qtyOrdered']),
+      transactionItemId:
+          serializer.fromJson<String?>(json['transactionItemId']),
       depositQty: serializer.fromJson<double>(json['depositQty']),
       paid: serializer.fromJson<bool>(json['paid']),
       note: serializer.fromJson<String?>(json['note']),
@@ -13963,6 +13999,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       'customerName': serializer.toJson<String>(customerName),
       'phone': serializer.toJson<String?>(phone),
       'qtyOrdered': serializer.toJson<double>(qtyOrdered),
+      'transactionItemId': serializer.toJson<String?>(transactionItemId),
       'depositQty': serializer.toJson<double>(depositQty),
       'paid': serializer.toJson<bool>(paid),
       'note': serializer.toJson<String?>(note),
@@ -13984,6 +14021,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           String? customerName,
           Value<String?> phone = const Value.absent(),
           double? qtyOrdered,
+          Value<String?> transactionItemId = const Value.absent(),
           double? depositQty,
           bool? paid,
           Value<String?> note = const Value.absent(),
@@ -14003,6 +14041,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
         customerName: customerName ?? this.customerName,
         phone: phone.present ? phone.value : this.phone,
         qtyOrdered: qtyOrdered ?? this.qtyOrdered,
+        transactionItemId: transactionItemId.present
+            ? transactionItemId.value
+            : this.transactionItemId,
         depositQty: depositQty ?? this.depositQty,
         paid: paid ?? this.paid,
         note: note.present ? note.value : this.note,
@@ -14032,6 +14073,9 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       phone: data.phone.present ? data.phone.value : this.phone,
       qtyOrdered:
           data.qtyOrdered.present ? data.qtyOrdered.value : this.qtyOrdered,
+      transactionItemId: data.transactionItemId.present
+          ? data.transactionItemId.value
+          : this.transactionItemId,
       depositQty:
           data.depositQty.present ? data.depositQty.value : this.depositQty,
       paid: data.paid.present ? data.paid.value : this.paid,
@@ -14062,6 +14106,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           ..write('customerName: $customerName, ')
           ..write('phone: $phone, ')
           ..write('qtyOrdered: $qtyOrdered, ')
+          ..write('transactionItemId: $transactionItemId, ')
           ..write('depositQty: $depositQty, ')
           ..write('paid: $paid, ')
           ..write('note: $note, ')
@@ -14085,6 +14130,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
       customerName,
       phone,
       qtyOrdered,
+      transactionItemId,
       depositQty,
       paid,
       note,
@@ -14106,6 +14152,7 @@ class PreorderEntry extends DataClass implements Insertable<PreorderEntry> {
           other.customerName == this.customerName &&
           other.phone == this.phone &&
           other.qtyOrdered == this.qtyOrdered &&
+          other.transactionItemId == this.transactionItemId &&
           other.depositQty == this.depositQty &&
           other.paid == this.paid &&
           other.note == this.note &&
@@ -14126,6 +14173,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
   final Value<String> customerName;
   final Value<String?> phone;
   final Value<double> qtyOrdered;
+  final Value<String?> transactionItemId;
   final Value<double> depositQty;
   final Value<bool> paid;
   final Value<String?> note;
@@ -14145,6 +14193,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     this.customerName = const Value.absent(),
     this.phone = const Value.absent(),
     this.qtyOrdered = const Value.absent(),
+    this.transactionItemId = const Value.absent(),
     this.depositQty = const Value.absent(),
     this.paid = const Value.absent(),
     this.note = const Value.absent(),
@@ -14165,6 +14214,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     required String customerName,
     this.phone = const Value.absent(),
     required double qtyOrdered,
+    this.transactionItemId = const Value.absent(),
     this.depositQty = const Value.absent(),
     this.paid = const Value.absent(),
     this.note = const Value.absent(),
@@ -14189,6 +14239,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     Expression<String>? customerName,
     Expression<String>? phone,
     Expression<double>? qtyOrdered,
+    Expression<String>? transactionItemId,
     Expression<double>? depositQty,
     Expression<bool>? paid,
     Expression<String>? note,
@@ -14209,6 +14260,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       if (customerName != null) 'customer_name': customerName,
       if (phone != null) 'phone': phone,
       if (qtyOrdered != null) 'qty_ordered': qtyOrdered,
+      if (transactionItemId != null) 'transaction_item_id': transactionItemId,
       if (depositQty != null) 'deposit_qty': depositQty,
       if (paid != null) 'paid': paid,
       if (note != null) 'note': note,
@@ -14231,6 +14283,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       Value<String>? customerName,
       Value<String?>? phone,
       Value<double>? qtyOrdered,
+      Value<String?>? transactionItemId,
       Value<double>? depositQty,
       Value<bool>? paid,
       Value<String?>? note,
@@ -14250,6 +14303,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
       customerName: customerName ?? this.customerName,
       phone: phone ?? this.phone,
       qtyOrdered: qtyOrdered ?? this.qtyOrdered,
+      transactionItemId: transactionItemId ?? this.transactionItemId,
       depositQty: depositQty ?? this.depositQty,
       paid: paid ?? this.paid,
       note: note ?? this.note,
@@ -14289,6 +14343,9 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
     }
     if (qtyOrdered.present) {
       map['qty_ordered'] = Variable<double>(qtyOrdered.value);
+    }
+    if (transactionItemId.present) {
+      map['transaction_item_id'] = Variable<String>(transactionItemId.value);
     }
     if (depositQty.present) {
       map['deposit_qty'] = Variable<double>(depositQty.value);
@@ -14334,6 +14391,7 @@ class PreorderEntriesCompanion extends UpdateCompanion<PreorderEntry> {
           ..write('customerName: $customerName, ')
           ..write('phone: $phone, ')
           ..write('qtyOrdered: $qtyOrdered, ')
+          ..write('transactionItemId: $transactionItemId, ')
           ..write('depositQty: $depositQty, ')
           ..write('paid: $paid, ')
           ..write('note: $note, ')
@@ -24938,6 +24996,7 @@ typedef $$PreorderEntriesTableCreateCompanionBuilder = PreorderEntriesCompanion
   required String customerName,
   Value<String?> phone,
   required double qtyOrdered,
+  Value<String?> transactionItemId,
   Value<double> depositQty,
   Value<bool> paid,
   Value<String?> note,
@@ -24959,6 +25018,7 @@ typedef $$PreorderEntriesTableUpdateCompanionBuilder = PreorderEntriesCompanion
   Value<String> customerName,
   Value<String?> phone,
   Value<double> qtyOrdered,
+  Value<String?> transactionItemId,
   Value<double> depositQty,
   Value<bool> paid,
   Value<String?> note,
@@ -25020,6 +25080,10 @@ class $$PreorderEntriesTableFilterComposer
 
   ColumnFilters<double> get qtyOrdered => $composableBuilder(
       column: $table.qtyOrdered, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get depositQty => $composableBuilder(
       column: $table.depositQty, builder: (column) => ColumnFilters(column));
@@ -25102,6 +25166,10 @@ class $$PreorderEntriesTableOrderingComposer
   ColumnOrderings<double> get qtyOrdered => $composableBuilder(
       column: $table.qtyOrdered, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<double> get depositQty => $composableBuilder(
       column: $table.depositQty, builder: (column) => ColumnOrderings(column));
 
@@ -25181,6 +25249,9 @@ class $$PreorderEntriesTableAnnotationComposer
 
   GeneratedColumn<double> get qtyOrdered => $composableBuilder(
       column: $table.qtyOrdered, builder: (column) => column);
+
+  GeneratedColumn<String> get transactionItemId => $composableBuilder(
+      column: $table.transactionItemId, builder: (column) => column);
 
   GeneratedColumn<double> get depositQty => $composableBuilder(
       column: $table.depositQty, builder: (column) => column);
@@ -25262,6 +25333,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             Value<String> customerName = const Value.absent(),
             Value<String?> phone = const Value.absent(),
             Value<double> qtyOrdered = const Value.absent(),
+            Value<String?> transactionItemId = const Value.absent(),
             Value<double> depositQty = const Value.absent(),
             Value<bool> paid = const Value.absent(),
             Value<String?> note = const Value.absent(),
@@ -25282,6 +25354,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             customerName: customerName,
             phone: phone,
             qtyOrdered: qtyOrdered,
+            transactionItemId: transactionItemId,
             depositQty: depositQty,
             paid: paid,
             note: note,
@@ -25302,6 +25375,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             required String customerName,
             Value<String?> phone = const Value.absent(),
             required double qtyOrdered,
+            Value<String?> transactionItemId = const Value.absent(),
             Value<double> depositQty = const Value.absent(),
             Value<bool> paid = const Value.absent(),
             Value<String?> note = const Value.absent(),
@@ -25322,6 +25396,7 @@ class $$PreorderEntriesTableTableManager extends RootTableManager<
             customerName: customerName,
             phone: phone,
             qtyOrdered: qtyOrdered,
+            transactionItemId: transactionItemId,
             depositQty: depositQty,
             paid: paid,
             note: note,

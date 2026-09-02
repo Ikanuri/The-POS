@@ -3555,6 +3555,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         'penuhi' => 'Dipenuhi',
         'batal' => 'Dibatalkan',
         'edit' => 'Diubah',
+        // Susulan (permintaan user) — kumpulkan pembayaran DP/jaminan
+        // pre-order yang tadinya dikunci Rp 0 saat checkout, dicatat sbg
+        // event Laci Meja jenis baru supaya ikut tampil di kartu riwayat
+        // pre-order di nota (`qty` SENGAJA 0 di event ini — lihat dok
+        // `collectPreorderDeposit` — biar tidak ikut kehitung ke
+        // `_laciMejaTakenQty`/`getLaciMejaTakenQty`, nominalnya ada di
+        // `note`).
+        'bayar' => 'DP Dibayar',
         _ => aksi,
       };
 

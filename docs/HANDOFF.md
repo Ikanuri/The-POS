@@ -5,6 +5,69 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 — fitur "kumpulkan DP/jaminan pre-order"
+diimplementasikan (gap yang dicatat sesi sebelumnya sbg "belum
+ditindaklanjuti", user approve eksplisit). Versi kerja **2.30.0+66**,
+schemaVersion **35→36**. Ada 3 permintaan susulan BARU dari user
+(copy laporan pre-order, riwayat Laci Meja dgn search/filter, tanya
+self-hosting) yang MASIH MENGGANTUNG — lihat bawah._
+
+**Fitur baru** (`d579c86`): pre-order dgn DP/jaminan terkunci Rp 0 saat
+checkout sekarang BISA ditagih begitu dipenuhi, walau nota sudah
+"Lunas" utk item lain. Skema v36 nambah `PreorderEntries.
+transactionItemId` (tautan presisi ke baris nota, diisi
+`payment_screen.dart` saat checkout) — dipakai
+`getPreorderDepositOwed`/`collectPreorderDeposit` (app_database.dart)
+yang REUSE `_reconcileTransactionTotals` (mekanisme sama yg dipakai
+"Tambah Belanjaan" utk buka-lagi status lunas) + `addPaymentToTransaction`
+(muncul di Riwayat Pembayaran) + `recordLaciMejaEvent(aksi:'bayar')`
+(muncul di kartu riwayat pre-order struk & layar review usulan sync).
+Tombol "Penuhi" di dashboard Laci Meja (`laci_meja_dashboard_screen.
+dart`) otomatis menawarkan `showDebtPaymentSheet` kalau ada DP
+tertunda. **Kenapa TIDAK reuse `editPaidTransactionItem`**: method itu
+SENGAJA menolak semua kenaikan nilai (`if (newSubtotal > item.subtotal)
+return`) — constraint benar utk edit manual biasa, tapi menutup jalur
+ini; makanya dibuatkan method DB baru yang sengaja bypass constraint
+itu utk SATU kasus legitimate ini saja.
+
+**Ripple wajib skemaVersion naik (pola sudah didokumentasikan di sesi²
+lalu, terulang lagi)**: 17 file `test/migration_vX_test.dart` hardcode
+`expect(ver.data.values.first, 35)` — semua diupdate ke `36`. **Kalau
+nambah migrasi lagi nanti, WAJIB grep
+`expect(ver.data.values.first,` di seluruh `test/` dulu sebelum
+menganggap full suite akan hijau.**
+
+**MENGGANGGUNG — 3 permintaan baru dari user, belum satupun dieksekusi**:
+1. **Tombol copy laporan pre-order** (di halaman/kartu Laci Meja
+   pre-order) — copy ke clipboard laporan ringkas-tapi-informatif
+   (timestamp + atribut penting) sesuai FILTER PRODUK yang sedang aktif
+   di dashboard. User eksplisit minta **format teksnya direview dulu**
+   sebelum ditulis kodenya — JANGAN langsung implementasi, kirim draft
+   format teks laporan dulu.
+2. **Riwayat Laci Meja dipisah per 3 kategori** (titip/pinjaman/
+   pre-order) + fitur pencarian + filter tanggal, DAN pre-order dapat
+   filter per produk tambahan. **Catatan penting**: saat ini TIDAK ADA
+   layar "Riwayat Laci Meja" tersendiri sama sekali di
+   `lib/features/laci_meja/` — baru ada dashboard (kartu entri AKTIF)
+   & `LaciMejaProposalReviewScreen` (review usulan sync, BUKAN riwayat
+   utk kasir/owner). Kalau user maksud "riwayat" = daftar entri yg
+   SUDAH selesai (dipenuhi/diambil/dikembalikan/dibatalkan), ini
+   kemungkinan besar layar BARU yang perlu dirancang dulu (tanya/
+   tawarkan UI-UX sblm coding, pola yg sama dgn Reset Stok kemarin) —
+   BELUM ditanyakan ke user scope persisnya.
+3. **Pertanyaan murni** (TIDAK perlu eksekusi kode, sudah dikonfirmasi
+   user): app ini bisa dibuat self-hosted utk fungsi online? Sudah
+   dijawab di chat (lihat riwayat percakapan) — inti: app ini offline-
+   first by design (SQLCipher lokal, sync LAN/QR, TANPA backend cloud
+   sama sekali, lihat §Ringkasan Proyek di CLAUDE.md); "self-hosting utk
+   fungsi online" scr teknis MUNGKIN (mis. device jadi server HTTP
+   lokal yg bisa diekspos lewat reverse-tunnel/VPN utk akses dari luar
+   LAN toko) TAPI itu perubahan arsitektur besar (autentikasi jarak
+   jauh, enkripsi transport publik, dsb) yang BUKAN arah desain app
+   ini saat ini — dijawab sbg diskusi, bukan komitmen fitur.
+
+---
+
 _Update sesi 1 September 2026 (lanjutan lagi — fix restore backup lintas-
 versi-app + jawab 2 pertanyaan user: pembayaran pre-order jaminan
 belum-bayar, & re-sync setelah host fulfill langsung). Versi kerja
