@@ -7,6 +7,7 @@ import '../../features/kasir/kasir_screen.dart';
 import '../../features/kasir/payment_screen.dart';
 import '../../features/kasir/receipt_screen.dart';
 import '../../features/laci_meja/laci_meja_dashboard_screen.dart';
+import '../../features/laci_meja/riwayat_laci_meja_screen.dart';
 import '../../features/laporan/laporan_screen.dart';
 import '../../features/pelanggan/pelanggan_form_screen.dart';
 import '../../features/pelanggan/pelanggan_list_screen.dart';
@@ -147,6 +148,15 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'laci-meja',
                 builder: (_, __) => const LaciMejaDashboardScreen(),
+                routes: [
+                  // Layar arsip Riwayat (permintaan user) — anak `laci-meja`
+                  // spt `struk/:txId`, alasan sama (tetap di DALAM ShellRoute,
+                  // bottom nav tidak hilang saat dibuka).
+                  GoRoute(
+                    path: 'riwayat',
+                    builder: (_, __) => const RiwayatLaciMejaScreen(),
+                  ),
+                ],
               ),
               // Tambah belanjaan ke transaksi yang sudah ada.
               GoRoute(

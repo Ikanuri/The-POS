@@ -8,6 +8,7 @@ import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/laci_meja/laci_meja_dashboard_screen.dart';
+import 'package:the_pos/features/laci_meja/riwayat_laci_meja_screen.dart';
 
 /// PLAN.md Item 54 poin 1 & 5 (sisi UI):
 ///  • ambil/penuhi SEBAGIAN lewat dialog qty, sisa tetap menggantung;
@@ -31,6 +32,10 @@ void main() {
           builder: (_, state) => Scaffold(
               body: Text('Layar Struk ${state.pathParameters['txId']}')),
         ),
+        GoRoute(
+          path: '/kasir/laci-meja/riwayat',
+          builder: (_, __) => const RiwayatLaciMejaScreen(),
+        ),
       ],
     );
     return ProviderScope(
@@ -39,7 +44,8 @@ void main() {
     );
   }
 
-  Future<void> seedTx(String id) => db.into(db.transactions).insert(
+  Future<void> seedTx(String id, {String name = 'Bu Rina'}) =>
+      db.into(db.transactions).insert(
         TransactionsCompanion.insert(
           id: id,
           localId: id,
@@ -48,7 +54,7 @@ void main() {
           paid: 10000,
           changeAmount: 0,
           paymentMethod: 'tunai',
-          customerName: const Value('Bu Rina'),
+          customerName: Value(name),
         ),
       );
 
@@ -175,32 +181,9 @@ void main() {
     });
   });
 
-  group('Layar Riwayat (poin 5)', () {
-    testWidgets('ikon Riwayat menampilkan log ketiga kategori bercampur, '
-        'urut terbaru dulu', (tester) async {
-      await seedTx('tx1');
-      await db.into(db.products).insert(
-          ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
-      await db.addLeftBehindItem(
-          id: 'l1',
-          transactionId: 'tx1',
-          itemName: 'Payung',
-          jenis: 'titip',
-          qty: 1);
-      await db.addBorrowedItem(
-          id: 'b1', transactionId: 'tx1', itemName: 'Krat botol', qty: 2);
-      await db.addPreorderEntry(
-          id: 'p1',
-          productId: 'P1',
-          productUnitId: 'U1',
-          customerName: 'Bu Rina',
-          qtyOrdered: 4,
-          transactionId: 'tx1');
-
-      await db.collectLeftBehindQty('l1', 1, total: 1, eventId: 'e1');
-      await db.returnBorrowedItemQty('b1', 2, eventId: 'e2');
-      await db.fulfillPreorderQty('p1', 3, eventId: 'e3');
-
+  group('Layar Riwayat (poin 5, kini layar arsip terpisah)', () {
+    testWidgets('ikon Riwayat membuka layar arsip Riwayat Laci Meja (rute '
+        'terpisah, bukan toggle inline)', (tester) async {
       await tester.pumpWidget(buildApp());
       await tester.pumpAndSettle();
 
@@ -208,26 +191,138 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Riwayat Laci Meja'), findsOneWidget);
-      expect(find.textContaining('diambil'), findsOneWidget);
-      expect(find.textContaining('kembali 2'), findsOneWidget);
-      expect(find.textContaining('dipenuhi 3'), findsOneWidget);
-      // Kategori disebut di baris kedua tiap kartu.
-      expect(find.textContaining('Titip/Ketinggalan · Payung'), findsOneWidget);
-      expect(find.textContaining('Pre-order · Gas LPG 3kg'), findsOneWidget);
-      // Pemisah hari.
-      expect(find.textContaining('Hari ini'), findsOneWidget);
+      // 3 tab kategori terpisah (permintaan user "pisahkan ketiga kategori").
+      expect(find.text('Titip/Ketinggalan'), findsOneWidget);
+      expect(find.text('Pinjaman'), findsOneWidget);
+      expect(find.text('Pre-order'), findsOneWidget);
 
       await drain(tester);
     });
 
-    testWidgets('belum ada kejadian -> pesan kosong, bukan daftar kosong '
-        'tanpa penjelasan', (tester) async {
+    testWidgets('entri yang SUDAH SELESAI tetap tampil di riwayat (beda dari '
+        'dashboard yang cuma tampilkan yang masih terbuka)', (tester) async {
+      await seedTx('tx1');
+      await db.addLeftBehindItem(
+          id: 'l1',
+          transactionId: 'tx1',
+          itemName: 'Payung',
+          jenis: 'titip',
+          qty: 1);
+      await db.collectLeftBehindQty('l1', 1, total: 1, eventId: 'e1');
+      await db.markLeftBehindCollected('l1', sisaQty: 0, eventId: 'e1b');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      // Dashboard (tab default Titip/Ketinggalan) TIDAK menampilkannya lagi
+      // -- sudah selesai.
+      expect(find.textContaining('Payung'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.history));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Payung'), findsOneWidget);
+      expect(find.textContaining('Selesai'), findsOneWidget);
+
+      await drain(tester);
+    });
+
+    testWidgets('belum ada riwayat sama sekali -> pesan kosong per tab',
+        (tester) async {
       await tester.pumpWidget(buildApp());
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.history));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Belum ada riwayat'), findsOneWidget);
+
+      await drain(tester);
+    });
+
+    testWidgets('pencarian menyaring baris sesuai nama pelanggan/nama barang',
+        (tester) async {
+      await seedTx('tx1');
+      await seedTx('tx2', name: 'Pak Budi');
+      await db.addLeftBehindItem(
+          id: 'l1',
+          transactionId: 'tx1',
+          itemName: 'Payung',
+          jenis: 'titip',
+          qty: 1);
+      await db.addLeftBehindItem(
+          id: 'l2',
+          transactionId: 'tx2',
+          itemName: 'Topi',
+          jenis: 'ketinggalan',
+          qty: 1);
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.history));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Payung'), findsOneWidget);
+      expect(find.textContaining('Topi'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'Payung');
+      await tester.pumpAndSettle();
+
+      // 2 kemunculan "Payung": teks yg baru diketik di kotak pencarian itu
+      // sendiri, + baris kartu yg lolos filter (Topi sudah tersaring habis).
+      expect(find.textContaining('Payung'), findsNWidgets(2));
+      expect(find.textContaining('Topi'), findsNothing);
+
+      await drain(tester);
+    });
+
+    testWidgets('tab Pre-order: filter produk menyaring hanya entri produk '
+        'terpilih', (tester) async {
+      await seedTx('tx1');
+      await db.into(db.products)
+          .insert(ProductsCompanion.insert(id: 'P1', name: 'Gas LPG 3kg'));
+      await db.into(db.products)
+          .insert(ProductsCompanion.insert(id: 'P2', name: 'Beras 25kg'));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
+      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
+          id: 'U2', productId: 'P2', isBaseUnit: const Value(true)));
+      await db.addPreorderEntry(
+          id: 'p1',
+          productId: 'P1',
+          productUnitId: 'U1',
+          customerName: 'Bu Rina',
+          qtyOrdered: 4,
+          transactionId: 'tx1');
+      await db.addPreorderEntry(
+          id: 'p2',
+          productId: 'P2',
+          productUnitId: 'U2',
+          customerName: 'Bu Rina',
+          qtyOrdered: 2,
+          transactionId: 'tx1');
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.history));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Pre-order'));
+      await tester.pumpAndSettle();
+
+      // Cek isi KARTU (bukan seluruh layar) — chip filter produk juga
+      // menyebut nama produk yg sama, jadi textContaining biasa akan
+      // ganda-hitung chip + kartu.
+      Finder cardWith(String text) => find.ancestor(
+          of: find.textContaining(text), matching: find.byType(Card));
+
+      expect(cardWith('Gas LPG 3kg'), findsOneWidget);
+      expect(cardWith('Beras 25kg'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Gas LPG 3kg'));
+      await tester.pumpAndSettle();
+
+      expect(cardWith('Gas LPG 3kg'), findsOneWidget);
+      expect(cardWith('Beras 25kg'), findsNothing);
 
       await drain(tester);
     });

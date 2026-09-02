@@ -11,6 +11,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 2 September 2026
 
 ### ✨ Fitur Baru
+- **Layar "Riwayat Laci Meja" baru** — sekarang ada layar riwayat
+  tersendiri (buka lewat ikon jam di pojok kanan atas dashboard Laci
+  Meja) yang memisahkan riwayat Titip/Ketinggalan, Pinjaman Barang, dan
+  Pre-order jadi 3 tab terpisah. Setiap tab menampilkan SEMUA catatan —
+  yang masih terbuka maupun yang sudah selesai — dilengkapi kotak
+  pencarian (cari nama pelanggan/nama barang) dan filter rentang
+  tanggal. Khusus tab Pre-order, ada tambahan filter per produk supaya
+  gampang melihat riwayat satu produk saja (misal cuma LPG).
 - **Bisa mengumpulkan pembayaran DP/jaminan pre-order yang tertunda**
   — sebelumnya kalau ada pre-order dengan jaminan/DP yang belum dibayar
   (misal LPG yang harganya masih Rp 0 di nota, sementara barang lain di
