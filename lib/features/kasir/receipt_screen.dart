@@ -3645,6 +3645,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     String? note,
     bool showPhone = false,
     bool showDeposit = false,
+    // Item 56 (keputusan user) — cap qty ke qty baris nota tertaut, KHUSUS
+    // pre-order yang punya `transactionItemId`. Null = tidak ada cap (titip/
+    // pinjaman, atau entri pre-order tanpa tautan baris nota). Menambah
+    // jumlah pre-order melebihi ini HARUS lewat "Tambah Belanjaan" (bikin
+    // baris nota + entri baru), BUKAN menaikkan qty entri yang sudah ada.
+    double? maxQty,
   }) async {
     final nameCtrl = TextEditingController(text: customerName);
     final phoneCtrl = TextEditingController(text: phone ?? '');
@@ -3653,6 +3659,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         TextEditingController(text: _fmtQtyShort(depositQty ?? 0));
     final noteCtrl = TextEditingController(text: note ?? '');
     String? qtyError;
+    String? depositError;
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -3697,10 +3704,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     labelText: 'Jumlah',
                     border: const OutlineInputBorder(),
                     errorText: qtyError,
-                    helperText: minQty > 0
-                        ? 'Minimal ${_fmtQtyShort(minQty)} (sudah tercatat '
-                            'di riwayat)'
-                        : null,
+                    helperText: maxQty != null
+                        ? 'Maks ${_fmtQtyShort(maxQty)} (sesuai qty di nota) — '
+                            'tambah lewat Tambah Belanjaan'
+                        : minQty > 0
+                            ? 'Minimal ${_fmtQtyShort(minQty)} (sudah '
+                                'tercatat di riwayat)'
+                            : null,
                   ),
                   onChanged: (_) {
                     if (qtyError != null) setSheetState(() => qtyError = null);
@@ -3712,9 +3722,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     controller: depositCtrl,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                         labelText: 'Jumlah jaminan dititip',
-                        border: OutlineInputBorder()),
+                        border: const OutlineInputBorder(),
+                        errorText: depositError),
+                    onChanged: (_) {
+                      if (depositError != null) {
+                        setSheetState(() => depositError = null);
+                      }
+                    },
                   ),
                 ],
                 const SizedBox(height: 10),
@@ -3751,6 +3767,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 qtyError = 'Tidak boleh kurang dari yang sudah '
                                     'tercatat (${_fmtQtyShort(minQty)})');
                             return;
+                          }
+                          if (maxQty != null && parsed > maxQty) {
+                            setSheetState(() => qtyError =
+                                'Tidak boleh melebihi qty di nota '
+                                '(${_fmtQtyShort(maxQty)}) — tambah lewat '
+                                'Tambah Belanjaan');
+                            return;
+                          }
+                          if (showDeposit) {
+                            final parsedDeposit =
+                                double.tryParse(depositCtrl.text.trim()) ?? 0;
+                            if (parsedDeposit > parsed) {
+                              setSheetState(() => depositError =
+                                  'Tidak boleh melebihi jumlah '
+                                  '(${_fmtQtyShort(parsed)})');
+                              return;
+                            }
                           }
                           Navigator.of(ctx).pop(true);
                         },
@@ -3846,6 +3879,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   }
 
   Future<void> _editPreorderEntry(PreorderEntry p, String productName) async {
+    // Item 56 (keputusan user) — entri yang tertaut baris nota (diisi
+    // checkout/Tambah Belanjaan sejak v36) tidak boleh diedit qty-nya
+    // melebihi qty baris nota itu sendiri; menambah jumlah pre-order untuk
+    // produk yang sama harus lewat "Tambah Belanjaan" (baris nota + entri
+    // baru), bukan menaikkan qty entri lama. Entri tanpa tautan (lama, atau
+    // titip wadah tanpa beli) tidak punya apa pun utk dibandingkan -> bebas
+    // spt sebelumnya.
+    final linkedItemId = p.transactionItemId;
+    double? maxQty;
+    if (linkedItemId != null) {
+      for (final i in _items) {
+        if (i.id == linkedItemId) {
+          maxQty = i.qty;
+          break;
+        }
+      }
+    }
     final result = await _showLaciMejaEditSheet(
       title: 'Ubah pre-order — $productName',
       customerName: p.customerName,
@@ -3856,6 +3906,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       note: p.note,
       showPhone: true,
       showDeposit: true,
+      maxQty: maxQty,
     );
     if (result == null || !mounted) return;
     await ref.read(databaseProvider).editPreorderEntry(
