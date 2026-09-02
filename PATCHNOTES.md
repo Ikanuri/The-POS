@@ -11,6 +11,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 2 September 2026
 
 ### ✨ Fitur Baru
+- **Urutan metode pembayaran sekarang bisa diatur sendiri** — di layar
+  Pengaturan > Metode Pembayaran, tekan-tahan ikon garis (drag-handle)
+  di kiri tiap metode lalu geser naik/turun untuk mengubah urutannya.
+  Urutan baru ini otomatis ikut tampil di mana pun daftar metode
+  pembayaran muncul — layar Bayar, sheet Lunasi Piutang, dan pemilihan
+  metode refund — jadi metode yang paling sering dipakai bisa ditaruh
+  paling atas.
 - **Tombol "Salin Laporan" di dashboard Laci Meja tab Pre-order** —
   ikon salin baru di sebelah tombol Kuota. Sekali tap, ringkasan
   antrian pre-order yang masih terbuka (nama pelanggan, jumlah
