@@ -218,14 +218,23 @@ void main() {
     final garisSebelumFilter =
         find.textContaining('Batas kiriman').evaluate().length;
 
-    // Chip filter produk: labelnya ikut menampilkan kuota yang aktif.
-    // `ensureVisible` WAJIB — chip ada di dalam `SingleChildScrollView`
-    // horizontal yang bisa memotong kontennya di luar viewport awal; tap ke
-    // posisi ter-clip itu jatuh ke widget LAIN yang kebetulan ada di
-    // koordinat yang sama (di sini: tombol "Kuota" di sebelahnya).
-    await tester.ensureVisible(find.text('LPG 3kg · maks 70'));
+    // Filter produk sekarang dropdown (`ProductPickerDropdown`, permintaan
+    // user "opsi dropdown design anda kemarin itu sudah paling pas") —
+    // chip awalnya menampilkan "Semua Produk", tap utk buka menu, lalu
+    // pilih baris "LPG 3kg" (badgenya menampilkan kuota aktif "maks 70").
+    // DUA pump 300ms WAJIB (bukan cuma satu) — `PopupMenuButton` punya
+    // animasi masuk (`_kMenuDuration` = 300ms, `ScaleTransition` dari titik
+    // jangkar tombol); satu pump 300ms belum genap selesai (durasi total
+    // event loop utk tap+pump pertama kali makan sebagian dari 300ms itu
+    // sendiri), sehingga koordinat tap ke baris menu masih kena posisi
+    // TERSKALA-SEBAGIAN (bukan bug UI sungguhan — sudah dikonfirmasi
+    // manual via debug print `RenderBox.localToGlobal`: begitu animasi
+    // genap selesai, posisi baris menu tepat sejajar tombol, TIDAK
+    // pernah render di luar layar).
+    await tester.tap(find.text('Semua Produk'));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('LPG 3kg · maks 70'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('LPG 3kg').last);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 

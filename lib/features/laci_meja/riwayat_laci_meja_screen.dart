@@ -6,6 +6,8 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/theme/app_theme.dart';
 import 'laci_meja_date_utils.dart';
+import 'laci_meja_expandable_search.dart';
+import 'product_picker_dropdown.dart';
 
 /// Layar "Riwayat Laci Meja" (permintaan user) — BEDA dari
 /// `LaciMejaDashboardScreen`: dashboard cuma menampilkan entri yang MASIH
@@ -37,15 +39,16 @@ class _RiwayatLaciMejaScreenState extends ConsumerState<RiwayatLaciMejaScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
       TabController(length: 3, vsync: this);
-  final _searchCtrl = TextEditingController();
   String _query = '';
+  // Susulan (permintaan user, layout sempit HP 360-400dp) — status
+  // expand/collapse field cari, lihat `LaciMejaExpandableSearch`.
+  bool _searchExpanded = false;
   DateTimeRange? _dateFilter;
   String? _productFilter;
 
   @override
   void dispose() {
     _tabController.dispose();
-    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -95,68 +98,89 @@ class _RiwayatLaciMejaScreenState extends ConsumerState<RiwayatLaciMejaScreen>
       ),
       body: Column(
         children: [
+          // Susulan (permintaan user, screenshot: field cari full-width
+          // bikin baris filter tanggal/produk di bawahnya sempit/terpotong
+          // di HP 360-400dp) — field cari jadi expandable (pola SAMA PERSIS
+          // dgn dashboard Laci Meja tab Pre-order, lihat `LaciMejaExpandableSearch`),
+          // filter tanggal & produk jadi sejajar di baris yang sama saat
+          // collapsed (bukan lagi baris terpisah di bawah field cari).
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'Cari nama, barang, atau catatan…',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                isDense: true,
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          setState(() => _query = '');
-                        },
-                      ),
-              ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  InputChip(
-                    avatar: const Icon(Icons.date_range, size: 16),
-                    label: Text(
-                      _dateFilter == null
-                          ? 'Semua Tanggal'
-                          : '${_dateFilter!.start.day}/${_dateFilter!.start.month} – '
-                              '${_dateFilter!.end.day}/${_dateFilter!.end.month}',
-                      style: const TextStyle(fontSize: 12),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: Row(
+              children: [
+                if (_searchExpanded)
+                  Expanded(
+                    child: LaciMejaExpandableSearch(
+                      hintText: 'Cari nama, barang, atau catatan…',
+                      expanded: _searchExpanded,
+                      onExpandedChanged: (v) =>
+                          setState(() => _searchExpanded = v),
+                      onChanged: (v) => setState(() => _query = v),
                     ),
-                    selected: _dateFilter != null,
-                    showCheckmark: false,
-                    onSelected: (_) => _pickDateRange(),
-                    onDeleted: _dateFilter != null
-                        ? () => setState(() => _dateFilter = null)
-                        : null,
-                    visualDensity: VisualDensity.compact,
-                    selectedColor: scheme.primaryContainer,
-                    side: BorderSide.none,
+                  )
+                else ...[
+                  LaciMejaExpandableSearch(
+                    hintText: 'Cari nama, barang, atau catatan…',
+                    expanded: _searchExpanded,
+                    onExpandedChanged: (v) =>
+                        setState(() => _searchExpanded = v),
+                    onChanged: (v) => setState(() => _query = v),
                   ),
-                  if (showProductFilter && _productFilter != null) ...[
-                    const SizedBox(width: 6),
-                    InputChip(
-                      avatar: const Icon(Icons.inventory_2_outlined, size: 16),
-                      label: Text(_productFilterLabel(),
-                          style: const TextStyle(fontSize: 12)),
-                      selected: true,
-                      showCheckmark: false,
-                      onDeleted: () => setState(() => _productFilter = null),
-                      visualDensity: VisualDensity.compact,
-                      selectedColor: scheme.primaryContainer,
-                      side: BorderSide.none,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          // Filter tanggal — SUDAH satu tombol/chip tunggal
+                          // (tap membuka date-range picker, "x" muncul
+                          // kalau aktif utk membersihkan) sejak awal dibuat
+                          // — TIDAK diubah, sudah sesuai permintaan user.
+                          InputChip(
+                            avatar: const Icon(Icons.date_range, size: 16),
+                            label: Text(
+                              _dateFilter == null
+                                  ? 'Semua Tanggal'
+                                  : '${_dateFilter!.start.day}/${_dateFilter!.start.month} – '
+                                      '${_dateFilter!.end.day}/${_dateFilter!.end.month}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            selected: _dateFilter != null,
+                            showCheckmark: false,
+                            onSelected: (_) => _pickDateRange(),
+                            onDeleted: _dateFilter != null
+                                ? () => setState(() => _dateFilter = null)
+                                : null,
+                            visualDensity: VisualDensity.compact,
+                            selectedColor: scheme.primaryContainer,
+                            side: BorderSide.none,
+                          ),
+                          // Filter produk (tab Pre-order) — dropdown pola
+                          // SAMA PERSIS `ProductPickerDropdown` yang dipakai
+                          // dashboard (permintaan user eksplisit "opsi
+                          // dropdown design anda kemarin itu sudah paling
+                          // pas"), BUKAN lagi chip `ChoiceChip`.
+                          if (showProductFilter &&
+                              _lastProductNames.length > 1) ...[
+                            const SizedBox(width: 6),
+                            ProductPickerDropdown(
+                              entries: {
+                                for (final e in _lastProductNames.entries)
+                                  e.key: (name: e.value, badge: null),
+                              },
+                              selectedId: _productFilter,
+                              allLabel: 'Semua Produk',
+                              tooltip: 'Filter produk',
+                              onSelected: (id) =>
+                                  setState(() => _productFilter = id),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ],
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
           const Divider(height: 1),
@@ -175,8 +199,8 @@ class _RiwayatLaciMejaScreenState extends ConsumerState<RiwayatLaciMejaScreen>
     );
   }
 
-  String _productFilterLabel() => _lastProductNames[_productFilter] ?? '';
-  // Diisi tiap kali tab Pre-order dibangun — dipakai chip di atas tab.
+  // Diisi tiap kali tab Pre-order dibangun — dipakai dropdown filter produk
+  // di atas TabBarView.
   Map<String, String> _lastProductNames = const {};
 
   // ── Titip/Ketinggalan ──
@@ -340,17 +364,12 @@ class _RiwayatLaciMejaScreenState extends ConsumerState<RiwayatLaciMejaScreen>
               (e.note ?? '').toLowerCase().contains(query);
         }).toList();
 
+        // Chip filter produk TIDAK lagi dirender di sini — sudah pindah jadi
+        // dropdown (`ProductPickerDropdown`) sejajar dgn field cari & filter
+        // tanggal di atas `TabBarView` (lihat `build`), supaya baris tab ini
+        // tidak dobel dgn baris filter di atasnya.
         return Column(
           children: [
-            if (productNames.length > 1)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: _ProductFilterChips(
-                  productNames: productNames,
-                  selected: _productFilter,
-                  onSelected: (id) => setState(() => _productFilter = id),
-                ),
-              ),
             Expanded(
               child: filtered.isEmpty
                   ? _emptyState(scheme, items.isEmpty)
@@ -572,45 +591,5 @@ class _RiwayatCard extends StatelessWidget {
       ),
     );
     return onTap == null ? card : InkWell(onTap: onTap, child: card);
-  }
-}
-
-/// Chip filter produk (tab Pre-order) — pola sama `_PreorderProductFilter`
-/// dashboard, disederhanakan (tanpa info kuota, tidak relevan di riwayat).
-class _ProductFilterChips extends StatelessWidget {
-  const _ProductFilterChips({
-    required this.productNames,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final Map<String, String> productNames;
-  final String? selected;
-  final ValueChanged<String?> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          ChoiceChip(
-            label: const Text('Semua Produk'),
-            selected: selected == null,
-            onSelected: (_) => onSelected(null),
-            visualDensity: VisualDensity.compact,
-          ),
-          for (final e in productNames.entries) ...[
-            const SizedBox(width: 6),
-            ChoiceChip(
-              label: Text(e.value),
-              selected: selected == e.key,
-              onSelected: (_) => onSelected(e.key),
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }

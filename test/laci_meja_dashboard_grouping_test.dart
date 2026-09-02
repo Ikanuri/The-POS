@@ -53,21 +53,38 @@ Finder findEntryRows({Finder? of}) {
   return of == null ? matcher : find.descendant(of: of, matching: matcher);
 }
 
-/// Nama produk di dalam chip pemilih jaminan (`_ProductPickerChip`) —
-/// DIBATASI ke widget itu krn nama produk yang sama juga muncul sbg label
-/// chip filter produk (`_PreorderProductFilter`, ChoiceChip biasa) begitu
-/// ada >1 produk pre-order aktif; keduanya sama-sama `Text(namaPersis)`.
-Finder findJaminanPickerText(String name) => find.descendant(
+/// Susulan (permintaan user, screenshot layout sempit): pemilih produk
+/// jaminan DAN dropdown filter produk sekarang SATU widget yang sama persis
+/// (`ProductPickerDropdown`, `product_picker_dropdown.dart`, dipakai ulang —
+/// permintaan user eksplisit "opsi dropdown design anda kemarin itu sudah
+/// paling pas") — jadi finder berbasis TIPE SAJA tidak cukup lagi kalau
+/// keduanya sama-sama tampil (>1 produk pre-order aktif). DIBATASI lewat
+/// ancestor `_PreorderStatsLine` (tempat pemilih jaminan dirender) supaya
+/// tidak ikut kena dropdown filter produk di baris atas.
+Finder _jaminanPickerScope() => find.descendant(
     of: find.byWidgetPredicate(
-        (w) => w.runtimeType.toString() == '_ProductPickerChip'),
-    matching: find.text(name));
+        (w) => w.runtimeType.toString() == '_PreorderStatsLine'),
+    matching: find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == 'ProductPickerDropdown'));
 
-/// Nama produk di dalam SATU baris dropdown jaminan (`_ProductPickerMenuRow`)
-/// — dropdown-nya sendiri didesain khusus (bukan `ListTile` bawaan), lihat
-/// dok `_ProductPickerChip`.
+Finder findJaminanPickerText(String name) =>
+    find.descendant(of: _jaminanPickerScope(), matching: find.text(name));
+
+/// Tombol pemilih jaminan itu sendiri (utk di-tap membuka dropdown) —
+/// dibatasi ancestor yang sama spt [findJaminanPickerText].
+Finder findJaminanPickerButton() => find.descendant(
+    of: find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_PreorderStatsLine'),
+    matching: find.byType(PopupMenuButton<String>));
+
+/// Nama produk di dalam SATU baris dropdown jaminan (`ProductPickerMenuRow`,
+/// `product_picker_dropdown.dart`) — dropdown-nya sendiri didesain khusus
+/// (bukan `ListTile` bawaan). TIDAK perlu dibatasi ancestor krn isi popup
+/// dirender via `Overlay` (bukan turunan tree asalnya) & hanya SATU popup
+/// yang bisa terbuka sekaligus di test manapun di sini.
 Finder findJaminanMenuText(String text) => find.descendant(
     of: find.byWidgetPredicate(
-        (w) => w.runtimeType.toString() == '_ProductPickerMenuRow'),
+        (w) => w.runtimeType.toString() == 'ProductPickerMenuRow'),
     matching: find.text(text));
 
 void main() {
@@ -509,6 +526,16 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// Susulan (permintaan user, layout sempit): field cari sekarang
+    /// collapsed (ikon saja) sampai di-tap — bedanya dari dulu yang
+    /// langsung full-width `TextField` begitu tab dibuka. Test yang mau
+    /// mengetik kata kunci WAJIB buka field-nya dulu lewat ikon (tooltip
+    /// "Cari"), baru `find.byType(TextField)` bisa menemukan satu match.
+    Future<void> expandPreorderSearch(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Cari'));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets(
         'statistik ringkas satu baris memisahkan total produk vs total '
         'jaminan (permintaan user: 2 kartu besar diganti 1 baris teks)',
@@ -550,8 +577,8 @@ void main() {
           findsOneWidget);
 
       // Tap chip -> dropdown custom muncul, tampilkan kedua pilihan (nama +
-      // badge qty terpisah, lihat `_ProductPickerMenuRow`).
-      await tester.tap(find.byType(PopupMenuButton<String>));
+      // badge qty terpisah, lihat `ProductPickerMenuRow`).
+      await tester.tap(findJaminanPickerButton());
       await tester.pumpAndSettle();
 
       expect(findJaminanMenuText('Galon Aqua'), findsOneWidget,
@@ -580,21 +607,34 @@ void main() {
         (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
+      await expandPreorderSearch(tester);
 
       await tester.enterText(find.byType(TextField), 'Budi');
       await tester.pumpAndSettle();
 
       expect(find.text('Pak Budi'), findsOneWidget);
       expect(find.text('Bu Artia'), findsNothing);
+      // Statistik & filter dropdown disembunyikan sementara selagi field
+      // cari melebar (lihat `_buildPreorderList`) — mengecilkan lewat blur
+      // (BUKAN tombol x: teks "Budi" masih ada, tombol x kalau isi tidak
+      // kosong JUSTRU menghapus teksnya, bukan mengecilkan — lihat dok
+      // `LaciMejaExpandableSearch._onClearOrShrink`) supaya query TETAP
+      // aktif saat statistik tersaring diverifikasi.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
       // Statistik ikut tersaring: sisa 3 produk & 1 jaminan (cuma Galon Aqua
-      // -> chip tanpa dropdown, krn tidak ada produk lain utk dipilih).
+      // -> chip tanpa dropdown, krn tidak ada produk lain berjaminan utk
+      // dipilih — dropdown FILTER produk di baris atas tetap ada krn masih
+      // ada 2 produk yg punya antrian terbuka, TIDAK terpengaruh pencarian).
       expect(find.textContaining('Produk: 3', findRichText: true),
           findsOneWidget);
       expect(findJaminanPickerText('Galon Aqua'), findsOneWidget);
       expect(find.textContaining('Jaminan: 1', findRichText: true),
           findsOneWidget);
-      expect(find.byType(PopupMenuButton<String>), findsNothing,
-          reason: 'cuma 1 produk berjaminan -> tidak ada gunanya dropdown');
+      expect(findJaminanPickerButton(), findsNothing,
+          reason: 'cuma 1 produk berjaminan -> tidak ada gunanya dropdown '
+              'jaminan (beda dari dropdown FILTER produk di baris atas yg '
+              'tetap ada)');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -603,6 +643,7 @@ void main() {
     testWidgets('cari by NAMA PRODUK juga bisa', (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
+      await expandPreorderSearch(tester);
 
       await tester.enterText(find.byType(TextField), 'galon');
       await tester.pumpAndSettle();
@@ -619,6 +660,7 @@ void main() {
         (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
+      await expandPreorderSearch(tester);
 
       await tester.enterText(find.byType(TextField), 'zzz');
       await tester.pumpAndSettle();
@@ -674,11 +716,13 @@ void main() {
 
       // Nama panjang -> MarqueeText mendeteksi overflow & merender lewat
       // jalur animasi (`AnimatedBuilder`+`OverflowBox`), BUKAN `Text` biasa
-      // yang softWrap:false bisa terpotong tanpa indikasi.
+      // yang softWrap:false bisa terpotong tanpa indikasi. Cuma 1 produk di
+      // sini (predikat tipe polos aman, tidak ambigu dgn dropdown filter
+      // produk yg butuh >1 produk utk tampil).
       expect(
           find.descendant(
               of: find.byWidgetPredicate(
-                  (w) => w.runtimeType.toString() == '_ProductPickerChip'),
+                  (w) => w.runtimeType.toString() == 'ProductPickerDropdown'),
               matching: find.byType(AnimatedBuilder)),
           findsOneWidget,
           reason: 'nama produk kepanjangan harus jalan lewat MarqueeText, '
