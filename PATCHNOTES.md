@@ -52,6 +52,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   seperti ada banyak permintaan baru padahal itu cuma riwayat yang
   perlu disinkron ke perangkat owner.
 
+- **Restore backup dari perangkat dengan aplikasi versi lebih baru
+  sekarang ditolak dengan pesan yang jelas** — sebelumnya bisa gagal
+  dengan pesan error teknis yang membingungkan (mis. saat owner
+  memindahkan backup dari HP kasir ke HP pribadinya yang belum
+  diperbarui). Sekarang aplikasi memberi tahu untuk update aplikasi
+  dulu sebelum mencoba restore lagi.
+
 ## 31 Agustus 2026
 
 ### ✨ Fitur Baru
