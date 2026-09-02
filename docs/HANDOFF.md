@@ -5,6 +5,54 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 (sesi keempat hari yg sama, dikerjakan via agen
+background, PARALEL dgn agen lain di branch yg sama — cek konflik saat
+push/merge) — tugas "reorder metode pembayaran" (owner minta bisa ubah
+urutan metode bayar) SUDAH DISELESAIKAN. Versi kerja **2.33.0+69**,
+schemaVersion TETAP 36 (tidak ada migrasi baru — kolom `sortOrder` di
+`PaymentMethods` SUDAH ADA sebelumnya, tinggal ditambah UI)._
+
+**Diimplementasikan (`326e39d`)**: `PaymentMethodsScreen` (`lib/features/
+pengaturan/payment_methods_screen.dart`) diganti dari `ListView.separated`
+jadi `ReorderableListView.builder` — drag-handle IKON TERPISAH (`Icons.
+drag_handle` + `ReorderableDragStartListener`), BUKAN seluruh baris, supaya
+tidak bentrok dgn gestur swipe-to-delete `Dismissible` yang sudah ada di tile
+yang sama. `onReorder` tulis ulang `sortOrder` via helper baru `AppDatabase.
+reorderPaymentMethods` (`lib/core/database/app_database.dart`, transaksi,
+pola identik `reorderProductGroups` Item 54 kategori Kasir). "Tunai" TIDAK
+diberi posisi khusus/terkunci — diputuskan sendiri (tidak ada indikasi di
+kode/komentar lama yang mewajibkan ia selalu pertama), bebas direorder spt
+metode lain.
+
+**Audit query `paymentMethods`** (diminta eksplisit di tugas) — 2 tempat
+BELUM `orderBy(sortOrder)` ditemukan & diperbaiki: `_activeQrisMethod`
+(`receipt_screen.dart`) & `_activeQrisMethodForPreview` (`cart_sheet.dart`,
+sekaligus butuh import `drift` baru karena file itu sebelumnya tidak
+mengimpornya). Tempat lain (payment_screen, debt_payment_sheet, layar
+Pengaturan sendiri) SUDAH orderBy sebelumnya — tidak disentuh. Sekalian fix
+bug laten: metode pembayaran baru yang ditambah manual via sheet tambah
+SEBELUMNYA selalu insert `sortOrder` default 0 (tie dgn baris lain → urutan
+tak konsisten setelah >1 metode ditambah) — helper baru `AppDatabase.
+paymentMethodsMaxSortOrder` dipakai supaya metode baru selalu masuk ke
+posisi PALING BAWAH.
+
+**Test**: 3 test baru — `test/payment_methods_reorder_db_test.dart` (2 test
+DB murni: `reorderPaymentMethods` menulis ulang sortOrder & query lain ikut
+terurut; `paymentMethodsMaxSortOrder`), `test/
+payment_methods_screen_reorder_test.dart` (1 widget test drag-handle,
+`tester.startGesture`/`moveBy` step-kecil, pola sama `produk_form_
+reorder_alt_price_test.dart`) — SEMUA revert-verified (fix di-stash
+sementara, terbukti gagal dgn pesan masuk akal — compile error method belum
+ada / 0 drag-handle ditemukan — baru dikembalikan). `flutter analyze`
+bersih. Seluruh `flutter test` (1289 test) lolos kecuali
+`proposal_unchanged_end_to_end_test.dart` (flaky pre-existing, TIDAK terkait
+perubahan sesi ini).
+
+**Tidak ada item pending dari tugas ini.** PLAN.md tidak disentuh (tugas ini
+datang langsung dari user, bukan dari item PLAN.md).
+
+---
+
 _Update sesi 2 September 2026 (lanjutan, sesi ketiga hari yg sama, dikerjakan
 via agen background) — item pending "tombol copy laporan pre-order" (lihat
 blok sesi sebelumnya di bawah) SUDAH DISELESAIKAN, plus 1 tugas susulan yg
