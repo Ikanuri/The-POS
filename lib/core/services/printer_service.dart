@@ -7,6 +7,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/app_database.dart';
+import '../utils/preorder_calc.dart';
 
 /// Nomor urut nota saja, tanpa kode kasir & tanggal. localId berformat
 /// "KASIR-YYYYMMDD-NNNN" → "5". Defensif untuk data lama tanpa format.
@@ -779,8 +780,9 @@ class PrinterService {
       // dicetak di samping nama item (sama spt struk in-app/share).
       // ASCII polos ("- Titip N"), BUKAN "·" — printer ESC/POS tidak
       // dijamin dukung non-ASCII (lihat gotcha `_toAscii` di file ini).
-      final depositQty =
-          preorderDeposit['${item.productId}|${item.productUnitId}'];
+      // Pencocokan PER BARIS (key `item.id`, fallback produk+satuan) lewat
+      // helper bersama — lihat `preorderDepositForLine`.
+      final depositQty = preorderDepositForLine(preorderDeposit, item);
       final depositSuffix = depositQty != null
           ? ' - Titip ${depositQty % 1 == 0 ? depositQty.toInt() : depositQty}'
           : '';

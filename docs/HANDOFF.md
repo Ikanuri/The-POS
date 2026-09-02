@@ -5,6 +5,70 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 (sesi kedelapan hari yg sama). Versi kerja
+**2.33.4+73**, schemaVersion TETAP 37 (tidak ada migrasi — murni query/UI)._
+
+**3 bug dilaporkan user (2 screenshot nota `A1-20260902-0014`, dibuat
+device ASISTEN, dilihat dari HP OWNER) — SEMUA SELESAI (`a724aa8`)**:
+1. "Kasir: Owner" padahal pembuat asisten — `receipt_screen.dart` pakai
+   `device.deviceName` PENAMPIL. Fix helper `kasirLabel(tx, device)`:
+   nama sendiri hanya kalau `tx.kasirId == deviceCode` (atau kosong),
+   selain itu kode pembuat ("Kasir: A1"). Nama device lain memang TIDAK
+   ada di DB (cuma SharedPreferences) — kalau user ingin NAMA (bukan
+   kode), perlu tabel/registry device baru yang ikut sync (belum ada).
+2. Label inline "· Titip N" salah kalau 1 nota punya >1 entri pre-order
+   produk+satuan sama — `getPreorderDepositForTransaction` keyed
+   `product|unit`, entri kedua menimpa. Sekarang keyed
+   `transaction_item_id` per baris (fallback `product|unit` DIJUMLAHKAN
+   utk entri lama), nilai = jaminan SISA (`sisaDeposit`). **`sisaDeposit`
+   sekarang di `lib/core/utils/preorder_calc.dart`** (features file jadi
+   re-export); baca peta LEWAT `preorderDepositForLine(marks, item)` —
+   dipakai in-app, `_ReceiptPaper`, ESC/POS. ESC/POS TIDAK bisa dites di
+   sandbox (`CapabilityProfile.load()` hang) — cek cetak fisik sekali.
+3. Kartu riwayat Laci Meja di nota kini render `note` event (ringkasan
+   edit "jumlah 1 -> 2, jaminan 1 -> 2" / nominal DP) + suffix kode
+   device " · A1" di semua aksi. Review usulan: 'edit' -> "Diubah".
+
+**Audit "deep debug laci meja/pre-order + sync" — hasil per poin**:
+- 4a (agregasi jaminan/qty): dashboard `depositByProduct`/`_preorderTile`,
+  laporan salin, kuota `preorderIdsBeyondQuota`, label inline (baru)
+  SEMUA pakai sisa. Yang MENTAH & sengaja (deskripsi pesanan, sisa di
+  baris terpisah): headline kartu nota, subtitle Riwayat, pengingat cart
+  bar `getLaciMejaPending` — dicatat di PLAN Item 58, tidak diubah.
+- 4b: edit qty entri TIDAK menyentuh baris nota; DP ditagih dari qty
+  BARIS NOTA (`collectPreorderDeposit`). Bukan bug hitung, tapi jebakan
+  alur — PLAN Item 56, BUTUH KEPUTUSAN USER (rekomendasi: peringatan di
+  sheet edit).
+- 4c-i (BUG NYATA, DIPERBAIKI): `applyLaciMejaProposals` INSERT OR
+  REPLACE bisa membuka kembali entri yang sudah ditutup host (owner
+  memenuhi sebelum approve usulan edit klien). `filterUnchanged...`
+  TIDAK melindungi. Guard: `fulfilled_at`/`cancelled_at`/`collected_at`/
+  `fully_returned_at` host dipertahankan kalau usulan null, `qty_returned`
+  ambil terbesar. Test `apply_laci_meja_proposals_keep_closed_test.dart`.
+  Catatan desain tersisa: approve = terima SELURUH versi klien utk kolom
+  lain (qty/jaminan/nama/catatan) walau owner mengedit host lebih baru —
+  inheren pada model "usulan"; layar review menampilkan nilai usulan.
+- 4c-ii: id event `'$entryId-$micros'` — apply INSERT OR REPLACE by id,
+  mergeRows INSERT OR IGNORE: usulan sama diterapkan 2x TIDAK dobel. Aman.
+- 4c-iii: event klien `locally_modified` TIDAK PERNAH reset (tidak ada
+  `updated_at`, delta by `created_at` tidak menjangkau event lama) —
+  dikirim ulang tiap sync selamanya, dibuang host via `filterUnchanged`.
+  Data aman, payload tumbuh — PLAN Item 57 (catatan desain).
+- 4c-iv: pre-order cocokkan pelanggan lewat NAMA saja (`customerId` ada
+  tapi tidak dipakai) — risiko nama kembar, PLAN Item 58, butuh
+  persetujuan user sebelum diubah.
+- Dikonfirmasi ulang: `addPreorderEntry` selalu baris UUID baru; hanya
+  `editPreorderEntry` manual yang mengubah qty/jaminan; fulfilment nota
+  lain tidak bisa menyentuh entri nota ini.
+
+**Test**: 4 file baru (14 test), semua revert-verified dgn pesan gagal
+bermakna. Full `flutter test` 1320 lolos, 1 gagal FLAKY
+(`proposal_unchanged_end_to_end_test.dart`, "Address already in use,
+port 8625" — dua test HTTP loopback berebut port saat paralel; lolos
+saat dijalankan sendiri). `flutter analyze` 0 issue.
+
+---
+
 _Update sesi 2 September 2026 (sesi ketujuh hari yg sama). Versi kerja
 **2.33.3+72**, schemaVersion TETAP 37 (tidak ada migrasi — murni query)._
 

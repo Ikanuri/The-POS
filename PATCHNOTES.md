@@ -51,6 +51,37 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   Riwayat Pembayaran nota dan riwayat kartu pre-order di struk.
 
 ### 🐛 Perbaikan
+- **Nota yang dibuat perangkat lain tidak lagi tertulis "Kasir: [nama
+  HP ini]"** — sebelumnya, nota buatan HP asisten (nomor nota A1-...)
+  yang dibuka di HP owner tertulis "Kasir: Owner", seolah owner yang
+  membuatnya. Sekarang baris itu menampilkan kode perangkat pembuat
+  nota (mis. "Kasir: A1") kalau nota dibuat perangkat lain; nama
+  perangkat sendiri hanya tampil untuk nota buatan perangkat itu
+  sendiri.
+- **Penanda "Titip N" di baris item nota sekarang benar per baris** —
+  kalau satu nota punya dua baris produk yang sama dengan pre-order
+  masing-masing (mis. LPG asli 2 jaminan + LPG "Tambahan" 1 jaminan),
+  sebelumnya kedua baris sama-sama tertulis "Titip 1" walau kartu
+  Pre-order di bawahnya sudah benar (2 + 1). Sekarang tiap baris
+  menampilkan jaminan entri pre-ordernya sendiri, di layar, struk
+  gambar yang dibagikan, maupun cetak printer. Angkanya juga ikut
+  berkurang seiring pesanan dipenuhi sebagian — sama seperti dashboard
+  Laci Meja.
+- **Riwayat pre-order di nota sekarang menjelaskan APA yang diubah dan
+  perangkat mana yang mengubah** — baris "Diubah" di kartu Pre-order
+  (dan Titip/Pinjaman) sebelumnya cuma menampilkan waktunya. Sekarang
+  di bawahnya tertulis rinciannya (mis. "jumlah 1 -> 2, jaminan 1 ->
+  2") dan tiap kejadian (Dipenuhi/Diambil/Kembali/DP Dibayar/Diubah)
+  diberi kode perangkat pelakunya (mis. "Dipenuhi · A1"). Di layar
+  review usulan sync, kejadian "edit" dari HP kasir juga sekarang
+  berlabel "Diubah" (bukan teks mentah "edit").
+- **Menyetujui usulan sync dari HP kasir tidak lagi bisa "membuka
+  kembali" pre-order/titipan/pinjaman yang sudah owner selesaikan** —
+  kalau kasir mengubah entri di HP-nya, lalu owner memenuhi/menutup
+  entri itu di HP owner SEBELUM menyetujui usulan kasir, persetujuan
+  itu sebelumnya diam-diam menghapus status selesai (entri muncul lagi
+  sebagai terbuka dengan sisa 0). Sekarang status selesai di HP owner
+  dipertahankan, perubahan lain dari kasir tetap masuk.
 - **Hitungan "N hari lalu" di Laci Meja kini akurat lewat tengah
   malam** — sebelumnya kalau barang dititip/dipesan malam hari (mis.
   jam 23:50) dan dicek lagi sesaat setelah lewat tengah malam, masih
