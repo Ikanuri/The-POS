@@ -21,11 +21,28 @@ import '../../core/providers/laci_meja_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/utils/preorder_calc.dart';
 import '../../core/widgets/item_count_badge.dart';
 import '../../core/widgets/status_watermark_stamp.dart';
 import 'widgets/debt_payment_sheet.dart';
 import 'widgets/payment_qris_view.dart';
 import 'widgets/tx_history_sheet.dart';
+
+/// Label "Kasir: ..." di header nota. Bug nyata dilaporkan user: nota
+/// `A1-...` (dibuat device ASISTEN) dilihat dari HP owner tertulis
+/// "Kasir: Owner" — versi lama selalu memakai `device.deviceName` milik
+/// device yang SEDANG MELIHAT, bukan pembuat nota. Nama device lain TIDAK
+/// tersimpan di DB (`deviceName` cuma di SharedPreferences tiap device),
+/// tapi `transactions.kasirId` (kode device pembuat, mis. "A1"/"O1")
+/// tersimpan & ikut sync — jadi: nama device sendiri HANYA kalau nota ini
+/// memang dibuat device ini (atau `kasirId` kosong = nota lama), selain itu
+/// tampilkan kode pembuatnya ("Kasir: A1"), konsisten dgn kolom "Kasir" di
+/// tab Transaksi laporan yang memang sudah memakai `kasirId`.
+String kasirLabel(Transaction tx, DeviceIdentity device) {
+  final creator = tx.kasirId?.trim() ?? '';
+  if (creator.isEmpty || creator == device.deviceCode) return device.deviceName;
+  return creator;
+}
 
 /// Sisa tagihan yang BENAR: `total - paid` mentah bisa understate kalau
 /// kembalian yang sudah pernah diberikan (baris pembayaran manapun) dipakai
@@ -483,12 +500,12 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                 Theme.of(context).brightness ==
                                     Brightness.dark)),
                       ),
-                    if (_preorderDeposit[
-                            '${item.productId}|${item.productUnitId}'] !=
-                        null)
+                    // Pencocokan PER BARIS (key `item.id`, fallback
+                    // produk+satuan) — lihat `preorderDepositForLine`.
+                    if (preorderDepositForLine(_preorderDeposit, item) != null)
                       TextSpan(
                         text: ' · Titip '
-                            '${_fmtQtyShort(_preorderDeposit['${item.productId}|${item.productUnitId}']!)}',
+                            '${_fmtQtyShort(preorderDepositForLine(_preorderDeposit, item)!)}',
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -2913,7 +2930,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           // Dibungkus Expanded + ellipsis agar tanggal di kanan
                           // (info lebih penting) tidak ikut terdorong meluber.
                           Expanded(
-                            child: Text('Kasir: ${device.deviceName}',
+                            child: Text('Kasir: ${kasirLabel(tx, device)}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -3512,7 +3529,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                     fontSize: 11,
                     fontStyle: FontStyle.italic,
                     color: fg.withOpacity(0.75))),
-          for (final e in events)
+          for (final e in events) ...[
             Padding(
               padding: const EdgeInsets.only(top: 3),
               child: Row(
@@ -3520,18 +3537,49 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   Text(_formatDateTime(e.createdAt),
                       style: TextStyle(fontSize: 11.5, color: fg)),
                   const SizedBox(width: 8),
-                  Text(_laciMejaAksiLabel(e.aksi),
-                      style: TextStyle(fontSize: 11.5, color: fg)),
-                  const Spacer(),
-                  if (e.qty > 0)
+                  // Kode device pelaku (`deviceCode`, mis. "A1") ikut
+                  // ditampilkan utk SEMUA jenis kejadian — laporan user:
+                  // owner melihat "Diubah" di kartu nota tapi tidak bisa
+                  // tahu perangkat MANA yang mengubah. Nama device lain
+                  // tidak tersimpan di DB (cuma di SharedPreferences tiap
+                  // device), jadi kodenya yang dipakai — sama spt label
+                  // "Kasir: A1" di header nota (`kasirLabel`).
+                  Expanded(
+                    child: Text(
+                        _laciMejaAksiLabel(e.aksi) +
+                            ((e.deviceCode ?? '').trim().isNotEmpty
+                                ? ' · ${e.deviceCode!.trim()}'
+                                : ''),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11.5, color: fg)),
+                  ),
+                  if (e.qty > 0) ...[
+                    const SizedBox(width: 8),
                     Text(_fmtQtyShort(e.qty),
                         style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
                             color: fg)),
+                  ],
                 ],
               ),
             ),
+            // Rincian kejadian — utk `aksi = 'edit'` berisi ringkasan
+            // perubahan (`_laciMejaChangeSummary`, mis. "jumlah 1 -> 2,
+            // jaminan 1 -> 2"), utk 'bayar' nominal DP. Sebelumnya `note`
+            // TIDAK PERNAH dirender di kartu nota, jadi owner cuma tahu
+            // "Diubah" tanpa tahu APA yang berubah (laporan user).
+            if ((e.note ?? '').trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, top: 1),
+                child: Text(e.note!.trim(),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: fg.withOpacity(0.85))),
+              ),
+          ],
           Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Text(
@@ -4353,10 +4401,9 @@ class _ReceiptPaper extends StatelessWidget {
             }
             // Susulan (permintaan user) — pre-order dgn jaminan dititip
             // ("· Titip N" di struk in-app) ikut ditampilkan di struk
-            // share, bukan cuma layar. Key SAMA PERSIS dgn provider
-            // on-screen-nya.
-            final depositQty =
-                preorderDeposit['${item.productId}|${item.productUnitId}'];
+            // share, bukan cuma layar. Pencocokan SAMA PERSIS dgn versi
+            // on-screen (per baris, lihat `preorderDepositForLine`).
+            final depositQty = preorderDepositForLine(preorderDeposit, item);
             final depositSuffix = depositQty != null
                 ? ' · Titip ${depositQty % 1 == 0 ? depositQty.toInt() : depositQty}'
                 : '';

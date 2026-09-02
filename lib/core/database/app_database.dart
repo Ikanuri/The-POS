@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
 import '../services/receive_text_parser.dart';
+import '../utils/preorder_calc.dart';
 import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
@@ -6676,15 +6677,32 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Item 52 redesain pre-order — jumlah jaminan (wadah kosong) yang dititip
-  /// utk tiap produk+satuan di SATU nota, dipakai struk in-app memberi label
-  /// "Titip [qty]" di samping nama barang (persis pola qty+satuan di atas).
-  /// Key: `'$productId|$productUnitId'` (PreorderEntries tidak menyimpan
-  /// `transactionItemId`, hanya productId+productUnitId — cukup presisi krn
-  /// pre-order dibuat via SATU baris cart per produk+satuan per nota).
-  /// Keputusan DIBALIK (permintaan user, susulan): penanda ini SEKARANG
-  /// mengikuti pola sama dgn Titip/Ketinggalan — TEMPORARY, hilang begitu
-  /// pre-order-nya dipenuhi/dibatalkan (`fulfilledAt`/`cancelledAt` diisi) di
-  /// dashboard Laci Meja. Difilter di query ini, bukan cuma di UI.
+  /// utk tiap BARIS item di SATU nota, dipakai struk in-app/share/ESC-POS
+  /// memberi label "Titip [qty]" di samping nama barang (persis pola
+  /// qty+satuan di atas). Baca peta ini LEWAT `preorderDepositForLine`
+  /// (`core/utils/preorder_calc.dart`), jangan akses key-nya langsung.
+  ///
+  /// Dua jenis key dalam SATU peta:
+  ///   • `transaction_item_id` (= `item.id`) — entri yang tertaut PRESISI ke
+  ///     baris nota (`PreorderEntries.transactionItemId`, diisi checkout &
+  ///     tambah belanjaan sejak v36). Nilai = jaminan entri ITU saja.
+  ///   • `'$productId|$productUnitId'` — fallback utk entri LAMA tanpa
+  ///     tautan (`transactionItemId` null); kalau ada beberapa, DIJUMLAHKAN
+  ///     (bukan ditimpa).
+  /// Bug nyata dilaporkan user: versi lama HANYA keyed produk+satuan &
+  /// entri kedua utk produk yg sama MENIMPA yg pertama — nota dgn 2 baris
+  /// LPG (asli + "Tambahan", masing-masing punya entri pre-order sendiri)
+  /// menampilkan "Titip 1" di KEDUA baris, padahal kartu Pre-order (benar)
+  /// menampilkan 2 + 1. Komentar lama "cukup presisi krn pre-order dibuat via
+  /// SATU baris cart per produk+satuan per nota" SALAH — "Tambahan" bisa
+  /// menambah baris produk yang sama ke nota yang sama.
+  ///
+  /// Nilainya jaminan SISA (`sisaDeposit`: dikurangi qty yang sudah
+  /// dipenuhi sebagian), konsisten dgn dashboard & laporan salin-teks —
+  /// bukan `depositQty` mentah. Entri yang sisanya 0 tidak masuk peta.
+  /// Penanda ini TEMPORARY (keputusan user, susulan) — hilang begitu
+  /// pre-order-nya dipenuhi/dibatalkan (`fulfilledAt`/`cancelledAt` diisi)
+  /// di dashboard Laci Meja. Difilter di query ini, bukan cuma di UI.
   Future<Map<String, double>> getPreorderDepositForTransaction(
       String transactionId) async {
     final rows = await (select(preorderEntries)
@@ -6694,9 +6712,16 @@ class AppDatabase extends _$AppDatabase {
               t.fulfilledAt.isNull() &
               t.cancelledAt.isNull()))
         .get();
-    return {
-      for (final r in rows) '${r.productId}|${r.productUnitId}': r.depositQty
-    };
+    if (rows.isEmpty) return {};
+    final taken = await getLaciMejaTakenQty(rows.map((r) => r.id).toList());
+    final out = <String, double>{};
+    for (final r in rows) {
+      final sisa = sisaDeposit(r, taken[r.id] ?? 0);
+      if (sisa <= 0) continue;
+      final key = r.transactionItemId ?? '${r.productId}|${r.productUnitId}';
+      out[key] = (out[key] ?? 0) + sisa;
+    }
+    return out;
   }
 
   /// Susulan (permintaan user) — pre-order TERBUKA milik pelanggan yang SAMA
@@ -7812,6 +7837,47 @@ class AppDatabase extends _$AppDatabase {
               skippedReasons.add(
                   'Riwayat Laci Meja: entri terkait belum tersinkron ke perangkat ini');
               continue;
+            }
+          }
+
+          // Audit sync pre-order (sesi 2 Sep 2026): `INSERT OR REPLACE` di
+          // bawah menimpa SELURUH baris host dgn versi klien. Kalau owner
+          // sudah MENUTUP entri di host (memenuhi/membatalkan pre-order,
+          // ambil titipan, pinjaman kembali semua) SEBELUM menyetujui usulan
+          // klien yang masih memuat versi TERBUKA (mis. klien mengedit qty
+          // lebih dulu, `locally_modified=1`), persetujuan itu diam-diam
+          // MEMBUKA KEMBALI entri yang sudah selesai — padahal event
+          // 'penuhi'/'ambil'/'kembali'-nya tetap ada, jadi dashboard
+          // menampilkan entri "terbuka" dgn sisa 0 yang tidak bisa ditutup
+          // lagi lewat jalur normal. Status tutup bersifat SATU ARAH
+          // (tidak ada jalur app yang mengosongkan kolom ini kembali) —
+          // pertahankan nilai host kalau usulan masih null, pola sama dgn
+          // `deleted_at` `expenses` di `mergeRows`. `qty_returned` (cache
+          // dari log, lihat `returnBorrowedItemQty`) ikut dijaga: ambil
+          // yang terbesar supaya cache tidak mundur.
+          const closedColumns = {
+            'preorder_entries': ['fulfilled_at', 'cancelled_at'],
+            'left_behind_items': ['collected_at'],
+            'borrowed_items': ['fully_returned_at'],
+          };
+          final guarded = closedColumns[entry.key];
+          if (guarded != null) {
+            final hostRow = await customSelect(
+              'SELECT * FROM "${entry.key}" WHERE id = ? LIMIT 1',
+              variables: [Variable.withString(cleaned['id'] as String)],
+            ).getSingleOrNull();
+            if (hostRow != null) {
+              for (final col in guarded) {
+                if (cleaned[col] == null && hostRow.data[col] != null) {
+                  cleaned[col] = hostRow.data[col];
+                }
+              }
+              final hostReturned = hostRow.data['qty_returned'];
+              final incomingReturned = cleaned['qty_returned'];
+              if (hostReturned is num &&
+                  (incomingReturned is! num || incomingReturned < hostReturned)) {
+                cleaned['qty_returned'] = hostReturned;
+              }
             }
           }
 

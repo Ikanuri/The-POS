@@ -224,6 +224,11 @@ class _LaciMejaProposalReviewScreenState
                       // `note`) supaya tidak ikut kehitung sbg qty barang
                       // diambil/dipenuhi.
                       'bayar' => 'DP Dibayar',
+                      // Edit atribut entri dari HP kasir — rincian
+                      // perubahannya ("jumlah 1 -> 2, ...") ada di `note`
+                      // (subtitle di bawah), supaya owner tahu APA yang
+                      // disetujui, bukan cuma bahwa ada yang berubah.
+                      'edit' => 'Diubah',
                       _ => aksi,
                     };
                     return _row(
