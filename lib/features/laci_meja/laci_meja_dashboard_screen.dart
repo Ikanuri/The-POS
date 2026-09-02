@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,7 +9,9 @@ import '../../core/providers/laci_meja_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/marquee_text.dart';
 import '../kasir/widgets/debt_payment_sheet.dart';
+import 'laci_meja_date_utils.dart';
 import 'preorder_quota_store.dart';
+import 'preorder_report.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 
@@ -196,7 +199,10 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     );
   }
 
-  static int _daysSince(DateTime d) => DateTime.now().difference(d).inDays;
+  /// Selisih HARI KALENDER — lihat dok `calendarDaysSince` (satu helper
+  /// dipakai bersama seluruh fitur Laci Meja, lihat `laci_meja_date_utils.
+  /// dart`) utk kenapa BUKAN `Duration.inDays` mentah.
+  static int _daysSince(DateTime d) => calendarDaysSince(d);
 
   /// Angka bulat tanpa ".0" — qty di sini hampir selalu bilangan bulat
   /// (tabung, krat, sak), tapi kolomnya `real` jadi tetap bisa pecahan.
@@ -681,6 +687,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final productFilter = ref.watch(_preorderProductFilterProvider);
     final quotas = ref.watch(preorderQuotaProvider);
     final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull ?? {};
+    final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
 
     // Sisa yang BELUM dipenuhi — dipakai di mana pun angka "berapa yang
     // masih harus diserahkan" ditampilkan (kuota, statistik, baris entri),
@@ -832,6 +839,14 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                   isDark: isDark,
                   onManageQuota: () =>
                       _showQuotaSheet(context, ref, productNames, quotas),
+                  onCopyReport: () => _copyPreorderReport(
+                    context,
+                    items: items,
+                    productFilter: productFilter,
+                    takenQty: taken,
+                    labels: labels,
+                    customerNames: liveNames,
+                  ),
                 ),
               ],
             ),
@@ -852,13 +867,41 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                   keys,
                   labels,
                   isDark,
-                  ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {},
+                  liveNames,
                   beyondQuota: beyondQuota,
                   queueNumbers: queueNumbers,
                   quota: quota,
                 ),
         ),
       ],
+    );
+  }
+
+  /// Susulan (permintaan user) — salin ringkasan antrian pre-order TERBUKA
+  /// yang SEDANG TAMPIL (mengikuti filter produk aktif, BUKAN kata kunci
+  /// pencarian — lihat dok `buildPreorderReportText`) ke clipboard, siap
+  /// tempel WhatsApp/nota manual. Logic penyusunan teksnya murni & testable
+  /// terpisah, lihat `preorder_report.dart`.
+  static Future<void> _copyPreorderReport(
+    BuildContext context, {
+    required List<PreorderEntry> items,
+    required String? productFilter,
+    required Map<String, double> takenQty,
+    required Map<String, ({String productName, String unitName})> labels,
+    required Map<String, String> customerNames,
+  }) async {
+    final text = buildPreorderReportText(
+      items: items,
+      productFilter: productFilter,
+      takenQty: takenQty,
+      productUnitLabels: labels,
+      customerNames: customerNames,
+      now: DateTime.now(),
+    );
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Laporan pre-order disalin')),
     );
   }
 
@@ -1495,6 +1538,7 @@ class _PreorderStatsLine extends StatelessWidget {
     required this.onSelectJaminan,
     required this.isDark,
     required this.onManageQuota,
+    required this.onCopyReport,
   });
 
   final double totalQty;
@@ -1504,6 +1548,7 @@ class _PreorderStatsLine extends StatelessWidget {
   final ValueChanged<String> onSelectJaminan;
   final bool isDark;
   final VoidCallback onManageQuota;
+  final VoidCallback onCopyReport;
 
   static String _fmt(double q) =>
       q % 1 == 0 ? q.toInt().toString() : q.toString();
@@ -1550,6 +1595,21 @@ class _PreorderStatsLine extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        // Susulan (permintaan user) — tombol salin laporan pre-order
+        // terbuka, icon-only spt tombol Kuota di sebelahnya (konsisten,
+        // baris ini padat & tidak ada ruang utk label teks).
+        IconButton(
+          onPressed: onCopyReport,
+          tooltip: 'Salin Laporan',
+          icon: const Icon(Icons.content_copy, size: 18),
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            foregroundColor: AppTheme.accent,
+            side: BorderSide(color: AppTheme.accent.withOpacity(0.5)),
+            minimumSize: const Size(34, 34),
           ),
         ),
         const SizedBox(width: 4),

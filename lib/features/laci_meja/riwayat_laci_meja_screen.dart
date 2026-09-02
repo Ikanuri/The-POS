@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/theme/app_theme.dart';
+import 'laci_meja_date_utils.dart';
 
 /// Layar "Riwayat Laci Meja" (permintaan user) — BEDA dari
 /// `LaciMejaDashboardScreen`: dashboard cuma menampilkan entri yang MASIH
@@ -515,7 +516,7 @@ class _RiwayatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final days = DateTime.now().difference(createdAt).inDays;
+    final days = calendarDaysSince(createdAt);
     final card = Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
