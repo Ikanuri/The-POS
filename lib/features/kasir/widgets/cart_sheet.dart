@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -290,7 +291,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   Future<PaymentMethod?> _activeQrisMethodForPreview() async {
     final db = ref.read(databaseProvider);
     final methods = await (db.select(db.paymentMethods)
-          ..where((t) => t.isActive.equals(true)))
+          ..where((t) => t.isActive.equals(true))
+          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
     for (final m in methods) {
       if (m.type == 'qris' && (m.qrValue?.trim().isNotEmpty ?? false)) {

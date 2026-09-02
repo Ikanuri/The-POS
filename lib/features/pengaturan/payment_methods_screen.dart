@@ -33,10 +33,24 @@ class PaymentMethodsScreen extends ConsumerWidget {
         ],
       ),
       body: methodsAsync.when(
-        data: (methods) => ListView.separated(
+        // ReorderableListView (bukan ListView.separated) — owner bisa
+        // urutkan ulang metode pembayaran via drag-handle, tersimpan ke
+        // kolom `sortOrder` (pola sama dgn reorder kategori produk Kasir,
+        // lihat AppDatabase.reorderProductGroups). "Tunai" TIDAK diberi
+        // posisi khusus — tidak ada indikasi di kode/komentar lama bahwa ia
+        // harus selalu di urutan pertama, jadi bebas direorder spt lainnya.
+        data: (methods) => ReorderableListView.builder(
+          buildDefaultDragHandles: false,
           itemCount: methods.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (_, i) => _MethodTile(method: methods[i]),
+          onReorder: (oldIndex, newIndex) {
+            if (newIndex > oldIndex) newIndex -= 1;
+            final ids = methods.map((m) => m.id).toList();
+            final moved = ids.removeAt(oldIndex);
+            ids.insert(newIndex, moved);
+            ref.read(databaseProvider).reorderPaymentMethods(ids);
+          },
+          itemBuilder: (_, i) => _MethodTile(
+              key: ValueKey(methods[i].id), method: methods[i], index: i),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -54,8 +68,9 @@ class PaymentMethodsScreen extends ConsumerWidget {
 }
 
 class _MethodTile extends ConsumerWidget {
-  const _MethodTile({required this.method});
+  const _MethodTile({super.key, required this.method, required this.index});
   final PaymentMethod method;
+  final int index;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,21 +79,39 @@ class _MethodTile extends ConsumerWidget {
 
     Future<void> toggle(bool v) async {
       final db = ref.read(databaseProvider);
-      await (db.update(db.paymentMethods)
-            ..where((t) => t.id.equals(method.id)))
+      await (db.update(db.paymentMethods)..where((t) => t.id.equals(method.id)))
           .write(PaymentMethodsCompanion(isActive: Value(v)));
     }
 
-    final tile = ListTile(
-      leading: Icon(_typeIcon(method.type)),
-      title: Text(method.name),
-      subtitle: Text(_typeLabel(method.type),
-          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-      // Tap judul → edit (kecuali Tunai, konsisten dgn tak bisa dinonaktifkan).
-      onTap: isTunai ? null : () => _showEditSheet(context, method),
-      trailing: Switch(
-        value: method.isActive,
-        onChanged: isTunai ? null : toggle,
+    final tile = Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: ListTile(
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag-handle terpisah (bukan seluruh baris) — supaya tidak
+            // bentrok dgn gestur swipe-to-delete (Dismissible) di bawah.
+            ReorderableDragStartListener(
+              index: index,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(Icons.drag_handle, color: scheme.onSurfaceVariant),
+              ),
+            ),
+            Icon(_typeIcon(method.type)),
+          ],
+        ),
+        title: Text(method.name),
+        subtitle: Text(_typeLabel(method.type),
+            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+        // Tap judul → edit (kecuali Tunai, konsisten dgn tak bisa dinonaktifkan).
+        onTap: isTunai ? null : () => _showEditSheet(context, method),
+        trailing: Switch(
+          value: method.isActive,
+          onChanged: isTunai ? null : toggle,
+        ),
       ),
     );
 
@@ -89,7 +122,7 @@ class _MethodTile extends ConsumerWidget {
     if (isTunai) return tile;
 
     return Dismissible(
-      key: ValueKey('pm-${method.id}'),
+      key: ValueKey('pm-dismiss-${method.id}'),
       direction: DismissDirection.endToStart,
       background: Container(
         color: scheme.errorContainer,
@@ -100,8 +133,7 @@ class _MethodTile extends ConsumerWidget {
       confirmDismiss: (_) async {
         if (method.isActive) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content:
-                  Text('Nonaktifkan metode ini dulu sebelum menghapus.')));
+              content: Text('Nonaktifkan metode ini dulu sebelum menghapus.')));
           return false;
         }
         final ok = await showDialog<bool>(
@@ -269,6 +301,11 @@ class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
                   _qrCtrl.text.trim().isEmpty ? null : _qrCtrl.text.trim();
               final e = widget.existing;
               if (e == null) {
+                // Metode baru selalu ditaruh di posisi PALING BAWAH — tanpa
+                // ini semua baris baru akan tie di sortOrder default (0),
+                // bikin urutannya jadi acak/tidak konsisten begitu ada lebih
+                // dari satu metode yang ditambah manual.
+                final maxSort = await db.paymentMethodsMaxSortOrder();
                 await db.into(db.paymentMethods).insert(
                       PaymentMethodsCompanion.insert(
                         id: _pmUuid.v4(),
@@ -276,6 +313,7 @@ class _AddMethodSheetState extends ConsumerState<_AddMethodSheet> {
                         name: _nameCtrl.text.trim(),
                         data: Value(data),
                         qrValue: Value(qr),
+                        sortOrder: Value(maxSort + 1),
                       ),
                     );
               } else {

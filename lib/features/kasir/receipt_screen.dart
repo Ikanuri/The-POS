@@ -2579,7 +2579,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Future<PaymentMethod?> _activeQrisMethod() async {
     final db = ref.read(databaseProvider);
     final methods = await (db.select(db.paymentMethods)
-          ..where((t) => t.isActive.equals(true)))
+          ..where((t) => t.isActive.equals(true))
+          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
     for (final m in methods) {
       if (m.type == 'qris' && (m.qrValue?.trim().isNotEmpty ?? false)) {
@@ -3600,7 +3601,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final nameCtrl = TextEditingController(text: customerName);
     final phoneCtrl = TextEditingController(text: phone ?? '');
     final qtyCtrl = TextEditingController(text: _fmtQtyShort(qty));
-    final depositCtrl = TextEditingController(text: _fmtQtyShort(depositQty ?? 0));
+    final depositCtrl =
+        TextEditingController(text: _fmtQtyShort(depositQty ?? 0));
     final noteCtrl = TextEditingController(text: note ?? '');
     String? qtyError;
 
@@ -3690,17 +3692,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                         style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 44)),
                         onPressed: () {
-                          final parsed =
-                              double.tryParse(qtyCtrl.text.trim());
+                          final parsed = double.tryParse(qtyCtrl.text.trim());
                           if (parsed == null || parsed <= 0) {
                             setSheetState(
                                 () => qtyError = 'Jumlah tidak valid');
                             return;
                           }
                           if (parsed < minQty) {
-                            setSheetState(() => qtyError =
-                                'Tidak boleh kurang dari yang sudah '
-                                'tercatat (${_fmtQtyShort(minQty)})');
+                            setSheetState(() =>
+                                qtyError = 'Tidak boleh kurang dari yang sudah '
+                                    'tercatat (${_fmtQtyShort(minQty)})');
                             return;
                           }
                           Navigator.of(ctx).pop(true);
@@ -3818,8 +3819,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           note: result.note,
           changeSummary: _laciMejaChangeSummary({
             'jumlah': (_fmtQtyShort(p.qtyOrdered), _fmtQtyShort(result.qty)),
-            'jaminan':
-                (_fmtQtyShort(p.depositQty), _fmtQtyShort(result.depositQty)),
+            'jaminan': (
+              _fmtQtyShort(p.depositQty),
+              _fmtQtyShort(result.depositQty)
+            ),
             'nama': (p.customerName, result.customerName),
             'telepon': (p.phone ?? '-', result.phone ?? '-'),
             'catatan': (p.note ?? '-', result.note ?? '-'),
@@ -4352,8 +4355,8 @@ class _ReceiptPaper extends StatelessWidget {
             // ("· Titip N" di struk in-app) ikut ditampilkan di struk
             // share, bukan cuma layar. Key SAMA PERSIS dgn provider
             // on-screen-nya.
-            final depositQty = preorderDeposit[
-                '${item.productId}|${item.productUnitId}'];
+            final depositQty =
+                preorderDeposit['${item.productId}|${item.productUnitId}'];
             final depositSuffix = depositQty != null
                 ? ' · Titip ${depositQty % 1 == 0 ? depositQty.toInt() : depositQty}'
                 : '';

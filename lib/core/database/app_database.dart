@@ -2189,6 +2189,30 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Simpan urutan baru metode pembayaran (drag-reorder di
+  /// `PaymentMethodsScreen`) — pola sama dgn [reorderProductGroups].
+  /// [orderedIds] adalah urutan tampil BARU secara utuh (index 0 = paling
+  /// atas), sortOrder ditulis sbg index-nya, dibungkus 1 transaksi.
+  Future<void> reorderPaymentMethods(List<String> orderedIds) async {
+    await transaction(() async {
+      for (var i = 0; i < orderedIds.length; i++) {
+        await (update(paymentMethods)..where((t) => t.id.equals(orderedIds[i])))
+            .write(PaymentMethodsCompanion(sortOrder: Value(i)));
+      }
+    });
+  }
+
+  /// `sortOrder` tertinggi saat ini di antara metode pembayaran (-1 bila
+  /// tabel kosong) — dipakai utk menaruh metode BARU di posisi paling
+  /// bawah, bukan tie di default 0 dgn baris lain.
+  Future<int> paymentMethodsMaxSortOrder() async {
+    final row = await (select(paymentMethods)
+          ..orderBy([(t) => OrderingTerm.desc(t.sortOrder)])
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.sortOrder ?? -1;
+  }
+
   /// Peta id produk → nama kategori untuk sekumpulan id (dipakai katalog untuk
   /// mengelompokkan produk per kategori). Hanya satu query untuk produk + grup.
   Future<Map<String, String>> getCategoryNamesForProducts(
@@ -6716,9 +6740,8 @@ class AppDatabase extends _$AppDatabase {
   Future<Map<String, String>> getCustomerAddressesForIds(
       List<String> customerIds) async {
     if (customerIds.isEmpty) return {};
-    final rows = await (select(customers)
-          ..where((t) => t.id.isIn(customerIds)))
-        .get();
+    final rows =
+        await (select(customers)..where((t) => t.id.isIn(customerIds))).get();
     final out = <String, String>{};
     for (final c in rows) {
       final addr = c.address?.trim();
@@ -7130,8 +7153,7 @@ class AppDatabase extends _$AppDatabase {
       final returned = (await getLaciMejaTakenQty([id]))[id] ?? 0;
       await (update(borrowedItems)..where((t) => t.id.equals(id))).write(
         BorrowedItemsCompanion(
-          fullyReturnedAt:
-              Value(returned >= qty ? DateTime.now() : null),
+          fullyReturnedAt: Value(returned >= qty ? DateTime.now() : null),
         ),
       );
     }
@@ -7160,9 +7182,8 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
       PreorderEntriesCompanion(
-        customerName: customerName == null
-            ? const Value.absent()
-            : Value(customerName),
+        customerName:
+            customerName == null ? const Value.absent() : Value(customerName),
         phone: Value(phone),
         qtyOrdered:
             qtyOrdered == null ? const Value.absent() : Value(qtyOrdered),
