@@ -5,6 +5,66 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 2 September 2026 (lanjutan, sesi kedua hari yg sama) —
+2 tugas terpisah dikerjakan berurutan sesuai instruksi user via agen
+background. Versi kerja **2.31.0+67**, schemaVersion TETAP 36 (tidak
+ada migrasi baru sesi ini)._
+
+**Tugas 1 (draft, TIDAK ada kode ditulis, SESUAI permintaan eksplisit
+user)**: format teks laporan copy pre-order (item pending #1 sesi
+sebelumnya) — 3 alternatif draft (A ringkas per-pelanggan, B
+dikelompokkan per-produk utk kasus filter "semua produk", C paling
+ringkas/mode kirim-cepat) ditulis di
+`/tmp/claude-0/-home-user-The-POS/fa93a3de-572e-5f25-9ccc-a6f3364b3c34/scratchpad/draft_copy_laporan_preorder.md`
+DAN dikutip penuh di laporan akhir sesi ke user (chat, bukan file
+repo) — user (via agen pemanggil) yang akan mereview & memilih.
+**TETAP MENGGANTUNG**: fitur copy-nya sendiri (tombol + logic clipboard)
+BELUM diimplementasikan sama sekali — nunggu user pilih salah satu
+draft (atau minta variasi lain) dulu.
+
+**Tugas 2 (DIIMPLEMENTASIKAN, `302167e`)**: layar `RiwayatLaciMejaScreen`
+baru (`lib/features/laci_meja/riwayat_laci_meja_screen.dart`), route
+`/kasir/laci-meja/riwayat`. Ini MENGGANTIKAN TOTAL toggle inline "Riwayat"
+lama di dashboard (`_showLogProvider`/`_buildEventLog`, log gabungan 3
+kategori tanpa pemisah/pencarian/filter — SUDAH DIHAPUS dari
+`laci_meja_dashboard_screen.dart`, ikon "Riwayat" di app bar sekarang
+`context.push` ke route baru). Detail lihat entri CHANGELOG `302167e`.
+**Keputusan desain yg diambil sendiri (tidak ada preseden eksak, tidak
+bisa tanya balik — sesi berjalan otomatis di background)**:
+- TIDAK ada query DB baru — param `includeCollected`/
+  `includeFullyReturned`/`includeClosed` di `AppDatabase.
+  watchLeftBehindItems`/`watchBorrowedItems`/`watchPreorderEntries`
+  TERNYATA SUDAH ADA sejak lama (sudah tertes di `laci_meja_db_test.
+  dart`) tapi belum pernah dipakai UI manapun — cukup pasang provider
+  baru yg memanggilnya dgn `includeX: true` + filter cari/tanggal/
+  produk di sisi Dart (pola sama persis `_buildPreorderList` dashboard
+  yg sudah lebih dulu begini).
+- Search+filter tanggal SATU set kontrol di atas TabBarView (bukan
+  per-tab terpisah) — brief user tidak spesifik per-tab/global, satu
+  set lebih sederhana & cukup jelas krn filternya cuma berlaku ke tab
+  yg sedang aktif.
+- Chip filter produk (tab Pre-order) TIDAK bawa info kuota (beda dari
+  `_PreorderProductFilter` dashboard yg tampilkan "maks N") — kuota
+  cuma relevan utk antrian AKTIF, tidak relevan di arsip riwayat.
+- Kartu riwayat (`_RiwayatCard`) SENGAJA lebih flat/tanpa grouping
+  per-nota (beda dari kartu dashboard `_buildLeftBehindList` dkk. yg
+  mengelompokkan per transaksi) — riwayat mencampur entri terbuka+
+  selesai, grouping per-nota jadi kurang relevan drpd melihat status
+  tiap baris langsung.
+- Test lama grup "Layar Riwayat (poin 5)" di
+  `test/laci_meja_partial_and_log_test.dart` DITULIS ULANG total (bukan
+  ditambah di sebelah test lama) krn perilaku lama (toggle inline)
+  SUDAH TIDAK ADA lagi — 9 test baru, semua revert-verified (screen
+  disingkirkan sementara -> compile error -> bukti test genuinely
+  bergantung ke fitur -> dikembalikan -> hijau).
+
+**Item pending SISA dari sesi sebelumnya**:
+- Pertanyaan self-hosting sudah DIJAWAB tuntas di chat sesi sebelumnya
+  (diskusi, bukan komitmen fitur) — tidak ada tindak lanjut kode yg
+  diperlukan, dihapus dari daftar pending.
+
+---
+
 _Update sesi 2 September 2026 — fitur "kumpulkan DP/jaminan pre-order"
 diimplementasikan (gap yang dicatat sesi sebelumnya sbg "belum
 ditindaklanjuti", user approve eksplisit). Versi kerja **2.30.0+66**,
