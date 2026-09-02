@@ -45,6 +45,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ### 🔧 Perbaikan
 - Keterangan di struk "Pratinjau Keranjang" dipersingkat, tetap jelas.
+- **Layar persetujuan sinkron Laci Meja sekarang menandai pre-order/
+  titip/pinjaman yang SUDAH selesai** ("Dipenuhi", "Sudah diambil",
+  "Sudah kembali semua") — sebelumnya entri yang sudah selesai tampil
+  identik dengan permintaan baru yang masih terbuka, jadi terlihat
+  seperti ada banyak permintaan baru padahal itu cuma riwayat yang
+  perlu disinkron ke perangkat owner.
 
 ## 31 Agustus 2026
 
