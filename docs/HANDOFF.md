@@ -5,6 +5,59 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 1 September 2026 (lanjutan lagi — fix restore backup lintas-
+versi-app + jawab 2 pertanyaan user: pembayaran pre-order jaminan
+belum-bayar, & re-sync setelah host fulfill langsung). Versi kerja
+**2.29.2+65**._
+
+**Fix** (`5eeb7f1`): user kirim screenshot error `SqliteException`
+mentah saat restore backup dari HP kasir (app lebih baru) ke HP
+pribadi owner (app lebih lama, skema DB blm migrasi ke kolom
+`method_name`). Payload backup (`exportPortable`/`exportOwnerTransfer`)
+sekarang bawa `schemaVersion`; `DbExportService.restore()` cek ini
+SEBELUM `restoreFromDump`, tolak dgn pesan jelas kalau backup dari app
+lebih baru. **Kalau nanti nemu bug schema-mismatch serupa di jalur
+LAIN** (mis. WiFi sync `mergeRows` — itu SUDAH difilter via `PRAGMA
+table_info` fisik, aman; tapi kalau ada jalur raw-SQL baru yang
+menyusun kolom dari data eksternal, cek pola ini dulu).
+
+**Pertanyaan user #1 — BELUM ditindaklanjuti, catatan gap nyata**:
+pre-order dgn jaminan wadah TAPI DP-nya belum dibayar (`_effectivePrice
+= 0` di `item_entry_sheet.dart` saat `_isPreorder && !_dpPaid`) —
+nota bisa "Lunas" krn barang LAIN di keranjang menutup total, sementara
+baris LPG itu sendiri tetap `paid=false` (`preorderEntries.paid`,
+ditampilkan sbg "Tempo" di kartu dashboard). SAAT pre-order itu
+dipenuhi ("Penuhi" di dashboard, `fulfillPreorderQty`), TIDAK ADA
+mekanisme mengumpulkan pembayaran sama sekali — aksi itu PURE
+qty/status Laci Meja, tidak menyentuh transaksi finansial apa pun.
+Workaround yang ADA: edit manual harga baris item di nota (yg sudah
+lunas) via `editPaidTransactionItem` (re-buka status jadi tempo utk
+selisihnya, alur pelunasan normal jalan) — TAPI ini TIDAK mengubah
+`preorderEntries.paid` sama sekali (`editPreorderEntry` TIDAK PUNYA
+param `paid`), jadi kartu dashboard tetap salah bilang "Tempo" walau
+sudah benar-benar dibayar via workaround itu. **Ini gap fitur nyata,
+belum diminta user utk difix — kalau diminta nanti, dua hal yang perlu
+disambungkan: (1) titik "Penuhi" perlu jalur kumpulkan bayar (spt debt-
+payment), (2) `editPreorderEntry` perlu param `paid` biar bisa
+disinkronkan manual dari alur manapun.**
+
+**Pertanyaan user #2 — sudah dijawab, TIDAK perlu fix**: "kalau host
+fulfill preorder langsung, apakah nanti client re-sync ngirim balik yg
+'belum fulfilled'?" — TIDAK, karena `fulfillPreorderQty` restamp
+`updated_at` + `locallyModified=false` (default saat dipanggil owner),
+lalu `dumpSince`/`mergeRows` (host->client, last-write-wins by
+`updated_at`) menimpa baris client dgn versi host TERMASUK
+`locally_modified=0` — jadi `dumpLaciMejaProposals` client (yg cuma
+kirim `WHERE locally_modified=1`) otomatis tidak lagi menyertakan baris
+itu. **Satu-satunya celah**: race condition kalau CLIENT juga edit baris
+YANG SAMA sekitar waktu bersamaan dgn `updated_at` client LEBIH BARU —
+`mergeRows` skip menimpa (client menang), baris tetap
+`locally_modified=1` di client & akan ke-propose lagi. Ini genuine
+conflict scenario (dua device ubah baris sama), bukan bug biasa —
+belum ada resolusi otomatis utknya di app ini.
+
+---
+
 _Update sesi 1 September 2026 (lanjutan lagi — jawab pertanyaan user
 soal pre-order "muncul lagi" di sync, ternyata cuma masalah TAMPILAN
 di layar approval, bukan bug data). Versi kerja **2.29.1+64**._

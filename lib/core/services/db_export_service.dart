@@ -53,6 +53,14 @@ class DbExportService {
     final dump = await db.dumpAllTables();
     final payload = <String, dynamic>{
       'exportedAt': DateTime.now().toIso8601String(),
+      // Susulan (bug dilaporkan user) — restore ke device dgn app LEBIH
+      // LAMA dari yang membuat backup ini gagal `SqliteException` mentah
+      // ("table transactions has no column named method_name") krn
+      // `restoreFromDump` menyusun INSERT dari kolom apa pun yang ada di
+      // dump, tanpa tahu skema lokal ketinggalan migrasi. Disimpan di
+      // sini supaya `restore()` bisa cegah dgn pesan yg jelas SEBELUM
+      // mencoba INSERT yang pasti gagal.
+      'schemaVersion': db.schemaVersion,
       'tables': dump,
     };
     final jsonBytes = utf8.encode(jsonEncode(payload));
@@ -79,6 +87,10 @@ class DbExportService {
     final dump = await db.dumpAllTables();
     final payload = <String, dynamic>{
       'exportedAt': DateTime.now().toIso8601String(),
+      // Lihat dok setara di `exportPortable` — dicek `restore()` sebelum
+      // `restoreFromDump` supaya restore ke app lebih lama gagal dgn
+      // pesan jelas, bukan `SqliteException` mentah.
+      'schemaVersion': db.schemaVersion,
       'tables': dump,
       'storeUuid': storeUuid,
       'storeKey': storeKey,
@@ -229,10 +241,28 @@ class DbExportService {
   }
 
   /// Restore dari parsed payload ke DB.
+  ///
+  /// Bug nyata dilaporkan user: restore backup dari device LAIN yang app-nya
+  /// lebih baru (sudah migrasi skema, mis. kolom `method_name` baru) ke
+  /// device dgn app LEBIH LAMA (skema lokal ketinggalan) gagal
+  /// `SqliteException` mentah ("table transactions has no column named
+  /// method_name") — `restoreFromDump` menyusun `INSERT` dari kolom apa pun
+  /// yang ada di dump tanpa tahu skema lokal ketinggalan. Dicek di sini
+  /// SEBELUM `restoreFromDump` dipanggil, supaya errornya jelas & actionable
+  /// (bukan raw SQL exception yang tidak dimengerti pengguna awam).
+  /// `schemaVersion` NULLABLE — backup lama (sebelum field ini ditambahkan)
+  /// tetap dianggap kompatibel (tidak ada info utk dibandingkan).
   static Future<void> restore({
     required AppDatabase db,
     required Map<String, dynamic> payload,
   }) async {
+    final backupSchemaVersion = payload['schemaVersion'] as int?;
+    if (backupSchemaVersion != null &&
+        backupSchemaVersion > db.schemaVersion) {
+      throw BackupException(
+          'Backup ini dibuat dari aplikasi versi lebih baru. '
+          'Update aplikasi di perangkat ini dulu, baru coba restore lagi.');
+    }
     final raw = payload['tables'] as Map<String, dynamic>;
     final dump = raw.map((k, v) {
       final rows = (v as List).cast<Map<String, dynamic>>().map((row) {
