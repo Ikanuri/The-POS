@@ -52,7 +52,11 @@ CHANGELOG. **Item 47/48 BELUM dieksekusi** (user bilang "sisanya
 biarkan"): Item 47 = pengeluaran tidak ikut ekspor PDF/Excel Laporan
 (root cause + fix jelas); Item 48 = warna avatar produk kasir jadi
 soft/pastel (root cause + fix jelas). **Item 3c/4/5 (migrasi data Griyo)
-DICORET user** (18 Juli, "coret: 4, 3c, 5") — dihapus dari plan._
+DICORET user** (18 Juli, "coret: 4, 3c, 5") — dihapus dari plan.
+**Item 54 baru ditambahkan** (2 September 2026): opsi upgrade
+arsitektur masa depan (sync LAN otomatis + akses owner dari luar
+toko) — murni didiskusikan, user pilih tetap sync manual utk
+sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
@@ -575,4 +579,100 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
      1 angka) atau mulai hitung rata-rata tertimbang (lebih akurat kalau
      harga modal sering naik-turun antar pembelian, tapi perlu simpan
      riwayat per-batch pembelian, bukan cuma 1 kolom).
+
+9. **Item 54 — Opsi upgrade arsitektur masa depan: sync LAN otomatis
+   (bukan manual) + akses owner dari luar toko (PENDING, murni diskusi,
+   user eksplisit "sync manual dulu" — JANGAN dieksekusi sampai
+   diminta lagi, proyek dinilai user belum cukup stabil utk ini).**
+
+   **Konteks pemicu**: user tanya soal kemungkinan "self-hosting utk
+   fungsi online" — setelah digali, kebutuhan sebenarnya BUKAN akses
+   internet umum, tapi 2 hal terpisah:
+   (a) semua device di SATU toko otomatis dapat update transaksi/
+   harga/laci-meja terbaru serentak, tanpa proses manual buka-layar-
+   sync yang ada sekarang;
+   (b) owner sesekali perlu akses dari LUAR WiFi toko (bepergian),
+   atau pegawai yang keluar jangkauan WiFi toko (mis. ambil barang di
+   gudang terpisah) tetap ingin ikut update.
+
+   **Analisis (a) — otomatis DALAM satu WiFi toko, TIDAK butuh hosting/
+   internet sama sekali:**
+   - Cukup ubah *kapan* sync LAN yang sudah ada dipicu — dari manual
+     (tombol) jadi otomatis/berkala selama app dibuka di WiFi yang
+     sama. Tidak perlu server baru, tidak ada komponen infrastruktur
+     tambahan.
+   - Dua pendekatan teknis: (1) polling berkala (mis. tiap 15-30 detik
+     selama app aktif — lag dibatasi interval, implementasi paling
+     sederhana, bangun di atas `dumpSince`/`LanSyncService` yang sudah
+     ada) vs (2) koneksi standby/push (lag nyaris instan, tapi jauh
+     lebih rumit — perlu urus reconnect, host melayani banyak koneksi
+     terbuka sekaligus). **Rekomendasi kalau dieksekusi nanti: mulai
+     dari polling berkala, bukan standby permanen** — risiko & effort
+     jauh lebih kecil, cukup utk kebutuhan toko (bukan aplikasi
+     real-time seperti chat).
+   - **Baterai**: kalau sync otomatis HANYA jalan selagi app dibuka
+     (bukan proses yang tetap hidup walau app ditutup), dampaknya
+     minimal (WiFi sudah menyala utk keperluan lain). Kalau dipaksa
+     "standby walau app tertutup", Android butuh foreground service
+     (notifikasi permanen) yang ADA biaya baterai nyata & makin
+     dibatasi OS — **jangan desain versi "selalu hidup di background"
+     kecuali user eksplisit minta & paham trade-off-nya**.
+   - **Auto-sync TIDAK menghilangkan tahap approval manual** yang
+     memang sudah jadi aturan bisnis (usulan harga/produk Item 40,
+     usulan Laci Meja client→host) — itu mempercepat *transfer*-nya
+     sampai ke layar review owner, bukan menghapus keharusan owner
+     approve.
+   - **Pro**: tidak ada risiko "lupa sync", data antar device lebih
+     cepat konsisten, mengurangi gesekan kerja kasir.
+   - **Kontra (INI YANG BIKIN USER MEMILIH TUNDA)**: kompleksitas kode
+     naik (timer/loop background, state koneksi, retry); kegagalan
+     jadi lebih "diam-diam" (butuh indikator status sync yang selalu
+     terlihat, bukan cuma notifikasi sekali muncul); **konflik data
+     jadi lebih sering "ketemu"** karena sync terjadi lebih rutin
+     (bukan berarti lebih banyak konflik SEBENARNYA, tapi skenario
+     race condition — spt genuine-conflict edge case yang sudah
+     didokumentasikan di `docs/HANDOFF.md` soal Laci Meja — jadi
+     lebih sering punya kesempatan muncul); lebih sulit didebug (tidak
+     ada patokan waktu "kapan user terakhir tekan sync").
+   - **RISIKO PALING KRITIS yang jadi alasan utama user memilih tunda**:
+     kalau `schemaVersion` naik & device-device di satu toko kebetulan
+     beda versi app (skenario yang SUDAH TERBUKTI terjadi nyata —
+     lihat fix `5eeb7f1`/`d579c86` soal restore backup lintas-versi &
+     ripple 17 file test migrasi tiap schemaVersion naik), sync
+     OTOMATIS yang jalan sendiri tanpa aksi manual bisa mencoba
+     tukar-menukar data antar device yang skemanya BEDA jauh lebih
+     sering & lebih "diam-diam" daripada sync manual (yang sifatnya
+     sekali-jalan, lebih mudah dijaga user "jangan sync dulu sebelum
+     semua device update"). **Kalau nanti dieksekusi, WAJIB ada guard
+     versi/skema di jalur auto-sync yang setara/lebih ketat dari guard
+     backup (`schemaVersion` di payload, tolak dgn pesan jelas kalau
+     device tujuan lebih lama) — SEBELUM diaktifkan sbg default,
+     bukan sesudahnya.**
+
+   **Analisis (b) — akses dari LUAR WiFi toko, BARU benar-benar
+   butuh sesuatu yang "online":**
+   - Kalau device (owner bepergian, atau pegawai di gudang terpisah)
+     benar-benar di luar jangkauan WiFi toko yang sama, mekanisme LAN
+     otomatis di atas TIDAK bisa menjangkaunya — perlu titik yang bisa
+     diakses dari internet: tunnel (Cloudflare Tunnel/Tailscale dkk,
+     numpang device yang sudah ada) atau server terpisah yang
+     di-hosting sendiri (self-hosted beneran).
+   - Di sinilah level risiko keamanan naik signifikan: autentikasi sync
+     LAN sekarang ringan (implisit "percaya krn sama WiFi toko") —
+     TIDAK cukup lagi begitu terekspos ke internet, perlu autentikasi
+     & enkripsi transport yang jauh lebih serius (di luar cakupan
+     desain app ini saat ini).
+
+   **Rekomendasi bertahap kalau/ketika dieksekusi kelak** (BUKAN
+   sekarang): (1) duluan otomatiskan sync LAN yang sudah ada (murni
+   internal, TAPI wajib guard schemaVersion dulu spt di atas) — manfaat
+   langsung tanpa risiko keamanan baru; (2) baru kalau memang perlu,
+   tambahkan akses terbatas dari luar (opt-in, mungkin read-only dulu
+   utk owner) — supaya kompleksitas keamanan yang ditambah sepadan
+   dgn kebutuhan riil, bukan membangun arsitektur cloud penuh dari awal.
+
+   **Keputusan user (2 September 2026)**: untuk sekarang **tetap sync
+   manual** — proyek dinilai belum cukup stabil utk lompat ke arsitektur
+   ini. Item ini dicatat murni sbg opsi upgrade masa depan, TIDAK ada
+   rencana eksekusi sampai user angkat lagi secara eksplisit.
 
