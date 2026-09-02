@@ -5,6 +5,36 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 1 September 2026 (lanjutan lagi — jawab pertanyaan user
+soal pre-order "muncul lagi" di sync, ternyata cuma masalah TAMPILAN
+di layar approval, bukan bug data). Versi kerja **2.29.1+64**._
+
+**Pertanyaan user**: "apakah pre-order yang sudah dipenuhi client akan
+muncul lagi sbg usulan sync ke host? kalau iya, apakah itu cuma riwayat
+sync (bukan bug)?" — YA, itu memang perilaku BENAR (bukan bug): begitu
+status entri Laci Meja berubah di klien, `locally_modified` nyala lagi
+supaya perubahan itu tersinkron ke host (`filterUnchangedLaciMejaProposals`
+sudah dokumentasikan ini sejak sebelumnya). Akar kebingungan user: layar
+`LaciMejaProposalReviewScreen` menampilkan baris yang SUDAH selesai
+(dipenuhi/diambil/dikembalikan) SAMA PERSIS dgn baris BARU yang masih
+terbuka — tanpa penanda status apa pun.
+
+**Fix** (`481b92d`, murni tampilan — TIDAK ADA perubahan data/logic
+sync): subtitle tiap baris sekarang menandai status eksplisit
+("· Dipenuhi"/"· Dibatalkan" utk pre-order, "· Sudah diambil" utk
+titip/ketinggalan, "· Sudah kembali semua"/"· Dikembalikan sebagian
+(N)" utk pinjaman). Juga ditemukan gap terpisah saat investigasi:
+baris `laci_meja_events` (log "diambil N" dkk) SEBELUMNYA ikut
+dikirim & DITERAPKAN sbg usulan tapi TIDAK PERNAH ditampilkan di layar
+ini sama sekali — owner menyetujui baris yang tak terlihat. Sekarang
+tampil sbg section "Riwayat Kejadian" terpisah, label manusiawi
+("Diambil 3", "Dipenuhi 5") + keterangan eksplisit "bukan permintaan
+baru".
+
+Tidak ada pekerjaan menggantung dari sesi ini.
+
+---
+
 _Update sesi 1 September 2026 (lanjutan lagi — penanda "Titip N" pre-
 order ikut ke print/share struk; persingkat teks disclaimer Pratinjau
 Keranjang). Versi kerja **2.29.0+63**._

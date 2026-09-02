@@ -100,6 +100,7 @@ class _LaciMejaProposalReviewScreenState
     final leftBehind = widget.proposal.rows['left_behind_items'] ?? const [];
     final borrowed = widget.proposal.rows['borrowed_items'] ?? const [];
     final preorder = widget.proposal.rows['preorder_entries'] ?? const [];
+    final events = widget.proposal.rows['laci_meja_events'] ?? const [];
 
     return Scaffold(
       appBar: AppBar(
@@ -115,14 +116,26 @@ class _LaciMejaProposalReviewScreenState
                   Text('Titip/Ketinggalan (${leftBehind.length})',
                       style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 6),
-                  ...leftBehind.map((r) => _row(
-                        table: 'left_behind_items',
-                        id: r['id'] as String,
-                        title: (r['item_name'] as String?) ?? '(tanpa nama)',
-                        subtitle:
-                            '${(r['jenis'] as String?) == 'titip' ? 'Dititip' : 'Ketinggalan'}'
-                            '${r['customer_name_text'] != null ? ' — ${r['customer_name_text']}' : ''}',
-                      )),
+                  ...leftBehind.map((r) {
+                    // Susulan (permintaan user) — baris yang SUDAH diambil
+                    // (`collected_at` terisi) tetap masuk usulan (dumpnya
+                    // ikut nyala `locally_modified` saat status berubah),
+                    // tapi TANPA penanda ini terlihat seperti barang
+                    // titip/ketinggalan yang MASIH menunggu diambil —
+                    // padahal usulan ini cuma riwayat "sudah diambil" yang
+                    // perlu disinkron ke host, bukan hal baru yang perlu
+                    // ditinjau.
+                    final collected = r['collected_at'] != null;
+                    return _row(
+                      table: 'left_behind_items',
+                      id: r['id'] as String,
+                      title: (r['item_name'] as String?) ?? '(tanpa nama)',
+                      subtitle:
+                          '${(r['jenis'] as String?) == 'titip' ? 'Dititip' : 'Ketinggalan'}'
+                          '${r['customer_name_text'] != null ? ' — ${r['customer_name_text']}' : ''}'
+                          '${collected ? ' · Sudah diambil' : ''}',
+                    );
+                  }),
                   const SizedBox(height: 12),
                 ],
                 if (borrowed.isNotEmpty) ...[
@@ -133,12 +146,14 @@ class _LaciMejaProposalReviewScreenState
                     final qty = (r['qty'] as num?)?.toDouble() ?? 0;
                     final returned =
                         (r['qty_returned'] as num?)?.toDouble() ?? 0;
+                    final fullyReturned = r['fully_returned_at'] != null;
                     return _row(
                       table: 'borrowed_items',
                       id: r['id'] as String,
                       title: (r['item_name'] as String?) ?? '(tanpa nama)',
                       subtitle: 'Qty $qty (sisa ${qty - returned})'
-                          '${r['customer_name_text'] != null ? ' — ${r['customer_name_text']}' : ''}',
+                          '${r['customer_name_text'] != null ? ' — ${r['customer_name_text']}' : ''}'
+                          '${fullyReturned ? ' · Sudah kembali semua' : (returned > 0 ? ' · Dikembalikan sebagian ($returned)' : '')}',
                     );
                   }),
                   const SizedBox(height: 12),
@@ -151,17 +166,72 @@ class _LaciMejaProposalReviewScreenState
                     final qty = (r['qty_ordered'] as num?)?.toDouble() ?? 0;
                     final deposit = (r['deposit_qty'] as num?)?.toDouble() ?? 0;
                     final paid = r['paid'] == 1 || r['paid'] == true;
+                    // Susulan (permintaan user) — pre-order yang SUDAH
+                    // dipenuhi/dibatalkan tetap bisa masuk usulan (baris
+                    // itu berubah statusnya, jadi `locally_modified` nyala
+                    // lagi), tapi tanpa penanda status di sini owner
+                    // mengira ini pre-order BARU yang masih terbuka —
+                    // padahal cuma riwayat penyelesaian yang perlu
+                    // disinkron. Ini yang bikin laporan user "kenapa
+                    // pre-order yang sudah dipenuhi muncul lagi utk
+                    // ditinjau" — jawabannya: ya, itu memang riwayat sync
+                    // (bukan bug), sekarang ditandai jelas biar tidak
+                    // membingungkan.
+                    final fulfilled = r['fulfilled_at'] != null;
+                    final cancelled = r['cancelled_at'] != null;
                     return _row(
                       table: 'preorder_entries',
                       id: r['id'] as String,
                       title: (r['customer_name'] as String?) ?? '(tanpa nama)',
                       subtitle: 'Qty $qty'
                           '${deposit > 0 ? ' · titip wadah $deposit' : ''}'
-                          '${paid ? ' · sudah bayar' : ''}',
+                          '${paid ? ' · sudah bayar' : ''}'
+                          '${fulfilled ? ' · Dipenuhi' : (cancelled ? ' · Dibatalkan' : '')}',
                     );
                   }),
                 ],
-                if (leftBehind.isEmpty && borrowed.isEmpty && preorder.isEmpty)
+                if (events.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('Riwayat Kejadian (${events.length})',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  // Susulan (permintaan user) — kejadian "diambil sejumlah
+                  // sekian" dkk (`laci_meja_events`) SEBELUMNYA ikut
+                  // dikirim & diterapkan sbg usulan, tapi TIDAK PERNAH
+                  // ditampilkan di layar ini sama sekali — owner menyetujui
+                  // baris yang tak terlihat. Sekarang ditampilkan eksplisit
+                  // supaya jelas usulan ini murni riwayat kejadian, bukan
+                  // permintaan baru.
+                  Text(
+                      'Kejadian ambil/kembali/penuhi/batal yang tercatat di '
+                      'perangkat kasir — ikut disinkron sbg riwayat, BUKAN '
+                      'permintaan baru.',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 6),
+                  ...events.map((r) {
+                    final aksi = r['aksi'] as String? ?? '?';
+                    final qty = (r['qty'] as num?)?.toDouble() ?? 0;
+                    final label = switch (aksi) {
+                      'ambil' => 'Diambil $qty',
+                      'kembali' => 'Dikembalikan $qty',
+                      'penuhi' => 'Dipenuhi $qty',
+                      'batal' => 'Dibatalkan',
+                      _ => aksi,
+                    };
+                    return _row(
+                      table: 'laci_meja_events',
+                      id: r['id'] as String,
+                      title: label,
+                      subtitle: (r['note'] as String?) ?? '',
+                    );
+                  }),
+                ],
+                if (leftBehind.isEmpty &&
+                    borrowed.isEmpty &&
+                    preorder.isEmpty &&
+                    events.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
                     child: Center(child: Text('Tidak ada usulan')),
