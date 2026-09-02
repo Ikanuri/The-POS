@@ -7,11 +7,12 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/marquee_text.dart';
 import '../kasir/widgets/debt_payment_sheet.dart';
 import 'laci_meja_date_utils.dart';
+import 'laci_meja_expandable_search.dart';
 import 'preorder_quota_store.dart';
 import 'preorder_report.dart';
+import 'product_picker_dropdown.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 
@@ -22,6 +23,14 @@ final _selectedCategoryProvider =
 /// PELANGGAN maupun NAMA PRODUK sekaligus, karena staf bisa datang dari dua
 /// arah: "siapa yang antri Gas?" vs "Bu Artia antri apa saja?".
 final _preorderSearchProvider = StateProvider<String>((ref) => '');
+
+/// Status expand/collapse field pencarian tab Pre-order (permintaan user,
+/// layout sempit di HP 360-400dp) — lihat `LaciMejaExpandableSearch`. Dipisah
+/// dari `_preorderSearchProvider` (isi teksnya) krn keduanya punya siklus
+/// hidup beda: teks tetap ada walau field mengecil, status expanded murni
+/// soal tampilan baris di sebelahnya (dropdown filter produk) disembunyikan
+/// atau tidak.
+final _preorderSearchExpandedProvider = StateProvider<bool>((ref) => false);
 
 /// Filter produk tab Pre-order (permintaan user) — PELENGKAP pencarian, bukan
 /// penggantinya: garis pembatas kuota hanya masuk akal untuk SATU produk
@@ -684,6 +693,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     }
     final labels = ref.watch(preorderProductUnitLabelsProvider).valueOrNull ?? {};
     final query = ref.watch(_preorderSearchProvider).trim().toLowerCase();
+    final searchExpanded = ref.watch(_preorderSearchExpandedProvider);
     final productFilter = ref.watch(_preorderProductFilterProvider);
     final quotas = ref.watch(preorderQuotaProvider);
     final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull ?? {};
@@ -787,71 +797,101 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     }
     final keys = groups.keys.toList();
 
+    // Baris pencarian (susulan, permintaan user — screenshot: baris cari
+    // full-width bikin baris filter di bawahnya sempit/terpotong di HP
+    // 360-400dp). Collapsed = ikon kecil sejajar dgn dropdown filter produk
+    // (`LaciMejaExpandableSearch`); expanded = melebar SENDIRIAN mengisi
+    // baris (dropdown filter + panel statistik ikut disembunyikan sementara
+    // — screen space diprioritaskan utk field cari + keyboard).
+    final searchField = LaciMejaExpandableSearch(
+      hintText: 'Cari nama pelanggan atau produk…',
+      expanded: searchExpanded,
+      onExpandedChanged: (v) =>
+          ref.read(_preorderSearchExpandedProvider.notifier).state = v,
+      onChanged: (v) => ref.read(_preorderSearchProvider.notifier).state = v,
+    );
+
     return Column(
       children: [
-        _PreorderSearchField(
-          onChanged: (v) =>
-              ref.read(_preorderSearchProvider.notifier).state = v,
-        ),
-        // Filter + statistik DIBUNGKUS jadi satu panel (permintaan user:
-        // sebelumnya masing-masing elemen punya padding sendiri-sendiri yang
-        // tidak selaras, jadi kelihatan "asal tempel" begitu daftar di
-        // bawahnya discroll). Satu kartu dgn batas jelas = satu unit visual.
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppTheme.laciBg(isDark).withOpacity(0.5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.laciFg(isDark).withOpacity(0.12)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Chip filter HANYA saat >1 produk (tidak ada yang perlu
-                // disaring kalau cuma 1) — baris sendiri krn bisa perlu
-                // scroll horizontal, beda kebutuhan dari baris statistik.
+          child: Row(
+            children: [
+              if (searchExpanded)
+                Expanded(child: searchField)
+              else ...[
+                searchField,
+                // Dropdown filter produk HANYA saat >1 produk (tidak ada
+                // yang perlu disaring kalau cuma 1) — pola SAMA PERSIS
+                // `ProductPickerDropdown` yang dipakai pemilih jaminan di
+                // `_PreorderStatsLine` (permintaan user eksplisit "opsi
+                // dropdown design anda kemarin itu sudah paling pas"),
+                // BUKAN lagi baris chip `ChoiceChip` di-scroll horizontal.
                 if (productNames.length > 1) ...[
-                  _PreorderProductFilter(
-                    productNames: productNames,
-                    selected: productFilter,
-                    quotas: quotas,
+                  const SizedBox(width: 8),
+                  ProductPickerDropdown(
+                    entries: {
+                      for (final e in productNames.entries)
+                        e.key: (
+                          name: e.value,
+                          badge: quotas[e.key] == null
+                              ? null
+                              : 'maks ${_fmtQty(quotas[e.key]!)}'
+                        ),
+                    },
+                    selectedId: productFilter,
+                    allLabel: 'Semua Produk',
+                    tooltip: 'Filter produk',
                     onSelected: (id) => ref
                         .read(_preorderProductFilterProvider.notifier)
                         .state = id,
                   ),
-                  const SizedBox(height: 8),
                 ],
-                // Statistik + tombol Kuota SATU BARIS (permintaan user:
-                // kartu total sebelumnya terlalu besar/makan tempat). Chip
-                // "Jaminan: N" menampilkan angka produk yang SEDANG dipilih
-                // (dinamis, bukan dijumlah semua produk) — dipilih lewat
-                // chip nama produk di sebelahnya, tanpa perlu tap tooltip.
-                _PreorderStatsLine(
-                  totalQty: totalQty,
-                  entryCount: filtered.length,
-                  depositByProduct: depositByProduct,
-                  selectedJaminanId: effectiveJaminanId,
-                  onSelectJaminan: (id) => ref
-                      .read(_preorderJaminanDisplayProvider.notifier)
-                      .state = id,
-                  isDark: isDark,
-                  onManageQuota: () =>
-                      _showQuotaSheet(context, ref, productNames, quotas),
-                  onCopyReport: () => _copyPreorderReport(
-                    context,
-                    items: items,
-                    productFilter: productFilter,
-                    takenQty: taken,
-                    labels: labels,
-                    customerNames: liveNames,
-                  ),
-                ),
               ],
-            ),
+            ],
           ),
         ),
+        // Panel statistik disembunyikan sementara selagi field cari
+        // melebar — ruang layar diprioritaskan utk field+keyboard, angka
+        // statistik kurang relevan selagi sedang mengetik kata kunci.
+        if (!searchExpanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.laciBg(isDark).withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: AppTheme.laciFg(isDark).withOpacity(0.12)),
+              ),
+              // Statistik + tombol Kuota SATU BARIS (permintaan user:
+              // kartu total sebelumnya terlalu besar/makan tempat). Chip
+              // "Jaminan: N" menampilkan angka produk yang SEDANG dipilih
+              // (dinamis, bukan dijumlah semua produk) — dipilih lewat
+              // dropdown nama produk di sebelahnya, tanpa perlu tap tooltip.
+              child: _PreorderStatsLine(
+                totalQty: totalQty,
+                entryCount: filtered.length,
+                depositByProduct: depositByProduct,
+                selectedJaminanId: effectiveJaminanId,
+                onSelectJaminan: (id) => ref
+                    .read(_preorderJaminanDisplayProvider.notifier)
+                    .state = id,
+                isDark: isDark,
+                onManageQuota: () =>
+                    _showQuotaSheet(context, ref, productNames, quotas),
+                onCopyReport: () => _copyPreorderReport(
+                  context,
+                  items: items,
+                  productFilter: productFilter,
+                  takenQty: taken,
+                  labels: labels,
+                  customerNames: liveNames,
+                ),
+              ),
+            ),
+          ),
         Expanded(
           child: keys.isEmpty
               ? Center(
@@ -876,6 +916,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       ],
     );
   }
+
+  static String _fmtQty(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
 
   /// Susulan (permintaan user) — salin ringkasan antrian pre-order TERBUKA
   /// yang SEDANG TAMPIL (mengikuti filter produk aktif, BUKAN kata kunci
@@ -1249,116 +1291,6 @@ class _EntryRow extends StatelessWidget {
 /// pill kecil ikon+label singkat — minimalis tapi TIDAK kotak-persegi rigid
 /// (`StadiumBorder`), pola sama semangatnya dgn `_CollectButton` di chip
 /// lain app ini (rounded, aksen warna domain Laci Meja).
-/// Kotak pencarian tab Pre-order (permintaan user) — `StatefulWidget` sendiri
-/// supaya `TextEditingController`-nya tidak dibuat ulang tiap rebuild daftar
-/// (kalau dibuat di dalam `build`, kursor melompat ke awal tiap ketikan).
-class _PreorderSearchField extends StatefulWidget {
-  const _PreorderSearchField({required this.onChanged});
-  final ValueChanged<String> onChanged;
-
-  @override
-  State<_PreorderSearchField> createState() => _PreorderSearchFieldState();
-}
-
-class _PreorderSearchFieldState extends State<_PreorderSearchField> {
-  final _ctrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-      child: TextField(
-        controller: _ctrl,
-        onChanged: (v) {
-          widget.onChanged(v);
-          // Rebuild lokal semata utk memunculkan/menyembunyikan tombol clear
-          // (state pencariannya sendiri hidup di provider, bukan di sini).
-          setState(() {});
-        },
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: 'Cari nama pelanggan atau produk…',
-          prefixIcon: const Icon(Icons.search, size: 18),
-          suffixIcon: _ctrl.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    _ctrl.clear();
-                    widget.onChanged('');
-                    setState(() {});
-                  },
-                ),
-          contentPadding:
-              const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        ),
-        onTapOutside: (_) => FocusScope.of(context).unfocus(),
-      ),
-    );
-  }
-}
-
-/// Baris chip filter produk + pintu masuk pengaturan kuota (permintaan user).
-/// Chip produk yang kuotanya aktif diberi angka batasnya langsung di label,
-/// supaya staf tahu ada garis pembatas tanpa harus membuka sheet pengaturan.
-/// Chip filter produk — dipanggil HANYA saat >1 produk (parent sudah
-/// mengecek), jadi tidak perlu tangani kasus "sembunyi" di sini lagi.
-/// Tombol Kuota TIDAK di sini lagi (permintaan user: gabung satu baris dgn
-/// statistik, lihat `_PreorderStatsLine`) — dulu ganda dgn baris statistik
-/// jadi 2 baris toolbar yang makan tempat.
-class _PreorderProductFilter extends StatelessWidget {
-  const _PreorderProductFilter({
-    required this.productNames,
-    required this.selected,
-    required this.quotas,
-    required this.onSelected,
-  });
-
-  final Map<String, String> productNames;
-  final String? selected;
-  final Map<String, double> quotas;
-  final ValueChanged<String?> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    // TANPA Padding sendiri — widget ini dipanggil dari dalam panel yang
-    // sudah punya padding seragam (lihat pembungkusnya di `_buildPreorderList`).
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          ChoiceChip(
-            label: const Text('Semua'),
-            selected: selected == null,
-            onSelected: (_) => onSelected(null),
-            visualDensity: VisualDensity.compact,
-          ),
-          for (final e in productNames.entries) ...[
-            const SizedBox(width: 6),
-            ChoiceChip(
-              label: Text(quotas[e.key] == null
-                  ? e.value
-                  : '${e.value} · maks ${_fmt(quotas[e.key]!)}'),
-              selected: selected == e.key,
-              onSelected: (_) => onSelected(e.key),
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static String _fmt(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
-}
-
 /// Satu baris pengaturan kuota di sheet "Kuota Pre-order": toggle aktif +
 /// angka batas. Mematikan toggle MENGHAPUS kuotanya (bukan menyimpan 0) —
 /// lihat dok `PreorderQuotaStore`.
@@ -1582,12 +1514,24 @@ class _PreorderStatsLine extends StatelessWidget {
                   const SizedBox(width: 6),
                   // Pemilih produk (nama saja, custom dropdown) TERPISAH
                   // dari angkanya — angkanya sendiri jadi chip "Jaminan: N"
-                  // yang ikut berubah begitu pilihan produk diganti.
-                  _ProductPickerChip(
-                    entries: depositByProduct,
+                  // yang ikut berubah begitu pilihan produk diganti. Widget
+                  // dropdown DIEKSTRAK jadi `ProductPickerDropdown`
+                  // (`product_picker_dropdown.dart`) — dipakai ULANG pola
+                  // yang sama persis di filter produk (lihat
+                  // `_buildPreorderList`) & layar Riwayat.
+                  ProductPickerDropdown(
+                    entries: {
+                      for (final e in depositByProduct.entries)
+                        e.key: (
+                          name: e.value.name,
+                          badge: '${_fmt(e.value.qty)} jaminan'
+                        ),
+                    },
                     selectedId: selectedId,
-                    onSelected: onSelectJaminan,
-                    fg: fg,
+                    tooltip: 'Pilih produk jaminan',
+                    onSelected: (id) {
+                      if (id != null) onSelectJaminan(id);
+                    },
                   ),
                   const SizedBox(width: 6),
                   _StatChip(
@@ -1671,176 +1615,6 @@ class _StatChip extends StatelessWidget {
                     fontSize: 12.5, fontWeight: FontWeight.w800, color: fg)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Chip jaminan yang bisa GANTI PRODUK yang ditampilkan (permintaan user) —
-/// sebelumnya rincian per produk cuma bisa dilihat lewat tooltip yang harus
-/// di-tap ulang tiap kali. Sekarang satu produk ditampilkan LANGSUNG (tanpa
-/// perlu tap apa pun), produk lain tetap bisa dilihat/dipilih lewat dropdown
-/// (`PopupMenuButton`) yang muncul begitu chip di-tap — hanya kalau memang
-/// ada >1 produk berjaminan, kalau cuma 1 tidak ada gunanya menawarkan
-/// pilihan yang isinya itu-itu saja.
-/// Pemilih PRODUK (bukan angka — angkanya ada di chip "Jaminan: N" sebelah
-/// ini, lihat `_PreorderStatsLine`) utk menentukan produk mana yang jaminan-
-/// nya sedang ditampilkan. Dropdown-nya didesain sendiri (permintaan user
-/// eksplisit "bukan default flutter") — bukan `PopupMenuItem` polos putih
-/// dgn `ListTile` bawaan, tapi kartu aksen dgn indikator radio & badge qty.
-/// Tetap pakai mekanisme `PopupMenuButton` (posisi/dismiss/keyboard sudah
-/// teruji Flutter sendiri), yang di-custom total cuma tampilannya.
-class _ProductPickerChip extends StatelessWidget {
-  const _ProductPickerChip({
-    required this.entries,
-    required this.selectedId,
-    required this.onSelected,
-    required this.fg,
-  });
-
-  final Map<String, ({String name, double qty})> entries;
-  final String? selectedId;
-  final ValueChanged<String> onSelected;
-  final Color fg;
-
-  static String _fmt(double q) =>
-      q % 1 == 0 ? q.toInt().toString() : q.toString();
-
-  @override
-  Widget build(BuildContext context) {
-    if (entries.isEmpty) return const SizedBox.shrink();
-    final id = entries.containsKey(selectedId) ? selectedId! : entries.keys.first;
-    final selectedName = entries[id]!.name;
-    final hasOthers = entries.length > 1;
-
-    final chip = Container(
-      padding: EdgeInsets.fromLTRB(8, 4, hasOthers ? 4 : 8, 4),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.accent.withOpacity(0.14),
-            AppTheme.accent.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.accent.withOpacity(0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.inventory_2_outlined, size: 12, color: AppTheme.accent),
-          const SizedBox(width: 4),
-          // Susulan (permintaan user): nama produk dibatasi lebarnya &
-          // dibuat berjalan (marquee, pola sama dgn nama pelanggan di cart
-          // bar) kalau kepanjangan — dulu chip ini bisa melebar tak
-          // terbatas (Row `mainAxisSize.min`) & mendorong chip lain
-          // ("Jaminan: N", tombol Kuota) keluar layar tanpa tanda ada
-          // konten terpotong.
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 96),
-            child: MarqueeText(
-              text: selectedName,
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w700, color: fg),
-            ),
-          ),
-          if (hasOthers) ...[
-            const SizedBox(width: 2),
-            const Icon(Icons.expand_more, size: 16, color: AppTheme.accent),
-          ],
-        ],
-      ),
-    );
-
-    // Tanpa produk lain, chip cuma tampilan — tidak ada yang perlu dipilih.
-    if (!hasOthers) return chip;
-
-    return PopupMenuButton<String>(
-      tooltip: 'Pilih produk jaminan',
-      padding: EdgeInsets.zero,
-      offset: const Offset(0, 6),
-      elevation: 6,
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: AppTheme.accent.withOpacity(0.25)),
-      ),
-      constraints: const BoxConstraints(minWidth: 180),
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final e in entries.entries)
-          PopupMenuItem<String>(
-            value: e.key,
-            padding: EdgeInsets.zero,
-            height: 0,
-            child: _ProductPickerMenuRow(
-              name: e.value.name,
-              qty: _fmt(e.value.qty),
-              selected: e.key == id,
-              fg: fg,
-            ),
-          ),
-      ],
-      child: chip,
-    );
-  }
-}
-
-/// Satu baris pilihan di dropdown `_ProductPickerChip` — desain sendiri:
-/// indikator radio (bukan cuma teks polos), nama produk, badge qty bulat
-/// beraksen. Baris yang sedang dipilih diberi tint latar supaya langsung
-/// kelihatan tanpa perlu baca radio-nya.
-class _ProductPickerMenuRow extends StatelessWidget {
-  const _ProductPickerMenuRow({
-    required this.name,
-    required this.qty,
-    required this.selected,
-    required this.fg,
-  });
-
-  final String name;
-  final String qty;
-  final bool selected;
-  final Color fg;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      color: selected ? AppTheme.accent.withOpacity(0.1) : null,
-      child: Row(
-        children: [
-          Icon(
-              selected
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
-              size: 16,
-              color: selected ? AppTheme.accent : fg.withOpacity(0.35)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: fg)),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.14),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text('$qty jaminan',
-                style: const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.accent)),
-          ),
-        ],
       ),
     );
   }

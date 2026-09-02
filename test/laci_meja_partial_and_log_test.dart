@@ -264,6 +264,11 @@ void main() {
       expect(find.textContaining('Payung'), findsOneWidget);
       expect(find.textContaining('Topi'), findsOneWidget);
 
+      // Susulan (permintaan user, layout sempit): field cari sekarang
+      // collapsed (ikon saja) sampai di-tap — beda dari dulu yang langsung
+      // full-width `TextField`.
+      await tester.tap(find.byTooltip('Cari'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Payung');
       await tester.pumpAndSettle();
 
@@ -318,7 +323,13 @@ void main() {
       expect(cardWith('Gas LPG 3kg'), findsOneWidget);
       expect(cardWith('Beras 25kg'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Gas LPG 3kg'));
+      // Filter produk sekarang dropdown (`ProductPickerDropdown`, pola SAMA
+      // PERSIS dgn dashboard — permintaan user), bukan lagi `ChoiceChip`:
+      // chip awal menampilkan "Semua Produk", tap utk buka menu, lalu pilih
+      // baris produknya.
+      await tester.tap(find.text('Semua Produk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Gas LPG 3kg').last);
       await tester.pumpAndSettle();
 
       expect(cardWith('Gas LPG 3kg'), findsOneWidget);

@@ -11,6 +11,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 2 September 2026
 
 ### ✨ Fitur Baru
+- **Tampilan dashboard Laci Meja tab Pre-order & layar Riwayat Laci
+  Meja dirapikan untuk HP layar sempit** — kotak pencarian sekarang
+  ikon kaca pembesar kecil yang melebar begitu di-tap (sebelumnya
+  full-width, bikin baris filter di bawahnya terpotong/berdesakan).
+  Filter produk juga diganti jadi dropdown kecil (pola sama seperti
+  pemilih jaminan yang sudah ada), bukan lagi deretan chip yang
+  memakan lebar layar.
 - **Urutan metode pembayaran sekarang bisa diatur sendiri** — di layar
   Pengaturan > Metode Pembayaran, tekan-tahan ikon garis (drag-handle)
   di kiri tiap metode lalu geser naik/turun untuk mengubah urutannya.
