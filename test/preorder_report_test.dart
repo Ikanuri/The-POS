@@ -87,12 +87,14 @@ void main() {
         now: now,
       );
 
+      // Budi dipenuhi 2 dari 5 -> jaminan SISA (bukan mentah) = 5-2 = 3
+      // (asumsi konsumsi 1:1 dgn qty diambil, sama pola dgn dashboard).
       const expected = 'LAPORAN PRE-ORDER — LPG\n'
           'Dicetak: 02/09/2026 14:35\n'
-          'Total terbuka: 3 entri, 12 tabung, **8 jaminan**\n'
+          'Total terbuka: 3 entri, 12 tabung, **6 jaminan**\n'
           '\n'
           '1. Budi Santoso\n'
-          '   Pesan 5 LPG - Sisa 3 - 5 jaminan - Tempo\n'
+          '   Pesan 5 LPG - Sisa 3 - 3 jaminan - Tempo\n'
           '   Dipesan 28/08/2026 09:12 (5 hari lalu) - Dipenuhi 2 dari 5\n'
           '\n'
           '2. Siti (Umum)\n'
@@ -103,7 +105,7 @@ void main() {
           '   Pesan 4 LPG - Sisa 4 - Tempo\n'
           '   Dipesan 01/09/2026 11:05 (1 hari lalu)\n'
           '\n'
-          '**Total jaminan: 8**';
+          '**Total jaminan: 6**';
 
       expect(text, expected);
     });
@@ -256,12 +258,13 @@ void main() {
         now: now,
       );
 
+      // Budi dipenuhi 2 dari 5 -> jaminan SISA = 5-2 = 3 (bukan 5 mentah).
       const expected = 'LAPORAN PRE-ORDER TERBUKA\n'
           'Dicetak: 02/09/2026 14:35\n'
-          'Total terbuka: 3 entri, **8 jaminan**\n'
+          'Total terbuka: 3 entri, **6 jaminan**\n'
           '\n'
-          '=== LPG (2 pesanan, 8 tabung, 8 jaminan) ===\n'
-          '1. Budi Santoso: Sisa 3 dari 5 - 5 jaminan - Tempo '
+          '=== LPG (2 pesanan, 8 tabung, 6 jaminan) ===\n'
+          '1. Budi Santoso: Sisa 3 dari 5 - 3 jaminan - Tempo '
           '(dipesan 28/08, 5 hari lalu, dipenuhi 2/5)\n'
           '2. Siti (Umum): Sisa 3 - 3 jaminan - Lunas '
           '(dipesan 30/08, 3 hari lalu)\n'
@@ -269,7 +272,7 @@ void main() {
           '=== Beras 25kg (1 pesanan) ===\n'
           '3. Warung Jaya: Sisa 4 - Tempo (dipesan 01/09, 1 hari lalu)\n'
           '\n'
-          '**Total jaminan: 8**';
+          '**Total jaminan: 6**';
 
       expect(text, expected);
     });

@@ -255,7 +255,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -689,6 +689,17 @@ class AppDatabase extends _$AppDatabase {
             // lain yang sudah lebih dulu punya kolom serupa.
             await _addColumnIfMissing('preorder_entries', 'transaction_item_id',
                 preorderEntries, preorderEntries.transactionItemId, m);
+          }
+          if (from < 37) {
+            // Item 62 — bug sync serius: `transactions` diperlakukan
+            // append-only murni oleh `dumpSince` (filter `created_at >=
+            // since` saja), jadi perubahan pada nota yang SUDAH pernah
+            // tersinkron (mis. void, ganti pelanggan, poin) tidak pernah
+            // terkirim lagi ke device lain. Tambah `updated_at` supaya bisa
+            // difilter juga (lihat `dumpSince`/`mergeRows` case khusus
+            // 'transactions').
+            await _addColumnIfMissing('transactions', 'updated_at',
+                transactions, transactions.updatedAt, m);
           }
         },
         beforeOpen: (details) async {
@@ -2780,6 +2791,13 @@ class AppDatabase extends _$AppDatabase {
           }
         }
         merged.addAll(checkedItemIds);
+        // Item 62 — SENGAJA TIDAK mencap `updatedAt` di sini: `checkedItemIds`
+        // dokumentasinya sendiri (lihat kolom `Transactions.checkedItemIds`)
+        // murni per-perangkat & tidak ikut sync, sama seperti `changeTaken`.
+        // Mencapnya akan membuat baris ini dianggap "berubah" oleh
+        // `dumpSince`/`mergeRows` padahal field yang genuinely butuh
+        // propagasi lintas-device (status/customer/points) tidak berubah di
+        // sini.
         await (update(transactions)..where((t) => t.id.equals(txId)))
             .write(TransactionsCompanion(
           checkedItemIds: Value(jsonEncode(merged.toList())),
@@ -3048,6 +3066,7 @@ class AppDatabase extends _$AppDatabase {
         paid: Value(newPaid),
         status: Value(newStatus),
         changeAmount: Value(newChange),
+        updatedAt: Value(DateTime.now()),
       ),
     );
   }
@@ -3134,8 +3153,9 @@ class AppDatabase extends _$AppDatabase {
 
     final now = DateTime.now();
     await transaction(() async {
-      await (update(transactions)..where((t) => t.id.equals(txId)))
-          .write(TransactionsCompanion(pointsEarned: Value(targetPoints)));
+      await (update(transactions)..where((t) => t.id.equals(txId))).write(
+          TransactionsCompanion(
+              pointsEarned: Value(targetPoints), updatedAt: Value(now)));
       await into(loyaltyPointLedger).insert(LoyaltyPointLedgerCompanion.insert(
         id: const Uuid().v4(),
         customerId: customerId,
@@ -3198,14 +3218,17 @@ class AppDatabase extends _$AppDatabase {
           note: Value('Ganti pelanggan ${tx.localId}'),
           createdAt: Value(DateTime.now()),
         ));
-        await (update(transactions)..where((t) => t.id.equals(txId)))
-            .write(const TransactionsCompanion(pointsEarned: Value(0)));
+        await (update(transactions)..where((t) => t.id.equals(txId))).write(
+            TransactionsCompanion(
+                pointsEarned: const Value(0),
+                updatedAt: Value(DateTime.now())));
       }
 
       await (update(transactions)..where((t) => t.id.equals(txId))).write(
         TransactionsCompanion(
           customerName: Value(newCustomerName),
           customerId: Value(newCustomerId),
+          updatedAt: Value(DateTime.now()),
         ),
       );
 
@@ -3301,8 +3324,9 @@ class AppDatabase extends _$AppDatabase {
         ));
       }
 
-      await (update(transactions)..where((t) => t.id.equals(txId)))
-          .write(const TransactionsCompanion(status: Value('void')));
+      await (update(transactions)..where((t) => t.id.equals(txId))).write(
+          TransactionsCompanion(
+              status: const Value('void'), updatedAt: Value(now)));
 
       // Perbarui ringkasan harian untuk tanggal transaksi yang dibatalkan.
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
@@ -3526,8 +3550,10 @@ class AppDatabase extends _$AppDatabase {
           .getSingleOrNull();
       if (after != null && after.total <= 0 && after.status != 'lunas') {
         await (update(transactions)..where((t) => t.id.equals(txId))).write(
-            const TransactionsCompanion(
-                status: Value('lunas'), changeAmount: Value(0)));
+            TransactionsCompanion(
+                status: const Value('lunas'),
+                changeAmount: const Value(0),
+                updatedAt: Value(DateTime.now())));
       }
 
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
@@ -3674,8 +3700,10 @@ class AppDatabase extends _$AppDatabase {
           .getSingleOrNull();
       if (after != null && after.total <= 0 && after.status != 'lunas') {
         await (update(transactions)..where((t) => t.id.equals(txId))).write(
-            const TransactionsCompanion(
-                status: Value('lunas'), changeAmount: Value(0)));
+            TransactionsCompanion(
+                status: const Value('lunas'),
+                changeAmount: const Value(0),
+                updatedAt: Value(DateTime.now())));
       }
 
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
@@ -4208,6 +4236,7 @@ class AppDatabase extends _$AppDatabase {
           status:
               Value(netPaidForStatus >= tx.total ? 'lunas' : 'kurang_bayar'),
           changeAmount: Value(change),
+          updatedAt: Value(ts),
         ),
       );
       return delta.changeGiven;
@@ -4433,6 +4462,7 @@ class AppDatabase extends _$AppDatabase {
             paid: Value(newPaid),
             status:
                 Value(netPaidForStatus >= tx.total ? 'lunas' : 'kurang_bayar'),
+            updatedAt: Value(now),
           ),
         );
         remaining -= applied;
@@ -5649,6 +5679,15 @@ class AppDatabase extends _$AppDatabase {
       final String sql;
       var varCount = 1;
       switch (t) {
+        case 'transactions':
+          // Item 62 — nota bukan append-only murni: `status` (void),
+          // `customer_name`/`customer_id`, `points_earned` bisa berubah
+          // SETELAH nota pertama kali tersinkron (lihat dok kolom
+          // `updated_at`) — tanpa OR ini, perubahan itu tidak pernah
+          // ke-dump lagi begitu `created_at`-nya sudah lewat watermark.
+          sql = 'SELECT * FROM "transactions" WHERE created_at >= ? '
+              'OR updated_at >= ?';
+          varCount = 2;
         case 'transaction_items':
           // Item susulan (fitur tambah belanjaan) bisa menempel pada transaksi
           // lama — ikutkan juga berdasarkan added_at agar tidak tertinggal.
@@ -6337,6 +6376,45 @@ class AppDatabase extends _$AppDatabase {
                   updates: {expenses},
                   updateKind: UpdateKind.update,
                 );
+              }
+              // Item 62 — `transactions` KHUSUS: baris yang sudah ada
+              // (`INSERT OR IGNORE` di bawah akan no-op) masih bisa punya
+              // field yang genuinely berubah setelah tersinkron pertama kali
+              // (status void, ganti pelanggan, poin) — TIDAK bisa
+              // direkonstruksi dari `transaction_items`/`transaction_payments`
+              // (beda dari total/paid/changeAmount yang direkonsiliasi ulang
+              // otomatis pasca-merge, lihat `reconcileTransactionsByIds`).
+              // Last-write-wins by `updated_at`, sama pola dgn tabel master.
+              // Field per-device (`checked_item_ids`, `change_taken`,
+              // `synced_at`) SENGAJA tidak ikut — lihat dok kolomnya.
+              if (tableName == 'transactions') {
+                final incomingUpdatedAt = row['updated_at'];
+                if (incomingUpdatedAt is int) {
+                  final existingFull = await customSelect(
+                    'SELECT updated_at FROM "transactions" WHERE id = ?',
+                    variables: [Variable<Object>(pkVal)],
+                  ).getSingleOrNull();
+                  final existingUpdatedAt =
+                      existingFull?.data['updated_at'] as int?;
+                  if (existingUpdatedAt == null ||
+                      incomingUpdatedAt > existingUpdatedAt) {
+                    await customUpdate(
+                      'UPDATE transactions SET status = ?, customer_id = ?, '
+                      'customer_name = ?, points_earned = ?, updated_at = ? '
+                      'WHERE id = ?',
+                      variables: [
+                        Variable<Object>(row['status'] ?? ''),
+                        Variable<Object>(row['customer_id']),
+                        Variable<Object>(row['customer_name']),
+                        Variable<Object>(row['points_earned'] ?? 0),
+                        Variable<Object>(incomingUpdatedAt),
+                        Variable<Object>(pkVal),
+                      ],
+                      updates: {transactions},
+                      updateKind: UpdateKind.update,
+                    );
+                  }
+                }
               }
               continue;
             }
