@@ -1354,6 +1354,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final openPreorderRefs =
         (customerDisplay != null && customerDisplay.trim().isNotEmpty)
             ? await db.getOpenPreorderRefsForCustomer(
+                customerId: customer?.id,
                 customerName: customerDisplay,
                 excludeTransactionId: widget.transactionId)
             : <String, ({String transactionId, DateTime createdAt})>{};

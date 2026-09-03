@@ -304,6 +304,11 @@ void main() {
           id: 'p9',
           productId: 'prodX',
           productUnitId: 'unitX',
+          // Item 58 — checkout SELALU mengisi `customerId` utk pelanggan
+          // terdaftar (lihat `payment_screen.dart`), jadi seed di sini ikut
+          // mengisinya supaya test mencerminkan alur nyata pasca fix
+          // (pencocokan by-id, bukan lagi by-nama, utk pelanggan terdaftar).
+          customerId: 'c9',
           customerName: 'Bu Artia',
           qtyOrdered: 2,
           depositQty: 2);
