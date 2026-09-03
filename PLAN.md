@@ -769,22 +769,3 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
    rekonsiliasi Laci Meja. Fix kandidat: guard tambahan di `voidPayment`
    (pola sama guard `retur`/`edit`) atau logic reverse eksplisit.
 
-## Item 58 — Pre-order cocokkan pelanggan LEWAT NAMA (risiko nama kembar,
-   audit 2 September 2026 — catatan risiko, JANGAN ubah tanpa persetujuan)
-
-   `getLaciMejaPending` (pengingat cart bar) & `getOpenPreorderRefsForCustomer`
-   (rujukan baris item ke nota pre-order asal) mencocokkan pre-order
-   SELALU lewat `customerName` persis (bukan `customerId`, walau kolom
-   `PreorderEntries.customerId` sudah ada & terisi utk pelanggan
-   terdaftar). Dua pelanggan terdaftar bernama sama -> pengingat & rujukan
-   saling tercampur (user pernah minta alamat ditampilkan di dropdown
-   pelanggan karena kasus nama kembar ini nyata). Titip/Pinjaman sudah
-   cocokkan lewat id dulu (fallback nama). Kandidat: pre-order ikut pola
-   yang sama — `customerId` dulu kalau ada, fallback nama utk entri lama/
-   ad-hoc. Perubahan perilaku yang terlihat user -> minta persetujuan
-   dulu. Catatan agregasi terkait (audit 4a, konsisten, TIDAK diubah):
-   headline kartu Pre-order di nota & subtitle Riwayat Laci Meja memakai
-   `depositQty`/`qtyOrdered` MENTAH sbg deskripsi pesanan (status/sisa
-   di baris terpisah) — sengaja, bukan bug; `getLaciMejaPending.
-   preorders.depositQty` (pengingat cart bar) juga mentah — kalau ingin
-   "sisa" di pengingat, ikutkan `getLaciMejaTakenQty` di sana.
