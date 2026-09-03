@@ -212,7 +212,11 @@ class _TxTile extends ConsumerWidget {
     if (ok == true) {
       final db = ref.read(databaseProvider);
       final device = ref.read(deviceProvider);
-      await db.voidTransaction(tx.id, device.deviceCode);
+      // Item 40 pattern — device BUKAN owner -> event Laci Meja yang
+      // ditulis voidTransaction (Item 60) menunggu persetujuan owner via
+      // sync.
+      await db.voidTransaction(tx.id, device.deviceCode,
+          locallyModified: !device.isOwner);
       if (ctx.mounted) Navigator.of(ctx).pop();
     }
   }
