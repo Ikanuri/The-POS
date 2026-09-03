@@ -5,6 +5,118 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 3 September 2026 (sesi kedua belas — batch besar 1 instruksi
+user, banyak poin). Versi kerja **2.33.10+79**, schemaVersion TETAP 38
+(tidak ada migrasi — semua fix sesi ini SENGAJA tidak menambah kolom/tabel
+baru, lihat rasional Item 60 di bawah)._
+
+**PLAN.md housekeeping (Item 17/21/28/41.B1/51/53), `1615481`** —
+diverifikasi ULANG ke kode langsung (bukan cuma percaya klaim user):
+- **Item 17 (persist antrian approval sync) & Item 21 (sync UI global +
+  status progres)**: TERKONFIRMASI SELESAI — `lan_sync_service.dart` sudah
+  py `sync_upload_queue` persisten + komentar eksplisit "Item 17 Fase 2",
+  `sync_state_provider.dart` sudah py `SyncState` global Riverpod + banner
+  shell + `dispose()` `sync_screen.dart` TIDAK LAGI mematikan host. Dihapus
+  dari PLAN.md.
+- **Item 28 (pegawai lanjutkan pesanan owner lintas device)**: user KLAIM
+  "sudah selesai" — **TIDAK terbukti**, grep `_isAddMode`/`addToTxId`
+  cuma menunjukkan mode "Tambah Belanjaan" SATU device yang sama, TIDAK
+  ADA jalur lintas-device sama sekali. **TETAP di PLAN.md, BUTUH
+  KLARIFIKASI USER** — item ini belum diimplementasikan sama sekali,
+  klaim sebelumnya keliru.
+- **Item 41 B.1 (rotasi/un-pair storeKey)**: user klaim "sepertinya
+  selesai lewat Alihkan Owner" — **TERBUKTI SALAH**. `pairing_service.dart`
+  masih eksplisit "Belum ada mekanisme un-pair/rotasi". "Alihkan Owner"
+  itu transfer kepemilikan PENUH toko ke identitas toko BARU (skenario
+  ganti kepemilikan total) — BUKAN solusi utk mencabut SATU device (HP
+  kasir hilang/pegawai keluar) tanpa mengganti seluruh identitas toko.
+  Catatan pembeda diperjelas di PLAN.md, item tetap terbuka.
+- **Item 51 & Item 53**: dicoret user eksplisit (keputusan bisnis murni,
+  tanpa perlu verifikasi kode) — dihapus dari PLAN.md.
+
+**Item 55 — filter produk Riwayat Transaksi, `eec6890`** — bug pola PERSIS
+SAMA dgn fix filter pelanggan sesi sebelumnya (`4a331d1`): `findTxIdsWithProduct`
+dipakai menyaring baris SETELAH `LIMIT 1000/100` SQL, bukan sebelum — produk
+target bisa tertimbun tanpa muncul kalau rentang tanggal aktif punya >1000
+transaksi total. Fix: `WHERE t.id IN (...)` dipindah ke SEBELUM `LIMIT` di
+`_txHistoryProvider` (`tx_history_sheet.dart`). Test revert-verified.
+
+**Item 60 — `voidTransaction` cascade Laci Meja, `3ba1143`** — `voidTransaction`
+sebelumnya tidak menyentuh 3 tabel Laci Meja (`PreorderEntries`/
+`LeftBehindItems`/`BorrowedItems`) walau baris di sana bisa merujuk transaksi
+yang di-void; dashboard/pengingat cart bar tetap menampilkan entri itu.
+Fix: `PreorderEntries` reuse `cancelledAt`+`cancelPreorderEntry` existing.
+`LeftBehindItems`/`BorrowedItems` **SENGAJA TIDAK dapat kolom "batal" baru**
+(tanpa migrasi schema) — status "batal" murni disimpulkan lewat JOIN ke
+`transactions.status` di `getLaciMejaPending`/`watchLeftBehindItems`/
+`watchBorrowedItems`/`watchLaciMejaOpenCount` (mode default; mode riwayat
+penuh sengaja TIDAK difilter, nota tetap bukti historis). Event audit
+`laci_meja_events` aksi='batal' tetap ditulis utk kedua kategori.
+
+**Investigasi sync-void (diminta EKSPLISIT user) — hasil detail:**
+- **(a) `voidTransaction` mencap `updatedAt` transaksi?** SUDAH, sejak
+  sebelum sesi ini (bukan bug baru) — diverifikasi langsung di kode &
+  ditegaskan lagi via assertion di test sync baru.
+- **(b) Event 'batal' baru ikut mekanisme `applied_at` (Item 57)?** TIDAK
+  PERLU & TIDAK relevan di sini — mekanisme `applied_at` itu utk PROPOSAL
+  client→host (`applyLaciMejaProposals`). Event 'batal' Item 60 ditulis
+  LANGSUNG oleh host saat host sendiri yang void (createdAt baru sudah
+  cukup lolos filter delta biasa). **TEMUAN PENTING**: event ini justru
+  **DIKECUALIKAN TOTAL** dari `dumpSince` host→klien oleh filter
+  `excludeVoidTx` yang **SUDAH ADA SEBELUM Item 60** (`73338c8`, sesi
+  audit sebelumnya) — baris Laci Meja (termasuk log event-nya) milik
+  transaksi yang statusnya void sengaja tidak pernah disebar ke klien.
+  Ini BUKAN regresi: audit trail cukup tersimpan di HOST (tempat void
+  terjadi), dan status "batal" di dashboard klien tetap benar 100% murni
+  dari sync status void transaksi itu sendiri (yang SUDAH benar sejak
+  Item 62) — klien tidak perlu tahu event auditnya utk menyembunyikan
+  entri dari dashboard, JOIN lokal klien ke `transactions.status` sudah
+  cukup begitu baris `transactions` yang void tersinkron.
+- **(c) `updated_at` LeftBehindItems/BorrowedItems dicap ulang saat
+  voidTransaction menulisnya?** TIDAK ADA yang perlu dicap — desain
+  SENGAJA tidak menyentuh baris tabel itu sendiri sama sekali (tidak ada
+  kolom yang berubah di sana, cuma baris `laci_meja_events` baru +
+  `transactions.status`/`updatedAt` yang berubah). Ini BUKAN kasus gotcha
+  CLAUDE.md "lupa cap ulang updated_at" — memang tidak ada apa pun yang
+  ditulis ke baris itu.
+
+Test sync end-to-end BARU (`void_transaction_laci_meja_cascade_sync_test.dart`,
+2 `AppDatabase` host+klien nyata, pola sama `transaction_updated_at_sync_
+test.dart`/`laci_meja_events_applied_at_sync_test.dart`): void nota berisi
+2 entri Laci Meja (titip + pinjaman) SETELAH sync pertama → sync ulang →
+klien melihat status void nota, KEDUA entri tidak lagi pending (via JOIN),
+audit event TIDAK ikut sync (per temuan (b) di atas, dites eksplisit BUKAN
+diasumsikan), mode riwayat tetap menampilkan entri. Revert-verified.
+
+**Item 61 — `voidPayment` reverse DP pre-order, `85c5c11`** — `voidPayment`
+pada baris DP pre-order (note persis `'DP/jaminan pre-order'`) sebelumnya
+membalik nominal `paid` dgn benar TAPI tidak membalik `transactionItems.
+priceAtSale`/`subtotal` (tetap di harga asli, seharusnya balik Rp0) maupun
+`preorderEntries.paid` (tetap `true`, seharusnya balik `false`) — desync
+administratif murni (bukan kehilangan uang). Fix: guard tambahan reverse
+eksplisit kebalikan persis `collectPreorderDeposit`. Tidak ada `entryId`
+langsung dari pembayaran ke `preorder_entries` — dicocokkan via
+`transactionId` + `paid=true` + `updatedAt` terdekat dgn `paidAt`
+pembayaran (limitasi diketahui: >1 pre-order dgn DP terpisah dalam SATU
+nota bisa salah pilih, kasus jarang). Test revert-verified.
+
+**Test & versi**: `flutter analyze` 0 issue. Full `flutter test` 1332/1333
+hijau — SATU gagal (`proposal_unchanged_end_to_end_test.dart`) adalah flaky
+PRE-EXISTING yang sudah dikonfirmasi tidak terkait perubahan sesi ini
+(kadang lolos, kadang tidak, di run terpisah tanpa perubahan kode apa pun).
+PATCHNOTES.md TIDAK diupdate — Item 55/60/61 semua temuan AUDIT sesi
+sebelumnya, belum pernah dirasakan/dilaporkan user secara langsung, sesuai
+kriteria file (bugfix internal, bukan bug yang pernah user alami).
+
+**Menggantung dari sesi ini**: **Item 28** butuh klarifikasi user (lihat di
+atas — klaim "sudah selesai" TIDAK terbukti, TETAP di PLAN.md). Item 41
+B.1 (rotasi/un-pair storeKey) masih butuh keputusan desain user. Item 23
+sisa, Item 52 (verifikasi kandidat root cause), Item 54 (opsi arsitektur
+masa depan) — semua tetap seperti dijelaskan di PLAN.md, tidak disentuh
+sesi ini.
+
+---
+
 _Update sesi 3 September 2026 (sesi kesebelas). Versi kerja **2.33.7+76**,
 schemaVersion TETAP 38 (tidak ada migrasi — kolom `PreorderEntries.customerId`
 sudah ada sejak v35, murni ubah logic query)._
