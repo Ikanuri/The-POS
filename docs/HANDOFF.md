@@ -5,6 +5,49 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 3 September 2026 (sesi ketiga belas — Item 59). Versi kerja
+**2.33.11+80**, schemaVersion TETAP 38 (tidak ada migrasi — type
+`stock_ledger` baru `'preorder_fulfill'` cuma nilai string, bukan kolom/
+tabel baru)._
+
+**Item 59 — stok pre-order dipotong saat dipenuhi, `cd4cd34`** — bug KRITIS
+dari audit sesi sebelumnya (lihat entri sesi kedua belas di bawah utk detail
+temuan): pre-order TIDAK PERNAH memotong stok di seluruh siklus hidupnya
+(`collectPreorderDeposit` maupun `fulfillPreorderQty`/`fulfillPreorderEntry`
+tidak pernah panggil `_appendStock`). **Keputusan user (final)**: stok
+dipotong SAAT barang diserahkan (fulfill), BUKAN saat DP dibayar — lebih
+akurat scr fisik. Implementasi:
+- `fulfillPreorderQty(id, qtyFulfilled)` — potong persis `qtyFulfilled`.
+- `fulfillPreorderEntry(id)` (penuhi sisa sekaligus) — potong hanya SISA
+  yang BELUM terpotong oleh pemenuhan sebagian sebelumnya (dihitung dari
+  `getLaciMejaTakenQty`, pola yang SUDAH dipakai fungsi ini), supaya tidak
+  dobel-potong kalau sebelumnya sudah ada `fulfillPreorderQty` parsial.
+- Type `stock_ledger` baru `'preorder_fulfill'` (bukan reuse `'sale'`) —
+  audit trail lebih jelas: ini realisasi fisik pre-order, bukan checkout
+  baru. `referenceId` = id entri pre-order, `note` sebut nama pelanggan.
+- TIDAK ada guard stok negatif baru — diverifikasi checkout normal juga
+  tidak memblokir stok kurang, jadi konsisten (bukan inkonsistensi baru).
+- Kedua fungsi sekarang dibungkus `transaction()` (sebelumnya tidak) —
+  ledger event + potongan stok + update `preorderEntries` harus atomik.
+
+**One-time correction pre-order lama yang sudah "Dipenuhi"**: dipilih
+opsi **dokumentasi saja** (bukan koreksi otomatis/query bantuan) — stok
+yang sudah kadung tidak terpotong SEBELUM fix ini TIDAK dikoreksi otomatis
+oleh app (menyentuh angka stok toko tanpa sepengetahuan user itu berisiko,
+apalagi kalau owner sudah sempat opname manual sendiri). `PATCHNOTES.md`
+sudah eksplisit minta toko yang pernah pakai pre-order lakukan **Stok
+Opname manual sekali** utk produk yang pernah "Dipenuhi". Tidak ada
+mekanisme app baru utk ini — reuse layar Stok Opname (`reset_stock_screen.
+dart`) yang SUDAH ADA, sesuai arahan user.
+
+Test baru `test/preorder_fulfill_stock_deduction_test.dart` (level DB
+murni, `AppDatabase(NativeDatabase.memory())`) — 4 skenario, semua
+revert-verified: (1) fulfill sekaligus qty penuh, (2) `fulfillPreorderEntry`
+sisa penuh, (3) 2x pemenuhan sebagian berturut tidak dobel-hitung, (4)
+`fulfillPreorderEntry` SETELAH satu pemenuhan sebagian hanya potong sisa.
+
+---
+
 _Update sesi 3 September 2026 (sesi kedua belas — batch besar 1 instruksi
 user, banyak poin). Versi kerja **2.33.10+79**, schemaVersion TETAP 38
 (tidak ada migrasi — semua fix sesi ini SENGAJA tidak menambah kolom/tabel

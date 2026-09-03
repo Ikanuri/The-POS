@@ -177,45 +177,6 @@ matikan kok kasir masih bisa?"). Perbaikan murah: tambah teks info
 
 ---
 
-## Item 28 — Pegawai lanjutkan pesanan yang sudah diproses (lunas/tempo) owner di device lain
-
-**Konteks:** kasus nyata yang sering terjadi: pegawai input barang di HP-nya
-→ scan/kirim ke owner → owner proses jadi lunas/tempo → pelanggan masih mau
-tambah barang lagi. Sekarang tidak ada alur untuk pegawai "buka kembali"
-pesanan yang sudah closed di device owner itu untuk ditambahi.
-
-**Belum didesain sama sekali** — baru sebatas concern yang divalidasi,
-dimasukkan ke plan dulu sesuai permintaan user ("oke yang ini masukkan plan
-tersendiri dulu"), implementasi ditunda.
-
-**Diverifikasi ulang 3 September 2026** (user sempat mengklaim ini "sudah
-diselesaikan" — TIDAK terbukti di kode): digrep `_isAddMode`/`addToTxId`
-(`kasir_screen.dart`, `payment_screen.dart`, `app_router.dart`) — mekanisme
-itu HANYA utk "Tambah Belanjaan" satu device yang sama (`kMainCartId`/
-`txId` lokal), TIDAK ada jalur lintas-device apa pun. `held_orders` (Item
-24) juga cuma antrian pesanan yang BELUM diproses sama sekali. TIDAK
-ditemukan mekanisme "pegawai kirim tambahan utk nota yang sudah closed di
-device owner". Item ini **MASIH BELUM diimplementasikan** — tetap di plan.
-
-**Pertimbangan awal (belum keputusan final):**
-- Beda dengan "Tambah Belanjaan" yang sudah ada sekarang (`_isAddMode`,
-  keyed `tx.id`) — itu untuk transaksi yang MASIH di device yang sama.
-  Kasus ini pesanan sudah pindah tangan device (pegawai → owner) DAN sudah
-  closed (lunas/tempo), jadi butuh mekanisme "buka kembali & sinkronkan
-  balik" lintas device, bukan cuma lintas state lokal.
-- Kemungkinan pendekatan: perpanjangan dari alur QR handoff antrian
-  (`held_orders`, Item 24) — pegawai kirim "tambahan" baru sebagai request
-  terpisah yang owner approve manual (konsisten dgn keputusan "TANPA
-  notifikasi otomatis" di Item 24), owner-side gabungkan ke transaksi asli
-  (butuh logic gabung item + reconcile total/pembayaran kalau statusnya
-  sudah lunas).
-- Perlu keputusan desain: apakah transaksi asli di-void lalu dibuat ulang
-  gabungan, atau item ditambahkan langsung ke transaksi asli yang sudah
-  closed (implikasi ke `pointsEarned`, cetak struk ulang, dll perlu
-  dipikirkan).
-
----
-
 ## Item 41 — Audit kode menyeluruh (18 Juli 2026) — SISA yang belum dieksekusi
 
 Audit baca-kode penuh + verifikasi nyata (Flutter 3.24.5 pin CI: analyze
@@ -398,9 +359,6 @@ suatu saat dibutuhkan.
    `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
    Hutang, Tutup Kasir "kas sistem" overstated) — belum disentuh, lihat
    detail Item 23 di atas.
-3. **Item 28** (pegawai lanjutkan pesanan owner lintas device) — konsep,
-   belum didesain, TERVERIFIKASI ULANG 3 September 2026 masih belum
-   diimplementasikan (lihat catatan verifikasi di detail Item 28 di atas).
 4. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
    di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi/un-pair storeKey
    (butuh keputusan desain user — BUKAN terselesaikan oleh "Alihkan
@@ -566,37 +524,6 @@ suatu saat dibutuhkan.
    `WHERE t.id IN (...)` di SQL utama, bukan post-filter di Dart — mirip
    pola JOIN `customers` yg dipakai utk fix filter pelanggan).
 
-
-## Item 59 — [KRITIS] Stok pre-order TIDAK PERNAH dipotong di seluruh
-   siklus hidupnya (audit menyeluruh 3 September 2026)
-
-   **Konfirmasi lewat pembacaan kode langsung, bukan dugaan.** Pre-order
-   memang didesain utk produk stok kosong (`PreorderEntries` di
-   `laci_meja_tables.dart:180`) — masuk akal stok TIDAK dipotong saat
-   pesan dibuat (barangnya belum ada, `payment_screen.dart:633-634,778-779`
-   sengaja kecualikan item pre-order dari `stockItems` saat checkout).
-   TAPI ditelusuri SELURUH jalur lanjutannya (`collectPreorderDeposit`
-   di `app_database.dart:7396-7451`, `fulfillPreorderQty`/
-   `fulfillPreorderEntry` di `app_database.dart:7636-7662`, dipanggil dari
-   tombol "Penuhi" `laci_meja_dashboard_screen.dart:1203-1206`) — TIDAK
-   ADA satu pun titik yang memanggil `_appendStock` sama sekali. Begitu
-   toko restock & barangnya diserahkan ke pelanggan pre-order ("Penuhi"),
-   stok sistem TIDAK PERNAH berkurang.
-
-   **Skenario konkret**: produk X stok 0 → pelanggan A pre-order 5 pcs
-   (DP dibayar, revenue tercatat) → toko restock 20 pcs (stok sistem 20)
-   → staf serahkan 5 pcs ke A, tap "Penuhi" → stok sistem TETAP 20,
-   padahal fisik cuma 15. Ini permanen & berulang tiap pre-order
-   dipenuhi — "Cek Stok"/nilai inventori makin overstated seiring waktu,
-   TIDAK BISA ketahuan kecuali opname fisik manual.
-
-   **Keputusan desain yang perlu diputuskan SEBELUM fix**: stok dipotong
-   SAAT DP dibayar (`collectPreorderDeposit`) atau SAAT barang benar²
-   diserahkan (`fulfillPreorderQty`/`fulfillPreorderEntry`)? Kandidat:
-   yang kedua lebih akurat scr fisik (uang bisa masuk duluan tapi barang
-   belum pindah tangan). Plus perlu one-time correction utk pre-order
-   yang SUDAH kadung "Dipenuhi" sebelum fix ini (stok sistemnya sudah
-   kadung salah, perlu koreksi manual/opname sekali).
 
 ## Item 60 — [Berisiko, belum pasti] `voidTransaction` tidak cascade ke
    entri Laci Meja tertaut (audit 3 September 2026)

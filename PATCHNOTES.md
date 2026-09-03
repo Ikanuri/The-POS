@@ -11,6 +11,22 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 3 September 2026
 
 ### 🐛 Perbaikan
+- **Stok sekarang benar-benar berkurang saat pesanan pre-order
+  diserahkan ke pelanggan** — sebelumnya menekan tombol "Penuhi" di
+  dashboard Laci Meja (atau membayar DP pre-order) TIDAK mengurangi
+  stok sistem sama sekali, walau barangnya sudah keluar toko. Akibatnya
+  stok tercatat di aplikasi bisa lebih besar dari stok fisik sebenarnya,
+  makin lama makin menyimpang setiap ada pre-order yang dipenuhi.
+  Sekarang stok terpotong tepat saat barang diserahkan (bukan saat DP
+  dibayar, karena uang bisa masuk duluan sebelum barang benar-benar
+  berpindah tangan).
+  ⚠️ **Penting untuk toko yang sudah pernah pakai fitur pre-order**:
+  pre-order yang statusnya sudah "Dipenuhi" SEBELUM pembaruan ini
+  stoknya terlanjur TIDAK terpotong (bug lama) — perbaikan ini tidak
+  mengoreksi angka stok yang sudah kadung salah secara otomatis.
+  Disarankan lakukan **Stok Opname** manual sekali untuk produk-produk
+  yang pernah punya pre-order "Dipenuhi", supaya stok sistem sesuai
+  stok fisik toko lagi.
 - **Pengingat pre-order pelanggan sekarang tidak lagi bisa tertukar
   kalau ada dua pelanggan terdaftar dengan nama yang sama** (mis. dua
   "Budi" berbeda) — sebelumnya pengingat titipan/pre-order di keranjang

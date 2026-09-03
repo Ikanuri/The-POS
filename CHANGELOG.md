@@ -7,6 +7,32 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-03 (sesi ketiga belas)
+
+- `cd4cd34` — fix(db): potong stok saat pre-order dipenuhi. Item 59
+  (audit kritis sesi sebelumnya). Pre-order TIDAK PERNAH memotong stok
+  di seluruh siklus hidupnya: checkout sengaja mengecualikan item
+  pre-order dari pemotongan stok (barangnya belum ada), tapi
+  `collectPreorderDeposit` maupun `fulfillPreorderQty`/
+  `fulfillPreorderEntry` (tombol "Penuhi" dashboard Laci Meja) tidak
+  pernah memanggil `_appendStock` — stok sistem tetap tidak berkurang
+  walau barang sudah diserahkan ke pelanggan, inventori overstated
+  permanen. Fix: stok dipotong SAAT barang diserahkan (fulfill), bukan
+  saat DP dibayar — lebih akurat scr fisik. `fulfillPreorderQty`
+  memotong persis `qtyFulfilled`; `fulfillPreorderEntry` memotong hanya
+  SISA yang belum terpotong pemenuhan sebagian sebelumnya (dihitung dari
+  `getLaciMejaTakenQty`), supaya tidak dobel-potong. Type `stock_ledger`
+  baru `'preorder_fulfill'` (terpisah dari `'sale'`) utk kejelasan audit
+  trail. Tidak ada guard stok negatif baru, konsisten dgn checkout
+  normal yang juga tidak memblokir stok kurang. Pre-order yang sudah
+  "Dipenuhi" SEBELUM fix ini stok sistemnya sudah kadung tidak
+  terpotong — perlu opname manual sekali (lihat `docs/HANDOFF.md`/
+  `PATCHNOTES.md`), tidak ada koreksi otomatis. Test baru
+  `test/preorder_fulfill_stock_deduction_test.dart` (revert-verified).
+- `8c10971` — docs: coret Item 28 dari `PLAN.md` (keputusan user). User
+  menegaskan pendekatan QR+approval-gate yang diusulkan tidak praktis
+  (menambah gerbang baru) — dianggap selesai/tidak perlu dikerjakan.
+
 ## 2026-09-03 (sesi kedua belas)
 
 - `85c5c11` — fix(db): `voidPayment` reverse efek DP pre-order. Item 61
