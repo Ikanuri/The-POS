@@ -4345,6 +4345,27 @@ class AppDatabase extends _$AppDatabase {
   /// HANTU (dihitung ulang seolah harus diserahkan lagi, padahal sudah
   /// pernah). Guard di sini (bukan cuma sembunyikan tombol UI) supaya
   /// caller lain di masa depan tidak bisa kena bug yang sama.
+  /// Item 61 — pembayaran DP/jaminan pre-order (note persis
+  /// `_kPreorderDepositNote`, dipakai `collectPreorderDeposit`) dibatalkan
+  /// via jalur ini SEBELUMNYA hanya membalik nominal `paid`/status nota
+  /// dgn benar (`_reconcileTransactionTotals`, tidak ada uang hilang scr
+  /// nominal), TAPI tidak pernah membalik efek `collectPreorderDeposit`
+  /// yang lain: `transactionItems.priceAtSale`/`subtotal` baris pre-order
+  /// yang tadinya dinaikkan dari Rp0 ke harga asli TETAP di harga asli, dan
+  /// `preorderEntries.paid` tetap `true` — status "DP sudah dibayar"
+  /// nyangkut walau pembayarannya sudah dibatalkan.
+  ///
+  /// Fix: kalau baris yang dibatalkan adalah DP pre-order, REVERSE eksplisit
+  /// (kebalikan PERSIS dari `collectPreorderDeposit`) — item balik ke Rp0,
+  /// `preorderEntries.paid` balik `false`. Tidak ada tautan `entryId`
+  /// langsung dari baris pembayaran ke `preorder_entries` (kolom itu tidak
+  /// ada) — dicocokkan lewat `transactionId` + `paid=true` + `updatedAt`
+  /// TERDEKAT dgn `paidAt` pembayaran ini (keduanya dicap dlm SATU
+  /// `transaction()` di `collectPreorderDeposit`, jaraknya cuma milidetik).
+  /// Kasus nota dgn LEBIH DARI SATU entri pre-order yang masing² py DP
+  /// terpisah: heuristik ini pilih SATU entri paling dekat waktunya,
+  /// bukan sempurna utk skenario itu (jarang terjadi di praktik toko) —
+  /// dicatat sbg batasan yang diketahui, bukan diabaikan diam-diam.
   Future<void> voidPayment(String paymentId) async {
     await transaction(() async {
       final pay = await (select(transactionPayments)
@@ -4362,8 +4383,54 @@ class AppDatabase extends _$AppDatabase {
       await (update(transactionPayments)..where((t) => t.id.equals(paymentId)))
           .write(const TransactionPaymentsCompanion(voided: Value(true)));
       await _reconcileTransactionTotals(pay.transactionId);
+
+      if (pay.note == _kPreorderDepositNote) {
+        final candidates = await (select(preorderEntries)
+              ..where((t) =>
+                  t.transactionId.equals(pay.transactionId) &
+                  t.paid.equals(true) &
+                  t.transactionItemId.isNotNull()))
+            .get();
+        if (candidates.isNotEmpty) {
+          candidates.sort((a, b) => (a.updatedAt.difference(pay.paidAt))
+              .abs()
+              .compareTo((b.updatedAt.difference(pay.paidAt)).abs()));
+          final entry = candidates.first;
+          final item = await (select(transactionItems)
+                ..where((t) => t.id.equals(entry.transactionItemId!)))
+              .getSingleOrNull();
+          if (item != null) {
+            await (update(transactionItems)
+                  ..where((t) => t.id.equals(item.id)))
+                .write(const TransactionItemsCompanion(
+              priceAtSale: Value(0),
+              subtotal: Value(0),
+            ));
+            await _reconcileTransactionTotals(pay.transactionId);
+          }
+          final now = DateTime.now();
+          await (update(preorderEntries)..where((t) => t.id.equals(entry.id)))
+              .write(PreorderEntriesCompanion(
+            paid: const Value(false),
+            updatedAt: Value(now),
+          ));
+          await recordLaciMejaEvent(
+            id: '${entry.id}-batal-dp-${now.microsecondsSinceEpoch}',
+            entityType: 'preorder',
+            entryId: entry.id,
+            aksi: 'batal',
+            note: 'DP dibatalkan (voidPayment)',
+            deviceCode: pay.kasirId,
+          );
+        }
+      }
     });
   }
+
+  /// Note persis yang ditulis `collectPreorderDeposit` — dibagi ke konstanta
+  /// supaya `voidPayment` tidak diam-diam meleset kalau salah satu diketik
+  /// ulang beda.
+  static const _kPreorderDepositNote = 'DP/jaminan pre-order';
 
   // ───────────────────────── Expenses (pengeluaran) ────────────────────────
 
@@ -7558,7 +7625,7 @@ class AppDatabase extends _$AppDatabase {
         method: method,
         methodName: methodName,
         kasirId: kasirId,
-        note: 'DP/jaminan pre-order',
+        note: _kPreorderDepositNote,
       );
 
       final now = DateTime.now();
