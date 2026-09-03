@@ -7,6 +7,80 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-03 (sesi kedua belas)
+
+- `85c5c11` — fix(db): `voidPayment` reverse efek DP pre-order. Item 61
+  (audit sesi sebelumnya). `voidPayment` pada baris pembayaran DP/jaminan
+  pre-order (note persis `'DP/jaminan pre-order'`, dipakai
+  `collectPreorderDeposit`) sebelumnya hanya membalik nominal
+  `paid`/status nota via `_reconcileTransactionTotals` (uang aman scr
+  nominal), TAPI tidak pernah membalik efek lain `collectPreorderDeposit`:
+  `transactionItems.priceAtSale`/`subtotal` baris pre-order (dinaikkan
+  dari Rp0 ke harga asli saat DP dibayar) tetap di harga asli, dan
+  `preorderEntries.paid` tetap `true` — status "DP sudah dibayar" nyangkut
+  walau pembayarannya sudah dibatalkan. Fix: guard tambahan — kalau baris
+  yang dibatalkan adalah DP pre-order, reverse eksplisit (kebalikan
+  persis): item balik ke Rp0, `preorderEntries.paid` balik `false`, total
+  nota ikut turun; `updatedAt` `transactions`/`preorderEntries` dicap
+  ulang. Tidak ada tautan `entryId` langsung dari pembayaran ke
+  `preorder_entries` — dicocokkan lewat `transactionId` + `paid=true` +
+  `updatedAt` terdekat dgn `paidAt` pembayaran (didokumentasikan sbg
+  batasan yang diketahui utk kasus jarang >1 pre-order dgn DP terpisah
+  dalam satu nota). Test revert-verified (`void_payment_preorder_deposit_
+  reverse_test.dart`).
+- `3ba1143` — fix(db): `voidTransaction` cascade batalkan entri Laci Meja
+  tertaut. Item 60 (audit sesi sebelumnya). `voidTransaction` reverse
+  stok/poin loyalty/status transaksi, tapi tidak pernah menyentuh 3 tabel
+  Laci Meja (`PreorderEntries`/`LeftBehindItems`/`BorrowedItems`) walau
+  baris di sana bisa merujuk transaksi yang di-void — dashboard/pengingat
+  cart bar tetap menampilkan entri itu seolah masih berlaku. Fix per
+  kategori: `PreorderEntries` reuse `cancelledAt`+`cancelPreorderEntry`
+  existing (sudah cap `updatedAt`); `LeftBehindItems`/`BorrowedItems`
+  SENGAJA TIDAK dapat kolom "batal" baru/migrasi schema (pendekatan
+  paling sedikit mengubah struktur data) — status "batal" disimpulkan
+  murni dari status `transactions` induk lewat JOIN di
+  `getLaciMejaPending`/`watchLeftBehindItems`/`watchBorrowedItems`/
+  `watchLaciMejaOpenCount` (mode default; mode riwayat penuh sengaja
+  tidak difilter). Event audit `laci_meja_events` aksi='batal' tetap
+  ditulis utk kedua kategori (pola sama pre-order). `voidTransaction`
+  dapat parameter `locallyModified` baru (Item 40 pattern), di-thread
+  dari 2 call site (`tx_history_sheet.dart`, `transaksi_tab.dart`).
+  Investigasi sync (diminta eksplisit user) dilampirkan lengkap di pesan
+  commit & `docs/HANDOFF.md`: (a) `voidTransaction` SUDAH mencap
+  `updatedAt` transaksi (bukan bug baru); (b) event 'batal' baru justru
+  DIKECUALIKAN dari `dumpSince` host->klien oleh filter `excludeVoidTx`
+  yang SUDAH ADA sebelumnya (`73338c8`) — audit cukup di host, status
+  dashboard klien tetap benar murni via sync status void (Item 62); (c)
+  `LeftBehindItems`/`BorrowedItems` tidak dapat kolom baru jadi tidak ada
+  `updated_at` baru yang perlu dicap di sana (desain sengaja, bukan
+  gotcha kelupaan). Test sync end-to-end 2 `AppDatabase` host+klien
+  revert-verified (`void_transaction_laci_meja_cascade_sync_test.dart`).
+- `eec6890` — fix(kasir): filter produk di Riwayat Transaksi dipindah ke
+  SQL `WHERE`. Item 55 (ditemukan saat audit filter pelanggan sesi
+  sebelumnya). Bug pola PERSIS SAMA dgn fix filter pelanggan (`4a331d1`):
+  hasil `findTxIdsWithProduct` dipakai MENYARING baris SETELAH query SQL
+  utama (`ORDER BY created_at DESC LIMIT 1000/100`) sudah dipotong, bukan
+  SEBELUM — transaksi yg mengandung produk dicari bisa tertimbun & tidak
+  muncul sama sekali kalau rentang tanggal aktif punya >1000 transaksi
+  total. Fix: `productTxIds` dimasukkan sbg `WHERE t.id IN (...)` SEBELUM
+  `LIMIT`, pola identik JOIN `customers` yg dipakai fix filter pelanggan.
+  Test baru meniru pola `tx_history_busy_month_search_limit_test.dart`
+  utk filter produk, revert-verified
+  (`tx_history_busy_month_product_filter_limit_test.dart`).
+- `1615481` — docs: verifikasi & bersihkan `PLAN.md` (Item 17/21/28/
+  41.B1/51/53). Item 17 (persist antrian approval sync) & Item 21 (sync
+  UI global) terkonfirmasi SELESAI lewat verifikasi kode langsung
+  (`lan_sync_service.dart`/`sync_state_provider.dart`) — dihapus dari
+  plan. Item 28 (pegawai lanjutkan pesanan owner lintas device) — klaim
+  user "sudah selesai" TIDAK terbukti (grep `_isAddMode`/`addToTxId`
+  cuma menunjukkan mode 1-device, tidak ada jalur lintas-device) — TETAP
+  di plan, butuh klarifikasi. Item 41 B.1 (rotasi/un-pair storeKey) —
+  klaim user "selesai lewat Alihkan Owner" TERBUKTI SALAH
+  (`pairing_service.dart` masih eksplisit "belum ada mekanisme"; Alihkan
+  Owner itu transfer kepemilikan toko PENUH, beda skenario) — catatan
+  pembeda diperjelas, tetap terbuka. Item 51 & Item 53 dicoret user
+  eksplisit (keputusan bisnis, tanpa perlu verifikasi kode).
+
 ## 2026-09-03
 
 - `a3b6235` — fix(preorder): cocokkan pre-order pelanggan TERDAFTAR lewat `customerId`, bukan nama. Item 58 (audit sesi sebelumnya, keputusan user sudah diambil sesi ini, dieksekusi langsung). Akar masalah: `getOpenPreorderRefsForCustomer` (rujukan baris item struk ke nota pre-order asal) & `getLaciMejaPending` (pengingat cart bar) mencocokkan pre-order pelanggan SELALU lewat `PreorderEntries.customerName` persis, walau kolom `customerId` sudah ada & terisi dari checkout sejak v35 — dua pelanggan TERDAFTAR beda id yang kebetulan namanya sama (mis. dua "Budi") bisa saling tertaut pre-order-nya (pengingat & rujukan salah pelanggan). Fix: kalau pemanggil punya `customerId` (pelanggan terdaftar tersedia di titik pemanggilan), pencocokan MURNI lewat `customerId` — TIDAK di-OR dengan nama. Pembeli ad-hoc (`customerId` null) tetap fallback ke `customerName` seperti sebelumnya, satu-satunya identitas yang tersedia utk kasus itu — tidak diubah. `receipt_screen.dart` diteruskan `customer?.id` (variabel lokal yang sudah dimuat, sebelumnya tidak diteruskan ke query). Test baru `preorder_match_by_customer_id_test.dart` (skenario PERSIS nama kembar: 2 `customers` beda id nama sama, masing² punya pre-order terbuka beda nota — panggil dgn `customerId` A harus cuma dapat pre-order A, bukan B; + regresi negatif ad-hoc tetap match by nama) revert-verified (fix dicabut, test gagal dgn hasil salah — dapat 2 pre-order padahal expect 1, atau map berisi produk milik pelanggan lain). 2 test existing (`laci_meja_marks_and_reminder_test.dart`, `cart_bar_reminder_lines_test.dart`) diperbarui — seed `addPreorderEntry` ditambah `customerId` supaya mencerminkan alur nyata checkout pasca-v35 (checkout SELALU mengisi kolom ini utk pelanggan terdaftar).

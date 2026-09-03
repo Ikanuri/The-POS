@@ -3252,7 +3252,13 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<void> voidTransaction(String txId, String kasirId) async {
+  /// [kasirId] sebetulnya dipakai sbg `deviceCode` audit trail Laci Meja
+  /// (lihat di bawah, Item 60) — bukan kasirId nota. [locallyModified]:
+  /// Item 40 pattern, device BUKAN owner -> event Laci Meja yang ditulis
+  /// di sini menunggu persetujuan owner via sync (sama pola
+  /// `laciMejaLocallyModifiedProvider`); device owner selalu `false`.
+  Future<void> voidTransaction(String txId, String kasirId,
+      {bool locallyModified = false}) async {
     await transaction(() async {
       // Baca items untuk reverse stock.
       final items = await (select(transactionItems)
@@ -3335,6 +3341,70 @@ class AppDatabase extends _$AppDatabase {
           note: Value('Void ${tx.localId}'),
           createdAt: Value(now),
         ));
+      }
+
+      // Item 60 — void HARUS ikut membatalkan (bukan menghapus) entri Laci
+      // Meja yang masih PENDING & tertaut ke nota ini, supaya dashboard/
+      // pengingat cart bar tidak lagi menampilkannya seolah masih berlaku.
+      // Entri yang sudah SELESAI (diambil/dikembalikan/dipenuhi) sebelum
+      // void dibiarkan apa adanya — barangnya sudah pindah tangan secara
+      // fisik, tidak relevan lagi dibatalkan.
+      //
+      // Pre-order SUDAH punya kolom `cancelledAt` (dipakai `PreorderEntries`
+      // sejak awal) — reuse `cancelPreorderEntry` apa adanya, konsisten
+      // pola & otomatis ikut filter `watchPreorderEntries`/`getLaciMejaPending`
+      // yang sudah mengecek `cancelledAt.isNull()`.
+      final pendingPreorders = await (select(preorderEntries)
+            ..where((t) =>
+                t.transactionId.equals(txId) &
+                t.fulfilledAt.isNull() &
+                t.cancelledAt.isNull()))
+          .get();
+      for (final p in pendingPreorders) {
+        await cancelPreorderEntry(p.id,
+            locallyModified: locallyModified, deviceCode: kasirId);
+      }
+
+      // Titip/Ketinggalan & Pinjaman TIDAK punya kolom "batal" eksplisit
+      // (beda dari pre-order) — sengaja TIDAK ditambah kolom baru/migrasi
+      // schema baru utk ini (pendekatan yang paling sedikit mengubah
+      // struktur data): baris `laci_meja_events` aksi='batal' tetap ditulis
+      // utk audit trail (pola sama pre-order), TAPI status "sembunyi dari
+      // dashboard" dicapai lewat query dashboard (`getLaciMejaPending`,
+      // `watchLeftBehindItems`, `watchBorrowedItems`) yang sekarang ikut
+      // JOIN & filter status transaksi induk != 'void' — lihat query-query
+      // itu. Baris tabelnya sendiri TIDAK diubah (tidak ada updated_at baru
+      // di sini) krn memang tidak ada kolom yang berubah.
+      final pendingLeft = await (select(leftBehindItems)
+            ..where(
+                (t) => t.transactionId.equals(txId) & t.collectedAt.isNull()))
+          .get();
+      for (final l in pendingLeft) {
+        await recordLaciMejaEvent(
+          id: '${l.id}-batal-${now.microsecondsSinceEpoch}',
+          entityType: 'titip',
+          entryId: l.id,
+          aksi: 'batal',
+          note: 'Void ${tx.localId}',
+          deviceCode: kasirId,
+          locallyModified: locallyModified,
+        );
+      }
+
+      final pendingBorrowed = await (select(borrowedItems)
+            ..where((t) =>
+                t.transactionId.equals(txId) & t.fullyReturnedAt.isNull()))
+          .get();
+      for (final b in pendingBorrowed) {
+        await recordLaciMejaEvent(
+          id: '${b.id}-batal-${now.microsecondsSinceEpoch}',
+          entityType: 'pinjaman',
+          entryId: b.id,
+          aksi: 'batal',
+          note: 'Void ${tx.localId}',
+          deviceCode: kasirId,
+          locallyModified: locallyModified,
+        );
       }
 
       await (update(transactions)..where((t) => t.id.equals(txId))).write(
@@ -4275,6 +4345,27 @@ class AppDatabase extends _$AppDatabase {
   /// HANTU (dihitung ulang seolah harus diserahkan lagi, padahal sudah
   /// pernah). Guard di sini (bukan cuma sembunyikan tombol UI) supaya
   /// caller lain di masa depan tidak bisa kena bug yang sama.
+  /// Item 61 — pembayaran DP/jaminan pre-order (note persis
+  /// `_kPreorderDepositNote`, dipakai `collectPreorderDeposit`) dibatalkan
+  /// via jalur ini SEBELUMNYA hanya membalik nominal `paid`/status nota
+  /// dgn benar (`_reconcileTransactionTotals`, tidak ada uang hilang scr
+  /// nominal), TAPI tidak pernah membalik efek `collectPreorderDeposit`
+  /// yang lain: `transactionItems.priceAtSale`/`subtotal` baris pre-order
+  /// yang tadinya dinaikkan dari Rp0 ke harga asli TETAP di harga asli, dan
+  /// `preorderEntries.paid` tetap `true` — status "DP sudah dibayar"
+  /// nyangkut walau pembayarannya sudah dibatalkan.
+  ///
+  /// Fix: kalau baris yang dibatalkan adalah DP pre-order, REVERSE eksplisit
+  /// (kebalikan PERSIS dari `collectPreorderDeposit`) — item balik ke Rp0,
+  /// `preorderEntries.paid` balik `false`. Tidak ada tautan `entryId`
+  /// langsung dari baris pembayaran ke `preorder_entries` (kolom itu tidak
+  /// ada) — dicocokkan lewat `transactionId` + `paid=true` + `updatedAt`
+  /// TERDEKAT dgn `paidAt` pembayaran ini (keduanya dicap dlm SATU
+  /// `transaction()` di `collectPreorderDeposit`, jaraknya cuma milidetik).
+  /// Kasus nota dgn LEBIH DARI SATU entri pre-order yang masing² py DP
+  /// terpisah: heuristik ini pilih SATU entri paling dekat waktunya,
+  /// bukan sempurna utk skenario itu (jarang terjadi di praktik toko) —
+  /// dicatat sbg batasan yang diketahui, bukan diabaikan diam-diam.
   Future<void> voidPayment(String paymentId) async {
     await transaction(() async {
       final pay = await (select(transactionPayments)
@@ -4292,8 +4383,54 @@ class AppDatabase extends _$AppDatabase {
       await (update(transactionPayments)..where((t) => t.id.equals(paymentId)))
           .write(const TransactionPaymentsCompanion(voided: Value(true)));
       await _reconcileTransactionTotals(pay.transactionId);
+
+      if (pay.note == _kPreorderDepositNote) {
+        final candidates = await (select(preorderEntries)
+              ..where((t) =>
+                  t.transactionId.equals(pay.transactionId) &
+                  t.paid.equals(true) &
+                  t.transactionItemId.isNotNull()))
+            .get();
+        if (candidates.isNotEmpty) {
+          candidates.sort((a, b) => (a.updatedAt.difference(pay.paidAt))
+              .abs()
+              .compareTo((b.updatedAt.difference(pay.paidAt)).abs()));
+          final entry = candidates.first;
+          final item = await (select(transactionItems)
+                ..where((t) => t.id.equals(entry.transactionItemId!)))
+              .getSingleOrNull();
+          if (item != null) {
+            await (update(transactionItems)
+                  ..where((t) => t.id.equals(item.id)))
+                .write(const TransactionItemsCompanion(
+              priceAtSale: Value(0),
+              subtotal: Value(0),
+            ));
+            await _reconcileTransactionTotals(pay.transactionId);
+          }
+          final now = DateTime.now();
+          await (update(preorderEntries)..where((t) => t.id.equals(entry.id)))
+              .write(PreorderEntriesCompanion(
+            paid: const Value(false),
+            updatedAt: Value(now),
+          ));
+          await recordLaciMejaEvent(
+            id: '${entry.id}-batal-dp-${now.microsecondsSinceEpoch}',
+            entityType: 'preorder',
+            entryId: entry.id,
+            aksi: 'batal',
+            note: 'DP dibatalkan (voidPayment)',
+            deviceCode: pay.kasirId,
+          );
+        }
+      }
     });
   }
+
+  /// Note persis yang ditulis `collectPreorderDeposit` — dibagi ke konstanta
+  /// supaya `voidPayment` tidak diam-diam meleset kalau salah satu diketik
+  /// ulang beda.
+  static const _kPreorderDepositNote = 'DP/jaminan pre-order';
 
   // ───────────────────────── Expenses (pengeluaran) ────────────────────────
 
@@ -6941,23 +7078,54 @@ class AppDatabase extends _$AppDatabase {
 
     // Titip/Ketinggalan & Pinjaman: cocokkan lewat id kalau pelanggan
     // terdaftar, kalau tidak lewat nama teksnya.
+    //
+    // Item 60 — JOIN ke `transactions` & kecualikan nota yang sudah di-void
+    // (`voidTransaction` tidak menghapus baris Titip/Pinjaman, cuma menulis
+    // event 'batal' audit — lihat dok di `voidTransaction`; tabel ini
+    // sengaja TIDAK dapat kolom `cancelledAt` baru, status "batal"-nya
+    // murni disimpulkan dari status nota induk di sini).
     final left = id.isNotEmpty
-        ? await (select(leftBehindItems)
-              ..where((t) => t.customerId.equals(id) & t.collectedAt.isNull()))
-            .get()
-        : await (select(leftBehindItems)
-              ..where((t) =>
-                  t.customerNameText.equals(nama) & t.collectedAt.isNull()))
-            .get();
+        ? (await (select(leftBehindItems).join([
+            innerJoin(transactions,
+                transactions.id.equalsExp(leftBehindItems.transactionId)),
+          ])
+                ..where(leftBehindItems.customerId.equals(id) &
+                    leftBehindItems.collectedAt.isNull() &
+                    transactions.status.isNotValue('void')))
+              .get())
+            .map((r) => r.readTable(leftBehindItems))
+            .toList()
+        : (await (select(leftBehindItems).join([
+            innerJoin(transactions,
+                transactions.id.equalsExp(leftBehindItems.transactionId)),
+          ])
+                ..where(leftBehindItems.customerNameText.equals(nama) &
+                    leftBehindItems.collectedAt.isNull() &
+                    transactions.status.isNotValue('void')))
+              .get())
+            .map((r) => r.readTable(leftBehindItems))
+            .toList();
     final borrowed = id.isNotEmpty
-        ? await (select(borrowedItems)
-              ..where(
-                  (t) => t.customerId.equals(id) & t.fullyReturnedAt.isNull()))
-            .get()
-        : await (select(borrowedItems)
-              ..where((t) =>
-                  t.customerNameText.equals(nama) & t.fullyReturnedAt.isNull()))
-            .get();
+        ? (await (select(borrowedItems).join([
+            innerJoin(transactions,
+                transactions.id.equalsExp(borrowedItems.transactionId)),
+          ])
+                ..where(borrowedItems.customerId.equals(id) &
+                    borrowedItems.fullyReturnedAt.isNull() &
+                    transactions.status.isNotValue('void')))
+              .get())
+            .map((r) => r.readTable(borrowedItems))
+            .toList()
+        : (await (select(borrowedItems).join([
+            innerJoin(transactions,
+                transactions.id.equalsExp(borrowedItems.transactionId)),
+          ])
+                ..where(borrowedItems.customerNameText.equals(nama) &
+                    borrowedItems.fullyReturnedAt.isNull() &
+                    transactions.status.isNotValue('void')))
+              .get())
+            .map((r) => r.readTable(borrowedItems))
+            .toList();
 
     // Pre-order: pelanggan TERDAFTAR (id terisi) dicocokkan MURNI lewat
     // `customerId` (Item 58 — dua pelanggan beda id namanya bisa sama,
@@ -6997,14 +7165,29 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Diurut PALING LAMA MENUNGGU dulu (FIFO), sesuai rancangan dashboard.
+  ///
+  /// Item 60 — mode default (dashboard, `includeCollected: false`) ikut
+  /// JOIN & mengecualikan nota yang sudah di-void (lihat dok
+  /// `getLaciMejaPending`). Mode `includeCollected: true` (riwayat penuh,
+  /// `riwayat_laci_meja_screen.dart`) SENGAJA TIDAK ikut filter void — nota
+  /// adalah bukti historis permanen, pola sama `getBorrowedForTransaction`.
   Stream<List<LeftBehindItem>> watchLeftBehindItems(
-          {bool includeCollected = false}) =>
-      (select(leftBehindItems)
-            ..where((t) => includeCollected
-                ? const Constant(true)
-                : t.collectedAt.isNull())
+      {bool includeCollected = false}) {
+    if (includeCollected) {
+      return (select(leftBehindItems)
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .watch();
+    }
+    final q = select(leftBehindItems).join([
+      innerJoin(transactions,
+          transactions.id.equalsExp(leftBehindItems.transactionId)),
+    ])
+      ..where(leftBehindItems.collectedAt.isNull() &
+          transactions.status.isNotValue('void'))
+      ..orderBy([OrderingTerm.asc(leftBehindItems.createdAt)]);
+    return q.watch().map(
+        (rows) => rows.map((r) => r.readTable(leftBehindItems)).toList());
+  }
 
   /// Tandai SELESAI seluruhnya. Tetap mencatat baris log (PLAN.md Item 54)
   /// supaya "ambil semua" ikut muncul di riwayat & log global — [sisaQty]
@@ -7060,17 +7243,32 @@ class AppDatabase extends _$AppDatabase {
 
   /// Kartu yang disematkan (`pinned`) naik ke atas, sisanya tetap FIFO
   /// `createdAt` seperti kategori Laci Meja lain.
+  /// Item 60 — sama pola `watchLeftBehindItems`: mode default kecualikan
+  /// nota void, mode `includeFullyReturned: true` (riwayat) tidak difilter.
   Stream<List<BorrowedItem>> watchBorrowedItems(
-          {bool includeFullyReturned = false}) =>
-      (select(borrowedItems)
-            ..where((t) => includeFullyReturned
-                ? const Constant(true)
-                : t.fullyReturnedAt.isNull())
+      {bool includeFullyReturned = false}) {
+    if (includeFullyReturned) {
+      return (select(borrowedItems)
             ..orderBy([
               (t) => OrderingTerm.desc(t.pinned),
               (t) => OrderingTerm.asc(t.createdAt),
             ]))
           .watch();
+    }
+    final q = select(borrowedItems).join([
+      innerJoin(transactions,
+          transactions.id.equalsExp(borrowedItems.transactionId)),
+    ])
+      ..where(borrowedItems.fullyReturnedAt.isNull() &
+          transactions.status.isNotValue('void'))
+      ..orderBy([
+        OrderingTerm.desc(borrowedItems.pinned),
+        OrderingTerm.asc(borrowedItems.createdAt),
+      ]);
+    return q
+        .watch()
+        .map((rows) => rows.map((r) => r.readTable(borrowedItems)).toList());
+  }
 
   /// [qtyReturnedDelta] ditambahkan ke `qtyReturned` yang sudah ada (bisa
   /// kembali sebagian bertahap). `fullyReturnedAt` di-set otomatis begitu
@@ -7427,7 +7625,7 @@ class AppDatabase extends _$AppDatabase {
         method: method,
         methodName: methodName,
         kasirId: kasirId,
-        note: 'DP/jaminan pre-order',
+        note: _kPreorderDepositNote,
       );
 
       final now = DateTime.now();
@@ -7675,14 +7873,22 @@ class AppDatabase extends _$AppDatabase {
   /// dependency tambahan (mis. rxdart) hanya utk menjumlahkan count — drift
   /// sudah mendukung `.watch()` di atas raw SQL asal `readsFrom` diisi
   /// eksplisit dgn tabel yang dibaca.
+  /// Item 60 — `left_behind_items`/`borrowed_items` ikut JOIN
+  /// `transactions` & kecualikan nota void (lihat dok `getLaciMejaPending`),
+  /// `readsFrom` ditambah `transactions` supaya badge ikut refresh saat
+  /// status nota berubah (mis. baru saja di-void).
   Stream<int> watchLaciMejaOpenCount() {
     return customSelect(
       'SELECT '
-      '(SELECT COUNT(*) FROM left_behind_items WHERE collected_at IS NULL) + '
-      '(SELECT COUNT(*) FROM borrowed_items WHERE fully_returned_at IS NULL) + '
+      '(SELECT COUNT(*) FROM left_behind_items li '
+      'JOIN transactions t ON t.id = li.transaction_id '
+      'WHERE li.collected_at IS NULL AND t.status != \'void\') + '
+      '(SELECT COUNT(*) FROM borrowed_items bi '
+      'JOIN transactions t ON t.id = bi.transaction_id '
+      'WHERE bi.fully_returned_at IS NULL AND t.status != \'void\') + '
       '(SELECT COUNT(*) FROM preorder_entries '
       'WHERE fulfilled_at IS NULL AND cancelled_at IS NULL) AS cnt',
-      readsFrom: {leftBehindItems, borrowedItems, preorderEntries},
+      readsFrom: {leftBehindItems, borrowedItems, preorderEntries, transactions},
     ).watchSingle().map((r) => r.data['cnt'] as int);
   }
 

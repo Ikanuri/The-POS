@@ -80,6 +80,12 @@ final _txHistoryProvider =
     FutureProvider.family<List<Transaction>, _HistoryQuery>((ref, q) async {
   final db = ref.watch(databaseProvider);
 
+  // Item 55: sama akar bug dgn filter pelanggan (lihat dok di atas) —
+  // `productTxIds` dulu dipakai utk MENYARING baris SETELAH LIMIT
+  // diterapkan, jadi transaksi yg mengandung produk dicari bisa tertimbun
+  // transaksi produk LAIN yg lebih baru di dalam rentang yg sama. Fix:
+  // masukkan sbg `WHERE t.id IN (...)` SEBELUM LIMIT, persis pola JOIN
+  // `customers` di atas.
   Set<String>? productTxIds;
   if (q.product.trim().isNotEmpty) {
     productTxIds = await db.findTxIdsWithProduct(q.product);
@@ -121,15 +127,15 @@ final _txHistoryProvider =
         db.transactions.customerName.lower().contains(searchQ) |
         db.customers.name.lower().contains(searchQ));
   }
+  if (productTxIds != null) {
+    sel.where(db.transactions.id.isIn(productTxIds));
+  }
   sel
     ..orderBy([OrderingTerm.desc(db.transactions.createdAt)])
     ..limit(q.loadAll ? 1000 : 100);
 
-  var rows =
+  final rows =
       (await sel.get()).map((r) => r.readTable(db.transactions)).toList();
-  if (productTxIds != null) {
-    rows = rows.where((t) => productTxIds!.contains(t.id)).toList();
-  }
   return rows;
 });
 
@@ -1292,7 +1298,10 @@ Future<bool> showVoidTransactionDialog(
   );
 
   if (confirmed != true) return false;
-  await db.voidTransaction(tx.id, device.deviceCode);
+  // Item 40 pattern — device BUKAN owner -> event Laci Meja yang ditulis
+  // voidTransaction (Item 60) menunggu persetujuan owner via sync.
+  await db.voidTransaction(tx.id, device.deviceCode,
+      locallyModified: !device.isOwner);
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Transaksi ${tx.localId} dibatalkan')));

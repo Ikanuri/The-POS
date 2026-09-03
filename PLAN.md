@@ -166,66 +166,6 @@ belum.
 
 ---
 
-## Item 17 — Persist antrian approval sync + majukan watermark upload (revisi dari catatan "ACK" lama)
-
-**Prioritas:** Sedang. **Disetujui arah oleh user** (usul: simpan state
-seperti pesanan tertahan). Menggantikan catatan lama di HANDOFF yang keliru
-membingkai ini sebagai "sync satu arah tanpa ACK".
-
-**Kondisi riil (dikoreksi setelah baca ulang `lan_sync_service.dart`):** sync
-SUDAH dua arah, host SUDAH punya hak review (antrian approval manual, bukan
-auto-merge), arah host→klien SUDAH pakai watermark (`last_sync_download_at`).
-Yang jadi akar masalah SEMPIT: `_pendingQueue` (baris ~79) adalah
-`static final [...]` — **cuma di memori host**. Kalau host restart sebelum
-owner approve, antrian hilang. KARENA itu arah klien→host sengaja tetap
-**full-dump** selamanya (komentar eksplisit baris ~486-498) sebagai pengaman —
-bukan karena bidirectionality belum ada.
-
-**Solusi:** persist `_pendingQueue` ke tabel DB baru (pola sama seperti
-`held_orders` yang selamat dari app-kill). Urutan KRITIS yang harus dijaga:
-simpan ke DB **sebelum** host membalas "diterima" ke klien (di handler baris
-~421-447). Begitu itu dijamin, watermark upload klien boleh dimajukan →
-klien berhenti kirim-ulang seluruh riwayat tiap sync.
-
-**Klarifikasi timeout WiFi (dari pertanyaan user):** BUKAN masalah — koneksi
-HTTP klien ditutup langsung setelah host membalas `pending_approval` (baris
-431-447), approval terjadi async tanpa koneksi terbuka. Jadi tidak ada
-sambungan yang digantung menunggu owner.
-
-**File:** `lib/core/services/lan_sync_service.dart`, tabel baru + migrasi
-`app_database.dart` (schemaVersion naik).
-
----
-
-## Item 21 — Sync UI persisten lintas tab + status progres (global state)
-
-**Prioritas:** Sedang. **Proposal user, DISETUJUI PENUH** — status progres
-(Menyambung → Mengirim → Menunggu persetujuan) dikonfirmasi user persis
-gambaran yang diinginkan. Refactor menengah.
-
-**Temuan tambahan (lebih dalam dari keluhan user):** `sync_screen.dart`
-`dispose()` (baris 42-43) memanggil `LanSyncService.stopHost()` → meninggalkan
-layar Sync mematikan server host TOTAL, bukan cuma UI-nya hilang. State sync
-(`_syncing`, `_queue`) juga lokal ke layar.
-
-**Solusi:** angkat state sync ke **provider global Riverpod**, lepaskan
-lifecycle host dari `SyncScreen`, render **banner inline persisten di level
-shell** (`main_shell.dart`) yang bertahan di tab/halaman manapun sampai proses
-selesai/dibatalkan (baik sisi host maupun klien).
-
-**Soal "tidak realtime" (antrian muncul sekaligus) — batasan protokol:**
-klien kirim SEMUA tabel dalam SATU request HTTP, jadi di host memang datang
-sekaligus. "Realtime per-baris" TIDAK mungkin tanpa merombak protokol.
-Yang bisa & sebaiknya diperbaiki: status progres sisi KLIEN (Menyambung →
-Mengirim → Menunggu persetujuan) + animasi halus saat item baru masuk antrian
-host. Jangan overpromise "per baris".
-
-**File:** provider baru (mis. `lib/core/providers/sync_state_provider.dart`),
-`lib/core/services/lan_sync_service.dart`, `lib/features/shell/main_shell.dart`,
-`lib/features/pengaturan/sync_screen.dart` (baca dari provider global).
-
----
-
 ## Catatan lintas-item — perbaikan UX permission (murah, opsional)
 
 Dari audit flow permission (bonus request user): perubahan izin owner **tidak
@@ -247,6 +187,15 @@ pesanan yang sudah closed di device owner itu untuk ditambahi.
 **Belum didesain sama sekali** — baru sebatas concern yang divalidasi,
 dimasukkan ke plan dulu sesuai permintaan user ("oke yang ini masukkan plan
 tersendiri dulu"), implementasi ditunda.
+
+**Diverifikasi ulang 3 September 2026** (user sempat mengklaim ini "sudah
+diselesaikan" — TIDAK terbukti di kode): digrep `_isAddMode`/`addToTxId`
+(`kasir_screen.dart`, `payment_screen.dart`, `app_router.dart`) — mekanisme
+itu HANYA utk "Tambah Belanjaan" satu device yang sama (`kMainCartId`/
+`txId` lokal), TIDAK ada jalur lintas-device apa pun. `held_orders` (Item
+24) juga cuma antrian pesanan yang BELUM diproses sama sekali. TIDAK
+ditemukan mekanisme "pegawai kirim tambahan utk nota yang sudah closed di
+device owner". Item ini **MASIH BELUM diimplementasikan** — tetap di plan.
 
 **Pertimbangan awal (belum keputusan final):**
 - Beda dengan "Tambah Belanjaan" yang sudah ada sekarang (`_isAddMode`,
@@ -313,6 +262,14 @@ Di bawah ini HANYA yang masih menggantung.
    sepihak. Sementara: kunci bocor = jalur "Alihkan Owner" ke identitas
    toko baru. _(Dikonfirmasi 11 Agt: masih belum ada — `pairing_service.
    dart` sendiri masih menulis "Belum ada mekanisme un-pair / rotasi".)_
+   _(Diverifikasi ulang 3 September 2026 — masih SAMA, BELUM selesai:
+   "Alihkan Owner" (`alih_owner_screen.dart`) itu transfer kepemilikan
+   PENUH toko via file terenkripsi BPOT1 ke IDENTITAS TOKO BARU (dipakai
+   utk skenario ganti kepemilikan toko total) — BUKAN solusi utk B.1,
+   yang butuhnya mencabut SATU device (HP kasir hilang/pegawai keluar)
+   TANPA mengganti seluruh identitas toko & TANPA memutus device lain
+   yang masih sah. `pairing_service.dart` masih eksplisit menulis belum
+   ada mekanisme un-pair/rotasi.)_
 
 _(C.2 dulu ada di sini — SUDAH SELESAI, lihat catatan verifikasi di
 atas.)_
@@ -397,10 +354,9 @@ asli ikut dikoreksi di tempat).
 
 ## Status ringkas & urutan sisa pekerjaan
 
-**Item 9-22 (backlog audit besar 10-11 Juli) — SELESAI 12/13**, lihat
-CHANGELOG untuk hash tiap item. Sisa satu: **Item 17+21 (sync)** — lihat
-detail lengkap di atas, sengaja ditunda ke sesi fokus (risiko data-loss di
-"majukan watermark upload" butuh test round-trip HTTP asli).
+**Item 9-22 (backlog audit besar 10-11 Juli) — SELESAI SEMUA 13/13** (Item
+17+21 terkonfirmasi selesai lewat verifikasi kode 3 September 2026, lihat
+CHANGELOG untuk hash tiap item).
 
 **Item migrasi data Griyo (Item 3c/4/5) DICORET user** (18 Juli) — dihapus
 dari plan. Kalau nanti user mau lanjut migrasi data lama, mulai analisis
@@ -432,60 +388,6 @@ dipakai cabang, sebelum data berubah lagi). TIDAK dikerjakan sekarang —
 catat di sini murni supaya tidak perlu didesain ulang dari nol kalau
 suatu saat dibutuhkan.
 
-## Item 51 — Usulan section baru CLAUDE.md: "Disiplin Rilis Profesional" (22 Juli, BELUM diputuskan — nunggu keputusan final user soal isi & pemangkasan)
-
-**Konteks:** user usul menambahkan section checklist baru ke `CLAUDE.md`,
-ditaruh SETELAH "Metode Test Sebelum Rilis" dan SEBELUM "Perencanaan —
-PLAN.md", isinya 9 poin disiplin rilis (klasifikasi risiko A/B/C,
-test skenario negatif, cari pola serupa lintas `lib/`, estimasi dampak
-performa, acceptance check sudut pandang toko, dokumentasi risiko
-tertunda, review mandiri skeptis utk perubahan finansial/keamanan,
-commit kecil per sub-item yang bisa di-bisect, pertimbangan device lama
-saat migrasi schema). Diminta opini dulu SEBELUM eksekusi (belum
-ditulis ke CLAUDE.md).
-
-**Opini yang sudah diberikan (ringkasan, detail lengkap ada di riwayat
-percakapan sesi ini):**
-- **Paling kuat/berbasis-bukti nyata proyek ini** (rekomendasi: pertahankan
-  apa adanya): poin migrasi schema device lama (cocok dgn insiden nyata
-  "migration test ripple" tiap `schemaVersion` naik, lihat HANDOFF.md),
-  estimasi dampak performa utk operasi yang tumbuh (persis pola yang
-  dipakai Item 50 di atas), cari pola serupa lintas file (cocok dgn
-  duplikasi 4 renderer struk in-app/share/print/merged yang berulang
-  kali jadi sumber bug parsial-fix), wajib test skenario negatif (sudah
-  jadi praktik nyata sesi-sesi terakhir, tinggal diformalkan), review
-  mandiri skeptis utk perubahan Kategori A/B (melengkapi revert-verify,
-  bukan menduplikasi — menangkap hal yang test coverage sendiri bisa
-  lewatkan spt try/catch kosong/default `??` tanpa alasan).
-- **Berguna tapi lebih lunak/rawan jadi formalitas kosong** (rekomendasi:
-  pertahankan tapi persingkat drastis): klasifikasi risiko A/B/C sebelum
-  coding, acceptance check "sudut pandang pemilik toko".
-- **Redundan, sebaiknya DIHAPUS/dipersingkat jadi 1 baris silang-rujuk**:
-  poin "dokumentasi risiko yang sengaja ditunda" — isinya sudah persis
-  sama dengan konvensi PLAN.md yang sudah dijelaskan di section
-  "Perencanaan — PLAN.md" beberapa baris setelahnya di CLAUDE.md.
-- **Paling rawan tidak realistis dalam praktik** (perlu kesadaran aktif
-  tiap sesi, bukan cuma tertulis, biar benar-benar ditegakkan): poin
-  commit kecil per sub-item yang bisa di-bisect — sesi ini SENDIRI belum
-  konsisten menjalankannya (redesain price-match Item 50/Task #10 masuk
-  1 commit besar, bukan dipecah per sub-item: engine matching, UI
-  preview, fitur ekspor file, test — padahal masing² relatif independen).
-
-**Kekhawatiran token/kepadatan file**: `CLAUDE.md` dibaca otomatis SETIAP
-sesi dan filenya sendiri eksplisit minta tetap ringkas. Draft usulan user
-~90 baris/9 subsection dgn banyak elaborasi & contoh — kalau ditambahkan
-utuh, menambah kira² 35-40% ke ukuran file yang sekarang. Saran yang
-sudah disampaikan: persingkat jadi checklist padat (judul poin + 1 baris
-alasan, tanpa elaborasi panjang), ATAU ikuti pola proyek ini sendiri
-(CHANGELOG/PATCHNOTES/HANDOFF/PLAN sudah terpisah per keperluan) — taruh
-versi lengkap di file terpisah (mis. `docs/RELEASE_CHECKLIST.md`) dan
-cukup 2-3 baris pointer di CLAUDE.md.
-
-**Belum ada keputusan final dari user** soal: (1) tetap tambahkan section
-penuh apa adanya, (2) pangkas sesuai saran di atas, atau (3) pisah ke
-file terpisah dgn pointer singkat. **Jangan eksekusi/tulis ke CLAUDE.md
-sampai user memutuskan salah satu opsi ini secara eksplisit.**
-
 ---
 
 **Item lain yang masih terbuka:**
@@ -496,17 +398,15 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
    `transaksi_tab.dart`, `tx_history_sheet.dart`, `settleMergedDebt`, Buku
    Hutang, Tutup Kasir "kas sistem" overstated) — belum disentuh, lihat
    detail Item 23 di atas.
-3. **Item 17+21 (sync)** — ditunda ke sesi fokus (risiko data-loss).
-4. **Item 28** (pegawai lanjutkan pesanan owner lintas device) — konsep,
-   belum didesain.
-5. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
-   di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi storeKey (butuh
-   keputusan desain user), C.2 (gabung Item 17+21), dan daftar P3 —
+3. **Item 28** (pegawai lanjutkan pesanan owner lintas device) — konsep,
+   belum didesain, TERVERIFIKASI ULANG 3 September 2026 masih belum
+   diimplementasikan (lihat catatan verifikasi di detail Item 28 di atas).
+4. **Item 41** (audit kode 18 Juli) — mayoritas P1/P2 SUDAH dieksekusi
+   di sesi yang sama (lihat CHANGELOG). Sisa: B.1 rotasi/un-pair storeKey
+   (butuh keputusan desain user — BUKAN terselesaikan oleh "Alihkan
+   Owner", lihat catatan pembeda di Item 41 di atas) dan daftar P3 —
    detail di Item 41 di atas.
-6. **Item 51** (usulan section "Disiplin Rilis Profesional" di CLAUDE.md)
-   — nunggu keputusan final user (tambah apa adanya / pangkas / pisah ke
-   file terpisah). Detail opini di Item 51 di atas.
-7. **Item 52 — bug sinkron harga antar toko: barcode sama, harga sudah
+5. **Item 52 — bug sinkron harga antar toko: barcode sama, harga sudah
    sama, tapi sync tetap usulkan harga beda** (kasus konkret user: "Rinso
    cair 500", 5000 → diusulkan 4400). Analisis mendalam (`PriceMatchService`
    dkk) SUDAH dilakukan, **root cause paling mungkin SUDAH diidentifikasi
@@ -548,37 +448,7 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
      `app_database.dart` — barcode scan sepenuhnya jalur lain, kamera/HID,
      terpisah dari field pencarian). Ditawarkan, belum dikonfirmasi user.
 
-8. **Item 53 — percepat alur input harga modal + stok dari nota supplier
-   (PENDING, user eksplisit "pending dulu poin ini")**. Konteks: toko
-   cabang belum pakai fitur ini secara penuh, tapi diperkirakan perlu ke
-   depan — keluhan user: tidak selalu ada waktu hitung manual dari nota
-   sampai input satu-satu di form Edit Produk. Insight yang sudah
-   didiskusikan (belum ada keputusan/eksekusi):
-   - **CSV import yang SUDAH ADA** (`csv_import_service.dart`) sudah
-     mendukung kolom `harga_beli`/`cost` & `stok`/`qty`, dan sudah bisa
-     UPDATE produk existing (cocok barcode → kode_produk → nama+satuan),
-     bukan cuma bikin produk baru — opsi termurah, tinggal dibiasakan
-     jadi alur kerja (isi template Excel sekali per nota, import),
-     tanpa perlu kode baru sama sekali.
-   - **Mode "restock" ala `StockOpnameScreen`** (scan barcode → sesuaikan)
-     — pola UX serupa bisa dipakai utk terima barang: scan barcode tiap
-     item nota → tampilkan harga modal terakhir sbg default (tinggal
-     koreksi) → qty DITAMBAHKAN (bukan di-replace spt opname). Belum
-     didesain detail, kandidat termurah kalau mau dibangun sbg fitur baru.
-   - **OCR nota supplier** — dinilai ROI rendah utk kasus toko grosir
-     (nota tulisan tangan/thermal print supplier tidak konsisten
-     formatnya, OCR sering salah baca angka terutama kolom harga, tetap
-     butuh verifikasi manual per baris). Rekomendasi: skip kecuali
-     supplier kirim nota digital berformat tetap (PDF/Excel) — baru
-     worth bikin parser CSV-import khusus format itu.
-   - **Keputusan desain yang MENGGANTUNG** (perlu diputuskan SEBELUM
-     bangun alur import manapun di atas, supaya tidak bongkar ulang):
-     harga modal pakai "harga terakhir" (skema sekarang, `costPrice`
-     1 angka) atau mulai hitung rata-rata tertimbang (lebih akurat kalau
-     harga modal sering naik-turun antar pembelian, tapi perlu simpan
-     riwayat per-batch pembelian, bukan cuma 1 kolom).
-
-9. **Item 54 — Opsi upgrade arsitektur masa depan: sync LAN otomatis
+6. **Item 54 — Opsi upgrade arsitektur masa depan: sync LAN otomatis
    (bukan manual) + akses owner dari luar toko (PENDING, murni diskusi,
    user eksplisit "sync manual dulu" — JANGAN dieksekusi sampai
    diminta lagi, proyek dinilai user belum cukup stabil utk ini).**
