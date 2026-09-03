@@ -699,28 +699,6 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
    pola JOIN `customers` yg dipakai utk fix filter pelanggan).
 
 
-## Item 57 — `laci_meja_events` klien: `locally_modified` TIDAK PERNAH
-   direset -> payload usulan tumbuh terus (audit 2 September 2026,
-   catatan desain, bukan bug data)
-
-   Entri induk (3 tabel) direset flag-nya saat baris host ter-merge balik
-   (`applyLaciMejaProposals` cap `updated_at=now` -> lolos `dumpSince` ->
-   `mergeRows` INSERT OR REPLACE). Event TIDAK punya `updated_at`, delta
-   host->klien by `created_at >= since` — event yang klien buat SEBELUM
-   watermark sync-nya tidak pernah dikirim balik, dan kalaupun dikirim
-   `mergeRows` append-only `INSERT OR IGNORE` tidak menyentuh baris yang
-   sudah ada. Akibat: SEMUA event yang pernah dibuat klien terus dikirim
-   ulang tiap sync selamanya. Kebenaran data AMAN — host membuang yang
-   identik via `filterUnchangedLaciMejaProposals`, dan `INSERT OR
-   REPLACE` by id (`'$entryId-$micros'`) tidak menggandakan — tapi ukuran
-   payload `laciMejaProposals` tumbuh linier dgn jumlah event seumur
-   device. Kandidat fix: host balas daftar id event yang sudah ada/diterapkan
-   -> klien set `locally_modified=0`; atau `mergeRows` append-only utk
-   `laci_meja_events` meng-UPDATE flag ke 0 kalau baris masuk dgn
-   `locally_modified=0` (perlu `dumpSince` host juga menyertakan event
-   klien yang baru diterapkan — mis. filter tambahan `OR id IN (baru
-   diterapkan)`). Tidak mendesak selama toko belum ribuan event.
-
 ## Item 58 — Pre-order cocokkan pelanggan LEWAT NAMA (risiko nama kembar,
    audit 2 September 2026 — catatan risiko, JANGAN ubah tanpa persetujuan)
 

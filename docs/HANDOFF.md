@@ -5,6 +5,39 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 3 September 2026 (sesi kesepuluh). Versi kerja **2.33.6+75**,
+schemaVersion **38** (naik dari 37 — migrasi baru)._
+
+**Item 57 SELESAI (`89cfeaf`)** — keputusan user sudah diambil sesi
+sebelumnya (di bawah, "Item 57/58... BELUM diputuskan user" — sekarang sudah).
+`laci_meja_events` (log kejadian Laci Meja) tidak punya `updated_at`; delta
+`dumpSince` host->klien murni `created_at >= since` (waktu kejadian FISIK,
+sengaja tidak boleh diubah). Kalau watermark sync klien lewat `created_at`
+event itu SEBELUM owner approve usulannya, event itu tidak pernah lagi lolos
+ke sync klien manapun — `locally_modified` klien nyangkut selamanya, event
+yang sama diusulkan ulang tiap sync (data aman, tapi payload usulan tumbuh
+tak terbatas). Fix: kolom baru `appliedAt` (nullable) dicap host SAAT
+`applyLaciMejaProposals` menyetujui (BUKAN `createdAt` yang tetap representasi
+waktu kejadian) — dipakai filter delta TAMBAHAN di `dumpSince`
+(`created_at >= since OR applied_at >= since`). `mergeRows` klien tidak perlu
+sentuhan — tabel ini bukan `appendOnlyTables`, sudah otomatis lewat jalur
+generic `INSERT OR REPLACE` yang membawa kolom baru tanpa kode tambahan.
+Test end-to-end `laci_meja_events_applied_at_sync_test.dart` (2 `AppDatabase`
+nyata host+klien) revert-verified — membuktikan skenario bug asli persis
+(klien upload usulan, sync-download SEKALI LAGI sebelum host approve dgn
+watermark sudah lewat `created_at`, host baru approve, sync-download ulang
+harus tetap membawa event itu balik & mereset `locally_modified`).
+
+PATCHNOTES.md TIDAK diupdate — murni bugfix internal sync (audit temuan
+sesi sebelumnya, belum pernah benar-benar dirasakan/dilaporkan user secara
+langsung), sesuai kriteria file itu.
+
+Item 57 sudah dihapus dari `PLAN.md`. **Item 58 masih menggantung** (pre-order
+cocokkan pelanggan lewat nama, risiko nama kembar) — BELUM diputuskan user,
+perubahan perilaku terlihat user, minta persetujuan dulu sebelum eksekusi.
+
+---
+
 _Update sesi 2 September 2026 (sesi kesembilan hari yg sama). Versi kerja
 **2.33.5+74**, schemaVersion TETAP 37 (tidak ada migrasi — murni UI)._
 
