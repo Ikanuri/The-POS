@@ -130,13 +130,11 @@ layar/struk yang sama (bukan cuma "Sisa"-nya) — "Dibayar" sempat kelewat
 diperbaiki sekalian padahal satu card yang sama dengan "Sisa Tagihan",
 ketahuan user karena Total != Dibayar+Sisa jadi tidak nyambung.
 
-**Scope yang SENGAJA belum disentuh** (dipilih user lewat poll — fokus dulu
-ke laporan spesifik, bukan sapu bersih semua turunan `total-paid`):
-- **Buku Hutang** (`getDebtBook`, `getUnpaidTxDetails` di app_database.dart)
-  — angka hutang pelanggan bisa understated dengan pola bug yang SAMA
-  (belum diverifikasi/diperbaiki).
-- **`settleMergedDebt`** (engine pelunasan hutang gabungan Buku Hutang) —
-  variabel `sisa` di dalamnya pakai `tx.total - tx.paid` mentah juga.
+**Update audit 3 September 2026**: `getDebtBook`/`getUnpaidTxDetails` DAN
+`settleMergedDebt` SUDAH diperbaiki (net dari `change_given`, lihat
+`app_database.dart:4017-4143` & `:4416-4491`) — dicoret dari daftar
+"belum diverifikasi" di bawah. Sisa scope yang GENUINELY belum tersentuh:
+
 - **Tutup Kasir** (`getTodayCashRecap`, dipakai `tutup_kasir_screen.dart`)
   — TEMUAN LEBIH LUAS: "kas sistem" dihitung dari `SUM(paid)` mentah tanpa
   dikurangi kembalian SAMA SEKALI, bahkan di transaksi normal TANPA reuse
@@ -698,6 +696,78 @@ sampai user memutuskan salah satu opsi ini secara eksplisit.**
    `WHERE t.id IN (...)` di SQL utama, bukan post-filter di Dart — mirip
    pola JOIN `customers` yg dipakai utk fix filter pelanggan).
 
+
+## Item 59 — [KRITIS] Stok pre-order TIDAK PERNAH dipotong di seluruh
+   siklus hidupnya (audit menyeluruh 3 September 2026)
+
+   **Konfirmasi lewat pembacaan kode langsung, bukan dugaan.** Pre-order
+   memang didesain utk produk stok kosong (`PreorderEntries` di
+   `laci_meja_tables.dart:180`) — masuk akal stok TIDAK dipotong saat
+   pesan dibuat (barangnya belum ada, `payment_screen.dart:633-634,778-779`
+   sengaja kecualikan item pre-order dari `stockItems` saat checkout).
+   TAPI ditelusuri SELURUH jalur lanjutannya (`collectPreorderDeposit`
+   di `app_database.dart:7396-7451`, `fulfillPreorderQty`/
+   `fulfillPreorderEntry` di `app_database.dart:7636-7662`, dipanggil dari
+   tombol "Penuhi" `laci_meja_dashboard_screen.dart:1203-1206`) — TIDAK
+   ADA satu pun titik yang memanggil `_appendStock` sama sekali. Begitu
+   toko restock & barangnya diserahkan ke pelanggan pre-order ("Penuhi"),
+   stok sistem TIDAK PERNAH berkurang.
+
+   **Skenario konkret**: produk X stok 0 → pelanggan A pre-order 5 pcs
+   (DP dibayar, revenue tercatat) → toko restock 20 pcs (stok sistem 20)
+   → staf serahkan 5 pcs ke A, tap "Penuhi" → stok sistem TETAP 20,
+   padahal fisik cuma 15. Ini permanen & berulang tiap pre-order
+   dipenuhi — "Cek Stok"/nilai inventori makin overstated seiring waktu,
+   TIDAK BISA ketahuan kecuali opname fisik manual.
+
+   **Keputusan desain yang perlu diputuskan SEBELUM fix**: stok dipotong
+   SAAT DP dibayar (`collectPreorderDeposit`) atau SAAT barang benar²
+   diserahkan (`fulfillPreorderQty`/`fulfillPreorderEntry`)? Kandidat:
+   yang kedua lebih akurat scr fisik (uang bisa masuk duluan tapi barang
+   belum pindah tangan). Plus perlu one-time correction utk pre-order
+   yang SUDAH kadung "Dipenuhi" sebelum fix ini (stok sistemnya sudah
+   kadung salah, perlu koreksi manual/opname sekali).
+
+## Item 60 — [Berisiko, belum pasti] `voidTransaction` tidak cascade ke
+   entri Laci Meja tertaut (audit 3 September 2026)
+
+   `voidTransaction` (`app_database.dart:3255-3347`) reverse stok, poin
+   loyalty, status transaksi — TAPI tidak pernah menyentuh 3 tabel Laci
+   Meja (`PreorderEntries`/`LeftBehindItems`/`BorrowedItems`) walau baris
+   di sana bisa merujuk `transactionId`/`transactionItemId` milik
+   transaksi yang di-void. Query dashboard (`getLaciMejaPending`,
+   `watchPreorderEntries`, dll.) TIDAK memfilter status transaksi induk.
+
+   **Skenario konkret**: kasir salah input nota berisi pre-order (DP
+   sudah tercatat), void nota utk membatalkan → entri pre-order TETAP
+   tampil "pending" di dashboard/pengingat cart bar seolah masih
+   berlaku, padahal notanya sudah dibatalkan. Kalau nanti "Dipenuhi"
+   (ditambah Item 59 di atas), barang keluar toko tanpa tercatat sbg
+   penjualan valid maupun potongan stok yang benar. Berlaku sama utk
+   Titip/Ketinggalan & Pinjaman, bukan cuma pre-order.
+
+   **Belum diverifikasi**: seberapa sering kasir benar² void nota yg
+   punya entri Laci Meja tertaut di praktik nyata toko — belum ada
+   laporan user soal ini secara spesifik. Butuh keputusan: void ikut
+   membatalkan (bukan menghapus) entri Laci Meja tertaut, ATAU minimal
+   query dashboard ikut JOIN status transaksi induk & sembunyikan entri
+   dari nota void.
+
+## Item 61 — [Berisiko, minor] `voidPayment` pada DP pre-order tidak
+   sinkron balik `preorderEntries.paid` (audit 3 September 2026)
+
+   `voidPayment` (`app_database.dart:4278-4296`) sudah menolak
+   membatalkan baris `method == 'retur'/'edit'`, TAPI TIDAK menolak
+   baris pembayaran DP pre-order (note `'DP/jaminan pre-order'`). Kalau
+   dibatalkan lewat "Batalkan Pembayaran": `_reconcileTransactionTotals`
+   tetap menghitung ulang `paid`/status dgn BENAR (tidak ada uang
+   hilang scr nominal), TAPI `transactionItems.priceAtSale` yg sudah
+   dinaikkan dari Rp0 ke harga asli TIDAK dikembalikan ke Rp0, dan
+   `preorderEntries.paid` tetap `true` — status "DP sudah dibayar"
+   nyangkut walau pembayarannya sudah dibatalkan. Murni desync
+   administratif (bukan kehilangan uang), bisa membingungkan saat
+   rekonsiliasi Laci Meja. Fix kandidat: guard tambahan di `voidPayment`
+   (pola sama guard `retur`/`edit`) atau logic reverse eksplisit.
 
 ## Item 58 — Pre-order cocokkan pelanggan LEWAT NAMA (risiko nama kembar,
    audit 2 September 2026 — catatan risiko, JANGAN ubah tanpa persetujuan)
