@@ -14521,6 +14521,12 @@ class $LaciMejaEventsTable extends LaciMejaEvents
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _appliedAtMeta =
+      const VerificationMeta('appliedAt');
+  @override
+  late final GeneratedColumn<DateTime> appliedAt = GeneratedColumn<DateTime>(
+      'applied_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -14531,7 +14537,8 @@ class $LaciMejaEventsTable extends LaciMejaEvents
         note,
         deviceCode,
         locallyModified,
-        createdAt
+        createdAt,
+        appliedAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -14592,6 +14599,10 @@ class $LaciMejaEventsTable extends LaciMejaEvents
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     }
+    if (data.containsKey('applied_at')) {
+      context.handle(_appliedAtMeta,
+          appliedAt.isAcceptableOrUnknown(data['applied_at']!, _appliedAtMeta));
+    }
     return context;
   }
 
@@ -14619,6 +14630,8 @@ class $LaciMejaEventsTable extends LaciMejaEvents
           .read(DriftSqlType.bool, data['${effectivePrefix}locally_modified'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      appliedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}applied_at']),
     );
   }
 
@@ -14657,6 +14670,19 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
   final String? deviceCode;
   final bool locallyModified;
   final DateTime createdAt;
+
+  /// Waktu HOST menyetujui/menerapkan event ini (`applyLaciMejaProposals`),
+  /// BUKAN waktu kejadian fisik terjadi (itu [createdAt], tidak pernah
+  /// diubah). Item 57 — delta `dumpSince` host->klien murni pakai
+  /// `createdAt >= since` sehingga event yang dibuat klien SEBELUM
+  /// watermark sync berikutnya tidak pernah lolos balik ke klien manapun,
+  /// walau baru saja disetujui host — `locallyModified` klien nyangkut
+  /// selamanya & event yang sama diusulkan ulang tiap sync (data aman,
+  /// dibuang via `filterUnchangedLaciMejaProposals`, tapi payload usulan
+  /// tumbuh tanpa akhir). `appliedAt` dipakai SEBAGAI TAMBAHAN filter
+  /// delta (`createdAt >= since OR appliedAt >= since`) supaya event yang
+  /// baru disetujui host dijamin lolos ke sync klien berikutnya.
+  final DateTime? appliedAt;
   const LaciMejaEvent(
       {required this.id,
       required this.entityType,
@@ -14666,7 +14692,8 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
       this.note,
       this.deviceCode,
       required this.locallyModified,
-      required this.createdAt});
+      required this.createdAt,
+      this.appliedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -14683,6 +14710,9 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
     }
     map['locally_modified'] = Variable<bool>(locallyModified);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || appliedAt != null) {
+      map['applied_at'] = Variable<DateTime>(appliedAt);
+    }
     return map;
   }
 
@@ -14699,6 +14729,9 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
           : Value(deviceCode),
       locallyModified: Value(locallyModified),
       createdAt: Value(createdAt),
+      appliedAt: appliedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(appliedAt),
     );
   }
 
@@ -14715,6 +14748,7 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
       deviceCode: serializer.fromJson<String?>(json['deviceCode']),
       locallyModified: serializer.fromJson<bool>(json['locallyModified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      appliedAt: serializer.fromJson<DateTime?>(json['appliedAt']),
     );
   }
   @override
@@ -14730,6 +14764,7 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
       'deviceCode': serializer.toJson<String?>(deviceCode),
       'locallyModified': serializer.toJson<bool>(locallyModified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'appliedAt': serializer.toJson<DateTime?>(appliedAt),
     };
   }
 
@@ -14742,7 +14777,8 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
           Value<String?> note = const Value.absent(),
           Value<String?> deviceCode = const Value.absent(),
           bool? locallyModified,
-          DateTime? createdAt}) =>
+          DateTime? createdAt,
+          Value<DateTime?> appliedAt = const Value.absent()}) =>
       LaciMejaEvent(
         id: id ?? this.id,
         entityType: entityType ?? this.entityType,
@@ -14753,6 +14789,7 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
         deviceCode: deviceCode.present ? deviceCode.value : this.deviceCode,
         locallyModified: locallyModified ?? this.locallyModified,
         createdAt: createdAt ?? this.createdAt,
+        appliedAt: appliedAt.present ? appliedAt.value : this.appliedAt,
       );
   LaciMejaEvent copyWithCompanion(LaciMejaEventsCompanion data) {
     return LaciMejaEvent(
@@ -14769,6 +14806,7 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
           ? data.locallyModified.value
           : this.locallyModified,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      appliedAt: data.appliedAt.present ? data.appliedAt.value : this.appliedAt,
     );
   }
 
@@ -14783,14 +14821,15 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
           ..write('note: $note, ')
           ..write('deviceCode: $deviceCode, ')
           ..write('locallyModified: $locallyModified, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('appliedAt: $appliedAt')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, entityType, entryId, aksi, qty, note,
-      deviceCode, locallyModified, createdAt);
+      deviceCode, locallyModified, createdAt, appliedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -14803,7 +14842,8 @@ class LaciMejaEvent extends DataClass implements Insertable<LaciMejaEvent> {
           other.note == this.note &&
           other.deviceCode == this.deviceCode &&
           other.locallyModified == this.locallyModified &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.appliedAt == this.appliedAt);
 }
 
 class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
@@ -14816,6 +14856,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
   final Value<String?> deviceCode;
   final Value<bool> locallyModified;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> appliedAt;
   final Value<int> rowid;
   const LaciMejaEventsCompanion({
     this.id = const Value.absent(),
@@ -14827,6 +14868,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
     this.deviceCode = const Value.absent(),
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.appliedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LaciMejaEventsCompanion.insert({
@@ -14839,6 +14881,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
     this.deviceCode = const Value.absent(),
     this.locallyModified = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.appliedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         entityType = Value(entityType),
@@ -14854,6 +14897,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
     Expression<String>? deviceCode,
     Expression<bool>? locallyModified,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? appliedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -14866,6 +14910,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
       if (deviceCode != null) 'device_code': deviceCode,
       if (locallyModified != null) 'locally_modified': locallyModified,
       if (createdAt != null) 'created_at': createdAt,
+      if (appliedAt != null) 'applied_at': appliedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -14880,6 +14925,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
       Value<String?>? deviceCode,
       Value<bool>? locallyModified,
       Value<DateTime>? createdAt,
+      Value<DateTime?>? appliedAt,
       Value<int>? rowid}) {
     return LaciMejaEventsCompanion(
       id: id ?? this.id,
@@ -14891,6 +14937,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
       deviceCode: deviceCode ?? this.deviceCode,
       locallyModified: locallyModified ?? this.locallyModified,
       createdAt: createdAt ?? this.createdAt,
+      appliedAt: appliedAt ?? this.appliedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -14925,6 +14972,9 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (appliedAt.present) {
+      map['applied_at'] = Variable<DateTime>(appliedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -14943,6 +14993,7 @@ class LaciMejaEventsCompanion extends UpdateCompanion<LaciMejaEvent> {
           ..write('deviceCode: $deviceCode, ')
           ..write('locallyModified: $locallyModified, ')
           ..write('createdAt: $createdAt, ')
+          ..write('appliedAt: $appliedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -25541,6 +25592,7 @@ typedef $$LaciMejaEventsTableCreateCompanionBuilder = LaciMejaEventsCompanion
   Value<String?> deviceCode,
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
+  Value<DateTime?> appliedAt,
   Value<int> rowid,
 });
 typedef $$LaciMejaEventsTableUpdateCompanionBuilder = LaciMejaEventsCompanion
@@ -25554,6 +25606,7 @@ typedef $$LaciMejaEventsTableUpdateCompanionBuilder = LaciMejaEventsCompanion
   Value<String?> deviceCode,
   Value<bool> locallyModified,
   Value<DateTime> createdAt,
+  Value<DateTime?> appliedAt,
   Value<int> rowid,
 });
 
@@ -25593,6 +25646,9 @@ class $$LaciMejaEventsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get appliedAt => $composableBuilder(
+      column: $table.appliedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$LaciMejaEventsTableOrderingComposer
@@ -25631,6 +25687,9 @@ class $$LaciMejaEventsTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get appliedAt => $composableBuilder(
+      column: $table.appliedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$LaciMejaEventsTableAnnotationComposer
@@ -25668,6 +25727,9 @@ class $$LaciMejaEventsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get appliedAt =>
+      $composableBuilder(column: $table.appliedAt, builder: (column) => column);
 }
 
 class $$LaciMejaEventsTableTableManager extends RootTableManager<
@@ -25706,6 +25768,7 @@ class $$LaciMejaEventsTableTableManager extends RootTableManager<
             Value<String?> deviceCode = const Value.absent(),
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime?> appliedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               LaciMejaEventsCompanion(
@@ -25718,6 +25781,7 @@ class $$LaciMejaEventsTableTableManager extends RootTableManager<
             deviceCode: deviceCode,
             locallyModified: locallyModified,
             createdAt: createdAt,
+            appliedAt: appliedAt,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -25730,6 +25794,7 @@ class $$LaciMejaEventsTableTableManager extends RootTableManager<
             Value<String?> deviceCode = const Value.absent(),
             Value<bool> locallyModified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime?> appliedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               LaciMejaEventsCompanion.insert(
@@ -25742,6 +25807,7 @@ class $$LaciMejaEventsTableTableManager extends RootTableManager<
             deviceCode: deviceCode,
             locallyModified: locallyModified,
             createdAt: createdAt,
+            appliedAt: appliedAt,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
