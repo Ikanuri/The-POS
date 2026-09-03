@@ -160,6 +160,19 @@ class LaciMejaEvents extends Table {
       boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// Waktu HOST menyetujui/menerapkan event ini (`applyLaciMejaProposals`),
+  /// BUKAN waktu kejadian fisik terjadi (itu [createdAt], tidak pernah
+  /// diubah). Item 57 — delta `dumpSince` host->klien murni pakai
+  /// `createdAt >= since` sehingga event yang dibuat klien SEBELUM
+  /// watermark sync berikutnya tidak pernah lolos balik ke klien manapun,
+  /// walau baru saja disetujui host — `locallyModified` klien nyangkut
+  /// selamanya & event yang sama diusulkan ulang tiap sync (data aman,
+  /// dibuang via `filterUnchangedLaciMejaProposals`, tapi payload usulan
+  /// tumbuh tanpa akhir). `appliedAt` dipakai SEBAGAI TAMBAHAN filter
+  /// delta (`createdAt >= since OR appliedAt >= since`) supaya event yang
+  /// baru disetujui host dijamin lolos ke sync klien berikutnya.
+  DateTimeColumn get appliedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

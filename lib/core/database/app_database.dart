@@ -256,7 +256,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -701,6 +701,18 @@ class AppDatabase extends _$AppDatabase {
             // 'transactions').
             await _addColumnIfMissing('transactions', 'updated_at',
                 transactions, transactions.updatedAt, m);
+          }
+          if (from < 38) {
+            // Item 57 — `laci_meja_events` delta host->klien (`dumpSince`)
+            // cuma pakai `created_at` (waktu kejadian fisik, tidak boleh
+            // diubah), jadi event yang dibuat klien sebelum watermark sync
+            // berikutnya tidak pernah lolos balik walau host sudah
+            // menyetujuinya -> `locallyModified` klien nyangkut selamanya
+            // & payload usulan tumbuh terus. `appliedAt` dicap saat HOST
+            // menyetujui (`applyLaciMejaProposals`), dipakai tambahan di
+            // filter delta `dumpSince` (lihat kolom & case khusus terkait).
+            await _addColumnIfMissing('laci_meja_events', 'applied_at',
+                laciMejaEvents, laciMejaEvents.appliedAt, m);
           }
         },
         beforeOpen: (details) async {
@@ -5757,16 +5769,25 @@ class AppDatabase extends _$AppDatabase {
           ).get();
           dump[t] = rows.map((r) => r.data).toList();
         } else if (t == 'laci_meja_events') {
-          // Baris log tidak pernah di-update, jadi `created_at` saja sudah
-          // cukup jadi delta — dan full-dump TIDAK boleh dipakai di sini
+          // Baris log tidak pernah di-update, jadi `created_at` (waktu
+          // kejadian fisik) sendiri sudah cukup jadi delta UNTUK EVENT YANG
+          // BELUM PERNAH DIUSULKAN — full-dump TIDAK boleh dipakai di sini
           // (tabel ini tumbuh terus seiring waktu, beda dari price_tiers dkk
-          // yang ukurannya terikat jumlah produk). `entryId` polimorfik
-          // (dok di atas) — kecualikan baris yang entri induknya (di salah
-          // satu dari 3 tabel sesuai `entityType`) barusan ikut dikecualikan
-          // di atas krn milik transaksi void, supaya log tidak jadi yatim
-          // menunjuk entri yang tidak pernah sampai ke host.
+          // yang ukurannya terikat jumlah produk). TAPI event yang klien
+          // buat SEBELUM watermark sync berikutnya, lalu baru disetujui host
+          // SETELAHNYA, tidak akan pernah lolos filter `created_at` itu lagi
+          // — `locally_modified` klien nyangkut selamanya & payload usulan
+          // tumbuh tanpa akhir (Item 57). `applied_at` (dicap host saat
+          // `applyLaciMejaProposals` menyetujui) jadi filter TAMBAHAN supaya
+          // event yang baru disetujui dijamin ikut, kapan pun disetujuinya.
+          // `entryId` polimorfik (dok di atas) — kecualikan baris yang entri
+          // induknya (di salah satu dari 3 tabel sesuai `entityType`)
+          // barusan ikut dikecualikan di atas krn milik transaksi void,
+          // supaya log tidak jadi yatim menunjuk entri yang tidak pernah
+          // sampai ke host.
           final rows = await customSelect(
-            'SELECT * FROM "$t" WHERE created_at >= ? AND NOT ('
+            'SELECT * FROM "$t" WHERE (created_at >= ? OR applied_at >= ?) '
+            'AND NOT ('
             "(entity_type = 'titip' AND entry_id IN "
             '(SELECT id FROM left_behind_items WHERE transaction_id IN '
             "(SELECT id FROM transactions WHERE status = 'void'))) OR "
@@ -5777,7 +5798,10 @@ class AppDatabase extends _$AppDatabase {
             '(SELECT id FROM preorder_entries WHERE transaction_id IN '
             "(SELECT id FROM transactions WHERE status = 'void')))"
             ')',
-            variables: [Variable.withInt(sinceSec)],
+            variables: [
+              Variable.withInt(sinceSec),
+              Variable.withInt(sinceSec),
+            ],
           ).get();
           dump[t] = rows.map((r) => r.data).toList();
         } else {
@@ -7888,6 +7912,17 @@ class AppDatabase extends _$AppDatabase {
           // gagal "no such column".
           if (localColumns.contains('updated_at')) {
             cleaned['updated_at'] =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          }
+          // Item 57 — `laci_meja_events` tidak punya `updated_at` (baris log
+          // tidak pernah di-update, `createdAt` = waktu kejadian fisik yang
+          // tidak boleh diubah). `applied_at` dicap DI SINI, saat host
+          // menyetujui, dipakai filter delta tambahan di `dumpSince` supaya
+          // event ini dijamin lolos ke sync klien berikutnya kapan pun
+          // disetujui (lihat dok kolom di `laci_meja_tables.dart`).
+          if (entry.key == 'laci_meja_events' &&
+              localColumns.contains('applied_at')) {
+            cleaned['applied_at'] =
                 DateTime.now().millisecondsSinceEpoch ~/ 1000;
           }
           final cols = cleaned.keys.map((k) => '"$k"').join(', ');

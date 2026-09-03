@@ -133,7 +133,7 @@ void main() {
         reason: 'entri lama memang tidak punya tautan ke baris nota');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 37); // schemaVersion terkini
+    expect(ver.data.values.first, 38); // schemaVersion terkini
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
