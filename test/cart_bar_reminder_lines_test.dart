@@ -109,6 +109,10 @@ void main() {
         id: 'po1',
         productId: 'p1',
         productUnitId: 'u1',
+        // Item 58 — checkout SELALU mengisi `customerId` utk pelanggan
+        // terdaftar; seed di sini ikut mengisinya supaya cocok dgn
+        // pencocokan by-id (bukan lagi by-nama) pasca fix.
+        customerId: 'c1',
         customerName: 'Bu Artia',
         qtyOrdered: 2,
         depositQty: 2,

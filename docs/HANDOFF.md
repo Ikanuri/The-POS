@@ -5,6 +5,42 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 3 September 2026 (sesi kesebelas). Versi kerja **2.33.7+76**,
+schemaVersion TETAP 38 (tidak ada migrasi — kolom `PreorderEntries.customerId`
+sudah ada sejak v35, murni ubah logic query)._
+
+**Item 58 SELESAI (`a3b6235`)** — keputusan user sudah diambil sesi ini
+(lihat sesi sebelumnya di bawah, "Item 58 masih menggantung... BELUM
+diputuskan user" — sekarang sudah, dieksekusi langsung tanpa tanya ulang
+desain). `getOpenPreorderRefsForCustomer` (rujukan baris item struk ke nota
+pre-order asal) & `getLaciMejaPending` (pengingat cart bar) sebelumnya
+mencocokkan pre-order pelanggan SELALU lewat `PreorderEntries.customerName`
+persis, walau kolom `customerId` sudah ada & terisi dari checkout sejak v35
+— dua pelanggan TERDAFTAR beda id yang kebetulan namanya sama bisa saling
+tertaut pre-order-nya. Fix: kalau pemanggil punya `customerId` (pelanggan
+terdaftar) → pencocokan MURNI lewat `customerId`, TIDAK di-OR dengan nama.
+Pembeli ad-hoc (`customerId` null) tetap fallback ke `customerName` seperti
+sebelumnya — tidak diubah. `receipt_screen.dart` diteruskan `customer?.id`
+(variabel lokal yang sudah dimuat di `_load()`, sebelumnya tidak diteruskan
+ke query); `payment_screen.dart`/`laci_meja_provider.dart` SUDAH meneruskan
+`customerId` ke `getLaciMejaPending` sebelum sesi ini (tinggal ubah logic
+internalnya). Test baru `preorder_match_by_customer_id_test.dart` (skenario
+PERSIS nama kembar: 2 `customers` beda id nama sama "Budi", masing²
+punya pre-order terbuka beda nota — panggil dgn `customerId` A harus cuma
+dapat pre-order A) revert-verified. 2 test existing (`laci_meja_marks_and_
+reminder_test.dart`, `cart_bar_reminder_lines_test.dart`) diperbarui —
+seed `addPreorderEntry` ditambah `customerId` supaya mencerminkan alur
+nyata checkout pasca-v35.
+
+PATCHNOTES.md diupdate singkat (satu poin bugfix) — user pernah diberi
+tahu risikonya secara eksplisit sesi ini (audit "nama kembar"), meski
+belum ada laporan gejala nyata dari pemakaian.
+
+Item 58 sudah dihapus dari `PLAN.md`. Tidak ada item baru menggantung dari
+sesi ini.
+
+---
+
 _Update sesi 3 September 2026 (sesi kesepuluh). Versi kerja **2.33.6+75**,
 schemaVersion **38** (naik dari 37 — migrasi baru)._
 

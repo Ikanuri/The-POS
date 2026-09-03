@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 3 September 2026
+
+### 🐛 Perbaikan
+- **Pengingat pre-order pelanggan sekarang tidak lagi bisa tertukar
+  kalau ada dua pelanggan terdaftar dengan nama yang sama** (mis. dua
+  "Budi" berbeda) — sebelumnya pengingat titipan/pre-order di keranjang
+  kasir dan rujukan nota bisa saja mengambil data pesanan pelanggan
+  lain yang kebetulan namanya sama. Sekarang dicocokkan lewat data
+  pelanggan yang tersimpan, bukan lagi lewat nama saja.
+
 ## 2 September 2026
 
 ### ✨ Fitur Baru

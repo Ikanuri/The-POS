@@ -6756,13 +6756,13 @@ class AppDatabase extends _$AppDatabase {
   /// asli (mis. pelanggan pre-order tanpa DP, lalu belanja lagi di nota
   /// terpisah beberapa hari kemudian).
   ///
-  /// Cocokkan LEWAT NAMA saja — pola SAMA PERSIS dgn [getLaciMejaPending]
-  /// ("Pre-order: SELALU lewat nama, satu-satunya yang disimpan"), BUKAN
-  /// `getCustomerNamesForTransactions` ("nama ikut nota terkini"): kolom
-  /// `PreorderEntries.customerName` sendiri sudah jadi satu-satunya identitas
-  /// yang dipakai di SELURUH fitur pre-order sejak awal, konsisten dgn itu
-  /// lebih penting drpd menambah mekanisme identitas baru yang cuma dipakai
-  /// di sini.
+  /// Item 58 (audit sesi sebelumnya, lihat PLAN.md) — pelanggan TERDAFTAR
+  /// ([customerId] terisi) dicocokkan MURNI lewat `PreorderEntries.
+  /// customerId`, BUKAN nama: dua pelanggan terdaftar beda id yang kebetulan
+  /// namanya sama (mis. dua "Budi") sebelumnya bisa saling tertaut
+  /// pre-order-nya kalau cuma lewat nama. Pembeli ad-hoc ([customerId] null)
+  /// TETAP lewat nama seperti sebelumnya — satu-satunya identitas yang
+  /// tersedia utk kasus itu, pola sama dgn [getLaciMejaPending].
   ///
   /// [excludeTransactionId] — nota yang SEDANG dilihat, supaya pre-order
   /// milik nota itu sendiri tidak "merujuk ke dirinya sendiri". Baris tanpa
@@ -6772,14 +6772,18 @@ class AppDatabase extends _$AppDatabase {
   /// urutan dashboard) yang dipakai sbg rujukan.
   Future<Map<String, ({String transactionId, DateTime createdAt})>>
       getOpenPreorderRefsForCustomer({
+    String? customerId,
     required String customerName,
     required String excludeTransactionId,
   }) async {
+    final id = customerId?.trim() ?? '';
     final nama = customerName.trim();
-    if (nama.isEmpty) return {};
+    if (id.isEmpty && nama.isEmpty) return {};
     final rows = await (select(preorderEntries)
           ..where((t) =>
-              t.customerName.equals(nama) &
+              (id.isNotEmpty
+                  ? t.customerId.equals(id)
+                  : t.customerName.equals(nama)) &
               t.fulfilledAt.isNull() &
               t.cancelledAt.isNull() &
               t.transactionId.isNotNull() &
@@ -6955,15 +6959,20 @@ class AppDatabase extends _$AppDatabase {
                   t.customerNameText.equals(nama) & t.fullyReturnedAt.isNull()))
             .get();
 
-    // Pre-order: SELALU lewat nama (satu-satunya yang disimpan), + JOIN
-    // produk supaya baris cart bar bisa menyebut nama produknya.
+    // Pre-order: pelanggan TERDAFTAR (id terisi) dicocokkan MURNI lewat
+    // `customerId` (Item 58 — dua pelanggan beda id namanya bisa sama,
+    // JANGAN OR dgn nama), ad-hoc tetap lewat nama (satu-satunya identitas
+    // yg tersedia utk kasus itu). + JOIN produk supaya baris cart bar bisa
+    // menyebut nama produknya.
     final preorders = <PreorderPendingLine>[];
-    if (nama.isNotEmpty) {
+    if (id.isNotEmpty || nama.isNotEmpty) {
       final rows = await (select(preorderEntries).join([
         leftOuterJoin(
             products, products.id.equalsExp(preorderEntries.productId)),
       ])
-            ..where(preorderEntries.customerName.equals(nama) &
+            ..where((id.isNotEmpty
+                    ? preorderEntries.customerId.equals(id)
+                    : preorderEntries.customerName.equals(nama)) &
                 preorderEntries.fulfilledAt.isNull() &
                 preorderEntries.cancelledAt.isNull()))
           .get();
