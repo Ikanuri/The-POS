@@ -525,37 +525,6 @@ suatu saat dibutuhkan.
    pola JOIN `customers` yg dipakai utk fix filter pelanggan).
 
 
-## Item 59 — [KRITIS] Stok pre-order TIDAK PERNAH dipotong di seluruh
-   siklus hidupnya (audit menyeluruh 3 September 2026)
-
-   **Konfirmasi lewat pembacaan kode langsung, bukan dugaan.** Pre-order
-   memang didesain utk produk stok kosong (`PreorderEntries` di
-   `laci_meja_tables.dart:180`) — masuk akal stok TIDAK dipotong saat
-   pesan dibuat (barangnya belum ada, `payment_screen.dart:633-634,778-779`
-   sengaja kecualikan item pre-order dari `stockItems` saat checkout).
-   TAPI ditelusuri SELURUH jalur lanjutannya (`collectPreorderDeposit`
-   di `app_database.dart:7396-7451`, `fulfillPreorderQty`/
-   `fulfillPreorderEntry` di `app_database.dart:7636-7662`, dipanggil dari
-   tombol "Penuhi" `laci_meja_dashboard_screen.dart:1203-1206`) — TIDAK
-   ADA satu pun titik yang memanggil `_appendStock` sama sekali. Begitu
-   toko restock & barangnya diserahkan ke pelanggan pre-order ("Penuhi"),
-   stok sistem TIDAK PERNAH berkurang.
-
-   **Skenario konkret**: produk X stok 0 → pelanggan A pre-order 5 pcs
-   (DP dibayar, revenue tercatat) → toko restock 20 pcs (stok sistem 20)
-   → staf serahkan 5 pcs ke A, tap "Penuhi" → stok sistem TETAP 20,
-   padahal fisik cuma 15. Ini permanen & berulang tiap pre-order
-   dipenuhi — "Cek Stok"/nilai inventori makin overstated seiring waktu,
-   TIDAK BISA ketahuan kecuali opname fisik manual.
-
-   **Keputusan desain yang perlu diputuskan SEBELUM fix**: stok dipotong
-   SAAT DP dibayar (`collectPreorderDeposit`) atau SAAT barang benar²
-   diserahkan (`fulfillPreorderQty`/`fulfillPreorderEntry`)? Kandidat:
-   yang kedua lebih akurat scr fisik (uang bisa masuk duluan tapi barang
-   belum pindah tangan). Plus perlu one-time correction utk pre-order
-   yang SUDAH kadung "Dipenuhi" sebelum fix ini (stok sistemnya sudah
-   kadung salah, perlu koreksi manual/opname sekali).
-
 ## Item 60 — [Berisiko, belum pasti] `voidTransaction` tidak cascade ke
    entri Laci Meja tertaut (audit 3 September 2026)
 

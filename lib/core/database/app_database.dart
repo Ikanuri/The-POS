@@ -7362,30 +7362,54 @@ class AppDatabase extends _$AppDatabase {
   /// Penuhi SELURUH sisa sekaligus — pelengkap [fulfillPreorderQty] utk kasus
   /// paling umum. Sisa yang belum tercatat di log ikut ditulis sbg satu baris
   /// 'penuhi' supaya riwayatnya tidak bolong.
+  ///
+  /// Item 59 — barang baru benar² keluar dari stok toko SAAT ini (bukan saat
+  /// DP dibayar `collectPreorderDeposit`, uang bisa masuk duluan tapi barang
+  /// belum pindah tangan). `qtyChange` cuma [sisa] yang BELUM pernah terpotong
+  /// oleh pemenuhan sebagian sebelumnya (lihat dok `getLaciMejaTakenQty`) —
+  /// kalau `fulfillPreorderQty` sudah pernah dipanggil utk entri ini, sisanya
+  /// tidak dobel-hitung. Konsisten dgn checkout normal (`recordSale`), TIDAK
+  /// ada guard stok negatif di sini — app ini secara umum mengizinkan stok
+  /// jadi negatif saat keluar (checkout normal pun tidak block).
   Future<void> fulfillPreorderEntry(String id,
       {bool locallyModified = false,
       String? eventId,
       String? deviceCode}) async {
-    final row = await (select(preorderEntries)..where((t) => t.id.equals(id)))
-        .getSingle();
-    final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
-    final sisa = row.qtyOrdered - taken;
-    await recordLaciMejaEvent(
-      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
-      entityType: 'preorder',
-      entryId: id,
-      aksi: 'penuhi',
-      qty: sisa > 0 ? sisa : 0,
-      deviceCode: deviceCode,
-      locallyModified: locallyModified,
-    );
-    await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
-      PreorderEntriesCompanion(
-        fulfilledAt: Value(DateTime.now()),
-        locallyModified: Value(locallyModified),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+    return transaction(() async {
+      final row = await (select(preorderEntries)
+            ..where((t) => t.id.equals(id)))
+          .getSingle();
+      final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
+      final sisa = row.qtyOrdered - taken;
+      final now = DateTime.now();
+      await recordLaciMejaEvent(
+        id: eventId ?? '$id-${now.microsecondsSinceEpoch}',
+        entityType: 'preorder',
+        entryId: id,
+        aksi: 'penuhi',
+        qty: sisa > 0 ? sisa : 0,
+        deviceCode: deviceCode,
+        locallyModified: locallyModified,
+      );
+      if (sisa > 0) {
+        await _appendStock(
+          productUnitId: row.productUnitId,
+          qtyChange: -sisa,
+          type: 'preorder_fulfill',
+          referenceId: id,
+          kasirId: deviceCode,
+          note: 'Pre-order dipenuhi: ${row.customerName}',
+          now: now,
+        );
+      }
+      await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+        PreorderEntriesCompanion(
+          fulfilledAt: Value(now),
+          locallyModified: Value(locallyModified),
+          updatedAt: Value(now),
+        ),
+      );
+    });
   }
 
   /// Batalkan pre-order. Baris log `aksi = 'batal'` qty-nya 0 — pembatalan
@@ -7840,6 +7864,12 @@ class AppDatabase extends _$AppDatabase {
 
   /// Penuhi SEBAGIAN pre-order. Selesai (`fulfilledAt`) begitu akumulasi log
   /// mencapai `qtyOrdered`.
+  ///
+  /// Item 59 — [qtyFulfilled] dipotong dari stok toko SAAT INI (barang benar²
+  /// diserahkan), bukan saat DP dibayar. Type ledger `preorder_fulfill`
+  /// (terpisah dari `sale` biasa) supaya audit trail jelas: ini realisasi
+  /// fisik pre-order, bukan checkout baru. Tanpa guard stok negatif — samakan
+  /// dgn checkout normal yang juga tidak block stok kurang.
   Future<void> fulfillPreorderQty(
     String id,
     double qtyFulfilled, {
@@ -7847,25 +7877,40 @@ class AppDatabase extends _$AppDatabase {
     String? deviceCode,
     bool locallyModified = false,
   }) async {
-    final row = await (select(preorderEntries)..where((t) => t.id.equals(id)))
-        .getSingle();
-    await recordLaciMejaEvent(
-      id: eventId ?? '$id-${DateTime.now().microsecondsSinceEpoch}',
-      entityType: 'preorder',
-      entryId: id,
-      aksi: 'penuhi',
-      qty: qtyFulfilled,
-      deviceCode: deviceCode,
-      locallyModified: locallyModified,
-    );
-    final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
-    await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
-      PreorderEntriesCompanion(
-        fulfilledAt: Value(taken >= row.qtyOrdered ? DateTime.now() : null),
-        locallyModified: Value(locallyModified),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+    return transaction(() async {
+      final row = await (select(preorderEntries)
+            ..where((t) => t.id.equals(id)))
+          .getSingle();
+      final now = DateTime.now();
+      await recordLaciMejaEvent(
+        id: eventId ?? '$id-${now.microsecondsSinceEpoch}',
+        entityType: 'preorder',
+        entryId: id,
+        aksi: 'penuhi',
+        qty: qtyFulfilled,
+        deviceCode: deviceCode,
+        locallyModified: locallyModified,
+      );
+      if (qtyFulfilled > 0) {
+        await _appendStock(
+          productUnitId: row.productUnitId,
+          qtyChange: -qtyFulfilled,
+          type: 'preorder_fulfill',
+          referenceId: id,
+          kasirId: deviceCode,
+          note: 'Pre-order dipenuhi: ${row.customerName}',
+          now: now,
+        );
+      }
+      final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
+      await (update(preorderEntries)..where((t) => t.id.equals(id))).write(
+        PreorderEntriesCompanion(
+          fulfilledAt: Value(taken >= row.qtyOrdered ? now : null),
+          locallyModified: Value(locallyModified),
+          updatedAt: Value(now),
+        ),
+      );
+    });
   }
 
   /// Badge gabungan 3 kategori utk ikon Kasir (bottom nav) & kartu dashboard.
