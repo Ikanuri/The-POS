@@ -6,9 +6,16 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 4 September 2026 (sesi ketujuh belas). Versi kerja
-**2.37.0+84** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
+**2.38.0+85** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
 TETAP 38 (tidak ada migrasi — persistensi Pra-Bayar murni SharedPreferences,
 sama pola `cartMetaProvider`)._
+
+**Susulan (permintaan user) setelah fitur Pra-Bayar utama, `076afe9`**:
+`_HeldCard` (kartu antrian "Ditahan" di `kasir_screen.dart`) sekarang
+menampilkan badge kecil "Pra-Bayar Rp X" langsung di kartu (dibaca dari
+`_parseHeldPayload(order.cartJson).prabayar`) — sebelumnya nominal yang
+sudah terkunci tidak tampak sama sekali sebelum kartu di-tap & keranjang
+dibuka. Disembunyikan total kalau tidak ada entri Pra-Bayar.
 
 **Sesi ini**: fitur besar baru "Pra-Bayar" — kasir bisa mengunci sebagian
 pembayaran dari keranjang AKTIF (sebelum checkout beneran), keranjang tetap
