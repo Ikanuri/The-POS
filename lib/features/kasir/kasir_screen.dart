@@ -4091,6 +4091,31 @@ class _HeldCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
+            // Susulan (permintaan user) — ringkasan Pra-Bayar yang sudah
+            // terkunci di keranjang SEBELUM ditahan (persist via
+            // `HeldOrders.cartJson` key "prabayar", lihat `_parseHeldPayload`)
+            // sebelumnya tidak tampak sama sekali di kartu antrian, baru
+            // kelihatan setelah kartu di-tap & keranjang dibuka.
+            if (parsed.prabayar.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Icon(Icons.lock_clock_outlined, size: 11, color: cs.primary),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
+                      'Pra-Bayar ${formatRupiah(parsed.prabayar.fold<int>(0, (s, e) => s + e.amount))}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: cs.primary),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const Spacer(),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
