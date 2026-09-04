@@ -7,6 +7,66 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-04 (sesi ketujuh belas)
+
+- `d16c78c` — feat(kasir): fitur "Pra-Bayar" — kunci sebagian pembayaran di
+  keranjang aktif sebelum checkout. Kasir bisa "Kunci" nominal + metode
+  bayar dari keranjang yang MASIH aktif (berkali-kali, akumulatif, keranjang
+  tetap 100% bisa diedit bebas selama belum checkout beneran) — kasus nyata:
+  pelanggan pesan barang, bayar sebagian, lalu nambah/kurang barang lagi.
+  `cart_prabayar_provider.dart` baru (`PrabayarEntry`, `cartPrabayarProvider`
+  `StateNotifierProvider.family` per cartId, persist SharedPreferences pola
+  sama `CartMetaNotifier`, prefix `cartprabayar_v1_` + `cleanupOrphanPrabayar`
+  dipanggil `main.dart`). `cart_sheet.dart` — tombol "Pra-Bayar" (ikon
+  `lock_clock_outlined`, gerbang `terima_pembayaran` via
+  `needsPaymentGateProvider`, HANYA `kMainCartId`) buka `showDebtPaymentSheet`
+  yang sudah ada (`remaining` = total keranjang - totalLocked, clamp 0);
+  badge live "Pra-Bayar: Rp X terkunci · Sisa Rp Y" (atau "Kelebihan" kalau
+  negatif) di atas footer total, tap → sheet daftar entri (hapus per-entri).
+  Header sheet (7 IconButton sekarang) diubah dari `Row` statis jadi blok
+  ikon scroll horizontal (`reverse: true`) supaya TIDAK overflow di HP sempit
+  360dp (judul "Keranjang" tetap fixed di kiri) — fix
+  `cart_sheet_header_overflow_test.dart` yang sempat regresi gara-gara ikon
+  ke-7 ini.
+  `payment_screen.dart` — logika UANG paling sensitif diekstrak jadi fungsi
+  murni `buildPrabayarCheckout` (testable tanpa widget): `combinedPaid` =
+  lockedSum (entri Pra-Bayar) + `paidAmountNow` (pilihan kasir di layar
+  checkout); `status` = 'tempo' HANYA kalau `combinedPaid == 0` juga (selaras
+  invariant `_reconcileTransactionTotals` yang sudah ada — tempo murni cuma
+  valid kalau `paid == 0`), selain itu 'kurang_bayar'/'lunas' dari GABUNGAN
+  vs total; `combinedChange` = kelebihan gabungan. Tiap entri Pra-Bayar jadi
+  SATU baris `TransactionPayments` dgn `paidAt` = `lockedAt` ASLI (bukan
+  waktu checkout), ditambah (kalau ada) satu baris "sekarang"; kembalian
+  gabungan diatribusikan ke baris "sekarang" kalau ada, kalau tidak ke baris
+  Pra-Bayar PALING TERAKHIR. Kalau `lockedSum >= total`: bottom bar berganti
+  jadi tombol tunggal "Selesaikan Transaksi" (`_prabayarCoversTotal`),
+  keypad/"Bayar Nanti" disembunyikan total — kasir tidak perlu isi apa pun
+  lagi. `_prabayarEntries` SELALU kosong di mode Tambah Belanjaan
+  (`_isAddMode`) — logika baru sama sekali tidak aktif di sana.
+  `order_parser_service.dart` — `encodeHandoff`/`parse` bawa entri Pra-Bayar
+  MENTAH (`ParsedPrabayarEntry`) lewat baris meta baru `Prabayar:` (JSON
+  ringkas `[{a,m,n,t}]`) — service ini SENGAJA tidak tahu apa-apa soal
+  gerbang izin (layering core/services tidak boleh bergantung Riverpod);
+  keputusan adopsi/buang ada di pemanggil (`kasir_screen.dart._handleOrderCode`
+  DAN `paste_order_sheet.dart._addToCart`, kedua titik yg sama dgn fix
+  mismatch-harga sebelumnya) — device penerima TIDAK bergerbang → entri
+  Pra-Bayar DIBUANG SEPENUHNYA (barang tetap masuk normal), BUKAN
+  ditampilkan sebagian. Hold/resume (`kasir_screen.dart` `_holdCurrent`/
+  `_autoHoldCurrentIfAny`/`_resumeHeld`/`_parseHeldPayload`, key baru
+  `prabayar` di `HeldOrders.cartJson`) & clear keranjang (`cart_sheet.dart`
+  `_holdCurrent`/`_confirmClear`) ikut menyertakan/membersihkan entri
+  Pra-Bayar, sejalan dgn `cartProvider`/`cartMetaProvider`.
+  Test baru: `payment_prabayar_checkout_test.dart` (komposisi murni +
+  round-trip `AppDatabase` sungguhan — lockedSum < total, ==, >, interaksi
+  tempo), `order_parser_prabayar_test.dart` (encode/parse + JSON rusak),
+  `kasir_handoff_prabayar_test.dart` (adopsi vs buang sesuai gerbang
+  penerima), `kasir_prabayar_hold_resume_test.dart` (hold+resume via UI),
+  `cart_sheet_prabayar_test.dart` (gate visibility, badge live, hapus entri,
+  ubah qty → Sisa ikut berubah). Semua kategori revert-verified (gagal
+  sensible sebelum fix diterapkan, hijau lagi sesudahnya) — termasuk fix
+  overflow header di atas, yang ditemukan justru DARI full test suite
+  regresi saat menambah tombol ke-7.
+
 ## 2026-09-04 (sesi keenam belas)
 
 - `b9d57c7` — feat(kasir): peringatan mismatch harga saat transfer

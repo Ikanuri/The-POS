@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../database/app_database.dart';
 import '../models/cart_item.dart';
 import '../theme/app_theme.dart' show formatRupiah;
@@ -35,6 +37,14 @@ class OrderParserService {
   // BUKAN nomor baru. Beda dari kode #PSN: handoff pegawai lama yang tidak
   // membawa ini (fallback: penerima reservasi baru sendiri).
   static final RegExp _notaLine = RegExp(r'^Nota:\s*(.+)$', multiLine: true);
+  // Fitur Pra-Bayar — entri kunci pembayaran dari keranjang PENGIRIM, JSON
+  // ringkas satu baris (lihat [encodeHandoff]/[parse]). Data MENTAH saja di
+  // sini (service `core/` ini sengaja tidak boleh bergantung ke Riverpod utk
+  // tahu status gerbang izin PENERIMA) — keputusan adopsi/buang dilakukan
+  // PEMANGGIL yang sudah baca gate (`kasir_screen.dart`/`paste_order_sheet.
+  // dart`).
+  static final RegExp _prabayarLine =
+      RegExp(r'^Prabayar:\s*(.+)$', multiLine: true);
 
   /// Marker baris meta yang HARUS berada di awal baris agar regex `^...`
   /// di atas mengenalinya (lihat [_normalizeMetaLineBreaks]).
@@ -45,6 +55,7 @@ class OrderParserService {
     'Catatan:',
     'PelangganId:',
     'Nota:',
+    'Prabayar:',
   ];
 
   /// Sisipkan newline di depan marker meta (`Pegawai:`/`Nama:`/dst) bila
@@ -245,6 +256,26 @@ class OrderParserService {
     final note = _noteLine.firstMatch(text)?.group(1)?.trim();
     final employeeName = _employeeLine.firstMatch(text)?.group(1)?.trim();
     final notaId = _notaLine.firstMatch(text)?.group(1)?.trim();
+    final prabayarRaw = _prabayarLine.firstMatch(text)?.group(1)?.trim();
+    var prabayar = const <ParsedPrabayarEntry>[];
+    if (prabayarRaw != null && prabayarRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(prabayarRaw) as List;
+        prabayar = decoded.map((e) {
+          final m = e as Map<String, dynamic>;
+          return ParsedPrabayarEntry(
+            amount: m['a'] as int,
+            method: m['m'] as String,
+            methodName: m['n'] as String?,
+            lockedAtMs: m['t'] as int,
+          );
+        }).toList();
+      } catch (_) {
+        // Data rusak — abaikan prabayar, JANGAN gagalkan seluruh parse
+        // (barang tetap harus masuk normal).
+        prabayar = const <ParsedPrabayarEntry>[];
+      }
+    }
 
     // Item 4/57 — id pelanggan HANYA dipakai kalau benar-benar tersync
     // lokal di device penerima (mis. beda toko yg jarang sync, atau
@@ -271,6 +302,7 @@ class OrderParserService {
           (employeeName == null || employeeName.isEmpty) ? null : employeeName,
       reservedLocalId:
           (notaId == null || notaId.isEmpty) ? null : notaId,
+      prabayar: prabayar,
       hasMachineCode: true,
     );
   }
@@ -321,6 +353,11 @@ class OrderParserService {
   /// WhatsApp/chat SEBELUM scan, bukan cuma baris kode mentah. Null/kosong
   /// (default lama) skip bagian ini sepenuhnya — dipakai test lama yang
   /// tidak butuh header ini.
+  /// Fitur Pra-Bayar — entri Pra-Bayar keranjang PENGIRIM, ikut dibawa lewat
+  /// kode transfer sbg baris meta `Prabayar:` baru (data mentah, JSON
+  /// ringkas). Keputusan adopsi (device PENERIMA harus JUGA bergerbang
+  /// `terima_pembayaran`) dilakukan PEMANGGIL, BUKAN di sini — lihat dok
+  /// [_prabayarLine]/[ParsedOrder.prabayar].
   static String encodeHandoff({
     required List<CartItem> items,
     required String employeeName,
@@ -329,6 +366,8 @@ class OrderParserService {
     String? reservedLocalId,
     bool trustPrices = true,
     String? storeName,
+    List<({int amount, String method, String? methodName, int lockedAtMs})>?
+        prabayar,
   }) {
     final codeParts = items.map((c) {
       final flags = StringBuffer();
@@ -373,6 +412,17 @@ class OrderParserService {
     }
     if (reservedLocalId != null && reservedLocalId.isNotEmpty) {
       buf.write('\nNota: $reservedLocalId');
+    }
+    if (prabayar != null && prabayar.isNotEmpty) {
+      final encoded = jsonEncode(prabayar
+          .map((p) => {
+                'a': p.amount,
+                'm': p.method,
+                if (p.methodName != null) 'n': p.methodName,
+                't': p.lockedAtMs,
+              })
+          .toList());
+      buf.write('\nPrabayar: $encoded');
     }
     return buf.toString();
   }
@@ -540,6 +590,25 @@ class ParsedOrderItem {
       );
 }
 
+/// Fitur Pra-Bayar — satu entri Pra-Bayar MENTAH dari kode transfer (belum
+/// diadopsi ke `cartPrabayarProvider`, keputusan itu ada di pemanggil yang
+/// tahu status gerbang izin PENERIMA). Field & nama sengaja beda dari
+/// `PrabayarEntry` (features/kasir) — layer `core/services` ini tidak boleh
+/// bergantung ke provider Riverpod di `features/`.
+class ParsedPrabayarEntry {
+  const ParsedPrabayarEntry({
+    required this.amount,
+    required this.method,
+    this.methodName,
+    required this.lockedAtMs,
+  });
+
+  final int amount;
+  final String method;
+  final String? methodName;
+  final int lockedAtMs;
+}
+
 /// Hasil parsing teks pesanan.
 class ParsedOrder {
   const ParsedOrder({
@@ -551,6 +620,7 @@ class ParsedOrder {
     required this.note,
     required this.employeeName,
     this.reservedLocalId,
+    this.prabayar = const [],
     required this.hasMachineCode,
   });
 
@@ -582,6 +652,11 @@ class ParsedOrder {
   /// utuh (lihat dok `CartMeta.reservedLocalId`) — null kalau kode lama/tak
   /// ada (penerima reservasi baru sendiri).
   final String? reservedLocalId;
+
+  /// Fitur Pra-Bayar — entri Pra-Bayar MENTAH dari kode transfer (Item 4 di
+  /// PLAN.md fitur ini), kosong untuk pesanan pelanggan biasa (katalog HTML
+  /// TIDAK PERNAH mengisi baris `Prabayar:`). Lihat dok [ParsedPrabayarEntry].
+  final List<ParsedPrabayarEntry> prabayar;
 
   /// false bila teks yang ditempel sama sekali tidak mengandung kode mesin
   /// (`#PSN:...`) — dipakai UI untuk pesan error yang jelas, beda dari
