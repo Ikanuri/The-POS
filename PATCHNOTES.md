@@ -8,7 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## 4 September 2026
+## 4 September 2026 (sesi kelima belas)
+
+### ✨ Baru
+- **Tombol "Salin Kode Pesanan" di layar Struk** — buka nota transaksi
+  lama yang sudah selesai, ketuk ikon "Salin Kode Pesanan" di pojok
+  kanan atas, kode pesanan tersalin ke clipboard. Cocok untuk pelanggan
+  langganan yang beli barang sama tiap bulan — tinggal buka "Tempel
+  Pesanan" di kasir dan tempel, tidak perlu input satu-satu lagi. Harga
+  otomatis dipakai harga TERKINI, bukan harga lama di nota (kalau
+  sempat berubah). Barang yang sudah diretur/dikembalikan tidak ikut
+  disalin.
+
+## 4 September 2026 (sesi keempat belas)
 
 ### ✨ Baru
 - **Konverter "beli dengan nominal Rp" di layar tambah item** — untuk

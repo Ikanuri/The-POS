@@ -7,6 +7,20 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-04 (sesi kelima belas)
+
+- `2f3463c` — feat(kasir): tombol "Salin Kode Pesanan" di Struk untuk nota
+  lama. AppBar layar Struk (`receipt_screen.dart`) dapat ikon baru
+  (disembunyikan bila status `void`) yang membangun `List<CartItem>` dari
+  `transaction_items` nota lama — qty di-NET-kan per `productUnitId`
+  (baris retur negatif menetralkan; item sudah diretur penuh
+  dihilangkan) — lalu memanggil `OrderParserService.encodeHandoff`
+  (`trustPrices: false`, harga selalu di-resolve fresh saat ditempel
+  ulang, bukan harga nota lama) dan menyalin hasilnya ke clipboard.
+  Memudahkan kasir membuat ulang pesanan pelanggan langganan lewat
+  "Tempel Pesanan" tanpa input manual satu-satu. Test widget baru
+  `test/receipt_copy_order_code_test.dart`.
+
 ## 2026-09-04 (sesi keempat belas)
 
 - `df5d32b` — feat(kasir): konverter "beli dengan nominal Rp" di field

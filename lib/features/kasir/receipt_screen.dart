@@ -7,6 +7,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,8 +17,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
+import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/laci_meja_provider.dart';
+import '../../core/services/order_parser_service.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
@@ -2608,6 +2611,95 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     return null;
   }
 
+  /// Susulan (permintaan user) — "Salin Kode Pesanan" di nota LAMA/SUDAH
+  /// SELESAI, supaya pesanan pelanggan langganan (beli barang sama tiap
+  /// bulan) bisa dibuat ulang lewat "Tempel Pesanan" tanpa input manual
+  /// satu-satu. Mekanisme kodenya (`#PSN:...`) SUDAH ADA (dipakai fitur
+  /// Transfer Transaksi di `cart_sheet.dart`, `OrderParserService.
+  /// encodeHandoff`/`.parse`) — di sini cuma dipanggil dgn sumber
+  /// `List<CartItem>` yang dibangun dari `_items` (baris nota lama),
+  /// bukan keranjang aktif.
+  ///
+  /// - Qty per `productUnitId` di-NET-kan dulu (jumlah semua baris,
+  ///   termasuk baris retur qty negatif) — item yang sudah diretur PENUH
+  ///   (net <= 0) DIHILANGKAN, bukan ikut disalin dgn qty asli yang sudah
+  ///   tidak relevan. Baris retur sendiri tidak pernah jadi baris
+  ///   `CartItem` tersendiri (`encodeHandoff` tidak didesain utk qty
+  ///   negatif).
+  /// - `trustPrices: false` SENGAJA — harga nota lama bisa sudah beda dari
+  ///   harga sekarang, jadi flag harga (`p=`/`o=`/`k=`/`v=`) tidak
+  ///   disertakan sama sekali; sisi `parse()` otomatis resolve fresh dari
+  ///   harga TERKINI device penerima saat pesanan ini ditempel ulang
+  ///   (konsisten dgn prinsip yang sudah dipakai di seluruh
+  ///   `OrderParserService` utk katalog pelanggan).
+  /// - Atribut pre-order (`isPreorder`/`preorderPaid`/`depositQty`)
+  ///   SENGAJA tidak dibawa dari nota lama — hasil tempel ulang adalah
+  ///   transaksi BARU murni, bukan lanjutan pre-order lama.
+  /// - `reservedLocalId` dibiarkan null — nomor nota baru direservasi
+  ///   sendiri saat benar-benar ditempel, bukan lompat balik ke nomor nota
+  ///   lama.
+  Future<void> _copyOrderCode() async {
+    final tx = _tx;
+    if (tx == null) return;
+
+    // Qty net per productUnitId (jumlahkan semua baris termasuk retur
+    // negatif) — lihat dok di atas.
+    final netQty = <String, double>{};
+    for (final item in _items) {
+      netQty[item.productUnitId] =
+          (netQty[item.productUnitId] ?? 0) + item.qty;
+    }
+
+    final cartItems = <CartItem>[];
+    final seen = <String>{};
+    for (final item in _items) {
+      if (!seen.add(item.productUnitId)) continue; // 1 baris per unit
+      final qty = netQty[item.productUnitId] ?? 0;
+      if (qty <= 0) continue; // sudah diretur penuh (atau baris retur murni)
+      final parent = _parentItemOf(item);
+      cartItems.add(CartItem(
+        productId: item.productId,
+        productUnitId: item.productUnitId,
+        productName: _productNames[item.productId] ?? item.productId,
+        unitName: _unitNames[item.productUnitId] ?? '',
+        qty: qty,
+        price: item.priceAtSale,
+        originalPrice: item.originalPrice,
+        costPrice: item.costAtSale,
+        itemNote: item.itemNote,
+        parentProductId: parent?.productId,
+        parentProductUnitId: parent?.productUnitId,
+        isVariant: parent != null,
+      ));
+    }
+
+    if (cartItems.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak ada item untuk disalin')),
+      );
+      return;
+    }
+
+    final prefs = await _getStorePrefs();
+    if (!mounted) return;
+    final device = ref.read(deviceProvider);
+    final code = OrderParserService.encodeHandoff(
+      items: cartItems,
+      employeeName: device.deviceName,
+      customerName: _customer?.name ?? tx.customerName,
+      customerId: _customer?.id ?? tx.customerId,
+      trustPrices: false,
+      storeName: prefs.name.isNotEmpty ? prefs.name : device.storeName,
+    );
+
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Kode pesanan disalin')),
+    );
+  }
+
   Future<void> _showShareSheet() async {
     final prefs = await _getStorePrefs();
     final device = ref.read(deviceProvider);
@@ -2840,6 +2932,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               icon: const Icon(Icons.playlist_add),
               tooltip: '+ Catat',
               onPressed: () => _showCatatMenu(tx.id),
+            ),
+          // Susulan (permintaan user) — nota void batal, tidak valid
+          // dijadikan basis pesanan baru (pola sama dgn "+ Catat" di atas).
+          if (!isVoid)
+            IconButton(
+              icon: const Icon(Icons.repeat),
+              tooltip: 'Salin Kode Pesanan',
+              onPressed: () => _copyOrderCode(),
             ),
           IconButton(
             icon: const Icon(Icons.share_outlined),
