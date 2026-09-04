@@ -21,6 +21,7 @@ class CartItem {
     this.isPreorder = false,
     this.preorderPaid = false,
     this.depositQty,
+    this.priceMismatchLocal,
   });
 
   final String productId;
@@ -71,6 +72,21 @@ class CartItem {
   /// jaminan).
   final double? depositQty;
 
+  /// Susulan (Item transfer transaksi — peringatan mismatch harga):
+  /// terisi HANYA saat baris ini datang dari transfer transaksi antar
+  /// device toko sendiri (pengirim & penerima sama-sama berwenang
+  /// menimbang harga, lihat `needsPaymentGateProvider`) DAN harga yang
+  /// dipakai ([price], apa adanya dari pengirim) ternyata beda dari
+  /// resolve fresh lokal device penerima saat ini — berisi resolve fresh
+  /// itu (BUKAN [price]), murni informasional utk badge peringatan di
+  /// `cart_sheet.dart`. [price] yang tetap dipakai/tersimpan sbg
+  /// `priceAtSale`, field ini TIDAK PERNAH menimpanya (bukan auto-koreksi).
+  /// State EPHEMERAL — hanya hidup di `CartItem` keranjang aktif (state
+  /// Riverpod), TIDAK PERNAH ditulis ke tabel manapun & hilang begitu
+  /// checkout selesai. Null = tidak ada mismatch / tidak perlu tampil
+  /// apa pun (default, jalur lama).
+  final int? priceMismatchLocal;
+
   /// True bila varian ini menempel ke baris satuan induk [parentLine].
   /// Prioritas [parentProductUnitId] (presisi per-satuan); fallback ke
   /// [parentProductId] untuk data lama yang belum punya id satuan induk.
@@ -98,6 +114,7 @@ class CartItem {
     bool? isPreorder,
     bool? preorderPaid,
     Object? depositQty = _unset,
+    Object? priceMismatchLocal = _unset,
   }) =>
       CartItem(
         productId: productId,
@@ -122,6 +139,9 @@ class CartItem {
         depositQty: identical(depositQty, _unset)
             ? this.depositQty
             : depositQty as double?,
+        priceMismatchLocal: identical(priceMismatchLocal, _unset)
+            ? this.priceMismatchLocal
+            : priceMismatchLocal as int?,
       );
 
   Map<String, dynamic> toJson() => {

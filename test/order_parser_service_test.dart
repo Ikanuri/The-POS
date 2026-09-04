@@ -666,4 +666,150 @@ void main() {
       await db.close();
     });
   });
+
+  group('Susulan — peringatan mismatch harga transfer transaksi', () {
+    test(
+        'kode transfer (flag |p= ADA) dgn harga pengirim BEDA dari resolve '
+        'fresh lokal → priceTrustedFromSender=true, currentResolvedPrice = '
+        'harga LOKAL (bukan harga dari flag)', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Ayam Potong', price: 30000);
+      final u1 = await _unitIdOf(db, p1);
+
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Ayam Potong',
+          unitName: 'Kg',
+          qty: 2,
+          price: 27000, // Beda dari harga live DB penerima (30000).
+          originalPrice: 27000,
+          costPrice: 22000,
+        ),
+      ];
+      final encoded =
+          OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+      final result = await OrderParserService.parse(db: db, text: encoded);
+
+      final ayam = result.items.single;
+      expect(ayam.priceTrustedFromSender, isTrue);
+      expect(ayam.price, 27000,
+          reason: 'harga yg DIPAKAI tetap harga pengirim (bukan koreksi)');
+      expect(ayam.currentResolvedPrice, 30000,
+          reason: 'currentResolvedPrice harus harga fresh lokal PENERIMA');
+      await db.close();
+    });
+
+    test(
+        'kode transfer dgn harga pengirim SAMA dgn resolve fresh lokal → '
+        'currentResolvedPrice == price (tidak mismatch)', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Beras', price: 12000);
+      final u1 = await _unitIdOf(db, p1);
+
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Beras',
+          unitName: 'Kg',
+          qty: 1,
+          price: 12000,
+          originalPrice: 12000,
+          costPrice: 10000,
+        ),
+      ];
+      final encoded =
+          OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+      final result = await OrderParserService.parse(db: db, text: encoded);
+
+      final beras = result.items.single;
+      expect(beras.priceTrustedFromSender, isTrue);
+      expect(beras.currentResolvedPrice, beras.price);
+      await db.close();
+    });
+
+    test(
+        'kode transfer dgn trustPrices:false (pengirim tak berwenang) → '
+        'priceTrustedFromSender=false (flag |p= tidak disertakan)', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Ayam Potong', price: 30000);
+      final u1 = await _unitIdOf(db, p1);
+
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Ayam Potong',
+          unitName: 'Kg',
+          qty: 2,
+          price: 27000,
+          originalPrice: 27000,
+          costPrice: 22000,
+        ),
+      ];
+      final encoded = OrderParserService.encodeHandoff(
+          items: cart, employeeName: 'Budi', trustPrices: false);
+      final result = await OrderParserService.parse(db: db, text: encoded);
+
+      final ayam = result.items.single;
+      expect(ayam.priceTrustedFromSender, isFalse);
+      expect(ayam.currentResolvedPrice, ayam.price,
+          reason: 'tanpa flag harga, price = resolve fresh, jadi selalu sama');
+      await db.close();
+    });
+
+    test(
+        'kode katalog HTML pelanggan biasa (tanpa flag apa pun) → '
+        'priceTrustedFromSender=false', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Gula Pasir', price: 15000);
+      final u1 = await _unitIdOf(db, p1);
+
+      final text = '#PSN:$u1=2';
+      final result = await OrderParserService.parse(db: db, text: text);
+
+      expect(result.items.single.priceTrustedFromSender, isFalse);
+      await db.close();
+    });
+
+    test(
+        'baris dobel (unitId sama muncul 2x, digabung qty) tetap set '
+        'priceTrustedFromSender/currentResolvedPrice dari re-resolve, '
+        'bukan konstruktor lama', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Minyak', price: 32000);
+      final u1 = await _unitIdOf(db, p1);
+
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Minyak',
+          unitName: 'Liter',
+          qty: 1,
+          price: 28000, // Beda dari harga live DB (32000).
+          originalPrice: 28000,
+          costPrice: 24000,
+        ),
+      ];
+      final encoded =
+          OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+      // Duplikasi baris item manual (simulasi tempel 2x) — sisipkan segmen
+      // sama lagi sebelum baris meta.
+      final psnMatch = RegExp(r'#PSN:(.+)').firstMatch(encoded)!;
+      final itemPart = psnMatch.group(1)!;
+      final duped = encoded.replaceFirst(
+          '#PSN:$itemPart', '#PSN:$itemPart;$itemPart');
+
+      final result = await OrderParserService.parse(db: db, text: duped);
+      expect(result.items, hasLength(1));
+      final minyak = result.items.single;
+      expect(minyak.qty, 2, reason: 'qty digabung dari 2 baris identik');
+      expect(minyak.priceTrustedFromSender, isTrue);
+      expect(minyak.currentResolvedPrice, 32000);
+      await db.close();
+    });
+  });
 }
