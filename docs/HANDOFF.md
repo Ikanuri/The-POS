@@ -5,20 +5,60 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 4 September 2026 (sesi keempat belas). Versi kerja
-**2.34.0+81** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
+_Update sesi 4 September 2026 (sesi kelima belas). Versi kerja
+**2.35.0+82** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
 TETAP 38 (tidak ada migrasi)._
 
-**Sesi ini**: fitur susulan (permintaan user) — konverter kecil "beli
-dengan nominal Rp" di `item_entry_sheet.dart`, komit `df5d32b`. Kasir
-ketik nominal uang pelanggan, qty field Jumlah otomatis terisi hasil
-bagi nominal/harga satuan aktif (dibulatkan 3 desimal). Ikon kalkulator
-di sebelah label "Jumlah", cuma tampil saat `_price > 0 && !_priceLocked`
-(disembunyikan saat pre-order tanpa DP, harga terkunci ke 0). Tidak ada
-perubahan skema DB. Juga: PLAN.md dikoreksi — item 55/60/61 sempat
-salah tercatat masih terbuka (agen sesi sebelumnya klaim sudah dihapus
-tapi ternyata belum), sudah diverifikasi kode-nya genuinely ada &
-dihapus dari PLAN.md di komit `80c9833`.
+**Sesi ini**: tombol baru "Salin Kode Pesanan" di layar Struk
+(`receipt_screen.dart`), komit `2f3463c` — mengisi gap: mekanisme kode
+`#PSN:...` (`OrderParserService.encodeHandoff`/`.parse`, sudah dipakai
+fitur Transfer Transaksi di `cart_sheet.dart`) sebelumnya HANYA bisa
+dipicu dari keranjang AKTIF, tidak pernah dari nota LAMA/SUDAH SELESAI.
+Sekarang kasir bisa buka nota lama pelanggan langganan, tap tombol ini,
+kode pesanan tersalin ke clipboard, lalu "Tempel Pesanan" di kasir untuk
+membuat ulang transaksi yang sama persis tanpa input manual satu-satu.
+
+Detail implementasi (`_copyOrderCode` di `receipt_screen.dart`):
+- Ikon `Icons.repeat` di AppBar, disembunyikan bila `tx.status == 'void'`
+  (nota batal tidak valid jadi basis pesanan baru) — pola sama dgn
+  gating tombol "+ Catat" yang sudah ada.
+- `List<CartItem>` dibangun dari `_items` (`transaction_items`), qty
+  di-NET-kan per `productUnitId` (jumlah semua baris termasuk baris
+  retur qty negatif) — item yang net-nya <=0 (sudah diretur PENUH)
+  DIHILANGKAN, bukan ikut disalin dgn qty asli yang sudah tidak
+  relevan. Semua item net 0 → tombol tetap tampil, SnackBar "Tidak ada
+  item untuk disalin" (bukan silent no-op).
+- `trustPrices: false` SENGAJA di `encodeHandoff` — harga nota lama bisa
+  sudah beda dari harga sekarang, jadi flag harga (`p=`/`o=`/`k=`/`v=`)
+  tidak disertakan; sisi `parse()` resolve fresh dari harga TERKINI saat
+  ditempel ulang.
+- Atribut pre-order (`isPreorder`/`preorderPaid`/`depositQty`) SENGAJA
+  tidak dibawa dari nota lama (hasil tempel adalah transaksi baru murni).
+  `reservedLocalId` juga null (reservasi nomor nota baru sendiri).
+- `customerName`/`customerId` ikut dibawa (dari `_customer`/`tx`) supaya
+  pelanggan otomatis terisi di sisi "Tempel Pesanan".
+- `employeeName` = `device.deviceName` (device SAAT INI melakukan salin,
+  bukan `storeName` — beda konsep). `storeName` diisi supaya blok
+  manusiawi "PESANAN — toko / daftar / Total" ikut muncul (memudahkan
+  verifikasi visual sebelum ditempel) — Total di blok ini pakai harga
+  `priceAtSale`/`originalPrice` nota LAMA sbg estimasi tampilan saja
+  (TIDAK ikut terkirim sbg flag mesin krn `trustPrices: false`), jadi
+  bisa saja beda dari harga final setelah resolve fresh di sisi
+  penerima — cukup utk sekilas cek visual, bukan angka final.
+- `OrderParserService`/`encodeHandoff`/`parse` **TIDAK diubah sama
+  sekali** — sudah cukup generik, cukup dipanggil dgn parameter yang
+  tepat.
+
+Test baru `test/receipt_copy_order_code_test.dart` (harness
+`pumpWithFakeApp`) — 4 skenario, semua revert-verified: (1) nota biasa
+induk+varian → qty benar, tanpa flag harga, (2) item diretur penuh
+dikecualikan (qty net, bukan qty kotor), (3) tombol hilang di nota void,
+(4) semua item net 0 → SnackBar "Tidak ada item untuk disalin". Full
+`flutter test` (1342 test) — 2 gagal, KEDUANYA di
+`proposal_unchanged_end_to_end_test.dart` (flaky pra-eksisting sudah
+terdokumentasi, port 8625 bentrok saat suite penuh paralel — dikonfirmasi
+ULANG lulus 100% saat dijalankan sendirian). `flutter analyze` bersih (0
+issue).
 
 **PLAN.md — status ringkas item yang masih terbuka** (per sesi ini):
 Item 47 (ekspor pengeluaran PDF/Excel, disetujui & ditahan), Item 48
