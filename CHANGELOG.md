@@ -7,6 +7,33 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-04 (sesi keenam belas)
+
+- `b9d57c7` — feat(kasir): peringatan mismatch harga saat transfer
+  transaksi antar device. Transfer Transaksi (`OrderParserService.
+  encodeHandoff`/`.parse`, dipakai `cart_sheet.dart`/`kasir_screen.
+  dart`/`paste_order_sheet.dart`) mempercayai harga pengirim mentah-
+  mentah (`trustPrices`) tanpa pernah membandingkannya ke harga fresh
+  lokal penerima — walau `parse()` sudah selalu resolve harga itu utk
+  kebutuhan lain, hasilnya dulu dibuang. Sekarang, kalau pengirim DAN
+  penerima sama-sama BERWENANG (tidak digerbang izin
+  `terima_pembayaran`) tapi harga yang dibawa ternyata beda dari
+  resolve fresh lokal saat ini, tampilkan badge peringatan
+  informasional di baris keranjang penerima (`CartItem.
+  priceMismatchLocal`, style sama pola `itemNote` tapi warna
+  `scheme.error`) — harga yang dipakai/tersimpan TETAP harga pengirim,
+  BUKAN auto-koreksi. Penerima tak berwenang di-skip (device itu toh
+  ke-gate lagi di tombol Bayar). `ParsedOrderItem` dapat 2 field baru
+  (`priceTrustedFromSender`, `currentResolvedPrice`); keputusan
+  tampil/tidak dihitung di `kasir_screen.dart._handleOrderCode` DAN
+  `paste_order_sheet.dart._addToCart` (sheet ini juga bisa memproses
+  kode transfer yang ditempel manual, bukan cuma katalog pelanggan) —
+  dua-duanya pakai `await needsPaymentGateProvider.future` (bukan baca
+  sync `.valueOrNull`) krn provider `autoDispose` ini ke-reset saat
+  build `KasirScreen` berganti total ke layar scanner kamera (bug yg
+  kepergok lewat revert-verify test). State `priceMismatchLocal` murni
+  ephemeral (keranjang aktif), tidak pernah ditulis ke tabel manapun.
+
 ## 2026-09-04 (sesi kelima belas)
 
 - `2f3463c` — feat(kasir): tombol "Salin Kode Pesanan" di Struk untuk nota

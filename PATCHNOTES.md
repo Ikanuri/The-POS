@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 4 September 2026 (sesi keenam belas)
+
+### ✨ Baru
+- **Peringatan kalau harga transfer transaksi beda dari harga lokal** —
+  saat menerima transfer transaksi dari device lain (mis. asisten kirim
+  ke owner atau sebaliknya), kalau ternyata harga yang dibawa beda dari
+  harga terkini di device penerima (mis. harga sempat diubah di device
+  lain), sekarang muncul kotak peringatan kecil di bawah barang itu di
+  keranjang — menampilkan harga lokal (dicoret) dan harga yang dipakai.
+  Ini murni pemberitahuan; harga yang tersimpan di transaksi tetap
+  harga dari pengirim, tidak berubah otomatis. Mencegah kasir/owner
+  salah sangka saat ada perbedaan harga tanpa sadar.
+
 ## 4 September 2026 (sesi kelima belas)
 
 ### ✨ Baru

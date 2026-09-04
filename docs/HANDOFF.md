@@ -5,6 +5,72 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 4 September 2026 (sesi keenam belas). Versi kerja
+**2.36.0+83** (MINOR naik — badge peringatan baru terlihat pengguna),
+schemaVersion TETAP 38 (tidak ada migrasi)._
+
+**Sesi ini**: peringatan mismatch harga transfer transaksi antar device,
+komit `b9d57c7`. Transfer Transaksi (`OrderParserService.encodeHandoff`/
+`.parse`) mempercayai harga pengirim mentah-mentah (`trustPrices`) tanpa
+pernah membandingkannya ke harga fresh lokal penerima — walau `parse()`
+sudah SELALU resolve harga itu (variabel `resolved`/`reResolved`) utk
+kebutuhan lain, hasilnya dulu dibuang begitu saja kalau flag harga ada.
+
+Implementasi:
+- `ParsedOrderItem` (`order_parser_service.dart`) dapat 2 field baru:
+  `priceTrustedFromSender` (true kalau flag `p=` ADA di segmen item —
+  cuma diisi kode transfer `trustPrices: true`, TIDAK PERNAH katalog HTML
+  pelanggan) & `currentResolvedPrice` (harga resolve fresh LOKAL, diisi
+  di KEDUA titik construction di `parse()`). `encodeHandoff` TIDAK diubah.
+  `toCartItem()` dapat parameter opsional `priceMismatchLocal` (default
+  null, tidak breaking call site lama).
+- `CartItem` (`cart_item.dart`) dapat field baru `priceMismatchLocal`
+  (nullable, EPHEMERAL — tidak pernah ditulis ke tabel manapun, hilang
+  saat checkout). Ditambahkan juga ke `copyWith` (pola sentinel `_unset`
+  sama seperti `itemNote`/`depositQty`) — TANPA ini, merge duplikat
+  scan/qty (`cart_provider.dart` banyak pakai `copyWith(qty:...)`) akan
+  diam-diam menghapus field ini tiap kali qty berubah.
+- Titik keputusan tampil/tidak (`showMismatch = priceTrustedFromSender &&
+  !receiverNeedsGate && price != currentResolvedPrice`) ada di DUA
+  tempat: `kasir_screen.dart._handleOrderCode` (cabang `employeeName !=
+  null`, baik jalur merge ke keranjang aktif maupun — TIDAK dipasang di
+  jalur held_orders krn payload JSON situ tidak menyerap field ephemeral
+  ini sama sekali) DAN `paste_order_sheet.dart._addToCart` — sheet ini
+  SECARA UMUM dipakai "Tempel Pesanan" pelanggan biasa TAPI tidak
+  membedakan kode transfer yang ditempel MANUAL (employeeName terisi),
+  jadi logika yang sama wajib diterapkan di sana juga (no-op aman utk
+  katalog biasa krn `priceTrustedFromSender` selalu false di jalur itu).
+- **Bug ditemukan LEWAT langkah revert-verify** (bukan cuma lolos
+  kebetulan): kedua titik di atas awalnya baca `ref.read(
+  needsPaymentGateProvider).valueOrNull ?? false` (sync) — provider ini
+  `autoDispose` & satu-satunya watcher biasa `_CartMetaTab`, yang TIDAK
+  ikut ter-build saat scanner kamera terbuka (build() `KasirScreen`
+  ganti total ke layar scanner). Akibatnya provider ke-dispose & reset
+  ke `AsyncLoading` PERSIS saat titik ini dieksekusi dari callback scan
+  → baca sync selalu jatuh ke default `false` (salah utk pegawai tak
+  berizin, harusnya `true`) — BUKAN race jarang, tapi rusak sistematis
+  tiap kali scan. Fix: `await ref.read(needsPaymentGateProvider.future)`
+  di kedua tempat (dibungkus try/catch, fallback false kalau gagal).
+- UI badge (`cart_sheet.dart`) — REUSE pola visual badge `itemNote`
+  (border kiri + background tint) tapi warna `scheme.error`, taruh
+  TERPISAH di bawah subtotal (bukan inline di baris "unitName · harga"
+  yang sudah sesak, risiko overflow HP sempit) — isi `Text.rich` harga
+  lokal dicoret (`TextDecoration.lineThrough`) → harga dipakai (tebal).
+
+Test baru: `test/order_parser_service_test.dart` (5 skenario logic murni
+`priceTrustedFromSender`/`currentResolvedPrice`, termasuk kasus baris
+dobel/gabung qty) + `test/kasir_handoff_price_mismatch_test.dart` (3
+skenario widget end-to-end via fake `MobileScannerPlatform`: owner
+menerima dari pengirim berwenang dgn harga beda → badge tampil kedua
+nominal; harga sama → tidak tampil; penerima pegawai tak berizin →
+skip). Semua revert-verified (bug gate provider di atas KETEMU justru
+lewat langkah ini). Full `flutter test` (1351 test) — 1 gagal, di
+`proposal_unchanged_end_to_end_test.dart` (flaky pra-eksisting
+terdokumentasi, port 8625 bentrok saat suite penuh paralel — dikonfirmasi
+ULANG lulus 100% sendirian). `flutter analyze` bersih (0 issue).
+
+---
+
 _Update sesi 4 September 2026 (sesi kelima belas). Versi kerja
 **2.35.0+82** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
 TETAP 38 (tidak ada migrasi)._
