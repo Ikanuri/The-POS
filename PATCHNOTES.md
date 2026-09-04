@@ -8,6 +8,33 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 4 September 2026 (sesi ketujuh belas)
+
+### ✨ Baru
+- **Fitur "Pra-Bayar" di keranjang kasir** — sekarang bisa kunci sebagian
+  pembayaran dari keranjang yang masih aktif (belum checkout), sambil
+  keranjang tetap bebas diedit (tambah/kurang barang). Kasus nyata:
+  pelanggan pesan barang, bayar sebagian dulu, lalu masih mau
+  nambah/kurangi belanjaan sebelum benar-benar bayar penuh — uangnya yang
+  sudah diterima tetap "nempel" & terbawa otomatis ke pembayaran akhir,
+  tidak perlu jadi nota lunas dulu baru bisa diedit.
+  - Buka keranjang → tombol baru ikon gembok jam "Pra-Bayar" di header
+    (tersedia utk owner/asisten/pegawai yang punya izin terima
+    pembayaran). Tap → pilih nominal & metode bayar, bisa dikunci
+    berkali-kali.
+  - Ringkasan "Pra-Bayar: Rp X terkunci · Sisa Rp Y" tampil live di atas
+    total keranjang — otomatis update kalau isi keranjang diubah. Tap
+    ringkasan itu untuk lihat daftar & menghapus entri yang salah input
+    (selama belum checkout).
+  - Saat checkout: kalau uang yang sudah dikunci sudah menutup/melebihi
+    total belanja, tinggal tap "Selesaikan Transaksi" — tidak perlu isi
+    kalkulator lagi. Kalau belum cukup, layar bayar berjalan seperti
+    biasa untuk sisanya.
+  - Entri Pra-Bayar ikut tersimpan kalau pesanan ditahan (Antrian) dan
+    kalau pesanan dipindah ke device lain lewat Transfer Transaksi/QR
+    (device penerima harus punya izin terima pembayaran juga, kalau
+    tidak entri ini tidak ikut terbawa — barangnya tetap masuk normal).
+
 ## 4 September 2026 (sesi keenam belas)
 
 ### ✨ Baru

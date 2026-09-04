@@ -5,6 +5,121 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 4 September 2026 (sesi ketujuh belas). Versi kerja
+**2.37.0+84** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
+TETAP 38 (tidak ada migrasi — persistensi Pra-Bayar murni SharedPreferences,
+sama pola `cartMetaProvider`)._
+
+**Sesi ini**: fitur besar baru "Pra-Bayar" — kasir bisa mengunci sebagian
+pembayaran dari keranjang AKTIF (sebelum checkout beneran), keranjang tetap
+100% bisa diedit bebas sesudahnya. Komit `d16c78c`.
+
+**Provider baru**: `lib/features/kasir/cart_prabayar_provider.dart` —
+`PrabayarEntry {id, amount, method, methodName, lockedAt}` +
+`cartPrabayarProvider` (`StateNotifierProvider.family<CartPrabayarNotifier,
+List<PrabayarEntry>, String>`, key = cartId SAMA dgn `cartProvider`/
+`cartMetaProvider` — `kMainCartId`/txId tambah belanjaan, walau fitur ini
+TIDAK dipakai di mode itu). Persist SharedPreferences prefix
+`cartprabayar_v1_<cartId>`, pola identik `CartMetaNotifier` (termasuk
+`cleanupOrphanPrabayar()`, dipanggil `main.dart` sejajar
+`cleanupOrphanCarts`/`cleanupOrphanMeta`). `notifier.totalLocked` = sum
+amount semua entri.
+
+**Titik integrasi checkout (`payment_screen.dart`, BAGIAN PALING SENSITIF)**:
+- Fungsi MURNI `buildPrabayarCheckout()` (di top-level file, testable tanpa
+  widget) — input: `cartTotal`, `prabayarEntries`, `paidAmountNow` (pilihan
+  kasir DI LAYAR INI, 0 kalau `isTempo` atau lockedSum sudah menutup total),
+  `isTempo`, metode/nama "sekarang", `now`, `kasirId`, `genId`. Output
+  `PrabayarCheckoutResult {combinedPaid, status, combinedChange, payments,
+  displayMethodType, displayMethodName}`.
+- **Keputusan kunci**: `status` = gabungan (`lockedSum + paidAmountNow`) vs
+  `cartTotal` — BUKAN cuma `paidAmountNow` sendirian. `'tempo'` HANYA valid
+  kalau `combinedPaid == 0` JUGA (kalau ada Pra-Bayar tapi kasir pilih
+  "Bayar Nanti" utk sisanya, itu BUKAN tempo murni lagi — jatuh ke
+  `kurang_bayar`/`lunas` sesuai gabungan). Ini SENGAJA diselaraskan dgn
+  invariant yang SUDAH ADA di `_reconcileTransactionTotals` (status tempo
+  cuma dipertahankan kalau `paid == 0`) — bukan aturan baru, cuma konsisten.
+- Tiap entri Pra-Bayar → 1 baris `TransactionPayments`, `paidAt` = `lockedAt`
+  ASLI (bukan waktu checkout). Kalau ada `paidAmountNow > 0` → 1 baris
+  tambahan `paidAt` = sekarang. `combinedChange` (kelebihan gabungan)
+  diatribusikan ke baris "sekarang" kalau ada; kalau TIDAK ada (lockedSum
+  sendiri sudah menutup/melebihi total) → ke baris Pra-Bayar PALING
+  TERAKHIR (bukan hilang).
+- **`lockedSum >= cartTotal`** (`_prabayarCoversTotal` getter): bottom bar
+  jadi SATU tombol "Selesaikan Transaksi" (bukan Row Bayar/Bayar Nanti) —
+  `_tendered` dipaksa 0, auto lunas + kembalian dari kelebihan lockedSum.
+  Kasir TIDAK PERNAH diminta isi keypad/pilih metode di kasus ini.
+- `_prabayarEntries` getter mengembalikan `const []` kalau `_isAddMode` —
+  fitur ini TIDAK aktif SAMA SEKALI di mode Tambah Belanjaan
+  (`_confirmAddItems` tidak disentuh sedikit pun).
+- Setelah checkout sukses: `cartPrabayarProvider(_cartId).notifier.clear()`
+  sejajar `cartProvider`/`cartMetaProvider`.
+
+**UI (`cart_sheet.dart`)**: tombol "Pra-Bayar" (ikon `lock_clock_outlined`,
+HANYA `kMainCartId` + gerbang `terima_pembayaran` via
+`needsPaymentGateProvider` — pola sama `canTransfer`) buka
+`showDebtPaymentSheet` YANG SUDAH ADA (`remaining` = total keranjang -
+totalLocked, clamp 0, TIDAK di-cap paksa di atas itu — sheet sendiri sudah
+punya kalkulator bebas). Hasil → `PrabayarEntry` baru. Badge live di atas
+footer total: "Pra-Bayar: Rp X terkunci · Sisa Rp Y" (atau "Kelebihan ...
+jadi kembalian saat checkout" kalau negatif) — tap → sheet daftar entri
+(hapus per-entri, selama belum checkout).
+**Efek samping penting**: menambah ikon ke-7 di header sheet bikin baris
+IconButton OVERFLOW di HP sempit 360dp (regresi ke
+`cart_sheet_header_overflow_test.dart`, KETEMU justru dari full test suite,
+bukan test baru) — fix: blok ikon (semua KECUALI judul "Keranjang") sekarang
+`SingleChildScrollView(scrollDirection: horizontal, reverse: true)`, bukan
+`Row` statis lagi. Kalau nambah ikon lagi ke depan, INI SUDAH aman
+(scroll), tidak perlu pola `IconButtonTheme` minimumSize manual lagi
+sebagai satu-satunya pertahanan.
+
+**Transfer QR / Tempel Pesanan (`order_parser_service.dart`)**:
+`encodeHandoff`/`parse` bawa entri Pra-Bayar MENTAH (`ParsedPrabayarEntry
+{amount, method, methodName, lockedAtMs}`) lewat baris meta baru
+`Prabayar: <json ringkas [{a,m,n,t}]>`. Service ini SENGAJA TIDAK tahu
+gerbang izin (layering core/services vs Riverpod) — `ParsedOrder.prabayar`
+cuma data mentah. **Keputusan adopsi** (device penerima harus JUGA
+bergerbang `terima_pembayaran`, dicek via `.future` BUKAN sync — pola yg
+sama dgn fix mismatch-harga sesi lalu) ada di 2 titik: `kasir_screen.dart.
+_handleOrderCode` (baik jalur merge-ke-keranjang-aktif maupun jalur
+held_orders — payload dapat key `'prabayar'` baru) DAN
+`paste_order_sheet.dart._addToCart`. Device TIDAK bergerbang → entri Pra-
+Bayar DIBUANG SEPENUHNYA, barang tetap masuk normal (bukan sebagian).
+
+**Held Orders**: `HeldOrders.cartJson` (`kasir_screen.dart`) dapat key baru
+`'prabayar'` — `_holdCurrent`/`_autoHoldCurrentIfAny` menulisnya (dari
+`cartPrabayarProvider(_cartId)`, lalu `.clear()` provider aktif — sejalan
+`cartProvider`/`cartMetaProvider`), `_parseHeldPayload` mem-parsingnya
+(fallback list kosong utk payload lama pra-fitur ini), `_resumeHeld`
+me-restore via `.replaceAll(...)`. `cart_sheet.dart` `_holdCurrent`/
+`_confirmClear` juga ikut menyertakan/membersihkan (pola sama).
+
+**Test baru** (semua revert-verified — gagal sensible sebelum fix, hijau
+sesudahnya): `payment_prabayar_checkout_test.dart` (komposisi murni
+`buildPrabayarCheckout` + round-trip `AppDatabase` sungguhan — lockedSum <
+total/==/>/interaksi tempo), `order_parser_prabayar_test.dart` (encode/parse
++ JSON baris Prabayar rusak), `kasir_handoff_prabayar_test.dart` (adopsi vs
+buang via fake `MobileScannerPlatform` sesuai gerbang penerima),
+`kasir_prabayar_hold_resume_test.dart` (hold+resume via UI —
+`_askHoldLabel` dialog SENGAJA dihindari di test dgn pre-set customer,
+lihat catatan test itu soal TextEditingController dispose race yg tidak
+terkait fitur ini), `cart_sheet_prabayar_test.dart` (gate visibility, badge
+live, hapus entri, ubah qty → Sisa berubah otomatis — pakai
+`find.byType(AddControl)` utk stepper krn lingkaran utamanya menampilkan
+ANGKA qty bukan ikon "+" begitu item sudah di keranjang).
+
+Full `flutter test` (1371 test) — SEMUA LULUS (termasuk
+`proposal_unchanged_end_to_end_test.dart` yg biasanya flaky paralel).
+`flutter analyze` bersih (0 issue).
+
+**Belum/tidak disentuh** (di luar cakupan brief, tidak ada indikasi
+diperlukan): tampilan ringkasan Pra-Bayar di kartu `_HeldCard` (antrian) —
+datanya SUDAH benar tersimpan/dipulihkan, cuma belum ada badge visual di
+kartu sebelum di-resume (kasir baru lihat setelah tap resume & buka
+keranjang).
+
+---
+
 _Update sesi 4 September 2026 (sesi keenam belas). Versi kerja
 **2.36.0+83** (MINOR naik — badge peringatan baru terlihat pengguna),
 schemaVersion TETAP 38 (tidak ada migrasi)._
