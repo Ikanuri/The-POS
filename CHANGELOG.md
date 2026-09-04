@@ -7,6 +7,17 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-04 (sesi keempat belas)
+
+- `df5d32b` — feat(kasir): konverter "beli dengan nominal Rp" di field
+  Jumlah pada `item_entry_sheet.dart`. Ikon kalkulator di sebelah label
+  "Jumlah" (tampil hanya saat harga satuan aktif >0 & tidak terkunci
+  pre-order) membuka dialog kecil: ketik nominal uang pelanggan, qty
+  otomatis dihitung dari harga satuan aktif (termasuk tier grosir/Harga
+  Lain terpilih), dibulatkan 3 desimal, diterapkan via tombol "Pakai".
+  Test baru `test/item_entry_rupiah_converter_test.dart` (harness widget,
+  revert-verified).
+
 ## 2026-09-03 (sesi ketiga belas)
 
 - `cd4cd34` — fix(db): potong stok saat pre-order dipenuhi. Item 59
