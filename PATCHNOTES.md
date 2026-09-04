@@ -11,6 +11,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 4 September 2026 (sesi ketujuh belas)
 
 ### ✨ Baru
+- **Kartu antrian "Ditahan" sekarang menampilkan nominal Pra-Bayar** —
+  kalau pesanan yang ditahan sudah punya sebagian pembayaran terkunci,
+  langsung kelihatan di kartu ("Pra-Bayar Rp ..."), tidak perlu buka
+  keranjangnya dulu untuk tahu.
 - **Fitur "Pra-Bayar" di keranjang kasir** — sekarang bisa kunci sebagian
   pembayaran dari keranjang yang masih aktif (belum checkout), sambil
   keranjang tetap bebas diedit (tambah/kurang barang). Kasus nyata:

@@ -9,6 +9,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-04 (sesi ketujuh belas)
 
+- `076afe9` — feat(kasir): badge ringkasan Pra-Bayar ("Pra-Bayar Rp X") di
+  `_HeldCard` (kartu antrian "Ditahan"), dibaca dari `HeldOrders.cartJson`
+  key `prabayar` via `_parseHeldPayload` yang sudah ada — sebelumnya
+  nominal terkunci tidak tampak sebelum kartu di-tap. Test baru
+  `test/kasir_held_card_prabayar_badge_test.dart` (revert-verified).
 - `d16c78c` — feat(kasir): fitur "Pra-Bayar" — kunci sebagian pembayaran di
   keranjang aktif sebelum checkout. Kasir bisa "Kunci" nominal + metode
   bayar dari keranjang yang MASIH aktif (berkali-kali, akumulatif, keranjang
