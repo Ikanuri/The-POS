@@ -403,6 +403,87 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     });
   }
 
+  /// Pembulatan hasil konversi Rp→qty ke 3 desimal (cukup presisi utk
+  /// gram-an tanpa noise floating point, mis. 5000/17000 → 0.294, bukan
+  /// 0.29411764705882354).
+  double _roundQty3(double q) => (q * 1000).round() / 1000;
+
+  String _fmtConvertedQty(double q) {
+    final r = _roundQty3(q);
+    return r % 1 == 0 ? r.toInt().toString() : r.toString();
+  }
+
+  /// Susulan (permintaan user) — konverter "beli dengan nominal Rp": kasir
+  /// ketik nominal uang pelanggan (mis. Rp 5.000), qty otomatis dihitung
+  /// dari harga satuan aktif (`_price`, sudah termasuk tier grosir/Harga
+  /// Lain terpilih) lalu diterapkan ke field Jumlah. Menghindari
+  /// meraba-raba qty manual utk produk timbang/satuan desimal.
+  Future<void> _showRupiahConverter() async {
+    final sel = _sel;
+    if (sel == null || _price <= 0) return;
+    final amountCtrl = TextEditingController();
+    double computedQty = 0;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final scheme = Theme.of(ctx).colorScheme;
+          return AlertDialog(
+            title: const Text('Beli dengan nominal'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Harga: ${formatRupiah(_price)} / ${sel.unitName}',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: const [ThousandsSeparatorFormatter()],
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixText: 'Rp ',
+                    labelText: 'Uang pelanggan',
+                  ),
+                  onChanged: (v) {
+                    final amount = ThousandsSeparatorFormatter.parseValue(v);
+                    setDialogState(() {
+                      computedQty = amount > 0 ? amount / _price : 0;
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '≈ ${_fmtConvertedQty(computedQty)} ${sel.unitName}',
+                  style:
+                      AppTheme.numStyle(ctx, size: 18, weight: FontWeight.w700),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: computedQty > 0
+                    ? () {
+                        _setQty(_roundQty3(computedQty));
+                        Navigator.of(ctx).pop();
+                      }
+                    : null,
+                child: const Text('Pakai'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   void _submit() {
     final sel = _sel;
     if (sel == null) return;
@@ -715,10 +796,34 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Jumlah',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: scheme.onSurfaceVariant)),
+                              Row(
+                                children: [
+                                  Text('Jumlah',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: scheme.onSurfaceVariant)),
+                                  // Susulan (permintaan user) — konverter kecil
+                                  // "beli dengan nominal Rp", supaya pelanggan
+                                  // yg mau beli produk timbang/satuan desimal
+                                  // (mis. gula per kg) senilai uang tertentu
+                                  // (mis. Rp 5.000) tidak perlu meraba-raba
+                                  // qty-nya secara manual. Cuma tampil kalau
+                                  // harga satuan aktif diketahui (>0) & tidak
+                                  // terkunci (pre-order tanpa DP = harga 0).
+                                  if (_price > 0 && !_priceLocked) ...[
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      onTap: _showRupiahConverter,
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(2),
+                                        child: Icon(Icons.calculate_outlined,
+                                            size: 15, color: scheme.primary),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [

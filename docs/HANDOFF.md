@@ -5,10 +5,29 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 3 September 2026 (sesi ketiga belas — Item 59). Versi kerja
-**2.33.11+80**, schemaVersion TETAP 38 (tidak ada migrasi — type
-`stock_ledger` baru `'preorder_fulfill'` cuma nilai string, bukan kolom/
-tabel baru)._
+_Update sesi 4 September 2026 (sesi keempat belas). Versi kerja
+**2.34.0+81** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
+TETAP 38 (tidak ada migrasi)._
+
+**Sesi ini**: fitur susulan (permintaan user) — konverter kecil "beli
+dengan nominal Rp" di `item_entry_sheet.dart`, komit `df5d32b`. Kasir
+ketik nominal uang pelanggan, qty field Jumlah otomatis terisi hasil
+bagi nominal/harga satuan aktif (dibulatkan 3 desimal). Ikon kalkulator
+di sebelah label "Jumlah", cuma tampil saat `_price > 0 && !_priceLocked`
+(disembunyikan saat pre-order tanpa DP, harga terkunci ke 0). Tidak ada
+perubahan skema DB. Juga: PLAN.md dikoreksi — item 55/60/61 sempat
+salah tercatat masih terbuka (agen sesi sebelumnya klaim sudah dihapus
+tapi ternyata belum), sudah diverifikasi kode-nya genuinely ada &
+dihapus dari PLAN.md di komit `80c9833`.
+
+**PLAN.md — status ringkas item yang masih terbuka** (per sesi ini):
+Item 47 (ekspor pengeluaran PDF/Excel, disetujui & ditahan), Item 48
+(warna avatar pastel, disetujui & ditahan), Item 23 sisa ("kas sistem"
+Tutup Kasir diduga overstated, belum dikonfirmasi), Item 41 B.1 (rotasi
+kunci toko/cabut akses device — user minta pending; 11 sub-item P3
+kerapian kode juga masih terbuka), Item 52 (dugaan bug sync harga
+"Rinso cair 500" — user minta pending), Item 54 (arsitektur sync
+otomatis & akses luar toko — sengaja ditunda).
 
 **Item 59 — stok pre-order dipotong saat dipenuhi, `cd4cd34`** — bug KRITIS
 dari audit sesi sebelumnya (lihat entri sesi kedua belas di bawah utk detail

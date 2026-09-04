@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 4 September 2026
+
+### ✨ Baru
+- **Konverter "beli dengan nominal Rp" di layar tambah item** — untuk
+  produk yang dijual per satuan desimal (mis. gula per kilo), sekarang
+  ada ikon kalkulator kecil di sebelah label "Jumlah". Ketuk untuk buka
+  dialog kecil: ketik uang pelanggan (mis. Rp 5.000), aplikasi langsung
+  hitung berapa jumlah yang bisa dibeli senilai itu, tinggal tekan
+  "Pakai". Tidak perlu lagi meraba-raba atau menghitung manual berapa kg
+  yang setara dengan uang pelanggan.
+
+---
+
 ## 3 September 2026
 
 ### 🐛 Perbaikan
