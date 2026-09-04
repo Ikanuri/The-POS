@@ -1154,6 +1154,59 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                                   ),
                                 ),
                               ),
+                            // Susulan (permintaan user): peringatan mismatch harga
+                            // transfer transaksi (lihat `CartItem.priceMismatchLocal`)
+                            // — REUSE pola visual badge `itemNote` di atas (border kiri
+                            // + background tint) tapi warna warning (`scheme.error`,
+                            // bukan `scheme.tertiary`) & taruh sbg badge TERPISAH di
+                            // bawah subtotal, BUKAN inline di baris "unitName · harga"
+                            // yang sudah sesak (risiko overflow di HP sempit). Murni
+                            // informasional — harga yang dipakai/tersimpan TETAP
+                            // [item.price], badge ini TIDAK mengubah apa pun.
+                            if (item.priceMismatchLocal != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Container(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(8, 3, 6, 3),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                        left: BorderSide(
+                                            width: 3,
+                                            color: scheme.error
+                                                .withOpacity(0.5))),
+                                    color: scheme.error.withOpacity(0.06),
+                                    borderRadius: const BorderRadius.horizontal(
+                                        right: Radius.circular(4)),
+                                  ),
+                                  child: Text.rich(
+                                    TextSpan(
+                                      style: TextStyle(
+                                          fontSize: 12, color: scheme.error),
+                                      children: [
+                                        const TextSpan(
+                                            text: '⚠ Harga pengirim beda dari '
+                                                'lokal: '),
+                                        TextSpan(
+                                          text: formatRupiah(
+                                              item.priceMismatchLocal!),
+                                          style: const TextStyle(
+                                              decoration:
+                                                  TextDecoration.lineThrough),
+                                        ),
+                                        const TextSpan(text: ' → '),
+                                        TextSpan(
+                                          text: formatRupiah(item.price),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ],

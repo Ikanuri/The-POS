@@ -8,6 +8,7 @@ import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_meta_provider.dart';
 import '../cart_provider.dart';
+import '../handoff_gate_provider.dart';
 
 /// Sheet "Tempel Pesanan": kasir menempel teks pesanan yang dikirim balik
 /// pelanggan (hasil Katalog Pesanan, lihat `OrderPageService`) lalu semua
@@ -110,16 +111,46 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
     if (result == null || result.items.isEmpty || _adding) return;
     setState(() => _adding = true);
 
+    // Susulan (permintaan user): sheet ini SECARA UMUM dipakai utk "Tempel
+    // Pesanan" pelanggan biasa (employeeName null, katalog HTML — TIDAK
+    // PERNAH menyertakan flag harga `p=`), TAPI teksnya bisa juga hasil
+    // tempel MANUAL kode transfer transaksi antar device (employeeName
+    // terisi, mis. disalin lewat chat alih-alih di-scan) — sheet ini
+    // sendiri tidak membedakan keduanya, langsung memproses apa pun yang
+    // berhasil di-parse. Cek mismatch harga sama seperti `kasir_screen.
+    // dart._handleOrderCode`: no-op aman utk item katalog biasa krn
+    // `priceTrustedFromSender` selalu false di jalur itu.
+    // `await .future` (bukan baca sync `.valueOrNull ?? false`) — provider
+    // ini `autoDispose`, aman dijamin sudah resolve sungguhan di sini
+    // (lihat dok sama di `kasir_screen.dart._handleOrderCode`).
+    bool receiverNeedsGate;
+    try {
+      receiverNeedsGate = await ref.read(needsPaymentGateProvider.future);
+    } catch (_) {
+      receiverNeedsGate = false;
+    }
+    if (!mounted) return;
+    CartItem toCartItemWithMismatch(ParsedOrderItem item) {
+      final showMismatch = item.priceTrustedFromSender &&
+          !receiverNeedsGate &&
+          item.price != item.currentResolvedPrice;
+      return item.toCartItem(
+        priceMismatchLocal: showMismatch ? item.currentResolvedPrice : null,
+      );
+    }
+
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
     // Induk dulu (agar placeholder siap) baru varian, sesuai urutan yang
     // dipakai _ensureParentInCart di alur kasir biasa.
     for (final item in result.items.where((i) => !i.isVariant)) {
-      notifier.addItem(item.toCartItem());
+      notifier.addItem(toCartItemWithMismatch(item));
     }
     for (final item in result.items.where((i) => i.isVariant)) {
       await _ensureParentInCart(item);
       if (!mounted) return;
-      ref.read(cartProvider(widget.cartId).notifier).addItem(item.toCartItem());
+      ref
+          .read(cartProvider(widget.cartId).notifier)
+          .addItem(toCartItemWithMismatch(item));
     }
 
     // Nama pelanggan (bila ada) pra-isi ke metadata keranjang. Item 4/57 —

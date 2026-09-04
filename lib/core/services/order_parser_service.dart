@@ -205,6 +205,8 @@ class OrderParserService {
           isPreorder: isPreorder,
           preorderPaid: preorderPaid,
           depositQty: depositQty,
+          priceTrustedFromSender: price != null,
+          currentResolvedPrice: reResolved.price,
         );
         continue;
       }
@@ -233,6 +235,8 @@ class OrderParserService {
         isPreorder: isPreorder,
         preorderPaid: preorderPaid,
         depositQty: depositQty,
+        priceTrustedFromSender: price != null,
+        currentResolvedPrice: resolved.price,
       ));
     }
 
@@ -453,7 +457,10 @@ class ParsedOrderItem {
     this.isPreorder = false,
     this.preorderPaid = false,
     this.depositQty,
-  }) : originalPrice = originalPrice ?? price;
+    this.priceTrustedFromSender = false,
+    int? currentResolvedPrice,
+  })  : originalPrice = originalPrice ?? price,
+        currentResolvedPrice = currentResolvedPrice ?? price;
 
   final String productId;
   final String productUnitId;
@@ -485,11 +492,34 @@ class ParsedOrderItem {
   final bool preorderPaid;
   final double? depositQty;
 
+  /// Susulan (Item transfer transaksi — peringatan mismatch harga): true
+  /// bila flag `p=` (harga) memang DISERTAKAN oleh pengirim di segmen item
+  /// ini (lihat [OrderParserService.parse]) — beda dari sekadar "harga
+  /// akhirnya kebetulan sama dgn resolve lokal". Hanya kode transfer
+  /// (`trustPrices: true` di [OrderParserService.encodeHandoff]) yang
+  /// pernah menyertakan flag ini; katalog HTML pelanggan TIDAK PERNAH,
+  /// jadi selalu false di jalur itu.
+  final bool priceTrustedFromSender;
+
+  /// Harga hasil `resolvePrice()` FRESH dari DB lokal device INI saat
+  /// parsing (bukan dari flag `p=` pengirim) — dihitung SELALU (dipakai
+  /// jalur lama juga), diekspos di sini supaya pemanggil (layer fitur,
+  /// yang tahu status gerbang izin PENERIMA) bisa membandingkan ke [price]
+  /// yang benar-benar dipakai & memutuskan tampil-tidaknya peringatan
+  /// mismatch. Sama dengan [price] bila [priceTrustedFromSender] false.
+  final int currentResolvedPrice;
+
   int get subtotal => (price * qty).round();
 
   /// Konversi ke [CartItem] siap masuk `cartProvider`. `barcode` sengaja
   /// null — tempel-pesanan tidak melalui jalur scan barcode.
-  CartItem toCartItem() => CartItem(
+  ///
+  /// [priceMismatchLocal] opsional — diisi PEMANGGIL (bukan di sini,
+  /// service `core/` ini sengaja tidak boleh bergantung ke provider
+  /// Riverpod utk tahu status gerbang izin PENERIMA) ketika sudah
+  /// diputuskan peringatan mismatch harga transfer perlu tampil di
+  /// keranjang (lihat `kasir_screen.dart`/`paste_order_sheet.dart`).
+  CartItem toCartItem({int? priceMismatchLocal}) => CartItem(
         productId: productId,
         productUnitId: productUnitId,
         productName: productName,
@@ -506,6 +536,7 @@ class ParsedOrderItem {
         isPreorder: isPreorder,
         preorderPaid: preorderPaid,
         depositQty: depositQty,
+        priceMismatchLocal: priceMismatchLocal,
       );
 }
 

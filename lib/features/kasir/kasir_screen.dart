@@ -1328,6 +1328,44 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         await db.adoptReservedLocalId(parsed.reservedLocalId!);
       }
 
+      // Susulan (permintaan user): transfer transaksi antar device toko
+      // sendiri — kalau pengirim BERWENANG (harga dipercaya mentah, lihat
+      // `priceTrustedFromSender`) DAN device PENERIMA ini JUGA berwenang
+      // (tidak digerbang), harga yang dibawa pengirim BISA beda dari resolve
+      // fresh lokal device ini SEKARANG (mis. harga baru saja diubah owner
+      // di device lain). Tampilkan sbg peringatan INFORMASIONAL di baris
+      // keranjang (harga yang dipakai TETAP harga pengirim, BUKAN
+      // auto-koreksi) — lihat `CartItem.priceMismatchLocal`. Kalau penerima
+      // TIDAK berwenang (pegawai tanpa izin terima_pembayaran), skip: device
+      // itu toh tidak berwenang menimbang harga & tombol Bayar-nya ke-gate
+      // lagi.
+      //
+      // `await .future` (BUKAN `ref.read(...).valueOrNull ?? false` sync) —
+      // provider ini `autoDispose` & satu-satunya watcher biasanya
+      // `_CartMetaTab` yg TIDAK ikut ter-build saat scanner kamera terbuka
+      // (build() KasirScreen ganti total ke layar scanner, lihat
+      // `_scannerOpen`), jadi provider ini SUDAH di-dispose & ke-reset ke
+      // `AsyncLoading` tepat saat titik ini dieksekusi (dipanggil dari
+      // callback scan) — baca sync di titik itu SELALU jatuh ke default
+      // `false` (salah utk pegawai tak berizin, harusnya `true`), bukan
+      // race yang jarang terjadi.
+      bool receiverNeedsGate;
+      try {
+        receiverNeedsGate = await ref.read(needsPaymentGateProvider.future);
+      } catch (_) {
+        receiverNeedsGate = false;
+      }
+      if (!mounted) return;
+      CartItem toCartItemWithMismatch(ParsedOrderItem item) {
+        final showMismatch = item.priceTrustedFromSender &&
+            !receiverNeedsGate &&
+            item.price != item.currentResolvedPrice;
+        return item.toCartItem(
+          priceMismatchLocal:
+              showMismatch ? item.currentResolvedPrice : null,
+        );
+      }
+
       // Susulan (permintaan user): kalau device ini SEDANG punya keranjang
       // aktif (bukan kosong) — biasanya pegawai tanpa izin terima_pembayaran
       // yang mau menambah pesanan ke transaksi yang sedang ia layani (poin
@@ -1340,12 +1378,14 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       if (activeCart.isNotEmpty) {
         final notifier = ref.read(cartProvider(_cartId).notifier);
         for (final item in parsed.items.where((i) => !i.isVariant)) {
-          notifier.addItem(item.toCartItem());
+          notifier.addItem(toCartItemWithMismatch(item));
         }
         for (final item in parsed.items.where((i) => i.isVariant)) {
-          await _ensureParentInCart(item.toCartItem());
+          await _ensureParentInCart(toCartItemWithMismatch(item));
           if (!mounted) return;
-          ref.read(cartProvider(_cartId).notifier).addItem(item.toCartItem());
+          ref
+              .read(cartProvider(_cartId).notifier)
+              .addItem(toCartItemWithMismatch(item));
         }
         if (customerName != null &&
             customerName.isNotEmpty &&
