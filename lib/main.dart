@@ -16,6 +16,7 @@ import 'core/services/crash_log_service.dart';
 import 'core/services/temp_share_cleanup.dart';
 import 'core/theme/app_theme.dart';
 import 'features/kasir/cart_meta_provider.dart';
+import 'features/kasir/cart_prabayar_provider.dart';
 import 'features/kasir/cart_provider.dart';
 
 void main() {
@@ -94,6 +95,8 @@ Future<void> _runStartupMaintenance(ProviderContainer container) async {
   await CartNotifier.cleanupOrphanCarts();
   // Metadata keranjang yatim mengikuti pembersihan keranjang di atas.
   await CartMetaNotifier.cleanupOrphanMeta();
+  // Entri Pra-Bayar yatim mengikuti pembersihan keranjang di atas juga.
+  await CartPrabayarNotifier.cleanupOrphanPrabayar();
   // Item 8 — file gambar/HTML sementara hasil "Bagikan" yang tidak pernah
   // dihapus sebelumnya (menumpuk di temp dir).
   await TempShareCleanup.run();

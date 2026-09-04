@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
@@ -7,6 +8,7 @@ import '../../../core/services/order_parser_service.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_meta_provider.dart';
+import '../cart_prabayar_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 
@@ -180,6 +182,25 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
       await ref
           .read(databaseProvider)
           .adoptReservedLocalId(result.reservedLocalId!);
+    }
+
+    // Fitur Pra-Bayar — device PENERIMA hanya boleh mengadopsi entri
+    // Pra-Bayar dari kode transfer kalau device ini JUGA bergerbang
+    // `terima_pembayaran` (`receiverNeedsGate` sudah dibaca di atas lewat
+    // `.future`) — kalau tidak, DIBUANG SEPENUHNYA (item barang tetap masuk
+    // normal), sama persis pola di `kasir_screen.dart._handleOrderCode`.
+    if (!receiverNeedsGate && result.prabayar.isNotEmpty) {
+      final prabayarNotifier =
+          ref.read(cartPrabayarProvider(widget.cartId).notifier);
+      for (final p in result.prabayar) {
+        prabayarNotifier.add(PrabayarEntry(
+          id: const Uuid().v4(),
+          amount: p.amount,
+          method: p.method,
+          methodName: p.methodName,
+          lockedAt: DateTime.fromMillisecondsSinceEpoch(p.lockedAtMs),
+        ));
+      }
     }
 
     if (mounted) {

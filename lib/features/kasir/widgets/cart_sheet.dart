@@ -23,8 +23,10 @@ import '../../../core/services/order_parser_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
 import '../cart_meta_provider.dart';
+import '../cart_prabayar_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
+import 'debt_payment_sheet.dart';
 import 'add_control.dart';
 import 'cart_meta_pickers.dart';
 import 'cart_preview_paper.dart';
@@ -110,6 +112,18 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final employeeName =
         meta.hasEmployee ? meta.employeeName! : device.deviceName;
     final needsGate = ref.read(needsPaymentGateProvider).valueOrNull ?? false;
+    // Fitur Pra-Bayar — entri terkunci di keranjang INI ikut dibawa (data
+    // mentah, keputusan adopsi ada di device PENERIMA — lihat dok
+    // `OrderParserService.encodeHandoff`/`parse`).
+    final prabayarPayload = ref
+        .read(cartPrabayarProvider(widget.cartId))
+        .map((e) => (
+              amount: e.amount,
+              method: e.method,
+              methodName: e.methodName,
+              lockedAtMs: e.lockedAt.millisecondsSinceEpoch,
+            ))
+        .toList();
     // Susulan (permintaan user, 14 Agt 2026): payload QR dipisah dari teks
     // Copy/Share. `OrderParserService.parse` HANYA membaca baris `#PSN:...`
     // + baris meta (Pegawai/Nama/dst) lewat regex per-baris — blok
@@ -130,6 +144,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       reservedLocalId: meta.reservedLocalId,
       trustPrices: !needsGate,
       storeName: null,
+      prabayar: prabayarPayload,
     );
     final shareText = OrderParserService.encodeHandoff(
       items: cart,
@@ -155,6 +170,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       // Item 54 — keterangan item + Total manusia-bisa-baca di depan kode
       // mesin, format sama dgn katalog HTML (`buildOrderText`).
       storeName: device.storeName,
+      prabayar: prabayarPayload,
     );
 
     await showModalBottomSheet<void>(
@@ -220,18 +236,151 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     }
 
     final db = ref.read(databaseProvider);
+    final prabayar = ref.read(cartPrabayarProvider(widget.cartId));
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
+      'prabayar': prabayar.map((e) => e.toJson()).toList(),
     });
     await db.holdOrder(id: const Uuid().v4(), label: label, cartJson: payload);
     ref.read(cartProvider(widget.cartId).notifier).clear();
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
+    ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
     if (!ctx.mounted) return;
     ScaffoldMessenger.of(ctx).showSnackBar(
       SnackBar(content: Text('Pesanan "$label" ditahan')),
     );
     Navigator.of(ctx).pop();
+  }
+
+  /// Fitur Pra-Bayar — buka kalkulator pelunasan yang SUDAH ADA
+  /// (`showDebtPaymentSheet`, dipakai juga oleh "Tambah Bayar" di
+  /// receipt_screen.dart/tx_history_sheet.dart) dgn `remaining` = sisa yang
+  /// BELUM terkunci (`total keranjang - totalLocked`, clamp 0 — sheet-nya
+  /// sendiri sudah punya kalkulator bebas ketik nominal apa pun lebih dari
+  /// itu, TIDAK di-cap paksa di sini). Hasilnya jadi satu [PrabayarEntry]
+  /// baru (akumulatif, TIDAK menimpa entri lama).
+  Future<void> _addPrabayar(BuildContext ctx, WidgetRef ref) async {
+    final db = ref.read(databaseProvider);
+    final notifier = ref.read(cartProvider(widget.cartId).notifier);
+    final prabayarNotifier =
+        ref.read(cartPrabayarProvider(widget.cartId).notifier);
+    final remaining =
+        (notifier.totalAmount - prabayarNotifier.totalLocked).clamp(0, 99999999).toInt();
+    final result = await showDebtPaymentSheet(
+      ctx,
+      db,
+      remaining: remaining,
+      title: 'Pra-Bayar',
+    );
+    if (result == null || result.amount <= 0) return;
+    prabayarNotifier.add(PrabayarEntry(
+      id: const Uuid().v4(),
+      amount: result.amount,
+      method: result.method,
+      methodName: result.methodName,
+      lockedAt: DateTime.now(),
+    ));
+    if (!ctx.mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(content: Text('Pra-Bayar ${formatRupiah(result.amount)} dikunci')),
+    );
+  }
+
+  /// Daftar entri Pra-Bayar terkunci — tiap entri bisa dihapus lagi selama
+  /// belum checkout (kasir salah input).
+  Future<void> _showPrabayarList(BuildContext ctx, WidgetRef ref) async {
+    await showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Consumer(
+        builder: (consumerCtx, sheetRef, _) {
+          final entries = sheetRef.watch(cartPrabayarProvider(widget.cartId));
+          final scheme = Theme.of(consumerCtx).colorScheme;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Text('Entri Pra-Bayar',
+                      style: Theme.of(consumerCtx).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  if (entries.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text('Belum ada entri Pra-Bayar',
+                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: entries.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final e = entries[i];
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(formatRupiah(e.amount),
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w700)),
+                            subtitle: Text(
+                                '${e.methodName ?? _methodLabel(e.method)} · '
+                                '${_fmtTime(e.lockedAt)}',
+                                style: const TextStyle(fontSize: 12)),
+                            trailing: IconButton(
+                              tooltip: 'Hapus',
+                              icon: Icon(Icons.delete_outline,
+                                  color: scheme.error, size: 20),
+                              onPressed: () => sheetRef
+                                  .read(cartPrabayarProvider(widget.cartId)
+                                      .notifier)
+                                  .remove(e.id),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  static String _methodLabel(String type) => switch (type) {
+        'tunai' => 'Tunai',
+        'qris' => 'QRIS',
+        'bank' => 'Transfer Bank',
+        'ewallet' => 'E-Wallet',
+        'tempo' => 'Tempo',
+        _ => type,
+      };
+
+  static String _fmtTime(DateTime t) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(t.hour)}:${two(t.minute)}';
   }
 
   /// Item 56 — Kosongkan keranjang (ikon tempat sampah, dialog konfirmasi
@@ -260,6 +409,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     }
     ref.read(cartProvider(widget.cartId).notifier).clear();
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
+    ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
     if (ctx.mounted) Navigator.of(ctx).pop();
   }
 
@@ -561,6 +711,15 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     // punya jalur sendiri (tombol Bayar utama otomatis jadi "Kirim ke
     // Owner/Asisten" — lihat di bawah), tidak perlu tombol tambahan.
     final canTransfer = widget.cartId != kCatalogCartId && !needsGate;
+    // Fitur Pra-Bayar — HANYA keranjang utama kasir (bukan mode Katalog,
+    // bukan Tambah Belanjaan — nota tambah belanjaan sudah lunas/checkout
+    // sebelumnya, tidak relevan sama sekali, lihat dok `payment_screen.dart`)
+    // & HANYA device dgn izin `terima_pembayaran` (sama persis gerbang
+    // `canTransfer` di atas).
+    final canPrabayar = widget.cartId == kMainCartId && !needsGate;
+    final prabayarEntries = ref.watch(cartPrabayarProvider(widget.cartId));
+    final prabayarTotal =
+        prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -611,14 +770,19 @@ class _CartSheetState extends ConsumerState<CartSheet> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              // Susulan (permintaan user): tombol "Bagikan Pratinjau"
-              // menambah baris ikon jadi sampai 6 IconButton sekaligus —
-              // dgn padding/minimumSize default (48dp) row ini OVERFLOW di
-              // layar sempit sungguhan (360dp, lihat
+              // Susulan (permintaan user): tombol "Bagikan Pratinjau" & fitur
+              // Pra-Bayar menambah baris ikon jadi sampai 7 IconButton
+              // sekaligus — dgn padding/minimumSize default (48dp) row ini
+              // OVERFLOW di layar sempit sungguhan (360dp, lihat
               // cart_sheet_header_overflow_test.dart & gotcha overflow
               // tombol di CLAUDE.md). Persempit SEMUA IconButton di baris
-              // ini via theme lokal (bukan satu-satu) supaya konsisten &
-              // tombol baru berikutnya otomatis ikut sempit juga.
+              // ini via theme lokal (bukan satu-satu) TIDAK LAGI CUKUP begitu
+              // jumlah ikon terus bertambah (7 ikon @36dp = 252dp, ditambah
+              // judul "Keranjang" + "#nomor" tetap overflow di 360dp) —
+              // blok ikon sekarang scroll horizontal sendiri (`reverse:
+              // true`, jadi ikon PALING KANAN — Kosongkan — yang defaultnya
+              // terlihat, bukan yang paling kiri), judul TETAP fixed & selalu
+              // terlihat penuh di sisi kiri.
               child: IconButtonTheme(
                 data: IconButtonThemeData(
                   style: IconButton.styleFrom(
@@ -639,7 +803,14 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               fontWeight: FontWeight.w700,
                               color: scheme.onSurfaceVariant)),
                     ],
-                    const Spacer(),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        reverse: true,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                     // Susulan (permintaan user): "Tahan Pesanan" langsung dari
                     // header keranjang, di SAMPING KIRI "Tempel Pesanan" —
                     // gerbang sama persis dgn tab folder `_CartMetaTab` di
@@ -652,6 +823,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         onPressed:
                             cart.isEmpty ? null : () => _holdCurrent(ctx, ref),
                         icon: const Icon(Icons.pause_circle_outline),
+                      ),
+                    // Fitur Pra-Bayar — kunci sebagian pembayaran dari
+                    // keranjang aktif, sebelum checkout beneran (keranjang
+                    // tetap 100% bisa diedit bebas sesudahnya).
+                    if (canPrabayar)
+                      IconButton(
+                        tooltip: 'Pra-Bayar',
+                        onPressed:
+                            cart.isEmpty ? null : () => _addPrabayar(ctx, ref),
+                        icon: const Icon(Icons.lock_clock_outlined),
                       ),
                     // Susulan (permintaan user): "Tempel Pesanan" juga bisa
                     // dipakai LANGSUNG dari keranjang yang sedang terbuka —
@@ -717,6 +898,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           cart.isEmpty ? null : () => _confirmClear(ctx, ref),
                       icon: Icon(Icons.delete_outline, color: scheme.error),
                     ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -763,6 +948,44 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     }),
             ),
             const Divider(height: 1),
+            // Fitur Pra-Bayar — ringkasan LIVE (rebuild otomatis tiap
+            // cart/prabayar berubah, lihat `ref.watch` di atas): "Sisa" =
+            // total keranjang - total terkunci, bisa negatif (kelebihan →
+            // jadi kembalian saat checkout). Tap → daftar entri (hapus per
+            // entri selama belum checkout).
+            if (canPrabayar && prabayarEntries.isNotEmpty)
+              InkWell(
+                onTap: () => _showPrabayarList(ctx, ref),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  color: scheme.primaryContainer.withOpacity(0.35),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_clock_outlined,
+                          size: 16, color: scheme.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          total - prabayarTotal < 0
+                              ? 'Pra-Bayar: ${formatRupiah(prabayarTotal)} terkunci '
+                                  '· Kelebihan ${formatRupiah(prabayarTotal - total)} '
+                                  '(jadi kembalian saat checkout)'
+                              : 'Pra-Bayar: ${formatRupiah(prabayarTotal)} terkunci '
+                                  '· Sisa ${formatRupiah(total - prabayarTotal)}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.primary),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                          size: 18, color: scheme.primary),
+                    ],
+                  ),
+                ),
+              ),
             Padding(
               padding: EdgeInsets.fromLTRB(
                   16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),

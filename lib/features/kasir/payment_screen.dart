@@ -15,6 +15,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_meta_provider.dart';
+import 'cart_prabayar_provider.dart';
 import 'cart_provider.dart';
 import 'discount_allocation.dart';
 import 'receipt_screen.dart' show netRemainingOwed;
@@ -36,6 +37,129 @@ Future<bool> resolveAllowNegativeStock(
     allow = await db.isPermissionEnabled('asisten_stok_minus');
   }
   return allow;
+}
+
+/// Fitur Pra-Bayar — hasil komposisi checkout gabungan (entri Pra-Bayar yang
+/// SUDAH terkunci + pilihan kasir SEKARANG) vs total keranjang. Lihat dok
+/// [buildPrabayarCheckout].
+class PrabayarCheckoutResult {
+  const PrabayarCheckoutResult({
+    required this.combinedPaid,
+    required this.status,
+    required this.combinedChange,
+    required this.payments,
+    required this.displayMethodType,
+    required this.displayMethodName,
+  });
+
+  /// `transactions.paid` — SEMUA baris `TransactionPayments` (entri Pra-Bayar
+  /// + pilihan sekarang), konsisten dgn cara kolom itu dihitung di tempat
+  /// lain (`_reconcileTransactionTotals`/`addPaymentToTransaction`).
+  final int combinedPaid;
+  final String status;
+  final int combinedChange;
+  final List<TransactionPaymentsCompanion> payments;
+
+  /// Label metode/nama header nota — murni tampilan, rincian sebenarnya ada
+  /// di [payments] (sumber kebenaran uang).
+  final String displayMethodType;
+  final String? displayMethodName;
+}
+
+/// Fitur Pra-Bayar — komposisi MURNI (tanpa DB/Riverpod) checkout gabungan:
+/// entri [prabayarEntries] yang SUDAH terkunci ke keranjang SEBELUM layar
+/// bayar ini dibuka, DITAMBAH (kalau ada) [paidAmountNow] yang kasir pilih
+/// SEKARANG di layar ini. Diekstrak dari `_confirm()` supaya bisa diuji
+/// langsung tanpa perlu mendorong seluruh alur widget PaymentScreen (lihat
+/// CLAUDE.md §Metode Test) — dipakai HANYA di alur checkout baru
+/// (`_confirm`), TIDAK PERNAH di mode Tambah Belanjaan (`_confirmAddItems`,
+/// prabayar tidak relevan sama sekali di sana).
+///
+/// Status & kembalian HARUS dari GABUNGAN (lockedSum + [paidAmountNow]) vs
+/// [cartTotal] — BUKAN cuma dari [paidAmountNow] sendirian, kalau tidak
+/// transaksi bisa keliru berstatus `kurang_bayar` padahal gabungannya sudah
+/// lunas (atau sebaliknya). [isTempo] cuma valid membuahkan status `tempo`
+/// kalau GABUNGANNYA `0` juga — selaras dgn invariant yang SUDAH ADA di
+/// `_reconcileTransactionTotals` (status `tempo` cuma dipertahankan kalau
+/// `paid == 0`; begitu ada bagian yang sudah dibayar — mis. dari Pra-Bayar —
+/// bukan tempo murni lagi, jatuh ke `kurang_bayar`/`lunas` seperti biasa).
+///
+/// Tiap entri Pra-Bayar jadi SATU baris `TransactionPayments` tersendiri,
+/// `paidAt` = `lockedAt` ASLI entri itu (bukan waktu checkout — supaya jejak
+/// waktu kuncinya akurat), DITAMBAH (kalau [paidAmountNow] > 0) satu baris
+/// dari pilihan kasir SEKARANG (`paidAt` = [now], seperti biasa). Kembalian
+/// gabungan diatribusikan ke baris "sekarang" itu kalau ada; kalau TIDAK ada
+/// baris sekarang (lockedSum sendiri sudah menutup/melebihi total) tapi
+/// tetap ada kembalian, ditaruh di baris Pra-Bayar PALING TERAKHIR (paling
+/// baru dikunci) — supaya tidak hilang dari `TransactionPayments.changeGiven`.
+PrabayarCheckoutResult buildPrabayarCheckout({
+  required String txId,
+  required int cartTotal,
+  required List<PrabayarEntry> prabayarEntries,
+  required int paidAmountNow,
+  required bool isTempo,
+  required String nowMethodType,
+  String? nowMethodName,
+  required DateTime now,
+  required String kasirId,
+  required String Function() genId,
+}) {
+  final lockedSum = prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
+  final combinedPaid = lockedSum + paidAmountNow;
+  final status = (isTempo && combinedPaid == 0)
+      ? 'tempo'
+      : (combinedPaid < cartTotal ? 'kurang_bayar' : 'lunas');
+  final combinedChange = combinedPaid > cartTotal ? combinedPaid - cartTotal : 0;
+
+  final displayMethodType = paidAmountNow > 0
+      ? nowMethodType
+      : (prabayarEntries.isNotEmpty
+          ? prabayarEntries.last.method
+          : nowMethodType);
+  final displayMethodName = paidAmountNow > 0
+      ? nowMethodName
+      : (prabayarEntries.isNotEmpty
+          ? prabayarEntries.last.methodName
+          : nowMethodName);
+
+  final payments = <TransactionPaymentsCompanion>[
+    for (final p in prabayarEntries)
+      TransactionPaymentsCompanion.insert(
+        id: genId(),
+        transactionId: txId,
+        amount: p.amount,
+        method: p.method,
+        methodName: Value(p.methodName),
+        paidAt: Value(p.lockedAt),
+        kasirId: Value(kasirId),
+        changeGiven: const Value(0),
+      ),
+    if (paidAmountNow > 0)
+      TransactionPaymentsCompanion.insert(
+        id: genId(),
+        transactionId: txId,
+        amount: paidAmountNow,
+        method: nowMethodType,
+        methodName: Value(nowMethodName),
+        paidAt: Value(now),
+        kasirId: Value(kasirId),
+        changeGiven: Value(combinedChange),
+      ),
+  ];
+  if (paidAmountNow == 0 && combinedChange > 0 && payments.isNotEmpty) {
+    final lastIdx = payments.length - 1;
+    payments[lastIdx] =
+        payments[lastIdx].copyWith(changeGiven: Value(combinedChange));
+  }
+
+  return PrabayarCheckoutResult(
+    combinedPaid: combinedPaid,
+    status: status,
+    combinedChange: combinedChange,
+    payments: payments,
+    displayMethodType: displayMethodType,
+    displayMethodName: displayMethodName,
+  );
 }
 
 class PaymentScreen extends ConsumerStatefulWidget {
@@ -388,7 +512,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// dipaksa 0 di `_confirm`/`_confirmAddItems` (isTempo check terpisah).
   int get _paid => _tendered;
 
-  int get _change => (_paid - _total).clamp(0, double.maxFinite.toInt());
+  /// Fitur Pra-Bayar — TIDAK relevan sama sekali di mode Tambah Belanjaan
+  /// (nota yang sudah lunas/checkout sebelumnya, bukan checkout baru) —
+  /// selalu kosong di sana, apa pun isi provider-nya, supaya logika baru di
+  /// bawah tidak ikut aktif di cabang `_isAddMode`.
+  List<PrabayarEntry> get _prabayarEntries =>
+      _isAddMode ? const [] : ref.read(cartPrabayarProvider(_cartId));
+
+  int get _lockedSum =>
+      _prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
+
+  /// true bila Pra-Bayar yang sudah terkunci SENDIRI sudah menutup/melebihi
+  /// total keranjang — kasir tidak perlu lagi pilih metode/nominal apa pun
+  /// di layar ini, cukup tombol konfirmasi "Selesaikan Transaksi".
+  bool get _prabayarCoversTotal => _lockedSum > 0 && _lockedSum >= _total;
 
   Future<void> _editTotal() async {
     final ctrl =
@@ -508,9 +645,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               : await db.generateUniqueLocalId(device.deviceCode, now);
 
       final isTempo = _selectedMethodType == 'tempo';
-      final paidAmount = isTempo ? 0 : _paid;
-      final status =
-          isTempo ? 'tempo' : (paidAmount < _total ? 'kurang_bayar' : 'lunas');
+      // Fitur Pra-Bayar — `paidAmountNow` HANYA porsi yang kasir pilih DI
+      // LAYAR INI (metode+keypad, atau 0 kalau lockedSum sudah menutup
+      // total — lihat `_prabayarCoversTotal`/tombol "Selesaikan Transaksi"
+      // di build()). Entri yang SUDAH terkunci (`_prabayarEntries`) TIDAK
+      // ikut logika keypad sama sekali — sudah "nempel" ke keranjang sejak
+      // sebelum layar ini dibuka.
+      final paidAmountNow = isTempo ? 0 : _paid;
 
       // Customer resolution
       final customerId = _selectedCustomer?.id;
@@ -588,18 +729,34 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               itemCompanions[i].id.value,
       };
 
+      // Fitur Pra-Bayar — komposisi gabungan (entri terkunci + pilihan
+      // sekarang) diekstrak ke [buildPrabayarCheckout] (fungsi murni, lihat
+      // dok di sana) supaya bisa diuji langsung tanpa widget PaymentScreen.
+      final prabayarResult = buildPrabayarCheckout(
+        txId: txId,
+        cartTotal: _total,
+        prabayarEntries: _prabayarEntries,
+        paidAmountNow: paidAmountNow,
+        isTempo: isTempo,
+        nowMethodType: _selectedMethodType,
+        nowMethodName: _selectedMethod?.name,
+        now: now,
+        kasirId: device.deviceCode,
+        genId: _uuid.v4,
+      );
+
       final txCompanion = TransactionsCompanion.insert(
         id: txId,
         localId: localId,
         kasirId: Value(device.deviceCode),
         customerId: Value(customerId),
         customerName: Value(customerName),
-        status: status,
+        status: prabayarResult.status,
         total: _total,
-        paid: paidAmount,
-        changeAmount: _change,
-        paymentMethod: _selectedMethodType,
-        methodName: Value(_selectedMethod?.name),
+        paid: prabayarResult.combinedPaid,
+        changeAmount: prabayarResult.combinedChange,
+        paymentMethod: prabayarResult.displayMethodType,
+        methodName: Value(prabayarResult.displayMethodName),
         employeeName: Value(_selectedEmployee?.name),
         pointsEarned: Value(pointsEarned),
         createdAt: Value(now),
@@ -608,22 +765,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             : Value(jsonEncode(checkedTxItemIds)),
       );
 
-      final paymentCompanions = paidAmount > 0
-          ? [
-              TransactionPaymentsCompanion.insert(
-                id: _uuid.v4(),
-                transactionId: txId,
-                amount: paidAmount,
-                method: _selectedMethodType,
-                methodName: Value(_selectedMethod?.name),
-                paidAt: Value(now),
-                kasirId: Value(device.deviceCode),
-                // Transaksi baru → tidak ada pembayaran sebelumnya, jadi
-                // kembalian pembayaran ini = kembalian keseluruhan (_change).
-                changeGiven: Value(_change),
-              ),
-            ]
-          : <TransactionPaymentsCompanion>[];
+      final paymentCompanions = prabayarResult.payments;
 
       // Stock items — only deduct stock for items with effective qty > 0.
       // Item 52 redesain pre-order — item pre-order DIKECUALIKAN dari
@@ -704,6 +846,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       ref.read(cartProvider(_cartId).notifier).clear();
       ref.read(cartMetaProvider(_cartId).notifier).clear();
+      ref.read(cartPrabayarProvider(_cartId).notifier).clear();
       if (mounted) {
         context.pushReplacement('/kasir/struk/$txId');
       }
@@ -1008,6 +1151,81 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     ],
                   ),
                 ),
+                // Fitur Pra-Bayar — ringkasan entri yang SUDAH terkunci di
+                // keranjang ini SEBELUM layar bayar ini dibuka (lihat
+                // `cart_sheet.dart`). Tidak relevan sama sekali di mode
+                // Tambah Belanjaan (`_prabayarEntries` selalu kosong di
+                // sana).
+                if (_prabayarEntries.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Card(
+                    color: scheme.primaryContainer.withOpacity(0.35),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.lock_clock_outlined,
+                                  size: 16, color: scheme.primary),
+                              const SizedBox(width: 6),
+                              Text('Pra-Bayar',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.primary)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          for (final p in _prabayarEntries)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                      p.methodName ??
+                                          _prabayarMethodLabel(p.method),
+                                      style: const TextStyle(fontSize: 12)),
+                                  Text(formatRupiah(p.amount),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          const Divider(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total Terkunci',
+                                  style: TextStyle(fontWeight: FontWeight.w700)),
+                              Text(formatRupiah(_lockedSum),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.primary)),
+                            ],
+                          ),
+                          if (!_prabayarCoversTotal) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Sisa yang perlu dibayar',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: scheme.onSurfaceVariant)),
+                                Text(formatRupiah(_total - _lockedSum),
+                                    style: const TextStyle(
+                                        fontSize: 12, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // Pelanggan & pegawai mengikuti transaksi asli saat tambah
@@ -1420,52 +1638,102 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       bottomNavigationBar: Padding(
         padding: EdgeInsets.fromLTRB(
             16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: FilledButton(
-                onPressed:
-                    (_isSaving || !_bayarEnabled) ? null : _onBayarPressed,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
-                  backgroundColor: AppTheme.payGreen,
-                  foregroundColor: Colors.white,
+        // Fitur Pra-Bayar — kalau lockedSum SENDIRI sudah menutup/melebihi
+        // total keranjang, kasir tidak perlu lagi pilih metode/nominal apa
+        // pun di layar ini (keypad/"Bayar Nanti" jadi tidak relevan sama
+        // sekali) — cukup SATU tombol konfirmasi.
+        child: _prabayarCoversTotal
+            ? SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  onPressed: (_isSaving || !_bayarEnabled)
+                      ? null
+                      : _onSelesaikanPrabayarPressed,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.payGreen,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Selesaikan Transaksi',
+                          style: TextStyle(fontSize: 16)),
                 ),
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text(_bayarLabel(), style: const TextStyle(fontSize: 16)),
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: FilledButton(
+                      onPressed: (_isSaving || !_bayarEnabled)
+                          ? null
+                          : _onBayarPressed,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        backgroundColor: AppTheme.payGreen,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text(_bayarLabel(),
+                              style: const TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      onPressed: (_isSaving || !_bayarEnabled)
+                          ? null
+                          : _onBayarNantiPressed,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        // Mode gelap: scheme.error terlalu pucat — pakai merah
+                        // solid yang sama dgn stepper state merah (tombol minus).
+                        backgroundColor:
+                            Theme.of(context).brightness == Brightness.dark
+                                ? const Color(0xFFD64545)
+                                : Theme.of(context).colorScheme.error,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Bayar Nanti',
+                          style: TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 2,
-              child: FilledButton(
-                onPressed:
-                    (_isSaving || !_bayarEnabled) ? null : _onBayarNantiPressed,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
-                  // Mode gelap: scheme.error terlalu pucat — pakai merah solid
-                  // yang sama dgn stepper state merah (tombol minus).
-                  backgroundColor:
-                      Theme.of(context).brightness == Brightness.dark
-                          ? const Color(0xFFD64545)
-                          : Theme.of(context).colorScheme.error,
-                  foregroundColor: Colors.white,
-                ),
-                child:
-                    const Text('Bayar Nanti', style: TextStyle(fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
       ),
     );
+  }
+
+  static String _prabayarMethodLabel(String type) => switch (type) {
+        'tunai' => 'Tunai',
+        'qris' => 'QRIS',
+        'bank' => 'Transfer Bank',
+        'ewallet' => 'E-Wallet',
+        'tempo' => 'Tempo',
+        _ => type,
+      };
+
+  /// Fitur Pra-Bayar — "Selesaikan Transaksi" saat lockedSum SUDAH
+  /// menutup/melebihi total. Tunai/keypad TIDAK relevan (kasir tidak pernah
+  /// mengetik nominal apa pun) — `_tendered` dipaksa 0 supaya `_confirm()`
+  /// menghitung `paidAmountNow = 0` & seluruhnya berasal dari entri Pra-Bayar
+  /// yang sudah terkunci.
+  Future<void> _onSelesaikanPrabayarPressed() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _tendered = 0);
+    await _confirm();
   }
 
   /// Tombol "Bayar" aktif: keranjang tidak kosong. Untuk tunai, jumlah uang
