@@ -8,6 +8,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 September 2026 (sesi kesembilan belas)
+
+### ✨ Baru
+- **Transaksi yang dibatalkan sekarang tetap terlihat di Laporan**
+  (ditandai badge "VOID" + totalnya dicoret), bisa dilihat notanya
+  lengkap, dan bisa dicatat alasannya. Sebelumnya transaksi yang dibatalkan
+  langsung hilang dari daftar Laporan -> Transaksi, seolah datanya lenyap
+  (padahal tetap tersimpan di database, cuma tidak ditampilkan).
+- Saat membatalkan transaksi, sekarang ada kolom **"Alasan (opsional)"**
+  di dialog konfirmasi — kalau diisi, alasannya ikut tersimpan & muncul di
+  struk bersama kode kasir/owner yang membatalkannya.
+- Tap transaksi di Laporan -> Transaksi sekarang langsung membuka **struk
+  lengkap** (item, harga, pelanggan) — bukan lagi ringkasan singkat yang
+  cuma menampilkan total/metode/waktu.
+
 ## 5 September 2026 (sesi kedelapan belas)
 
 ### 🎨 Tampilan

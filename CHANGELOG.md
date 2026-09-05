@@ -7,6 +7,26 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-05 (sesi kesembilan belas)
+
+- `fd6fa1d` — feat(laporan): transaksi void kini tampil di Laporan ->
+  Transaksi (dulu difilter total oleh `watchTransactions`, padahal badge
+  VOID + total dicoret di `_TxTile` sudah ada tapi tak pernah terpicu) —
+  `watchTransactions()` dapat parameter `includeVoid` (default `false`,
+  semua pemanggil lain tidak berubah). Tap nota (void/bukan) di Laporan ->
+  Transaksi kini navigasi ke `ReceiptScreen` (struk asli lengkap), bukan
+  sheet ringkasan tipis lama — dialog void bespoke `_confirmVoid` &
+  `_tambahBayar` di `transaksi_tab.dart` jadi dead code, dihapus. Kolom
+  baru `Transactions.voidedBy`/`voidReason` (schemaVersion 38 -> 39,
+  migrasi nullable/aditif) dicatat `voidTransaction()` via parameter
+  `reason` opsional baru; `showVoidTransactionDialog` (bersama) dapat
+  field "Alasan (opsional)"; `ReceiptScreen` tampilkan siapa & alasan void
+  di banner "Transaksi ini telah dibatalkan". Turut memperbaiki bug
+  `TextEditingController` dipakai setelah dispose (dialog masih animasi
+  keluar) yang ketahuan dari test UI baru. Test baru: `migration_v39_test`,
+  `void_reason_test`, `transaksi_tab_void_test`, `void_dialog_reason_test`
+  (semua revert-verified).
+
 ## 2026-09-05 (sesi kedelapan belas)
 
 - `50b6cbe` — refactor(kasir): revisi tata letak UI Pra-Bayar — banner
