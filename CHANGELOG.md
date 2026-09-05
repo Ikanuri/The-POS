@@ -7,6 +7,40 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-05 (sesi kedua puluh satu)
+
+- `5f45f4a` — feat(pengaturan): Fase B "Kategori Harga" — layar baru
+  Pengaturan -> Kategori Harga (`kategori_harga_screen.dart`). List
+  kategori (CRUD nama, reorder, hapus — pola sama `PaymentMethodsScreen`).
+  Detail kategori: daftar produk anggota + tambah produk (cari produk ->
+  pilih satuan) + editor margin bidirectional per produk (toggle Acuan
+  Modal/Dasar — "Modal" disabled kalau costPrice<=0 — x toggle Jenis
+  Rupiah/Persen; field Margin & Harga Jual saling live-update). Route
+  `/pengaturan/kategori-harga` + entry menu Pengaturan. Test widget
+  (`kategori_harga_screen_test.dart`, revert-verified). Version
+  2.41.0+88 -> 2.42.0+89.
+- `2e640c3` — test: bump assertion `PRAGMA user_version` terkini (v7-v39)
+  ke 40, konsekuensi mekanis dari bump schemaVersion di commit
+  sebelumnya (konvensi lama proyek).
+- `143eacd` — feat(db): Fase B "Kategori Harga" — skema + kalkulasi.
+  Migrasi aditif schemaVersion 39 -> 40: tabel baru `PriceCategories`
+  (murni label pengelompokan, tanpa margin default) + 4 kolom nullable
+  di `AltPrices` (`priceCategoryId`, `marginAnchor`, `marginType`,
+  `marginValue`) — baris lama/ad-hoc tanpa kategori tidak berubah.
+  Kalkulasi murni bidirectional `computeCategoryPrice`/
+  `computeMarginValue` (`lib/core/utils/price_category_calc.dart`) —
+  guard anchor "modal" dgn costPrice<=0 melempar `ArgumentError`.
+  `AppDatabase.getAltPrices()` menghitung ULANG live harga baris
+  berkategori dari harga dasar/modal produk TERKINI sebelum
+  dikembalikan (chip "Harga Lain" `ItemEntrySheet` otomatis jadi
+  dinamis, tanpa perlu diubah). CRUD `PriceCategories` +
+  `getPriceCategoryMembers`/`setPriceCategoryMargin`/
+  `removeProductFromPriceCategory`. Hapus kategori melepas keterkaitan
+  (baris `AltPrices` jadi harga manual beku, tidak dihapus); lepas satu
+  produk dari layar detail menghapus baris totalnya. Test: migrasi
+  v39->v40, kalkulasi (19 kasus), CRUD+live-price+semantik hapus (9
+  kasus) — semua di-revert-verify.
+
 ## 2026-09-05 (sesi kedua puluh)
 
 - `f527c4e` — feat(kasir): Fase A "Kategori Harga" — dialog "Ubah Total" di

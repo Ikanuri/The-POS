@@ -5,6 +5,86 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 5 September 2026 (sesi kedua puluh satu). Versi kerja
+**2.42.0+89** (MINOR naik — layar baru Pengaturan -> Kategori Harga,
+terlihat pengguna). **schemaVersion 39 -> 40** — tabel baru
+`PriceCategories` + 4 kolom nullable di `AltPrices` (migrasi aditif)._
+
+**KONTEKS PENTING utk sesi berikutnya**: sesi ini adalah **Fase B** dari
+rencana besar "Kategori Harga" (Fase A = mode Diskon % di Ubah Total,
+`f527c4e`, SELESAI & sudah di sesi sebelumnya — TIDAK terkait langsung).
+- **Fase B (SESI INI, `143eacd` + `5f45f4a`, SELESAI)** — skema +
+  kalkulasi + layar kelola kategori. Detail di bawah.
+- **Fase C (BELUM DIKERJAKAN, MENYUSUL TERPISAH)** — toggle AKTIF
+  kategori harga di keranjang kasir + integrasi `PriceService.
+  resolvePrice`. JANGAN mulai tanpa konfirmasi user — `PriceService`/
+  `resolvePrice`/logika pemilihan harga di `ItemEntrySheet` SENGAJA
+  TIDAK disentuh sesi ini. Prinsip yang SUDAH disepakati utk Fase C
+  nanti: **manual override selalu menang** begitu ada toggle aktif
+  kategori di keranjang.
+
+**Yang dibangun sesi ini** (lihat dok inline di tiap file utk detail
+penuh, jangan re-derive dari nol):
+- **Skema** (`lib/core/database/tables/pricing_tables.dart`):
+  `PriceCategories` (id/name/sortOrder/createdAt — MURNI label
+  pengelompokan, TIDAK ADA margin default per kategori — margin SELALU
+  per-produk). `AltPrices` +4 kolom nullable: `priceCategoryId`,
+  `marginAnchor` (`'modal'`|`'dasar'`), `marginType`
+  (`'percent'`|`'fixed'`), `marginValue`. Baris `AltPrices` lama/manual
+  tanpa kategori TIDAK berubah perilakunya sama sekali.
+- **Kalkulasi murni** — `lib/core/utils/price_category_calc.dart`:
+  `computeCategoryPrice`/`computeMarginValue` (bidirectional — margin
+  <-> harga jual, sumber kebenaran = margin). Guard: anchor `'modal'`
+  dgn `costPrice<=0` melempar `ArgumentError` (banyak produk toko nyata
+  belum punya HPP — bukan kasus langka).
+- **Harga LIVE (bukan beku)** — `AppDatabase.getAltPrices()`
+  (`app_database.dart`) menghitung ULANG harga baris berkategori dari
+  `PriceTiers` TERKINI produk itu sebelum dikembalikan (kolom `price` di
+  DB cuma snapshot/fallback jika `computeCategoryPrice` gagal, mis. HPP
+  dihapus belakangan). Efek samping BAGUS: chip "Harga Lain" kategori di
+  `ItemEntrySheet` otomatis dinamis TANPA `ItemEntrySheet` diubah sama
+  sekali (diverifikasi, bukan asumsi).
+- **CRUD DB** (`app_database.dart`): `getAllPriceCategories`/
+  `watchPriceCategories`/`addPriceCategory`/`renamePriceCategory`/
+  `reorderPriceCategories`/`deletePriceCategory`/
+  `getPriceCategoryMembers`/`setPriceCategoryMargin`/
+  `removeProductFromPriceCategory`. **Keputusan hapus** (2 semantik
+  BEDA, sengaja): `deletePriceCategory` (massal) melepas keterkaitan
+  baris `AltPrices` anggota (jadi harga manual BEKU, TIDAK dihapus —
+  bisa dipulihkan); `removeProductFromPriceCategory` (satu baris, dari
+  layar detail) MENGHAPUS TOTAL baris itu (dibuat khusus lewat layar
+  ini, bukan alt-price manual buatan owner sendiri).
+- **UI** — `lib/features/pengaturan/kategori_harga_screen.dart`:
+  `KategoriHargaScreen` (list, pola sama `PaymentMethodsScreen`) +
+  `KategoriHargaDetailScreen` (anggota + tambah/keluarkan produk) +
+  `_MarginEditorSheet` (bottom sheet bidirectional Margin<->Harga Jual,
+  toggle Acuan/Jenis via `SegmentedButton`) + `_ProductUnitPickerScreen`
+  (cari produk -> pilih satuan). Route `/pengaturan/kategori-harga`,
+  entry menu di `PengaturanScreen` dekat "Metode Pembayaran".
+
+**Test**: `price_category_calc_test.dart` (19 kasus murni),
+`migration_v40_test.dart`, `price_categories_db_test.dart` (9 kasus DB:
+CRUD, live-price, semantik hapus x2, upsert, guard costPrice=0),
+`kategori_harga_screen_test.dart` (6 kasus widget). Semua di-revert-
+verify. Test migrasi LAMA (`migration_v7..v39_test.dart`) diperbarui
+assert `PRAGMA user_version` akhir dari 39 -> 40 (konsekuensi mekanis
+bump schemaVersion, konvensi lama proyek — lihat commit `2e640c3`).
+
+Full `flutter test`: **1431 lulus, 2 gagal** — KEDUANYA
+`proposal_unchanged_end_to_end_test.dart` ("Address already in use" port
+8625, SocketException), dikonfirmasi HANYA gagal saat paralel penuh &
+lulus sendirian (pola sama yang sudah didokumentasikan sesi-sesi
+sebelumnya, BUKAN regresi sesi ini). `flutter analyze` bersih (0 issue).
+
+Item opsional yang SENGAJA TIDAK dikerjakan sesi ini (boleh dilakukan
+sesi lain kalau owner minta): indikator read-only "Kategori: <nama>" di
+`produk_form_screen.dart` (form Produk) utk baris alt-price yang sudah
+ke-assign kategori — briefing eksplisit menandainya opsional & TIDAK
+boleh mengganggu alur input alt-price manual yang sudah ada; risikonya
+dinilai lebih besar dari manfaatnya utk sesi ini.
+
+---
+
 _Update sesi 5 September 2026 (sesi kedua puluh). Versi kerja **2.41.0+88**
 (MINOR naik — mode Diskon % baru di dialog Ubah Total, terlihat pengguna).
 schemaVersion TETAP 39 — TIDAK ADA tabel/skema baru disentuh sesi ini
