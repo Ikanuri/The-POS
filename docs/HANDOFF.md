@@ -5,6 +5,65 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 5 September 2026 (sesi kedua puluh tiga). Versi kerja
+**2.44.0+91** (MINOR naik — toggle Kategori Harga di keranjang,
+terlihat pengguna). schemaVersion TETAP 40 — TIDAK ADA perubahan skema
+DB sesi ini (murni logika + UI, kolom yg dipakai sudah ada dari Fase B)._
+
+**"Kategori Harga" (Fase A + B + C) SUDAH LENGKAP/SELESAI SEMUA** — tidak
+ada Fase lanjutan yang direncanakan lagi kecuali user minta sesuatu yang
+baru. Fase A (diskon % di Ubah Total) & Fase B (skema `PriceCategories`
++ margin per-produk + layar kelola di Pengaturan) sudah live sebelumnya.
+**Fase C (sesi ini, `d77117e`)** — toggle kategori AKTIF langsung di
+keranjang kasir:
+- Kasir pilih 1 kategori (chip "Normal"/nama kategori) di `CartSheet`
+  (HANYA `kMainCartId`) — baris keranjang yang produknya terdaftar di
+  kategori itu otomatis pindah ke harga kategori (live-computed dari
+  margin Fase B, bukan formula baru). Chip disembunyikan total kalau
+  device tak berizin `override_harga` ATAU belum ada `PriceCategories`
+  sama sekali.
+- **Prioritas resolusi harga** (final): manual override (`CartItem.
+  priceOverridden`, di level CartItem) > kategori aktif > harga grup
+  pelanggan > tier qty > harga dasar. `PriceService.resolvePrice`
+  parameter baru `activeCategoryId` (source baru `PriceSource.category`,
+  costPrice tetap dari tier qty berlaku spy laba akurat).
+- **Manual override SELALU menang** — baris `priceOverridden==true`
+  TIDAK PERNAH disentuh toggle, baik saat dinyalakan/dimatikan/ganti
+  kategori. Penanda `CartItem.priceFromCategoryId` MURNI internal
+  (dipakai `repriceCartForCategoryChange` di
+  `cart_price_category_provider.dart`), tidak pernah mengubah
+  `priceOverridden`/ikon pensil override manual — badge visualnya beda
+  (`Icons.sell_outlined`, bukan `Icons.edit`).
+- Item baru via `ItemEntrySheet` selagi kategori aktif → harga awal
+  SUDAH harga kategori (baca `cartPriceCategoryProvider` saat
+  `resolvePrice`); edit manual sebelum submit tetap melewati penanda.
+- Hold/resume (`kasir_screen.dart` + `cart_sheet.dart`): kategori aktif
+  ikut payload (`priceCategory`), pulih saat resume. Transfer transaksi
+  via QR SENGAJA TIDAK membawa penanda kategori lintas device (di luar
+  scope — device penerima terima harga apa adanya, perilaku lama).
+- **Gotcha ketemu sesi ini**: daftar `PriceCategories` di `CartSheet`
+  SENGAJA `FutureProvider` (`priceCategoriesForToggleProvider`), BUKAN
+  `StreamProvider` reaktif — `CartSheet` dipakai puluhan test widget yg
+  menutup `AppDatabase` di `tearDown` TANPA `drain()` (lihat gotcha
+  `StreamProvider` di CLAUDE.md); begitu ditambah sbg `StreamProvider`,
+  `cart_sheet_transfer_icon_test.dart` (dan berpotensi test `CartSheet`
+  lain) langsung HANG "Timer is still pending". Kategori tidak pernah
+  diedit dari alur kasir (CRUD-nya di layar Pengaturan terpisah) jadi
+  tidak butuh reaktif live — fetch sekali tiap sheet dibuka sudah cukup.
+- 22 test baru (semua di-revert-verify): `price_service_category_test.
+  dart`, `cart_reprice_category_test.dart`,
+  `kasir_price_category_hold_resume_test.dart`,
+  `cart_sheet_price_category_toggle_test.dart`,
+  `item_entry_sheet_price_category_test.dart`. Full `flutter test`:
+  **1463 lulus, 1 gagal** (`proposal_unchanged_end_to_end_test.dart`,
+  port 8625 "Address already in use" — dikonfirmasi lulus sendirian,
+  pola flaky yg sama, BUKAN regresi). `flutter analyze` bersih (0 issue).
+
+Tidak ada item menggantung dari Fase C — scope selesai persis sesuai
+briefing.
+
+---
+
 _Update sesi 5 September 2026 (sesi kedua puluh dua, dikerjakan di git
 WORKTREE terpisah dari sesi Fase B "Kategori Harga" di atas — dua agen
 paralel, fitur TIDAK terkait). Versi kerja **2.43.0+90** (MINOR naik —
