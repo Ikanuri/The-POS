@@ -13,20 +13,21 @@ import '../../core/theme/app_theme.dart';
 /// mengecil lagi. Teks yang sudah diketik TIDAK ikut hilang saat
 /// mengecil — cuma lebar VISUAL yang berubah, filter tetap aktif.
 ///
-/// IMPLEMENTASI TEKNIS SENGAJA disederhanakan dari `_KasirTopbar` (BUKAN
-/// `Stack`+`AnimatedPositioned` yang menimpa baris tombol scan/antrian/
-/// riwayat/grid di belakangnya secara animasi) — 2 layar Laci Meja yang
-/// memakai widget ini TIDAK punya baris tombol yang perlu disembunyikan
-/// dengan cara ditimpa; di sini PEMANGGIL yang memutuskan apa yang
-/// disembunyikan/dimunculkan di sebelahnya (lihat `expanded`/
-/// `onExpandedChanged` — controlled component, status dipegang PEMANGGIL
-/// bukan disimpan sendiri) via `if (expanded) ... else ...` biasa,
-/// sehingga TIDAK butuh replikasi matematika lebar/animasi overlay yang
-/// spesifik ke tata letak tombol kasir. Satu widget ini dipakai ULANG di
-/// `laci_meja_dashboard_screen.dart` (tab Pre-order) DAN
-/// `riwayat_laci_meja_screen.dart` — sengaja disatukan (bukan diduplikasi
-/// 2x) krn perilakunya identik, cuma `hintText` & callback yang beda per
-/// layar.
+/// IMPLEMENTASI TEKNIS widget INI SENDIRI tetap sederhana (BUKAN
+/// `Stack`+`AnimatedPositioned` di dalam sini) — cuma `if (expanded) ...
+/// else ...` biasa yang merender collapsed (ikon 36×36) atau `TextField`
+/// penuh, mengikuti lebar yang DIBERI PEMANGGIL (controlled component,
+/// status dipegang PEMANGGIL lewat `expanded`/`onExpandedChanged`, lihat
+/// juga dok field itu). Susulan (poin 1c, `laci_meja_dashboard_screen.dart`):
+/// tab Pre-order sekarang PUNYA baris tombol (Kuota+Salin) yang perlu
+/// ditimpa begitu field ini melebar — mekanisme `Stack`+`AnimatedPositioned`
+/// utk itu ada di PEMANGGIL (dashboard screen), BUKAN di sini, supaya
+/// `riwayat_laci_meja_screen.dart` (yang tidak py tombol di sebelahnya)
+/// tetap bisa pakai widget ini apa adanya tanpa ikut kena kerumitan itu.
+/// Satu widget ini dipakai ULANG di `laci_meja_dashboard_screen.dart` (tab
+/// Pre-order) DAN `riwayat_laci_meja_screen.dart` — sengaja disatukan
+/// (bukan diduplikasi 2x) krn perilaku intinya identik, cuma `hintText` &
+/// callback yang beda per layar.
 class LaciMejaExpandableSearch extends StatefulWidget {
   const LaciMejaExpandableSearch({
     super.key,
@@ -136,10 +137,11 @@ class _LaciMejaExpandableSearchState extends State<LaciMejaExpandableSearch> {
   }
 }
 
-/// Ikon collapsed — gaya SAMA dgn tombol ikon lain yang sudah ada di baris
-/// statistik Pre-order dashboard (mis. tombol Kuota/Salin Laporan: border
-/// aksen tipis, `minimumSize` 34×34) supaya konsisten sebagai satu keluarga
-/// tombol ikon, bukan style baru.
+/// Ikon collapsed — gaya SAMA dgn tombol ikon lain di baris atas dashboard
+/// (kategori, Kuota/Salin Laporan). Ukuran 36×36 PERSIS `_CategoryIconBtn`
+/// (permintaan user, redesain: field cari jadi satu ikon sebesar kotak
+/// kategori, bukan lagi kotak lebar `Expanded`) — border aksen tipis, biar
+/// tetap satu keluarga tombol ikon, bukan style baru.
 class _CollapsedSearchButton extends StatelessWidget {
   const _CollapsedSearchButton({required this.onTap});
   final VoidCallback onTap;
@@ -151,10 +153,13 @@ class _CollapsedSearchButton extends StatelessWidget {
       tooltip: 'Cari',
       icon: const Icon(Icons.search, size: 18),
       visualDensity: VisualDensity.compact,
+      alignment: Alignment.center,
       style: IconButton.styleFrom(
         foregroundColor: AppTheme.accent,
         side: BorderSide(color: AppTheme.accent.withOpacity(0.5)),
-        minimumSize: const Size(34, 34),
+        minimumSize: const Size(36, 36),
+        maximumSize: const Size(36, 36),
+        alignment: Alignment.center,
       ),
     );
   }

@@ -107,6 +107,15 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
             tooltip: 'Kelola Kategori',
             onPressed: () => context.push('/produk/kategori'),
           ),
+          // Revisi 3 (permintaan user): pindah dari Pengaturan ke sini —
+          // lebih dekat konteksnya ke daftar produk. Route TETAP
+          // `/pengaturan/kategori-harga` (URL internal, tidak dilihat
+          // pengguna), cuma entry point-nya yang pindah.
+          IconButton(
+            icon: const Icon(Icons.sell_outlined),
+            tooltip: 'Kategori Harga',
+            onPressed: () => context.push('/pengaturan/kategori-harga'),
+          ),
           IconButton(
             icon: const Icon(Icons.collections_bookmark_outlined),
             tooltip: 'Katalog',

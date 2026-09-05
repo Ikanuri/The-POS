@@ -146,15 +146,12 @@ class PengaturanScreen extends ConsumerWidget {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/pengaturan/metode-bayar'),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.sell_outlined),
-                        title: const Text('Kategori Harga'),
-                        subtitle: const Text(
-                            'Kelompokkan produk & atur margin per produk'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () =>
-                            context.push('/pengaturan/kategori-harga'),
-                      ),
+                      // "Kategori Harga" PINDAH ke layar Produk (permintaan
+                      // user, revisi 3) — lebih dekat konteksnya ke daftar
+                      // produk drpd Pengaturan. Route-nya sendiri TETAP
+                      // `/pengaturan/kategori-harga` (URL internal, tidak
+                      // terlihat user), cuma entry point-nya yang pindah —
+                      // lihat `produk_list_screen.dart`.
                       Builder(builder: (context) {
                         final canExpense =
                             ref.watch(_canInputExpenseProvider).valueOrNull ??

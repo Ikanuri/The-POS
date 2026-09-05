@@ -53,36 +53,25 @@ Finder findEntryRows({Finder? of}) {
   return of == null ? matcher : find.descendant(of: of, matching: matcher);
 }
 
-/// Susulan (permintaan user, screenshot layout sempit): pemilih produk
-/// jaminan DAN dropdown filter produk sekarang SATU widget yang sama persis
-/// (`ProductPickerDropdown`, `product_picker_dropdown.dart`, dipakai ulang —
-/// permintaan user eksplisit "opsi dropdown design anda kemarin itu sudah
-/// paling pas") — jadi finder berbasis TIPE SAJA tidak cukup lagi kalau
-/// keduanya sama-sama tampil (>1 produk pre-order aktif). DIBATASI lewat
-/// ancestor `_PreorderStatsLine` (tempat pemilih jaminan dirender) supaya
-/// tidak ikut kena dropdown filter produk di baris atas.
-Finder _jaminanPickerScope() => find.descendant(
-    of: find.byWidgetPredicate(
-        (w) => w.runtimeType.toString() == '_PreorderStatsLine'),
-    matching: find.byWidgetPredicate(
-        (w) => w.runtimeType.toString() == 'ProductPickerDropdown'));
+/// Redesain lanjutan (permintaan user, poin 1a): dropdown INTERNAL pemilih
+/// produk jaminan (di dalam chip statistik) DIHAPUS TOTAL — fungsinya sudah
+/// diwakili dropdown filter produk UTAMA (baris di atas daftar kartu).
+/// Jaminan sekarang teks biasa ("Jaminan: N") yang ikut produk yang SEDANG
+/// difilter lewat dropdown utama itu; null/"Semua Produk" -> baris jaminan
+/// disembunyikan total (tidak ada satu produk tunggal utk dihitung).
+///
+/// Dropdown filter produk UTAMA (satu2nya `ProductPickerDropdown` yang
+/// tersisa di layar ini) — dipakai test di bawah utk memilih produk lalu
+/// mengecek angka "Jaminan: N" ikut berubah.
+Finder findMainProductFilterButton() =>
+    find.byWidgetPredicate((w) => w.runtimeType.toString() == 'ProductPickerDropdown');
 
-Finder findJaminanPickerText(String name) =>
-    find.descendant(of: _jaminanPickerScope(), matching: find.text(name));
-
-/// Tombol pemilih jaminan itu sendiri (utk di-tap membuka dropdown) —
-/// dibatasi ancestor yang sama spt [findJaminanPickerText].
-Finder findJaminanPickerButton() => find.descendant(
-    of: find.byWidgetPredicate(
-        (w) => w.runtimeType.toString() == '_PreorderStatsLine'),
-    matching: find.byType(PopupMenuButton<String>));
-
-/// Nama produk di dalam SATU baris dropdown jaminan (`ProductPickerMenuRow`,
+/// Nama produk di dalam SATU baris dropdown filter (`ProductPickerMenuRow`,
 /// `product_picker_dropdown.dart`) — dropdown-nya sendiri didesain khusus
 /// (bukan `ListTile` bawaan). TIDAK perlu dibatasi ancestor krn isi popup
 /// dirender via `Overlay` (bukan turunan tree asalnya) & hanya SATU popup
 /// yang bisa terbuka sekaligus di test manapun di sini.
-Finder findJaminanMenuText(String text) => find.descendant(
+Finder findProductFilterMenuText(String text) => find.descendant(
     of: find.byWidgetPredicate(
         (w) => w.runtimeType.toString() == 'ProductPickerMenuRow'),
     matching: find.text(text));
@@ -537,67 +526,64 @@ void main() {
     }
 
     testWidgets(
-        'statistik ringkas satu baris memisahkan total produk vs total '
-        'jaminan (permintaan user: 2 kartu besar diganti 1 baris teks)',
-        (tester) async {
+        'statistik ringkas (entri/Produk) tampil begitu tab dibuka; jaminan '
+        'DISEMBUNYIKAN default krn "Semua Produk" (2 produk aktif, tidak ada '
+        'satu produk tunggal utk dihitung) — poin 1a', (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      // qty 2 + 3 = 5 produk; jaminan 2 + 1 = 3 jaminan — SENGAJA dua angka
-      // terpisah, bukan dijumlahkan jadi satu. Produk PERTAMA yang punya
-      // jaminan (Tabung Gas, P1) ditampilkan langsung di chip pemilih tanpa
-      // perlu tap apa pun; angka "Jaminan: N" DINAMIS ikut produk yang
-      // ditampilkan (2, bukan total 3) — permintaan user eksplisit, bukan
-      // dijumlah semua produk.
+      // qty 2 + 3 = 5 produk — jaminan (dulu dijumlah scr terpisah lewat
+      // dropdown internal) sekarang HILANG TOTAL selama "Semua Produk"
+      // masih terpilih di dropdown filter UTAMA (redesain poin 1a: dropdown
+      // internal pemilih jaminan DIHAPUS, tidak ada lagi auto-fallback "produk
+      // pertama berjaminan").
       expect(find.textContaining('2 entri'), findsOneWidget);
       expect(find.textContaining('Produk: 5', findRichText: true),
           findsOneWidget);
-      expect(findJaminanPickerText('Tabung Gas'), findsOneWidget,
-          reason: 'produk pertama berjaminan ditampilkan default di chip');
-      expect(find.textContaining('Jaminan: 2', findRichText: true),
-          findsOneWidget,
-          reason: 'angka jaminan ikut produk yang ditampilkan (Tabung Gas '
-              '= 2), BUKAN total semua produk (3)');
+      expect(find.textContaining('Jaminan:', findRichText: true), findsNothing,
+          reason: '"Semua Produk" dipilih -> tidak ada produk tunggal utk '
+              'jaminan, baris disembunyikan total');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
     });
 
     testWidgets(
-        'chip jaminan bisa DIGANTI produk yang ditampilkan lewat dropdown '
-        'custom (permintaan user, bukan tampilan default flutter), angka '
-        '"Jaminan: N" ikut berubah',
-        (tester) async {
+        'memilih produk lewat dropdown FILTER UTAMA menampilkan jaminan '
+        'TEKS BIASA produk itu (poin 1a: bukan dropdown terpisah lagi), & '
+        'ikut berubah kalau produk lain dipilih', (tester) async {
       await seedPreorders();
       await openPreorderTab(tester);
 
-      // Default: Tabung Gas (produk pertama berjaminan), Jaminan: 2.
-      expect(findJaminanPickerText('Tabung Gas'), findsOneWidget);
+      // Buka dropdown filter UTAMA (chip "Semua Produk") -> pilih Tabung Gas.
+      await tester.tap(find.text('Semua Produk'));
+      await tester.pumpAndSettle();
+      await tester.tap(findProductFilterMenuText('Tabung Gas').last);
+      await tester.pumpAndSettle();
+
       expect(find.textContaining('Jaminan: 2', findRichText: true),
-          findsOneWidget);
+          findsOneWidget,
+          reason: 'jaminan Tabung Gas (2) tampil sbg teks biasa begitu '
+              'produk itu difilter dari dropdown UTAMA');
+      // Tidak ada lagi dropdown/tombol KEDUA yang khusus utk jaminan.
+      expect(
+          find.byWidgetPredicate(
+              (w) => w.runtimeType.toString() == 'ProductPickerDropdown'),
+          findsOneWidget,
+          reason: 'cuma SATU ProductPickerDropdown tersisa di layar ini '
+              '(filter utama) — dropdown jaminan internal sudah dihapus');
 
-      // Tap chip -> dropdown custom muncul, tampilkan kedua pilihan (nama +
-      // badge qty terpisah, lihat `ProductPickerMenuRow`).
-      await tester.tap(findJaminanPickerButton());
+      // Ganti ke Galon Aqua -> angka jaminan ikut berubah.
+      await tester.tap(find.text('Tabung Gas'));
+      await tester.pumpAndSettle();
+      await tester.tap(findProductFilterMenuText('Galon Aqua').last);
       await tester.pumpAndSettle();
 
-      expect(findJaminanMenuText('Galon Aqua'), findsOneWidget,
-          reason: 'produk LAIN yang berjaminan tetap bisa dipilih lewat '
-              'dropdown, tidak cuma yang sedang ditampilkan');
-      expect(findJaminanMenuText('1 jaminan'), findsOneWidget,
-          reason: 'badge qty per produk di menu dropdown, desain sendiri '
-              '(bukan ListTile bawaan)');
-
-      // Pilih Galon Aqua -> chip & angka "Jaminan: N" berganti.
-      await tester.tap(findJaminanMenuText('Galon Aqua'));
-      await tester.pumpAndSettle();
-
-      expect(findJaminanPickerText('Galon Aqua'), findsOneWidget,
-          reason: 'chip sekarang menampilkan Galon Aqua tanpa perlu tap '
-              'tooltip lagi');
       expect(find.textContaining('Jaminan: 1', findRichText: true),
           findsOneWidget,
-          reason: 'angka jaminan ikut berubah jadi milik Galon Aqua (1)');
+          reason: 'jaminan ikut berubah jadi milik Galon Aqua (1)');
+      expect(find.textContaining('Jaminan: 2', findRichText: true),
+          findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -615,26 +601,24 @@ void main() {
       expect(find.text('Pak Budi'), findsOneWidget);
       expect(find.text('Bu Artia'), findsNothing);
       // Statistik & filter dropdown disembunyikan sementara selagi field
-      // cari melebar (lihat `_buildPreorderList`) — mengecilkan lewat blur
-      // (BUKAN tombol x: teks "Budi" masih ada, tombol x kalau isi tidak
-      // kosong JUSTRU menghapus teksnya, bukan mengecilkan — lihat dok
+      // cari melebar (lihat baris dropdown di `build()`) — mengecilkan lewat
+      // blur (BUKAN tombol x: teks "Budi" masih ada, tombol x kalau isi
+      // tidak kosong JUSTRU menghapus teksnya, bukan mengecilkan — lihat dok
       // `LaciMejaExpandableSearch._onClearOrShrink`) supaya query TETAP
       // aktif saat statistik tersaring diverifikasi.
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
-      // Statistik ikut tersaring: sisa 3 produk & 1 jaminan (cuma Galon Aqua
-      // -> chip tanpa dropdown, krn tidak ada produk lain berjaminan utk
-      // dipilih — dropdown FILTER produk di baris atas tetap ada krn masih
-      // ada 2 produk yg punya antrian terbuka, TIDAK terpengaruh pencarian).
+      // Statistik ikut tersaring (Produk: 3, cuma Pak Budi/Galon Aqua yg
+      // cocok) — dropdown FILTER produk di baris atas tetap ada krn masih
+      // ada 2 produk yg punya antrian terbuka (TIDAK terpengaruh pencarian),
+      // & krn masih "Semua Produk" (belum difilter scr eksplisit) jaminan
+      // tetap disembunyikan (poin 1a) — sama spt sebelum mencari.
       expect(find.textContaining('Produk: 3', findRichText: true),
           findsOneWidget);
-      expect(findJaminanPickerText('Galon Aqua'), findsOneWidget);
-      expect(find.textContaining('Jaminan: 1', findRichText: true),
-          findsOneWidget);
-      expect(findJaminanPickerButton(), findsNothing,
-          reason: 'cuma 1 produk berjaminan -> tidak ada gunanya dropdown '
-              'jaminan (beda dari dropdown FILTER produk di baris atas yg '
-              'tetap ada)');
+      expect(find.textContaining('Jaminan:', findRichText: true), findsNothing);
+      expect(find.text('Semua Produk'), findsOneWidget,
+          reason: 'dropdown filter UTAMA tetap ada, tidak terpengaruh '
+              'pencarian nama pelanggan');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -695,42 +679,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     });
 
-    testWidgets(
-        'susulan (permintaan user): nama produk yang KEPANJANGAN di chip '
-        'jaminan berjalan (marquee), bukan mendorong chip lain keluar '
-        'layar', (tester) async {
-      await seedTransaction('tx1');
-      await db.into(db.products).insert(ProductsCompanion.insert(
-          id: 'P1', name: 'Tabung Gas LPG 12kg Non-Subsidi Merah'));
-      await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
-          id: 'U1', productId: 'P1', isBaseUnit: const Value(true)));
-      await db.addPreorderEntry(
-          id: 'po1',
-          productId: 'P1',
-          productUnitId: 'U1',
-          customerName: 'Bu Artia',
-          qtyOrdered: 2,
-          depositQty: 2,
-          transactionId: 'tx1');
-      await openPreorderTab(tester);
-
-      // Nama panjang -> MarqueeText mendeteksi overflow & merender lewat
-      // jalur animasi (`AnimatedBuilder`+`OverflowBox`), BUKAN `Text` biasa
-      // yang softWrap:false bisa terpotong tanpa indikasi. Cuma 1 produk di
-      // sini (predikat tipe polos aman, tidak ambigu dgn dropdown filter
-      // produk yg butuh >1 produk utk tampil).
-      expect(
-          find.descendant(
-              of: find.byWidgetPredicate(
-                  (w) => w.runtimeType.toString() == 'ProductPickerDropdown'),
-              matching: find.byType(AnimatedBuilder)),
-          findsOneWidget,
-          reason: 'nama produk kepanjangan harus jalan lewat MarqueeText, '
-              'bukan Text polos yang diam kepotong');
-
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 10));
-    });
+    // Test marquee "nama produk kepanjangan di chip jaminan" (test lama)
+    // DIHAPUS: poin 1a menghapus dropdown internal jaminan (yg dulu
+    // menampilkan NAMA produk, butuh MarqueeText utk nama panjang) — jaminan
+    // sekarang murni ANGKA teks biasa (`_StatChip` "Jaminan: N"), tidak lagi
+    // menampilkan nama produk sama sekali, jadi tidak ada lagi teks panjang
+    // yg perlu marquee di baris ini.
   });
 
   group(
