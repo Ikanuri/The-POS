@@ -309,14 +309,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Statistik sekarang chip mini "Produk: N" (`_StatChip`) + chip pemilih
-    // produk (nama polos, "Lpg" — produk tunggal di sini jadi tanpa
-    // dropdown) + chip "Jaminan: N" yang angkanya DINAMIS ikut produk yang
-    // ditampilkan — lihat `_PreorderStatsLine`/`_ProductPickerChip`. Sebelum
+    // Statistik sekarang chip mini "Produk: N" (`_StatChip`) + chip
+    // "Jaminan: N" TEKS BIASA (poin 1a — dropdown internal pemilih jaminan
+    // dihapus total, tidak lagi menampilkan NAMA produk sama sekali,
+    // angkanya ikut `effectiveProduct`: produk tunggal di sini otomatis
+    // "terpilih" tanpa perlu dropdown, sama pola dgn garis kuota). Sebelum
     // dipenuhi: total penuh (1+1+5=7 produk, jaminan sama krn 1 produk).
     final produkAwal =
         find.textContaining('Produk: 7', findRichText: true).evaluate().length;
-    final namaChipAwal = find.text('Lpg').evaluate().length;
     final jaminanAwal =
         find.textContaining('Jaminan: 7', findRichText: true).evaluate().length;
 
@@ -339,8 +339,6 @@ void main() {
 
     expect(produkAwal, 1,
         reason: 'Total produk = 7 sebelum ada pemenuhan');
-    expect(namaChipAwal, 1,
-        reason: 'chip pemilih menampilkan nama produk (Lpg)');
     expect(jaminanAwal, 1,
         reason: 'angka jaminan (Lpg) = 7 sebelum ada pemenuhan');
     expect(angkaAwalMasihAda, 0,

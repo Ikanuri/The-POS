@@ -395,8 +395,11 @@ void main() {
   });
 
   testWidgets(
-      'baris statistik pre-order TIDAK lagi dibungkus Container besar '
-      'berwarna (permintaan user: hapus bingkai pembungkus)', (tester) async {
+      'statistik pre-order (chip "N entri"/"Produk: N") TIDAK dibungkus '
+      'Container besar berwarna (permintaan user: hapus bingkai pembungkus '
+      '— berlanjut di redesain lanjutan: `_PreorderStatsLine` sendiri sudah '
+      'dihapus total, isinya terpecah ke baris atas [Kuota/Salin] & baris '
+      'dropdown filter produk [entri/Produk/Jaminan])', (tester) async {
     await seedTransaction('tx1');
     await db.addPreorderEntry(
         id: 'p1',
@@ -411,16 +414,15 @@ void main() {
     await tester.tap(find.text('Pre-order'));
     await tester.pumpAndSettle();
 
-    final statsLine = find.byWidgetPredicate(
-        (w) => w.runtimeType.toString() == '_PreorderStatsLine');
-    expect(statsLine, findsOneWidget);
+    final entriChip = find.textContaining('entri');
+    expect(entriChip, findsOneWidget);
 
     // Sebelumnya ada Container ancestor dgn `color` terisi (laciBg opacity
     // 0.5) yg membungkus SELURUH baris statistik — redesain menghapusnya,
     // tiap atribut di dalamnya (chip/tombol) py bingkai sendiri2, tapi
     // TIDAK ADA LAGI satu Container besar berwarna yg jadi ancestor-nya.
     final coloredAncestor = find.ancestor(
-        of: statsLine,
+        of: entriChip,
         matching:
             find.byWidgetPredicate((w) => w is Container && w.color != null));
     expect(coloredAncestor, findsNothing,

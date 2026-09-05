@@ -7,6 +7,31 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-05 (sesi kedua puluh empat)
+
+- `39011fd` — refactor(laci-meja): rapikan baris statistik pre-order &
+  pindahkan Kategori Harga ke Produk. Hapus dropdown internal pemilih
+  produk jaminan di chip statistik pre-order (`_PreorderStatsLine` DIHAPUS
+  total) — fungsinya diwakili dropdown filter produk utama; jaminan
+  sekarang teks biasa "Jaminan: N" ikut `effectiveProduct` (produk yang
+  difilter, atau produk tunggal implisit), disembunyikan total kalau
+  "Semua Produk" dipilih dgn >1 produk aktif. Logika filter+statistik pindah
+  ke `_computePreorderStats` (dipakai bersama `build()` &
+  `_buildPreorderList`, satu sumber kebenaran). Field cari tab Pre-order
+  (& Titip/Pinjaman) jadi satu ikon 36x36 (persis `_CategoryIconBtn`),
+  melebar via `Stack`+`AnimatedPositioned` (pola sama `_KasirTopbar`)
+  menimpa tombol Kuota+Salin Laporan yang pindah ke baris atas
+  (`_PreorderTopActionBtn` baru) — kedua tombol itu cuma tampil di tab
+  Pre-order. qty total & jumlah entri pindah ke baris dropdown filter
+  produk. Fix bug nyata: `Container` 36x36 ikon kategori/search/Kuota/Salin
+  tanpa `alignment` bikin ikon numpuk di pojok kiri-atas — tambah
+  `alignment: Alignment.center`. Menu "Kategori Harga" pindah dari
+  `ListTile` Pengaturan ke `IconButton` AppBar layar Produk (route tetap
+  `/pengaturan/kategori-harga`). Test baru: `laci_meja_top_row_actions_test.
+  dart`, `kategori_harga_entry_point_test.dart`; `laci_meja_dashboard_
+  redesign_test.dart`/`laci_meja_dashboard_grouping_test.dart`/
+  `preorder_quota_line_test.dart` disesuaikan.
+
 ## 2026-09-05 (sesi kedua puluh tiga)
 
 - `d77117e` — feat(kasir): toggle Kategori Harga aktif di keranjang (Fase
