@@ -5,10 +5,25 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 4 September 2026 (sesi ketujuh belas). Versi kerja
-**2.38.0+85** (MINOR naik — fitur baru terlihat pengguna), schemaVersion
-TETAP 38 (tidak ada migrasi — persistensi Pra-Bayar murni SharedPreferences,
-sama pola `cartMetaProvider`)._
+_Update sesi 5 September 2026 (sesi kedelapan belas). Versi kerja
+**2.39.0+86** (MINOR naik — perubahan tata letak UI yang terlihat pengguna,
+bukan bugfix murni), schemaVersion TETAP 38 (tidak ada migrasi disentuh sesi
+ini)._
+
+**Sesi ini (`50b6cbe`)**: REVISI DESAIN UI fitur Pra-Bayar yang SUDAH ADA —
+logika (`cartPrabayarProvider`/`buildPrabayarCheckout`/dll di
+`payment_screen.dart`) TIDAK disentuh, murni tata letak/warna di
+`cart_sheet.dart`. Detail lengkap ada di bagian **"UI (`cart_sheet.dart`)"**
+di bawah — SUDAH DITIMPA supaya mencerminkan struktur BARU (bukan lagi
+banner+header icon lama). Ringkas: banner full-width di atas Total dihapus
+→ jadi baris kecil "Pra-Bayar Rp X" (netral) + "Sisa Rp Z"
+(merah)/"Kembalian Rp Y" (hijau) di bawah nominal Total, tap tetap buka
+daftar entri; tombol Pra-Bayar pindah dari ikon ke-7 di header (yg dulu
+bikin overflow 360dp, makanya header dibikin scroll horizontal) ke tombol
+sekunder (`IconButton.filledTonal`) di footer, sebelah tombol Bayar yang
+tetap dominan. Header sekarang balik ke 6 ikon (tanpa Pra-Bayar) — blok
+ikon header MASIH `SingleChildScrollView` horizontal (belum dikembalikan ke
+`Row` statis, tidak wajib & berisiko kalau ikon baru ditambah lagi nanti).
 
 **Susulan (permintaan user) setelah fitur Pra-Bayar utama, `076afe9`**:
 `_HeldCard` (kartu antrian "Ditahan" di `kasir_screen.dart`) sekarang
@@ -62,23 +77,32 @@ amount semua entri.
 - Setelah checkout sukses: `cartPrabayarProvider(_cartId).notifier.clear()`
   sejajar `cartProvider`/`cartMetaProvider`.
 
-**UI (`cart_sheet.dart`)**: tombol "Pra-Bayar" (ikon `lock_clock_outlined`,
-HANYA `kMainCartId` + gerbang `terima_pembayaran` via
-`needsPaymentGateProvider` — pola sama `canTransfer`) buka
-`showDebtPaymentSheet` YANG SUDAH ADA (`remaining` = total keranjang -
-totalLocked, clamp 0, TIDAK di-cap paksa di atas itu — sheet sendiri sudah
-punya kalkulator bebas). Hasil → `PrabayarEntry` baru. Badge live di atas
-footer total: "Pra-Bayar: Rp X terkunci · Sisa Rp Y" (atau "Kelebihan ...
-jadi kembalian saat checkout" kalau negatif) — tap → sheet daftar entri
-(hapus per-entri, selama belum checkout).
-**Efek samping penting**: menambah ikon ke-7 di header sheet bikin baris
-IconButton OVERFLOW di HP sempit 360dp (regresi ke
-`cart_sheet_header_overflow_test.dart`, KETEMU justru dari full test suite,
-bukan test baru) — fix: blok ikon (semua KECUALI judul "Keranjang") sekarang
-`SingleChildScrollView(scrollDirection: horizontal, reverse: true)`, bukan
-`Row` statis lagi. Kalau nambah ikon lagi ke depan, INI SUDAH aman
-(scroll), tidak perlu pola `IconButtonTheme` minimumSize manual lagi
-sebagai satu-satunya pertahanan.
+**UI (`cart_sheet.dart`) — STRUKTUR SAAT INI (sesi kedelapan belas,
+`50b6cbe`)**: tombol "Pra-Bayar" (ikon `lock_clock_outlined`, HANYA
+`kMainCartId` + gerbang `terima_pembayaran` via `needsPaymentGateProvider` —
+pola sama `canTransfer`) SEKARANG ada di baris FOOTER (bukan header lagi),
+`IconButton.filledTonal` sekunder di antara Column "Total" & `Expanded`
+tombol Bayar — buka `showDebtPaymentSheet` YANG SUDAH ADA (`remaining` =
+total keranjang - totalLocked, clamp 0). Hasil → `PrabayarEntry` baru.
+Ringkasan SEKARANG baris kecil (widget `_PrabayarFooterSummary`) DI DALAM
+Column footer yang sama dgn "Total"/nominalnya (bukan banner
+`primaryContainer` full-width terpisah lagi — itu SUDAH DIHAPUS): baris
+"Pra-Bayar Rp X" warna NETRAL (tanpa override color, bukan `scheme.primary`
+lagi), lalu SATU baris tambahan KALAU selisih != 0 — "Sisa Rp Z"
+(`AppTheme.debtFg`, merah) kalau kurang, atau "Kembalian Rp Y"
+(`AppTheme.changeFg`, hijau) kalau lebih; kalau PAS (selisih 0) tidak ada
+baris kedua sama sekali. Tap AREA RINGKASAN (bukan "Total"-nya sendiri) →
+`InkWell` yg sama membungkus seluruh Column Total, `onTap` cuma aktif kalau
+`canPrabayar && prabayarEntries.isNotEmpty` → `_showPrabayarList` (sheet
+daftar entri, hapus per-entri, selama belum checkout) — behavior tap ini
+TIDAK berubah dari sebelumnya, cuma titiknya pindah.
+**Efek samping (masih berlaku dari sesi sebelumnya)**: header sheet
+SEBELUMNYA (saat Pra-Bayar masih di header) sempat 7 ikon & overflow di HP
+sempit 360dp — fix-nya (blok ikon header pakai
+`SingleChildScrollView(scrollDirection: horizontal, reverse: true)`) TETAP
+DIPERTAHANKAN walau header sekarang balik ke 6 ikon (Pra-Bayar sudah pindah
+ke footer) — tidak dikembalikan ke `Row` statis krn tidak wajib & berisiko
+kalau ikon baru ditambah lagi nanti.
 
 **Transfer QR / Tempel Pesanan (`order_parser_service.dart`)**:
 `encodeHandoff`/`parse` bawa entri Pra-Bayar MENTAH (`ParsedPrabayarEntry

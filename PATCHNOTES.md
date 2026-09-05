@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 September 2026 (sesi kedelapan belas)
+
+### 🎨 Tampilan
+- **Tampilan Pra-Bayar di keranjang dirapikan** — ringkasan "sudah dikunci
+  berapa" sekarang muncul sebagai baris kecil langsung di bawah "Total"
+  (bukan lagi kotak besar terpisah). Kalau masih ada sisa yang belum
+  dibayar, angkanya sekarang **merah** ("Sisa"), dan kalau sudah kelebihan
+  jadi **hijau** ("Kembalian") — sama seperti warna yang sudah dikenal di
+  layar Bayar. Tombol "Pra-Bayar" juga pindah dari atas ke bawah, jadi tombol
+  kecil di samping tombol "Bayar" supaya tombol "Bayar" tetap yang paling
+  menonjol. Tap ringkasan Pra-Bayar tetap membuka daftar rincian seperti
+  sebelumnya.
+
 ## 4 September 2026 (sesi ketujuh belas)
 
 ### ✨ Baru
