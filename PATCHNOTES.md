@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 September 2026 (sesi kedua puluh empat)
+
+### ✨ Baru
+- **Tampilan pre-order Laci Meja dirapikan lagi** — field cari sekarang
+  jadi ikon ringkas (sama seperti ikon kategori), dan tombol Kuota & Salin
+  Laporan pindah ke baris atas biar lebih dekat & mudah dijangkau. Jumlah
+  jaminan sekarang tampil sbg angka biasa yang otomatis ikut produk yang
+  sedang dipilih di filter, tidak perlu pilih produk dua kali lagi.
+- **Menu "Kategori Harga" sekarang ada di layar Produk** (bukan
+  Pengaturan lagi) — lebih dekat ke daftar produk yang memang mau diatur
+  kategorinya.
+
 ## 5 September 2026 (sesi kedua puluh tiga)
 
 ### ✨ Baru

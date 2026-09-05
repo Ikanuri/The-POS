@@ -5,6 +5,70 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 5 September 2026 (sesi kedua puluh empat). Versi kerja
+**2.45.0+92** (MINOR naik — redesain lanjutan dashboard Laci Meja +
+Kategori Harga pindah lokasi, keduanya terlihat pengguna). schemaVersion
+TETAP 40 — TIDAK ADA perubahan skema DB sesi ini (murni UI + logika)._
+
+**Sesi ini** — 3 revisi kecil-menengah thd fitur yang sudah live:
+
+1. **Baris statistik tab Pre-order Laci Meja dirapikan lagi**
+   (`laci_meja_dashboard_screen.dart`): dropdown INTERNAL pemilih produk
+   jaminan (di dalam chip statistik, `ProductPickerDropdown` kedua) DIHAPUS
+   — fungsinya sudah diwakili dropdown filter produk UTAMA. Jaminan
+   sekarang TEKS BIASA "Jaminan: N" yang ikut `effectiveProduct` (produk yg
+   sedang difilter dropdown utama, ATAU produk tunggal implisit kalau cuma
+   1 produk aktif — pola yg SAMA dgn garis kuota) — disembunyikan TOTAL
+   kalau "Semua Produk" dipilih & ada >1 produk aktif (tidak ada satu
+   produk tunggal utk dihitung). Field cari jadi SATU ikon 36×36 (persis
+   `_CategoryIconBtn`), melebar via `Stack`+`AnimatedPositioned` (pola
+   PERSIS `_KasirTopbar` di `kasir_screen.dart`, konstanta durasi dibuat
+   ulang lokal krn private ke file asal) menimpa tombol Kuota+Salin
+   Laporan yang PINDAH ke baris atas (`_PreorderTopActionBtn` baru) —
+   kedua tombol itu CUMA tampil di tab Pre-order (disembunyikan total di
+   Titip/Ketinggalan & Pinjaman). qty total ("Produk: N") & jumlah entri
+   ("N entri") pindah ke baris dropdown filter produk. `_PreorderStatsLine`
+   DIHAPUS TOTAL sbg satu widget — logikanya dipecah jadi
+   `_computePreorderStats` (method static, dipakai SEKALI di `build()` lalu
+   hasilnya diteruskan ke `_buildPreorderList` — satu sumber kebenaran,
+   tidak dihitung ulang) + `_PreorderTopActionBtn` (tombol ikon 36×36
+   reusable utk Kuota/Salin).
+2. **Fix bug nyata (revisi mid-turn)**: `Container` 36×36 pembungkus ikon
+   di `_CategoryIconBtn` (dan search/Kuota/Salin baru) TIDAK PUNYA
+   `alignment` → ikon numpuk di POJOK KIRI-ATAS box, bukan di tengah. Fix:
+   tambah `alignment: Alignment.center` ke tiap `Container` 36×36 di baris
+   ini (`IconButton`-based sudah center by default, revert-verify
+   membuktikan Container-based-lah yang benar2 butuh fix ini).
+3. **Menu "Kategori Harga" pindah dari Pengaturan ke layar Produk** —
+   `ListTile` di `pengaturan_screen.dart` dihapus, `IconButton` baru
+   (`Icons.sell_outlined`, tooltip "Kategori Harga") ditambah di AppBar
+   `produk_list_screen.dart` (antara "Kelola Kategori" & "Katalog"). Route
+   TETAP `/pengaturan/kategori-harga` (URL internal saja, push lintas-tab
+   dalam `ShellRoute` yg sama, pola sama `receipt_screen.dart` push
+   `/kasir/struk/:id` dari tab lain) — sengaja TIDAK dipindah grouping,
+   biar minimal-risiko.
+
+Test baru: `laci_meja_top_row_actions_test.dart` (search 36×36, Kuota/Salin
+cuma di Pre-order & ketutup search, semua ikon centered — geometri
+`tester.getCenter`, bukan cuma "ada"), `kategori_harga_entry_point_test.
+dart` (ListTile hilang dari Pengaturan, IconButton baru navigasi ke
+`KategoriHargaScreen` via `GoRouter` nyata). Disesuaikan (bukan dihapus):
+`laci_meja_dashboard_redesign_test.dart`, `laci_meja_dashboard_grouping_
+test.dart` (2 test dropdown-jaminan-internal ditulis ulang jadi test
+dropdown-filter-utama, 1 test marquee jaminan DIHAPUS krn fiturnya sendiri
+hilang), `preorder_quota_line_test.dart` (assersi "chip nama produk"
+dihapus). SEMUA revert-verify (fix dibalik → test gagal dgn pesan masuk
+akal → fix dikembalikan → hijau lagi).
+
+Full `flutter test`: **1471 lulus, 0 gagal** (termasuk
+`proposal_unchanged_end_to_end_test.dart` — TIDAK flaky run ini, port 8625
+tidak bentrok). `flutter analyze` bersih (0 issue). Push ke branch fitur +
+merge ke `main` sudah dilakukan sesi ini.
+
+Tidak ada item menggantung dari 3 revisi ini.
+
+---
+
 _Update sesi 5 September 2026 (sesi kedua puluh tiga). Versi kerja
 **2.44.0+91** (MINOR naik — toggle Kategori Harga di keranjang,
 terlihat pengguna). schemaVersion TETAP 40 — TIDAK ADA perubahan skema
@@ -14,7 +78,7 @@ DB sesi ini (murni logika + UI, kolom yg dipakai sudah ada dari Fase B)._
 ada Fase lanjutan yang direncanakan lagi kecuali user minta sesuatu yang
 baru. Fase A (diskon % di Ubah Total) & Fase B (skema `PriceCategories`
 + margin per-produk + layar kelola di Pengaturan) sudah live sebelumnya.
-**Fase C (sesi ini, `d77117e`)** — toggle kategori AKTIF langsung di
+**Fase C (`d77117e`)** — toggle kategori AKTIF langsung di
 keranjang kasir:
 - Kasir pilih 1 kategori (chip "Normal"/nama kategori) di `CartSheet`
   (HANYA `kMainCartId`) — baris keranjang yang produknya terdaftar di
