@@ -65,6 +65,18 @@ class Transactions extends Table {
   /// ada, atau belum pernah di-update sejak dibuat.
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
+  /// Kode device/kasir yang menekan Void (device_code, pola sama `kasirId`).
+  /// null = nota lama sebelum kolom ini ada (void terjadi tanpa jejak
+  /// siapa pelakunya, cuma `updatedAt` yang berubah — ambigu, bisa
+  /// tertimpa edit lain). Dicap SEKALI saat `voidTransaction` dipanggil,
+  /// immutable setelahnya.
+  TextColumn get voidedBy => text().nullable()();
+
+  /// Alasan void, diisi OPSIONAL oleh kasir/owner saat konfirmasi
+  /// pembatalan (`showVoidTransactionDialog`). null = tidak diisi, atau
+  /// nota lama sebelum kolom ini ada.
+  TextColumn get voidReason => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
