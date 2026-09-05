@@ -3,8 +3,10 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
@@ -22,6 +24,15 @@ import 'receipt_screen.dart' show netRemainingOwed;
 import 'widgets/payment_qris_view.dart';
 
 const _uuid = Uuid();
+
+/// Fase A "Kategori Harga" — mode "Diskon %" di dialog "Ubah Total": preferensi
+/// kelipatan pembulatan & arah TERAKHIR yang dipakai kasir, per-device (bukan
+/// per-transaksi) via SharedPreferences — supaya kasir yang biasa pakai
+/// kelipatan tertentu tidak perlu atur ulang tiap transaksi.
+const _prefKeyDiscountRoundMultiple = 'kasir_discount_round_multiple';
+const _prefKeyDiscountRoundDirection = 'kasir_discount_round_direction';
+const _defaultDiscountRoundMultiple = 500;
+const _defaultDiscountRoundDirection = RoundDirection.nearest;
 
 /// C-5: apakah transaksi ini boleh lanjut walau stok kurang. Owner SELALU
 /// boleh (konsisten dengan izin lain — override harga, input stok, dst —
@@ -528,50 +539,34 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool get _prabayarCoversTotal => _lockedSum > 0 && _lockedSum >= _total;
 
   Future<void> _editTotal() async {
-    final ctrl =
-        TextEditingController(text: ThousandsSeparatorFormatter.format(_total));
-    final result = await showDialog<int>(
+    final prefs = await SharedPreferences.getInstance();
+    final savedMultiple = prefs.getInt(_prefKeyDiscountRoundMultiple) ??
+        _defaultDiscountRoundMultiple;
+    final savedDirection = RoundDirection.values.firstWhere(
+      (d) => d.name == prefs.getString(_prefKeyDiscountRoundDirection),
+      orElse: () => _defaultDiscountRoundDirection,
+    );
+    if (!mounted) return;
+    final result = await showDialog<_EditTotalDialogResult>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ubah Total'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Total keranjang: ${formatRupiah(_cartTotal)}',
-                style: const TextStyle(fontSize: 13)),
-            const SizedBox(height: 4),
-            const Text('Untuk diskon manual / pembulatan.',
-                style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [ThousandsSeparatorFormatter()],
-              decoration: const InputDecoration(
-                  prefixText: 'Rp ', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          if (_totalOverride != null)
-            TextButton(
-              onPressed: () => ctx.pop(-1),
-              child: const Text('Reset'),
-            ),
-          TextButton(onPressed: () => ctx.pop(), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () =>
-                ctx.pop(ThousandsSeparatorFormatter.parseValue(ctrl.text)),
-            child: const Text('Terapkan'),
-          ),
-        ],
+      builder: (ctx) => _EditTotalDialog(
+        cartTotal: _cartTotal,
+        currentTotal: _total,
+        hasOverride: _totalOverride != null,
+        initialMultiple: savedMultiple,
+        initialDirection: savedDirection,
       ),
     );
     if (result == null) return;
+    if (result.persistDiscountPrefs) {
+      await prefs.setInt(
+          _prefKeyDiscountRoundMultiple, result.discountMultiple!);
+      await prefs.setString(
+          _prefKeyDiscountRoundDirection, result.discountDirection!.name);
+    }
     setState(() {
-      _totalOverride = result == -1 ? null : result.clamp(0, 99999999);
+      _totalOverride =
+          result.reset ? null : result.total!.clamp(0, 99999999);
     });
   }
 
@@ -1800,6 +1795,274 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       _tendered = 0;
     });
     await _confirm();
+  }
+}
+
+/// Hasil dialog `_EditTotalDialog` — bisa: reset ke total asli, atau total
+/// baru (dari mode manapun) + (opsional) preferensi kelipatan/arah pembulatan
+/// diskon % yang harus disimpan (hanya diisi kalau mode "Diskon %" yg dipakai
+/// utk apply, supaya mode "Nominal" tidak menimpa preferensi tersimpan).
+class _EditTotalDialogResult {
+  const _EditTotalDialogResult.reset() : this._(reset: true);
+  const _EditTotalDialogResult.nominal(int total) : this._(total: total);
+  const _EditTotalDialogResult.percent(
+      int total, int multiple, RoundDirection direction)
+      : this._(
+          total: total,
+          discountMultiple: multiple,
+          discountDirection: direction,
+        );
+
+  const _EditTotalDialogResult._({
+    this.reset = false,
+    this.total,
+    this.discountMultiple,
+    this.discountDirection,
+  });
+
+  final bool reset;
+  final int? total;
+  final int? discountMultiple;
+  final RoundDirection? discountDirection;
+
+  bool get persistDiscountPrefs => discountMultiple != null;
+}
+
+/// Item Fase A "Kategori Harga" — dialog "Ubah Total" di layar bayar, 2 mode:
+/// "Nominal" (ketik langsung, perilaku ASLI tidak berubah) & "Diskon %"
+/// (ketik persentase, preview live nominal mentah vs hasil dibulatkan, pilih
+/// kelipatan & arah pembulatan). Hasil akhir dari mode manapun dipakai sbg
+/// `_totalOverride` di titik yang SAMA PERSIS (lihat `_editTotal` pemanggil).
+class _EditTotalDialog extends StatefulWidget {
+  const _EditTotalDialog({
+    required this.cartTotal,
+    required this.currentTotal,
+    required this.hasOverride,
+    required this.initialMultiple,
+    required this.initialDirection,
+  });
+
+  final int cartTotal;
+  final int currentTotal;
+  final bool hasOverride;
+  final int initialMultiple;
+  final RoundDirection initialDirection;
+
+  @override
+  State<_EditTotalDialog> createState() => _EditTotalDialogState();
+}
+
+enum _EditTotalMode { nominal, percent }
+
+class _EditTotalDialogState extends State<_EditTotalDialog> {
+  static const _multipleOptions = [100, 500, 1000, 5000];
+
+  _EditTotalMode _mode = _EditTotalMode.nominal;
+  late final TextEditingController _nominalCtrl;
+  late final TextEditingController _percentCtrl;
+  late int _multiple;
+  late RoundDirection _direction;
+
+  @override
+  void initState() {
+    super.initState();
+    _nominalCtrl = TextEditingController(
+        text: ThousandsSeparatorFormatter.format(widget.currentTotal));
+    _percentCtrl = TextEditingController();
+    _multiple = widget.initialMultiple;
+    _direction = widget.initialDirection;
+  }
+
+  @override
+  void dispose() {
+    _nominalCtrl.dispose();
+    _percentCtrl.dispose();
+    super.dispose();
+  }
+
+  /// null bila input % kosong/tidak valid/<= 0 — dihitung dari
+  /// `widget.cartTotal` (total keranjang APA ADANYA), BUKAN `currentTotal`
+  /// yang mungkin sudah pernah di-override, supaya diskon % konsisten &
+  /// tidak menumpuk kalau dialog dibuka berkali-kali.
+  PercentDiscountResult? get _percentPreview {
+    final raw = _percentCtrl.text.trim().replaceAll(',', '.');
+    if (raw.isEmpty) return null;
+    final percent = double.tryParse(raw);
+    if (percent == null || percent <= 0) return null;
+    return applyPercentDiscount(
+      cartTotal: widget.cartTotal,
+      percent: percent,
+      multiple: _multiple,
+      direction: _direction,
+    );
+  }
+
+  void _applyNominal() {
+    Navigator.of(context).pop(
+      _EditTotalDialogResult.nominal(
+          ThousandsSeparatorFormatter.parseValue(_nominalCtrl.text)),
+    );
+  }
+
+  void _applyPercent() {
+    final preview = _percentPreview;
+    if (preview == null) return;
+    Navigator.of(context).pop(
+      _EditTotalDialogResult.percent(
+          preview.roundedTotal, _multiple, _direction),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = _mode == _EditTotalMode.percent ? _percentPreview : null;
+    return AlertDialog(
+      title: const Text('Ubah Total'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Total keranjang: ${formatRupiah(widget.cartTotal)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('Nominal'),
+                    selected: _mode == _EditTotalMode.nominal,
+                    onSelected: (_) =>
+                        setState(() => _mode = _EditTotalMode.nominal),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('Diskon %'),
+                    selected: _mode == _EditTotalMode.percent,
+                    onSelected: (_) =>
+                        setState(() => _mode = _EditTotalMode.percent),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_mode == _EditTotalMode.nominal) ...[
+              const Text('Untuk diskon manual / pembulatan.',
+                  style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('editTotal_nominalField'),
+                controller: _nominalCtrl,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: const [ThousandsSeparatorFormatter()],
+                decoration: const InputDecoration(
+                    prefixText: 'Rp ', border: OutlineInputBorder()),
+              ),
+            ] else ...[
+              const Text('Diskon % dari total keranjang, hasil dibulatkan.',
+                  style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('editTotal_percentField'),
+                controller: _percentCtrl,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d{0,3}([.,]\d{0,2})?$')),
+                ],
+                decoration: const InputDecoration(
+                    suffixText: '%', border: OutlineInputBorder()),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const Text('Kelipatan:', style: TextStyle(fontSize: 12)),
+                  DropdownButton<int>(
+                    key: const Key('editTotal_multipleDropdown'),
+                    value: _multiple,
+                    isDense: true,
+                    items: _multipleOptions
+                        .map((m) => DropdownMenuItem(
+                            value: m, child: Text(ThousandsSeparatorFormatter.format(m))))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _multiple = v);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  ChoiceChip(
+                    key: const Key('editTotal_dirDown'),
+                    label: const Text('Turun'),
+                    selected: _direction == RoundDirection.down,
+                    onSelected: (_) =>
+                        setState(() => _direction = RoundDirection.down),
+                  ),
+                  ChoiceChip(
+                    key: const Key('editTotal_dirNearest'),
+                    label: const Text('Terdekat'),
+                    selected: _direction == RoundDirection.nearest,
+                    onSelected: (_) =>
+                        setState(() => _direction = RoundDirection.nearest),
+                  ),
+                  ChoiceChip(
+                    key: const Key('editTotal_dirUp'),
+                    label: const Text('Naik'),
+                    selected: _direction == RoundDirection.up,
+                    onSelected: (_) =>
+                        setState(() => _direction = RoundDirection.up),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (preview != null) ...[
+                Text(
+                    'Diskon mentah: ${formatRupiah(preview.rawDiscount)} (${formatRupiah(widget.cartTotal - preview.rawDiscount)})',
+                    style: const TextStyle(fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(
+                  'Hasil dibulatkan: ${formatRupiah(preview.roundedTotal)}',
+                  key: const Key('editTotal_percentPreview'),
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        if (widget.hasOverride)
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(const _EditTotalDialogResult.reset()),
+            child: const Text('Reset'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: _mode == _EditTotalMode.nominal
+              ? _applyNominal
+              : (_percentPreview != null ? _applyPercent : null),
+          child: const Text('Terapkan'),
+        ),
+      ],
+    );
   }
 }
 

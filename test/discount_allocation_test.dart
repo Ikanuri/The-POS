@@ -128,4 +128,112 @@ void main() {
       expect(lines, isEmpty);
     });
   });
+
+  group('applyPercentDiscount — Fase A "Kategori Harga" (mode Diskon %)', () {
+    test('contoh dari kasir: 5% dari Rp 317.000, kelipatan 500 turun', () {
+      final result = applyPercentDiscount(
+        cartTotal: 317000,
+        percent: 5,
+        multiple: 500,
+        direction: RoundDirection.down,
+      );
+      expect(result.rawDiscount, 15850); // 317000 * 5% = 15850
+      expect(317000 - result.rawDiscount, 301150); // mentah
+      expect(result.roundedTotal, 301000, reason: 'dibulatkan turun ke kelipatan 500');
+    });
+
+    test('kelipatan 500, arah terdekat → 301150 dibulatkan ke 301000 (lebih dekat dari 301500)', () {
+      final result = applyPercentDiscount(
+        cartTotal: 317000,
+        percent: 5,
+        multiple: 500,
+        direction: RoundDirection.nearest,
+      );
+      expect(result.roundedTotal, 301000);
+    });
+
+    test('kelipatan 500, arah naik → 301150 dibulatkan naik ke 301500', () {
+      final result = applyPercentDiscount(
+        cartTotal: 317000,
+        percent: 5,
+        multiple: 500,
+        direction: RoundDirection.up,
+      );
+      expect(result.roundedTotal, 301500);
+    });
+
+    test('kelipatan 1000, arah turun', () {
+      final result = applyPercentDiscount(
+        cartTotal: 317000,
+        percent: 5,
+        multiple: 1000,
+        direction: RoundDirection.down,
+      );
+      expect(result.roundedTotal, 301000);
+    });
+
+    test('kelipatan 100, arah naik — pembulatan halus', () {
+      final result = applyPercentDiscount(
+        cartTotal: 12345,
+        percent: 10,
+        multiple: 100,
+        direction: RoundDirection.up,
+      );
+      // 12345 - 1235 (10% dibulatkan) = 11110 -> naik ke kelipatan 100 = 11200
+      expect(result.rawDiscount, 1235);
+      expect(result.roundedTotal, 11200);
+    });
+
+    test('multiple <= 1 berarti tanpa pembulatan (total mentah apa adanya)', () {
+      final result = applyPercentDiscount(
+        cartTotal: 100000,
+        percent: 7,
+        multiple: 1,
+        direction: RoundDirection.nearest,
+      );
+      expect(result.roundedTotal, 93000); // 100000 - 7000, tanpa pembulatan
+    });
+
+    test('percent 0 atau negatif tidak mengubah total (diskon nihil)', () {
+      final result = applyPercentDiscount(
+        cartTotal: 100000,
+        percent: 0,
+        multiple: 500,
+        direction: RoundDirection.nearest,
+      );
+      expect(result.roundedTotal, 100000);
+    });
+
+    test('percent di atas 100 di-clamp ke 100 (diskon tidak boleh negatif)', () {
+      final result = applyPercentDiscount(
+        cartTotal: 100000,
+        percent: 150,
+        multiple: 500,
+        direction: RoundDirection.nearest,
+      );
+      expect(result.roundedTotal, 0);
+    });
+
+    test('hasil tidak pernah melebihi cartTotal walau arah Naik + kelipatan kasar', () {
+      // cartTotal kecil, diskon kecil, kelipatan kasar -> rawTotal dekat
+      // cartTotal, dibulatkan naik bisa lewati cartTotal tanpa clamp.
+      final result = applyPercentDiscount(
+        cartTotal: 100,
+        percent: 1,
+        multiple: 5000,
+        direction: RoundDirection.up,
+      );
+      expect(result.roundedTotal, lessThanOrEqualTo(100));
+    });
+
+    test('hasil tidak pernah negatif', () {
+      final result = applyPercentDiscount(
+        cartTotal: 1000,
+        percent: 99,
+        multiple: 5000,
+        direction: RoundDirection.down,
+      );
+      expect(result.roundedTotal, greaterThanOrEqualTo(0));
+    });
+  });
 }
