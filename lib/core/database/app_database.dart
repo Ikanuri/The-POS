@@ -920,18 +920,48 @@ class AppDatabase extends _$AppDatabase {
   /// mis. HPP dihapus setelah kategori dipasang), JANGAN gagalkan seluruh
   /// query — fallback ke `price` snapshot terakhir yang tersimpan.
   AltPrice _withLiveCategoryPrice(AltPrice row, int basePrice, int costPrice) {
+    return row.copyWith(price: _liveCategoryPrice(row, basePrice, costPrice));
+  }
+
+  /// Sumber kebenaran TUNGGAL utk harga live baris [AltPrice] berkategori —
+  /// dipakai oleh [getAltPrices] (list "Harga Lain"), [getPriceCategoryMembers]
+  /// (layar kelola kategori) & [getCategoryPriceFor] (Fase C — lookup 1
+  /// produk utk toggle kategori aktif di keranjang). Baris tanpa margin
+  /// (belum/bukan kategori) langsung kembalikan `row.price` apa adanya.
+  int _liveCategoryPrice(AltPrice row, int basePrice, int costPrice) {
+    if (row.marginType == null || row.marginValue == null) return row.price;
     try {
-      final live = computeCategoryPrice(
+      return computeCategoryPrice(
         basePrice: basePrice,
         costPrice: costPrice,
         marginAnchor: row.marginAnchor ?? kMarginAnchorDasar,
         marginType: row.marginType!,
         marginValue: row.marginValue!,
       );
-      return row.copyWith(price: live);
     } catch (_) {
-      return row;
+      return row.price;
     }
+  }
+
+  /// Fase C "Kategori Harga" — harga LIVE (dari [_liveCategoryPrice]) utk
+  /// SATU productUnit di SATU kategori, dipakai `PriceService.resolvePrice`
+  /// (parameter `activeCategoryId`) saat toggle kategori aktif di keranjang.
+  /// Null bila produk ini TIDAK terdaftar sbg anggota [priceCategoryId]
+  /// (baris `AltPrices` yg cocok `productUnitId`+`priceCategoryId` tidak
+  /// ada) — pemanggil lalu fallback ke prioritas harga normal.
+  Future<int?> getCategoryPriceFor(
+      String productUnitId, String priceCategoryId) async {
+    final row = await (select(altPrices)
+          ..where((t) =>
+              t.productUnitId.equals(productUnitId) &
+              t.priceCategoryId.equals(priceCategoryId)))
+        .getSingleOrNull();
+    if (row == null) return null;
+    final tiers = await getPriceTiers(productUnitId); // minQty DESC
+    final base = tiers.isEmpty
+        ? null
+        : tiers.firstWhere((t) => t.minQty <= 1, orElse: () => tiers.last);
+    return _liveCategoryPrice(row, base?.price ?? 0, base?.costPrice ?? 0);
   }
 
   // ─────────────────────── Price Categories (Fase B) ───────────────────────
@@ -1058,21 +1088,7 @@ class AppDatabase extends _$AppDatabase {
               orElse: () => unitTiers.last);
       final basePrice = base?.price ?? 0;
       final costPrice = base?.costPrice ?? 0;
-      var livePrice = r.price;
-      if (r.marginType != null && r.marginValue != null) {
-        try {
-          livePrice = computeCategoryPrice(
-            basePrice: basePrice,
-            costPrice: costPrice,
-            marginAnchor: r.marginAnchor ?? kMarginAnchorDasar,
-            marginType: r.marginType!,
-            marginValue: r.marginValue!,
-          );
-        } catch (_) {
-          // Data tidak konsisten (mis. anchor modal tapi HPP sudah dihapus)
-          // — fallback ke snapshot terakhir, sama seperti getAltPrices().
-        }
-      }
+      final livePrice = _liveCategoryPrice(r, basePrice, costPrice);
       result.add((
         altPriceId: r.id,
         productUnitId: r.productUnitId,

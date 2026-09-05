@@ -22,6 +22,7 @@ class CartItem {
     this.preorderPaid = false,
     this.depositQty,
     this.priceMismatchLocal,
+    this.priceFromCategoryId,
   });
 
   final String productId;
@@ -87,6 +88,20 @@ class CartItem {
   /// apa pun (default, jalur lama).
   final int? priceMismatchLocal;
 
+  /// Fase C "Kategori Harga" — terisi id `PriceCategories` bila [price]
+  /// baris ini SEDANG diterapkan dari toggle kategori aktif di keranjang
+  /// (`cartPriceCategoryProvider`), murni PENANDA internal utk logika
+  /// re-price massal saat toggle berganti/dimatikan (lihat
+  /// `repriceCartForCategoryChange` di `cart_price_category_provider.dart`)
+  /// — TIDAK PERNAH mempengaruhi [priceOverridden]/ikon pensil "diedit
+  /// manual" yang sudah ada; baris kategori JANGAN tampak seolah manual
+  /// override. Null = harga baris ini bukan (atau sudah bukan lagi) dari
+  /// kategori. Dipersist ke JSON (ikut keranjang tersimpan/tahan-pesanan)
+  /// TAPI SENGAJA TIDAK dibawa lintas device via transfer QR — lihat
+  /// `OrderParserService`/`ParsedOrderItem.toCartItem` (di luar scope Fase
+  /// C, device penerima terima harga apa adanya tanpa embel kategori).
+  final String? priceFromCategoryId;
+
   /// True bila varian ini menempel ke baris satuan induk [parentLine].
   /// Prioritas [parentProductUnitId] (presisi per-satuan); fallback ke
   /// [parentProductId] untuk data lama yang belum punya id satuan induk.
@@ -108,6 +123,7 @@ class CartItem {
   CartItem copyWith({
     double? qty,
     int? price,
+    int? costPrice,
     bool? priceOverridden,
     Object? itemNote = _unset,
     bool? checked,
@@ -115,6 +131,7 @@ class CartItem {
     bool? preorderPaid,
     Object? depositQty = _unset,
     Object? priceMismatchLocal = _unset,
+    Object? priceFromCategoryId = _unset,
   }) =>
       CartItem(
         productId: productId,
@@ -124,7 +141,7 @@ class CartItem {
         qty: qty ?? this.qty,
         price: price ?? this.price,
         originalPrice: originalPrice,
-        costPrice: costPrice,
+        costPrice: costPrice ?? this.costPrice,
         priceOverridden: priceOverridden ?? this.priceOverridden,
         itemNote: identical(itemNote, _unset)
             ? this.itemNote
@@ -142,6 +159,9 @@ class CartItem {
         priceMismatchLocal: identical(priceMismatchLocal, _unset)
             ? this.priceMismatchLocal
             : priceMismatchLocal as int?,
+        priceFromCategoryId: identical(priceFromCategoryId, _unset)
+            ? this.priceFromCategoryId
+            : priceFromCategoryId as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -163,6 +183,7 @@ class CartItem {
         'isPreorder': isPreorder,
         'preorderPaid': preorderPaid,
         'depositQty': depositQty,
+        'priceFromCategoryId': priceFromCategoryId,
       };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
@@ -184,5 +205,6 @@ class CartItem {
         isPreorder: json['isPreorder'] as bool? ?? false,
         preorderPaid: json['preorderPaid'] as bool? ?? false,
         depositQty: (json['depositQty'] as num?)?.toDouble(),
+        priceFromCategoryId: json['priceFromCategoryId'] as String?,
       );
 }

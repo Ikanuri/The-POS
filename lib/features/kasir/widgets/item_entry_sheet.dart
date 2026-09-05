@@ -8,6 +8,7 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
+import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 
 /// Modal entri item: pilih satuan (harga lain), atur qty & harga, lalu
@@ -37,6 +38,7 @@ class _UnitOption {
     required this.tiers,
     this.altPrices = const [],
     this.barcode,
+    this.priceFromCategoryId,
   });
 
   final ProductUnit unit;
@@ -48,6 +50,13 @@ class _UnitOption {
   /// Harga alternatif berlabel (bukan tier qty) — mis. "Harga Toko A".
   final List<AltPrice> altPrices;
   final String? barcode;
+
+  /// Fase C "Kategori Harga" — terisi bila [basePrice] di atas SUDAH
+  /// hasil resolve kategori aktif (`resolvePrice(..., activeCategoryId:)`
+  /// balik `source == PriceSource.category`). Dipakai `_submit()` utk
+  /// mengisi `CartItem.priceFromCategoryId` HANYA kalau kasir tidak
+  /// mengedit manual harga yang tampil (lihat dok `_priceOverridden`).
+  final String? priceFromCategoryId;
 }
 
 /// Varian (produk anak) yang bisa ditambahkan sebagai item add-on bersarang.
@@ -62,6 +71,7 @@ class _VariantOption {
     required this.isNonStock,
     this.altPrices = const [],
     this.barcode,
+    this.priceFromCategoryId,
   });
 
   final Product product;
@@ -85,6 +95,9 @@ class _VariantOption {
   // vertikal kalau varian banyak).
   final List<AltPrice> altPrices;
   final String? barcode;
+
+  /// Fase C — lihat dok field sejenis di [_UnitOption].
+  final String? priceFromCategoryId;
 }
 
 class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
@@ -171,6 +184,12 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       canOverride = await db.isPermissionEnabled('override_harga');
     }
 
+    // Fase C "Kategori Harga" — kategori TOGGLE aktif di keranjang ini (null
+    // = "Normal"). Diteruskan ke `resolvePrice` supaya harga AWAL yang
+    // tampil di sheet ini SUDAH benar (harga kategori bila produk terdaftar)
+    // — kasir tidak perlu sadar & toggle manual lagi (briefing Fase C).
+    final activeCategoryId = ref.read(cartPriceCategoryProvider(widget.cartId));
+
     final units = await db.getProductUnits(widget.product.id);
     final opts = <_UnitOption>[];
     for (final u in units) {
@@ -180,6 +199,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       final resolved = await priceService.resolvePrice(
         productUnitId: u.id,
         qty: 1,
+        activeCategoryId: activeCategoryId,
       );
       final stock = await db.currentStock(u.id);
       final tiers = await db.getPriceTiers(u.id);
@@ -197,6 +217,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
             .where((b) => b.isPrimary)
             .map((b) => b.barcode)
             .firstOrNull,
+        priceFromCategoryId:
+            resolved.source == PriceSource.category ? activeCategoryId : null,
       ));
     }
 
@@ -216,6 +238,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       final vResolved = await priceService.resolvePrice(
         productUnitId: base.id,
         qty: 1,
+        activeCategoryId: activeCategoryId,
       );
       final vBarcodes = await db.getProductBarcodes(base.id);
       final vStock = base.isNonStock ? 0.0 : await db.currentStock(base.id);
@@ -233,6 +256,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
             .where((b) => b.isPrimary)
             .map((b) => b.barcode)
             .firstOrNull,
+        priceFromCategoryId: vResolved.source == PriceSource.category
+            ? activeCategoryId
+            : null,
       ));
     }
 
@@ -513,6 +539,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         preorderPaid: _dpPaid,
         depositQty:
             (_isPreorder && sel.unit.requiresDeposit) ? _depositQty : null,
+        // Fase C — hanya diisi kalau kasir TIDAK mengedit manual harga yang
+        // tadinya sudah dari kategori (edit manual -> _priceOverridden true
+        // -> priceFromCategoryId dilewati, sesuai briefing).
+        priceFromCategoryId: _priceOverridden ? null : sel.priceFromCategoryId,
       ));
     }
 
@@ -532,6 +562,12 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         parentProductId: widget.product.id,
         parentProductUnitId: sel.unit.id, // Item 16: menempel ke satuan aktif
         isVariant: true,
+        // Fase C — varian tidak punya `priceOverridden` (lihat dok
+        // `_variantPrice`, tidak diubah di sini): tanda "diedit manual" utk
+        // varian adalah ada-tidaknya entri `_variantPriceOverride`.
+        priceFromCategoryId: _variantPriceOverride[v.product.id] == null
+            ? v.priceFromCategoryId
+            : null,
       ));
     }
     Navigator.of(context).pop();

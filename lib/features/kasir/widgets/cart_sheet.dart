@@ -20,10 +20,12 @@ import '../../../core/models/cart_item.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/providers/theme_provider.dart';
 import '../../../core/services/order_parser_service.dart';
+import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
 import '../cart_meta_provider.dart';
 import '../cart_prabayar_provider.dart';
+import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 import 'debt_payment_sheet.dart';
@@ -237,20 +239,44 @@ class _CartSheetState extends ConsumerState<CartSheet> {
 
     final db = ref.read(databaseProvider);
     final prabayar = ref.read(cartPrabayarProvider(widget.cartId));
+    final priceCategoryId = ref.read(cartPriceCategoryProvider(widget.cartId));
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
       'prabayar': prabayar.map((e) => e.toJson()).toList(),
+      'priceCategory': priceCategoryId,
     });
     await db.holdOrder(id: const Uuid().v4(), label: label, cartJson: payload);
     ref.read(cartProvider(widget.cartId).notifier).clear();
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
     ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
+    ref.read(cartPriceCategoryProvider(widget.cartId).notifier).clear();
     if (!ctx.mounted) return;
     ScaffoldMessenger.of(ctx).showSnackBar(
       SnackBar(content: Text('Pesanan "$label" ditahan')),
     );
     Navigator.of(ctx).pop();
+  }
+
+  /// Fase C "Kategori Harga" — tap chip toggle (termasuk chip "Normal" =
+  /// [newCategoryId] null). Re-price SEMUA baris keranjang (kecuali
+  /// `priceOverridden`) SEBELUM state provider-nya diganti — supaya rebuild
+  /// berikutnya langsung menampilkan harga baru sekaligus dgn kategori
+  /// aktif yang baru (bukan dua rebuild terpisah yg bisa kelihatan
+  /// "berkedip").
+  Future<void> _onCategoryToggle(WidgetRef ref, String? newCategoryId) async {
+    final cart = ref.read(cartProvider(widget.cartId));
+    final priceService = PriceService(ref.read(databaseProvider));
+    final repriced = await repriceCartForCategoryChange(
+      priceService: priceService,
+      cart: cart,
+      newCategoryId: newCategoryId,
+    );
+    if (!mounted) return;
+    ref.read(cartProvider(widget.cartId).notifier).replaceAll(repriced);
+    ref
+        .read(cartPriceCategoryProvider(widget.cartId).notifier)
+        .setCategory(newCategoryId);
   }
 
   /// Fitur Pra-Bayar — buka kalkulator pelunasan yang SUDAH ADA
@@ -721,6 +747,21 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final prabayarTotal =
         prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
 
+    // Fase C "Kategori Harga" — toggle HANYA di keranjang utama kasir (bukan
+    // mode Katalog/Tambah Belanjaan, lihat briefing), device berizin
+    // `override_harga` (gerbang SAMA beratnya dgn override harga manual),
+    // DAN minimal ada 1 kategori terdaftar (kalau owner belum pernah bikin
+    // kategori, baris ini tidak ada gunanya sama sekali).
+    final priceCategories = widget.cartId == kMainCartId
+        ? (ref.watch(priceCategoriesForToggleProvider).valueOrNull ?? const [])
+        : const <PriceCategory>[];
+    final canOverrideHarga =
+        ref.watch(canOverrideHargaProvider).valueOrNull ?? false;
+    final canToggleCategory = widget.cartId == kMainCartId &&
+        priceCategories.isNotEmpty &&
+        canOverrideHarga;
+    final activeCategoryId = ref.watch(cartPriceCategoryProvider(widget.cartId));
+
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.4,
@@ -902,6 +943,34 @@ class _CartSheetState extends ConsumerState<CartSheet> {
               ),
             ),
             const Divider(height: 1),
+            // Fase C "Kategori Harga" — chip toggle "Normal" + tiap
+            // PriceCategories terdaftar. Baris ini disembunyikan TOTAL bila
+            // gerbang [canToggleCategory] tidak terpenuhi (lihat dok di atas).
+            if (canToggleCategory)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Normal'),
+                        selected: activeCategoryId == null,
+                        onSelected: (_) => _onCategoryToggle(ref, null),
+                      ),
+                      for (final cat in priceCategories) ...[
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: Text(cat.name),
+                          selected: activeCategoryId == cat.id,
+                          onSelected: (_) => _onCategoryToggle(ref, cat.id),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            if (canToggleCategory) const Divider(height: 1),
             Expanded(
               child: cart.isEmpty
                   ? Center(
@@ -1313,6 +1382,18 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                                   const SizedBox(width: 4),
                                   Icon(Icons.edit,
                                       size: 12, color: scheme.tertiary),
+                                ] else if (item.priceFromCategoryId !=
+                                    null) ...[
+                                  // Fase C — penanda "harga dari toggle
+                                  // kategori aktif", ikon SENGAJA beda dari
+                                  // pensil override manual di atas (supaya
+                                  // kasir bisa bedakan sekilas) — `else if`
+                                  // krn keduanya seharusnya tidak pernah
+                                  // bersamaan (lihat dok
+                                  // `CartItem.priceFromCategoryId`).
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.sell_outlined,
+                                      size: 12, color: scheme.secondary),
                                 ],
                                 if (isZeroed) ...[
                                   const SizedBox(width: 4),
