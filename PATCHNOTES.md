@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 September 2026 (sesi kedua puluh)
+
+### ✨ Baru
+- **Sekarang bisa kasih diskon berbasis persen di layar bayar**, hasilnya
+  otomatis dibulatkan ke angka rapi sesuai pilihan kasir. Buka "Ubah
+  Total" seperti biasa, pilih tab "Diskon %", ketik persennya — langsung
+  kelihatan nominal diskonnya dan hasil setelah dibulatkan. Kasir bisa
+  pilih kelipatan pembulatan (100/500/1.000/5.000) dan arahnya (turun,
+  ke terdekat, atau naik). Pilihan kelipatan & arah yang terakhir dipakai
+  otomatis diingat di HP itu, jadi tidak perlu diatur ulang tiap transaksi.
+  Cara lama (ketik nominal total langsung) masih ada dan tetap sama.
+
 ## 5 September 2026 (sesi kesembilan belas)
 
 ### ✨ Baru

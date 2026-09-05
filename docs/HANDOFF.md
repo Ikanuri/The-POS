@@ -5,6 +5,84 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 5 September 2026 (sesi kedua puluh). Versi kerja **2.41.0+88**
+(MINOR naik — mode Diskon % baru di dialog Ubah Total, terlihat pengguna).
+schemaVersion TETAP 39 — TIDAK ADA tabel/skema baru disentuh sesi ini
+(sengaja, lihat konteks Fase A di bawah)._
+
+**KONTEKS PENTING utk sesi berikutnya**: sesi ini adalah **Fase A** dari
+rencana besar "Kategori Harga" yang sudah didiskusikan panjang dgn user
+tapi SENGAJA dipecah jadi 3 fase independen (risiko rendah dulu):
+- **Fase A (SESI INI, `f527c4e`, SELESAI)** — mode "Diskon %" di dialog
+  "Ubah Total" (layar bayar), murni UI + fungsi murni baru
+  `applyPercentDiscount`, TANPA skema/tabel baru sama sekali.
+- **Fase B (BELUM DIKERJAKAN)** — tabel Kategori Harga + margin per-produk.
+  Akan didelegasikan ke sesi/agen TERPISAH nanti — JANGAN mulai di sesi
+  yang menyentuh hal lain tanpa konfirmasi user lebih dulu.
+- **Fase C (BELUM DIKERJAKAN)** — toggle aktif Kategori Harga di keranjang.
+  Bergantung pada Fase B selesai duluan.
+
+Kalau user menyinggung "Kategori Harga" lagi, kemungkinan besar maksudnya
+lanjut ke Fase B — cek dulu apakah ada detail desain tambahan yang belum
+didiskusikan (struktur tabel margin, aturan prioritas kategori, dst)
+sebelum mulai coding.
+
+**Sesi ini (`f527c4e`)**: dialog "Ubah Total" (`_editTotal`,
+`payment_screen.dart`) yang SEBELUMNYA cuma 1 mode (ketik nominal langsung)
+diperluas jadi 2 mode via `ChoiceChip` toggle di dalam `AlertDialog` yang
+SAMA (bukan dialog terpisah) — `_EditTotalDialog` (StatefulWidget baru,
+lihat file utk detail penuh):
+- **Mode "Nominal"** — perilaku ASLI, sama persis, tidak diubah.
+- **Mode "Diskon %"** (baru) — kasir ketik persentase, preview live
+  "Diskon mentah: Rp X (Rp Y)" lalu "Hasil dibulatkan: Rp Z" tebal.
+  Kontrol: `DropdownButton<int>` kelipatan (100/500/1.000/5.000, key
+  `editTotal_multipleDropdown`) & 3 `ChoiceChip` arah (Turun/Terdekat/Naik,
+  key `editTotal_dirDown`/`editTotal_dirNearest`/`editTotal_dirUp`).
+  Preferensi kelipatan+arah TERAKHIR diingat per-device via
+  `SharedPreferences` (`kasir_discount_round_multiple`/
+  `kasir_discount_round_direction`, default 500/Terdekat).
+
+Fungsi murni `applyPercentDiscount` + enum `RoundDirection`
+(`discount_allocation.dart`) menghitung dari **`_cartTotal` APA ADANYA**
+(param `cartTotal`, dipanggil dgn nilai itu bukan `_total` yang mungkin
+sudah pernah di-override) — supaya diskon % konsisten & TIDAK menumpuk
+kalau dialog dibuka berkali-kali. Hasil di-clamp ke `[0, cartTotal]`
+(pembulatan Naik + kelipatan kasar + % kecil secara teori bisa lewati
+cartTotal asli tanpa clamp ini). `allocateCartTotal`/`_confirm`/
+`_confirmAddItems` **TIDAK disentuh sama sekali** — hasil akhir mode
+manapun (Nominal atau Diskon %) tetap masuk lewat `_totalOverride` di
+titik keputusan yang persis sama seperti sebelumnya.
+
+**Test baru** (revert-verified — implementasi direvert manual via
+`git checkout HEAD --`, dikonfirmasi 5 test widget baru gagal dgn pesan
+masuk akal [`Method not found: applyPercentDiscount`/`Undefined name
+RoundDirection` utk test DB, `Found 0 widgets with text "Diskon %"` utk
+test UI], baru dikembalikan):
+`discount_allocation_test.dart` (grup baru `applyPercentDiscount` — 9 test
+DB murni: contoh 5% dari 317.000 kelipatan 500 turun/naik/terdekat,
+kelipatan lain, `multiple<=1` tanpa pembulatan, percent 0/negatif/>100,
+clamp ke `[0,cartTotal]`), `payment_screen_discount_percent_test.dart`
+(widget test baru, pola `ProviderContainer` manual + `UncontrolledProviderScope`
+sama seperti `payment_screen_buttons_test.dart` — **CATATAN**: seeding
+cart via widget lifecycle [`_CartSeeder.build()` yg manggil
+`notifier.addItem()`] SEMPAT dicoba dulu tapi Riverpod throw "Tried to
+modify a provider while the widget tree was building" secara flaky [lolos
+2x, gagal di test ke-3/4] — fix-nya seed cart via `ProviderContainer`
+manual SEBELUM `pumpWidget`, BUKAN di dalam `build()` widget manapun. 4
+test: mode Nominal regresi tetap jalan, Diskon % 5%/kelipatan500/turun,
+kelipatan1000/naik, preferensi kelipatan+arah ke-restore dari
+`SharedPreferences` lain kali dialog dibuka).
+
+Full `flutter test` (1690 test) — SEMUA LULUS kecuali 2 yang GAGAL hanya
+saat paralel penuh (dikonfirmasi lulus sendirian, bukan regresi dari sesi
+ini — pola port-contention yang sama sudah didokumentasikan sesi
+sebelumnya): `proposal_unchanged_end_to_end_test.dart` ("Address already
+in use" port 8625) dan `laci_meja_proposal_unchanged_end_to_end_test.dart`
+(assertion gagal krn interaksi test lain yg buka `AppDatabase` bersamaan —
+lulus sendirian). `flutter analyze` bersih (0 issue).
+
+---
+
 _Update sesi 5 September 2026 (sesi kesembilan belas). Versi kerja
 **2.40.0+87** (MINOR naik — void transaksi kini terlihat & bisa diberi
 alasan, terlihat pengguna). **schemaVersion 38 -> 39** — kolom baru
