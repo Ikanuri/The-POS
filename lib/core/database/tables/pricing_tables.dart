@@ -20,6 +20,16 @@ class PriceTiers extends Table {
 /// berjenjang minQty seperti [PriceTiers]. Murni pilihan cepat yang tampil
 /// sebagai chip tap-untuk-pakai di kasir (`ItemEntrySheet`), tidak pernah
 /// dipilih otomatis oleh `PriceService.resolvePrice`.
+///
+/// Fase B "Kategori Harga" (schemaVersion 40) menambah 4 kolom NULLABLE di
+/// bawah — baris lama/ad-hoc tanpa kategori TIDAK berubah perilakunya sama
+/// sekali (kolom-kolom itu tetap NULL, `price` dipakai apa adanya). Baris
+/// yang PUNYA kategori (`priceCategoryId` + `marginType` + `marginValue`
+/// terisi) sebaliknya jadi "hidup": `price` di baris ini cuma SNAPSHOT
+/// terakhir (histori/fallback) — nilai yang sebenarnya dipakai pemanggil
+/// dihitung ULANG live dari `marginAnchor`/`marginType`/`marginValue` +
+/// harga dasar/modal produk TERKINI, lihat `AppDatabase.getAltPrices()` &
+/// `computeCategoryPrice()` (`lib/core/utils/price_category_calc.dart`).
 class AltPrices extends Table {
   TextColumn get id => text()(); // UUID
   TextColumn get productUnitId => text().references(ProductUnits, #id)();
@@ -30,6 +40,39 @@ class AltPrices extends Table {
   // Produk. TIDAK bisa mengandalkan createdAt: saveProduct menulis semua
   // baris harga-lain dalam satu batch dengan timestamp yang sama persis.
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Kategori harga pemilik baris ini (nullable — baris ad-hoc lama/manual
+  /// tanpa kategori tidak diisi). References [PriceCategories].
+  TextColumn get priceCategoryId =>
+      text().nullable().references(PriceCategories, #id)();
+
+  /// Acuan margin: `'modal'` (HPP/`costPrice` tier) atau `'dasar'` (harga
+  /// jual dasar, tier `minQty=1`). Nullable — hanya terisi untuk baris
+  /// kategori (lihat dok kelas).
+  TextColumn get marginAnchor => text().nullable()();
+
+  /// Jenis margin: `'percent'` atau `'fixed'` (Rupiah tetap). Nullable.
+  TextColumn get marginType => text().nullable()();
+
+  /// Nilai margin sesuai [marginType] — mis. 15.0 untuk 15%, atau 2000.0
+  /// untuk Rp2.000 tetap. Nullable.
+  RealColumn get marginValue => real().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Kategori pengelompokan produk untuk "Harga Kategori" (Fase B) — MURNI
+/// label pengelompokan tampilan/manajemen, TIDAK ADA margin default per
+/// kategori (satu kategori boleh berisi produk dengan karakter margin
+/// sangat berbeda, mis. rokok margin tipis + telur margin tebal — margin
+/// SELALU per-produk lewat baris [AltPrices] yang menunjuk ke sini via
+/// `priceCategoryId`).
+class PriceCategories extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};
