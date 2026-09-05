@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 September 2026 (sesi kedua puluh dua)
+
+### ✨ Baru
+- **Dashboard Laci Meja sekarang lebih ringkas** — kategori
+  Titip/Ketinggalan, Pinjaman, dan Pre-order jadi ikon kecil berwarna
+  beda dengan angka penanda (badge), bukan kartu besar seperti
+  sebelumnya. Satu kolom cari sekarang berlaku untuk ketiganya (dulu
+  cuma bisa mencari di tab Pre-order) — ketik nama pelanggan atau nama
+  barang, langsung menyaring daftar kategori manapun yang sedang
+  dibuka, dan teksnya tidak hilang saat berpindah kategori. Tampilan
+  statistik Pre-order juga lebih lega, tanpa kotak besar pembungkus.
+
 ## 5 September 2026 (sesi kedua puluh satu)
 
 ### ✨ Baru

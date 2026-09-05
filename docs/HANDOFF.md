@@ -5,6 +5,95 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 5 September 2026 (sesi kedua puluh dua, dikerjakan di git
+WORKTREE terpisah dari sesi Fase B "Kategori Harga" di atas — dua agen
+paralel, fitur TIDAK terkait). Versi kerja **2.43.0+90** (MINOR naik —
+redesain dashboard Laci Meja, terlihat pengguna). schemaVersion TETAP
+40 — TIDAK ADA perubahan skema DB sesi ini (murni redesain UI)._
+
+**Sesi ini** — redesain dashboard Laci Meja
+(`laci_meja_dashboard_screen.dart`) supaya lebih compact, 3 instruksi
+persis dari mockup yang sudah disetujui user (screenshot Playwright):
+1. **3 kartu ringkasan besar (`_SummaryCard`) -> 3 ikon kotak kecil**
+   gaya PERSIS `_TbBtn` kasir (`kasir_screen.dart`): 36x36, radius 10,
+   border 0.75 `outlineVariant`, ikon 18px berwarna aksen per-kategori,
+   `Badge` Material kecil menempel utk count (gantiin angka besar
+   lama). Tap ikon = fungsi ganda: pindah kategori aktif SEKALIGUS
+   badge menampilkan count kategori itu. Kategori aktif ditandai latar
+   (`bg`) + bingkai lebih pekat (`fg`, width 1.4) warna aksennya;
+   kategori tidak aktif latar transparan + bingkai netral tipis (0.75)
+   — ikon TETAP berwarna aksennya kapan pun (bukan cuma saat aktif).
+2. **Warna aksen baru** di `app_theme.dart`: `pinjamanFg`/`pinjamanBg`
+   (indigo/periwinkle, `#4C5FA8` light / `#AAB6E8` dark) untuk
+   Pinjaman; `preorderFg`/`preorderBg` (turquoise/petrol, `#1B7A82`
+   light / `#6FD3DA` dark) untuk Pre-order. Titip/Ketinggalan reuse
+   `laciFg`/`laciBg` lama (dusty-rose) — sesuai izin briefing ("boleh
+   dipakai lagi utk salah satu dari 3 kategori"). TIDAK reuse
+   `tealFg`/`tealBg` (sudah dipakai Pengaturan -> Perangkat).
+3. **Satu field cari untuk KETIGA kategori** — `LaciMejaExpandableSearch`
+   (`laci_meja_expandable_search.dart`) dipromosikan jadi widget shared
+   (sebelumnya privat tab Pre-order), diposisikan di samping 3 ikon
+   kategori satu baris. Provider digeneralisasi:
+   `_preorderSearchProvider`/`_preorderSearchExpandedProvider` ->
+   `_laciMejaSearchProvider`/`_laciMejaSearchExpandedProvider` (level
+   dashboard, dipakai bersama). Teks TIDAK reset saat pindah kategori.
+   **Titip/Ketinggalan & Pinjaman SEBELUMNYA SAMA SEKALI tidak punya
+   filter pencarian** — `_buildLeftBehindList`/`_buildBorrowedList`
+   sekarang ikut menyaring nama pelanggan ATAU nama barang
+   (case-insensitive `contains`, logika sama `_buildPreorderList`).
+   Dropdown filter produk Pre-order (`ProductPickerDropdown`,
+   `_preorderProductFilterProvider`) TETAP ADA & TETAP KHUSUS
+   Pre-order (bukan bagian field cari bersama) — dipindah ke baris
+   tersendiri di bawah baris ikon+cari, tampil hanya saat kategori
+   Pre-order aktif & >1 produk.
+4. **Container besar pembungkus baris statistik Pre-order dihapus** —
+   `_PreorderStatsLine` dirender langsung (tanpa `Container` luar
+   ber-`color`/`border`/`padding`), tiap atribut di dalamnya (chip
+   "N entri", chip Produk/Jaminan, dropdown, tombol Kuota/Salin) sudah
+   punya bingkai sendiri-sendiri (`_StatChip` & `IconButton.styleFrom`
+   yang sudah ada + chip "N entri" baru dibungkus `Container` kecil
+   berbingkai sendiri).
+
+**Bug ditemukan+diperbaiki saat implementasi** (BUKAN dari briefing,
+ketemu lewat widget test yg BENAR2 pindah kategori lalu buka lagi field
+cari-nya): search field yang pembungkusnya berubah tipe (`Expanded`
+saat status expanded, widget POLOS saat collapsed) membuat Flutter
+memperlakukannya sbg elemen BEDA di slot `Row` itu tiap kali status
+expanded berganti -> `LaciMejaExpandableSearch` LAMA (berikut
+`TextEditingController`-nya, isi teks pencarian) DIBUANG & dibuat ulang
+KOSONG begitu kategori dipindah lalu field cari dibuka lagi. Fix: field
+cari SELALU dibungkus `Expanded` (collapsed cuma memberi ruang sisa,
+tidak mengubah tampilan ikon kecilnya).
+
+**Test**: `laci_meja_dashboard_redesign_test.dart` (9 kasus baru —
+tap ikon pindah kategori+visual aktif, badge count sesuai seed, badge
+count-0 disembunyikan, pencarian menyaring ketiga kategori [termasuk
+2 yg SEBELUMNYA tidak difilter sama sekali], teks cari tidak reset
+pindah kategori [termasuk revert-verify utk bug `Expanded` di atas],
+tidak overflow 360dp, container besar pre-order sudah tidak ada).
+Semua di-revert-verify (dikonfirmasi gagal dgn pesan masuk akal
+terhadap kode `_SummaryCard` lama sebelum redesain, dikembalikan lagi).
+Beberapa test LAMA lintas file lain (mis.
+`laci_meja_dashboard_redesign_test.dart` bukan satu2nya — test lama di
+`laci_meja_dashboard_grouping_test.dart`/`laci_meja_dashboard_redirect_
+test.dart`/dll yg tap `find.text('Pinjaman')`/`find.text('Pre-order')`)
+SENGAJA TIDAK diubah krn label teks itu SENGAJA dipertahankan persis di
+bawah ikon (bukan dihapus total) — supaya semuanya tetap lulus TANPA
+modifikasi.
+
+Full `flutter test`: **1441 lulus, 1 gagal** —
+`proposal_unchanged_end_to_end_test.dart` ("Address already in use"
+port 8625, SocketException), dikonfirmasi HANYA gagal saat paralel
+penuh & lulus sendirian (pola sama yg sudah didokumentasikan
+sesi-sesi sebelumnya, BUKAN regresi sesi ini). `flutter analyze` bersih
+(0 issue).
+
+Tidak ada item menggantung dari sesi ini — scope selesai persis sesuai
+briefing (3 instruksi mockup di atas), `riwayat_laci_meja_screen.dart`
+sengaja TIDAK disentuh (di luar scope).
+
+---
+
 _Update sesi 5 September 2026 (sesi kedua puluh satu). Versi kerja
 **2.42.0+89** (MINOR naik — layar baru Pengaturan -> Kategori Harga,
 terlihat pengguna). **schemaVersion 39 -> 40** — tabel baru

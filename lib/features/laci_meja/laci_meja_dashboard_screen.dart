@@ -20,18 +20,21 @@ enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 final _selectedCategoryProvider =
     StateProvider<_LaciMejaCategory>((ref) => _LaciMejaCategory.titipKetinggalan);
 
-/// Kata kunci pencarian tab Pre-order (permintaan user) — dicocokkan ke NAMA
-/// PELANGGAN maupun NAMA PRODUK sekaligus, karena staf bisa datang dari dua
-/// arah: "siapa yang antri Gas?" vs "Bu Artia antri apa saja?".
-final _preorderSearchProvider = StateProvider<String>((ref) => '');
+/// Kata kunci pencarian dashboard (redesain: dulu cuma tab Pre-order,
+/// sekarang SATU field dipakai bersama KETIGA kategori — permintaan user)
+/// — dicocokkan ke NAMA PELANGGAN maupun NAMA PRODUK/BARANG sekaligus,
+/// karena staf bisa datang dari dua arah: "siapa yang antri Gas?" vs
+/// "Bu Artia antri apa saja?". Teksnya TIDAK reset saat pindah kategori
+/// (tap ikon lain) — hidup di provider level-dashboard ini, bukan per-tab.
+final _laciMejaSearchProvider = StateProvider<String>((ref) => '');
 
-/// Status expand/collapse field pencarian tab Pre-order (permintaan user,
+/// Status expand/collapse field pencarian dashboard (permintaan user,
 /// layout sempit di HP 360-400dp) — lihat `LaciMejaExpandableSearch`. Dipisah
-/// dari `_preorderSearchProvider` (isi teksnya) krn keduanya punya siklus
+/// dari `_laciMejaSearchProvider` (isi teksnya) krn keduanya punya siklus
 /// hidup beda: teks tetap ada walau field mengecil, status expanded murni
-/// soal tampilan baris di sebelahnya (dropdown filter produk) disembunyikan
-/// atau tidak.
-final _preorderSearchExpandedProvider = StateProvider<bool>((ref) => false);
+/// soal tampilan baris di sebelahnya (dropdown filter produk pre-order)
+/// disembunyikan atau tidak.
+final _laciMejaSearchExpandedProvider = StateProvider<bool>((ref) => false);
 
 /// Filter produk tab Pre-order (permintaan user) — PELENGKAP pencarian, bukan
 /// penggantinya: garis pembatas kuota hanya masuk akal untuk SATU produk
@@ -264,6 +267,30 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     final borrowed = ref.watch(borrowedItemsProvider);
     final preorder = ref.watch(preorderEntriesProvider);
 
+    final searchExpanded = ref.watch(_laciMejaSearchExpandedProvider);
+    final searchField = LaciMejaExpandableSearch(
+      hintText: 'Cari nama pelanggan atau produk…',
+      expanded: searchExpanded,
+      onExpandedChanged: (v) =>
+          ref.read(_laciMejaSearchExpandedProvider.notifier).state = v,
+      onChanged: (v) => ref.read(_laciMejaSearchProvider.notifier).state = v,
+    );
+
+    // Dropdown filter produk pre-order (permintaan user: TETAP ADA & TETAP
+    // KHUSUS pre-order, terpisah dari field cari bersama) — datanya
+    // dihitung di sini (level dashboard, bukan lagi di dalam
+    // `_buildPreorderList`) krn baris yang menampilkannya sekarang ada di
+    // ATAS switch kategori, bukan di dalamnya.
+    final preorderLabels =
+        ref.watch(preorderProductUnitLabelsProvider).valueOrNull ?? {};
+    final preorderProductFilter = ref.watch(_preorderProductFilterProvider);
+    final preorderQuotas = ref.watch(preorderQuotaProvider);
+    final preorderProductNames = <String, String>{};
+    for (final e in preorder.valueOrNull ?? const <PreorderEntry>[]) {
+      preorderProductNames[e.productId] =
+          preorderLabels[e.productUnitId]?.productName ?? e.productId;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Laci Meja'),
@@ -282,45 +309,97 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
+          // Redesain (permintaan user, mockup disetujui): 3 kartu ringkasan
+          // besar diganti 3 IKON KOTAK kecil (gaya PERSIS `_TbBtn` di
+          // `kasir_screen.dart`) + SATU field cari yang dipakai bersama
+          // ketiga kategori di sampingnya, satu baris — pola sama semangat
+          // dgn toolbar kasir.
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             child: Row(
               children: [
-                Expanded(
-                  child: _SummaryCard(
-                    label: 'Titip/Ketinggalan',
-                    icon: Icons.inventory_outlined,
-                    count: leftBehind.valueOrNull?.length ?? 0,
-                    selected: selected == _LaciMejaCategory.titipKetinggalan,
-                    onTap: () => ref.read(_selectedCategoryProvider.notifier).state =
-                        _LaciMejaCategory.titipKetinggalan,
-                  ),
+                _CategoryIconBtn(
+                  icon: Icons.inventory_outlined,
+                  label: 'Titip/Ketinggalan',
+                  badgeCount: leftBehind.valueOrNull?.length ?? 0,
+                  selected: selected == _LaciMejaCategory.titipKetinggalan,
+                  fg: AppTheme.laciFg,
+                  bg: AppTheme.laciBg,
+                  onTap: () => ref.read(_selectedCategoryProvider.notifier).state =
+                      _LaciMejaCategory.titipKetinggalan,
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: _SummaryCard(
-                    label: 'Pinjaman',
-                    icon: Icons.swap_horiz,
-                    count: borrowed.valueOrNull?.length ?? 0,
-                    selected: selected == _LaciMejaCategory.pinjaman,
-                    onTap: () => ref.read(_selectedCategoryProvider.notifier).state =
-                        _LaciMejaCategory.pinjaman,
-                  ),
+                _CategoryIconBtn(
+                  icon: Icons.swap_horiz,
+                  label: 'Pinjaman',
+                  badgeCount: borrowed.valueOrNull?.length ?? 0,
+                  selected: selected == _LaciMejaCategory.pinjaman,
+                  fg: AppTheme.pinjamanFg,
+                  bg: AppTheme.pinjamanBg,
+                  onTap: () => ref.read(_selectedCategoryProvider.notifier).state =
+                      _LaciMejaCategory.pinjaman,
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: _SummaryCard(
-                    label: 'Pre-order',
-                    icon: Icons.hourglass_empty,
-                    count: preorder.valueOrNull?.length ?? 0,
-                    selected: selected == _LaciMejaCategory.preorder,
-                    onTap: () => ref.read(_selectedCategoryProvider.notifier).state =
-                        _LaciMejaCategory.preorder,
-                  ),
+                _CategoryIconBtn(
+                  icon: Icons.hourglass_empty,
+                  label: 'Pre-order',
+                  badgeCount: preorder.valueOrNull?.length ?? 0,
+                  selected: selected == _LaciMejaCategory.preorder,
+                  fg: AppTheme.preorderFg,
+                  bg: AppTheme.preorderBg,
+                  onTap: () => ref.read(_selectedCategoryProvider.notifier).state =
+                      _LaciMejaCategory.preorder,
                 ),
+                const SizedBox(width: 8),
+                // SELALU dibungkus `Expanded` (BUKAN cuma saat expanded) —
+                // BUG YANG SUDAH DIPERBAIKI: kalau pembungkusnya berubah
+                // tipe (`Expanded` vs widget polos) tiap kali status
+                // expanded berganti, Flutter memperlakukannya sbg elemen
+                // BEDA di slot Row itu -> `LaciMejaExpandableSearch` lama
+                // (berikut `TextEditingController`-nya, isi teks pencarian)
+                // DIBUANG & dibuat ulang kosong. Ketemu via widget test yg
+                // BENAR2 pindah kategori lalu buka lagi field cari-nya
+                // (test DB/one-shot tidak menangkap kelas bug ini — mirip
+                // gotcha `updates:` raw-SQL di CLAUDE.md, akar masalahnya
+                // sama: identitas widget/state yg berubah diam-diam).
+                // Saat collapsed, `Expanded` cuma memberi ruang sisa; ikon
+                // kecilnya sendiri tidak ikut melebar (tidak mengubah
+                // tampilan).
+                Expanded(child: searchField),
               ],
             ),
           ),
+          // Dropdown filter produk pre-order — KHUSUS saat kategori
+          // Pre-order aktif (fitur pelengkap terpisah, bukan bagian field
+          // cari bersama), disembunyikan sementara selagi field cari
+          // melebar (ruang layar diprioritaskan utk field+keyboard, sama
+          // pola dgn statistik pre-order di bawahnya).
+          if (selected == _LaciMejaCategory.preorder &&
+              !searchExpanded &&
+              preorderProductNames.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ProductPickerDropdown(
+                  entries: {
+                    for (final e in preorderProductNames.entries)
+                      e.key: (
+                        name: e.value,
+                        badge: preorderQuotas[e.key] == null
+                            ? null
+                            : 'maks ${_fmtQty(preorderQuotas[e.key]!)}'
+                      ),
+                  },
+                  selectedId: preorderProductFilter,
+                  allLabel: 'Semua Produk',
+                  tooltip: 'Filter produk',
+                  onSelected: (id) => ref
+                      .read(_preorderProductFilterProvider.notifier)
+                      .state = id,
+                ),
+              ),
+            ),
           const Divider(height: 1),
           Expanded(
             child: switch (selected) {
@@ -348,12 +427,35 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
 
   Widget _buildLeftBehindList(BuildContext context, WidgetRef ref,
       List<LeftBehindItem> items, bool isDark, ColorScheme scheme) {
-    if (items.isEmpty) {
+    final qtyUnit = ref.watch(leftBehindQtyUnitProvider).valueOrNull ?? {};
+    final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
+    final addresses =
+        ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
+
+    // Field cari BERSAMA ketiga kategori (redesain, permintaan user) — sama
+    // logika pencocokan dgn `_buildPreorderList`: NAMA PELANGGAN atau NAMA
+    // BARANG, case-insensitive, `contains`. Sebelumnya kategori ini SAMA
+    // SEKALI tidak punya filter pencarian.
+    final query = ref.watch(_laciMejaSearchProvider).trim().toLowerCase();
+    final filteredItems = query.isEmpty
+        ? items
+        : items.where((e) {
+            final customerName = _customerLabel(
+                txId: e.transactionId,
+                liveNames: liveNames,
+                fallback: e.customerNameText);
+            return customerName.toLowerCase().contains(query) ||
+                e.itemName.toLowerCase().contains(query);
+          }).toList();
+
+    if (filteredItems.isEmpty) {
       return Center(
-          child: Text('Tidak ada barang titip/ketinggalan.',
+          child: Text(
+              query.isEmpty
+                  ? 'Tidak ada barang titip/ketinggalan.'
+                  : 'Tidak ada yang cocok dgn "$query".',
               style: TextStyle(color: scheme.onSurfaceVariant)));
     }
-    final qtyUnit = ref.watch(leftBehindQtyUnitProvider).valueOrNull ?? {};
 
     // Item 52 susulan (permintaan user) — barang dari NOTA YANG SAMA
     // dikumpulkan jadi satu "frame" (Card), bukan baris terpisah rata spt
@@ -362,13 +464,10 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     // `LinkedHashMap` bawaan Dart Map menjaga urutan insert -> tetap FIFO
     // sesuai `watchLeftBehindItems` (ORDER BY created_at).
     final groups = <String, List<LeftBehindItem>>{};
-    for (final e in items) {
+    for (final e in filteredItems) {
       groups.putIfAbsent(e.transactionId, () => []).add(e);
     }
     final txIds = groups.keys.toList();
-    final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
-    final addresses =
-        ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
 
     return ListView.separated(
       padding: const EdgeInsets.all(12),
@@ -498,19 +597,39 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
 
   Widget _buildBorrowedList(BuildContext context, WidgetRef ref,
       List<BorrowedItem> items, bool isDark, ColorScheme scheme) {
-    if (items.isEmpty) {
-      return Center(
-          child: Text('Tidak ada pinjaman barang aktif.',
-              style: TextStyle(color: scheme.onSurfaceVariant)));
-    }
-    final groups = <String, List<BorrowedItem>>{};
-    for (final e in items) {
-      groups.putIfAbsent(_borrowedGroupKey(e), () => []).add(e);
-    }
-    final keys = groups.keys.toList();
     final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
     final addresses =
         ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
+
+    // Field cari BERSAMA ketiga kategori (redesain, permintaan user) — sama
+    // logika pencocokan dgn `_buildPreorderList`/`_buildLeftBehindList`:
+    // NAMA PELANGGAN atau NAMA BARANG, case-insensitive, `contains`.
+    // Sebelumnya kategori ini SAMA SEKALI tidak punya filter pencarian.
+    final query = ref.watch(_laciMejaSearchProvider).trim().toLowerCase();
+    final filteredItems = query.isEmpty
+        ? items
+        : items.where((e) {
+            final customerName = _customerLabel(
+                txId: e.transactionId,
+                liveNames: liveNames,
+                fallback: e.customerNameText);
+            return customerName.toLowerCase().contains(query) ||
+                e.itemName.toLowerCase().contains(query);
+          }).toList();
+
+    if (filteredItems.isEmpty) {
+      return Center(
+          child: Text(
+              query.isEmpty
+                  ? 'Tidak ada pinjaman barang aktif.'
+                  : 'Tidak ada yang cocok dgn "$query".',
+              style: TextStyle(color: scheme.onSurfaceVariant)));
+    }
+    final groups = <String, List<BorrowedItem>>{};
+    for (final e in filteredItems) {
+      groups.putIfAbsent(_borrowedGroupKey(e), () => []).add(e);
+    }
+    final keys = groups.keys.toList();
 
     return ListView.separated(
       padding: const EdgeInsets.all(12),
@@ -693,8 +812,10 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
               style: TextStyle(color: scheme.onSurfaceVariant)));
     }
     final labels = ref.watch(preorderProductUnitLabelsProvider).valueOrNull ?? {};
-    final query = ref.watch(_preorderSearchProvider).trim().toLowerCase();
-    final searchExpanded = ref.watch(_preorderSearchExpandedProvider);
+    // Field cari dashboard-level (dipakai bersama ketiga kategori, redesain
+    // permintaan user) — lihat dok provider di atas.
+    final query = ref.watch(_laciMejaSearchProvider).trim().toLowerCase();
+    final searchExpanded = ref.watch(_laciMejaSearchExpandedProvider);
     final productFilter = ref.watch(_preorderProductFilterProvider);
     final quotas = ref.watch(preorderQuotaProvider);
     final taken = ref.watch(laciMejaTakenQtyProvider).valueOrNull ?? {};
@@ -798,98 +919,41 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     }
     final keys = groups.keys.toList();
 
-    // Baris pencarian (susulan, permintaan user — screenshot: baris cari
-    // full-width bikin baris filter di bawahnya sempit/terpotong di HP
-    // 360-400dp). Collapsed = ikon kecil sejajar dgn dropdown filter produk
-    // (`LaciMejaExpandableSearch`); expanded = melebar SENDIRIAN mengisi
-    // baris (dropdown filter + panel statistik ikut disembunyikan sementara
-    // — screen space diprioritaskan utk field cari + keyboard).
-    final searchField = LaciMejaExpandableSearch(
-      hintText: 'Cari nama pelanggan atau produk…',
-      expanded: searchExpanded,
-      onExpandedChanged: (v) =>
-          ref.read(_preorderSearchExpandedProvider.notifier).state = v,
-      onChanged: (v) => ref.read(_preorderSearchProvider.notifier).state = v,
-    );
-
+    // Baris cari & dropdown filter produk SUDAH PINDAH ke atas (level
+    // dashboard, permintaan user — satu field cari dipakai bersama ketiga
+    // kategori, dropdown filter produk tetap khusus pre-order tapi
+    // ditampilkan di baris tersendiri di bawah baris ikon+cari). Di sini
+    // tinggal panel statistik + daftar antrian.
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-          child: Row(
-            children: [
-              if (searchExpanded)
-                Expanded(child: searchField)
-              else ...[
-                searchField,
-                // Dropdown filter produk HANYA saat >1 produk (tidak ada
-                // yang perlu disaring kalau cuma 1) — pola SAMA PERSIS
-                // `ProductPickerDropdown` yang dipakai pemilih jaminan di
-                // `_PreorderStatsLine` (permintaan user eksplisit "opsi
-                // dropdown design anda kemarin itu sudah paling pas"),
-                // BUKAN lagi baris chip `ChoiceChip` di-scroll horizontal.
-                if (productNames.length > 1) ...[
-                  const SizedBox(width: 8),
-                  ProductPickerDropdown(
-                    entries: {
-                      for (final e in productNames.entries)
-                        e.key: (
-                          name: e.value,
-                          badge: quotas[e.key] == null
-                              ? null
-                              : 'maks ${_fmtQty(quotas[e.key]!)}'
-                        ),
-                    },
-                    selectedId: productFilter,
-                    allLabel: 'Semua Produk',
-                    tooltip: 'Filter produk',
-                    onSelected: (id) => ref
-                        .read(_preorderProductFilterProvider.notifier)
-                        .state = id,
-                  ),
-                ],
-              ],
-            ],
-          ),
-        ),
         // Panel statistik disembunyikan sementara selagi field cari
         // melebar — ruang layar diprioritaskan utk field+keyboard, angka
         // statistik kurang relevan selagi sedang mengetik kata kunci.
+        // Redesain (permintaan user): Container besar pembungkus SATU
+        // bingkai DIHAPUS — `_PreorderStatsLine` dirender langsung, tiap
+        // atributnya (chip Produk/Jaminan, dropdown, tombol Kuota/Salin)
+        // SUDAH punya bingkai sendiri-sendiri di dalam widget itu sendiri.
         if (!searchExpanded)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.laciBg(isDark).withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: AppTheme.laciFg(isDark).withOpacity(0.12)),
-              ),
-              // Statistik + tombol Kuota SATU BARIS (permintaan user:
-              // kartu total sebelumnya terlalu besar/makan tempat). Chip
-              // "Jaminan: N" menampilkan angka produk yang SEDANG dipilih
-              // (dinamis, bukan dijumlah semua produk) — dipilih lewat
-              // dropdown nama produk di sebelahnya, tanpa perlu tap tooltip.
-              child: _PreorderStatsLine(
-                totalQty: totalQty,
-                entryCount: filtered.length,
-                depositByProduct: depositByProduct,
-                selectedJaminanId: effectiveJaminanId,
-                onSelectJaminan: (id) => ref
-                    .read(_preorderJaminanDisplayProvider.notifier)
-                    .state = id,
-                isDark: isDark,
-                onManageQuota: () =>
-                    _showQuotaSheet(context, ref, productNames, quotas),
-                onCopyReport: () => _copyPreorderReport(
-                  context,
-                  items: items,
-                  productFilter: productFilter,
-                  takenQty: taken,
-                  labels: labels,
-                  customerNames: liveNames,
-                ),
+            child: _PreorderStatsLine(
+              totalQty: totalQty,
+              entryCount: filtered.length,
+              depositByProduct: depositByProduct,
+              selectedJaminanId: effectiveJaminanId,
+              onSelectJaminan: (id) => ref
+                  .read(_preorderJaminanDisplayProvider.notifier)
+                  .state = id,
+              isDark: isDark,
+              onManageQuota: () =>
+                  _showQuotaSheet(context, ref, productNames, quotas),
+              onCopyReport: () => _copyPreorderReport(
+                context,
+                items: items,
+                productFilter: productFilter,
+                takenQty: taken,
+                labels: labels,
+                customerNames: liveNames,
               ),
             ),
           ),
@@ -1507,8 +1571,21 @@ class _PreorderStatsLine extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                Text('$entryCount entri',
-                    style: TextStyle(fontSize: 11, color: fg.withOpacity(0.7))),
+                // Redesain (permintaan user, hapus bingkai besar
+                // pembungkus): "N entri" ikut dapat bingkai TIPIS SENDIRI
+                // (bukan lagi teks polos yang cuma numpang di bingkai besar
+                // yang dihapus).
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: fg.withOpacity(0.18)),
+                  ),
+                  child: Text('$entryCount entri',
+                      style:
+                          TextStyle(fontSize: 11, color: fg.withOpacity(0.7))),
+                ),
                 const SizedBox(width: 6),
                 _StatChip(label: 'Produk', value: _fmt(totalQty), fg: fg),
                 if (hasDeposit) ...[
@@ -1653,57 +1730,89 @@ class _CollectButton extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.label,
+/// Redesain dashboard (permintaan user, mockup disetujui) — pengganti
+/// `_SummaryCard` lama (kartu besar dgn angka jumbo). Gaya PERSIS `_TbBtn`
+/// di `kasir_screen.dart` (~baris 2624): kotak 36x36 radius 10, border 0.75
+/// `outlineVariant`, ikon 18px, `Badge` Material kecil menempel di pojok
+/// utk count (bukan angka besar terpisah lagi) + label kecil di bawah
+/// (dipertahankan drpd `_TbBtn` — dipakai jg sbg penanda tap-target di
+/// banyak test lama yg `find.text('Pinjaman')`/`find.text('Pre-order')`).
+///
+/// Tap ikon = FUNGSI GANDA (dikonfirmasi user): pindah kategori aktif
+/// SEKALIGUS badge di ikon itu menampilkan count kategori itu (logic count
+/// sendiri tidak berubah dari `_SummaryCard` lama, cuma sekarang di badge).
+///
+/// Kategori AKTIF: kotak diberi latar warna aksennya sendiri ([bg]) + border
+/// pekat warna aksen ([fg]), label ikut bold & berwarna aksen. Kategori
+/// TIDAK aktif: latar transparan, border netral tipis (`outlineVariant`) —
+/// ikon TETAP berwarna aksennya (permintaan user poin 2: warna beda per
+/// kategori terlihat kapan pun, bukan cuma saat aktif), yang berubah cuma
+/// latar/border/label sbg penanda "sedang dipilih".
+class _CategoryIconBtn extends StatelessWidget {
+  const _CategoryIconBtn({
     required this.icon,
-    required this.count,
+    required this.label,
+    required this.badgeCount,
     required this.selected,
+    required this.fg,
+    required this.bg,
     required this.onTap,
   });
 
-  final String label;
   final IconData icon;
-  final int count;
+  final String label;
+  final int badgeCount;
   final bool selected;
+  final Color Function(bool isDark) fg;
+  final Color Function(bool isDark) bg;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fg = AppTheme.laciFg(isDark);
-    final bg = AppTheme.laciBg(isDark);
-    return Material(
-      color: selected ? bg : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: selected ? fg : Theme.of(context).colorScheme.outlineVariant,
-                width: selected ? 1.5 : 0.5),
+    final cs = Theme.of(context).colorScheme;
+    final iconColor = fg(isDark);
+    final child = Icon(icon, size: 18, color: iconColor);
+    final box = Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: selected ? bg(isDark) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: selected ? iconColor : cs.outlineVariant,
+            width: selected ? 1.4 : 0.75),
+      ),
+      child: badgeCount > 0
+          ? Badge(label: Text('$badgeCount'), child: child)
+          : child,
+    );
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          box,
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: SizedBox(
+              width: 56,
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 8.5,
+                  height: 1.05,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? iconColor : cs.onSurfaceVariant,
+                ),
+              ),
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: fg, size: 20),
-              const SizedBox(height: 4),
-              Text('$count',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 16, color: fg)),
-              const SizedBox(height: 2),
-              Text(label,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: fg)),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }

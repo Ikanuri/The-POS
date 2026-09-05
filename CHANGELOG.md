@@ -7,6 +7,32 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-05 (sesi kedua puluh dua)
+
+- `2d5a8cb` — refactor(laci-meja): redesain dashboard Laci Meja jadi lebih
+  compact (`laci_meja_dashboard_screen.dart`). 3 kartu ringkasan besar
+  (`_SummaryCard`) diganti 3 ikon kotak kecil gaya `_TbBtn` kasir (36x36,
+  radius 10, `Badge` count menempel di ikon, tap = pindah kategori aktif +
+  update badge), kategori aktif ditandai latar+bingkai lebih pekat warna
+  aksennya. Warna aksen baru di `app_theme.dart`: `pinjamanFg`/`pinjamanBg`
+  (indigo/periwinkle) & `preorderFg`/`preorderBg` (turquoise/petrol);
+  Titip/Ketinggalan reuse `laciFg`/`laciBg` lama. Satu field cari
+  (`LaciMejaExpandableSearch`, dipromosikan jadi shared — sebelumnya
+  privat tab Pre-order) dipakai bersama ketiga kategori, provider
+  digeneralisasi (`_preorderSearchProvider` -> `_laciMejaSearchProvider`,
+  dst) — teks TIDAK reset saat pindah kategori. Titip/Ketinggalan &
+  Pinjaman (sebelumnya SAMA SEKALI tidak punya filter pencarian) sekarang
+  ikut tersaring nama pelanggan/barang. Dropdown filter produk Pre-order
+  tetap ada, dipindah ke baris tersendiri di bawah baris ikon+cari.
+  Container besar pembungkus baris statistik Pre-order dihapus — tiap
+  atribut (chip Produk/Jaminan, dropdown, tombol Kuota/Salin) sudah punya
+  bingkai sendiri. Bug ditemukan+diperbaiki: search field yg pembungkusnya
+  (`Expanded` vs polos) berubah tergantung status expanded membuat Flutter
+  membuang state (termasuk teks yg sudah diketik) tiap ganti status —
+  sekarang selalu dibungkus `Expanded`. Test baru
+  `laci_meja_dashboard_redesign_test.dart` (9 kasus, revert-verified).
+  Version 2.42.0+89 -> 2.43.0+90.
+
 ## 2026-09-05 (sesi kedua puluh satu)
 
 - `5f45f4a` — feat(pengaturan): Fase B "Kategori Harga" — layar baru

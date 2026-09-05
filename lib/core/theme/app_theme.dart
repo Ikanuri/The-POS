@@ -68,6 +68,25 @@ class AppTheme {
   static Color laciBg(bool isDark) =>
       isDark ? const Color(0x33E3A8B7) : const Color(0xFFF5E3E8);
 
+  // Item 52 redesain dashboard (permintaan user "seperti kasir" — Scan/
+  // Antrian/Riwayat di toolbar kasir masing2 py aksen beda) — 3 kategori
+  // Laci Meja (Titip/Ketinggalan, Pinjaman, Pre-order) dapat warna sendiri2.
+  // Titip/Ketinggalan reuse laciFg/laciBg di atas (kategori "utama"/asal
+  // fitur ini, dusty-rose). Pinjaman & Pre-order dapat hue BARU di bawah,
+  // dipilih supaya beda dari SEMUA aksen fungsi lain yang sudah ada di file
+  // ini (merah debt, hijau change, biru scan, emas antrian, ungu riwayat,
+  // hijau-zaitun tempel, amber stockWarn, teal perangkat, dusty-rose laci)
+  // — TIDAK reuse tealFg/tealBg (sudah dipakai seksi "Perangkat" di
+  // Pengaturan, dipakai lagi di sini akan rancu).
+  static Color pinjamanFg(bool isDark) =>
+      isDark ? const Color(0xFFAAB6E8) : const Color(0xFF4C5FA8);
+  static Color pinjamanBg(bool isDark) =>
+      isDark ? const Color(0x33AAB6E8) : const Color(0xFFE6E9F6);
+  static Color preorderFg(bool isDark) =>
+      isDark ? const Color(0xFF6FD3DA) : const Color(0xFF1B7A82);
+  static Color preorderBg(bool isDark) =>
+      isDark ? const Color(0x336FD3DA) : const Color(0xFFDBF0F1);
+
   /// SnackBar dengan warna yang benar di light & dark. Untuk pesan error,
   /// pakai [isError] agar latar/ikon merah konsisten (tidak pink kontras buruk).
   static void showSnack(BuildContext context, String message,
