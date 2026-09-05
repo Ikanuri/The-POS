@@ -20,6 +20,7 @@ import '../../features/pengaturan/csv_import_screen.dart';
 import '../../features/pengaturan/device_license_screen.dart';
 import '../../features/pengaturan/asisten_permissions_screen.dart';
 import '../../features/pengaturan/kasir_permissions_screen.dart';
+import '../../features/pengaturan/kategori_harga_screen.dart';
 import '../../features/pengaturan/order_share_screen.dart';
 import '../../features/pengaturan/pair_device_screen.dart';
 import '../../features/pengaturan/payment_methods_screen.dart';
@@ -262,6 +263,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: 'metode-bayar',
                   builder: (_, __) => const PaymentMethodsScreen()),
+              GoRoute(
+                  path: 'kategori-harga',
+                  builder: (_, __) => const KategoriHargaScreen()),
               GoRoute(
                   path: 'pengeluaran',
                   builder: (_, __) => const ExpensesScreen()),
