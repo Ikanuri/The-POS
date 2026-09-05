@@ -127,10 +127,19 @@ void main() {
     await tester.tap(find.byType(FilledButton).last);
     await tester.pumpAndSettle();
 
-    expect(
-        find.textContaining(
-            'Pra-Bayar: ${formatRupiah(30000)} terkunci · Sisa ${formatRupiah(0)}'),
-        findsOneWidget);
+    // Sudah lunas PAS (30000 dikunci dari total 30000) → baris "Pra-Bayar Rp
+    // X" tampil, TAPI baris "Sisa"/"Kembalian" TIDAK ada sama sekali.
+    expect(find.text('Pra-Bayar ${formatRupiah(30000)}'), findsOneWidget);
+    expect(find.textContaining('Sisa '), findsNothing);
+    expect(find.textContaining('Kembalian '), findsNothing);
+
+    // Warna "Pra-Bayar Rp X" harus NETRAL (bukan `scheme.primary` seperti
+    // desain lama) — style tanpa override warna berarti `color` null,
+    // mewarisi warna teks default tema.
+    final prabayarLabelStyle = tester
+        .widget<Text>(find.text('Pra-Bayar ${formatRupiah(30000)}'))
+        .style;
+    expect(prabayarLabelStyle?.color, isNull);
 
     final prabayar =
         r.container.read(cartPrabayarProvider(kMainCartId));
@@ -140,17 +149,23 @@ void main() {
     // Ubah qty item keranjang (tambah 1 lagi via stepper — item sudah di
     // keranjang, lingkaran utama `AddControl` menampilkan ANGKA qty, bukan
     // ikon "+" lagi, jadi tap widget-nya langsung, bukan cari ikon) → total
-    // naik jadi 45000, "Sisa" harus ikut naik jadi 15000 TANPA aksi lain.
+    // naik jadi 45000, "Sisa" harus muncul (merah) jadi 15000 TANPA aksi lain.
     await tester.tap(find.byType(AddControl).first);
     await tester.pumpAndSettle();
 
-    expect(
-        find.textContaining(
-            'Pra-Bayar: ${formatRupiah(30000)} terkunci · Sisa ${formatRupiah(15000)}'),
-        findsOneWidget);
+    expect(find.text('Pra-Bayar ${formatRupiah(30000)}'), findsOneWidget);
+    expect(find.text('Sisa ${formatRupiah(15000)}'), findsOneWidget);
+    expect(find.textContaining('Kembalian '), findsNothing);
 
-    // Hapus entri Pra-Bayar via daftar (tap badge → sheet daftar → hapus).
-    await tester.tap(find.textContaining('Pra-Bayar:'));
+    final sisaStyle =
+        tester.widget<Text>(find.text('Sisa ${formatRupiah(15000)}')).style;
+    expect(sisaStyle?.color, AppTheme.debtFg(false));
+
+    // Hapus entri Pra-Bayar via daftar (tap area ringkasan → sheet daftar →
+    // hapus). Pakai teks PERSIS (bukan `textContaining`) — SnackBar sisa
+    // "Pra-Bayar Rp X dikunci" dari langkah kunci di atas juga cocok dgn
+    // substring "Pra-Bayar Rp" dan bikin finder ambigu.
+    await tester.tap(find.text('Pra-Bayar ${formatRupiah(30000)}'));
     await tester.pumpAndSettle();
     expect(find.text('Entri Pra-Bayar'), findsOneWidget);
     await tester.tap(find.byTooltip('Hapus'));
@@ -161,7 +176,71 @@ void main() {
     await tester.tap(find.text('Tutup'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Pra-Bayar:'), findsNothing,
-        reason: 'badge hilang total setelah entri terakhir dihapus');
+    // Cek dgn predicate PERSIS (bukan `textContaining`) — SnackBar sisa
+    // "Pra-Bayar Rp X dikunci" dari langkah kunci di atas juga cocok dgn
+    // substring "Pra-Bayar Rp" tapi BUKAN ringkasan footer yang dimaksud.
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Text &&
+                RegExp(r'^Pra-Bayar Rp [\d.]+$').hasMatch(w.data ?? '')),
+        findsNothing,
+        reason: 'ringkasan hilang total setelah entri terakhir dihapus');
+  });
+
+  testWidgets(
+      'Pra-Bayar melebihi total keranjang -> baris "Kembalian" HIJAU '
+      'tampil (bukan "Sisa")', (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+
+    // Total keranjang = 30000. Kunci Rp 40.000 (lebih dari total) langsung
+    // lewat notifier (skip alur sheet manual — sudah dibuktikan tombolnya
+    // benar di test sebelumnya) supaya skenario "kelebihan" mudah disusun.
+    r.container.read(cartPrabayarProvider(kMainCartId).notifier).add(
+          PrabayarEntry(
+            id: 'e1',
+            amount: 40000,
+            method: 'tunai',
+            lockedAt: DateTime.now(),
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pra-Bayar ${formatRupiah(40000)}'), findsOneWidget);
+    expect(find.text('Kembalian ${formatRupiah(10000)}'), findsOneWidget);
+    expect(find.textContaining('Sisa '), findsNothing);
+
+    final kembalianStyle = tester
+        .widget<Text>(find.text('Kembalian ${formatRupiah(10000)}'))
+        .style;
+    expect(kembalianStyle?.color, AppTheme.changeFg(false));
+  });
+
+  testWidgets(
+      'tombol Pra-Bayar (sekunder, sebelah tombol Bayar) & ringkasan tidak '
+      'overflow di layar sempit 360dp', (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    await tester.pumpAndSettle();
+
+    r.container.read(cartPrabayarProvider(kMainCartId).notifier).add(
+          PrabayarEntry(
+            id: 'e1',
+            amount: 40000,
+            method: 'tunai',
+            lockedAt: DateTime.now(),
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull,
+        reason: 'baris footer (badge + ringkasan + tombol Pra-Bayar + Bayar) '
+            'harus render tanpa overflow di 360dp walau nominal panjang');
+    expect(find.byTooltip('Pra-Bayar'), findsOneWidget);
+    expect(find.text('Bayar'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
   });
 }
