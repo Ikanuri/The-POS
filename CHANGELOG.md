@@ -7,6 +7,26 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-05 (sesi kedua puluh)
+
+- `f527c4e` — feat(kasir): Fase A "Kategori Harga" — dialog "Ubah Total" di
+  layar bayar (`_editTotal`) diperluas jadi 2 mode: "Nominal" (perilaku
+  lama, tidak berubah sama sekali) dan "Diskon %" (baru) — kasir ketik
+  persentase, preview live nominal diskon mentah vs hasil SETELAH
+  dibulatkan, pilih kelipatan pembulatan (100/500/1.000/5.000 via
+  dropdown) & arah (Turun/Terdekat/Naik via `ChoiceChip`). Fungsi murni
+  baru `applyPercentDiscount` (`discount_allocation.dart`) menghitung dari
+  `_cartTotal` APA ADANYA (bukan `_total` yang mungkin sudah pernah
+  di-override) supaya diskon % tidak menumpuk kalau dialog dibuka
+  berkali-kali; hasil di-clamp ke `[0, cartTotal]`. Kelipatan & arah
+  TERAKHIR yang dipakai kasir diingat per-device via `SharedPreferences`
+  (`kasir_discount_round_multiple`/`kasir_discount_round_direction`).
+  `allocateCartTotal`/`_confirm`/`_confirmAddItems` TIDAK disentuh sama
+  sekali — hasil akhir mode manapun tetap masuk lewat `_totalOverride` di
+  titik yang persis sama seperti sebelumnya. Ini Fase A dari rencana besar
+  "Kategori Harga"; Fase B (tabel Kategori Harga + margin per-produk) &
+  Fase C (toggle aktif di keranjang) menyusul terpisah.
+
 ## 2026-09-05 (sesi kesembilan belas)
 
 - `fd6fa1d` — feat(laporan): transaksi void kini tampil di Laporan ->

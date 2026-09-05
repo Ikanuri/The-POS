@@ -1,5 +1,70 @@
 import '../../core/models/cart_item.dart';
 
+/// Arah pembulatan hasil diskon % — dipakai mode "Diskon %" di dialog
+/// "Ubah Total" (`_editTotal`, payment_screen.dart).
+enum RoundDirection { up, down, nearest }
+
+/// Hasil hitung diskon % : nominal diskon MENTAH (sebelum dibulatkan) dan
+/// total AKHIR setelah dibulatkan ke kelipatan [multiple] sesuai arah.
+class PercentDiscountResult {
+  const PercentDiscountResult({
+    required this.rawDiscount,
+    required this.roundedTotal,
+  });
+
+  /// Nominal diskon sebelum pembulatan (cartTotal * percent / 100, dibulatkan
+  /// ke rupiah terdekat) — murni untuk ditampilkan sbg pembanding di preview,
+  /// TIDAK dipakai sbg hasil akhir.
+  final int rawDiscount;
+
+  /// Total AKHIR (cartTotal - diskon, sudah dibulatkan) — inilah yang
+  /// dipakai sbg `_totalOverride`.
+  final int roundedTotal;
+}
+
+/// Hitung total setelah diskon [percent]% dari [cartTotal], dibulatkan ke
+/// kelipatan [multiple] rupiah sesuai [direction]. [percent] dalam rentang
+/// 0-100 (di luar itu di-clamp). [multiple] <= 1 berarti tanpa pembulatan
+/// (total mentah dipakai apa adanya).
+///
+/// PENTING: [cartTotal] harus total keranjang APA ADANYA (bukan total yang
+/// sudah pernah di-override sebelumnya) — supaya diskon % konsisten & tidak
+/// "menumpuk" kalau dialog "Ubah Total" dibuka berkali-kali.
+///
+/// Hasil akhir DI-CLAMP ke rentang [0, cartTotal] — pembulatan "Naik" dgn
+/// kelipatan kasar + persen kecil bisa secara teori mendorong total di atas
+/// cartTotal asli (jadi bukan diskon lagi, tapi surcharge) atau di bawah 0;
+/// keduanya tidak masuk akal utk fitur "diskon" jadi dibatasi.
+PercentDiscountResult applyPercentDiscount({
+  required int cartTotal,
+  required double percent,
+  required int multiple,
+  required RoundDirection direction,
+}) {
+  final clampedPercent = percent.clamp(0, 100);
+  final rawDiscount = (cartTotal * clampedPercent / 100).round();
+  final rawTotal = cartTotal - rawDiscount;
+
+  int roundedTotal;
+  if (multiple <= 1) {
+    roundedTotal = rawTotal;
+  } else {
+    switch (direction) {
+      case RoundDirection.up:
+        roundedTotal = ((rawTotal + multiple - 1) ~/ multiple) * multiple;
+        break;
+      case RoundDirection.down:
+        roundedTotal = (rawTotal ~/ multiple) * multiple;
+        break;
+      case RoundDirection.nearest:
+        roundedTotal = ((rawTotal + (multiple ~/ 2)) ~/ multiple) * multiple;
+        break;
+    }
+  }
+  roundedTotal = roundedTotal.clamp(0, cartTotal);
+  return PercentDiscountResult(rawDiscount: rawDiscount, roundedTotal: roundedTotal);
+}
+
 /// Satu baris hasil alokasi total ke item keranjang — dipakai untuk membangun
 /// `TransactionItemsCompanion` saat menyimpan transaksi / tambah-belanjaan.
 class AllocatedCartLine {
