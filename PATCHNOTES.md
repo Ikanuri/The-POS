@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 September 2026 (sesi kedua puluh tiga)
+
+### ✨ Baru
+- **Sekarang bisa aktifkan Kategori Harga langsung di keranjang** —
+  produk yang termasuk kategori itu otomatis pakai harga khususnya,
+  tanpa perlu ubah satu-satu. Tinggal pilih kategori dari deretan chip
+  di atas daftar keranjang (cuma tampil kalau memang sudah punya
+  kategori harga & berhak mengubah harga); baris yang harganya sudah
+  pernah diedit manual sendiri TIDAK ikut berubah — tetap aman. Matikan
+  lagi kapan saja untuk kembali ke harga normal.
+
 ## 5 September 2026 (sesi kedua puluh dua)
 
 ### ✨ Baru

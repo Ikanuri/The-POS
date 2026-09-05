@@ -30,6 +30,7 @@ import '../produk/catalog/catalog_store.dart';
 import '../shell/sync_status_banner.dart';
 import 'cart_meta_provider.dart';
 import 'cart_prabayar_provider.dart';
+import 'cart_price_category_provider.dart';
 import 'cart_provider.dart';
 import 'handoff_gate_provider.dart';
 import 'widgets/add_control.dart';
@@ -489,6 +490,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
   bool awaitingPayment,
   String? employeeName,
   List<PrabayarEntry> prabayar,
+  String? priceCategoryId,
 }) _parseHeldPayload(String json) {
   try {
     final decoded = jsonDecode(json);
@@ -503,6 +505,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         awaitingPayment: false,
         employeeName: null,
         prabayar: const <PrabayarEntry>[],
+        priceCategoryId: null,
       );
     }
     if (decoded is Map<String, dynamic>) {
@@ -523,6 +526,9 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         awaitingPayment: decoded['awaitingPayment'] as bool? ?? false,
         employeeName: decoded['employeeName'] as String?,
         prabayar: prabayar,
+        // Fase C "Kategori Harga" — key baru (absen di payload lama,
+        // fallback null = "Normal" — kompatibel mundur).
+        priceCategoryId: decoded['priceCategory'] as String?,
       );
     }
   } catch (_) {/* data rusak → kosong */}
@@ -532,6 +538,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
     awaitingPayment: false,
     employeeName: null,
     prabayar: const <PrabayarEntry>[],
+    priceCategoryId: null,
   );
 }
 
@@ -1599,15 +1606,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
 
     final db = ref.read(databaseProvider);
     final prabayar = ref.read(cartPrabayarProvider(_cartId));
+    final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
       'prabayar': prabayar.map((e) => e.toJson()).toList(),
+      'priceCategory': priceCategoryId,
     });
     await db.holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
     ref.read(cartProvider(_cartId).notifier).clear();
     ref.read(cartMetaProvider(_cartId).notifier).clear();
     ref.read(cartPrabayarProvider(_cartId).notifier).clear();
+    ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
     if (mounted) {
       setState(() => _heldPanelOpen = false);
       _showBanner('Pesanan "$label" ditahan', InlineBannerType.success);
@@ -1668,6 +1678,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     ref.read(cartProvider(_cartId).notifier).replaceAll(parsed.items);
     ref.read(cartMetaProvider(_cartId).notifier).replaceAll(parsed.meta);
     ref.read(cartPrabayarProvider(_cartId).notifier).replaceAll(parsed.prabayar);
+    ref
+        .read(cartPriceCategoryProvider(_cartId).notifier)
+        .setCategory(parsed.priceCategoryId);
     if (mounted) {
       setState(() => _heldPanelOpen = false);
       _showBanner(
@@ -1687,11 +1700,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     if (cart.isEmpty) return null;
     final meta = ref.read(cartMetaProvider(_cartId));
     final prabayar = ref.read(cartPrabayarProvider(_cartId));
+    final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
     final label = meta.hasCustomer ? meta.customerName! : _autoHoldLabel();
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
       'prabayar': prabayar.map((e) => e.toJson()).toList(),
+      'priceCategory': priceCategoryId,
     });
     await ref
         .read(databaseProvider)
@@ -1699,6 +1714,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     ref.read(cartProvider(_cartId).notifier).clear();
     ref.read(cartMetaProvider(_cartId).notifier).clear();
     ref.read(cartPrabayarProvider(_cartId).notifier).clear();
+    ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
     return label;
   }
 

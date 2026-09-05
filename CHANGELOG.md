@@ -7,6 +7,29 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-05 (sesi kedua puluh tiga)
+
+- `d77117e` — feat(kasir): toggle Kategori Harga aktif di keranjang (Fase
+  C, final). `PriceService.resolvePrice` param `activeCategoryId` (menang
+  di atas customerGroup/qty-tier/base, `PriceSource.category` baru,
+  costPrice dari tier qty berlaku). `AppDatabase.getCategoryPriceFor` +
+  refactor `_liveCategoryPrice` jadi satu sumber kebenaran (dipakai juga
+  `getAltPrices`/`getPriceCategoryMembers`). `CartItem.priceFromCategoryId`
+  (penanda internal, tidak pernah menyentuh `priceOverridden`).
+  `cart_price_category_provider.dart` baru: `cartPriceCategoryProvider`
+  (persist per-cartId), `canOverrideHargaProvider`,
+  `repriceCartForCategoryChange` (re-price massal saat toggle
+  berganti/mati/ganti kategori, manual override selalu menang). `CartSheet`:
+  baris chip toggle "Normal"+kategori (gerbang izin `override_harga` +
+  minimal 1 kategori terdaftar) & badge `sell_outlined` beda dari pensil
+  override manual. `ItemEntrySheet`: harga awal item baru ikut kategori
+  aktif. Hold/resume (`kasir_screen.dart`+`cart_sheet.dart`): kategori
+  aktif ikut payload `priceCategory`, pulih saat resume (transfer QR
+  SENGAJA tidak membawa lintas device). 22 test baru (semua
+  revert-verify): resolvePrice prioritas+costPrice+live-compute,
+  getCategoryPriceFor, repriceCartForCategoryChange (4 skenario),
+  hold/resume, CartSheet toggle UI, ItemEntrySheet harga awal.
+
 ## 2026-09-05 (sesi kedua puluh dua)
 
 - `2d5a8cb` — refactor(laci-meja): redesain dashboard Laci Meja jadi lebih

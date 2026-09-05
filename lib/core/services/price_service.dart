@@ -1,9 +1,17 @@
 import '../database/app_database.dart';
 
 /// Resolusi harga, prioritas tertinggi ke terendah:
-/// 1. Customer group price (pelanggan terdaftar dengan group)
-/// 2. Qty tier — minQty terbesar yang <= qty
-/// 3. Fallback — tier minQty = 1
+/// 1. Kategori Harga aktif (`activeCategoryId`, Fase C — toggle di keranjang;
+///    HANYA menang bila produk ini TERDAFTAR di kategori itu, lihat
+///    `AppDatabase.getCategoryPriceFor`; kalau tidak terdaftar, lanjut ke
+///    prioritas di bawah persis seolah `activeCategoryId` tidak diisi).
+///    Catatan: manual override harga per-baris (`CartItem.priceOverridden`)
+///    ada di LUAR fungsi ini — level pemanggil (`cart_sheet.dart`) yang
+///    menjamin baris ter-override TIDAK PERNAH dikirim ke sini dgn
+///    `activeCategoryId` terisi lagi (lihat `repriceCartForCategoryChange`).
+/// 2. Customer group price (pelanggan terdaftar dengan group)
+/// 3. Qty tier — minQty terbesar yang <= qty
+/// 4. Fallback — tier minQty = 1
 class PriceService {
   PriceService(this._db);
 
@@ -13,7 +21,32 @@ class PriceService {
     required String productUnitId,
     required double qty,
     String? customerGroupId,
+    String? activeCategoryId,
   }) async {
+    if (activeCategoryId != null) {
+      final catPrice =
+          await _db.getCategoryPriceFor(productUnitId, activeCategoryId);
+      if (catPrice != null) {
+        // HPP tetap dari tier qty yang berlaku — baris AltPrices kategori
+        // tidak punya kolom cost sendiri (pola SAMA dgn cabang customerGroup
+        // di bawah: harga jual dari sumber lain, HPP selalu dari tier qty
+        // produk, supaya laba di laporan tidak melonjak palsu/costPrice 0).
+        final tiers = await _db.getPriceTiers(productUnitId); // minQty DESC
+        PriceTier? costTier;
+        for (final t in tiers) {
+          if (t.minQty <= qty) {
+            costTier = t;
+            break;
+          }
+        }
+        if (costTier == null && tiers.isNotEmpty) costTier = tiers.last;
+        return ResolvedPrice(
+            price: catPrice,
+            costPrice: costTier?.costPrice ?? 0,
+            source: PriceSource.category);
+      }
+    }
+
     if (customerGroupId != null) {
       final groupPrice =
           await _db.getCustomerGroupPrice(productUnitId, customerGroupId);
@@ -59,7 +92,7 @@ class PriceService {
   }
 }
 
-enum PriceSource { customerGroup, qtyTier, base, none }
+enum PriceSource { category, customerGroup, qtyTier, base, none }
 
 class ResolvedPrice {
   const ResolvedPrice({
