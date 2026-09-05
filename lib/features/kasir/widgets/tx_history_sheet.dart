@@ -1252,61 +1252,85 @@ Future<bool> showVoidTransactionDialog(
 
   final scheme = Theme.of(context).colorScheme;
   final isKurangBayar = tx.status == 'kurang_bayar' || tx.status == 'tempo';
+  final reasonCtrl = TextEditingController();
 
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Batalkan Transaksi?'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Transaksi ${tx.localId} akan dibatalkan.',
-              style: const TextStyle(fontSize: 13)),
-          const SizedBox(height: 8),
-          const Text('• Stok barang akan dikembalikan',
-              style: TextStyle(fontSize: 12)),
-          const Text('• Poin loyalitas akan dibalik',
-              style: TextStyle(fontSize: 12)),
-          if (tx.paid > 0 && !isKurangBayar)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                  '• Kembalikan ${formatRupiah(tx.paid)} ke pelanggan secara manual',
-                  style: TextStyle(fontSize: 12, color: scheme.error)),
-            ),
-          if (isKurangBayar && tx.paid > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                  '• Uang ${formatRupiah(tx.paid)} yang sudah masuk dianggap hangus',
-                  style: TextStyle(fontSize: 12, color: scheme.error)),
-            ),
+  try {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Batalkan Transaksi?'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Transaksi ${tx.localId} akan dibatalkan.',
+                  style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 8),
+              const Text('• Stok barang akan dikembalikan',
+                  style: TextStyle(fontSize: 12)),
+              const Text('• Poin loyalitas akan dibalik',
+                  style: TextStyle(fontSize: 12)),
+              if (tx.paid > 0 && !isKurangBayar)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                      '• Kembalikan ${formatRupiah(tx.paid)} ke pelanggan secara manual',
+                      style: TextStyle(fontSize: 12, color: scheme.error)),
+                ),
+              if (isKurangBayar && tx.paid > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                      '• Uang ${formatRupiah(tx.paid)} yang sudah masuk dianggap hangus',
+                      style: TextStyle(fontSize: 12, color: scheme.error)),
+                ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Alasan (opsional)',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Tidak Jadi')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: scheme.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Batalkan Transaksi'),
+          ),
         ],
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Tidak Jadi')),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: scheme.error),
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Batalkan Transaksi'),
-        ),
-      ],
-    ),
-  );
+    );
 
-  if (confirmed != true) return false;
-  // Item 40 pattern — device BUKAN owner -> event Laci Meja yang ditulis
-  // voidTransaction (Item 60) menunggu persetujuan owner via sync.
-  await db.voidTransaction(tx.id, device.deviceCode,
-      locallyModified: !device.isOwner);
-  if (context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Transaksi ${tx.localId} dibatalkan')));
+    if (confirmed != true) return false;
+    final reason = reasonCtrl.text.trim();
+    // Item 40 pattern — device BUKAN owner -> event Laci Meja yang ditulis
+    // voidTransaction (Item 60) menunggu persetujuan owner via sync.
+    await db.voidTransaction(tx.id, device.deviceCode,
+        locallyModified: !device.isOwner,
+        reason: reason.isEmpty ? null : reason);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Transaksi ${tx.localId} dibatalkan')));
+    }
+    return true;
+  } finally {
+    // Dispose SATU FRAME setelah ini (bukan langsung) — dialog masih dalam
+    // animasi keluar (pop) saat titik ini tereksekusi, TextField-nya (yang
+    // pakai reasonCtrl) masih ter-build sebentar selagi transisi berjalan.
+    // Dispose langsung -> "TextEditingController used after being disposed"
+    // saat frame animasi berikutnya.
+    WidgetsBinding.instance.addPostFrameCallback((_) => reasonCtrl.dispose());
   }
-  return true;
 }
 
 class _DaySeparator extends StatelessWidget {

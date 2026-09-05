@@ -3435,12 +3435,36 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 color: scheme.errorContainer,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.block, color: scheme.onErrorContainer, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Transaksi ini telah dibatalkan',
-                      style: TextStyle(color: scheme.onErrorContainer)),
+                  Row(
+                    children: [
+                      Icon(Icons.block,
+                          color: scheme.onErrorContainer, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Transaksi ini telah dibatalkan',
+                          style: TextStyle(color: scheme.onErrorContainer)),
+                    ],
+                  ),
+                  // Log void (permintaan user) — null utk nota void SEBELUM
+                  // kolom ini ada (voidedBy/voidReason), sengaja tidak
+                  // ditampilkan sama sekali kalau tidak ada datanya.
+                  if (tx.voidedBy != null || tx.voidReason != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, left: 26),
+                      child: Text(
+                        [
+                          if (tx.voidedBy != null)
+                            'Dibatalkan oleh: ${tx.voidedBy}',
+                          if (tx.voidReason != null &&
+                              tx.voidReason!.isNotEmpty)
+                            'Alasan: ${tx.voidReason}',
+                        ].join(' · '),
+                        style: TextStyle(
+                            color: scheme.onErrorContainer, fontSize: 12),
+                      ),
+                    ),
                 ],
               ),
             ),

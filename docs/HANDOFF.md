@@ -5,6 +5,89 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 5 September 2026 (sesi kesembilan belas). Versi kerja
+**2.40.0+87** (MINOR naik — void transaksi kini terlihat & bisa diberi
+alasan, terlihat pengguna). **schemaVersion 38 -> 39** — kolom baru
+`Transactions.voidedBy`/`voidReason` (nullable, migrasi aditif via
+`_addColumnIfMissing`)._
+
+**Sesi ini (`fd6fa1d`)**: fitur #3 dari 3 fitur besar sesi ini (fitur #1 &
+#2 didelegasikan ke agen terpisah, TIDAK disentuh sesi ini — hindari 2 agen
+menyentuh migrasi skema `transactions`/dialog void bersamaan). Latar
+belakang: owner sempat bertanya kenapa transaksi void "hilang" dari
+Laporan — ternyata `voidTransaction()` cuma mengubah `status` jadi
+`'void'` (tidak menghapus apa pun), tapi `watchTransactions()` MEMFILTER
+status void keluar sebelum sampai ke UI. `transaksi_tab.dart` SUDAH punya
+kode styling `isVoid` (badge merah VOID + total dicoret di `_TxTile`) yang
+tidak pernah terpicu krn datanya sudah difilter — sisa kode lama.
+
+**Yang berubah**:
+- `AppDatabase.watchTransactions()` (app_database.dart) dapat parameter
+  `includeVoid` (default `false` — SEMUA pemanggil lain, mis. ekspor,
+  TIDAK berubah). `transaksi_tab.dart`'s `_transaksiTabProvider` panggil
+  dgn `includeVoid: true` — badge VOID yang sudah ada otomatis "hidup".
+- `_showTxDetail` di `transaksi_tab.dart` (dulu sheet ringkasan tipis
+  Total/Dibayar/Metode/Waktu/Kasir + tombol Void/Tambah Bayar BESPOKE
+  sendiri `_confirmVoid`/`_tambahBayar`) DIGANTI jadi
+  `context.push('/kasir/struk/${tx.id}')` — navigasi ke `ReceiptScreen`
+  (struk asli lengkap, pola sama `tx_history_sheet.dart`). `ReceiptScreen`
+  SUDAH py tombol Batalkan (`_showVoid` -> `showVoidTransactionDialog`
+  bersama) & Tambah Bayar (`_showTambahBayar`) terintegrasi, jadi
+  `_confirmVoid`/`_tambahBayar`/`_InfoRow`/`_methodLabel` bespoke di
+  `transaksi_tab.dart` jadi DEAD CODE — DIHAPUS (diverifikasi tidak ada
+  pemanggil lain).
+- Kolom baru `Transactions.voidedBy`/`voidReason` (transaction_tables.dart,
+  nullable) — `voidTransaction()` dapat parameter opsional `reason`, ditulis
+  bareng `voidedBy: kasirId` di companion write yang sama yang menulis
+  `status: 'void'`.
+- `showVoidTransactionDialog()` (`tx_history_sheet.dart`, dipakai bersama
+  riwayat & struk) dapat `TextField` "Alasan (opsional)" di dalam
+  `AlertDialog` yang sudah ada; reason diteruskan langsung ke
+  `db.voidTransaction(..., reason: ...)` DI DALAM fungsi ini sendiri (bukan
+  dikembalikan ke pemanggil).
+- `ReceiptScreen` — banner "Transaksi ini telah dibatalkan" (isVoid) kini
+  tampilkan baris tambahan "Dibatalkan oleh: `<voidedBy>` · Alasan:
+  `<voidReason>`" kalau salah satu terisi (nota void LAMA sebelum kolom
+  ini ada -> null keduanya -> baris tambahan tidak tampil sama sekali,
+  bukan "null · null").
+- **Bug ketemu dari test UI baru sendiri** (bukan pre-existing): dispose
+  `reasonCtrl` (`TextEditingController` field alasan) langsung di
+  `finally` block `showVoidTransactionDialog` crash
+  "TextEditingController used after being disposed" — dialog MASIH dalam
+  animasi keluar (pop) saat titik itu tereksekusi, `TextField`-nya masih
+  ter-build sebentar selama transisi. Fix: dispose via
+  `WidgetsBinding.instance.addPostFrameCallback` (satu frame kemudian),
+  bukan langsung. Revert-verified (immediate dispose -> crash reproduce;
+  deferred -> hijau).
+
+**Test baru** (semua revert-verified): `migration_v39_test.dart` (migrasi
+schema v38->v39, kolom baru nullable, data lama tetap NULL),
+`void_reason_test.dart` (DB murni: `voidTransaction` dgn/tanpa `reason`,
+`watchTransactions` `includeVoid` true/false),
+`transaksi_tab_void_test.dart` (UI: badge VOID + strikethrough tampil, tap
+nota void -> `ReceiptScreen` beneran terbuka & item asli + voidedBy/
+voidReason tampil — pakai `GoRouter` + `Scaffold` manual, BUKAN
+`pumpWithFakeApp`, krn butuh route sungguhan ke `/kasir/struk/:txId`;
+WAJIB `SharedPreferences.setMockInitialValues({})` krn `ReceiptScreen._load`
+memanggil `SharedPreferences.getInstance()` — tanpa mock, hang selamanya
+tanpa error jelas; produk nama tampil via `RichText`/`TextSpan`
+[`_productNames[...]` dipakai sbg `text:` span] BUKAN `Text` polos ->
+harus `find.textContaining(..., findRichText: true)`, `find.text` biasa
+TIDAK menemukannya), `void_dialog_reason_test.dart` (UI: isi alasan di
+dialog -> beneran tersimpan ke DB via `pumpWithFakeApp` + `TxHistorySheet`
+sungguhan, bukan cuma cek widget dialog-nya doang).
+
+Full `flutter test` (1383 test) — SEMUA LULUS kecuali
+`proposal_unchanged_end_to_end_test.dart` yang gagal "Address already in
+use" port 8625 (dikonfirmasi flaky KETIKA paralel dgn test LAN-sync lain
+di full suite — lulus sendirian, BUKAN regresi, sudah didokumentasikan
+sebelumnya juga). `flutter analyze` bersih (0 issue).
+
+**Belum/tidak disentuh** (di luar cakupan brief): fitur #1 & #2 (lihat
+paragraf pembuka) — akan dikerjakan agen terpisah setelah sesi ini.
+
+---
+
 _Update sesi 5 September 2026 (sesi kedelapan belas). Versi kerja
 **2.39.0+86** (MINOR naik — perubahan tata letak UI yang terlihat pengguna,
 bukan bugfix murni), schemaVersion TETAP 38 (tidak ada migrasi disentuh sesi

@@ -256,7 +256,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -713,6 +713,15 @@ class AppDatabase extends _$AppDatabase {
             // filter delta `dumpSince` (lihat kolom & case khusus terkait).
             await _addColumnIfMissing('laci_meja_events', 'applied_at',
                 laciMejaEvents, laciMejaEvents.appliedAt, m);
+          }
+          if (from < 39) {
+            // Log void (permintaan user) — siapa yang membatalkan & alasan
+            // opsional (lihat dok `Transactions.voidedBy`/`voidReason`).
+            // Nullable & aditif, nota lama tetap valid apa adanya.
+            await _addColumnIfMissing('transactions', 'voided_by',
+                transactions, transactions.voidedBy, m);
+            await _addColumnIfMissing('transactions', 'void_reason',
+                transactions, transactions.voidReason, m);
           }
         },
         beforeOpen: (details) async {
@@ -3258,7 +3267,7 @@ class AppDatabase extends _$AppDatabase {
   /// di sini menunggu persetujuan owner via sync (sama pola
   /// `laciMejaLocallyModifiedProvider`); device owner selalu `false`.
   Future<void> voidTransaction(String txId, String kasirId,
-      {bool locallyModified = false}) async {
+      {bool locallyModified = false, String? reason}) async {
     await transaction(() async {
       // Baca items untuk reverse stock.
       final items = await (select(transactionItems)
@@ -3409,7 +3418,10 @@ class AppDatabase extends _$AppDatabase {
 
       await (update(transactions)..where((t) => t.id.equals(txId))).write(
           TransactionsCompanion(
-              status: const Value('void'), updatedAt: Value(now)));
+              status: const Value('void'),
+              updatedAt: Value(now),
+              voidedBy: Value(kasirId),
+              voidReason: Value(reason)));
 
       // Perbarui ringkasan harian untuk tanggal transaksi yang dibatalkan.
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
@@ -5407,13 +5419,18 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Laporan queries ─────────────────────────
 
+  /// `includeVoid: false` (default) menjaga perilaku LAMA — transaksi void
+  /// dikecualikan, SEMUA pemanggil existing (ekspor, dll) tidak berubah.
+  /// `includeVoid: true` dipakai Laporan → Transaksi (Item 63) supaya nota
+  /// void tetap terlihat (badge VOID di `_TxTile` yang sudah ada).
   Stream<List<Transaction>> watchTransactions({
     required DateTime from,
     required DateTime to,
+    bool includeVoid = false,
   }) =>
       (select(transactions)
             ..where((t) =>
-                t.status.isNotValue('void') &
+                (includeVoid ? const Constant(true) : t.status.isNotValue('void')) &
                 t.createdAt.isBiggerOrEqualValue(from) &
                 t.createdAt.isSmallerOrEqualValue(to))
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
