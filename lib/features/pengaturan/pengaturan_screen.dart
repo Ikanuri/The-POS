@@ -146,6 +146,15 @@ class PengaturanScreen extends ConsumerWidget {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/pengaturan/metode-bayar'),
                       ),
+                      ListTile(
+                        leading: const Icon(Icons.sell_outlined),
+                        title: const Text('Kategori Harga'),
+                        subtitle: const Text(
+                            'Kelompokkan produk & atur margin per produk'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () =>
+                            context.push('/pengaturan/kategori-harga'),
+                      ),
                       Builder(builder: (context) {
                         final canExpense =
                             ref.watch(_canInputExpenseProvider).valueOrNull ??

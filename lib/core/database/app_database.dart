@@ -13,6 +13,7 @@ import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
 import '../services/receive_text_parser.dart';
 import '../utils/preorder_calc.dart';
+import '../utils/price_category_calc.dart';
 import 'tables/app_settings_table.dart';
 import 'tables/cash_closing_tables.dart';
 import 'tables/customer_tables.dart';
@@ -73,6 +74,22 @@ const kKasirPermissionKeys = <String>[
 const kAsistenPermissionKeys = <String>[
   'asisten_stok_minus',
 ];
+
+/// Baris hasil [AppDatabase.getPriceCategoryMembers] — Fase B "Kategori
+/// Harga". [currentPrice] sudah LIVE-computed (lihat dok fungsi).
+typedef PriceCategoryMember = ({
+  String altPriceId,
+  String productUnitId,
+  String productId,
+  String productName,
+  String unitName,
+  int currentPrice,
+  String? marginAnchor,
+  String? marginType,
+  double? marginValue,
+  int basePrice,
+  int costPrice,
+});
 
 /// Baris hasil [AppDatabase.watchStockOverview] — Item 30 ("Cek Stok").
 /// [unitId] = id satuan DASAR produk ini (dipakai Item 36 stock opname utk
@@ -218,6 +235,7 @@ class BarcodeConflictException implements Exception {
   ProductBarcodes,
   PriceTiers,
   AltPrices,
+  PriceCategories,
   CustomerGroups,
   CustomerGroupPrices,
   Customers,
@@ -256,7 +274,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 39;
+  int get schemaVersion => 40;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -723,6 +741,22 @@ class AppDatabase extends _$AppDatabase {
             await _addColumnIfMissing('transactions', 'void_reason',
                 transactions, transactions.voidReason, m);
           }
+          if (from < 40) {
+            // Fase B "Kategori Harga" — kelompok produk dengan margin
+            // (Rp/persen, acuan modal/dasar) per-produk, dihitung LIVE saat
+            // dibaca (lihat dok kelas `AltPrices`/`getAltPrices`). Aditif &
+            // nullable: baris alt-price lama/manual tanpa kategori tetap
+            // berperilaku sama persis apa adanya.
+            await m.createTable(priceCategories);
+            await _addColumnIfMissing('alt_prices', 'price_category_id',
+                altPrices, altPrices.priceCategoryId, m);
+            await _addColumnIfMissing('alt_prices', 'margin_anchor',
+                altPrices, altPrices.marginAnchor, m);
+            await _addColumnIfMissing(
+                'alt_prices', 'margin_type', altPrices, altPrices.marginType, m);
+            await _addColumnIfMissing('alt_prices', 'margin_value', altPrices,
+                altPrices.marginValue, m);
+          }
         },
         beforeOpen: (details) async {
           // Arsip dibuka read-only (query_only = ON) — jangan menulis apa pun.
@@ -844,11 +878,278 @@ class AppDatabase extends _$AppDatabase {
   /// Harga alternatif berlabel untuk satu satuan produk, diurut sesuai
   /// posisi hasil drag-reorder user di form Produk (bukan waktu dibuat).
   /// Beda dari [getPriceTiers]: bukan tier qty, murni pilihan cepat manual.
-  Future<List<AltPrice>> getAltPrices(String productUnitId) {
-    return (select(altPrices)
+  ///
+  /// Fase B "Kategori Harga": baris yang punya `priceCategoryId` +
+  /// `marginType` + `marginValue` terisi dihitung ULANG live dari harga
+  /// dasar/modal TERKINI produk ini (`price` yang tersimpan di DB cuma
+  /// snapshot terakhir/fallback) — SEBELUM dikembalikan ke pemanggil. Ini
+  /// yang membuat chip "Harga Lain" kategori di `ItemEntrySheet` otomatis
+  /// jadi dinamis tanpa perlu ubah pemanggilnya sama sekali: kalau harga
+  /// acuan produk berubah, panggilan berikutnya ke fungsi ini langsung
+  /// mengembalikan harga baru.
+  Future<List<AltPrice>> getAltPrices(String productUnitId) async {
+    final rows = await (select(altPrices)
           ..where((t) => t.productUnitId.equals(productUnitId))
           ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
         .get();
+    if (rows.every((r) => r.priceCategoryId == null)) return rows;
+
+    // Tier di-query SEKALI (semua baris di sini menunjuk productUnitId yang
+    // sama) — hindari N query per baris kategori.
+    final tiers = await getPriceTiers(productUnitId); // minQty DESC
+    final base = tiers.isEmpty
+        ? null
+        : (tiers.firstWhere((t) => t.minQty <= 1, orElse: () => tiers.last));
+    final basePrice = base?.price ?? 0;
+    final costPrice = base?.costPrice ?? 0;
+
+    return [
+      for (final r in rows)
+        if (r.priceCategoryId != null &&
+            r.marginType != null &&
+            r.marginValue != null)
+          _withLiveCategoryPrice(r, basePrice, costPrice)
+        else
+          r,
+    ];
+  }
+
+  /// Hitung ulang `price` [row] dari acuan+margin tersimpan — dibungkus
+  /// try/catch (lihat dok `computeCategoryPrice`): kalau anchor 'modal'
+  /// tapi produk ini belum/tidak lagi punya HPP (data lama/tidak konsisten,
+  /// mis. HPP dihapus setelah kategori dipasang), JANGAN gagalkan seluruh
+  /// query — fallback ke `price` snapshot terakhir yang tersimpan.
+  AltPrice _withLiveCategoryPrice(AltPrice row, int basePrice, int costPrice) {
+    try {
+      final live = computeCategoryPrice(
+        basePrice: basePrice,
+        costPrice: costPrice,
+        marginAnchor: row.marginAnchor ?? kMarginAnchorDasar,
+        marginType: row.marginType!,
+        marginValue: row.marginValue!,
+      );
+      return row.copyWith(price: live);
+    } catch (_) {
+      return row;
+    }
+  }
+
+  // ─────────────────────── Price Categories (Fase B) ───────────────────────
+
+  Future<List<PriceCategory>> getAllPriceCategories() =>
+      (select(priceCategories)
+            ..orderBy([
+              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.name),
+            ]))
+          .get();
+
+  /// Reaktif — layar Kategori Harga pakai ini supaya CRUD (tambah/ubah nama/
+  /// hapus/reorder) langsung tampil tanpa reload manual.
+  Stream<List<PriceCategory>> watchPriceCategories() => (select(priceCategories)
+        ..orderBy([
+          (t) => OrderingTerm.asc(t.sortOrder),
+          (t) => OrderingTerm.asc(t.name),
+        ]))
+      .watch();
+
+  /// `sortOrder` tertinggi saat ini (-1 bila kosong) — pola sama dgn
+  /// [paymentMethodsMaxSortOrder], menaruh kategori baru di posisi paling
+  /// bawah, bukan tie di default 0.
+  Future<int> priceCategoriesMaxSortOrder() async {
+    final row = await (select(priceCategories)
+          ..orderBy([(t) => OrderingTerm.desc(t.sortOrder)])
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.sortOrder ?? -1;
+  }
+
+  Future<String> addPriceCategory(String name) async {
+    final id = const Uuid().v4();
+    final maxSort = await priceCategoriesMaxSortOrder();
+    await into(priceCategories).insert(PriceCategoriesCompanion.insert(
+      id: id,
+      name: name,
+      sortOrder: Value(maxSort + 1),
+    ));
+    return id;
+  }
+
+  Future<void> renamePriceCategory(String id, String name) async {
+    await (update(priceCategories)..where((t) => t.id.equals(id)))
+        .write(PriceCategoriesCompanion(name: Value(name)));
+  }
+
+  /// Pola sama dgn [reorderPaymentMethods].
+  Future<void> reorderPriceCategories(List<String> orderedIds) async {
+    await transaction(() async {
+      for (var i = 0; i < orderedIds.length; i++) {
+        await (update(priceCategories)
+              ..where((t) => t.id.equals(orderedIds[i])))
+            .write(PriceCategoriesCompanion(sortOrder: Value(i)));
+      }
+    });
+  }
+
+  /// Hapus kategori — KEPUTUSAN: baris [AltPrices] anggota TIDAK dihapus
+  /// (bisa memuat margin berharga yang sudah owner atur untuk produk itu),
+  /// hanya dilepas keterkaitannya (`priceCategoryId`+margin di-null-kan).
+  /// Baris itu jadi harga alternatif MANUAL biasa, beku di nilai
+  /// live-computed TERAKHIR sebelum kategori dihapus — tetap tampil apa
+  /// adanya sbg chip "Harga Lain" biasa di kasir, tidak hilang mendadak.
+  /// Beda dari [removeProductFromPriceCategory] (hapus SATU produk dari
+  /// layar detail kategori, aksi sengaja per-baris) yang menghapus baris
+  /// totalnya — di sini aksinya massal/tidak diniatkan per-produk, jadi
+  /// dipilih yang lebih aman (bisa dipulihkan manual, bukan hilang).
+  Future<void> deletePriceCategory(String id) async {
+    await transaction(() async {
+      await (update(altPrices)..where((t) => t.priceCategoryId.equals(id)))
+          .write(const AltPricesCompanion(
+        priceCategoryId: Value(null),
+        marginAnchor: Value(null),
+        marginType: Value(null),
+        marginValue: Value(null),
+      ));
+      await (delete(priceCategories)..where((t) => t.id.equals(id))).go();
+    });
+  }
+
+  /// Anggota satu kategori — join manual (bukan agregat SQL) tapi TETAP
+  /// hindari N+1: unit/produk/tipe-satuan/tier semua di-batch sekali per
+  /// kategori (jumlah anggota realistis kecil, layar manajemen bukan hot
+  /// path, tapi query per baris tetap dihindari demi konsistensi pola app).
+  Future<List<PriceCategoryMember>> getPriceCategoryMembers(
+      String priceCategoryId) async {
+    final rows = await (select(altPrices)
+          ..where((t) => t.priceCategoryId.equals(priceCategoryId)))
+        .get();
+    if (rows.isEmpty) return [];
+
+    final unitIds = rows.map((r) => r.productUnitId).toSet().toList();
+    final units =
+        await (select(productUnits)..where((t) => t.id.isIn(unitIds))).get();
+    final unitById = {for (final u in units) u.id: u};
+    final productIds = units.map((u) => u.productId).toSet().toList();
+    final prods =
+        await (select(products)..where((t) => t.id.isIn(productIds))).get();
+    final productById = {for (final p in prods) p.id: p};
+    final unitTypeIds = units.map((u) => u.unitTypeId ?? 1).toSet().toList();
+    final types =
+        await (select(unitTypes)..where((t) => t.id.isIn(unitTypeIds))).get();
+    final typeNameById = {for (final t in types) t.id: t.name};
+    final tiers = await (select(priceTiers)
+          ..where((t) => t.productUnitId.isIn(unitIds)))
+        .get();
+    final tiersByUnit = <String, List<PriceTier>>{};
+    for (final t in tiers) {
+      tiersByUnit.putIfAbsent(t.productUnitId, () => []).add(t);
+    }
+
+    final result = <PriceCategoryMember>[];
+    for (final r in rows) {
+      final unit = unitById[r.productUnitId];
+      if (unit == null) continue; // unit dihapus tapi baris blm ikut hilang
+      final product = productById[unit.productId];
+      final unitTiers = tiersByUnit[r.productUnitId] ?? [];
+      unitTiers.sort((a, b) => b.minQty.compareTo(a.minQty));
+      final base = unitTiers.isEmpty
+          ? null
+          : unitTiers.firstWhere((t) => t.minQty <= 1,
+              orElse: () => unitTiers.last);
+      final basePrice = base?.price ?? 0;
+      final costPrice = base?.costPrice ?? 0;
+      var livePrice = r.price;
+      if (r.marginType != null && r.marginValue != null) {
+        try {
+          livePrice = computeCategoryPrice(
+            basePrice: basePrice,
+            costPrice: costPrice,
+            marginAnchor: r.marginAnchor ?? kMarginAnchorDasar,
+            marginType: r.marginType!,
+            marginValue: r.marginValue!,
+          );
+        } catch (_) {
+          // Data tidak konsisten (mis. anchor modal tapi HPP sudah dihapus)
+          // — fallback ke snapshot terakhir, sama seperti getAltPrices().
+        }
+      }
+      result.add((
+        altPriceId: r.id,
+        productUnitId: r.productUnitId,
+        productId: unit.productId,
+        productName: product?.name ?? '(produk terhapus)',
+        unitName: typeNameById[unit.unitTypeId ?? 1] ?? 'Satuan',
+        currentPrice: livePrice,
+        marginAnchor: r.marginAnchor,
+        marginType: r.marginType,
+        marginValue: r.marginValue,
+        basePrice: basePrice,
+        costPrice: costPrice,
+      ));
+    }
+    return result;
+  }
+
+  /// Tambah produk ke kategori ATAU perbarui margin produk yang sudah jadi
+  /// anggota (upsert by productUnitId+priceCategoryId — satu produk hanya
+  /// boleh punya SATU baris margin per kategori). [computedPrice] adalah
+  /// hasil [computeCategoryPrice] TERKINI (dihitung pemanggil UI saat
+  /// simpan) — ditulis sbg snapshot awal, akan tetap dihitung ulang live
+  /// tiap dibaca lewat [getAltPrices]/[getPriceCategoryMembers].
+  Future<void> setPriceCategoryMargin({
+    required String priceCategoryId,
+    required String productUnitId,
+    required String categoryName,
+    required String marginAnchor,
+    required String marginType,
+    required double marginValue,
+    required int computedPrice,
+  }) async {
+    final existing = await (select(altPrices)
+          ..where((t) =>
+              t.productUnitId.equals(productUnitId) &
+              t.priceCategoryId.equals(priceCategoryId)))
+        .getSingleOrNull();
+    if (existing == null) {
+      final maxSort = await (select(altPrices)
+            ..where((t) => t.productUnitId.equals(productUnitId))
+            ..orderBy([(t) => OrderingTerm.desc(t.sortOrder)])
+            ..limit(1))
+          .getSingleOrNull();
+      await into(altPrices).insert(AltPricesCompanion.insert(
+        id: const Uuid().v4(),
+        productUnitId: productUnitId,
+        label: categoryName,
+        price: computedPrice,
+        sortOrder: Value((maxSort?.sortOrder ?? -1) + 1),
+        priceCategoryId: Value(priceCategoryId),
+        marginAnchor: Value(marginAnchor),
+        marginType: Value(marginType),
+        marginValue: Value(marginValue),
+      ));
+    } else {
+      await (update(altPrices)..where((t) => t.id.equals(existing.id))).write(
+        AltPricesCompanion(
+          label: Value(categoryName),
+          price: Value(computedPrice),
+          marginAnchor: Value(marginAnchor),
+          marginType: Value(marginType),
+          marginValue: Value(marginValue),
+        ),
+      );
+    }
+  }
+
+  /// Lepas SATU produk dari kategori (aksi sengaja per-baris di layar
+  /// detail kategori) — beda dari [deletePriceCategory] (massal), di sini
+  /// baris [AltPrices]-nya dihapus TOTAL: baris ini dibuat KHUSUS lewat
+  /// layar kategori (bukan alt-price manual yang owner tulis sendiri di
+  /// form Produk), jadi menyisakan chip beku tak berlabel jelas setelah
+  /// owner secara eksplisit "keluarkan dari kategori" cuma akan
+  /// membingungkan (chip misterius tetap muncul di kasir padahal owner
+  /// pikir sudah dicabut).
+  Future<void> removeProductFromPriceCategory(String altPriceId) async {
+    await (delete(altPrices)..where((t) => t.id.equals(altPriceId))).go();
   }
 
   // ───────────────────────── Stock queries ─────────────────────────

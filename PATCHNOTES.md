@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 5 September 2026 (sesi kedua puluh satu)
+
+### ✨ Baru
+- **Sekarang ada layar Kategori Harga di Pengaturan** — kelompokkan
+  produk yang biasa dijual grosir/harga khusus (mis. "Grosir", "Rokok"),
+  lalu atur margin per produk (dari harga modal atau harga dasar, dalam
+  bentuk rupiah tetap atau persen). Harganya otomatis ikut bergerak
+  kalau harga produk berubah — tidak perlu diatur ulang manual satu per
+  satu. Kalau produk belum ada harga modalnya, opsi "dari Harga Modal"
+  otomatis disembunyikan supaya tidak salah hitung.
+
 ## 5 September 2026 (sesi kedua puluh)
 
 ### ✨ Baru

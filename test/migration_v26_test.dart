@@ -185,7 +185,7 @@ void main() {
     expect(borrowedRows.single.itemName, 'Galon Lama');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 39);
+    expect(ver.data.values.first, 40);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();
