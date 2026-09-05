@@ -824,16 +824,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             cart.isEmpty ? null : () => _holdCurrent(ctx, ref),
                         icon: const Icon(Icons.pause_circle_outline),
                       ),
-                    // Fitur Pra-Bayar — kunci sebagian pembayaran dari
-                    // keranjang aktif, sebelum checkout beneran (keranjang
-                    // tetap 100% bisa diedit bebas sesudahnya).
-                    if (canPrabayar)
-                      IconButton(
-                        tooltip: 'Pra-Bayar',
-                        onPressed:
-                            cart.isEmpty ? null : () => _addPrabayar(ctx, ref),
-                        icon: const Icon(Icons.lock_clock_outlined),
-                      ),
+                    // Susulan (revisi desain user): tombol "Pra-Bayar" pindah
+                    // dari header ke baris footer (sebelah tombol Bayar) —
+                    // lihat blok footer di bawah. Header sekarang tinggal 6
+                    // ikon (Tahan Pesanan, Tempel Pesanan, Bagikan Pratinjau,
+                    // Pengaturan Keranjang, Transfer QR, Kosongkan).
                     // Susulan (permintaan user): "Tempel Pesanan" juga bisa
                     // dipakai LANGSUNG dari keranjang yang sedang terbuka —
                     // berguna kalau ada pesanan tambahan (dari pelanggan via
@@ -948,72 +943,66 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     }),
             ),
             const Divider(height: 1),
-            // Fitur Pra-Bayar — ringkasan LIVE (rebuild otomatis tiap
-            // cart/prabayar berubah, lihat `ref.watch` di atas): "Sisa" =
-            // total keranjang - total terkunci, bisa negatif (kelebihan →
-            // jadi kembalian saat checkout). Tap → daftar entri (hapus per
-            // entri selama belum checkout).
-            if (canPrabayar && prabayarEntries.isNotEmpty)
-              InkWell(
-                onTap: () => _showPrabayarList(ctx, ref),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
-                  color: scheme.primaryContainer.withOpacity(0.35),
-                  child: Row(
-                    children: [
-                      Icon(Icons.lock_clock_outlined,
-                          size: 16, color: scheme.primary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          total - prabayarTotal < 0
-                              ? 'Pra-Bayar: ${formatRupiah(prabayarTotal)} terkunci '
-                                  '· Kelebihan ${formatRupiah(prabayarTotal - total)} '
-                                  '(jadi kembalian saat checkout)'
-                              : 'Pra-Bayar: ${formatRupiah(prabayarTotal)} terkunci '
-                                  '· Sisa ${formatRupiah(total - prabayarTotal)}',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: scheme.primary),
-                        ),
-                      ),
-                      Icon(Icons.chevron_right,
-                          size: 18, color: scheme.primary),
-                    ],
-                  ),
-                ),
-              ),
             Padding(
               padding: EdgeInsets.fromLTRB(
                   16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Badge jumlah item — gaya sama dgn cart bar kasir, supaya
                   // representasi "jumlah barang" konsisten di seluruh alur.
                   ItemCountBadge(count: cart.where((c) => !c.isVariant).length),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Total',
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                  // Fitur Pra-Bayar (revisi desain user): ringkasan
+                  // Pra-Bayar/Sisa/Kembalian sekarang jadi baris kecil DI
+                  // BAWAH "Total" (bukan banner terpisah lagi) — tap area ini
+                  // (bukan "Total"-nya sendiri) tetap buka daftar entri
+                  // (`_showPrabayarList`), sama seperti banner lama.
+                  Flexible(
+                    child: InkWell(
+                      onTap: (canPrabayar && prabayarEntries.isNotEmpty)
+                          ? () => _showPrabayarList(ctx, ref)
+                          : null,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Total',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
                                     color: scheme.onSurfaceVariant,
                                   )),
-                      Text(
-                        formatRupiah(total),
-                        style: AppTheme.numStyle(context,
-                            size: 22,
-                            weight: FontWeight.w700,
-                            color: scheme.primary),
+                          Text(
+                            formatRupiah(total),
+                            style: AppTheme.numStyle(context,
+                                size: 22,
+                                weight: FontWeight.w700,
+                                color: scheme.primary),
+                          ),
+                          if (canPrabayar && prabayarEntries.isNotEmpty)
+                            _PrabayarFooterSummary(
+                              total: total,
+                              prabayarTotal: prabayarTotal,
+                            ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 8),
+                  // Susulan (revisi desain user): tombol "Pra-Bayar" pindah
+                  // dari header ke sini (sebelah tombol Bayar) — sekunder,
+                  // ikon saja tanpa label supaya tombol Bayar tetap dominan.
+                  if (canPrabayar)
+                    IconButton.filledTonal(
+                      tooltip: 'Pra-Bayar',
+                      onPressed:
+                          cart.isEmpty ? null : () => _addPrabayar(ctx, ref),
+                      icon: const Icon(Icons.lock_clock_outlined),
+                    ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton(
                       onPressed: cart.isEmpty
@@ -1587,6 +1576,55 @@ class _HandoffQrSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Fitur Pra-Bayar (revisi desain user) — ringkasan kecil di bawah nominal
+/// "Total": baris "Pra-Bayar Rp X" (warna netral/teks biasa), lalu SATU baris
+/// tambahan "Sisa Rp Z" (merah, `AppTheme.debtFg`) kalau masih kurang, ATAU
+/// "Kembalian Rp Y" (hijau, `AppTheme.changeFg`) kalau sudah lebih — kalau
+/// pas (selisih 0) tidak ada baris kedua sama sekali. Font kecil (11px) &
+/// `TextOverflow.ellipsis` sengaja — Column ini sebelahan dgn
+/// `Expanded(Bayar)` di Row yang sama, nominal panjang (mis. "Kembalian Rp
+/// 1.250.000") tidak boleh mendesak tombol Bayar (lihat gotcha overflow di
+/// CLAUDE.md, WAJIB test 360dp).
+class _PrabayarFooterSummary extends StatelessWidget {
+  const _PrabayarFooterSummary({
+    required this.total,
+    required this.prabayarTotal,
+  });
+
+  final int total;
+  final int prabayarTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final diff = total - prabayarTotal;
+    const baseStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w600);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Pra-Bayar ${formatRupiah(prabayarTotal)}',
+          style: baseStyle,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (diff > 0)
+          Text(
+            'Sisa ${formatRupiah(diff)}',
+            style: baseStyle.copyWith(color: AppTheme.debtFg(isDark)),
+            overflow: TextOverflow.ellipsis,
+          )
+        else if (diff < 0)
+          Text(
+            'Kembalian ${formatRupiah(-diff)}',
+            style: baseStyle.copyWith(color: AppTheme.changeFg(isDark)),
+            overflow: TextOverflow.ellipsis,
+          ),
+      ],
     );
   }
 }

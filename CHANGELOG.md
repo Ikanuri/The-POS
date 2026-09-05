@@ -7,6 +7,16 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-05 (sesi kedelapan belas)
+
+- `50b6cbe` — refactor(kasir): revisi tata letak UI Pra-Bayar — banner
+  full-width lama dihapus, ringkasan "Pra-Bayar Rp X" (netral) + "Sisa Rp Z"
+  (merah, `AppTheme.debtFg`)/"Kembalian Rp Y" (hijau, `AppTheme.changeFg`)
+  dipindah jadi baris kecil di bawah "Total"; tombol Pra-Bayar dipindah dari
+  header ke footer (sekunder, `IconButton.filledTonal`) di samping tombol
+  Bayar. Logika Pra-Bayar tidak diubah, murni tata letak. Test
+  `test/cart_sheet_prabayar_test.dart` diperbarui + ditambah (revert-verified).
+
 ## 2026-09-04 (sesi ketujuh belas)
 
 - `076afe9` — feat(kasir): badge ringkasan Pra-Bayar ("Pra-Bayar Rp X") di
