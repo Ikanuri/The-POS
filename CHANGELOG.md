@@ -7,6 +7,22 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-06 (sesi kedua puluh tujuh)
+
+- `dce7935` — feat(kasir): fitur "kembalian sudah diambil" di Pra-Bayar —
+  `CartPrabayarNotifier` dapat akumulator `changeTakenTotal` (persist ke
+  SharedPreferences, key sama dgn entri, format lama tetap kompatibel),
+  `poolAvailable = totalLocked - changeTakenTotal`. Baris "Kembalian" di
+  footer keranjang (`cart_sheet.dart`) dapat checkbox — tap menambahkan
+  nilai yg sedang tampil ke akumulator, langsung recompute jadi Rp 0/
+  hilang. `buildPrabayarCheckout`/`_prabayarCoversTotal`
+  (`payment_screen.dart`) dipindah dari `lockedSum` mentah ke pool —
+  porsi yg sudah diambil dipotong dari entri Pra-Bayar paling baru
+  dikunci (invariant Σ`TransactionPayments.amount` == `combinedPaid`
+  tetap terjaga). `changeTakenTotal` ikut tersimpan/terpulihkan saat
+  hold/resume pesanan (key `prabayarChangeTaken`), reset bersamaan
+  `clear()` entri Pra-Bayar.
+
 ## 2026-09-06 (sesi kedua puluh enam)
 
 - `ee313e8` — fix(kasir): chip "Harga dasar" di `ItemEntrySheet` (produk

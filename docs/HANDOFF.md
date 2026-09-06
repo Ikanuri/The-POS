@@ -5,6 +5,85 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 6 September 2026 (sesi kedua puluh tujuh). Versi kerja
+**2.46.0+96** (MINOR naik, PATCH reset — fitur baru terlihat pengguna).
+schemaVersion TETAP 40 — TIDAK ADA perubahan skema DB sesi ini._
+
+**Sesi ini — fitur baru "kembalian sudah diambil" di Pra-Bayar SELESAI**
+(diminta user via briefing lengkap, rumus pool sudah dikonfirmasi user
+sebelum eksekusi — tidak ada pertanyaan menggantung).
+
+Masalah: baris "Kembalian" (hijau) di footer keranjang kasir dihitung
+LIVE dari `prabayarTotal - cartTotal` — begitu kasir SUDAH menyerahkan
+fisik kembalian itu, lalu keranjang berubah lagi (customer nambah/kurang
+barang), nilai kembalian dihitung ULANG seolah uang itu masih tersedia
+→ risiko diserahkan dobel.
+
+Fix (`lib/features/kasir/cart_prabayar_provider.dart`):
+- `CartPrabayarNotifier` dapat akumulator `changeTakenTotal` (int,
+  BUKAN boolean — kembalian bisa muncul & diambil berkali-kali per
+  sesi keranjang) + `poolAvailable = totalLocked - changeTakenTotal`.
+  Persist ke SharedPreferences KEY YANG SAMA dgn entri (`cartprabayar_v1_
+  <cartId>`) — payload berubah dari bare JSON list jadi objek
+  `{entries, changeTakenTotal}`, format lama (bare list) tetap
+  ke-parse (fallback 0). `recordChangeTaken(amount)` — dipanggil dari
+  checkbox, akumulatif. `clear()`/`replaceAll(entries,
+  changeTakenTotal:)` ikut reset/pulihkan bersamaan siklus hidup entri.
+- `cart_sheet.dart` (`_PrabayarFooterSummary`, jadi `ConsumerWidget`):
+  Sisa/Kembalian dihitung dari `pool = prabayarTotal - changeTakenTotal`
+  (bukan `prabayarTotal` mentah). Baris "Kembalian" dapat `Checkbox`
+  kecil (18×18, `MaterialTapTargetSize.shrinkWrap`) — tap memanggil
+  `recordChangeTaken(nilai yg SEDANG tampil)`, baris langsung
+  recompute (checkbox SELALU tampil `value:false`, bukan status
+  permanen — kalau kembalian baru muncul lagi nanti, checkbox baru
+  lagi).
+- `payment_screen.dart`: `buildPrabayarCheckout` dapat param
+  `changeTakenTotal` (default 0, kompatibel mundur) — pool dipakai utk
+  `combinedPaid`/status/`combinedChange`, porsi yg sudah diambil
+  dipotong dari entri Pra-Bayar PALING BARU dikunci (mundur) supaya
+  invariant lama `Σ TransactionPayments.amount == combinedPaid` tetap
+  terjaga (entri yg abis terpotong 0 tidak menghasilkan baris sama
+  sekali). `_prabayarCoversTotal`/`_prabayarPool` juga pindah ke pool
+  (`_lockedSum` mentah TETAP dipakai apa adanya utk label "Total
+  Terkunci" — informasi faktual, bukan keputusan). Baris info
+  "Kembalian sudah diambil" (read-only, tanpa checkbox — sudah
+  ditentukan sebelum layar bayar ini dibuka) ditambah kalau
+  `changeTakenTotal > 0`.
+- Hold/resume order: `changeTakenTotal` ikut tersimpan di payload
+  `cartJson` (key baru `prabayarChangeTaken`, sejajar `prabayar`) di
+  KETIGA titik hold (`cart_sheet.dart` `_holdCurrent`, `kasir_screen.dart`
+  `_holdCurrent`/`_autoHoldCurrentIfAny`) & dipulihkan di
+  `_parseHeldPayload`/`_resumeHeld` (fallback 0 utk payload lama).
+
+Test (semua BARU, revert-verify dibuktikan gagal dulu sebelum fix
+dikembalikan — pesan gagal masuk akal, bukan error tak relevan):
+- `test/cart_prabayar_change_taken_test.dart` (BARU, 5 test) — logic
+  murni notifier: akumulasi, no-op utk nilai ≤0, reset via `clear()`,
+  persist/reload round-trip, kompatibilitas format lama.
+- `test/payment_prabayar_checkout_test.dart` (+4 test) —
+  `buildPrabayarCheckout` dgn `changeTakenTotal`: pool dipakai bukan
+  lockedSum mentah, potongan dari entri terbaru, entri abis terpotong
+  hilang dari payments, default 0 tak berubah perilaku lama.
+- `test/cart_sheet_prabayar_test.dart` (+2 test) — interaksi checkbox
+  end-to-end (termasuk kembalian MUNCUL LAGI setelah qty dikurangi
+  lagi, akumulasi changeTakenTotal via UI), `poolAvailable` vs
+  `totalLocked` lewat notifier.
+- `test/kasir_prabayar_hold_resume_test.dart` (+2 test) — hold/resume
+  bawa `prabayarChangeTaken` utuh, DAN payload lama (tanpa key itu)
+  tetap resume normal dgn fallback 0.
+
+Full suite (`--concurrency=1`, serial): **1492 lulus, 1 gagal** —
+`lan_sync_timeout_test.dart` (timing-sensitive, network timeout real,
+TIDAK terkait Pra-Bayar — lulus normal saat dijalankan sendiri). Saat
+dijalankan default (paralel) muncul gagal ekstra (port bentrok antar
+file jaringan berbeda — `sync_upload_queue_device_slot_key_test.dart`
+dll), juga pre-existing/tidak terkait; lulus semua saat dites
+sendiri-sendiri. `flutter analyze`: 0 issue. Komit kode+test `dce7935`.
+
+**Belum dikerjakan / cek sesi depan**: tidak ada — briefing user
+tuntas dieksekusi semua poinnya (1-5), tidak ada keputusan desain yang
+masih menggantung utk fitur ini.
+
 _Update sesi 6 September 2026 (sesi kedua puluh enam). Versi kerja
 **2.45.3+95** (PATCH naik — murni bugfix finance-critical, tanpa fitur
 baru). schemaVersion TETAP 40._

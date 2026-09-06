@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 September 2026 (sesi kedua puluh tujuh)
+
+### ✨ Fitur Baru
+- **Pra-Bayar: sekarang ada tombol "kembalian sudah diambil".** Kalau
+  keranjang menunjukkan kembalian (karena Pra-Bayar lebih besar dari
+  total keranjang saat ini), begitu kembalian itu sudah benar-benar
+  diserahkan ke pelanggan, kasir tinggal centang kotaknya — baris
+  kembalian langsung hilang. Ini mencegah kembalian yang sudah
+  diserahkan dihitung ulang seolah masih bisa ditarik/dipakai lagi
+  kalau pelanggan menambah atau mengurangi barang setelahnya (yang
+  bisa berujung kembalian diserahkan dua kali).
+
 ## 6 September 2026 (sesi kedua puluh enam)
 
 ### 🐛 Perbaikan
