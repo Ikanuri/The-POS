@@ -5,14 +5,82 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 6 September 2026 (sesi kedua puluh sembilan). Versi kerja
-**2.47.0+98** (MINOR naik, PATCH reset — redesain tampilan terlihat
-pengguna, walau perilaku fungsional tidak berubah). schemaVersion TETAP
-40 — TIDAK ADA perubahan skema DB sesi ini._
+_Update sesi 6 September 2026 (sesi kedua puluh sembilan — DUA sesi
+paralel: redesain sheet Pengaturan Struk & riwayat "kembalian diambil").
+Versi kerja **2.47.0+99** (MINOR naik, PATCH reset — kedua perubahan
+terlihat pengguna; masing-masing sesi kebetulan sama-sama bump ke
+`2.47.0+98` sebelum digabung, BUILD dinaikkan sekali lagi jadi `+99` di
+commit merge). schemaVersion TETAP 40 — TIDAK ADA perubahan skema DB
+sesi ini._
 
-**Sesi ini — redesain sheet "Pengaturan Struk" (ikon gear layar Struk)
-SELESAI** (diminta user: ikon gear sebelumnya membuka `PopupMenuButton`
-bawaan Flutter berisi 1 item "Tampilkan Laba", "terasa template"/generik).
+**Sesi ini — riwayat "kembalian sudah diambil" (bisa undo per-entri)
+SELESAI** (fix laporan user: misclick centang "kembalian sudah diambil"
+sebelumnya langsung menghilangkan nilai itu dari keranjang tanpa cara
+undo/cancel — commit `587d522`).
+
+Fix (`lib/features/kasir/cart_prabayar_provider.dart`):
+- `CartPrabayarNotifier` diubah dari akumulator scalar
+  `int _changeTakenTotal` jadi RIWAYAT: `List<ChangeTakenEntry>
+  _changeTakenEntries` (model baru `ChangeTakenEntry {id, amount,
+  takenAt}`, pola sama persis dgn `PrabayarEntry`). Getter
+  `changeTakenTotal` (API/nama dipertahankan sama — SEMUA call site lama
+  di `cart_sheet.dart`/`payment_screen.dart` tidak berubah) sekarang SUM
+  dari list. `poolAvailable = totalLocked - changeTakenTotal` TIDAK
+  berubah rumusnya.
+- `recordChangeTaken(amount)` (API sama persis) sekarang MENAMBAH satu
+  entri baru (bukan increment scalar). Method BARU
+  `removeChangeTaken(id)` — hapus satu entri (undo misclick), pool
+  otomatis recompute dari sisa list.
+- `replaceAll(entries, {changeTakenTotal})` (dipakai hold/resume order,
+  format payload `held_order` int scalar TIDAK diubah — di luar cakupan
+  riwayat ini) — nilai int itu dipulihkan sbg SATU entri sintetis.
+- Persist SharedPreferences: key BARU `changeTakenEntries` (list),
+  GANTI dari key lama `changeTakenTotal` (int). Backward-compat 2
+  lapis: (1) format PALING lama (bare list Pra-Bayar, pra-fitur
+  kembalian) — fallback kosong; (2) format TRANSISI (rilis fitur
+  "kembalian sudah diambil" PERTAMA sebelum jadi riwayat — Map dgn
+  `entries` + int `changeTakenTotal`, TANPA `changeTakenEntries`) —
+  dibaca sbg SATU entri sintetis (amount=nilai lama, takenAt=waktu
+  baca/sekarang, krn waktu asli tidak pernah disimpan).
+- `cart_sheet.dart`: baris footer baru "Kembalian diambil Rp X"
+  (tappable, ikon `Icons.history`, muncul independen dari baris
+  Sisa/Kembalian — kapan pun `changeTakenTotal > 0`) buka
+  `_showChangeTakenList` (method baru, mirror PERSIS `_showPrabayarList`)
+  — bottom sheet daftar `ChangeTakenEntry` dgn tombol hapus
+  (`Icons.delete_outline`) per baris. Hapus entri → `state` re-assign →
+  footer Sisa/Kembalian & badge riwayat langsung recompute (watcher sama
+  dgn `recordChangeTaken`).
+
+Test (semua BARU, revert-verify dibuktikan — stash HANYA file produksi
+(`cart_prabayar_provider.dart`/`cart_sheet.dart`), test lama TETAP ada →
+compile error "method/getter tidak ditemukan" yg MASUK AKAL, bukan error
+tak relevan — baru kembalikan fix, hijau lagi):
+- `test/cart_prabayar_change_taken_test.dart` (+5 test) — tambah 2+ entri
+  lalu hapus salah satu (pool recompute dari SISA list, bukan
+  nilai pertama/terakhir saja), `removeChangeTaken` id tak ada = no-op,
+  format transisi lama (int scalar) dibaca sbg 1 entri sintetis, persist
+  format BARU (list) round-trip.
+- `test/cart_sheet_prabayar_test.dart` (+1 test, & 2 assertion lama
+  diperbaiki krn sekarang ambigu — `textContaining('Kembalian ')` juga
+  cocok dgn baris riwayat baru "Kembalian diambil...", diganti predicate
+  spesifik `kembalianDiffRowFinder()`) — buka sheet riwayat via tap
+  badge, tampil isi, hapus 1 entri via tombol → footer recompute LIVE.
+
+Full suite: **1502 test, 0 gagal terkait fitur ini** (2 run penuh
+berbeda masing-masing punya 1-2 gagal, tapi di test LAN-sync REAL yg
+BEDA tiap run — `asisten_permission_sync_test.dart` &
+`proposal_unchanged_end_to_end_test.dart` — pre-existing flaky
+kontensi-resource paralel, lulus normal saat dites sendiri-sendiri,
+TIDAK terkait perubahan sesi ini). `flutter analyze`: 0 issue.
+
+**Belum dikerjakan / cek sesi depan**: tidak ada — briefing user
+tuntas dieksekusi semua poinnya, tidak ada keputusan desain yang masih
+menggantung utk fitur ini.
+
+**Sesi ini (paralel) — redesain sheet "Pengaturan Struk" (ikon gear
+layar Struk) SELESAI** (diminta user: ikon gear sebelumnya membuka
+`PopupMenuButton` bawaan Flutter berisi 1 item "Tampilkan Laba", "terasa
+template"/generik).
 
 Diganti (`lib/features/kasir/receipt_screen.dart`, method BARU
 `_showReceiptSettingsSheet`) dgn bottom sheet custom mengikuti pola

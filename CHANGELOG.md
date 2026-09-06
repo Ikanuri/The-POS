@@ -9,6 +9,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-06 (sesi kedua puluh sembilan)
 
+- chore: bump `pubspec.yaml` ke `2.47.0+99` — dua sesi paralel
+  (redesain sheet Pengaturan Struk & riwayat "kembalian diambil")
+  kebetulan sama-sama bump ke `2.47.0+98` sebelum digabung, BUILD
+  dinaikkan sekali lagi supaya tidak ada dua rilis beda isi dgn nomor
+  BUILD sama.
 - `64a3585` — feat(kasir): redesain sheet "Pengaturan Struk" di layar Struk —
   ikon gear app bar sebelumnya membuka `PopupMenuButton` bawaan Flutter
   (1 item, terasa generik), diganti bottom sheet custom mengikuti pola
@@ -17,6 +22,22 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
   tetap 1 opsi ("Tampilkan Laba"), perilaku (`_showProfit`, persist ke
   `receipt_show_profit`) tidak berubah — murni redesain tampilan. Test
   baru `test/receipt_settings_sheet_test.dart`.
+- `587d522` — feat(kasir): riwayat "kembalian sudah diambil" — bisa undo
+  per-entri. `CartPrabayarNotifier.changeTakenTotal` diubah dari
+  akumulator scalar (`int`) jadi riwayat (`List<ChangeTakenEntry>
+  {id, amount, takenAt}`); getter `changeTakenTotal` sekarang SUM dari
+  list (API dipertahankan sama, `poolAvailable = totalLocked -
+  changeTakenTotal` tidak berubah). `recordChangeTaken(amount)` (API
+  sama) menambah SATU entri baru; method baru `removeChangeTaken(id)`
+  menghapus satu entri (undo misclick centang). Persist SharedPreferences
+  pakai key baru `changeTakenEntries`; format transisi lama (int scalar,
+  rilis fitur "kembalian sudah diambil" pertama sebelum jadi riwayat)
+  dibaca sbg SATU entri sintetis (amount=nilai lama, takenAt=waktu baca)
+  supaya data existing tidak hilang saat resume. `cart_sheet.dart`: baris
+  footer baru "Kembalian diambil Rp X" (tappable, muncul kalau
+  `changeTakenTotal > 0`) buka sheet "Riwayat Kembalian Diambil" (mirror
+  `_showPrabayarList`) dgn tombol hapus (`Icons.delete_outline`)
+  per-entri — hapus langsung recompute pool/footer via re-watch provider.
 
 ## 2026-09-06 (sesi kedua puluh delapan)
 

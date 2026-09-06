@@ -10,6 +10,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 6 September 2026 (sesi kedua puluh sembilan)
 
+### ✨ Fitur Baru
+- **"Kembalian sudah diambil" sekarang punya riwayat yang bisa dibatalkan.**
+  Sebelumnya kalau kasir tidak sengaja mencentang kotak "kembalian sudah
+  diambil" (misclick), nilainya langsung hilang tanpa cara membatalkan.
+  Sekarang setiap kali kotak itu dicentang, tercatat sebagai satu baris
+  riwayat — tinggal ketuk tulisan "Kembalian diambil Rp ..." di footer
+  keranjang untuk membuka daftarnya, lalu hapus baris yang salah centang
+  (tombol tempat sampah). Begitu dihapus, hitungan Sisa/Kembalian langsung
+  diperbarui.
+
 ### 🎨 Tampilan
 - **Menu "Pengaturan Struk" (ikon gear di layar Struk) tampil lebih rapi.**
   Sebelumnya berupa menu dropdown polos bawaan sistem; sekarang berupa
