@@ -213,5 +213,23 @@ void main() {
 
       await drain(tester);
     });
+
+    testWidgets(
+        'badge notif jumlah TIDAK menutupi ikon — digeser ke pojok kotak, '
+        'bukan numpuk di tengah ikon yang sekarang sudah terpusat',
+        (tester) async {
+      await seedOnePreorder(tester);
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      final badge = tester.widget<Badge>(find.ancestor(
+          of: find.byIcon(Icons.hourglass_empty), matching: find.byType(Badge)));
+      expect(badge.offset, const Offset(10, -10),
+          reason: 'tanpa offset, Badge default numpuk di glyph ikon yang '
+              'sekarang sudah di-tengah kotak (bug baru ditemukan user) — '
+              'harus digeser keluar ke arah pojok kotak 36x36');
+
+      await drain(tester);
+    });
   });
 }
