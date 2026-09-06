@@ -8,6 +8,22 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 September 2026 (sesi ketiga puluh)
+
+### ✨ Fitur Baru
+- **Tombol "Batalkan" di Struk & Riwayat Transaksi punya opsi baru:
+  "Batalkan & Susun Ulang".** Cocok kalau kasir salah susun belanjaan
+  atau salah input dan ingin mulai lagi dari nota yang sama, tanpa
+  mengetik ulang semua barang. Ketuk Batalkan → pilih "Batalkan & Susun
+  Ulang" → nota lama dibatalkan (barang & poin dikembalikan seperti
+  biasa), dan keranjang kasir langsung terisi ulang dengan barang,
+  pelanggan, dan pegawai dari nota tadi — tinggal lanjut bayar seperti
+  transaksi baru biasa (nota lama tetap tersimpan sebagai riwayat
+  dibatalkan). Kalau nota lama sudah sempat menerima pembayaran, kasir
+  akan ditanya dulu apakah uang itu mau dibawa sebagai Pra-Bayar ke
+  transaksi baru — boleh dilewati kalau tidak perlu. Tidak berlaku
+  untuk nota yang sudah dibatalkan atau nota retur.
+
 ## 6 September 2026 (sesi kedua puluh sembilan)
 
 ### ✨ Fitur Baru
