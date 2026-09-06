@@ -17,12 +17,21 @@ class CartMeta {
     this.employeeId,
     this.employeeName,
     this.reservedLocalId,
+    this.replacesTxId,
   });
 
   final String? customerId;
   final String? customerName;
   final String? employeeId;
   final String? employeeName;
+
+  /// "Batalkan & Susun Ulang" (lihat `showVoidTransactionDialog`) — terisi id
+  /// nota LAMA yang baru divoid saat keranjang aktif diisi ulang dari nota
+  /// itu. Dibaca SEKALI oleh `payment_screen.dart` saat checkout nota BARU
+  /// untuk menulis `internalNote: 'GANTI:<id>'` (pola sama `RETUR:<id>` di
+  /// `addReturnTransaction`), lalu dibuang begitu keranjang di-clear pasca
+  /// checkout — TIDAK dipakai lagi setelahnya, murni penanda satu-kali-pakai.
+  final String? replacesTxId;
 
   /// Item 55 — nomor nota (`local_id`) di-reserve LEBIH AWAL, sejak
   /// keranjang mulai diisi/ditahan (bukan cuma saat checkout) — supaya
@@ -38,7 +47,8 @@ class CartMeta {
       customerName == null &&
       employeeId == null &&
       employeeName == null &&
-      reservedLocalId == null;
+      reservedLocalId == null &&
+      replacesTxId == null;
 
   bool get hasCustomer =>
       (customerName != null && customerName!.isNotEmpty);
@@ -61,6 +71,7 @@ class CartMeta {
     Object? employeeId = _unset,
     Object? employeeName = _unset,
     Object? reservedLocalId = _unset,
+    Object? replacesTxId = _unset,
   }) =>
       CartMeta(
         customerId: identical(customerId, _unset)
@@ -78,6 +89,9 @@ class CartMeta {
         reservedLocalId: identical(reservedLocalId, _unset)
             ? this.reservedLocalId
             : reservedLocalId as String?,
+        replacesTxId: identical(replacesTxId, _unset)
+            ? this.replacesTxId
+            : replacesTxId as String?,
       );
 
   static const Object _unset = Object();
@@ -88,6 +102,7 @@ class CartMeta {
         'employeeId': employeeId,
         'employeeName': employeeName,
         'reservedLocalId': reservedLocalId,
+        'replacesTxId': replacesTxId,
       };
 
   factory CartMeta.fromJson(Map<String, dynamic> json) => CartMeta(
@@ -96,6 +111,7 @@ class CartMeta {
         employeeId: json['employeeId'] as String?,
         employeeName: json['employeeName'] as String?,
         reservedLocalId: json['reservedLocalId'] as String?,
+        replacesTxId: json['replacesTxId'] as String?,
       );
 }
 
@@ -160,6 +176,11 @@ class CartMetaNotifier extends StateNotifier<CartMeta> {
 
   void replaceAll(CartMeta meta) {
     state = meta;
+  }
+
+  /// "Batalkan & Susun Ulang" — lihat dok `CartMeta.replacesTxId`.
+  void setReplacesTxId(String? txId) {
+    state = state.copyWith(replacesTxId: txId);
   }
 
   /// Item 55/56 — set nomor nota LANGSUNG (dari transfer QR, bukan hasil

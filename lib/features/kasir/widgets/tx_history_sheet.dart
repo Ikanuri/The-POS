@@ -4,11 +4,15 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
+import '../cart_meta_provider.dart';
+import '../cart_prabayar_provider.dart';
+import '../cart_provider.dart';
 import '../merged_receipt_screen.dart';
 import 'debt_payment_sheet.dart';
 
@@ -1224,7 +1228,8 @@ class _TxDetail extends ConsumerWidget {
   }
 
   Future<void> _showVoidConfirm(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showVoidTransactionDialog(context, ref, tx);
+    final confirmed = await showVoidTransactionDialog(context, ref, tx,
+        allowRestockOption: true);
     if (confirmed) onChanged();
   }
 }
@@ -1233,8 +1238,18 @@ class _TxDetail extends ConsumerWidget {
 /// dibatalkan. Dipakai bersama oleh riwayat & struk.
 ///
 /// Kasir/asisten wajib punya izin `batal_transaksi`; owner selalu boleh.
+///
+/// [allowRestockOption] — Susulan (permintaan user, "Batalkan & Susun
+/// Ulang"): tawarkan opsi kedua yang, setelah membatalkan, langsung mengisi
+/// ulang keranjang KASIR AKTIF (`kMainCartId`) dengan barang nota ini supaya
+/// kasir bisa lanjut checkout sbg transaksi BARU tanpa mengetik ulang —
+/// cocok utk kasir salah susun/salah bayar. TIDAK ditawarkan dari Riwayat
+/// Transaksi tab Laporan (`transaksi_tab.dart`, jauh dari alur Kasir) —
+/// hanya dari Struk & sheet Riwayat Transaksi kasir (default false, di sini
+/// disetel true oleh KEDUA pemanggil itu).
 Future<bool> showVoidTransactionDialog(
-    BuildContext context, WidgetRef ref, Transaction tx) async {
+    BuildContext context, WidgetRef ref, Transaction tx,
+    {bool allowRestockOption = false}) async {
   final device = ref.read(deviceProvider);
   final db = ref.read(databaseProvider);
 
@@ -1252,10 +1267,14 @@ Future<bool> showVoidTransactionDialog(
 
   final scheme = Theme.of(context).colorScheme;
   final isKurangBayar = tx.status == 'kurang_bayar' || tx.status == 'tempo';
+  // Nota RETUR (total negatif) tidak masuk akal "disusun ulang" jadi
+  // belanjaan baru — guard sama dgn `receipt_screen.dart` `isRetur`.
+  final isReturTx = tx.internalNote?.startsWith('RETUR:') ?? false;
+  final offerRestock = allowRestockOption && !isReturTx;
   final reasonCtrl = TextEditingController();
 
   try {
-    final confirmed = await showDialog<bool>(
+    final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Batalkan Transaksi?'),
@@ -1285,6 +1304,17 @@ Future<bool> showVoidTransactionDialog(
                       '• Uang ${formatRupiah(tx.paid)} yang sudah masuk dianggap hangus',
                       style: TextStyle(fontSize: 12, color: scheme.error)),
                 ),
+              if (offerRestock)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '"Batalkan & Susun Ulang" mengisi ulang keranjang kasir '
+                    'aktif dengan barang nota ini — lanjut checkout sbg '
+                    'transaksi baru tanpa mengetik ulang.',
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant),
+                  ),
+                ),
               const SizedBox(height: 12),
               TextField(
                 controller: reasonCtrl,
@@ -1300,25 +1330,35 @@ Future<bool> showVoidTransactionDialog(
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
+              onPressed: () => Navigator.of(ctx).pop(null),
               child: const Text('Tidak Jadi')),
+          if (offerRestock)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('redo'),
+              child: const Text('Batalkan & Susun Ulang'),
+            ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: scheme.error),
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () => Navigator.of(ctx).pop('void'),
             child: const Text('Batalkan Transaksi'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true) return false;
+    if (result == null) return false;
     final reason = reasonCtrl.text.trim();
     // Item 40 pattern — device BUKAN owner -> event Laci Meja yang ditulis
     // voidTransaction (Item 60) menunggu persetujuan owner via sync.
     await db.voidTransaction(tx.id, device.deviceCode,
         locallyModified: !device.isOwner,
         reason: reason.isEmpty ? null : reason);
-    if (context.mounted) {
+
+    if (result == 'redo') {
+      if (context.mounted) {
+        await _redoCartFromVoidedTransaction(context, ref, tx);
+      }
+    } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Transaksi ${tx.localId} dibatalkan')));
     }
@@ -1331,6 +1371,114 @@ Future<bool> showVoidTransactionDialog(
     // saat frame animasi berikutnya.
     WidgetsBinding.instance.addPostFrameCallback((_) => reasonCtrl.dispose());
   }
+}
+
+/// "Batalkan & Susun Ulang" — isi ulang keranjang KASIR AKTIF (`kMainCartId`)
+/// dengan barang dari nota [tx] yang BARU SAJA divoid (`voidTransaction`
+/// SUDAH dipanggil oleh caller sebelum fungsi ini), lalu kembali ke layar
+/// Kasir supaya kasir langsung lanjut checkout sbg transaksi BARU. Nota lama
+/// TETAP permanen berstatus void (jejak audit) — keterkaitan ditandai lewat
+/// `CartMeta.replacesTxId`, dibaca `payment_screen.dart` saat checkout utk
+/// menulis `internalNote: 'GANTI:<id nota lama>'` (pola sama `RETUR:<id>`).
+///
+/// Keranjang aktif SEBELUMNYA (kalau ada isinya) DITIMPA — beda dari resume
+/// pesanan tertahan (`kasir_screen.dart` `_resumeHeld`) yang auto-menahan
+/// keranjang lama dulu (Item 18): fungsi ini dipicu dari LUAR layar Kasir
+/// (Struk / sheet Riwayat Transaksi), tidak ada state widget Kasir yg bisa
+/// dipakai utk auto-hold di sini.
+Future<void> _redoCartFromVoidedTransaction(
+    BuildContext context, WidgetRef ref, Transaction tx) async {
+  final db = ref.read(databaseProvider);
+  final lines = await db.cartItemsFromTransaction(tx.id);
+  if (!context.mounted) return;
+  if (lines.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Transaksi dibatalkan — tidak ada barang tersisa '
+            'untuk disusun ulang')));
+    return;
+  }
+
+  final cartNotifier = ref.read(cartProvider(kMainCartId).notifier);
+  cartNotifier.clear();
+  // Urutan list SUDAH induk-dulu-baru-varian (lihat dok
+  // `cartItemsFromTransaction`) — `addItem` menaikkan storedQty induk
+  // otomatis saat varian menyusul, invariant terjaga tanpa hitung ulang
+  // manual di sini.
+  for (final line in lines) {
+    cartNotifier.addItem(line);
+  }
+
+  // Pegawai nota lama cuma snapshot NAMA (`Transactions.employeeName`, lihat
+  // dok kolom itu) — coba cocokkan balik ke record `Employee` aktif supaya
+  // `payment_screen.dart` bisa pra-pilih dropdown-nya persis spt pelanggan
+  // terdaftar; kalau tidak ketemu (pegawai sudah dihapus/ganti nama),
+  // `employeeName` tetap dibawa apa adanya (tampil di cart bar) walau tidak
+  // pra-pilih di dropdown.
+  Employee? matchedEmployee;
+  final empName = tx.employeeName;
+  if (empName != null && empName.isNotEmpty) {
+    final employees = await db.getEmployees();
+    for (final e in employees) {
+      if (e.name == empName) {
+        matchedEmployee = e;
+        break;
+      }
+    }
+  }
+  ref.read(cartMetaProvider(kMainCartId).notifier).replaceAll(CartMeta(
+        customerId: tx.customerId,
+        customerName: tx.customerName,
+        employeeId: matchedEmployee?.id,
+        employeeName: empName,
+        replacesTxId: tx.id,
+      ));
+  ref.read(cartPrabayarProvider(kMainCartId).notifier).clear();
+
+  // Nota SUDAH menerima pembayaran (lunas, ATAU kurang_bayar dgn uang
+  // sungguhan masuk) — TAWARKAN opsional bawa sbg Pra-Bayar ke keranjang
+  // baru (desain disetujui user: opsional, BUKAN otomatis). Nota tempo
+  // MURNI (belum ada uang masuk sama sekali) TIDAK ditawari.
+  final canOfferPrabayar =
+      tx.paid > 0 && (tx.status == 'lunas' || tx.status == 'kurang_bayar');
+  if (canOfferPrabayar && context.mounted) {
+    final bawa = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bawa Pembayaran Lama?'),
+        content: Text(
+          'Nota ini sudah menerima ${formatRupiah(tx.paid)} — bawa sebagai '
+          'Pra-Bayar ke transaksi baru?',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Lewati')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Ya, Bawa sbg Pra-Bayar')),
+        ],
+      ),
+    );
+    if (bawa == true) {
+      ref.read(cartPrabayarProvider(kMainCartId).notifier).add(PrabayarEntry(
+            id: const Uuid().v4(),
+            amount: tx.paid,
+            method: tx.paymentMethod,
+            methodName: tx.methodName,
+            lockedAt: DateTime.now(),
+          ));
+    }
+  }
+
+  if (!context.mounted) return;
+  // Tutup sheet/halaman Struk yang sedang terbuka (kalau ada), lalu
+  // pastikan berada di tab Kasir — dipanggil dari DUA konteks berbeda
+  // (Struk = rute go_router yg di-push; sheet Riwayat Transaksi = modal
+  // Navigator biasa di atas KasirScreen), jadi tidak bisa asumsikan salah
+  // satu bentuk navigasi saja.
+  if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+  if (context.mounted) context.go('/kasir');
 }
 
 class _DaySeparator extends StatelessWidget {

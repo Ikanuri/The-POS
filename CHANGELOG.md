@@ -7,8 +7,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
-## 2026-09-06 (sesi ketiga puluh)
+## 2026-09-06 (sesi ketiga puluh — DUA sesi paralel: "Lunasi Hutang" dari
+keranjang aktif & "Batalkan & Susun Ulang")
 
+- chore: bump BUILD ke `2.48.0+101` setelah merge dua sesi paralel — kedua
+  sesi kebetulan sama-sama bump ke `2.48.0+100` sebelum digabung, BUILD
+  dinaikkan sekali lagi supaya tidak ada dua rilis beda isi dgn nomor
+  BUILD sama.
 - `a921860` — feat(kasir): "Lunasi Hutang" dari keranjang aktif — kasir bisa
   menambahkan pelunasan (sebagian/semua) hutang tempo/kurang_bayar milik
   seorang pelanggan langsung dari keranjang aktif, sebelum checkout, dalam
@@ -36,6 +41,35 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
   gerbang izin + alur lengkap + `planFifoSettlement` anti-overpay revert-
   verify). Bump schemaVersion memutakhirkan assersi hardcoded di 19 file
   test migrasi lama (v7-v40) yang sebelumnya menegaskan `40`.
+- `708996b` — feat(kasir): "Batalkan & Susun Ulang" — tombol Batalkan di
+  Struk (`receipt_screen.dart`) & Riwayat Transaksi (`tx_history_sheet.dart`,
+  `showVoidTransactionDialog` param baru `allowRestockOption`) kini punya
+  opsi tambahan: void nota (reuse `voidTransaction()` apa adanya) lalu isi
+  ulang keranjang aktif (`kMainCartId`) dari barang nota yang baru divoid.
+  `AppDatabase.cartItemsFromTransaction()` baru — menyusun
+  `transaction_items` (qty positif saja, baris retur dikecualikan) jadi
+  `List<CartItem>` urut induk-dulu-baru-varian, supaya
+  `CartNotifier.addItem` menjaga invariant storedQty induk otomatis tanpa
+  hitung ulang manual. Checkout berikutnya dari keranjang ini menghasilkan
+  nota BARU dgn nomor baru; keterkaitan ditandai `CartMeta.replacesTxId`
+  (field baru, persisted) yg dibaca `payment_screen.dart` sekali saat
+  checkout utk menulis `internalNote: 'GANTI:<id nota lama>'` (pola sama
+  `RETUR:<id>` di `addReturnTransaction`). Nota lama TETAP permanen
+  berstatus void (jejak audit). Bila nota lama sudah ada pembayaran
+  (lunas, atau kurang_bayar dgn `paid>0` — bukan tempo murni), kasir
+  ditawari opsional (dialog konfirmasi, bukan otomatis) bawa nilainya sbg
+  1 entri Pra-Bayar (`cartPrabayarProvider`, reuse apa adanya) ke
+  keranjang baru. Guard: permission `batal_transaksi` sama dgn dialog void
+  lama; tidak ditawarkan utk nota RETUR/void, atau dari Riwayat Transaksi
+  tab Laporan (`transaksi_tab.dart`, default param `allowRestockOption`
+  tetap `false` di sana — di luar alur Kasir). Test: DB murni
+  (`void_restock_cart_items_test.dart`, transformasi transaction_items ->
+  CartItem, guard qty positif, urutan induk/varian), widget checkout
+  (`void_restock_ganti_note_test.dart`, internalNote GANTI ditulis benar),
+  widget end-to-end Struk (`void_restock_redo_flow_test.dart`, tombol
+  muncul gated + tap mengisi ulang keranjang + tawaran Pra-Bayar
+  kondisional) — semua di-revert-verify (gagal dgn pesan masuk akal
+  sebelum fix, hijau lagi setelahnya) sesuai CLAUDE.md §Metode Test.
 
 ## 2026-09-06 (sesi kedua puluh sembilan)
 
