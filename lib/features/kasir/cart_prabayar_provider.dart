@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import 'cart_provider.dart';
 
@@ -60,6 +61,41 @@ class PrabayarEntry {
       );
 }
 
+/// Fitur "kembalian sudah diambil" — SATU entri riwayat = satu kali kasir
+/// mencentang "sudah diambil" (lihat `_PrabayarFooterSummary` di
+/// `cart_sheet.dart`). Sejalan dgn pola [PrabayarEntry] di atas: riwayat
+/// (bukan cuma akumulator scalar) supaya misclick centang bisa
+/// dibatalkan/di-undo satu-per-satu lewat `removeChangeTaken` — lihat
+/// `_showChangeTakenList` di `cart_sheet.dart`.
+@immutable
+class ChangeTakenEntry {
+  const ChangeTakenEntry({
+    required this.id,
+    required this.amount,
+    required this.takenAt,
+  });
+
+  final String id;
+  final int amount;
+
+  /// Waktu kembalian ini ditandai sudah diambil.
+  final DateTime takenAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'amount': amount,
+        'takenAt': takenAt.millisecondsSinceEpoch,
+      };
+
+  factory ChangeTakenEntry.fromJson(Map<String, dynamic> json) =>
+      ChangeTakenEntry(
+        id: json['id'] as String,
+        amount: json['amount'] as int,
+        takenAt:
+            DateTime.fromMillisecondsSinceEpoch(json['takenAt'] as int),
+      );
+}
+
 class CartPrabayarNotifier extends StateNotifier<List<PrabayarEntry>> {
   CartPrabayarNotifier(this.cartId) : super(const []) {
     _load();
@@ -75,31 +111,44 @@ class CartPrabayarNotifier extends StateNotifier<List<PrabayarEntry>> {
   String get _prefKey => '$_prefPrefix$cartId';
   bool _loaded = false;
 
-  /// Fitur "kembalian sudah diambil" — akumulator (BUKAN boolean sekali
-  /// pakai: kembalian bisa muncul & diambil berkali-kali dalam satu sesi
-  /// keranjang, mis. add→kembalian muncul→diambil→kurangi lagi→kembalian
-  /// baru muncul→diambil lagi) porsi Pra-Bayar yang SUDAH fisik diserahkan
-  /// balik ke pelanggan. Dipakai di mana pun total Pra-Bayar mentah dulunya
-  /// dipakai utk hitung Sisa/Kembalian — lihat `poolAvailable` di bawah &
-  /// pemakaiannya di `cart_sheet.dart`/`payment_screen.dart`. TIDAK bagian
-  /// dari `state` (yang tetap `List<PrabayarEntry>`, supaya seluruh call
-  /// site lama tidak perlu berubah) — reaktivitas rebuild dipicu lewat
-  /// re-assign `state` (list baru, isi sama) tiap kali nilai ini berubah,
-  /// lihat [recordChangeTaken].
-  int _changeTakenTotal = 0;
-  int get changeTakenTotal => _changeTakenTotal;
+  /// Fitur "kembalian sudah diambil" — RIWAYAT (BUKAN boolean sekali pakai
+  /// atau scalar akumulator murni: kembalian bisa muncul & diambil
+  /// berkali-kali dalam satu sesi keranjang, mis. add→kembalian
+  /// muncul→diambil→kurangi lagi→kembalian baru muncul→diambil lagi, DAN
+  /// tiap kemunculan bisa dibatalkan/di-undo satu-per-satu kalau kasir
+  /// misclick centang — lihat [removeChangeTaken]). Dipakai di mana pun
+  /// total Pra-Bayar mentah dulunya dipakai utk hitung Sisa/Kembalian —
+  /// lihat `poolAvailable` di bawah & pemakaiannya di
+  /// `cart_sheet.dart`/`payment_screen.dart`. TIDAK bagian dari `state`
+  /// (yang tetap `List<PrabayarEntry>`, supaya seluruh call site lama
+  /// tidak perlu berubah) — reaktivitas rebuild dipicu lewat re-assign
+  /// `state` (list baru, isi sama) tiap kali riwayat ini berubah, lihat
+  /// [recordChangeTaken]/[removeChangeTaken].
+  List<ChangeTakenEntry> _changeTakenEntries = [];
+
+  /// Total (SUM) seluruh entri riwayat — API getter dipertahankan SAMA
+  /// persis (nama & tipe) dgn versi scalar lama supaya seluruh call site
+  /// existing (`cart_sheet.dart`/`payment_screen.dart`) tidak perlu berubah.
+  int get changeTakenTotal =>
+      _changeTakenEntries.fold<int>(0, (s, e) => s + e.amount);
+
+  /// Riwayat entri "kembalian sudah diambil" — dipakai UI baru
+  /// `_showChangeTakenList` (`cart_sheet.dart`) utk menampilkan & menghapus
+  /// per-entri (undo misclick centang).
+  List<ChangeTakenEntry> get changeTakenEntries =>
+      List.unmodifiable(_changeTakenEntries);
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    if (state.isEmpty && _changeTakenTotal == 0) {
+    if (state.isEmpty && _changeTakenEntries.isEmpty) {
       final raw = prefs.getString(_prefKey);
       if (raw != null && raw.isNotEmpty) {
         try {
           final decoded = jsonDecode(raw);
-          // Format lama (kompatibel mundur): list bare entri, tanpa
-          // `changeTakenTotal` (fitur ini belum ada saat data itu ditulis)
-          // — fallback 0.
+          // Format lama (kompatibel mundur): list bare entri Pra-Bayar,
+          // tanpa `changeTakenTotal`/`changeTakenEntries` sama sekali
+          // (fitur ini belum ada saat data itu ditulis) — fallback kosong.
           if (decoded is List) {
             super.state = decoded
                 .map((e) => PrabayarEntry.fromJson(e as Map<String, dynamic>))
@@ -109,8 +158,32 @@ class CartPrabayarNotifier extends StateNotifier<List<PrabayarEntry>> {
             super.state = entriesRaw
                 .map((e) => PrabayarEntry.fromJson(e as Map<String, dynamic>))
                 .toList();
-            _changeTakenTotal =
-                (decoded['changeTakenTotal'] as num?)?.toInt() ?? 0;
+            final changeTakenEntriesRaw =
+                decoded['changeTakenEntries'] as List?;
+            if (changeTakenEntriesRaw != null) {
+              // Format baru (riwayat).
+              _changeTakenEntries = changeTakenEntriesRaw
+                  .map((e) =>
+                      ChangeTakenEntry.fromJson(e as Map<String, dynamic>))
+                  .toList();
+            } else {
+              // Format transisi lama (rilis "kembalian sudah diambil"
+              // pertama, SEBELUM jadi riwayat): cuma int `changeTakenTotal`
+              // — baca sbg SATU entri sintetis (amount = nilai lama,
+              // takenAt = waktu baca/sekarang, karena waktu asli tidak
+              // pernah disimpan) supaya tidak hilang saat resume.
+              final legacyTotal =
+                  (decoded['changeTakenTotal'] as num?)?.toInt() ?? 0;
+              _changeTakenEntries = legacyTotal > 0
+                  ? [
+                      ChangeTakenEntry(
+                        id: const Uuid().v4(),
+                        amount: legacyTotal,
+                        takenAt: DateTime.now(),
+                      ),
+                    ]
+                  : [];
+            }
           }
         } catch (_) {/* abaikan data rusak */}
       }
@@ -120,16 +193,17 @@ class CartPrabayarNotifier extends StateNotifier<List<PrabayarEntry>> {
 
   void _persist() {
     final snapshot = state;
-    final changeTaken = _changeTakenTotal;
+    final changeTaken = List<ChangeTakenEntry>.of(_changeTakenEntries);
     SharedPreferences.getInstance().then((prefs) {
-      if (snapshot.isEmpty && changeTaken == 0) {
+      if (snapshot.isEmpty && changeTaken.isEmpty) {
         prefs.remove(_prefKey);
       } else {
         prefs.setString(
             _prefKey,
             jsonEncode({
               'entries': snapshot.map((e) => e.toJson()).toList(),
-              'changeTakenTotal': changeTaken,
+              'changeTakenEntries':
+                  changeTaken.map((e) => e.toJson()).toList(),
             }));
       }
     });
@@ -151,7 +225,7 @@ class CartPrabayarNotifier extends StateNotifier<List<PrabayarEntry>> {
   /// checkout final (`payment_screen.dart`) HARUS pakai ini, bukan
   /// [totalLocked] mentah — kalau tidak, kembalian yang sudah diserahkan
   /// akan dihitung ulang seakan masih tersedia utk ditarik/dipakai lagi.
-  int get poolAvailable => totalLocked - _changeTakenTotal;
+  int get poolAvailable => totalLocked - changeTakenTotal;
 
   void add(PrabayarEntry entry) {
     state = [...state, entry];
@@ -162,30 +236,60 @@ class CartPrabayarNotifier extends StateNotifier<List<PrabayarEntry>> {
   }
 
   /// Ganti seluruh isi (dipakai saat melanjutkan pesanan ditahan / adopsi
-  /// transfer QR). [changeTakenTotal] ikut dipulihkan (default 0) — siklus
-  /// hidupnya SAMA dgn entri sendiri (lihat dok `kasir_screen.dart`
-  /// `_parseHeldPayload`/`_resumeHeld`).
+  /// transfer QR). [changeTakenTotal] (int, format payload `held_order`
+  /// yang sudah ada — TIDAK diubah, di luar cakupan riwayat ini) ikut
+  /// dipulihkan sbg SATU entri sintetis (default 0 = tidak ada entri) —
+  /// siklus hidupnya SAMA dgn entri Pra-Bayar sendiri (lihat dok
+  /// `kasir_screen.dart` `_parseHeldPayload`/`_resumeHeld`).
   void replaceAll(List<PrabayarEntry> entries, {int changeTakenTotal = 0}) {
-    _changeTakenTotal = changeTakenTotal;
+    _changeTakenEntries = changeTakenTotal > 0
+        ? [
+            ChangeTakenEntry(
+              id: const Uuid().v4(),
+              amount: changeTakenTotal,
+              takenAt: DateTime.now(),
+            ),
+          ]
+        : [];
     state = entries;
   }
 
   /// Tandai [amount] dari pool Pra-Bayar sbg SUDAH fisik diserahkan balik ke
   /// pelanggan (checkbox "Kembalian sudah diambil" di `cart_sheet.dart`) —
-  /// akumulatif, bisa dipanggil berkali-kali dalam satu sesi keranjang.
+  /// tambah SATU entri riwayat baru, bisa dipanggil berkali-kali dalam satu
+  /// sesi keranjang. API (nama & signature) dipertahankan SAMA persis —
+  /// hanya isinya yang berubah dari increment scalar jadi tambah entri.
   void recordChangeTaken(int amount) {
     if (amount <= 0) return;
-    _changeTakenTotal += amount;
+    _changeTakenEntries = [
+      ..._changeTakenEntries,
+      ChangeTakenEntry(
+        id: const Uuid().v4(),
+        amount: amount,
+        takenAt: DateTime.now(),
+      ),
+    ];
     // `state` (List<PrabayarEntry>) sendiri tidak berubah ISI — re-assign
     // list BARU (isi sama) murni utk memicu notify ke watcher
     // `cartPrabayarProvider` (mis. footer keranjang) supaya langsung
     // recompute & SEKALIGUS memicu `_persist()` (lihat setter `state` di
-    // atas) menyimpan `_changeTakenTotal` yang baru saja berubah.
+    // atas) menyimpan riwayat yang baru saja berubah.
+    state = List.of(state);
+  }
+
+  /// Batalkan/undo SATU entri riwayat "kembalian sudah diambil" (mis. kasir
+  /// misclick centang) — `changeTakenTotal`/`poolAvailable` otomatis
+  /// recompute (SUM dari sisa list) begitu entri ini hilang, footer
+  /// Sisa/Kembalian langsung ikut berubah lewat watcher yang sama dgn
+  /// [recordChangeTaken]. Dipakai `_showChangeTakenList` (`cart_sheet.dart`).
+  void removeChangeTaken(String id) {
+    _changeTakenEntries =
+        _changeTakenEntries.where((e) => e.id != id).toList();
     state = List.of(state);
   }
 
   void clear() {
-    _changeTakenTotal = 0;
+    _changeTakenEntries = [];
     state = const [];
   }
 

@@ -247,6 +247,13 @@ void main() {
   // Keranjang juga punya Checkbox per baris item (checklist verifikasi
   // sebelum bayar) — finder generik `find.byType(Checkbox)` jadi ambigu.
   // Scope ke Checkbox yang SEBARIS dgn Text "Kembalian ..." saja.
+  // Baris diff footer "Kembalian Rp X" SPESIFIK (bukan baris riwayat
+  // "Kembalian diambil Rp X" — susulan fitur riwayat, keduanya sama-sama
+  // mengandung substring "Kembalian ", jadi `textContaining` generik jadi
+  // ambigu begitu changeTakenTotal > 0).
+  Finder kembalianDiffRowFinder() => find.byWidgetPredicate((w) =>
+      w is Text && RegExp(r'^Kembalian Rp').hasMatch(w.data ?? ''));
+
   Finder kembalianCheckboxFinder() => find.descendant(
         of: find
             .ancestor(
@@ -289,7 +296,12 @@ void main() {
     await tester.tap(kembalianCheckboxFinder());
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Kembalian '), findsNothing);
+    // Baris "Kembalian Rp X" (diff footer) harus hilang — TAPI baris
+    // riwayat baru "Kembalian diambil Rp X" (susulan fitur riwayat) MEMANG
+    // muncul sekarang (changeTakenTotal > 0), jadi cek dgn predicate yg
+    // SPESIFIK excl. "diambil", bukan `textContaining('Kembalian ')` generik
+    // (yang sekarang ambigu, ikut cocok dgn baris riwayat).
+    expect(kembalianDiffRowFinder(), findsNothing);
     expect(find.textContaining('Sisa '), findsNothing);
     expect(
         r.container
@@ -324,7 +336,7 @@ void main() {
             .changeTakenTotal,
         25000,
         reason: 'akumulasi 10000 (pertama) + 15000 (kedua)');
-    expect(find.textContaining('Kembalian '), findsNothing);
+    expect(kembalianDiffRowFinder(), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -357,6 +369,81 @@ void main() {
             'terpotong');
     expect(notifier.poolAvailable, 30000,
         reason: 'poolAvailable = totalLocked(40000) - changeTaken(10000)');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'Riwayat Kembalian Diambil: tap baris "Kembalian diambil Rp X" → '
+      'sheet riwayat tampil isi, hapus 1 entri via tombol → footer '
+      'Sisa/Kembalian LANGSUNG recompute (misclick undo)', (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+
+    // Total keranjang TETAP 30000 (qty tidak diubah di test ini) — nominal
+    // riwayat (8000/12000) & Pra-Bayar (50000) SENGAJA dibuat beda dari
+    // 30000 supaya finder teks per-entri (`formatRupiah` polos, tanpa
+    // prefix) tidak ambigu dgn Total/label lain di layar yg sama.
+    final notifier =
+        r.container.read(cartPrabayarProvider(kMainCartId).notifier);
+    notifier.add(PrabayarEntry(
+      id: 'e1',
+      amount: 50000,
+      method: 'tunai',
+      lockedAt: DateTime.now(),
+    ));
+    notifier.recordChangeTaken(8000);
+    notifier.recordChangeTaken(12000);
+    await tester.pumpAndSettle();
+
+    expect(notifier.changeTakenEntries, hasLength(2));
+    expect(notifier.changeTakenTotal, 20000);
+
+    // Baris ringkasan "Kembalian diambil Rp 20.000" harus tampil & tappable.
+    final historyRow =
+        find.text('Kembalian diambil ${formatRupiah(20000)}');
+    expect(historyRow, findsOneWidget);
+
+    await tester.tap(historyRow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Riwayat Kembalian Diambil'), findsOneWidget);
+    expect(find.text(formatRupiah(8000)), findsOneWidget);
+    expect(find.text(formatRupiah(12000)), findsOneWidget);
+
+    // Tombol hapus DI DALAM ListTile entri 8000 — di-scope (bukan
+    // `find.byIcon(Icons.delete_outline)` polos, yg JUGA cocok dgn ikon
+    // hapus per-baris item keranjang di layar belakang sheet ini).
+    Finder deleteButtonFor(int amount) => find.descendant(
+          of: find
+              .ancestor(
+                of: find.text(formatRupiah(amount)),
+                matching: find.byType(ListTile),
+              )
+              .first,
+          matching: find.byIcon(Icons.delete_outline),
+        );
+
+    // Hapus entri Rp 8.000 (undo misclick) — sisa 1 entri (12000).
+    await tester.tap(deleteButtonFor(8000));
+    await tester.pumpAndSettle();
+
+    expect(notifier.changeTakenEntries, hasLength(1));
+    expect(notifier.changeTakenTotal, 12000);
+    expect(find.text(formatRupiah(8000)), findsNothing,
+        reason: 'entri terhapus tidak tampil lagi di sheet (masih terbuka)');
+    expect(find.text(formatRupiah(12000)), findsOneWidget);
+
+    await tester.tap(find.text('Tutup'));
+    await tester.pumpAndSettle();
+
+    // Footer harus recompute dari total riwayat yg TERSISA (12000), bukan
+    // nilai lama (20000).
+    expect(find.text('Kembalian diambil ${formatRupiah(12000)}'),
+        findsOneWidget);
+    expect(find.text('Kembalian diambil ${formatRupiah(20000)}'),
+        findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

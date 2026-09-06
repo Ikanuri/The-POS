@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,6 +156,132 @@ void main() {
     expect(notifier.changeTakenTotal, 0);
     expect(container.read(cartPrabayarProvider('cOld')), hasLength(1));
     expect(notifier.poolAvailable, 20000);
+
+    await drain(tester);
+  });
+
+  // --- Riwayat "kembalian sudah diambil" (ChangeTakenEntry) -------------
+
+  testWidgets(
+      'tambah 2+ entri riwayat lalu hapus salah satu (removeChangeTaken) → '
+      'changeTakenTotal/poolAvailable recompute dari SISA list (bukan '
+      'nilai terakhir/pertama saja)', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await pumpNoop(tester, container);
+
+    final notifier = container.read(cartPrabayarProvider('c2').notifier);
+    notifier.add(PrabayarEntry(
+        id: 'e1', amount: 100000, method: 'tunai', lockedAt: DateTime.now()));
+    await tester.pump();
+
+    notifier.recordChangeTaken(40000);
+    await tester.pump();
+    notifier.recordChangeTaken(15000);
+    await tester.pump();
+
+    expect(notifier.changeTakenEntries, hasLength(2));
+    expect(notifier.changeTakenTotal, 55000);
+    expect(notifier.poolAvailable, 45000);
+
+    // Hapus entri PERTAMA (40000) — entri kedua (15000) HARUS tetap ada &
+    // ikut dihitung, bukan seluruh riwayat ikut hilang.
+    final firstId = notifier.changeTakenEntries.first.id;
+    notifier.removeChangeTaken(firstId);
+    await tester.pump();
+
+    expect(notifier.changeTakenEntries, hasLength(1));
+    expect(notifier.changeTakenEntries.single.amount, 15000);
+    expect(notifier.changeTakenTotal, 15000);
+    expect(notifier.poolAvailable, 85000,
+        reason: 'pool balik naik — undo entri 40000 mengembalikan porsi itu '
+            'ke kredit tersedia');
+
+    await drain(tester);
+  });
+
+  testWidgets(
+      'removeChangeTaken dgn id yg tidak ada di list = no-op (tidak error, '
+      'tidak mengubah total)', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await pumpNoop(tester, container);
+
+    final notifier = container.read(cartPrabayarProvider('c3').notifier);
+    notifier.add(PrabayarEntry(
+        id: 'e1', amount: 50000, method: 'tunai', lockedAt: DateTime.now()));
+    notifier.recordChangeTaken(20000);
+    await tester.pump();
+
+    notifier.removeChangeTaken('id-tidak-ada');
+    await tester.pump();
+    expect(notifier.changeTakenTotal, 20000);
+
+    await drain(tester);
+  });
+
+  testWidgets(
+      'format transisi lama (Map dgn `entries` + int `changeTakenTotal`, '
+      'SEBELUM jadi riwayat) tetap dimuat sbg SATU entri sintetis — tidak '
+      'hilang saat resume', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'cartprabayar_v1_cLegacy': jsonEncode({
+        'entries': [
+          {
+            'id': 'e1',
+            'amount': 80000,
+            'method': 'tunai',
+            'methodName': null,
+            'lockedAt': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          }
+        ],
+        'changeTakenTotal': 25000,
+      }),
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(cartPrabayarProvider('cLegacy').notifier);
+    await pumpNoop(tester, container);
+    await tester.pump();
+
+    expect(notifier.changeTakenEntries, hasLength(1),
+        reason: 'nilai lama (int) dibaca sbg SATU entri sintetis, tidak '
+            'hilang');
+    expect(notifier.changeTakenEntries.single.amount, 25000);
+    expect(notifier.changeTakenTotal, 25000);
+    expect(notifier.poolAvailable, 55000);
+
+    await drain(tester);
+  });
+
+  testWidgets(
+      'persist format BARU (changeTakenEntries list) & reload — seluruh '
+      'riwayat (bukan cuma total) tersimpan/terpulihkan', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final container1 = ProviderContainer();
+    addTearDown(container1.dispose);
+    await pumpNoop(tester, container1);
+
+    final notifier1 = container1.read(cartPrabayarProvider('cY').notifier);
+    await tester.pump();
+    notifier1.add(PrabayarEntry(
+        id: 'e1', amount: 90000, method: 'tunai', lockedAt: DateTime.now()));
+    notifier1.recordChangeTaken(30000);
+    notifier1.recordChangeTaken(10000);
+    await tester.pump();
+    await tester.pump();
+
+    final container2 = ProviderContainer();
+    addTearDown(container2.dispose);
+    final notifier2 = container2.read(cartPrabayarProvider('cY').notifier);
+    await pumpNoop(tester, container2);
+    await tester.pump();
+
+    expect(notifier2.changeTakenEntries, hasLength(2));
+    expect(notifier2.changeTakenTotal, 40000);
+    expect(notifier2.poolAvailable, 50000);
 
     await drain(tester);
   });

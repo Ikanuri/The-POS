@@ -401,6 +401,94 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     );
   }
 
+  /// Riwayat "kembalian sudah diambil" — mirror `_showPrabayarList` di
+  /// atas, tapi utk [ChangeTakenEntry] (bukan [PrabayarEntry]): tiap entri
+  /// bisa dihapus lagi (undo/cancel misclick centang) sebelum checkout.
+  /// Watch `cartPrabayarProvider` (bukan `changeTakenEntries`-nya langsung,
+  /// yang bukan `Provider` terpisah) supaya sheet ini ikut rebuild tiap
+  /// `recordChangeTaken`/`removeChangeTaken` re-assign `state` — lihat dok
+  /// `CartPrabayarNotifier`.
+  Future<void> _showChangeTakenList(BuildContext ctx, WidgetRef ref) async {
+    await showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Consumer(
+        builder: (consumerCtx, sheetRef, _) {
+          sheetRef.watch(cartPrabayarProvider(widget.cartId));
+          final notifier =
+              sheetRef.read(cartPrabayarProvider(widget.cartId).notifier);
+          final entries = notifier.changeTakenEntries;
+          final scheme = Theme.of(consumerCtx).colorScheme;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Text('Riwayat Kembalian Diambil',
+                      style: Theme.of(consumerCtx).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  if (entries.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text('Belum ada kembalian yang ditandai diambil',
+                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: entries.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final e = entries[i];
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(formatRupiah(e.amount),
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w700)),
+                            subtitle: Text(_fmtTime(e.takenAt),
+                                style: const TextStyle(fontSize: 12)),
+                            trailing: IconButton(
+                              tooltip: 'Batalkan (undo)',
+                              icon: Icon(Icons.delete_outline,
+                                  color: scheme.error, size: 20),
+                              onPressed: () => sheetRef
+                                  .read(cartPrabayarProvider(widget.cartId)
+                                      .notifier)
+                                  .removeChangeTaken(e.id),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   static String _methodLabel(String type) => switch (type) {
         'tunai' => 'Tunai',
         'qris' => 'QRIS',
@@ -1082,6 +1170,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               total: total,
                               prabayarTotal: prabayarTotal,
                               changeTakenTotal: changeTakenTotal,
+                              onShowChangeTakenHistory: () =>
+                                  _showChangeTakenList(ctx, ref),
                             ),
                         ],
                       ),
@@ -1708,22 +1798,32 @@ class _HandoffQrSheet extends StatelessWidget {
 /// baris ini muncul lagi dgn checkbox baru yang belum tercentang (checkbox
 /// di sini SELALU tampil `value: false` — bukan penanda status permanen,
 /// murni tombol aksi sekali-tap per kemunculan).
+///
+/// Susulan (permintaan user): kalau `changeTakenTotal > 0` (ada riwayat
+/// "kembalian sudah diambil", terlepas dari apakah Sisa/Kembalian SEDANG
+/// tampil), tambah SATU baris kecil tappable "Riwayat kembalian" (ikon
+/// `Icons.history`) — buka [_CartSheetState._showChangeTakenList] via
+/// [onShowChangeTakenHistory], tempat kasir bisa undo entri yang misclick
+/// tercentang (lihat dok `CartPrabayarNotifier.removeChangeTaken`).
 class _PrabayarFooterSummary extends ConsumerWidget {
   const _PrabayarFooterSummary({
     required this.cartId,
     required this.total,
     required this.prabayarTotal,
     required this.changeTakenTotal,
+    required this.onShowChangeTakenHistory,
   });
 
   final String cartId;
   final int total;
   final int prabayarTotal;
   final int changeTakenTotal;
+  final VoidCallback onShowChangeTakenHistory;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
     final pool = prabayarTotal - changeTakenTotal;
     final diff = total - pool;
     const baseStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w600);
@@ -1767,6 +1867,28 @@ class _PrabayarFooterSummary extends ConsumerWidget {
                 ),
               ),
             ],
+          ),
+        if (changeTakenTotal > 0)
+          InkWell(
+            onTap: onShowChangeTakenHistory,
+            borderRadius: BorderRadius.circular(4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.history, size: 12, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 2),
+                Flexible(
+                  child: Text(
+                    'Kembalian diambil ${formatRupiah(changeTakenTotal)}',
+                    style: baseStyle.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      decoration: TextDecoration.underline,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
       ],
     );
