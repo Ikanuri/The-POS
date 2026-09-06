@@ -786,6 +786,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         changeTakenTotal: _changeTakenTotal,
       );
 
+      // "Batalkan & Susun Ulang" (lihat dok `CartMeta.replacesTxId`) — nota
+      // BARU ini menautkan diri ke nota LAMA yang baru divoid, pola sama
+      // persis `internalNote: 'RETUR:<id>'` di `addReturnTransaction`. Tidak
+      // berlaku di mode tambah belanjaan (meta selalu kosong di sana).
+      final replacesTxId = _isAddMode
+          ? null
+          : ref.read(cartMetaProvider(_cartId)).replacesTxId;
+
       final txCompanion = TransactionsCompanion.insert(
         id: txId,
         localId: localId,
@@ -798,6 +806,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         changeAmount: prabayarResult.combinedChange,
         paymentMethod: prabayarResult.displayMethodType,
         methodName: Value(prabayarResult.displayMethodName),
+        internalNote: replacesTxId == null
+            ? const Value.absent()
+            : Value('GANTI:$replacesTxId'),
         employeeName: Value(_selectedEmployee?.name),
         pointsEarned: Value(pointsEarned),
         createdAt: Value(now),

@@ -9,6 +9,7 @@ import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'package:sqlite3/open.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/cart_item.dart';
 import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
 import '../services/receive_text_parser.dart';
@@ -3767,6 +3768,77 @@ class AppDatabase extends _$AppDatabase {
       // Perbarui ringkasan harian untuk tanggal transaksi yang dibatalkan.
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
     });
+  }
+
+  /// "Batalkan & Susun Ulang" (`showVoidTransactionDialog`) — susun ulang
+  /// baris nota [txId] jadi `List<CartItem>` siap dimasukkan ke keranjang
+  /// aktif via `CartNotifier.addItem` (BUKAN [CartItem] mentah lewat
+  /// `replaceAll` — urutan pemanggilan `addItem` INDUK dulu baru VARIAN
+  /// (list ini SUDAH diurutkan begitu) penting supaya invariant storedQty
+  /// induk = base + Σvarian otomatis terjaga lewat logika `addItem` yang
+  /// sudah ada, tanpa perlu menghitung ulang manual di sini).
+  ///
+  /// Hanya baris qty POSITIF (penjualan) yang disertakan — baris retur (qty
+  /// negatif) dilewati, karena barang itu sudah kembali ke rak & tidak boleh
+  /// terjual ulang seolah-olah masih ada di nota lama. `transaction_items`
+  /// menyimpan qty EFEKTIF per baris (lihat dok `_itemEffQty` di
+  /// `receipt_screen.dart`) — placeholder induk qty 0 tidak pernah tersimpan,
+  /// jadi tidak perlu ditangani di sini.
+  Future<List<CartItem>> cartItemsFromTransaction(String txId) async {
+    final items = await (select(transactionItems)
+          ..where((t) =>
+              t.transactionId.equals(txId) & t.qty.isBiggerThanValue(0)))
+        .get();
+    if (items.isEmpty) return const [];
+
+    final productIds = items.map((i) => i.productId).toSet();
+    final unitIds = items.map((i) => i.productUnitId).toSet();
+    final prods =
+        await (select(products)..where((t) => t.id.isIn(productIds))).get();
+    final units =
+        await (select(productUnits)..where((t) => t.id.isIn(unitIds))).get();
+    final productById = {for (final p in prods) p.id: p};
+    final unitById = {for (final u in units) u.id: u};
+
+    // Nama satuan bukan kolom `productUnits` langsung — lihat pola sama di
+    // `receipt_screen.dart` `_load()` (join manual ke `unitTypes`).
+    final unitTypeIds = units.map((u) => u.unitTypeId).whereType<int>().toSet();
+    final unitTypeRows = unitTypeIds.isEmpty
+        ? <UnitType>[]
+        : await (select(unitTypes)..where((t) => t.id.isIn(unitTypeIds))).get();
+    final unitTypeNameById = {for (final ut in unitTypeRows) ut.id: ut.name};
+    String unitNameFor(String productUnitId) {
+      final u = unitById[productUnitId];
+      if (u?.unitTypeId == null) return '';
+      return unitTypeNameById[u!.unitTypeId!] ?? '';
+    }
+
+    bool isVariant(TransactionItem i) =>
+        productById[i.productId]?.parentProductId != null;
+
+    // Induk dulu, baru varian — lihat dok di atas.
+    final ordered = [
+      ...items.where((i) => !isVariant(i)),
+      ...items.where(isVariant),
+    ];
+
+    return [
+      for (final i in ordered)
+        CartItem(
+          productId: i.productId,
+          productUnitId: i.productUnitId,
+          productName: productById[i.productId]?.name ?? i.productId,
+          unitName: unitNameFor(i.productUnitId),
+          qty: i.qty,
+          price: i.priceAtSale,
+          originalPrice: i.originalPrice,
+          costPrice: i.costAtSale,
+          priceOverridden: i.priceOverridden,
+          itemNote: i.itemNote,
+          parentProductId: productById[i.productId]?.parentProductId,
+          isVariant: isVariant(i),
+        ),
+    ];
   }
 
   // ───────────────────────── Retur ─────────────────────────

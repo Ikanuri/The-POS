@@ -1654,7 +1654,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   }
 
   Future<void> _showVoid(BuildContext context) async {
-    final ok = await showVoidTransactionDialog(context, ref, _tx!);
+    final ok = await showVoidTransactionDialog(context, ref, _tx!,
+        allowRestockOption: true);
     if (ok && mounted) await _load();
   }
 
