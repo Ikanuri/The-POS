@@ -1834,8 +1834,17 @@ class _CategoryIconBtn extends StatelessWidget {
       // ikon 36×36 di baris ini (kategori, search, Kuota, Salin) WAJIB
       // terpusat.
       alignment: Alignment.center,
+      // Revisi (permintaan user): Badge default diposisikan relatif ke
+      // ikon 18px yang SEKARANG sudah di-tengah kotak 36px (lihat catatan
+      // di atas) — tanpa offset, badge numpuk ke glyph ikon, bukan ke
+      // pojok kotak. Geser keluar ~separuh selisih (36-18)/2=9 px + sedikit
+      // ekstra supaya jelas berada di pojok kotak, tidak menutupi ikon.
       child: badgeCount > 0
-          ? Badge(label: Text('$badgeCount'), child: child)
+          ? Badge(
+              label: Text('$badgeCount'),
+              offset: const Offset(10, -10),
+              child: child,
+            )
           : child,
     );
     return GestureDetector(

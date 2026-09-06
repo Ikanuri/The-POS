@@ -7,6 +7,12 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-06 (sesi kedua puluh lima)
+
+- `a6e07ba` — fix(laci-meja): badge notif jumlah di ikon kategori/search/
+  Kuota/Salin sekarang bergeser ke pojok kotak (offset 10,-10), tidak lagi
+  numpuk di glyph ikon yang sejak revisi sebelumnya sudah di-tengah kotak.
+
 ## 2026-09-05 (sesi kedua puluh empat)
 
 - `39011fd` — refactor(laci-meja): rapikan baris statistik pre-order &

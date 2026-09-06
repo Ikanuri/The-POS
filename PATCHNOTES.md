@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 September 2026 (sesi kedua puluh lima)
+
+### 🐛 Perbaikan
+- **Angka notifikasi di ikon kategori Laci Meja tidak lagi menutupi
+  ikonnya** — sebelumnya lingkaran angka kecil itu numpuk pas di atas
+  gambar ikon, sekarang digeser rapi ke pojok kotak.
+
+---
+
 ## 5 September 2026 (sesi kedua puluh empat)
 
 ### ✨ Baru
