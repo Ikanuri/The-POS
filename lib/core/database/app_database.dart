@@ -290,7 +290,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 40;
+  int get schemaVersion => 41;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -772,6 +772,65 @@ class AppDatabase extends _$AppDatabase {
                 'alt_prices', 'margin_type', altPrices, altPrices.marginType, m);
             await _addColumnIfMissing('alt_prices', 'margin_value', altPrices,
                 altPrices.marginValue, m);
+          }
+          if (from < 41) {
+            // Modul Supplier & Pembelian dulu cuma ikut backup penuh/"Alihkan
+            // Owner" (`_allTables`), TIDAK PERNAH ikut sync LAN harian
+            // (`dumpSince`/masterData) — device kasir lain di toko yang sama
+            // tidak pernah melihat data supplier/pembelian owner. Tabel ini
+            // juga tidak punya `updatedAt` sama sekali, padahal
+            // `outstandingDebt`/`isActive` (Suppliers) & `status`/`paid`/
+            // `syncedAt` (Purchases) bisa berubah setelah baris dibuat —
+            // tanpa kolom ini, delta sync tidak bisa membedakan baris yang
+            // baru DIUBAH dari baris lama. `PurchaseItems` TIDAK diberi
+            // kolom ini: baris per-produk pembelian tidak pernah di-update
+            // setelah dibuat (immutable). `PurchaseItems` sebelumnya malah
+            // tidak punya timestamp SAMA SEKALI — ditambah `createdAt` di
+            // sini juga (bukan `updatedAt`) supaya ada cursor delta sync.
+            // Kolom baru NULLABLE (bukan `withDefault(currentDateAndTime)`)
+            // krn SQLite MENOLAK `ALTER TABLE ADD COLUMN` dgn default
+            // non-konstan (`CURRENT_TIMESTAMP`) — jadi backfill manual via
+            // UPDATE setelah kolom ada, supaya baris lama tidak nyangkut
+            // NULL selamanya (NULL tidak pernah lolos filter `>= ?` di
+            // `dumpSince`, baris lama tidak akan pernah ikut ter-sync).
+            // Fixture test migrasi LAMA (mis. `migration_v14_test.dart`)
+            // sengaja cuma bikin tabel yang relevan utk migrasi itu sendiri
+            // di raw sqlite3 (bukan skema lengkap) — `suppliers`/`purchases`/
+            // `purchase_items` BISA belum ada sama sekali saat migrasi ini
+            // jalan di fixture semacam itu. Cek keberadaan tabel dulu (bukan
+            // asumsikan selalu ada spt di DB produksi asli) supaya UPDATE
+            // backfill di bawah tidak "no such table" pada fixture tsb.
+            final existingTables = (await customSelect(
+                    "SELECT name FROM sqlite_master WHERE type='table'")
+                .get())
+                .map((r) => r.data['name'] as String)
+                .toSet();
+            if (existingTables.contains('suppliers')) {
+              await _addColumnIfMissing('suppliers', 'updated_at', suppliers,
+                  suppliers.updatedAt, m);
+              await customStatement(
+                  'UPDATE "suppliers" SET updated_at = created_at '
+                  'WHERE updated_at IS NULL;');
+            }
+            if (existingTables.contains('purchases')) {
+              await _addColumnIfMissing('purchases', 'updated_at', purchases,
+                  purchases.updatedAt, m);
+              await customStatement(
+                  'UPDATE "purchases" SET updated_at = created_at '
+                  'WHERE updated_at IS NULL;');
+            }
+            if (existingTables.contains('purchase_items')) {
+              await _addColumnIfMissing('purchase_items', 'created_at',
+                  purchaseItems, purchaseItems.createdAt, m);
+              // Tidak punya timestamp lama sama sekali utk dijadikan acuan
+              // backfill — pakai waktu migrasi dijalankan, supaya baris lama
+              // tetap ikut ter-sync pada siklus `dumpSince` berikutnya
+              // (bukan tertinggal permanen di NULL).
+              await customStatement(
+                  "UPDATE \"purchase_items\" SET created_at = "
+                  "CAST(strftime('%s', 'now') AS INTEGER) "
+                  'WHERE created_at IS NULL;');
+            }
           }
         },
         beforeOpen: (details) async {
@@ -6165,6 +6224,19 @@ class AppDatabase extends _$AppDatabase {
       // device kasir tidak pernah mendapatkannya.
       'payment_methods',
       'employees',
+      // Supplier & Pembelian — sebelumnya cuma ikut backup penuh/"Alihkan
+      // Owner", TIDAK PERNAH ikut sync LAN harian: device kasir lain di
+      // toko yang sama tidak pernah melihat data ini. Delta by `updated_at`
+      // (Suppliers.outstandingDebt/isActive & Purchases.status/paid/
+      // syncedAt bisa berubah setelah baris dibuat). Urutan: suppliers
+      // sebelum purchases sebelum purchase_items (FK logis supplierId/
+      // purchaseId, walau bukan FK fisik lintas-device di sini).
+      'suppliers',
+      'purchases',
+      // Baris per-produk pembelian — immutable begitu dibuat (tidak ada
+      // fungsi yang meng-update-nya), jadi tidak punya `updated_at` &
+      // delta-nya cukup by `created_at` saja (lihat cabang khusus di bawah).
+      'purchase_items',
     ];
     // Tabel yang mengalir DUA ARAH (klien->host maupun host->klien),
     // last-write-wins by `updated_at`. Beda dari [masterData] yang sengaja
@@ -6249,7 +6321,9 @@ class AppDatabase extends _$AppDatabase {
         final hasUpdated = t == 'products' ||
             t == 'customers' ||
             laciMejaWithTx ||
-            t == 'employees';
+            t == 'employees' ||
+            t == 'suppliers' ||
+            t == 'purchases';
         if (laciMejaWithTx) {
           final rows = await customSelect(
             'SELECT * FROM "$t" WHERE (updated_at >= ? OR created_at >= ?) '
@@ -6261,6 +6335,17 @@ class AppDatabase extends _$AppDatabase {
           final rows = await customSelect(
             'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
             variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
+          ).get();
+          dump[t] = rows.map((r) => r.data).toList();
+        } else if (t == 'purchase_items') {
+          // Baris per-produk pembelian — immutable begitu dibuat (tidak ada
+          // fungsi yang meng-update-nya, lihat dok tabel `PurchaseItems`),
+          // jadi `created_at` saja cukup jadi cursor delta. Full-dump TIDAK
+          // dipakai (beda dari price_tiers dkk) krn tabel ini tumbuh terus
+          // seiring pembelian baru, ukurannya tidak terikat jumlah produk.
+          final rows = await customSelect(
+            'SELECT * FROM "$t" WHERE created_at >= ?',
+            variables: [Variable.withInt(sinceSec)],
           ).get();
           dump[t] = rows.map((r) => r.data).toList();
         } else if (t == 'laci_meja_events') {
