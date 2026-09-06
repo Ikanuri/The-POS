@@ -4770,6 +4770,12 @@ class $TransactionsTable extends Transactions
   late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
       'void_reason', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _debtSettlementDetailMeta =
+      const VerificationMeta('debtSettlementDetail');
+  @override
+  late final GeneratedColumn<String> debtSettlementDetail =
+      GeneratedColumn<String>('debt_settlement_detail', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -4793,7 +4799,8 @@ class $TransactionsTable extends Transactions
         syncedAt,
         updatedAt,
         voidedBy,
-        voidReason
+        voidReason,
+        debtSettlementDetail
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4928,6 +4935,12 @@ class $TransactionsTable extends Transactions
           voidReason.isAcceptableOrUnknown(
               data['void_reason']!, _voidReasonMeta));
     }
+    if (data.containsKey('debt_settlement_detail')) {
+      context.handle(
+          _debtSettlementDetailMeta,
+          debtSettlementDetail.isAcceptableOrUnknown(
+              data['debt_settlement_detail']!, _debtSettlementDetailMeta));
+    }
     return context;
   }
 
@@ -4981,6 +4994,9 @@ class $TransactionsTable extends Transactions
           .read(DriftSqlType.string, data['${effectivePrefix}voided_by']),
       voidReason: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}void_reason']),
+      debtSettlementDetail: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}debt_settlement_detail']),
     );
   }
 
@@ -5061,6 +5077,17 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   /// pembatalan (`showVoidTransactionDialog`). null = tidak diisi, atau
   /// nota lama sebelum kolom ini ada.
   final String? voidReason;
+
+  /// Fitur "Lunasi Hutang" dari keranjang — ringkasan nota LAMA milik
+  /// pelanggan yang IKUT terlunasi (sebagian/semua) saat nota INI checkout,
+  /// disimpan sbg JSON string list `[{"invoiceId":..,"invoiceLocalId":..,
+  /// "amount":..}]`. null/kosong = nota ini tidak membawa pelunasan hutang
+  /// apa pun (mayoritas nota). Nullable & aditif — nota lama tetap valid
+  /// apa adanya. HANYA ringkasan tampilan (struk in-app/share/cetak) —
+  /// pelunasan sesungguhnya sudah tercatat lewat baris `transaction_payments`
+  /// terpisah di nota LAMA (lihat `settleMergedDebt`), field ini tidak
+  /// pernah dipakai utk kalkulasi ulang apa pun.
+  final String? debtSettlementDetail;
   const Transaction(
       {required this.id,
       required this.localId,
@@ -5083,7 +5110,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       this.syncedAt,
       this.updatedAt,
       this.voidedBy,
-      this.voidReason});
+      this.voidReason,
+      this.debtSettlementDetail});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -5132,6 +5160,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     }
     if (!nullToAbsent || voidReason != null) {
       map['void_reason'] = Variable<String>(voidReason);
+    }
+    if (!nullToAbsent || debtSettlementDetail != null) {
+      map['debt_settlement_detail'] = Variable<String>(debtSettlementDetail);
     }
     return map;
   }
@@ -5184,6 +5215,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       voidReason: voidReason == null && nullToAbsent
           ? const Value.absent()
           : Value(voidReason),
+      debtSettlementDetail: debtSettlementDetail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(debtSettlementDetail),
     );
   }
 
@@ -5213,6 +5247,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
       voidReason: serializer.fromJson<String?>(json['voidReason']),
+      debtSettlementDetail:
+          serializer.fromJson<String?>(json['debtSettlementDetail']),
     );
   }
   @override
@@ -5241,6 +5277,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'voidedBy': serializer.toJson<String?>(voidedBy),
       'voidReason': serializer.toJson<String?>(voidReason),
+      'debtSettlementDetail': serializer.toJson<String?>(debtSettlementDetail),
     };
   }
 
@@ -5266,7 +5303,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           Value<DateTime?> syncedAt = const Value.absent(),
           Value<DateTime?> updatedAt = const Value.absent(),
           Value<String?> voidedBy = const Value.absent(),
-          Value<String?> voidReason = const Value.absent()}) =>
+          Value<String?> voidReason = const Value.absent(),
+          Value<String?> debtSettlementDetail = const Value.absent()}) =>
       Transaction(
         id: id ?? this.id,
         localId: localId ?? this.localId,
@@ -5294,6 +5332,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
         voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
         voidReason: voidReason.present ? voidReason.value : this.voidReason,
+        debtSettlementDetail: debtSettlementDetail.present
+            ? debtSettlementDetail.value
+            : this.debtSettlementDetail,
       );
   Transaction copyWithCompanion(TransactionsCompanion data) {
     return Transaction(
@@ -5337,6 +5378,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
       voidReason:
           data.voidReason.present ? data.voidReason.value : this.voidReason,
+      debtSettlementDetail: data.debtSettlementDetail.present
+          ? data.debtSettlementDetail.value
+          : this.debtSettlementDetail,
     );
   }
 
@@ -5364,7 +5408,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('syncedAt: $syncedAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('voidedBy: $voidedBy, ')
-          ..write('voidReason: $voidReason')
+          ..write('voidReason: $voidReason, ')
+          ..write('debtSettlementDetail: $debtSettlementDetail')
           ..write(')'))
         .toString();
   }
@@ -5392,7 +5437,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         syncedAt,
         updatedAt,
         voidedBy,
-        voidReason
+        voidReason,
+        debtSettlementDetail
       ]);
   @override
   bool operator ==(Object other) =>
@@ -5419,7 +5465,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.syncedAt == this.syncedAt &&
           other.updatedAt == this.updatedAt &&
           other.voidedBy == this.voidedBy &&
-          other.voidReason == this.voidReason);
+          other.voidReason == this.voidReason &&
+          other.debtSettlementDetail == this.debtSettlementDetail);
 }
 
 class TransactionsCompanion extends UpdateCompanion<Transaction> {
@@ -5445,6 +5492,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<DateTime?> updatedAt;
   final Value<String?> voidedBy;
   final Value<String?> voidReason;
+  final Value<String?> debtSettlementDetail;
   final Value<int> rowid;
   const TransactionsCompanion({
     this.id = const Value.absent(),
@@ -5469,6 +5517,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.updatedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
+    this.debtSettlementDetail = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionsCompanion.insert({
@@ -5494,6 +5543,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.updatedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
+    this.debtSettlementDetail = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         localId = Value(localId),
@@ -5525,6 +5575,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<DateTime>? updatedAt,
     Expression<String>? voidedBy,
     Expression<String>? voidReason,
+    Expression<String>? debtSettlementDetail,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5550,6 +5601,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (voidedBy != null) 'voided_by': voidedBy,
       if (voidReason != null) 'void_reason': voidReason,
+      if (debtSettlementDetail != null)
+        'debt_settlement_detail': debtSettlementDetail,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5577,6 +5630,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       Value<DateTime?>? updatedAt,
       Value<String?>? voidedBy,
       Value<String?>? voidReason,
+      Value<String?>? debtSettlementDetail,
       Value<int>? rowid}) {
     return TransactionsCompanion(
       id: id ?? this.id,
@@ -5601,6 +5655,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       updatedAt: updatedAt ?? this.updatedAt,
       voidedBy: voidedBy ?? this.voidedBy,
       voidReason: voidReason ?? this.voidReason,
+      debtSettlementDetail: debtSettlementDetail ?? this.debtSettlementDetail,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5674,6 +5729,10 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (voidReason.present) {
       map['void_reason'] = Variable<String>(voidReason.value);
     }
+    if (debtSettlementDetail.present) {
+      map['debt_settlement_detail'] =
+          Variable<String>(debtSettlementDetail.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5705,6 +5764,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('updatedAt: $updatedAt, ')
           ..write('voidedBy: $voidedBy, ')
           ..write('voidReason: $voidReason, ')
+          ..write('debtSettlementDetail: $debtSettlementDetail, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -20576,6 +20636,7 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   Value<DateTime?> updatedAt,
   Value<String?> voidedBy,
   Value<String?> voidReason,
+  Value<String?> debtSettlementDetail,
   Value<int> rowid,
 });
 typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
@@ -20602,6 +20663,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<DateTime?> updatedAt,
   Value<String?> voidedBy,
   Value<String?> voidReason,
+  Value<String?> debtSettlementDetail,
   Value<int> rowid,
 });
 
@@ -20769,6 +20831,10 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get voidReason => $composableBuilder(
       column: $table.voidReason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get debtSettlementDetail => $composableBuilder(
+      column: $table.debtSettlementDetail,
+      builder: (column) => ColumnFilters(column));
 
   Expression<bool> transactionItemsRefs(
       Expression<bool> Function($$TransactionItemsTableFilterComposer f) f) {
@@ -20957,6 +21023,10 @@ class $$TransactionsTableOrderingComposer
 
   ColumnOrderings<String> get voidReason => $composableBuilder(
       column: $table.voidReason, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get debtSettlementDetail => $composableBuilder(
+      column: $table.debtSettlementDetail,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$TransactionsTableAnnotationComposer
@@ -21033,6 +21103,9 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<String> get voidReason => $composableBuilder(
       column: $table.voidReason, builder: (column) => column);
+
+  GeneratedColumn<String> get debtSettlementDetail => $composableBuilder(
+      column: $table.debtSettlementDetail, builder: (column) => column);
 
   Expression<T> transactionItemsRefs<T extends Object>(
       Expression<T> Function($$TransactionItemsTableAnnotationComposer a) f) {
@@ -21192,6 +21265,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<DateTime?> updatedAt = const Value.absent(),
             Value<String?> voidedBy = const Value.absent(),
             Value<String?> voidReason = const Value.absent(),
+            Value<String?> debtSettlementDetail = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionsCompanion(
@@ -21217,6 +21291,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             voidedBy: voidedBy,
             voidReason: voidReason,
+            debtSettlementDetail: debtSettlementDetail,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -21242,6 +21317,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<DateTime?> updatedAt = const Value.absent(),
             Value<String?> voidedBy = const Value.absent(),
             Value<String?> voidReason = const Value.absent(),
+            Value<String?> debtSettlementDetail = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionsCompanion.insert(
@@ -21267,6 +21343,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             voidedBy: voidedBy,
             voidReason: voidReason,
+            debtSettlementDetail: debtSettlementDetail,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

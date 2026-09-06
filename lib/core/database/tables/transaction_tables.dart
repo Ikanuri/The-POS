@@ -77,6 +77,17 @@ class Transactions extends Table {
   /// nota lama sebelum kolom ini ada.
   TextColumn get voidReason => text().nullable()();
 
+  /// Fitur "Lunasi Hutang" dari keranjang — ringkasan nota LAMA milik
+  /// pelanggan yang IKUT terlunasi (sebagian/semua) saat nota INI checkout,
+  /// disimpan sbg JSON string list `[{"invoiceId":..,"invoiceLocalId":..,
+  /// "amount":..}]`. null/kosong = nota ini tidak membawa pelunasan hutang
+  /// apa pun (mayoritas nota). Nullable & aditif — nota lama tetap valid
+  /// apa adanya. HANYA ringkasan tampilan (struk in-app/share/cetak) —
+  /// pelunasan sesungguhnya sudah tercatat lewat baris `transaction_payments`
+  /// terpisah di nota LAMA (lihat `settleMergedDebt`), field ini tidak
+  /// pernah dipakai utk kalkulasi ulang apa pun.
+  TextColumn get debtSettlementDetail => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

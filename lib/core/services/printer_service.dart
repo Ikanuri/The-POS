@@ -630,6 +630,53 @@ class PrinterService {
   @visibleForTesting
   static void debugClearQrisLogoCache() => _qrisLogoCache = null;
 
+  /// Test-only seam ke [_buildBytes] (private) — pola sama `debugQrisLogo`.
+  /// Dipakai memverifikasi konten teks struk cetak (mis. baris "Lunasi
+  /// Hutang") tanpa perlu koneksi printer Bluetooth sungguhan.
+  @visibleForTesting
+  static Future<Uint8List> debugBuildBytes({
+    required Transaction tx,
+    required List<TransactionItem> items,
+    required Map<String, String> productNames,
+    required Map<String, String> unitNames,
+    required Customer? customer,
+    required String storeName,
+    required String storeAddress,
+    required String storePhone,
+    required String? strukNote,
+    String employeeName = '',
+    List<TransactionPayment> payments = const [],
+    String storeWhatsapp = '',
+    String storeTelegram = '',
+    String receiptHeader = '',
+    String receiptFooter = '',
+    Map<String, String?> parentOf = const {},
+    Map<String, double> preorderDeposit = const {},
+    String? qrData,
+    required PrinterSettings settings,
+  }) =>
+      _buildBytes(
+        tx: tx,
+        items: items,
+        productNames: productNames,
+        unitNames: unitNames,
+        customer: customer,
+        storeName: storeName,
+        storeAddress: storeAddress,
+        storePhone: storePhone,
+        strukNote: strukNote,
+        employeeName: employeeName,
+        payments: payments,
+        storeWhatsapp: storeWhatsapp,
+        storeTelegram: storeTelegram,
+        receiptHeader: receiptHeader,
+        receiptFooter: receiptFooter,
+        parentOf: parentOf,
+        preorderDeposit: preorderDeposit,
+        qrData: qrData,
+        settings: settings,
+      );
+
   // ── Build ESC/POS bytes ──────────────────────────────────────────────────
 
   static Future<Uint8List> _buildBytes({
@@ -930,6 +977,21 @@ class PrinterService {
           out.addAll(bodyLR(
               'Refund ${_methodShort(refundPayment?.method ?? '', name: refundPayment?.methodName)}',
               'Rp ${_fmtNum(refundTotal)}'));
+        }
+      }
+
+      // Fitur "Lunasi Hutang" — nota ini turut melunasi nota LAMA pelanggan
+      // lain (lihat dok `Transactions.debtSettlementDetail`). ASCII murni
+      // (nama nota `localId` sudah ASCII-safe, sesuai gotcha printer ESC/POS
+      // di CLAUDE.md — tidak ada karakter non-ASCII di baris ini).
+      final debtSettlementLines =
+          parseDebtSettlementDetail(tx.debtSettlementDetail);
+      if (debtSettlementLines.isNotEmpty) {
+        out.addAll(
+            bodyText('Turut lunasi hutang:', styles: const PosStyles(bold: true)));
+        for (final l in debtSettlementLines) {
+          out.addAll(
+              bodyLR('Nota ${l.invoiceLocalId}', 'Rp ${_fmtNum(l.amount)}'));
         }
       }
     }

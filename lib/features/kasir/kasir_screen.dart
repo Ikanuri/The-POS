@@ -29,6 +29,7 @@ import '../produk/catalog/catalog_share.dart';
 import '../produk/catalog/catalog_store.dart';
 import '../shell/sync_status_banner.dart';
 import 'cart_meta_provider.dart';
+import 'cart_debt_settlement_provider.dart';
 import 'cart_prabayar_provider.dart';
 import 'cart_price_category_provider.dart';
 import 'cart_provider.dart';
@@ -492,6 +493,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
   List<PrabayarEntry> prabayar,
   int prabayarChangeTaken,
   String? priceCategoryId,
+  List<DebtSettlementEntry> debtSettlement,
 }) _parseHeldPayload(String json) {
   try {
     final decoded = jsonDecode(json);
@@ -508,6 +510,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         prabayar: const <PrabayarEntry>[],
         prabayarChangeTaken: 0,
         priceCategoryId: null,
+        debtSettlement: const <DebtSettlementEntry>[],
       );
     }
     if (decoded is Map<String, dynamic>) {
@@ -522,6 +525,13 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
       final prabayar = prabayarRaw
           .map((e) => PrabayarEntry.fromJson(e as Map<String, dynamic>))
           .toList();
+      // Fitur "Lunasi Hutang" — key baru (absen di payload lama pra-fitur
+      // ini, fallback list kosong — kompatibel mundur).
+      final debtSettlementRaw = decoded['debtSettlement'] as List? ?? const [];
+      final debtSettlement = debtSettlementRaw
+          .map((e) =>
+              DebtSettlementEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
       return (
         items: items,
         meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
@@ -535,6 +545,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         // Fase C "Kategori Harga" — key baru (absen di payload lama,
         // fallback null = "Normal" — kompatibel mundur).
         priceCategoryId: decoded['priceCategory'] as String?,
+        debtSettlement: debtSettlement,
       );
     }
   } catch (_) {/* data rusak → kosong */}
@@ -546,6 +557,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
     prabayar: const <PrabayarEntry>[],
     prabayarChangeTaken: 0,
     priceCategoryId: null,
+    debtSettlement: const <DebtSettlementEntry>[],
   );
 }
 
@@ -1615,6 +1627,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final prabayarNotifier = ref.read(cartPrabayarProvider(_cartId).notifier);
     final prabayar = ref.read(cartPrabayarProvider(_cartId));
     final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
+    final debtSettlement = ref.read(cartDebtSettlementProvider(_cartId));
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
@@ -1623,12 +1636,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       // persis siklus hidup entri Pra-Bayar sendiri.
       'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
       'priceCategory': priceCategoryId,
+      // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
+      // hidup entri Pra-Bayar (lihat dok `CartDebtSettlementNotifier`).
+      'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
     });
     await db.holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
     ref.read(cartProvider(_cartId).notifier).clear();
     ref.read(cartMetaProvider(_cartId).notifier).clear();
     ref.read(cartPrabayarProvider(_cartId).notifier).clear();
     ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
+    ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
     if (mounted) {
       setState(() => _heldPanelOpen = false);
       _showBanner('Pesanan "$label" ditahan', InlineBannerType.success);
@@ -1694,6 +1711,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     ref
         .read(cartPriceCategoryProvider(_cartId).notifier)
         .setCategory(parsed.priceCategoryId);
+    ref
+        .read(cartDebtSettlementProvider(_cartId).notifier)
+        .replaceAll(parsed.debtSettlement);
     if (mounted) {
       setState(() => _heldPanelOpen = false);
       _showBanner(
@@ -1715,6 +1735,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final prabayarNotifier = ref.read(cartPrabayarProvider(_cartId).notifier);
     final prabayar = ref.read(cartPrabayarProvider(_cartId));
     final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
+    final debtSettlement = ref.read(cartDebtSettlementProvider(_cartId));
     final label = meta.hasCustomer ? meta.customerName! : _autoHoldLabel();
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
@@ -1722,6 +1743,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       'prabayar': prabayar.map((e) => e.toJson()).toList(),
       'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
       'priceCategory': priceCategoryId,
+      'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
     });
     await ref
         .read(databaseProvider)
@@ -1730,6 +1752,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     ref.read(cartMetaProvider(_cartId).notifier).clear();
     ref.read(cartPrabayarProvider(_cartId).notifier).clear();
     ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
+    ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
     return label;
   }
 

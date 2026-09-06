@@ -274,6 +274,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// "Total awal/Retur/Total akhir/Refund".
   bool get _hasRetur => _items.any((i) => i.returnedAt != null);
 
+  /// Fitur "Lunasi Hutang" — lihat dok `Transactions.debtSettlementDetail`.
+  List<DebtSettlementDetailLine> get _debtSettlementLines =>
+      parseDebtSettlementDetail(_tx?.debtSettlementDetail);
+
   /// Total SEBELUM retur — sum baris PENJUALAN (qty positif, baik asli
   /// maupun susulan Tambah Belanjaan). BUKAN cuma baris asli.
   int get _totalAwal =>
@@ -3387,6 +3391,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             _SummaryRow(
                                 'Poin Didapat', '+${tx.pointsEarned} poin',
                                 color: scheme.tertiary),
+                          // Fitur "Lunasi Hutang" — nota ini turut melunasi
+                          // nota LAMA pelanggan lain (lihat dok
+                          // `Transactions.debtSettlementDetail`). Info murni,
+                          // di luar 3-baris ringkasan inti nota ini sendiri.
+                          for (final l in _debtSettlementLines)
+                            _SummaryRow(
+                              'Turut lunasi Nota ${l.invoiceLocalId}',
+                              formatRupiah(l.amount),
+                              color: scheme.tertiary,
+                            ),
                         ],
                       ),
                     ),
@@ -4812,6 +4826,26 @@ class _ReceiptPaper extends StatelessWidget {
                 Text('Rp ${_fmtNum(_refundTotal)}', style: _mono),
               ],
             ),
+          // Fitur "Lunasi Hutang" — nota ini turut melunasi nota LAMA
+          // pelanggan lain (lihat dok `Transactions.debtSettlementDetail`).
+          // Baris info murni (bukan bagian Total/Bayar/Kembali/Sisa nota
+          // ini), sejalan dgn pola baris "Refund .." di atas.
+          if (_debtSettlementLines.isNotEmpty) ...[
+            const _DashedLine(),
+            Text('Turut melunasi hutang:',
+                style: _mono.copyWith(fontWeight: FontWeight.w700)),
+            ..._debtSettlementLines.map((l) => Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text('Nota ${l.invoiceLocalId}',
+                          style: _mono.copyWith(fontSize: 11.5)),
+                    ),
+                    Text('Rp ${_fmtNum(l.amount)}',
+                        style: _mono.copyWith(fontSize: 11.5)),
+                  ],
+                )),
+          ],
           // Timeline pembayaran (mis. hutang dilunasi belakangan / dicicil).
           if (_showTimeline) ...[
             const _DashedLine(),
@@ -4890,6 +4924,10 @@ class _ReceiptPaper extends StatelessWidget {
     if (visible.length == 1) return visible.first.paidAt != tx.createdAt;
     return false;
   }
+
+  /// Fitur "Lunasi Hutang" — lihat dok `Transactions.debtSettlementDetail`.
+  List<DebtSettlementDetailLine> get _debtSettlementLines =>
+      parseDebtSettlementDetail(tx.debtSettlementDetail);
 
   String _fmtDateTime(DateTime dt) => '${dt.day}/${dt.month} '
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
