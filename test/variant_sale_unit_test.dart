@@ -61,7 +61,7 @@ void main() {
       baseUnitTypeId: 201, // Pcs (jangkar, ikut satuan dasar induk)
       contentPerUnit: 10,
       barcode: '2911111111116',
-      altPrices: const [(label: 'Toko A', price: 8500)],
+      altPrices: const [(label: 'Toko A', price: 8500, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null)],
       isNonStock: false,
     );
 
@@ -119,7 +119,7 @@ void main() {
       unitTypeId: 201,
       baseUnitTypeId: 201,
       barcode: '2911111111116',
-      altPrices: const [(label: 'Toko A', price: 900)],
+      altPrices: const [(label: 'Toko A', price: 900, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null)],
       isNonStock: false,
     );
     final baseId = (await db.getProductUnits(vId)).single.id;

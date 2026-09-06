@@ -12,6 +12,7 @@ import '../../core/providers/product_providers.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/utils/internal_barcode.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/widgets/price_category_margin_sheet.dart';
 
 /// Buka dialog scanner kamera untuk mengisi field barcode secara otomatis.
 /// Mengembalikan nilai barcode yang ter-scan, atau null jika dibatalkan.
@@ -204,8 +205,15 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           ..sort((a, b) => a.minQty.compareTo(b.minQty));
 
         final altPriceEntries = altPriceRows
-            .map(
-                (a) => _AltPriceEntry(id: a.id, label: a.label, price: a.price))
+            .map((a) => _AltPriceEntry(
+                  id: a.id,
+                  label: a.label,
+                  price: a.price,
+                  priceCategoryId: a.priceCategoryId,
+                  marginAnchor: a.marginAnchor,
+                  marginType: a.marginType,
+                  marginValue: a.marginValue,
+                ))
             .toList();
 
         entries.add(_UnitEntry(
@@ -449,6 +457,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               createdAt: Value(now),
               // Posisi baris di form saat simpan — hasil drag-reorder user.
               sortOrder: Value(i),
+              priceCategoryId: Value(validAlts[i].priceCategoryId),
+              marginAnchor: Value(validAlts[i].marginAnchor),
+              marginType: Value(validAlts[i].marginType),
+              marginValue: Value(validAlts[i].marginValue),
             ),
         ];
       }
@@ -801,6 +813,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                 entry: e.value,
                                 index: e.key,
                                 unitTypes: _unitTypes,
+                                productName: _nameCtrl.text.trim().isEmpty
+                                    ? 'Produk'
+                                    : _nameCtrl.text.trim(),
+                                unitLabel: unitLabel,
                                 canRemove: !_readOnly && _units.length > 1,
                                 readOnly: _readOnly,
                                 showStock: showStock,
@@ -1051,7 +1067,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         int price,
         String? barcode,
         bool trackStock,
-        List<({String label, int price})> altPrices,
+        List<AltPriceInput> altPrices,
         int unitTypeId,
         double contentPerUnit,
         bool followsParentPrice,
@@ -1062,7 +1078,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     required int price,
     String? barcode,
     bool trackStock = false,
-    List<({String label, int price})> altPrices = const [],
+    List<AltPriceInput> altPrices = const [],
     required int unitTypeId,
     double contentPerUnit = 1.0,
     // Item 53 (permintaan user) — saklar "ikut harga satuan dasar". Harga
@@ -1070,6 +1086,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     // hasil kali (harga_induk × isi-per-satuan) saat saklar aktif.
     bool followsParentPrice = false,
     required int parentBasePrice,
+    // HPP (costPrice) varian INI SENDIRI (bukan induk) — acuan 'Modal' saat
+    // assign salah satu baris Harga Lain ke Kategori Harga. Dialog ini tidak
+    // punya field HPP terpisah (costPrice varian ikut costPrice induk saat
+    // dibuat, lihat `_addVariant`), jadi cukup nilai pra-hitung dari pemanggil.
+    int costPrice = 0,
   }) async {
     final nameCtrl = TextEditingController(text: name);
     final priceCtrl =
@@ -1092,6 +1113,12 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       for (final a in altPrices)
         TextEditingController(text: ThousandsSeparatorFormatter.format(a.price))
     ];
+    // Jalur "assign ke Kategori Harga" — 4 daftar paralel dgn altLabelCtrls/
+    // altPriceCtrls (indeks sama), non-null berarti baris itu category-linked.
+    final altCategoryIds = <String?>[for (final a in altPrices) a.priceCategoryId];
+    final altAnchors = <String?>[for (final a in altPrices) a.marginAnchor];
+    final altTypes = <String?>[for (final a in altPrices) a.marginType];
+    final altValues = <double?>[for (final a in altPrices) a.marginValue];
 
     final ok = await showDialog<bool>(
       context: context,
@@ -1245,12 +1272,74 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Row(
                       children: [
+                        IconButton(
+                          icon: Icon(Icons.sell_outlined,
+                              size: 18,
+                              color: altCategoryIds[i] != null
+                                  ? Theme.of(ctx).colorScheme.primary
+                                  : Theme.of(ctx).colorScheme.onSurfaceVariant),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: altCategoryIds[i] != null
+                              ? 'Kategori: ${altLabelCtrls[i].text}'
+                              : 'Assign ke Kategori Harga',
+                          onPressed: () async {
+                            final currentPrice =
+                                ThousandsSeparatorFormatter.parseValue(
+                                    priceCtrl.text);
+                            final unitName = _unitTypes
+                                    .where((t) => t.id == unitType)
+                                    .map((t) => t.name)
+                                    .firstOrNull ??
+                                'Satuan';
+                            final outcome = await pickPriceCategoryForRow(
+                              context: context,
+                              ref: ref,
+                              productName: nameCtrl.text.trim().isEmpty
+                                  ? 'Varian'
+                                  : nameCtrl.text.trim(),
+                              unitName: unitName,
+                              basePrice: currentPrice,
+                              costPrice: costPrice,
+                              currentCategoryId: altCategoryIds[i],
+                              currentAnchor: altAnchors[i],
+                              currentType: altTypes[i],
+                              currentValue: altValues[i],
+                            );
+                            if (outcome == null) return;
+                            setDialog(() {
+                              if (outcome.unassign) {
+                                // KEPUTUSAN: bekukan nilai terakhir (bukan
+                                // dikosongkan) — pola sama dgn baris utama
+                                // (lihat `_onTapCategoryIcon` di `_UnitCard`).
+                                altCategoryIds[i] = null;
+                                altAnchors[i] = null;
+                                altTypes[i] = null;
+                                altValues[i] = null;
+                              } else {
+                                altLabelCtrls[i].text = outcome.categoryName!;
+                                altPriceCtrls[i].text =
+                                    ThousandsSeparatorFormatter.format(
+                                        outcome.margin!.computedPrice);
+                                altCategoryIds[i] = outcome.categoryId;
+                                altAnchors[i] = outcome.margin!.marginAnchor;
+                                altTypes[i] = outcome.margin!.marginType;
+                                altValues[i] = outcome.margin!.marginValue;
+                              }
+                            });
+                          },
+                        ),
                         Expanded(
                           flex: 3,
                           child: TextField(
                             controller: altLabelCtrls[i],
-                            decoration: const InputDecoration(
-                                isDense: true, labelText: 'Label'),
+                            readOnly: altCategoryIds[i] != null,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              labelText: 'Label',
+                              helperText: altCategoryIds[i] != null
+                                  ? 'Kategori Harga'
+                                  : null,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -1258,6 +1347,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                           flex: 2,
                           child: TextField(
                             controller: altPriceCtrls[i],
+                            readOnly: altCategoryIds[i] != null,
                             keyboardType: TextInputType.number,
                             inputFormatters: const [
                               ThousandsSeparatorFormatter()
@@ -1276,6 +1366,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                             altPriceCtrls[i].dispose();
                             altLabelCtrls.removeAt(i);
                             altPriceCtrls.removeAt(i);
+                            altCategoryIds.removeAt(i);
+                            altAnchors.removeAt(i);
+                            altTypes.removeAt(i);
+                            altValues.removeAt(i);
                           }),
                         ),
                       ],
@@ -1287,6 +1381,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                     onPressed: () => setDialog(() {
                       altLabelCtrls.add(TextEditingController());
                       altPriceCtrls.add(TextEditingController());
+                      altCategoryIds.add(null);
+                      altAnchors.add(null);
+                      altTypes.add(null);
+                      altValues.add(null);
                     }),
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('Tambah Harga Lain'),
@@ -1330,6 +1428,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               label: altLabelCtrls[i].text.trim(),
               price: ThousandsSeparatorFormatter.parseValue(
                   altPriceCtrls[i].text),
+              priceCategoryId: altCategoryIds[i],
+              marginAnchor: altAnchors[i],
+              marginType: altTypes[i],
+              marginValue: altValues[i],
             ),
       ],
     );
@@ -1361,6 +1463,10 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       price: base.price,
       unitTypeId: base.unitTypeId,
       parentBasePrice: base.price,
+      // Varian baru ikut costPrice induk (lihat `createVariant`) — dipakai
+      // sbg acuan 'Modal' bila salah satu baris Harga Lain di-assign ke
+      // Kategori Harga.
+      costPrice: base.costPrice,
     );
     if (res == null) return;
     final db = ref.read(databaseProvider);
@@ -1433,7 +1539,11 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     var curPrice = 0;
     String? curBarcode;
     var trackStock = false;
-    var curAltPrices = const <({String label, int price})>[];
+    var curAltPrices = const <AltPriceInput>[];
+    // HPP varian INI SENDIRI (bukan induk) — acuan 'Modal' saat assign salah
+    // satu baris Harga Lain ke Kategori Harga (spek: costPrice varian yg
+    // relevan, bukan costPrice induk).
+    var curCostPrice = 0;
     var curUnitTypeId = _units.isNotEmpty
         ? _units.firstWhere((u) => u.isBaseUnit, orElse: () => _units.first)
             .unitTypeId
@@ -1447,16 +1557,25 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       curContent = baseUnit.isBaseUnit ? 1.0 : baseUnit.ratioToBase;
       curFollow = baseUnit.followsParentPrice;
       final tiers = await db.getPriceTiers(baseUnit.id);
-      curPrice =
-          tiers.where((t) => t.minQty == 1).map((t) => t.price).firstOrNull ??
-              (tiers.isNotEmpty ? tiers.last.price : 0);
+      final baseTier =
+          tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.lastOrNull;
+      curPrice = baseTier?.price ?? 0;
+      curCostPrice = baseTier?.costPrice ?? 0;
       final bcs = await db.getProductBarcodes(baseUnit.id);
       curBarcode =
           bcs.where((b) => b.isPrimary).map((b) => b.barcode).firstOrNull;
       trackStock = !baseUnit.isNonStock;
       final alts = await db.getAltPrices(baseUnit.id);
       curAltPrices = [
-        for (final a in alts) (label: a.label, price: a.price),
+        for (final a in alts)
+          (
+            label: a.label,
+            price: a.price,
+            priceCategoryId: a.priceCategoryId,
+            marginAnchor: a.marginAnchor,
+            marginType: a.marginType,
+            marginValue: a.marginValue,
+          ),
       ];
     }
     if (!mounted) return;
@@ -1476,6 +1595,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       contentPerUnit: curContent,
       followsParentPrice: curFollow,
       parentBasePrice: parentBase,
+      costPrice: curCostPrice,
     );
     if (res == null) return;
     try {
@@ -1613,16 +1733,32 @@ class _TierEntry {
 /// Harga alternatif berlabel bebas (mis. "Harga Toko A" = 3000) — bukan
 /// tier qty seperti [_TierEntry], murni pilihan cepat tap-untuk-pakai di
 /// kasir (`ItemEntrySheet`).
+///
+/// 4 field kategori di bawah opsional (jalur "assign ke Kategori Harga"
+/// langsung dari Edit Produk) — non-null berarti baris ini category-linked:
+/// [label] & [price] jadi terkunci (readonly di UI, hanya berubah lewat
+/// picker kategori), [price] adalah snapshot harga live-computed terakhir.
+/// Null berarti baris manual biasa seperti semula, tidak berubah.
 class _AltPriceEntry {
   _AltPriceEntry({
     required this.id,
     required this.label,
     required this.price,
+    this.priceCategoryId,
+    this.marginAnchor,
+    this.marginType,
+    this.marginValue,
   });
 
   final String id;
   String label;
   int price;
+  String? priceCategoryId;
+  String? marginAnchor;
+  String? marginType;
+  double? marginValue;
+
+  bool get isCategoryLinked => priceCategoryId != null;
 }
 
 class _UnitEntry {
@@ -1685,7 +1821,7 @@ class _UnitEntry {
 
 // ─── Unit Card ───────────────────────────────────────────────────────────────
 
-class _UnitCard extends StatefulWidget {
+class _UnitCard extends ConsumerStatefulWidget {
   const _UnitCard({
     super.key,
     required this.entry,
@@ -1695,6 +1831,8 @@ class _UnitCard extends StatefulWidget {
     required this.readOnly,
     required this.onChanged,
     required this.onRemove,
+    required this.productName,
+    required this.unitLabel,
     this.showStock = false,
     this.canAdjustStock = false,
     this.loadStock,
@@ -1710,6 +1848,11 @@ class _UnitCard extends StatefulWidget {
   final bool readOnly;
   final ValueChanged<_UnitEntry> onChanged;
   final VoidCallback onRemove;
+
+  /// Nama produk & label satuan ini — dipakai judul sheet picker Kategori
+  /// Harga (jalur "assign ke Kategori Harga" dari baris Harga Lain).
+  final String productName;
+  final String unitLabel;
 
   /// Item 51 — generate barcode internal (EAN-13 prefix 29) langsung dari
   /// field input, tanpa perlu ke layar Barcode terpisah.
@@ -1731,10 +1874,10 @@ class _UnitCard extends StatefulWidget {
   final bool autofocusFirstField;
 
   @override
-  State<_UnitCard> createState() => _UnitCardState();
+  ConsumerState<_UnitCard> createState() => _UnitCardState();
 }
 
-class _UnitCardState extends State<_UnitCard> {
+class _UnitCardState extends ConsumerState<_UnitCard> {
   late final TextEditingController _priceCtrl;
   late final TextEditingController _costCtrl;
   late final TextEditingController _ratioCtrl;
@@ -1898,6 +2041,55 @@ class _UnitCardState extends State<_UnitCard> {
       _altPrices.insert(newIndex, _altPrices.removeAt(oldIndex));
       _altLabelCtrl.insert(newIndex, _altLabelCtrl.removeAt(oldIndex));
       _altPriceCtrl.insert(newIndex, _altPriceCtrl.removeAt(oldIndex));
+    });
+    widget.onChanged(widget.entry.copyWith(altPrices: List.from(_altPrices)));
+  }
+
+  /// Jalur "assign ke Kategori Harga" langsung dari baris Harga Lain satuan
+  /// produk utama — ikon `Icons.sell_outlined` di tiap baris. TIDAK menulis
+  /// ke DB sendiri (sama seperti Harga Lain manual): hasilnya cuma
+  /// memperbarui state lokal `_altPrices`, ditulis nanti saat tombol Simpan
+  /// form ditekan (lihat `saveProduct`).
+  Future<void> _onTapCategoryIcon(int i) async {
+    final current = _altPrices[i];
+    final outcome = await pickPriceCategoryForRow(
+      context: context,
+      ref: ref,
+      productName: widget.productName,
+      unitName: widget.unitLabel,
+      basePrice: widget.entry.price,
+      costPrice: widget.entry.costPrice,
+      currentCategoryId: current.priceCategoryId,
+      currentAnchor: current.marginAnchor,
+      currentType: current.marginType,
+      currentValue: current.marginValue,
+    );
+    if (outcome == null || !mounted) return;
+    setState(() {
+      if (outcome.unassign) {
+        // KEPUTUSAN: bekukan ke nilai live-computed TERAKHIR (bukan
+        // dikosongkan) — user langsung lihat angka wajar tanpa dipaksa isi
+        // ulang, konsisten dgn `deletePriceCategory` (massal) yg juga
+        // membekukan, bukan menghapus/mengosongkan.
+        _altPrices[i] = _AltPriceEntry(
+          id: current.id,
+          label: current.label,
+          price: current.price,
+        );
+      } else {
+        _altPrices[i] = _AltPriceEntry(
+          id: current.id,
+          label: outcome.categoryName!,
+          price: outcome.margin!.computedPrice,
+          priceCategoryId: outcome.categoryId,
+          marginAnchor: outcome.margin!.marginAnchor,
+          marginType: outcome.margin!.marginType,
+          marginValue: outcome.margin!.marginValue,
+        );
+      }
+      _altLabelCtrl[i].text = _altPrices[i].label;
+      _altPriceCtrl[i].text =
+          _altPrices[i].price > 0 ? _altPrices[i].price.toString() : '';
     });
     widget.onChanged(widget.entry.copyWith(altPrices: List.from(_altPrices)));
   }
@@ -2277,6 +2469,7 @@ class _UnitCardState extends State<_UnitCard> {
                 itemCount: _altPrices.length,
                 onReorder: widget.readOnly ? (_, __) {} : _reorderAltPrice,
                 itemBuilder: (context, i) {
+                  final linked = _altPrices[i].isCategoryLinked;
                   return Padding(
                     key: ValueKey(_altPrices[i].id),
                     padding: const EdgeInsets.only(top: 6),
@@ -2292,16 +2485,30 @@ class _UnitCardState extends State<_UnitCard> {
                                   size: 18, color: scheme.onSurfaceVariant),
                             ),
                           ),
+                        IconButton(
+                          icon: Icon(Icons.sell_outlined,
+                              size: 18,
+                              color:
+                                  linked ? scheme.primary : scheme.onSurfaceVariant),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: linked
+                              ? 'Kategori: ${_altPrices[i].label}'
+                              : 'Assign ke Kategori Harga',
+                          onPressed: widget.readOnly
+                              ? null
+                              : () => _onTapCategoryIcon(i),
+                        ),
                         Expanded(
                           child: TextFormField(
                             controller: _altLabelCtrl[i],
-                            readOnly: widget.readOnly,
-                            decoration: const InputDecoration(
+                            readOnly: widget.readOnly || linked,
+                            decoration: InputDecoration(
                               labelText: 'Nama Harga',
                               hintText: 'mis. Harga Toko A',
                               isDense: true,
+                              helperText: linked ? 'Kategori Harga' : null,
                             ),
-                            onChanged: widget.readOnly
+                            onChanged: widget.readOnly || linked
                                 ? null
                                 : (_) => _syncAltPrice(i),
                           ),
@@ -2311,7 +2518,7 @@ class _UnitCardState extends State<_UnitCard> {
                           width: 110,
                           child: TextFormField(
                             controller: _altPriceCtrl[i],
-                            readOnly: widget.readOnly,
+                            readOnly: widget.readOnly || linked,
                             decoration: const InputDecoration(
                               labelText: 'Nominal',
                               isDense: true,
@@ -2321,7 +2528,7 @@ class _UnitCardState extends State<_UnitCard> {
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly
                             ],
-                            onChanged: widget.readOnly
+                            onChanged: widget.readOnly || linked
                                 ? null
                                 : (_) => _syncAltPrice(i),
                           ),

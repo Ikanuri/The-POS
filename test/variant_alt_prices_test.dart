@@ -29,8 +29,8 @@ void main() {
       price: 5000,
       costPrice: 3000,
       altPrices: const [
-        (label: 'Harga Toko A', price: 4500),
-        (label: 'Harga Grosir', price: 4000),
+        (label: 'Harga Toko A', price: 4500, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null),
+        (label: 'Harga Grosir', price: 4000, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null),
       ],
     );
 
@@ -52,7 +52,7 @@ void main() {
       name: 'Coklat',
       price: 5000,
       costPrice: 3000,
-      altPrices: const [(label: 'Harga Lama', price: 4000)],
+      altPrices: const [(label: 'Harga Lama', price: 4000, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null)],
     );
     final unit = (await db.getProductUnits(variantId)).single;
 
@@ -60,7 +60,7 @@ void main() {
       variantProductId: variantId,
       name: 'Coklat',
       price: 5000,
-      altPrices: const [(label: 'Harga Baru', price: 4800)],
+      altPrices: const [(label: 'Harga Baru', price: 4800, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null)],
     );
 
     final alts = await db.getAltPrices(unit.id);
@@ -79,7 +79,7 @@ void main() {
       name: 'Coklat',
       price: 5000,
       costPrice: 3000,
-      altPrices: const [(label: 'Tetap Ada', price: 4000)],
+      altPrices: const [(label: 'Tetap Ada', price: 4000, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null)],
     );
     final unit = (await db.getProductUnits(variantId)).single;
 
@@ -103,7 +103,7 @@ void main() {
       name: 'Coklat',
       price: 5000,
       costPrice: 3000,
-      altPrices: const [(label: 'Akan Dihapus', price: 4000)],
+      altPrices: const [(label: 'Akan Dihapus', price: 4000, priceCategoryId: null, marginAnchor: null, marginType: null, marginValue: null)],
     );
     final unit = (await db.getProductUnits(variantId)).single;
 

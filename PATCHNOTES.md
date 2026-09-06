@@ -8,7 +8,7 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## 6 September 2026 (sesi kedua puluh tujuh)
+## 6 September 2026 (sesi kedua puluh delapan)
 
 ### ✨ Fitur Baru
 - **Pra-Bayar: sekarang ada tombol "kembalian sudah diambil".** Kalau
@@ -19,6 +19,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   diserahkan dihitung ulang seolah masih bisa ditarik/dipakai lagi
   kalau pelanggan menambah atau mengurangi barang setelahnya (yang
   bisa berujung kembalian diserahkan dua kali).
+
+## 6 September 2026 (sesi kedua puluh tujuh)
+
+### ✨ Fitur Baru
+- **Sekarang bisa langsung memasukkan produk (atau varian) ke Kategori
+  Harga dari layar Edit Produk** — tidak perlu lagi buka layar Kategori
+  Harga terpisah. Di section "Harga Lain (opsional)", tiap baris punya
+  ikon label harga kecil: ketuk untuk memilih Kategori Harga (atau buat
+  kategori baru) lalu atur margin-nya (Modal/Dasar, Rupiah/Persen) —
+  langsung dari situ. Baris yang sudah masuk kategori otomatis mengikuti
+  harga terbaru (tidak beku), dan bisa dilepas kembali kapan saja lewat
+  ikon yang sama (harga terakhirnya tetap disimpan, tidak hilang).
 
 ## 6 September 2026 (sesi kedua puluh enam)
 
