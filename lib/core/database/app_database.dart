@@ -9,6 +9,7 @@ import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'package:sqlite3/open.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/cart_item.dart';
 import '../services/crash_log_service.dart';
 import '../services/crypto_service.dart';
 import '../services/receive_text_parser.dart';
@@ -831,6 +832,11 @@ class AppDatabase extends _$AppDatabase {
                   "CAST(strftime('%s', 'now') AS INTEGER) "
                   'WHERE created_at IS NULL;');
             }
+            // Fitur "Lunasi Hutang" dari keranjang — ringkasan nota lama yang
+            // ikut terlunasi (lihat dok `Transactions.debtSettlementDetail`).
+            // Aditif & nullable, nota lama tetap valid apa adanya.
+            await _addColumnIfMissing('transactions', 'debt_settlement_detail',
+                transactions, transactions.debtSettlementDetail, m);
           }
         },
         beforeOpen: (details) async {
@@ -3168,6 +3174,81 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// [saveTransaction] + fitur "Lunasi Hutang" — SATU proses atomik: nota
+  /// baru tersimpan normal (item keranjang, TIDAK termasuk nominal
+  /// pelunasan — itu bukan baris produk), lalu utk SETIAP entri di
+  /// [debtSettlements], nominal itu dialokasikan FIFO ke nota LAMA
+  /// pelanggan terkait via [settleMergedDebt] (cap otomatis ke sisa hutang
+  /// aktual — kelebihan, kalau ada, jadi kembalian di nota lama itu, BUKAN
+  /// overpay). Ringkasan (nota mana & berapa yg ikut dilunasi, per grup
+  /// pelanggan) ditulis ke `transactions.debtSettlementDetail` nota BARU
+  /// (JSON, murni utk tampilan struk — lihat dok kolom itu).
+  ///
+  /// [targets] tiap entri debtSettlements SUDAH berupa rencana FIFO beku
+  /// (dihitung sekali saat kasir mengonfirmasi nominal di keranjang, lihat
+  /// `planFifoSettlement`/`DebtSettlementEntry` di `cart_debt_settlement_
+  /// provider.dart`) — dipakai APA ADANYA sbg breakdown struk, TIDAK
+  /// dihitung ulang di sini (hanya `settleMergedDebt` yg benar² menulis
+  /// alokasi FINAL ke nota lama, boleh beda tipis dari rencana beku kalau
+  /// sisa nota berubah di antaranya).
+  Future<void> saveTransactionWithDebtSettlements({
+    required TransactionsCompanion tx,
+    required List<TransactionItemsCompanion> items,
+    required List<TransactionPaymentsCompanion> payments,
+    required List<({String productUnitId, double qty, String note})> stockItems,
+    required List<
+        ({
+          String customerName,
+          int amount,
+          List<({String invoiceId, String invoiceLocalId, int amount})>
+              targets,
+          String method,
+          String? methodName,
+        })> debtSettlements,
+    required String kasirId,
+    DateTime? now,
+    LoyaltyPointLedgerCompanion? loyaltyEntry,
+  }) async {
+    final ts = now ?? DateTime.now();
+    await transaction(() async {
+      await saveTransaction(
+        tx: tx,
+        items: items,
+        payments: payments,
+        stockItems: stockItems,
+        now: ts,
+        loyaltyEntry: loyaltyEntry,
+      );
+      if (debtSettlements.isEmpty) return;
+      final detail = <Map<String, dynamic>>[];
+      for (final ds in debtSettlements) {
+        if (ds.targets.isEmpty || ds.amount <= 0) continue;
+        final txIds = ds.targets.map((t) => t.invoiceId).toList();
+        await settleMergedDebt(
+          txIds: txIds,
+          amount: ds.amount,
+          method: ds.method,
+          methodName: ds.methodName,
+          kasirId: kasirId,
+        );
+        for (final t in ds.targets) {
+          detail.add({
+            'invoiceId': t.invoiceId,
+            'invoiceLocalId': t.invoiceLocalId,
+            'amount': t.amount,
+            'customerName': ds.customerName,
+          });
+        }
+      }
+      if (detail.isNotEmpty) {
+        await (update(transactions)..where((t) => t.id.equals(tx.id.value)))
+            .write(TransactionsCompanion(
+          debtSettlementDetail: Value(jsonEncode(detail)),
+        ));
+      }
+    });
+  }
+
   /// Tambah item ke transaksi yang SUDAH tersimpan (fitur "tambah belanjaan").
   /// Tetap satu transaksi & satu localId. Dalam satu transaksi DB:
   ///  - insert transaction_items baru (ditandai addedAt = sekarang)
@@ -3826,6 +3907,77 @@ class AppDatabase extends _$AppDatabase {
       // Perbarui ringkasan harian untuk tanggal transaksi yang dibatalkan.
       await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
     });
+  }
+
+  /// "Batalkan & Susun Ulang" (`showVoidTransactionDialog`) — susun ulang
+  /// baris nota [txId] jadi `List<CartItem>` siap dimasukkan ke keranjang
+  /// aktif via `CartNotifier.addItem` (BUKAN [CartItem] mentah lewat
+  /// `replaceAll` — urutan pemanggilan `addItem` INDUK dulu baru VARIAN
+  /// (list ini SUDAH diurutkan begitu) penting supaya invariant storedQty
+  /// induk = base + Σvarian otomatis terjaga lewat logika `addItem` yang
+  /// sudah ada, tanpa perlu menghitung ulang manual di sini).
+  ///
+  /// Hanya baris qty POSITIF (penjualan) yang disertakan — baris retur (qty
+  /// negatif) dilewati, karena barang itu sudah kembali ke rak & tidak boleh
+  /// terjual ulang seolah-olah masih ada di nota lama. `transaction_items`
+  /// menyimpan qty EFEKTIF per baris (lihat dok `_itemEffQty` di
+  /// `receipt_screen.dart`) — placeholder induk qty 0 tidak pernah tersimpan,
+  /// jadi tidak perlu ditangani di sini.
+  Future<List<CartItem>> cartItemsFromTransaction(String txId) async {
+    final items = await (select(transactionItems)
+          ..where((t) =>
+              t.transactionId.equals(txId) & t.qty.isBiggerThanValue(0)))
+        .get();
+    if (items.isEmpty) return const [];
+
+    final productIds = items.map((i) => i.productId).toSet();
+    final unitIds = items.map((i) => i.productUnitId).toSet();
+    final prods =
+        await (select(products)..where((t) => t.id.isIn(productIds))).get();
+    final units =
+        await (select(productUnits)..where((t) => t.id.isIn(unitIds))).get();
+    final productById = {for (final p in prods) p.id: p};
+    final unitById = {for (final u in units) u.id: u};
+
+    // Nama satuan bukan kolom `productUnits` langsung — lihat pola sama di
+    // `receipt_screen.dart` `_load()` (join manual ke `unitTypes`).
+    final unitTypeIds = units.map((u) => u.unitTypeId).whereType<int>().toSet();
+    final unitTypeRows = unitTypeIds.isEmpty
+        ? <UnitType>[]
+        : await (select(unitTypes)..where((t) => t.id.isIn(unitTypeIds))).get();
+    final unitTypeNameById = {for (final ut in unitTypeRows) ut.id: ut.name};
+    String unitNameFor(String productUnitId) {
+      final u = unitById[productUnitId];
+      if (u?.unitTypeId == null) return '';
+      return unitTypeNameById[u!.unitTypeId!] ?? '';
+    }
+
+    bool isVariant(TransactionItem i) =>
+        productById[i.productId]?.parentProductId != null;
+
+    // Induk dulu, baru varian — lihat dok di atas.
+    final ordered = [
+      ...items.where((i) => !isVariant(i)),
+      ...items.where(isVariant),
+    ];
+
+    return [
+      for (final i in ordered)
+        CartItem(
+          productId: i.productId,
+          productUnitId: i.productUnitId,
+          productName: productById[i.productId]?.name ?? i.productId,
+          unitName: unitNameFor(i.productUnitId),
+          qty: i.qty,
+          price: i.priceAtSale,
+          originalPrice: i.originalPrice,
+          costPrice: i.costAtSale,
+          priceOverridden: i.priceOverridden,
+          itemNote: i.itemNote,
+          parentProductId: productById[i.productId]?.parentProductId,
+          isVariant: isVariant(i),
+        ),
+    ];
   }
 
   // ───────────────────────── Retur ─────────────────────────
@@ -8917,6 +9069,45 @@ class DebtBookEntry {
   final int count;
 
   int get daysOverdue => DateTime.now().difference(oldest).inDays;
+}
+
+/// Satu baris ringkasan "Lunasi Hutang" (fitur checkout dari keranjang) —
+/// parsed dari `transactions.debtSettlementDetail`. Dipakai ketiga jenis
+/// struk (in-app `receipt_screen.dart`, share, cetak `printer_service.dart`)
+/// utk menampilkan "Turut melunasi hutang: Nota X Rp Y".
+class DebtSettlementDetailLine {
+  const DebtSettlementDetailLine({
+    required this.invoiceLocalId,
+    required this.amount,
+    required this.customerName,
+  });
+
+  final String invoiceLocalId;
+  final int amount;
+  final String customerName;
+}
+
+/// Parse `transactions.debtSettlementDetail` (JSON string, nullable) menjadi
+/// daftar [DebtSettlementDetailLine] — data rusak/null/kosong -> list kosong
+/// (aman, tidak melempar).
+List<DebtSettlementDetailLine> parseDebtSettlementDetail(String? raw) {
+  if (raw == null || raw.isEmpty) return const [];
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const [];
+    return decoded
+        .map((e) {
+          final m = e as Map<String, dynamic>;
+          return DebtSettlementDetailLine(
+            invoiceLocalId: m['invoiceLocalId'] as String,
+            amount: (m['amount'] as num).toInt(),
+            customerName: m['customerName'] as String? ?? '',
+          );
+        })
+        .toList();
+  } catch (_) {
+    return const [];
+  }
 }
 
 /// Satu nota belum lunas — dipakai daftar detail di Buku Hutang.

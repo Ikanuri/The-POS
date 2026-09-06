@@ -16,6 +16,7 @@ import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
 import '../laci_meja/laci_meja_reminder.dart';
+import 'cart_debt_settlement_provider.dart';
 import 'cart_meta_provider.dart';
 import 'cart_prabayar_provider.dart';
 import 'cart_provider.dart';
@@ -583,6 +584,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// di layar ini, cukup tombol konfirmasi "Selesaikan Transaksi".
   bool get _prabayarCoversTotal => _prabayarPool > 0 && _prabayarPool >= _total;
 
+  /// Fitur "Lunasi Hutang" — entri yang dikunci di keranjang ini (nominal &
+  /// nota target SUDAH ditentukan sejak kasir mengonfirmasi lewat
+  /// kalkulatornya sendiri di `cart_sheet.dart`, `showDebtPaymentSheet`) —
+  /// TIDAK relevan sama sekali di mode Tambah Belanjaan, sama seperti
+  /// [_prabayarEntries].
+  List<DebtSettlementEntry> get _debtSettlementEntries =>
+      _isAddMode ? const [] : ref.read(cartDebtSettlementProvider(_cartId));
+
+  /// Jumlah seluruh entri Lunasi Hutang — sudah "selesai" secara nominal
+  /// (metode & jumlahnya dipilih sendiri di kalkulator masing-masing entri),
+  /// TIDAK ikut logika keypad/lunas-tidaknya nota BARU di layar ini (sama
+  /// persis Pra-Bayar yang sudah terkunci) — murni ditambahkan sbg info
+  /// "total yang perlu diterima kasir" (lihat [_grandTotal]) supaya kasir
+  /// tidak lupa ada uang tambahan yang harus diterima utk pelunasan hutang
+  /// pelanggan lain.
+  int get _debtSettlementTotal =>
+      _debtSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
+
+  /// Total keseluruhan yang perlu DITERIMA kasir dari pelanggan: total
+  /// belanja baru ([_total]) + seluruh nominal Lunasi Hutang. BUKAN nilai
+  /// yang tersimpan sbg `transactions.total` nota baru (itu tetap [_total]
+  /// murni, exclude pelunasan hutang — lihat dok `saveTransactionWithDebtSettlements`)
+  /// — murni figur tampilan supaya kasir tahu berapa total uang fisik yang
+  /// harus diterima sekali jalan.
+  int get _grandTotal => _total + _debtSettlementTotal;
+
   Future<void> _editTotal() async {
     final prefs = await SharedPreferences.getInstance();
     final savedMultiple = prefs.getInt(_prefKeyDiscountRoundMultiple) ??
@@ -786,6 +813,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         changeTakenTotal: _changeTakenTotal,
       );
 
+      // "Batalkan & Susun Ulang" (lihat dok `CartMeta.replacesTxId`) — nota
+      // BARU ini menautkan diri ke nota LAMA yang baru divoid, pola sama
+      // persis `internalNote: 'RETUR:<id>'` di `addReturnTransaction`. Tidak
+      // berlaku di mode tambah belanjaan (meta selalu kosong di sana).
+      final replacesTxId = _isAddMode
+          ? null
+          : ref.read(cartMetaProvider(_cartId)).replacesTxId;
+
       final txCompanion = TransactionsCompanion.insert(
         id: txId,
         localId: localId,
@@ -798,6 +833,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         changeAmount: prabayarResult.combinedChange,
         paymentMethod: prabayarResult.displayMethodType,
         methodName: Value(prabayarResult.displayMethodName),
+        internalNote: replacesTxId == null
+            ? const Value.absent()
+            : Value('GANTI:$replacesTxId'),
         employeeName: Value(_selectedEmployee?.name),
         pointsEarned: Value(pointsEarned),
         createdAt: Value(now),
@@ -834,11 +872,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         );
       }
 
-      await db.saveTransaction(
+      // Fitur "Lunasi Hutang" — rencana FIFO SUDAH beku sejak entri dibuat
+      // (`DebtSettlementEntry.targetInvoices`, lihat dok
+      // `saveTransactionWithDebtSettlements`) — dipakai apa adanya di sini.
+      final debtSettlements = _debtSettlementEntries
+          .map((e) => (
+                customerName: e.customerName,
+                amount: e.amount,
+                targets: e.targetInvoices
+                    .map((t) => (
+                          invoiceId: t.invoiceId,
+                          invoiceLocalId: t.invoiceLocalId,
+                          amount: t.amount,
+                        ))
+                    .toList(),
+                method: e.method,
+                methodName: e.methodName,
+              ))
+          .toList();
+
+      await db.saveTransactionWithDebtSettlements(
         tx: txCompanion,
         items: itemCompanions,
         payments: paymentCompanions,
         stockItems: stockItems,
+        debtSettlements: debtSettlements,
+        kasirId: device.deviceCode,
         now: now,
         loyaltyEntry: loyaltyEntry,
       );
@@ -888,6 +947,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       ref.read(cartProvider(_cartId).notifier).clear();
       ref.read(cartMetaProvider(_cartId).notifier).clear();
       ref.read(cartPrabayarProvider(_cartId).notifier).clear();
+      ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
       if (mounted) {
         context.pushReplacement('/kasir/struk/$txId');
       }
@@ -1281,6 +1341,72 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               ],
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                // Fitur "Lunasi Hutang" — ringkasan entri yang terkunci di
+                // keranjang ini SEBELUM layar bayar dibuka, mirror kartu
+                // Pra-Bayar di atas. Nominalnya SUDAH final (ditentukan lewat
+                // kalkulatornya sendiri di `cart_sheet.dart`) — TIDAK
+                // relevan di mode Tambah Belanjaan (`_debtSettlementEntries`
+                // selalu kosong di sana).
+                if (_debtSettlementEntries.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Card(
+                    color: scheme.tertiaryContainer.withOpacity(0.35),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.receipt_long_outlined,
+                                  size: 16, color: scheme.tertiary),
+                              const SizedBox(width: 6),
+                              Text('Turut Lunasi Hutang',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.tertiary)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          for (final d in _debtSettlementEntries)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '${d.customerName} · ${d.targetInvoices.map((t) => t.invoiceLocalId).join(', ')}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                  Text(formatRupiah(d.amount),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          const Divider(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total Diterima (Belanja + Hutang)',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700)),
+                              Text(formatRupiah(_grandTotal),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.tertiary)),
+                            ],
+                          ),
                         ],
                       ),
                     ),

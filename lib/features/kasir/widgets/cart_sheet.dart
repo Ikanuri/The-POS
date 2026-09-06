@@ -23,12 +23,14 @@ import '../../../core/services/order_parser_service.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
+import '../cart_debt_settlement_provider.dart';
 import '../cart_meta_provider.dart';
 import '../cart_prabayar_provider.dart';
 import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 import 'debt_payment_sheet.dart';
+import 'debt_settlement_picker.dart';
 import 'add_control.dart';
 import 'cart_meta_pickers.dart';
 import 'cart_preview_paper.dart';
@@ -242,6 +244,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         ref.read(cartPrabayarProvider(widget.cartId).notifier);
     final prabayar = ref.read(cartPrabayarProvider(widget.cartId));
     final priceCategoryId = ref.read(cartPriceCategoryProvider(widget.cartId));
+    final debtSettlement =
+        ref.read(cartDebtSettlementProvider(widget.cartId));
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
@@ -251,12 +255,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       // `CartPrabayarNotifier.replaceAll`).
       'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
       'priceCategory': priceCategoryId,
+      // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
+      // hidup entri Pra-Bayar.
+      'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
     });
     await db.holdOrder(id: const Uuid().v4(), label: label, cartJson: payload);
     ref.read(cartProvider(widget.cartId).notifier).clear();
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
     ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
     ref.read(cartPriceCategoryProvider(widget.cartId).notifier).clear();
+    ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
     if (!ctx.mounted) return;
     ScaffoldMessenger.of(ctx).showSnackBar(
       SnackBar(content: Text('Pesanan "$label" ditahan')),
@@ -377,6 +385,112 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                                   color: scheme.error, size: 20),
                               onPressed: () => sheetRef
                                   .read(cartPrabayarProvider(widget.cartId)
+                                      .notifier)
+                                  .remove(e.id),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Fitur "Lunasi Hutang" — buka alur pilih pelanggan (dgn hutang
+  /// tertunggak) -> pilih nota tempo/kurang_bayar miliknya -> kalkulator
+  /// nominal (`showDebtPaymentSheet`, sama persis dipakai Pra-Bayar &
+  /// Buku Hutang). Hasilnya jadi satu [DebtSettlementEntry] baru
+  /// (akumulatif — kasir bisa menambah pelunasan lebih dari satu pelanggan
+  /// sekaligus dalam satu keranjang, mis. rombongan keluarga bayar
+  /// belanjaan sendiri + turut melunasi hutang anggota lain).
+  Future<void> _addDebtSettlement(BuildContext ctx, WidgetRef ref) async {
+    final db = ref.read(databaseProvider);
+    final entry = await showDebtSettlementPicker(ctx, ref, db);
+    if (entry == null) return;
+    ref
+        .read(cartDebtSettlementProvider(widget.cartId).notifier)
+        .add(entry);
+    if (!ctx.mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+          content: Text(
+              'Turut lunasi hutang ${entry.customerName} ${formatRupiah(entry.amount)}')),
+    );
+  }
+
+  /// Daftar entri "Lunasi Hutang" — tiap entri bisa dihapus lagi selama
+  /// belum checkout (kasir salah input), mirror `_showPrabayarList`.
+  Future<void> _showDebtSettlementList(BuildContext ctx, WidgetRef ref) async {
+    await showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Consumer(
+        builder: (consumerCtx, sheetRef, _) {
+          final entries =
+              sheetRef.watch(cartDebtSettlementProvider(widget.cartId));
+          final scheme = Theme.of(consumerCtx).colorScheme;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Text('Entri Lunasi Hutang',
+                      style: Theme.of(consumerCtx).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  if (entries.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text('Belum ada entri Lunasi Hutang',
+                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: entries.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final e = entries[i];
+                          final invoiceLabel =
+                              e.targetInvoices.map((t) => t.invoiceLocalId).join(', ');
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('${e.customerName} · ${formatRupiah(e.amount)}',
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w700)),
+                            subtitle: Text(
+                                invoiceLabel.isEmpty ? '-' : 'Nota: $invoiceLabel',
+                                style: const TextStyle(fontSize: 12)),
+                            trailing: IconButton(
+                              tooltip: 'Hapus',
+                              icon: Icon(Icons.delete_outline,
+                                  color: scheme.error, size: 20),
+                              onPressed: () => sheetRef
+                                  .read(cartDebtSettlementProvider(widget.cartId)
                                       .notifier)
                                   .remove(e.id),
                             ),
@@ -530,6 +644,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     ref.read(cartProvider(widget.cartId).notifier).clear();
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
     ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
+    ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
     if (ctx.mounted) Navigator.of(ctx).pop();
   }
 
@@ -847,6 +962,15 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     // (list baru) tiap kali nilai ini berubah — lihat dok di sana.
     final changeTakenTotal =
         ref.read(cartPrabayarProvider(widget.cartId).notifier).changeTakenTotal;
+
+    // Fitur "Lunasi Hutang" — gerbang SAMA persis Pra-Bayar (kasir utama,
+    // device berizin `terima_pembayaran`): keduanya cara menambah nominal
+    // yang perlu diterima kasir dari pelanggan SEBELUM checkout.
+    final canDebtSettlement = widget.cartId == kMainCartId && !needsGate;
+    final debtSettlementEntries =
+        ref.watch(cartDebtSettlementProvider(widget.cartId));
+    final debtSettlementTotal =
+        debtSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
 
     // Fase C "Kategori Harga" — toggle HANYA di keranjang utama kasir (bukan
     // mode Katalog/Tambah Belanjaan, lihat briefing), device berizin
@@ -1173,6 +1297,28 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               onShowChangeTakenHistory: () =>
                                   _showChangeTakenList(ctx, ref),
                             ),
+                          // Fitur "Lunasi Hutang" — ringkasan kecil, mirror
+                          // pola `_PrabayarFooterSummary` di atas: baris
+                          // terpisah (bisa MUNCUL BERSAMAAN dgn ringkasan
+                          // Pra-Bayar, keduanya independen) yang tap-nya buka
+                          // daftar entri (`_showDebtSettlementList`).
+                          if (canDebtSettlement &&
+                              debtSettlementEntries.isNotEmpty)
+                            InkWell(
+                              onTap: () =>
+                                  _showDebtSettlementList(ctx, ref),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Text(
+                                'Turut lunasi hutang ${formatRupiah(debtSettlementTotal)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.tertiary,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -1187,6 +1333,17 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       onPressed:
                           cart.isEmpty ? null : () => _addPrabayar(ctx, ref),
                       icon: const Icon(Icons.lock_clock_outlined),
+                    ),
+                  const SizedBox(width: 8),
+                  // Fitur "Lunasi Hutang" — tombol sekunder sejalan dgn
+                  // Pra-Bayar, ikon beda supaya kasir tidak salah tap (uang
+                  // MASUK sbg pra-bayar nota ini vs uang MENGALIR ke nota
+                  // lama pelanggan lain).
+                  if (canDebtSettlement)
+                    IconButton.filledTonal(
+                      tooltip: 'Lunasi Hutang',
+                      onPressed: () => _addDebtSettlement(ctx, ref),
+                      icon: const Icon(Icons.receipt_long_outlined),
                     ),
                   const SizedBox(width: 8),
                   Expanded(
