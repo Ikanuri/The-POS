@@ -9,6 +9,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-06 (sesi kedua puluh lima)
 
+- `72505bb` — fix(kasir,pengaturan): nominal Total keranjang dibungkus
+  `FittedBox`+`maxLines:1` (mengecil otomatis, bukan wrap 2 baris — ruang
+  makin sempit sejak ikon Pra-Bayar menempati baris tombol Bayar); layar
+  "Tambah Produk" Kategori Harga sekarang menampilkan kode produk sbg
+  subtitle.
 - `a6e07ba` — fix(laci-meja): badge notif jumlah di ikon kategori/search/
   Kuota/Salin sekarang bergeser ke pojok kotak (offset 10,-10), tidak lagi
   numpuk di glyph ikon yang sejak revisi sebelumnya sudah di-tengah kotak.

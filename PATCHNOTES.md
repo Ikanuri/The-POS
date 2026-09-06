@@ -11,6 +11,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 6 September 2026 (sesi kedua puluh lima)
 
 ### 🐛 Perbaikan
+- **Nominal Total di keranjang tidak lagi terpotong jadi 2 baris** kalau
+  harganya besar — sekarang ukuran tulisannya mengecil otomatis biar tetap
+  1 baris.
+- **Layar "Tambah Produk" di Kategori Harga sekarang menampilkan kode
+  produk** — memudahkan membedakan produk yang namanya mirip.
 - **Angka notifikasi di ikon kategori Laci Meja tidak lagi menutupi
   ikonnya** — sebelumnya lingkaran angka kecil itu numpuk pas di atas
   gambar ikon, sekarang digeser rapi ke pojok kotak.

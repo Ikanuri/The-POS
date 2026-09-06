@@ -6,8 +6,29 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 6 September 2026 (sesi kedua puluh lima). Versi kerja
-**2.45.1+93** (PATCH naik — murni bugfix visual, tanpa fitur baru).
+**2.45.2+94** (PATCH naik — murni bugfix visual, tanpa fitur baru).
 schemaVersion TETAP 40._
+
+**Susulan sesi ini**: 2 bugfix kecil lagi —
+- `cart_sheet.dart`: nominal Total dibungkus `FittedBox`+`maxLines:1`
+  (mengecil otomatis) — sejak ikon Pra-Bayar menempati ruang di baris
+  tombol Bayar, harga besar berisiko terpotong 2 baris tanpa ini.
+- `kategori_harga_screen.dart`: layar "Tambah Produk" (`_ProductUnitPickerScreen`)
+  sekarang menampilkan `p.kodeProduk` sbg subtitle di tiap baris hasil
+  pencarian.
+Komit `72505bb`.
+
+**Investigasi berjalan (delegasi ke agen terpisah, BELUM selesai saat
+catatan ini ditulis)**: user melaporkan bug "override harga produk yang
+ada di kategori tertentu, harga masih tetap harga kategori lama saat
+di-switch ke Normal". Kecurigaan kuat: `_UnitOption.basePrice` di
+`item_entry_sheet.dart` (`_load()`) diisi dari `resolvePrice(...,
+activeCategoryId:)` — mencampur konsep "harga yang sedang berlaku" dgn
+"harga dasar sejati", dipakai baik utk chip "Harga dasar" MAUPUN baseline
+pembanding `_priceOverridden`. Kalau sesi berikutnya menemukan HANDOFF ini
+sebelum agen tsb melapor — cek dulu status commit terbaru
+(`fix(kasir): ...` menyangkut item_entry_sheet.dart/cart_price_category_provider.dart)
+sebelum mengerjakan ulang.
 
 **Sesi ini**: bugfix kecil — `Badge` notif jumlah di `_CategoryIconBtn`
 (ikon kategori/search/Kuota/Salin, `laci_meja_dashboard_screen.dart`)

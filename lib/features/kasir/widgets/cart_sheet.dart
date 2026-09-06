@@ -1044,12 +1044,24 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                                   ?.copyWith(
                                     color: scheme.onSurfaceVariant,
                                   )),
-                          Text(
-                            formatRupiah(total),
-                            style: AppTheme.numStyle(context,
-                                size: 22,
-                                weight: FontWeight.w700,
-                                color: scheme.primary),
+                          // Susulan (permintaan user): nominal Total dibuat
+                          // DINAMIS (mengecil otomatis lewat FittedBox), bukan
+                          // ukuran font tetap 22px — sejak ikon Pra-Bayar
+                          // menempati ruang di sebelah tombol Bayar, lebar
+                          // yang tersisa utk Total lebih sempit, harga besar
+                          // (mis. "Rp 12.345.678") bisa terpotong jadi 2 baris
+                          // tanpa ini.
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              formatRupiah(total),
+                              maxLines: 1,
+                              style: AppTheme.numStyle(context,
+                                  size: 22,
+                                  weight: FontWeight.w700,
+                                  color: scheme.primary),
+                            ),
                           ),
                           if (canPrabayar && prabayarEntries.isNotEmpty)
                             _PrabayarFooterSummary(
