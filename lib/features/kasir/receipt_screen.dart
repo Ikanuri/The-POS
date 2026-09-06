@@ -2148,6 +2148,93 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     );
   }
 
+  /// Redesain ikon gear app bar (sebelumnya `PopupMenuButton` bawaan Flutter,
+  /// terasa "template"/generik) — diganti bottom sheet custom mengikuti
+  /// pola visual sheet lain di app ini (handle bar + `Material` rounded-top
+  /// 20, lihat `debt_payment_sheet.dart`). Isinya TETAP cuma 1 opsi
+  /// ("Tampilkan Laba", persist ke `receipt_show_profit`) — sengaja tidak
+  /// ditambah opsi baru, cuma didesain ulang supaya terasa "utuh" sbg sheet
+  /// pengaturan (judul+ikon, switch row dgn ikon & deskripsi singkat).
+  Future<void> _showReceiptSettingsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final sheetScheme = Theme.of(sheetCtx).colorScheme;
+          return Material(
+            color: sheetScheme.surface,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 8, bottom: 10),
+                    decoration: BoxDecoration(
+                      color: sheetScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.receipt_long_outlined,
+                            color: AppTheme.accent, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Pengaturan Struk',
+                            style: Theme.of(sheetCtx)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Divider(height: 1),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppTheme.accent.withOpacity(0.12),
+                        child: const Icon(Icons.trending_up,
+                            color: AppTheme.accent, size: 20),
+                      ),
+                      title: const Text('Tampilkan Laba'),
+                      subtitle: const Text(
+                        'Perlihatkan estimasi keuntungan per baris & total '
+                        'di layar struk ini',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      value: _showProfit,
+                      activeColor: AppTheme.accent,
+                      onChanged: (v) async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('receipt_show_profit', v);
+                        setSheetState(() {});
+                        if (mounted) setState(() => _showProfit = v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// Item 52 ("Laci Meja") — tombol gabungan "+ Catat", satu ikon (BUKAN
   /// dua ikon terpisah di app bar yang sudah padat), pilihan jenis di
   /// dalam menu: Titip/Ketinggalan atau Pinjaman Barang. Kedua kategori ini
@@ -2907,25 +2994,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ),
         actions: [
           if (device.canSeeReports)
-            PopupMenuButton<String>(
+            IconButton(
               icon: const Icon(Icons.settings_outlined),
               tooltip: 'Pengaturan Struk',
-              onSelected: (v) async {
-                if (v == 'toggle_profit') {
-                  final prefs = await SharedPreferences.getInstance();
-                  final next = !_showProfit;
-                  await prefs.setBool('receipt_show_profit', next);
-                  setState(() => _showProfit = next);
-                }
-              },
-              itemBuilder: (_) => [
-                CheckedPopupMenuItem<String>(
-                  value: 'toggle_profit',
-                  checked: _showProfit,
-                  child: const Text('Tampilkan Laba',
-                      style: TextStyle(fontSize: 13)),
-                ),
-              ],
+              onPressed: _showReceiptSettingsSheet,
             ),
           if (!isVoid)
             IconButton(
