@@ -7,6 +7,18 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-06 (sesi kedua puluh enam)
+
+- `ee313e8` — fix(kasir): chip "Harga dasar" di `ItemEntrySheet` (produk
+  utama & varian) TIDAK lagi memakai harga Kategori Harga aktif —
+  ditambah field `trueBasePrice` yg resolve TANPA `activeCategoryId`,
+  terpisah dari `basePrice`/`price` (harga efektif, tetap dipakai apa
+  adanya utk pre-fill & baseline `_priceOverridden`). Bug dilaporkan
+  user: kasir override harga produk yg ada di kategori aktif, tap chip
+  "Harga dasar" bermaksud kembali ke harga normal malah tetap dapat
+  harga kategori lama. `repriceCartForCategoryChange` (toggle kategori
+  di keranjang) diverifikasi SUDAH benar sejak awal, tidak diubah.
+
 ## 2026-09-06 (sesi kedua puluh lima)
 
 - `72505bb` — fix(kasir,pengaturan): nominal Total keranjang dibungkus

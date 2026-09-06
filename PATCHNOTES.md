@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 September 2026 (sesi kedua puluh enam)
+
+### 🐛 Perbaikan
+- **Harga kategori yang sudah di-override manual sekarang benar-benar
+  tersimpan, tidak lagi nyangkut ke harga kategori lama saat kategori
+  dimatikan.** Sebelumnya, kalau kasir menekan tombol "Harga dasar" saat
+  Kategori Harga sedang aktif dengan maksud kembali ke harga normal
+  produk, tombol itu diam-diam masih memberi harga kategori (bukan
+  harga dasar produk yang sesungguhnya) — jadi terlihat seperti "harga
+  dasar" padahal sebenarnya masih harga kategori lama.
+
+---
+
 ## 6 September 2026 (sesi kedua puluh lima)
 
 ### 🐛 Perbaikan

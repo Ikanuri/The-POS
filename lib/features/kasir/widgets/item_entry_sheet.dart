@@ -39,10 +39,17 @@ class _UnitOption {
     this.altPrices = const [],
     this.barcode,
     this.priceFromCategoryId,
-  });
+    int? trueBasePrice,
+  }) : trueBasePrice = trueBasePrice ?? basePrice;
 
   final ProductUnit unit;
   final String unitName;
+
+  /// Harga yang SEDANG BERLAKU saat sheet dibuka — hasil `resolvePrice(...,
+  /// activeCategoryId:)` APA ADANYA (bisa kategori/customerGroup/qtyTier/
+  /// dasar). Dipakai utk PRE-FILL field Harga awal & sbg baseline pembanding
+  /// `_priceOverridden` (lihat dok field itu). BUKAN "harga dasar sejati" —
+  /// utk itu lihat [trueBasePrice].
   final int basePrice;
   final int costPrice;
   final double stock;
@@ -57,6 +64,18 @@ class _UnitOption {
   /// mengisi `CartItem.priceFromCategoryId` HANYA kalau kasir tidak
   /// mengedit manual harga yang tampil (lihat dok `_priceOverridden`).
   final String? priceFromCategoryId;
+
+  /// Bug dilaporkan user: chip "Harga dasar" (`_priceOptions()`) dulu
+  /// memakai [basePrice] mentah — SALAH begitu kategori aktif & produk
+  /// anggota, krn [basePrice] saat itu SUDAH tercemar jadi harga kategori,
+  /// bukan harga dasar produk yang sesungguhnya. [trueBasePrice] SELALU
+  /// harga dasar sejati (resolve TANPA `activeCategoryId` — prioritas
+  /// customerGroup/qtyTier/dasar biasa), dihitung ulang terpisah HANYA
+  /// saat [basePrice] ternyata berasal dari kategori (query ekstra 1x per
+  /// unit, bukan per-load semua unit, supaya tidak jadi N+1 tanpa perlu di
+  /// kasus umum tanpa kategori aktif). Sama dgn [basePrice] kalau kategori
+  /// tidak aktif / produk bukan anggota kategori itu.
+  final int trueBasePrice;
 }
 
 /// Varian (produk anak) yang bisa ditambahkan sebagai item add-on bersarang.
@@ -72,11 +91,14 @@ class _VariantOption {
     this.altPrices = const [],
     this.barcode,
     this.priceFromCategoryId,
-  });
+    int? trueBasePrice,
+  }) : trueBasePrice = trueBasePrice ?? price;
 
   final Product product;
   final String unitId;
   final String unitName;
+  /// Harga yang SEDANG BERLAKU (bisa kategori) — lihat dok sejenis di
+  /// `_UnitOption.basePrice`. Utk harga dasar sejati lihat [trueBasePrice].
   final int price;
   final int costPrice;
   // Susulan (permintaan user) — stok varian SUDAH DILACAK di DB (tiap
@@ -98,6 +120,10 @@ class _VariantOption {
 
   /// Fase C — lihat dok field sejenis di [_UnitOption].
   final String? priceFromCategoryId;
+
+  /// Lihat dok [_UnitOption.trueBasePrice] — masalah & fix yang sama juga
+  /// berlaku utk varian ("Harga dasar" chip di `_VariantRow`).
+  final int trueBasePrice;
 }
 
 class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
@@ -201,6 +227,16 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         qty: 1,
         activeCategoryId: activeCategoryId,
       );
+      // Bug dilaporkan user: chip "Harga dasar" tidak boleh ikut memakai
+      // harga kategori — lihat dok `_UnitOption.trueBasePrice`. Query
+      // TAMBAHAN (tanpa `activeCategoryId`) HANYA saat baris ini memang
+      // sedang category-priced, supaya kasus umum (tanpa kategori aktif,
+      // atau produk bukan anggota) tidak kena biaya query ekstra sama
+      // sekali.
+      final trueBasePrice = resolved.source == PriceSource.category
+          ? (await priceService.resolvePrice(productUnitId: u.id, qty: 1))
+              .price
+          : resolved.price;
       final stock = await db.currentStock(u.id);
       final tiers = await db.getPriceTiers(u.id);
       final altPriceList = await db.getAltPrices(u.id);
@@ -209,6 +245,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         unit: u,
         unitName: unitType?.name ?? 'Satuan',
         basePrice: resolved.price,
+        trueBasePrice: trueBasePrice,
         costPrice: resolved.costPrice,
         stock: stock,
         tiers: tiers,
@@ -240,6 +277,11 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         qty: 1,
         activeCategoryId: activeCategoryId,
       );
+      // Sama dgn unit produk utama — lihat dok `_UnitOption.trueBasePrice`.
+      final vTrueBasePrice = vResolved.source == PriceSource.category
+          ? (await priceService.resolvePrice(productUnitId: base.id, qty: 1))
+              .price
+          : vResolved.price;
       final vBarcodes = await db.getProductBarcodes(base.id);
       final vStock = base.isNonStock ? 0.0 : await db.currentStock(base.id);
       final vAltPrices = await db.getAltPrices(base.id);
@@ -248,6 +290,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
         unitId: base.id,
         unitName: vType?.name ?? 'Satuan',
         price: vResolved.price,
+        trueBasePrice: vTrueBasePrice,
         costPrice: vResolved.costPrice,
         stock: vStock,
         isNonStock: base.isNonStock,
@@ -404,7 +447,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     final sel = _sel;
     if (sel == null) return const [];
     return [
-      (label: 'Harga dasar', price: sel.basePrice),
+      (label: 'Harga dasar', price: sel.trueBasePrice),
       for (final t in sel.tiers.reversed)
         if (t.minQty > 1)
           (
@@ -1167,7 +1210,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               name: v.product.name,
                               unitName: v.unitName,
                               price: _variantPrice(v),
-                              basePrice: v.price,
+                              basePrice: v.trueBasePrice,
                               altPrices: v.altPrices,
                               onSelectPrice: (p) =>
                                   _setVariantPrice(v.product.id, p),
