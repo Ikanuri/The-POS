@@ -5,6 +5,104 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 6 September 2026 (sesi ketiga puluh — "Lunasi Hutang" dari
+keranjang aktif). Versi kerja **2.48.0+100** (MINOR naik, PATCH reset —
+fitur baru terlihat pengguna). schemaVersion **40 -> 41** (kolom baru
+`transactions.debt_settlement_detail`, TEXT nullable, aditif murni)._
+
+**Sesi ini — fitur "Lunasi Hutang" dari keranjang aktif SELESAI**
+(desain sudah disetujui eksplisit user di sesi sebelumnya, dieksekusi
+penuh sesi ini, commit `a921860`). Kasir bisa menambahkan pelunasan
+hutang tempo/kurang_bayar milik SEORANG pelanggan langsung dari
+keranjang aktif SEBELUM checkout — uangnya diterima bersamaan dgn
+belanja baru, satu proses.
+
+Keputusan desain kunci:
+- **Entry point**: ikon "Lunasi Hutang" (`Icons.receipt_long_outlined`)
+  di FOOTER `cart_sheet.dart`, sebelah tombol Pra-Bayar (BUKAN header
+  ikon-row) — dipilih karena konsisten scope dgn Pra-Bayar (keduanya
+  "nominal yang perlu diterima kasir SEBELUM checkout", bukan aksi
+  navigasi/utility spt Tahan Pesanan/Transfer QR di header). Gerbang
+  sama persis Pra-Bayar: `kMainCartId` & izin `terima_pembayaran`.
+- **Alur**: pilih pelanggan berhutang (`_DebtCustomerPickerSheet`, dari
+  `db.getDebtBook()`, ada search) -> checklist nota tempo/kurang_bayar
+  miliknya (`_DebtInvoicePickerSheet`, dari `db.getUnpaidTxDetails`,
+  default SEMUA tercentang, boleh sebagian) -> kalkulator nominal
+  (`showDebtPaymentSheet` yang SUDAH ADA, di-reuse penuh — sama dipakai
+  Pra-Bayar & Buku Hutang).
+- **Rencana FIFO dibekukan saat entri dibuat** (`planFifoSettlement`,
+  pure function di `debt_settlement_picker.dart`) — bukan dihitung ulang
+  saat checkout. Alasan: supaya ringkasan yg kasir lihat di keranjang
+  (nota mana dapat berapa) konsisten sampai checkout beneran. Saat
+  checkout, `settleMergedDebt` (fungsi lama, TIDAK diubah) tetap yang
+  menentukan alokasi FINAL sungguhan by design (bisa beda tipis dari
+  rencana beku kalau sisa nota berubah di antaranya — jarang, single-
+  device) — dan yang PALING PENTING, `settleMergedDebt` SUDAH cap
+  otomatis ke sisa aktual per nota, jadi TIDAK PERNAH overpay hutang
+  walau kasir input nominal lebih besar dari sisa (kelebihan jadi
+  `changeGiven` di nota lama, bukan ditambahkan ke `paid`).
+- **Uang pelunasan hutang TIDAK ikut logika keypad/status-lunas nota
+  BARU** — nominalnya sudah final sejak kalkulator entri sendiri
+  (persis spt entri Pra-Bayar yang sudah terkunci tidak perlu diketik
+  ulang di keypad `payment_screen.dart`). `_grandTotal` (= `_total` +
+  `_debtSettlementTotal`) HANYA figur tampilan ("Total Diterima Belanja +
+  Hutang" di kartu info) — TIDAK dipakai utk `_paid`/`_tendered`/status
+  lunas nota baru, yang tetap murni berbasis `_total` (cart) spt
+  sebelumnya.
+- **Field referensi struk**: `transactions.debtSettlementDetail` (TEXT
+  nullable, JSON list `{invoiceId, invoiceLocalId, amount,
+  customerName}`) — murni utk TAMPILAN struk (in-app/share/cetak),
+  ditulis SEKALI oleh `saveTransactionWithDebtSettlements` dari rencana
+  beku yang sama yang dipakai memanggil `settleMergedDebt` (bukan
+  dihitung ulang terpisah). Parser bersama `parseDebtSettlementDetail`/
+  `DebtSettlementDetailLine` di `app_database.dart`.
+- **DB method baru** `saveTransactionWithDebtSettlements` (app_database.
+  dart) membungkus `saveTransaction` (lama, tidak diubah) + loop
+  `settleMergedDebt` per entri + update kolom detail, SEMUA dalam SATU
+  `transaction()` (Drift savepoint nested — aman, transaction() lama di
+  dalam transaction() baru).
+- **Siklus hidup entri** (`CartDebtSettlementNotifier`,
+  `cart_debt_settlement_provider.dart`) — pola PERSIS `CartPrabayarNotifier`:
+  StateNotifierProvider.family per cartId, persist SharedPreferences
+  (`cartdebtsettle_v1_<cartId>`), ikut ter-hold/resume (`kasir_screen.dart`
+  `_parseHeldPayload`/`_holdCurrent`/`_resumeHeld`/`_autoHoldCurrentIfAny`
+  — key payload baru `debtSettlement`), clear saat cart di-clear/checkout.
+
+**Test** (revert-verify DIBUKTIKAN 2x — DB layer `settleMergedDebt` cap
+& picker layer `planFifoSettlement` cap, masing-masing di-stash sesaat
+& terbukti gagal dgn pesan overpay yang masuk akal sebelum dikembalikan):
+- `test/debt_settlement_checkout_test.dart` (7 test, DB murni) — FIFO 1
+  nota, partial, ANTI-OVERPAY (nominal > sisa aktual -> `paid` nota lama
+  dicap ke `total`, TIDAK PERNAH lebih, kelebihan jadi `changeGiven`),
+  gabungan 2 pelanggan dalam 1 checkout, parser detail (null/rusak/normal).
+- `test/cart_sheet_debt_settlement_test.dart` (8 test, widget +
+  pure-unit) — gerbang izin (owner lihat ikon, kasir tanpa izin/mode
+  Katalog tidak), seed entri langsung -> ringkasan footer -> hapus,
+  ALUR LENGKAP end-to-end (tap ikon -> pilih pelanggan -> pilih nota ->
+  kalkulator -> entri tersimpan benar), `planFifoSettlement` pure (cukup
+  1 nota, meluber FIFO ke nota ke-2, ANTI-OVERPAY tiap nota dicap ke
+  sisa masing-masing).
+- **Migrasi schemaVersion 40->41 memutakhirkan 19 file test migrasi
+  lama** (`migration_v7_test.dart` s/d `migration_v40_test.dart`, semua
+  yang assert `expect(ver.data.values.first, 40)` hardcoded "schemaVersion
+  terkini") — WAJIB dilakukan tiap migrasi baru, jangan lupa lagi.
+
+Full suite: **1517 test, 0 gagal terkait fitur ini**. 2 kegagalan yang
+sempat muncul di 2 run penuh berbeda (`proposal_unchanged_end_to_end_
+test.dart`, `lan_sync_transaction_items_repro_test.dart` — port 8625
+`Address already in use`) TERBUKTI pre-existing flaky kontensi-resource
+dari sesi paralel LAIN yang jalan bersamaan di environment yang sama
+(banyak worktree agent lain kepakai port sama), lulus 100% saat dites
+sendirian/isolated — TIDAK terkait perubahan sesi ini. `flutter analyze`:
+0 issue.
+
+**Belum dikerjakan / cek sesi depan**: tidak ada — briefing user tuntas
+dieksekusi semua poinnya (model, entry point, UI keranjang, checkout
+atomik, field referensi struk, ketiga jenis struk), tidak ada keputusan
+desain yang masih menggantung utk fitur ini.
+
+---
+
 _Update sesi 6 September 2026 (sesi kedua puluh sembilan — DUA sesi
 paralel: redesain sheet Pengaturan Struk & riwayat "kembalian diambil").
 Versi kerja **2.47.0+99** (MINOR naik, PATCH reset — kedua perubahan

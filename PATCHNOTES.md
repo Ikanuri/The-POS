@@ -8,6 +8,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 September 2026 (sesi ketiga puluh)
+
+### ✨ Fitur Baru
+- **Bisa sekalian melunasi hutang pelanggan saat mereka belanja lagi.**
+  Kalau pelanggan yang punya nota belum lunas (tempo/kurang bayar) datang
+  belanja lagi dan mau sekalian bayar hutangnya, kasir tidak perlu lagi
+  buka layar terpisah. Cukup ketuk ikon "Lunasi Hutang" di keranjang
+  (sebelah tombol Pra-Bayar) — pilih pelanggannya, centang nota mana yang
+  mau dilunasi, ketik nominalnya. Nominal itu otomatis ditambahkan ke
+  total yang perlu diterima kasir, dan begitu transaksi belanja baru
+  selesai, hutang lamanya ikut terlunasi (atau berkurang) secara
+  otomatis. Struk belanja baru juga menampilkan keterangan "Turut
+  melunasi hutang" lengkap dengan nomor nota lama & nominalnya — baik di
+  struk HP, struk yang dibagikan, maupun struk cetak.
+
 ## 6 September 2026 (sesi kedua puluh sembilan)
 
 ### ✨ Fitur Baru

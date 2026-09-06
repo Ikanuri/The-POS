@@ -7,6 +7,36 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-06 (sesi ketiga puluh)
+
+- `a921860` — feat(kasir): "Lunasi Hutang" dari keranjang aktif — kasir bisa
+  menambahkan pelunasan (sebagian/semua) hutang tempo/kurang_bayar milik
+  seorang pelanggan langsung dari keranjang aktif, sebelum checkout, dalam
+  satu proses penerimaan uang bersama belanja baru. Model baru
+  `DebtSettlementEntry` (`cart_debt_settlement_provider.dart`, pola sama
+  `PrabayarEntry`) — id, customer, amount, `targetInvoices` (rencana FIFO
+  beku via `planFifoSettlement`), method/methodName; ikut ter-hold/resume
+  bersama pesanan ditahan. Entry point ikon "Lunasi Hutang" di footer
+  `cart_sheet.dart` (sebelah Pra-Bayar, gerbang sama `terima_pembayaran`)
+  membuka `debt_settlement_picker.dart`: pilih pelanggan berhutang ->
+  checklist nota -> kalkulator nominal (`showDebtPaymentSheet`, di-reuse).
+  Checkout (`payment_screen.dart`) menghitung `_grandTotal` = total
+  belanja + total entri (kartu info terpisah, nominalnya sudah final —
+  tidak ikut logika keypad/status lunas nota baru). DB method baru
+  `saveTransactionWithDebtSettlements` (satu `transaction()`: simpan nota
+  baru normal exclude nominal pelunasan, lalu `settleMergedDebt` per
+  entri ke nota lama — cap otomatis ke sisa aktual, tidak pernah overpay
+  — lalu tulis ringkasan JSON ke kolom baru `transactions.
+  debtSettlementDetail`, migrasi aditif nullable, schemaVersion 40->41).
+  Baris "Turut melunasi hutang: Nota X Rp Y" tampil di struk in-app/share
+  (`receipt_screen.dart`) & cetak ESC/POS (`printer_service.dart`, ASCII-
+  safe) via parser bersama `parseDebtSettlementDetail`. Test baru:
+  `test/debt_settlement_checkout_test.dart` (DB, FIFO/partial/anti-overpay
+  revert-verify), `test/cart_sheet_debt_settlement_test.dart` (widget,
+  gerbang izin + alur lengkap + `planFifoSettlement` anti-overpay revert-
+  verify). Bump schemaVersion memutakhirkan assersi hardcoded di 19 file
+  test migrasi lama (v7-v40) yang sebelumnya menegaskan `40`.
+
 ## 2026-09-06 (sesi kedua puluh sembilan)
 
 - chore: bump `pubspec.yaml` ke `2.47.0+99` — dua sesi paralel
