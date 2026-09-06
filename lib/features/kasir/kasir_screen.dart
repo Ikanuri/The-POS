@@ -490,6 +490,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
   bool awaitingPayment,
   String? employeeName,
   List<PrabayarEntry> prabayar,
+  int prabayarChangeTaken,
   String? priceCategoryId,
 }) _parseHeldPayload(String json) {
   try {
@@ -505,6 +506,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         awaitingPayment: false,
         employeeName: null,
         prabayar: const <PrabayarEntry>[],
+        prabayarChangeTaken: 0,
         priceCategoryId: null,
       );
     }
@@ -526,6 +528,10 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         awaitingPayment: decoded['awaitingPayment'] as bool? ?? false,
         employeeName: decoded['employeeName'] as String?,
         prabayar: prabayar,
+        // Fitur "kembalian sudah diambil" — key baru (absen di payload lama
+        // pra-fitur ini, fallback 0 — kompatibel mundur).
+        prabayarChangeTaken:
+            (decoded['prabayarChangeTaken'] as num?)?.toInt() ?? 0,
         // Fase C "Kategori Harga" — key baru (absen di payload lama,
         // fallback null = "Normal" — kompatibel mundur).
         priceCategoryId: decoded['priceCategory'] as String?,
@@ -538,6 +544,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
     awaitingPayment: false,
     employeeName: null,
     prabayar: const <PrabayarEntry>[],
+    prabayarChangeTaken: 0,
     priceCategoryId: null,
   );
 }
@@ -1605,12 +1612,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     }
 
     final db = ref.read(databaseProvider);
+    final prabayarNotifier = ref.read(cartPrabayarProvider(_cartId).notifier);
     final prabayar = ref.read(cartPrabayarProvider(_cartId));
     final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
       'prabayar': prabayar.map((e) => e.toJson()).toList(),
+      // Fitur "kembalian sudah diambil" — ikut ditahan/dipulihkan sama
+      // persis siklus hidup entri Pra-Bayar sendiri.
+      'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
       'priceCategory': priceCategoryId,
     });
     await db.holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
@@ -1677,7 +1688,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     await ref.read(databaseProvider).deleteHeldOrder(order.id);
     ref.read(cartProvider(_cartId).notifier).replaceAll(parsed.items);
     ref.read(cartMetaProvider(_cartId).notifier).replaceAll(parsed.meta);
-    ref.read(cartPrabayarProvider(_cartId).notifier).replaceAll(parsed.prabayar);
+    ref.read(cartPrabayarProvider(_cartId).notifier).replaceAll(
+        parsed.prabayar,
+        changeTakenTotal: parsed.prabayarChangeTaken);
     ref
         .read(cartPriceCategoryProvider(_cartId).notifier)
         .setCategory(parsed.priceCategoryId);
@@ -1699,6 +1712,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final cart = ref.read(cartProvider(_cartId));
     if (cart.isEmpty) return null;
     final meta = ref.read(cartMetaProvider(_cartId));
+    final prabayarNotifier = ref.read(cartPrabayarProvider(_cartId).notifier);
     final prabayar = ref.read(cartPrabayarProvider(_cartId));
     final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
     final label = meta.hasCustomer ? meta.customerName! : _autoHoldLabel();
@@ -1706,6 +1720,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
       'prabayar': prabayar.map((e) => e.toJson()).toList(),
+      'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
       'priceCategory': priceCategoryId,
     });
     await ref

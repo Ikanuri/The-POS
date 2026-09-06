@@ -167,4 +167,152 @@ void main() {
 
     await drain(tester);
   });
+
+  testWidgets(
+      'Fitur "kembalian sudah diambil" — changeTakenTotal ikut tersimpan di '
+      'cartJson (key "prabayarChangeTaken") saat hold, DAN ikut terpulihkan '
+      'utuh saat resume', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider
+          .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+    ]);
+    addTearDown(container.dispose);
+
+    container.read(cartProvider(kMainCartId).notifier).addItem(const CartItem(
+          productId: 'pz',
+          productUnitId: 'uz',
+          productName: 'Gula',
+          unitName: 'pcs',
+          qty: 1,
+          price: 20000,
+          originalPrice: 20000,
+          costPrice: 15000,
+        ));
+    final prabayarNotifier =
+        container.read(cartPrabayarProvider(kMainCartId).notifier);
+    prabayarNotifier.add(PrabayarEntry(
+        id: 'pb-z',
+        amount: 30000,
+        method: 'tunai',
+        lockedAt: DateTime(2026, 4, 1)));
+    prabayarNotifier.recordChangeTaken(10000);
+    container
+        .read(cartMetaProvider(kMainCartId).notifier)
+        .setCustomer('cz', 'Bu Zahra');
+
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(body: KasirScreen()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.pause_circle_outline).first);
+    await tester.pumpAndSettle();
+
+    final held = await db.select(db.heldOrders).get();
+    expect(held, hasLength(1));
+    final decoded = jsonDecode(held.single.cartJson) as Map<String, dynamic>;
+    expect(decoded['prabayarChangeTaken'], 10000);
+    expect(container.read(cartPrabayarProvider(kMainCartId).notifier)
+        .changeTakenTotal, 0,
+        reason: 'ikut ter-clear dari provider aktif sama seperti entri');
+
+    // Resume — changeTakenTotal harus terpulihkan UTUH (bukan 0).
+    await tester.tap(find.text('Antrian').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bu Zahra'));
+    await tester.pumpAndSettle();
+
+    expect(
+        container
+            .read(cartPrabayarProvider(kMainCartId).notifier)
+            .changeTakenTotal,
+        10000);
+    expect(container.read(cartPrabayarProvider(kMainCartId)).single.amount,
+        30000);
+
+    await drain(tester);
+  });
+
+  testWidgets(
+      'resume cartJson LAMA (tanpa key "prabayarChangeTaken" sama sekali — '
+      'data ditahan sebelum fitur ini ada) → fallback changeTakenTotal=0, '
+      'entri Pra-Bayar tetap terpulihkan normal', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+
+    const item = CartItem(
+      productId: 'po',
+      productUnitId: 'uo',
+      productName: 'Telur',
+      unitName: 'pcs',
+      qty: 1,
+      price: 2000,
+      originalPrice: 2000,
+      costPrice: 1500,
+    );
+    await db.holdOrder(
+      id: 'ho-old',
+      label: 'Pak Old',
+      cartJson: jsonEncode({
+        'items': [item.toJson()],
+        'meta': <String, dynamic>{},
+        'prabayar': [
+          {
+            'id': 'pb-old',
+            'amount': 5000,
+            'method': 'tunai',
+            'methodName': null,
+            'lockedAt': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          },
+        ],
+        // SENGAJA TANPA 'prabayarChangeTaken' — simulasi data lama.
+      }),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider
+          .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+    ]);
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(body: KasirScreen()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Antrian').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pak Old'));
+    await tester.pumpAndSettle();
+
+    expect(
+        container
+            .read(cartPrabayarProvider(kMainCartId).notifier)
+            .changeTakenTotal,
+        0);
+    expect(container.read(cartPrabayarProvider(kMainCartId)), hasLength(1));
+    expect(container.read(cartPrabayarProvider(kMainCartId)).single.amount,
+        5000);
+
+    await drain(tester);
+  });
 }

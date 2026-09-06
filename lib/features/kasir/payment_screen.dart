@@ -103,6 +103,16 @@ class PrabayarCheckoutResult {
 /// baris sekarang (lockedSum sendiri sudah menutup/melebihi total) tapi
 /// tetap ada kembalian, ditaruh di baris Pra-Bayar PALING TERAKHIR (paling
 /// baru dikunci) — supaya tidak hilang dari `TransactionPayments.changeGiven`.
+///
+/// Fitur "kembalian sudah diambil" (checkbox di `cart_sheet.dart`) —
+/// [changeTakenTotal] adalah porsi dari `lockedSum` yang SUDAH fisik
+/// diserahkan balik ke pelanggan SEBELUM layar bayar ini (lihat
+/// `CartPrabayarNotifier.changeTakenTotal`/`poolAvailable`). Porsi itu WAJIB
+/// dipotong dari pool yang dihitung sbg kredit tersedia di sini — kalau
+/// tidak, kembalian yang sudah diserahkan akan dihitung ulang seakan masih
+/// tersedia (diserahkan DOBEL). Dipotong dari entri yang PALING BARU dikunci
+/// dulu (mundur) supaya `Σ payments.amount` tetap == `combinedPaid` (invariant
+/// yg SUDAH ADA sebelumnya, lihat `payment_prabayar_checkout_test.dart`).
 PrabayarCheckoutResult buildPrabayarCheckout({
   required String txId,
   required int cartTotal,
@@ -114,9 +124,14 @@ PrabayarCheckoutResult buildPrabayarCheckout({
   required DateTime now,
   required String kasirId,
   required String Function() genId,
+  int changeTakenTotal = 0,
 }) {
-  final lockedSum = prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
-  final combinedPaid = lockedSum + paidAmountNow;
+  final rawLockedSum = prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
+  final effectiveChangeTaken = changeTakenTotal < 0
+      ? 0
+      : (changeTakenTotal > rawLockedSum ? rawLockedSum : changeTakenTotal);
+  final poolTersedia = rawLockedSum - effectiveChangeTaken;
+  final combinedPaid = poolTersedia + paidAmountNow;
   final status = (isTempo && combinedPaid == 0)
       ? 'tempo'
       : (combinedPaid < cartTotal ? 'kurang_bayar' : 'lunas');
@@ -133,18 +148,35 @@ PrabayarCheckoutResult buildPrabayarCheckout({
           ? prabayarEntries.last.methodName
           : nowMethodName);
 
+  // Potong `effectiveChangeTaken` dari entri PALING BARU dikunci dulu
+  // (mundur) — entri yang habis terpotong (amount efektif 0) tidak
+  // menghasilkan baris `TransactionPayments` sama sekali (uangnya sudah
+  // sepenuhnya kembali ke pelanggan sebelum transaksi ini tercatat).
+  var remainingCut = effectiveChangeTaken;
+  final effectiveAmounts = <String, int>{};
+  for (final e in prabayarEntries.reversed) {
+    if (remainingCut <= 0) {
+      effectiveAmounts[e.id] = e.amount;
+      continue;
+    }
+    final cut = remainingCut < e.amount ? remainingCut : e.amount;
+    effectiveAmounts[e.id] = e.amount - cut;
+    remainingCut -= cut;
+  }
+
   final payments = <TransactionPaymentsCompanion>[
     for (final p in prabayarEntries)
-      TransactionPaymentsCompanion.insert(
-        id: genId(),
-        transactionId: txId,
-        amount: p.amount,
-        method: p.method,
-        methodName: Value(p.methodName),
-        paidAt: Value(p.lockedAt),
-        kasirId: Value(kasirId),
-        changeGiven: const Value(0),
-      ),
+      if ((effectiveAmounts[p.id] ?? p.amount) > 0)
+        TransactionPaymentsCompanion.insert(
+          id: genId(),
+          transactionId: txId,
+          amount: effectiveAmounts[p.id]!,
+          method: p.method,
+          methodName: Value(p.methodName),
+          paidAt: Value(p.lockedAt),
+          kasirId: Value(kasirId),
+          changeGiven: const Value(0),
+        ),
     if (paidAmountNow > 0)
       TransactionPaymentsCompanion.insert(
         id: genId(),
@@ -530,13 +562,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   List<PrabayarEntry> get _prabayarEntries =>
       _isAddMode ? const [] : ref.read(cartPrabayarProvider(_cartId));
 
+  /// Fitur "kembalian sudah diambil" — porsi Pra-Bayar yang SUDAH fisik
+  /// diserahkan balik ke pelanggan sebelum layar bayar ini dibuka. Sama
+  /// seperti [_prabayarEntries], TIDAK relevan di mode Tambah Belanjaan.
+  int get _changeTakenTotal => _isAddMode
+      ? 0
+      : ref.read(cartPrabayarProvider(_cartId).notifier).changeTakenTotal;
+
   int get _lockedSum =>
       _prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
 
-  /// true bila Pra-Bayar yang sudah terkunci SENDIRI sudah menutup/melebihi
+  /// Pool Pra-Bayar yang MASIH tersedia sbg kredit — [_lockedSum] DIKURANGI
+  /// [_changeTakenTotal] (kembalian yang sudah fisik diambil). SEMUA
+  /// keputusan "cukup/tidak cukup utk checkout" HARUS pakai ini, bukan
+  /// [_lockedSum] mentah — lihat dok `CartPrabayarNotifier.poolAvailable`.
+  int get _prabayarPool => _lockedSum - _changeTakenTotal;
+
+  /// true bila pool Pra-Bayar yang tersedia SENDIRI sudah menutup/melebihi
   /// total keranjang — kasir tidak perlu lagi pilih metode/nominal apa pun
   /// di layar ini, cukup tombol konfirmasi "Selesaikan Transaksi".
-  bool get _prabayarCoversTotal => _lockedSum > 0 && _lockedSum >= _total;
+  bool get _prabayarCoversTotal => _prabayarPool > 0 && _prabayarPool >= _total;
 
   Future<void> _editTotal() async {
     final prefs = await SharedPreferences.getInstance();
@@ -738,6 +783,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         now: now,
         kasirId: device.deviceCode,
         genId: _uuid.v4,
+        changeTakenTotal: _changeTakenTotal,
       );
 
       final txCompanion = TransactionsCompanion.insert(
@@ -1201,6 +1247,25 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                       color: scheme.primary)),
                             ],
                           ),
+                          // Fitur "kembalian sudah diambil" — info transparansi
+                          // saja (checkbox utk menandainya ada di footer
+                          // `cart_sheet.dart`, SEBELUM layar ini dibuka —
+                          // di sini murni tampilan, tidak ada aksi toggle).
+                          if (_changeTakenTotal > 0) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Kembalian sudah diambil',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: scheme.onSurfaceVariant)),
+                                Text('-${formatRupiah(_changeTakenTotal)}',
+                                    style: const TextStyle(
+                                        fontSize: 12, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ],
                           if (!_prabayarCoversTotal) ...[
                             const SizedBox(height: 2),
                             Row(
@@ -1210,7 +1275,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                     style: TextStyle(
                                         fontSize: 12,
                                         color: scheme.onSurfaceVariant)),
-                                Text(formatRupiah(_total - _lockedSum),
+                                Text(formatRupiah(_total - _prabayarPool),
                                     style: const TextStyle(
                                         fontSize: 12, fontWeight: FontWeight.w600)),
                               ],

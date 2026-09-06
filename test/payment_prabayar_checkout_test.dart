@@ -277,4 +277,145 @@ void main() {
           reason: 'baris Pra-Bayar terakhir (t2) menampung kembalian');
     });
   });
+
+  group('buildPrabayarCheckout + changeTakenTotal — "kembalian sudah diambil" '
+      'TIDAK boleh dihitung ulang sbg kredit tersedia', () {
+    test('kembalian SUDAH diambil penuh sebelumnya, cart naik lagi: '
+        'poolTersedia (bukan lockedSum mentah) yg dipakai utk status/sisa', () {
+      // Entri Pra-Bayar Rp100rb dikunci saat cart masih Rp60rb (kembalian
+      // Rp40rb SUDAH diambil kasir sebelum layar bayar ini dibuka — cart
+      // lalu naik lagi jadi Rp90rb, kasir mengumpulkan sisa Rp30rb via
+      // keypad). Tanpa fix: lockedSum(100rb)+30rb=130rb dianggap "lunas +
+      // kembalian 40rb" -> kembalian Rp40rb yg SUDAH diserahkan diserahkan
+      // LAGI (dobel). Dengan fix: poolTersedia = 100rb-40rb = 60rb, gabungan
+      // 60rb+30rb = 90rb = PAS, TANPA kembalian tambahan.
+      final lockedAt = DateTime(2026, 3, 1, 8, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txC',
+        cartTotal: 90000,
+        prabayarEntries: [
+          PrabayarEntry(
+              id: 'pbC', amount: 100000, method: 'tunai', lockedAt: lockedAt),
+        ],
+        paidAmountNow: 30000,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2, 10, 0),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 40000,
+      );
+
+      expect(result.combinedPaid, 90000,
+          reason: 'poolTersedia(60rb) + paidAmountNow(30rb), BUKAN '
+              'lockedSum(100rb) + paidAmountNow(30rb)');
+      expect(result.status, 'lunas');
+      expect(result.combinedChange, 0,
+          reason: 'kembalian Rp40rb SUDAH diserahkan sebelumnya — TIDAK '
+              'boleh dihitung ulang jadi kembalian tambahan di checkout ini');
+      // Invariant lama (sum(payments.amount) == combinedPaid) tetap terjaga
+      // — porsi yang sudah diambil dipotong dari entri PALING BARU dikunci
+      // (di sini cuma satu entri, jadi amount efektifnya 60rb).
+      expect(result.payments.fold<int>(0, (s, p) => s + p.amount.value), 90000);
+      expect(result.payments, hasLength(2),
+          reason: 'baris entri Pra-Bayar (dipotong) + baris "sekarang"');
+      expect(result.payments[0].amount.value, 60000);
+      expect(result.payments[0].changeGiven.value, 0);
+      expect(result.payments[1].amount.value, 30000);
+      expect(result.payments[1].changeGiven.value, 0);
+    });
+
+    test('kembalian SEBAGIAN diambil, lockedSum SENDIRI masih menutup total: '
+        'status lunas, TANPA baris "sekarang"', () {
+      // Dua entri (30rb lalu 40rb, total 70rb). Sebelumnya sempat muncul
+      // kembalian Rp10rb (saat cart masih 60rb) yg SUDAH diambil. Cart tetap
+      // 60rb saat checkout (tidak berubah lagi) → poolTersedia = 70-10=60,
+      // PAS dgn total, TANPA paidAmountNow, TANPA kembalian baru.
+      final t1 = DateTime(2026, 3, 1, 9, 0);
+      final t2 = DateTime(2026, 3, 1, 10, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txD',
+        cartTotal: 60000,
+        prabayarEntries: [
+          PrabayarEntry(id: 'pbD1', amount: 30000, method: 'tunai', lockedAt: t1),
+          PrabayarEntry(id: 'pbD2', amount: 40000, method: 'qris', lockedAt: t2),
+        ],
+        paidAmountNow: 0,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2, 11, 0),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 10000,
+      );
+
+      expect(result.combinedPaid, 60000);
+      expect(result.status, 'lunas');
+      expect(result.combinedChange, 0);
+      // Potongan Rp10rb diambil dari entri PALING BARU dikunci (pbD2, t2)
+      // dulu (mundur) — entri pbD1 (t1) tetap utuh Rp30rb.
+      expect(result.payments, hasLength(2));
+      expect(result.payments[0].amount.value, 30000,
+          reason: 'entri PERTAMA (t1) tidak tersentuh');
+      expect(result.payments[1].amount.value, 30000,
+          reason: 'entri TERAKHIR (t2, 40rb) dipotong 10rb jadi 30rb');
+      expect(
+          result.payments.fold<int>(0, (s, p) => s + p.amount.value), 60000);
+    });
+
+    test('changeTakenTotal MELEBIHI/SAMA lockedSum sepenuhnya (entri habis '
+        'terpotong): baris entri itu TIDAK muncul sama sekali di payments',
+        () {
+      final lockedAt = DateTime(2026, 3, 1, 8, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txE',
+        cartTotal: 50000,
+        prabayarEntries: [
+          PrabayarEntry(
+              id: 'pbE', amount: 40000, method: 'tunai', lockedAt: lockedAt),
+        ],
+        paidAmountNow: 50000,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 40000, // seluruh entri sudah diambil balik
+      );
+
+      expect(result.combinedPaid, 50000,
+          reason: 'poolTersedia(0) + paidAmountNow(50rb)');
+      expect(result.status, 'lunas');
+      expect(result.combinedChange, 0);
+      expect(result.payments, hasLength(1),
+          reason: 'entri Pra-Bayar yg amount efektifnya 0 tidak menghasilkan '
+              'baris TransactionPayments sama sekali');
+      expect(result.payments.single.amount.value, 50000);
+      expect(result.payments.single.method.value, 'tunai');
+    });
+
+    test('changeTakenTotal default 0 (perilaku lama TIDAK berubah)', () {
+      final result = buildPrabayarCheckout(
+        txId: 'txF',
+        cartTotal: 50000,
+        prabayarEntries: [
+          PrabayarEntry(
+              id: 'pbF',
+              amount: 60000,
+              method: 'tunai',
+              lockedAt: DateTime(2026, 3, 1)),
+        ],
+        paidAmountNow: 0,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2),
+        kasirId: 'K1',
+        genId: genId,
+      );
+
+      expect(result.combinedPaid, 60000);
+      expect(result.combinedChange, 10000);
+      expect(result.payments.single.amount.value, 60000);
+    });
+  });
 }

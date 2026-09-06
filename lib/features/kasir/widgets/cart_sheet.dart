@@ -238,12 +238,18 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     }
 
     final db = ref.read(databaseProvider);
+    final prabayarNotifier =
+        ref.read(cartPrabayarProvider(widget.cartId).notifier);
     final prabayar = ref.read(cartPrabayarProvider(widget.cartId));
     final priceCategoryId = ref.read(cartPriceCategoryProvider(widget.cartId));
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
       'meta': meta.toJson(),
       'prabayar': prabayar.map((e) => e.toJson()).toList(),
+      // Fitur "kembalian sudah diambil" — ikut ditahan/dipulihkan sama
+      // persis siklus hidup entri Pra-Bayar sendiri (lihat dok
+      // `CartPrabayarNotifier.replaceAll`).
+      'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
       'priceCategory': priceCategoryId,
     });
     await db.holdOrder(id: const Uuid().v4(), label: label, cartJson: payload);
@@ -746,6 +752,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final prabayarEntries = ref.watch(cartPrabayarProvider(widget.cartId));
     final prabayarTotal =
         prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
+    // Fitur "kembalian sudah diambil" — dibaca lewat notifier (bukan bagian
+    // `state` yang di-watch di atas), tapi rebuild tetap terjamin: watch
+    // `cartPrabayarProvider` di atas SUDAH cukup, karena
+    // `CartPrabayarNotifier.recordChangeTaken` selalu re-assign `state`
+    // (list baru) tiap kali nilai ini berubah — lihat dok di sana.
+    final changeTakenTotal =
+        ref.read(cartPrabayarProvider(widget.cartId).notifier).changeTakenTotal;
 
     // Fase C "Kategori Harga" — toggle HANYA di keranjang utama kasir (bukan
     // mode Katalog/Tambah Belanjaan, lihat briefing), device berizin
@@ -1065,8 +1078,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           ),
                           if (canPrabayar && prabayarEntries.isNotEmpty)
                             _PrabayarFooterSummary(
+                              cartId: widget.cartId,
                               total: total,
                               prabayarTotal: prabayarTotal,
+                              changeTakenTotal: changeTakenTotal,
                             ),
                         ],
                       ),
@@ -1676,25 +1691,41 @@ class _HandoffQrSheet extends StatelessWidget {
 /// Fitur Pra-Bayar (revisi desain user) — ringkasan kecil di bawah nominal
 /// "Total": baris "Pra-Bayar Rp X" (warna netral/teks biasa), lalu SATU baris
 /// tambahan "Sisa Rp Z" (merah, `AppTheme.debtFg`) kalau masih kurang, ATAU
-/// "Kembalian Rp Y" (hijau, `AppTheme.changeFg`) kalau sudah lebih — kalau
-/// pas (selisih 0) tidak ada baris kedua sama sekali. Font kecil (11px) &
-/// `TextOverflow.ellipsis` sengaja — Column ini sebelahan dgn
-/// `Expanded(Bayar)` di Row yang sama, nominal panjang (mis. "Kembalian Rp
-/// 1.250.000") tidak boleh mendesak tombol Bayar (lihat gotcha overflow di
-/// CLAUDE.md, WAJIB test 360dp).
-class _PrabayarFooterSummary extends StatelessWidget {
+/// "Kembalian Rp Y" (hijau, `AppTheme.changeFg`) + checkbox "sudah diambil"
+/// kalau sudah lebih — kalau pas (selisih 0) tidak ada baris kedua sama
+/// sekali. Font kecil (11px) & `TextOverflow.ellipsis` sengaja — Column ini
+/// sebelahan dgn `Expanded(Bayar)` di Row yang sama, nominal panjang (mis.
+/// "Kembalian Rp 1.250.000") tidak boleh mendesak tombol Bayar (lihat gotcha
+/// overflow di CLAUDE.md, WAJIB test 360dp).
+///
+/// Fitur "kembalian sudah diambil" — Sisa/Kembalian dihitung dari
+/// `poolTersedia = prabayarTotal - changeTakenTotal`, BUKAN `prabayarTotal`
+/// mentah (lihat dok `CartPrabayarNotifier.poolAvailable`) — begitu kasir
+/// menyerahkan fisik kembalian yang SEDANG tampil & mencentang kotaknya,
+/// nilai itu ditambahkan ke `changeTakenTotal` (via
+/// `recordChangeTaken`) sehingga baris ini langsung recompute jadi Rp 0/
+/// hilang; kalau nanti muncul kembalian baru (mis. barang dikurangi lagi),
+/// baris ini muncul lagi dgn checkbox baru yang belum tercentang (checkbox
+/// di sini SELALU tampil `value: false` — bukan penanda status permanen,
+/// murni tombol aksi sekali-tap per kemunculan).
+class _PrabayarFooterSummary extends ConsumerWidget {
   const _PrabayarFooterSummary({
+    required this.cartId,
     required this.total,
     required this.prabayarTotal,
+    required this.changeTakenTotal,
   });
 
+  final String cartId;
   final int total;
   final int prabayarTotal;
+  final int changeTakenTotal;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final diff = total - prabayarTotal;
+    final pool = prabayarTotal - changeTakenTotal;
+    final diff = total - pool;
     const baseStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w600);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1712,10 +1743,30 @@ class _PrabayarFooterSummary extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           )
         else if (diff < 0)
-          Text(
-            'Kembalian ${formatRupiah(-diff)}',
-            style: baseStyle.copyWith(color: AppTheme.changeFg(isDark)),
-            overflow: TextOverflow.ellipsis,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: Checkbox(
+                  value: false,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: (_) => ref
+                      .read(cartPrabayarProvider(cartId).notifier)
+                      .recordChangeTaken(-diff),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  'Kembalian ${formatRupiah(-diff)}',
+                  style: baseStyle.copyWith(color: AppTheme.changeFg(isDark)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
       ],
     );

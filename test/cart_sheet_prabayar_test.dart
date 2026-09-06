@@ -243,4 +243,122 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  // Keranjang juga punya Checkbox per baris item (checklist verifikasi
+  // sebelum bayar) — finder generik `find.byType(Checkbox)` jadi ambigu.
+  // Scope ke Checkbox yang SEBARIS dgn Text "Kembalian ..." saja.
+  Finder kembalianCheckboxFinder() => find.descendant(
+        of: find
+            .ancestor(
+              of: find.textContaining('Kembalian '),
+              matching: find.byType(Row),
+            )
+            .first,
+        matching: find.byType(Checkbox),
+      );
+
+  testWidgets(
+      'Fitur "kembalian sudah diambil": centang checkbox di baris Kembalian '
+      '→ langsung Rp 0/hilang (recompute pool), lalu kurangi barang lagi → '
+      'Kembalian baru muncul dgn checkbox BARU (belum tercentang)',
+      (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+
+    // Total keranjang = 30000 (qty 2 x 15000). Kunci Rp 40.000 → Kembalian
+    // Rp 10.000 tampil dgn checkbox.
+    r.container.read(cartPrabayarProvider(kMainCartId).notifier).add(
+          PrabayarEntry(
+            id: 'e1',
+            amount: 40000,
+            method: 'tunai',
+            lockedAt: DateTime.now(),
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kembalian ${formatRupiah(10000)}'), findsOneWidget);
+    final checkbox = tester.widget<Checkbox>(kembalianCheckboxFinder());
+    expect(checkbox.value, false,
+        reason: 'checkbox SELALU tampil belum tercentang — bukan penanda '
+            'status permanen, murni tombol aksi sekali-tap per kemunculan');
+
+    // Centang → kembalian yg SEDANG tampil (10000) masuk ke
+    // changeTakenTotal, baris Kembalian langsung hilang (pool = 40000 -
+    // 10000 = 30000, PAS dgn total → tidak ada Sisa/Kembalian sama sekali).
+    await tester.tap(kembalianCheckboxFinder());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Kembalian '), findsNothing);
+    expect(find.textContaining('Sisa '), findsNothing);
+    expect(
+        r.container
+            .read(cartPrabayarProvider(kMainCartId).notifier)
+            .changeTakenTotal,
+        10000);
+
+    // Kurangi 1 barang lagi (qty 2 -> 1, total turun jadi 15000) → pool
+    // tersedia (40000-10000=30000) sekarang MELEBIHI total baru →
+    // Kembalian BARU (Rp 15.000) muncul dgn checkbox BARU (belum tercentang
+    // lagi, walau sebelumnya sudah pernah dicentang sekali). Ubah qty
+    // LANGSUNG via notifier (bukan cari tombol minus widget-nya — bukan
+    // fokus test ini, sudah dibuktikan benar di test "kunci Pra-Bayar via
+    // tombol" di atas).
+    r.container
+        .read(cartProvider(kMainCartId).notifier)
+        .setEffectiveQty('u1', 1);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kembalian ${formatRupiah(15000)}'), findsOneWidget,
+        reason: 'kembalian BARU = pool(30000) - total_baru(15000) = 15000');
+    final checkbox2 = tester.widget<Checkbox>(kembalianCheckboxFinder());
+    expect(checkbox2.value, false);
+
+    // Ambil kembalian baru itu juga → akumulasi changeTakenTotal (BUKAN
+    // menimpa nilai lama).
+    await tester.tap(kembalianCheckboxFinder());
+    await tester.pumpAndSettle();
+    expect(
+        r.container
+            .read(cartPrabayarProvider(kMainCartId).notifier)
+            .changeTakenTotal,
+        25000,
+        reason: 'akumulasi 10000 (pertama) + 15000 (kedua)');
+    expect(find.textContaining('Kembalian '), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'checkbox "kembalian sudah diambil" TIDAK menyebabkan checkout final '
+      'menghitung ulang kembalian yg sudah diambil sbg kredit tersedia '
+      '(dicek via poolAvailable notifier, bukan lockedSum mentah)',
+      (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+
+    r.container.read(cartPrabayarProvider(kMainCartId).notifier).add(
+          PrabayarEntry(
+            id: 'e1',
+            amount: 40000,
+            method: 'tunai',
+            lockedAt: DateTime.now(),
+          ),
+        );
+    await tester.pumpAndSettle();
+    await tester.tap(kembalianCheckboxFinder());
+    await tester.pumpAndSettle();
+
+    final notifier =
+        r.container.read(cartPrabayarProvider(kMainCartId).notifier);
+    expect(notifier.totalLocked, 40000,
+        reason: 'total terkunci mentah TIDAK berubah — hanya pool yg '
+            'terpotong');
+    expect(notifier.poolAvailable, 30000,
+        reason: 'poolAvailable = totalLocked(40000) - changeTaken(10000)');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }
