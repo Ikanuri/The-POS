@@ -100,7 +100,7 @@ terbukti gagal dgn pesan overpay yang masuk akal sebelum dikembalikan):
   terkini") — WAJIB dilakukan tiap migrasi baru, jangan lupa lagi.
 
 Full suite (dijalankan setelah merge dgn sesi paralel "Batalkan & Susun
-Ulang"): **1523 test, 0 gagal terkait salah satu fitur**. Kegagalan yang
+Ulang"): **1528 test, 0 gagal terkait salah satu fitur**. Kegagalan yang
 sempat muncul di beberapa run penuh (`proposal_unchanged_end_to_end_
 test.dart`, `lan_sync_transaction_items_repro_test.dart` — port 8625
 `Address already in use`) TERBUKTI pre-existing flaky kontensi-resource
