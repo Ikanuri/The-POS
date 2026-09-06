@@ -5,15 +5,46 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 6 September 2026 (sesi kedua puluh delapan). Versi kerja
-**2.46.0+97** (MINOR naik, PATCH reset — fitur baru terlihat pengguna;
-dua sesi paralel — ini & "sesi kedua puluh tujuh" di bawah — kebetulan
-sama-sama bump ke `+96` sebelum digabung, lihat catatan masing-masing —
-BUILD dinaikkan sekali lagi jadi `+97` di commit merge supaya tidak ada
-dua rilis beda isi dgn nomor BUILD yg sama). schemaVersion TETAP 40 —
-TIDAK ADA perubahan skema DB sesi ini._
+_Update sesi 6 September 2026 (sesi kedua puluh sembilan). Versi kerja
+**2.47.0+98** (MINOR naik, PATCH reset — redesain tampilan terlihat
+pengguna, walau perilaku fungsional tidak berubah). schemaVersion TETAP
+40 — TIDAK ADA perubahan skema DB sesi ini._
 
-**Sesi ini — fitur baru "kembalian sudah diambil" di Pra-Bayar SELESAI**
+**Sesi ini — redesain sheet "Pengaturan Struk" (ikon gear layar Struk)
+SELESAI** (diminta user: ikon gear sebelumnya membuka `PopupMenuButton`
+bawaan Flutter berisi 1 item "Tampilkan Laba", "terasa template"/generik).
+
+Diganti (`lib/features/kasir/receipt_screen.dart`, method BARU
+`_showReceiptSettingsSheet`) dgn bottom sheet custom mengikuti pola
+visual sheet lain di app (handle bar 40×4 + `Material` rounded-top 20,
+lihat `debt_payment_sheet.dart`): judul "Pengaturan Struk" ber-ikon
+`receipt_long_outlined` accent terracotta, divider, lalu satu
+`SwitchListTile` dgn `CircleAvatar` ikon `trending_up` (accent-tint) +
+judul "Tampilkan Laba" + subtitle deskripsi singkat + `activeColor:
+AppTheme.accent` (Flutter 3.24.5 di repo ini masih pakai `activeColor`,
+BUKAN `activeThumbColor` yg baru ada di versi Flutter lebih baru —
+dicek langsung ke source SDK sblm dipakai, supaya tidak error nama
+parameter tak dikenal). Isi TETAP cuma 1 opsi (scope: redesain tampilan
+saja, bukan tambah opsi baru) — perilaku (`_showProfit`, persist ke
+SharedPreferences key `receipt_show_profit`) TIDAK diubah sama sekali.
+
+Test baru `test/receipt_settings_sheet_test.dart` (2 test): sheet custom
+terbuka dari ikon gear & `PopupMenuButton` sudah tidak ada di tree;
+toggle berfungsi, persist ke SharedPreferences, dan bertahan saat sheet
+ditutup-buka lagi. Revert-verify dibuktikan gagal dgn kode lama (pesan
+gagal masuk akal: `PopupMenuButton` masih ditemukan / `SwitchListTile`
+tak ditemukan) sebelum fix dikembalikan.
+
+Full suite: **1494 lulus, 3 gagal** — ketiga kegagalan (
+`proposal_unchanged_end_to_end_test.dart` x2,
+`sync_status_banner_gap_and_client_wait_test.dart`) TIDAK terkait
+perubahan sesi ini (tidak menyentuh sync/proposal sama sekali) dan
+LULUS SEMUA saat dijalankan terisolasi (`flutter test <file>` langsung)
+— pre-existing flaky/order-dependent test, bukan regresi baru. `flutter
+analyze`: 0 issue.
+
+**Sesi sebelumnya — fitur baru "kembalian sudah diambil" di Pra-Bayar
+SELESAI**
 (diminta user via briefing lengkap, rumus pool sudah dikonfirmasi user
 sebelum eksekusi — tidak ada pertanyaan menggantung).
 

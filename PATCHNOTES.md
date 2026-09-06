@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 September 2026 (sesi kedua puluh sembilan)
+
+### 🎨 Tampilan
+- **Menu "Pengaturan Struk" (ikon gear di layar Struk) tampil lebih rapi.**
+  Sebelumnya berupa menu dropdown polos bawaan sistem; sekarang berupa
+  jendela pengaturan yang didesain sesuai tampilan aplikasi, dengan judul
+  jelas dan tombol geser (switch) untuk "Tampilkan Laba" lengkap dengan
+  ikon dan keterangan singkat. Fungsinya sama persis seperti sebelumnya,
+  cuma tampilannya yang dipercantik.
+
 ## 6 September 2026 (sesi kedua puluh delapan)
 
 ### ✨ Fitur Baru

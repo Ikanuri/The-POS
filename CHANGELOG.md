@@ -7,6 +7,17 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-06 (sesi kedua puluh sembilan)
+
+- `64a3585` — feat(kasir): redesain sheet "Pengaturan Struk" di layar Struk —
+  ikon gear app bar sebelumnya membuka `PopupMenuButton` bawaan Flutter
+  (1 item, terasa generik), diganti bottom sheet custom mengikuti pola
+  visual sheet lain di app (handle bar + `Material` rounded-top 20, judul
+  ber-ikon, `SwitchListTile` ber-ikon+deskripsi, accent terracotta). Isi
+  tetap 1 opsi ("Tampilkan Laba"), perilaku (`_showProfit`, persist ke
+  `receipt_show_profit`) tidak berubah — murni redesain tampilan. Test
+  baru `test/receipt_settings_sheet_test.dart`.
+
 ## 2026-09-06 (sesi kedua puluh delapan)
 
 - chore: bump `pubspec.yaml` ke `2.46.0+97` — merge dua sesi paralel yang
