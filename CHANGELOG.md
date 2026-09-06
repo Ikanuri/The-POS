@@ -7,6 +7,19 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-06 (sesi kedua puluh tujuh)
+
+- `6ab6e5e` — feat(produk): assign ke Kategori Harga langsung dari Edit
+  Produk — ikon `Icons.sell_outlined` di tiap baris "Harga Lain
+  (opsional)" (satuan produk utama & varian) membuka picker Kategori
+  Harga + editor margin bidirectional (diekstrak jadi widget reusable
+  `PriceCategoryMarginSheet`, `lib/core/widgets/price_category_margin_
+  sheet.dart`, dipakai ulang di `kategori_harga_screen.dart`).
+  `createVariant`/`updateVariant` (`app_database.dart`) altPrices param
+  ganti jadi `AltPriceInput` (4 field kategori tambahan) supaya varian
+  ikut bisa category-linked. Unassign membekukan harga live-computed
+  terakhir jadi manual (bukan mengosongkan).
+
 ## 2026-09-06 (sesi kedua puluh enam)
 
 - `ee313e8` — fix(kasir): chip "Harga dasar" di `ItemEntrySheet` (produk

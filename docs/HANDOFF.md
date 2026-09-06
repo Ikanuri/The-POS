@@ -5,12 +5,91 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 6 September 2026 (sesi kedua puluh enam). Versi kerja
-**2.45.3+95** (PATCH naik — murni bugfix finance-critical, tanpa fitur
-baru). schemaVersion TETAP 40._
+_Update sesi 6 September 2026 (sesi kedua puluh tujuh). Versi kerja
+**2.46.0+96** (MINOR naik — fitur baru terlihat user, PATCH reset 0).
+schemaVersion TETAP 40 — TIDAK ADA migrasi baru (kolom kategori di
+`AltPrices` sudah ada sejak Fase B, sesi ini cuma menambah JALUR MASUK
+mengisinya dari Edit Produk)._
 
-**Sesi ini — investigasi & fix bug finance-critical Kategori Harga
-SELESAI** (dulu ditandai "belum selesai" di catatan sesi sebelumnya):
+**Sesi ini — fitur "assign ke Kategori Harga langsung dari Edit Produk"
+SELESAI** (item request user, komit `6ab6e5e`): sebelumnya satu-satunya
+jalur assign produk ke Kategori Harga adalah dari SISI KATEGORI
+(`kategori_harga_screen.dart` → "Tambah Produk"). Sekarang section
+"Harga Lain (opsional)" di Edit Produk (`produk_form_screen.dart`) —
+BAIK satuan produk utama MAUPUN tiap varian — punya ikon
+`Icons.sell_outlined` per baris yang membuka picker Kategori Harga +
+editor margin langsung dari situ.
+
+Keputusan desain kunci (semua sudah diverifikasi via test, revert-verify
+lulus):
+- **Reuse, bukan duplikasi**: editor margin bidirectional
+  (`_MarginEditorSheet` lama di `kategori_harga_screen.dart`) diekstrak
+  jadi `PriceCategoryMarginSheet` (`lib/core/widgets/price_category_
+  margin_sheet.dart`) — return hasil via `Navigator.pop`, TIDAK menulis
+  DB sendiri (beda dari versi lama). `kategori_harga_screen.dart` sudah
+  dipindah pakai widget ini (pemanggil di sana yang menulis DB via
+  `setPriceCategoryMargin`, perilaku observable TIDAK berubah — dites).
+  File yang sama juga berisi `pickPriceCategoryForRow` (pilih kategori
+  existing/buat baru → buka editor margin, atau "Lepas dari Kategori").
+- **Baris category-linked di Edit Produk TIDAK langsung tulis DB** — beda
+  dari alur kategori_harga_screen (yang langsung `setPriceCategoryMargin`
+  saat sheet ditutup). Di Edit Produk, hasil picker cuma mengubah state
+  lokal (`_AltPriceEntry` utk satuan produk utama; parallel lists
+  `altCategoryIds`/`altAnchors`/`altTypes`/`altValues` utk dialog
+  varian) — persis pola Harga Lain manual, baru benar² tersimpan saat
+  tombol Simpan (form produk ATAU dialog varian) ditekan. `createVariant`/
+  `updateVariant` (`app_database.dart`) altPrices param ganti dari record
+  polos `({label, price})` jadi typedef `AltPriceInput` (+4 field
+  kategori nullable) supaya varian ikut mendukungnya.
+- **Unassign ("Lepas dari Kategori") MEMBEKUKAN harga live-computed
+  terakhir jadi manual, TIDAK mengosongkan** — konsisten dgn keputusan
+  desain existing `deletePriceCategory` (massal, dokumentasi kelasnya
+  di `pricing_tables.dart`) yang juga membekukan bukan menghapus data
+  owner. Alasan: user baru saja lihat angka itu di layar (harga wajar),
+  memaksa isi ulang dari 0 lebih mengganggu daripada berguna.
+- **costPrice varian sendiri, bukan induk** dipakai sbg acuan 'Modal' —
+  sudah dikonfirmasi user tidak ada kasus redundan dgn
+  `followsParentPrice`/`_cascadeVariantPricesForUnit` (itu cuma
+  meng-cascade tier dasar minQty=1, TIDAK PERNAH menyentuh
+  AltPrices/costPrice varian). Dialog varian tidak py field costPrice
+  editable (nilainya ikut costPrice induk saat dibuat, lihat
+  `createVariant`) — cukup diteruskan sbg parameter baca-saja ke dialog.
+
+Test baru (semua revert-verify lulus — gagal jelas tanpa fix, hijau
+lagi dgn fix): `variant_price_category_test.dart` (DB murni,
+createVariant/updateVariant persist + live-compute category fields
+varian), `produk_form_price_category_assign_test.dart` (widget, assign
++ unassign satuan produk utama — WAJIB lewat router sungguhan
+`MaterialApp.router`/`routerProvider`, BUKAN `pumpWithFakeApp`, krn
+tombol "Simpan Produk" menutup layar via `context.pop()` go_router),
+`produk_form_variant_price_category_assign_test.dart` (widget, assign
+lewat dialog Tambah Varian — cukup `pumpWithFakeApp` krn dialog varian
+pakai `Navigator.pop` lokal, bukan go_router).
+
+Bug kecil ketemu & difix selama sesi ini: `FilledButton.tonal` di field
+"+ Kategori Baru" (dalam `Row` tanpa `Expanded`) crash infinite-width —
+gotcha `minimumSize` lebar penuh (`AppTheme`) yang sudah didokumentasikan
+di CLAUDE.md, ketemu lewat widget test (bukan kelihatan dari baca kode).
+
+Full suite: 1480 lulus, 3 gagal — SEMUA pre-existing & tidak terkait
+(port 8625 "Address already in use" di 3 test LAN-sync paralel yg
+memang saling rebutan port fisik, bukan regresi sesi ini — dikonfirmasi
+re-run test file yang relevan (`kategori_harga_screen_test.dart`)
+sendirian 100% hijau). `flutter analyze`: 0 issue.
+
+**Belum tersentuh sesi ini (potensi kerja lanjutan kalau diminta)**:
+- Belum ada cara MASSAL assign banyak produk sekaligus dari Edit Produk
+  (alur ini per-baris/per-produk saja) — kalau user butuh bulk-assign,
+  tetap pakai jalur lama dari `kategori_harga_screen.dart`.
+- `_NewCategoryField` (bikin kategori baru inline dari picker) belum
+  divalidasi nama duplikat (biarkan `addPriceCategory` — tidak ada
+  constraint unique di tabel `PriceCategories`, sama dgn perilaku form
+  Tambah Kategori yang sudah ada).
+
+---
+
+_Sesi sebelumnya (6 September 2026, sesi kedua puluh enam) — investigasi
+& fix bug finance-critical Kategori Harga SELESAI:_
 user melapor "override harga produk yang ada di kategori tertentu,
 mengapa harga dasar masih tetap harga kategori tersebut ketika diswitch
 kembali ke kategori normal?".
