@@ -5,6 +5,80 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 6 September 2026 (sesi ketiga puluh — fix sync LAN Supplier
+& Pembelian). Versi kerja **2.47.1+100** (PATCH naik — murni bugfix
+sync data lintas device, TANPA fitur baru yang terlihat pengguna:
+modul Supplier & Pembelian masih schema-only, belum ada satu pun
+UI/fitur yang memakainya, jadi tidak ada dampak yang benar² dirasakan
+pengguna hari ini). **schemaVersion 40 -> 41** — kolom `updated_at`
+baru (nullable) di `suppliers`/`purchases`, kolom `created_at` baru di
+`purchase_items` (sebelumnya tabel ini TIDAK PUNYA timestamp sama
+sekali)._
+
+**Sesi ini — suppliers/purchases/purchase_items ikut sync LAN harian
+SELESAI** (`4eaa885` — user melaporkan tabel-tabel ini cuma ikut backup
+penuh/"Alihkan Owner", tidak pernah ikut `dumpSince` harian; device
+kasir lain di toko yang sama tidak pernah melihat data supplier/
+pembelian yang diinput owner di device lain).
+
+Temuan penting: **modul Supplier & Pembelian (tabel `Suppliers`/
+`Purchases`/`PurchaseItems`) saat ini SCHEMA-ONLY** — tidak ada satu pun
+fungsi CRUD yang menyentuhnya di `app_database.dart`, tidak ada layar
+fitur di `lib/features/`, tidak ada test yang memakainya sebelum sesi
+ini. Jadi item "audit semua fungsi mutasi & restamp updated_at" di
+briefing tidak menemukan fungsi apa pun untuk diaudit — TIDAK ADA bug
+riil di kode APLIKASI hari ini (beda dari pola `deactivateProduct`/
+`applyProductProposals` yang sudah kejadian sebelumnya), tapi
+skema+`dumpSince` sekarang sudah siap dipakai benar begitu fitur
+Pembelian dibangun (sesi depan yang membangunnya WAJIB restamp
+`updated_at` eksplisit di tiap fungsi update `suppliers`/`purchases` —
+kolom TIDAK auto-touch, sama gotcha yang sudah ada di CLAUDE.md).
+
+Fix (`lib/core/database/tables/supplier_tables.dart`,
+`lib/core/database/app_database.dart`):
+- `Suppliers.updatedAt`, `Purchases.updatedAt` (keduanya baru,
+  NULLABLE — bukan `withDefault(currentDateAndTime)`, krn SQLite
+  menolak `ALTER TABLE ADD COLUMN` dgn default non-konstan).
+  `PurchaseItems.createdAt` (baru — tabel ini sebelumnya TANPA
+  timestamp sama sekali; cukup `createdAt`, TIDAK butuh `updatedAt`,
+  krn baris ini immutable begitu dibuat).
+- Migrasi v41: `addColumn` + backfill (`updated_at = created_at` utk 2
+  tabel pertama, `created_at = now()` utk `purchase_items`) — DIJAGA
+  cek `sqlite_master` dulu (fixture test migrasi lama, mis.
+  `migration_v14_test.dart`, sengaja cuma bikin tabel yg relevan utk
+  migrasi ITU, tabel-tabel ini bisa belum ada di fixture semacam itu —
+  tanpa guard ini migrasi lama JEBOL "no such table: suppliers", sempat
+  kejadian saat dikerjakan, sudah difix).
+- `suppliers`, `purchases`, `purchase_items` ditambah ke `masterData` di
+  `dumpSince` (urutan parent dulu). `purchase_items` delta by
+  `created_at` saja (bukan full-dump — tumbuh terus seiring pembelian).
+- `mergeRows` (klien) TIDAK butuh kode tambahan — generik by nama tabel,
+  last-write-wins by `updated_at` otomatis berlaku begitu kolomnya ada
+  (diverifikasi baca kode, bukan asumsi).
+- 19 test migrasi lama diupdate (`PRAGMA user_version` hardcode 40 ->
+  41 — assert ini SELALU perlu diupdate tiap bump `schemaVersion`,
+  gotcha buat sesi depan yang naikkan skema lagi).
+
+Test baru (`test/migration_v41_test.dart`, `test/
+supplier_purchase_sync_test.dart`) — revert-verify dibuktikan (stash
+`app_database.dart`/`app_database.g.dart`/`supplier_tables.dart` →
+compile error "getter tidak ditemukan"/"no such table", masuk akal,
+baru kembalikan fix). Full suite: **1508 test, 0 gagal** (run
+sebelumnya sempat 8-21 gagal semuanya di test LAN-sync REAL yg BEDA
+tiap run — `lan_sync_upload_queue_test.dart`/
+`asisten_permission_sync_test.dart`/
+`proposal_unchanged_end_to_end_test.dart` — pre-existing flaky
+kontensi-port paralel, sudah didokumentasikan sesi sebelumnya juga,
+lulus normal saat dites sendiri-sendiri, TIDAK terkait perubahan sesi
+ini). `flutter analyze`: 0 issue.
+
+**Belum dikerjakan / cek sesi depan**: kalau fitur Pembelian benar²
+dibangun (form beli dari supplier dll), WAJIB restamp `updated_at`
+eksplisit di setiap fungsi yang meng-update `suppliers`/`purchases` —
+lihat komentar di `supplier_tables.dart`.
+
+---
+
 _Update sesi 6 September 2026 (sesi kedua puluh sembilan — DUA sesi
 paralel: redesain sheet Pengaturan Struk & riwayat "kembalian diambil").
 Versi kerja **2.47.0+99** (MINOR naik, PATCH reset — kedua perubahan

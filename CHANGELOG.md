@@ -7,6 +7,19 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-06 (sesi ketiga puluh)
+
+- `4eaa885` — fix(sync): suppliers/purchases/purchase_items ikut sync LAN
+  harian — tabel ini sebelumnya cuma ikut backup penuh/"Alihkan Owner",
+  tidak pernah masuk `dumpSince`. schemaVersion 40 -> 41: kolom
+  `updated_at` baru (nullable) di `suppliers`/`purchases`, kolom
+  `created_at` baru di `purchase_items` (sebelumnya tanpa timestamp sama
+  sekali). Ketiganya ditambah ke `masterData` di `dumpSince`. 19 test
+  migrasi lama diupdate (assert `PRAGMA user_version` 40 -> 41).
+  Diverifikasi: belum ada satu pun fungsi CRUD yang menyentuh tabel ini
+  di app (modul masih schema-only), jadi tidak ada fungsi mutasi untuk
+  di-restamp `updated_at`-nya sesi ini.
+
 ## 2026-09-06 (sesi kedua puluh sembilan)
 
 - chore: bump `pubspec.yaml` ke `2.47.0+99` — dua sesi paralel
