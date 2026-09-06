@@ -32,6 +32,22 @@ import 'tables/transaction_tables.dart';
 
 part 'app_database.g.dart';
 
+/// Input satu baris Harga Lain untuk [AppDatabase.createVariant] /
+/// [AppDatabase.updateVariant] — `label`+`price` manual seperti semula,
+/// PLUS 4 field kategori opsional (jalur "assign ke Kategori Harga" langsung
+/// dari Edit Produk, lihat `produk_form_screen.dart`). Bila
+/// [priceCategoryId] terisi, baris ini jadi category-linked persis pola
+/// [AltPrices] (lihat dok kelas itu) — `price` di sini dipakai sbg snapshot
+/// awal, akan dihitung ulang live tiap dibaca lewat `getAltPrices`.
+typedef AltPriceInput = ({
+  String label,
+  int price,
+  String? priceCategoryId,
+  String? marginAnchor,
+  String? marginType,
+  double? marginValue,
+});
+
 const _kDefaultUnitTypes = <int, String>{
   1: 'Kg',
   2: 'Pcs',
@@ -2193,7 +2209,7 @@ class AppDatabase extends _$AppDatabase {
     // `saveProduct` (selalu ganti seluruh baris, bukan menumpuk). Sah-sah
     // saja secara data krn `AltPrices` sudah di-key per `productUnitId`,
     // dan varian sudah punya `ProductUnits` sendiri sejak awal.
-    List<({String label, int price})>? altPrices,
+    List<AltPriceInput>? altPrices,
 
     /// Jenis satuan DASAR varian (jangkar, pemegang stok). Hanya dipakai
     /// bila [contentPerUnit] != 1 — selain itu satuan dasar sekaligus satuan
@@ -2275,6 +2291,10 @@ class AppDatabase extends _$AppDatabase {
                     label: altPrices[i].label,
                     price: altPrices[i].price,
                     sortOrder: Value(i),
+                    priceCategoryId: Value(altPrices[i].priceCategoryId),
+                    marginAnchor: Value(altPrices[i].marginAnchor),
+                    marginType: Value(altPrices[i].marginType),
+                    marginValue: Value(altPrices[i].marginValue),
                   ),
               ],
             ));
@@ -2308,7 +2328,7 @@ class AppDatabase extends _$AppDatabase {
     // Susulan (permintaan user) — null = tidak disentuh (form lama/tanpa
     // Harga Lain); list (termasuk kosong) = SELALU ganti seluruh baris,
     // pola identik `saveProduct`.
-    List<({String label, int price})>? altPrices,
+    List<AltPriceInput>? altPrices,
 
     /// Jenis satuan JUAL varian (mis. Renteng/Dus). Null = tidak disentuh.
     int? unitTypeId,
@@ -2445,6 +2465,10 @@ class AppDatabase extends _$AppDatabase {
                       label: altPrices[i].label,
                       price: altPrices[i].price,
                       sortOrder: Value(i),
+                      priceCategoryId: Value(altPrices[i].priceCategoryId),
+                      marginAnchor: Value(altPrices[i].marginAnchor),
+                      marginType: Value(altPrices[i].marginType),
+                      marginValue: Value(altPrices[i].marginValue),
                     ),
                 ],
               ));

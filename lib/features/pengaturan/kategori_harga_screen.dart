@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/input_formatters.dart';
 import '../../core/utils/price_category_calc.dart';
+import '../../core/widgets/price_category_margin_sheet.dart';
 
 /// Fase B "Kategori Harga" — kategori murni label pengelompokan (TIDAK ADA
 /// margin default per kategori, lihat dok `PriceCategories`). Margin selalu
@@ -292,13 +291,10 @@ class _KategoriHargaDetailScreenState
     required String? existingType,
     required double? existingValue,
   }) async {
-    await showModalBottomSheet<void>(
+    final result = await showModalBottomSheet<PriceCategoryMarginResult>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _MarginEditorSheet(
-        categoryId: widget.categoryId,
-        categoryName: widget.categoryName,
-        productUnitId: productUnitId,
+      builder: (_) => PriceCategoryMarginSheet(
         productName: productName,
         unitName: unitName,
         basePrice: basePrice,
@@ -308,6 +304,16 @@ class _KategoriHargaDetailScreenState
         initialValue: existingValue ?? 0,
       ),
     );
+    if (result == null) return;
+    await ref.read(databaseProvider).setPriceCategoryMargin(
+          priceCategoryId: widget.categoryId,
+          productUnitId: productUnitId,
+          categoryName: widget.categoryName,
+          marginAnchor: result.marginAnchor,
+          marginType: result.marginType,
+          marginValue: result.marginValue,
+          computedPrice: result.computedPrice,
+        );
   }
 
   Future<void> _removeMember(PriceCategoryMember m) async {
@@ -410,261 +416,6 @@ class _KategoriHargaDetailScreenState
                     );
                   },
                 ),
-    );
-  }
-}
-
-/// Editor margin bidirectional (Fase B, keputusan desain user):
-/// - Toggle Acuan: "Harga Modal" (disabled kalau costPrice<=0) / "Harga
-///   Dasar".
-/// - Toggle Jenis: "Rupiah" (fixed) / "Persen".
-/// - Field "Margin" DAN field "Harga Jual" saling terhubung LIVE — isi
-///   salah satu, yang lain otomatis update (pola sama dgn konverter "beli
-///   dengan nominal Rp" di `ItemEntrySheet`).
-class _MarginEditorSheet extends ConsumerStatefulWidget {
-  const _MarginEditorSheet({
-    required this.categoryId,
-    required this.categoryName,
-    required this.productUnitId,
-    required this.productName,
-    required this.unitName,
-    required this.basePrice,
-    required this.costPrice,
-    required this.initialAnchor,
-    required this.initialType,
-    required this.initialValue,
-  });
-
-  final String categoryId;
-  final String categoryName;
-  final String productUnitId;
-  final String productName;
-  final String unitName;
-  final int basePrice;
-  final int costPrice;
-  final String initialAnchor;
-  final String initialType;
-  final double initialValue;
-
-  @override
-  ConsumerState<_MarginEditorSheet> createState() => _MarginEditorSheetState();
-}
-
-class _MarginEditorSheetState extends ConsumerState<_MarginEditorSheet> {
-  late String _anchor;
-  late String _type;
-  late final TextEditingController _marginCtrl;
-  late final TextEditingController _sellCtrl;
-
-  /// Guard re-entrancy antar 2 field yg saling mengisi (ubah A -> hitung
-  /// B -> set text B -> onChanged B terpanggil lagi -> jangan hitung ulang
-  /// A dari situ, akan salah nilainya).
-  bool _syncing = false;
-
-  bool get _modalAllowed => widget.costPrice > 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _anchor = widget.initialAnchor == kMarginAnchorModal && !_modalAllowed
-        ? kMarginAnchorDasar
-        : widget.initialAnchor;
-    _type = widget.initialType;
-    final initialSell = _safeComputePrice(_anchor, _type, widget.initialValue);
-    _marginCtrl = TextEditingController(
-        text: widget.initialValue == 0 ? '' : _fmtMarginValue(widget.initialValue));
-    _sellCtrl = TextEditingController(
-        text: initialSell > 0 ? initialSell.toString() : '');
-  }
-
-  @override
-  void dispose() {
-    _marginCtrl.dispose();
-    _sellCtrl.dispose();
-    super.dispose();
-  }
-
-  String _fmtMarginValue(double v) =>
-      v % 1 == 0 ? v.toInt().toString() : v.toString();
-
-  int _safeComputePrice(String anchor, String type, double marginValue) {
-    try {
-      return computeCategoryPrice(
-        basePrice: widget.basePrice,
-        costPrice: widget.costPrice,
-        marginAnchor: anchor,
-        marginType: type,
-        marginValue: marginValue,
-      );
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  double? _safeComputeMargin(String anchor, String type, int sellPrice) {
-    try {
-      return computeMarginValue(
-        basePrice: widget.basePrice,
-        costPrice: widget.costPrice,
-        sellPrice: sellPrice,
-        marginAnchor: anchor,
-        marginType: type,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void _onMarginChanged(String raw) {
-    if (_syncing) return;
-    final v = double.tryParse(raw.replaceAll(',', '.')) ?? 0;
-    final sell = _safeComputePrice(_anchor, _type, v);
-    _syncing = true;
-    _sellCtrl.text = sell > 0 ? sell.toString() : '';
-    _syncing = false;
-    setState(() {});
-  }
-
-  void _onSellChanged(String raw) {
-    if (_syncing) return;
-    final sell = ThousandsSeparatorFormatter.parseValue(raw);
-    final margin = _safeComputeMargin(_anchor, _type, sell);
-    if (margin == null) return;
-    _syncing = true;
-    _marginCtrl.text = margin == 0 ? '' : _fmtMarginValue(margin);
-    _syncing = false;
-    setState(() {});
-  }
-
-  void _recomputeSellFromMargin() {
-    final v = double.tryParse(_marginCtrl.text.replaceAll(',', '.')) ?? 0;
-    final sell = _safeComputePrice(_anchor, _type, v);
-    _sellCtrl.text = sell > 0 ? sell.toString() : '';
-  }
-
-  Future<void> _save() async {
-    final marginValue = double.tryParse(_marginCtrl.text.replaceAll(',', '.'));
-    if (marginValue == null) return;
-    final computed = _safeComputePrice(_anchor, _type, marginValue);
-    if (computed <= 0) return;
-    await ref.read(databaseProvider).setPriceCategoryMargin(
-          priceCategoryId: widget.categoryId,
-          productUnitId: widget.productUnitId,
-          categoryName: widget.categoryName,
-          marginAnchor: _anchor,
-          marginType: _type,
-          marginValue: marginValue,
-          computedPrice: computed,
-        );
-    if (!mounted) return;
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('${widget.productName} · ${widget.unitName}',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Harga Dasar ${formatRupiah(widget.basePrice)} · '
-            'Harga Modal ${_modalAllowed ? formatRupiah(widget.costPrice) : "belum diisi"}',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 16),
-          Text('Acuan', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 6),
-          SegmentedButton<String>(
-            segments: [
-              const ButtonSegment(
-                  value: kMarginAnchorDasar, label: Text('Harga Dasar')),
-              ButtonSegment(
-                value: kMarginAnchorModal,
-                label: const Text('Harga Modal'),
-                enabled: _modalAllowed,
-              ),
-            ],
-            selected: {_anchor},
-            showSelectedIcon: false,
-            onSelectionChanged: (sel) {
-              setState(() => _anchor = sel.first);
-              _recomputeSellFromMargin();
-            },
-          ),
-          if (!_modalAllowed)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'Harga Modal (HPP) belum diisi untuk produk ini — pakai '
-                'Harga Dasar, atau isi HPP dulu di form Produk.',
-                style: TextStyle(fontSize: 11, color: scheme.error),
-              ),
-            ),
-          const SizedBox(height: 16),
-          Text('Jenis Margin', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 6),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: kMarginTypeFixed, label: Text('Rupiah')),
-              ButtonSegment(value: kMarginTypePercent, label: Text('Persen')),
-            ],
-            selected: {_type},
-            showSelectedIcon: false,
-            onSelectionChanged: (sel) {
-              setState(() => _type = sel.first);
-              _recomputeSellFromMargin();
-            },
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _marginCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,-]')),
-                  ],
-                  decoration: InputDecoration(
-                    isDense: true,
-                    labelText: 'Margin',
-                    prefixText: _type == kMarginTypeFixed ? 'Rp ' : null,
-                    suffixText: _type == kMarginTypePercent ? '%' : null,
-                  ),
-                  onChanged: _onMarginChanged,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _sellCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: const [ThousandsSeparatorFormatter()],
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    labelText: 'Harga Jual',
-                    prefixText: 'Rp ',
-                  ),
-                  onChanged: _onSellChanged,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _save,
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
     );
   }
 }
