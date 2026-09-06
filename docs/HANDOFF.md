@@ -6,11 +6,12 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
 _Update sesi 6 September 2026 (sesi kedua puluh delapan). Versi kerja
-**2.46.0+96** (MINOR naik, PATCH reset — fitur baru terlihat pengguna;
+**2.46.0+97** (MINOR naik, PATCH reset — fitur baru terlihat pengguna;
 dua sesi paralel — ini & "sesi kedua puluh tujuh" di bawah — kebetulan
-sama-sama bump ke build yg sama sebelum digabung, lihat catatan
-masing-masing). schemaVersion TETAP 40 — TIDAK ADA perubahan skema DB
-sesi ini._
+sama-sama bump ke `+96` sebelum digabung, lihat catatan masing-masing —
+BUILD dinaikkan sekali lagi jadi `+97` di commit merge supaya tidak ada
+dua rilis beda isi dgn nomor BUILD yg sama). schemaVersion TETAP 40 —
+TIDAK ADA perubahan skema DB sesi ini._
 
 **Sesi ini — fitur baru "kembalian sudah diambil" di Pra-Bayar SELESAI**
 (diminta user via briefing lengkap, rumus pool sudah dikonfirmasi user

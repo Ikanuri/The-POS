@@ -9,6 +9,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-06 (sesi kedua puluh delapan)
 
+- chore: bump `pubspec.yaml` ke `2.46.0+97` — merge dua sesi paralel yang
+  kebetulan sama-sama bump ke `+96` sebelumnya (lihat docs/HANDOFF.md),
+  BUILD dinaikkan sekali lagi supaya tidak ada dua rilis beda isi dgn
+  nomor BUILD sama.
 - `dce7935` — feat(kasir): fitur "kembalian sudah diambil" di Pra-Bayar —
   `CartPrabayarNotifier` dapat akumulator `changeTakenTotal` (persist ke
   SharedPreferences, key sama dgn entri, format lama tetap kompatibel),
