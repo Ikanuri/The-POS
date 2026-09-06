@@ -5,30 +5,46 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
-_Update sesi 6 September 2026 (sesi kedua puluh lima). Versi kerja
-**2.45.2+94** (PATCH naik — murni bugfix visual, tanpa fitur baru).
-schemaVersion TETAP 40._
+_Update sesi 6 September 2026 (sesi kedua puluh enam). Versi kerja
+**2.45.3+95** (PATCH naik — murni bugfix finance-critical, tanpa fitur
+baru). schemaVersion TETAP 40._
 
-**Susulan sesi ini**: 2 bugfix kecil lagi —
-- `cart_sheet.dart`: nominal Total dibungkus `FittedBox`+`maxLines:1`
-  (mengecil otomatis) — sejak ikon Pra-Bayar menempati ruang di baris
-  tombol Bayar, harga besar berisiko terpotong 2 baris tanpa ini.
-- `kategori_harga_screen.dart`: layar "Tambah Produk" (`_ProductUnitPickerScreen`)
-  sekarang menampilkan `p.kodeProduk` sbg subtitle di tiap baris hasil
-  pencarian.
-Komit `72505bb`.
+**Sesi ini — investigasi & fix bug finance-critical Kategori Harga
+SELESAI** (dulu ditandai "belum selesai" di catatan sesi sebelumnya):
+user melapor "override harga produk yang ada di kategori tertentu,
+mengapa harga dasar masih tetap harga kategori tersebut ketika diswitch
+kembali ke kategori normal?".
 
-**Investigasi berjalan (delegasi ke agen terpisah, BELUM selesai saat
-catatan ini ditulis)**: user melaporkan bug "override harga produk yang
-ada di kategori tertentu, harga masih tetap harga kategori lama saat
-di-switch ke Normal". Kecurigaan kuat: `_UnitOption.basePrice` di
-`item_entry_sheet.dart` (`_load()`) diisi dari `resolvePrice(...,
-activeCategoryId:)` — mencampur konsep "harga yang sedang berlaku" dgn
-"harga dasar sejati", dipakai baik utk chip "Harga dasar" MAUPUN baseline
-pembanding `_priceOverridden`. Kalau sesi berikutnya menemukan HANDOFF ini
-sebelum agen tsb melapor — cek dulu status commit terbaru
-(`fix(kasir): ...` menyangkut item_entry_sheet.dart/cart_price_category_provider.dart)
-sebelum mengerjakan ulang.
+Hasil investigasi (reproduksi via `pumpWithFakeApp`-style widget test,
+BUKAN cuma baca kode):
+- `repriceCartForCategoryChange` (`cart_price_category_provider.dart`) —
+  logika toggle kategori di keranjang SUDAH BENAR sejak awal. Baris
+  `priceOverridden==true` konsisten dilewati; skenario "override manual
+  saat kategori aktif -> toggle ke Normal -> harga tetap nilai override"
+  LULUS tanpa perubahan kode sama sekali (test regresi ditambahkan
+  utk mengunci ini).
+- Bug SEBENARNYA ada di `item_entry_sheet.dart`: chip "Harga dasar"
+  (`_priceOptions()` produk utama, & `_MiniPriceChip` varian) memakai
+  `_UnitOption.basePrice`/`_VariantOption.price` — field ini SUDAH hasil
+  resolve Kategori Harga aktif (dipakai jg utk pre-fill field Harga,
+  benar utk itu), tapi ikut dipakai sbg acuan "harga dasar" — SALAH.
+  Kasir yg tap chip "Harga dasar" bermaksud kembali ke harga normal
+  malah tetap dapat harga kategori lama (chip-nya sendiri yg mislabel).
+
+Fix: field baru `trueBasePrice` (resolve KEDUA kali TANPA
+`activeCategoryId`, hanya query ekstra saat baris memang category-priced
+— tidak nambah biaya di kasus umum). Chip "Harga dasar" (produk & varian)
+sekarang pakai `trueBasePrice`; field `basePrice`/`price` (efektif) TIDAK
+disentuh — tetap dipakai apa adanya utk pre-fill & baseline
+`_priceOverridden` (perilaku lama, non-kategori, TIDAK regresi — sudah
+dites eksplisit).
+
+Test baru: `test/item_entry_sheet_price_category_true_base_test.dart`
+(5 test — 2 reproduksi bug/fix, 1 skenario penuh laporan user, 2 regresi
+non-kategori & non-anggota). Revert-verify: 2/5 gagal tanpa fix
+("Rp 10.000 not found"), 3/5 SUDAH lulus tanpa fix (membuktikan
+`repriceCartForCategoryChange` independen benar). Full suite: 1480
+lulus, 0 gagal. `flutter analyze`: 0 issue. Komit `ee313e8`.
 
 **Sesi ini**: bugfix kecil — `Badge` notif jumlah di `_CategoryIconBtn`
 (ikon kategori/search/Kuota/Salin, `laci_meja_dashboard_screen.dart`)
