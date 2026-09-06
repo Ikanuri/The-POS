@@ -5,6 +5,16 @@ Ini BUKAN log — **timpa/rewrite** isinya tiap akhir sesi agar selalu
 mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md).
 
+_Update sesi 6 September 2026 (sesi kedua puluh lima). Versi kerja
+**2.45.1+93** (PATCH naik — murni bugfix visual, tanpa fitur baru).
+schemaVersion TETAP 40._
+
+**Sesi ini**: bugfix kecil — `Badge` notif jumlah di `_CategoryIconBtn`
+(ikon kategori/search/Kuota/Salin, `laci_meja_dashboard_screen.dart`)
+diberi `offset: const Offset(10, -10)` supaya tidak numpuk di atas glyph
+ikon yang (sejak revisi sesi sebelumnya) sudah di-tengah kotak 36×36 via
+`alignment: Alignment.center`. Komit `a6e07ba`.
+
 _Update sesi 5 September 2026 (sesi kedua puluh empat). Versi kerja
 **2.45.0+92** (MINOR naik — redesain lanjutan dashboard Laci Meja +
 Kategori Harga pindah lokasi, keduanya terlihat pengguna). schemaVersion
