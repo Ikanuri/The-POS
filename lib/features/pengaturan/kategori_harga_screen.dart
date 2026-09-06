@@ -812,6 +812,9 @@ class _ProductUnitPickerScreenState
                           final p = _results[i];
                           return ListTile(
                             title: Text(p.name),
+                            subtitle: p.kodeProduk != null
+                                ? Text('Kode: ${p.kodeProduk}')
+                                : null,
                             onTap: () => _pick(p),
                           );
                         },
