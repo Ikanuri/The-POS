@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-07 (sesi ketiga puluh tujuh — redesain ketiga "Lunasi Hutang": struk)
 
-- (pending hash) — feat(kasir): redesain KETIGA "Lunasi Hutang" — baris nota
+- `34fa8ec` — feat(kasir): redesain KETIGA "Lunasi Hutang" — baris nota
   yg dilunasi di struk MENYATU LANGSUNG ke list item produk (bukan lagi
   section terpisah berheader "Turut melunasi hutang:"/"Turut lunasi
   hutang:" di bawah Total), di KETIGA jenis struk: in-app
