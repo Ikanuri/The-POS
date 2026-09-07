@@ -8,6 +8,27 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh satu)
+
+### ✨ Fitur Baru
+- **Riwayat Pembayaran sekarang mencatat kembalian yang diambil saat
+  masih Pra-Bayar.** Kalau kasir mengunci Pra-Bayar lalu ada kembalian
+  yang sudah diserahkan ke pelanggan SEBELUM transaksi checkout, kartu
+  "Riwayat Pembayaran" di layar Struk sekarang menampilkan keterangan
+  "Kembalian Rp X sudah diambil sebelum checkout" di bawah baris
+  pembayaran terkait — jadi riwayatnya benar-benar lengkap, tidak lagi
+  seolah kembalian itu tidak pernah terjadi.
+
+### 🐛 Perbaikan
+- **Kalkulator Pra-Bayar sekarang mulai dari kosong.** Sebelumnya saat
+  membuka kalkulator Pra-Bayar, nominalnya otomatis terisi sisa
+  keranjang — sekarang mulai dari Rp 0, kasir bebas mengetik nominal
+  sendiri tanpa perlu menghapus angka yang sudah terisi duluan.
+- **Teks "Kembalian" di footer keranjang Pra-Bayar tidak lagi terpotong.**
+  Kalau nominalnya besar, sebelumnya sebagian teks bisa hilang/terpotong
+  di ruang yang sempit — sekarang ukuran tulisannya otomatis mengecil
+  supaya tetap terbaca utuh.
+
 ## 6 September 2026 (sesi ketiga puluh)
 
 ### ✨ Fitur Baru

@@ -7,6 +7,30 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh satu — 3 perbaikan/fitur kecil Pra-Bayar)
+
+- `0913408` — feat(kasir): catat kembalian Pra-Bayar yang diambil sebelum
+  checkout — schemaVersion 41 -> 42, kolom baru nullable
+  `transaction_payments.prabayar_change_taken_before_checkout` (metadata
+  MURNI, diisi HANYA utk baris entri Pra-Bayar yang amount-nya dipotong
+  mundur oleh `buildPrabayarCheckout` krn sebagian kembaliannya sudah
+  diambil kasir SEBELUM checkout — `amount`/`changeGiven` baris itu TETAP
+  representasi uang sungguhan, invariant `Σ payments.amount ==
+  combinedPaid` tidak berubah). Kartu "Riwayat Pembayaran" in-app
+  (`receipt_screen.dart`) menampilkan baris keterangan italic terpisah
+  utk baris yang bawa metadata ini (beda visual dari `_ChangeTakenRow`
+  supaya tidak tertukar makna). TIDAK ditambahkan ke struk cetak/share —
+  detail audit teknis, in-app Riwayat Pembayaran sudah tempat yang tepat.
+  19 test migrasi lama diupdate (assert `PRAGMA user_version` 41 -> 42) +
+  test migrasi baru `migration_v42_test.dart`.
+- `7655706` — fix(kasir): kalkulator Pra-Bayar mulai nol & ringkasan
+  footer tak terpotong — `_addPrabayar` sekarang buka kalkulator dgn
+  `prefillRemaining: false` (mulai Rp 0, bukan prefill sisa keranjang);
+  baris ringkasan `_PrabayarFooterSummary` (Pra-Bayar/Sisa/Kembalian/
+  riwayat) & "Turut lunasi hutang" dibungkus `FittedBox(scaleDown)` per
+  baris (pola sama nominal "Total"), gantikan `TextOverflow.ellipsis`
+  polos yang memotong nominal besar secara permanen.
+
 ## 2026-09-06 (sesi ketiga puluh — TIGA sesi paralel: fix sync supplier/
 pembelian, "Lunasi Hutang" dari keranjang aktif, & "Batalkan & Susun
 Ulang")
