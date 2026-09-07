@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh tiga)
+
+### 🐛 Perbaikan
+- **"Batalkan & Susun Ulang" sekarang benar-benar membawa nama pelanggan
+  terdaftar.** Sebelumnya kalau nota yang dibatalkan-lalu-disusun-ulang
+  punya pelanggan yang SUDAH TERDAFTAR (bukan nama umum), keranjang baru
+  seakan lupa pelanggannya — chip pelanggan di cart bar kosong lagi,
+  padahal seharusnya ikut terbawa persis seperti item & Pra-Bayar.
+  Sekarang nama pelanggan ikut terisi dengan benar.
+
 ## 7 September 2026 (sesi ketiga puluh dua)
 
 ### 🎨 Tampilan

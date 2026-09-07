@@ -7,7 +7,27 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
-## 2026-09-07 (sesi ketiga puluh dua — redesain toggle "Lunasi Hutang")
+## 2026-09-07 (sesi ketiga puluh tiga — fix pelanggan tidak terbawa di "Batalkan & Susun Ulang")
+
+- `b3bab3f` — fix(kasir): "Batalkan & Susun Ulang" bawa nama pelanggan
+  terdaftar — akar masalah: `Transactions.customerName` SENGAJA null utk
+  pelanggan TERDAFTAR (customerId satu-satunya sumber kebenaran, lihat dok
+  kolom `transaction_tables.dart`), tapi `_redoCartFromVoidedTransaction`
+  (`tx_history_sheet.dart`) membawa `tx.customerName` MENTAH ke `CartMeta`
+  baru — hasilnya `customerId` terisi benar tapi `customerName` null.
+  `CartMeta.hasCustomer` cuma cek `customerName` (bukan `customerId`), jadi
+  chip pelanggan cart bar & label "Tahan Pesanan" (`_holdCurrent`) tampil
+  seakan tidak ada pelanggan sama sekali. Fix: resolve nama pelanggan
+  TERKINI dari tabel `customers` via `customerId` (pola sama pencocokan
+  `matchedEmployee` yang sudah ada di fungsi itu) sebelum membentuk
+  `CartMeta`. BUKAN race `_load()`/`SharedPreferences` seperti hipotesis
+  awal — dibuktikan false lewat analisis alur sinkron (`replaceAll` selalu
+  jalan sebelum continuation `_load()` bisa resume, state dibaca live saat
+  itu, bukan snapshot basi). Test baru
+  `test/void_restock_redo_flow_test.dart` (pelanggan terdaftar + tabel
+  customers) — revert-verify dibuktikan (fix di-stash, gagal dgn
+  `Expected 'Bu Sari', Actual: <null>`, dikembalikan, hijau lagi). Full
+  suite 1541 test, semua lulus. `flutter analyze`: 0 issue.
 
 - `a254152` — feat(kasir): redesain toggle otomatis "Lunasi Hutang" di
   keranjang — ganti TOTAL UX fitur yang baru dibangun sesi sebelumnya

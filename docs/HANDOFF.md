@@ -6,99 +6,95 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh dua — redesain toggle
-"Lunasi Hutang"). Versi kerja **2.50.0+104** (MINOR naik, PATCH reset —
-perubahan UX terlihat pengguna: cara pakai fitur "Lunasi Hutang" diganti
-total). schemaVersion TIDAK berubah (masih 42, tidak ada migrasi sesi
-ini)._
+_Update sesi 7 September 2026 (sesi ketiga puluh tiga — fix "pelanggan
+tidak terbawa" di "Batalkan & Susun Ulang"). Versi kerja **2.50.1+105**
+(PATCH naik — murni bugfix, tanpa fitur baru). schemaVersion TIDAK berubah
+(masih 42, tidak ada migrasi sesi ini)._
 
-## Sesi ini — redesain toggle "Lunasi Hutang" SELESAI (`a254152`)
+## Sesi ini — fix bug "pelanggan tidak terbawa" SELESAI (`b3bab3f`)
 
-Fitur "Lunasi Hutang" (dibangun sesi sebelumnya, `a921860` dkk) direvisi
-TOTAL atas permintaan user — alasan: (1) ikon terpisah di footer
-`cart_sheet.dart` makan ruang yang sudah padat (sebelah Pra-Bayar), (2)
-BISA MISCLICK pilih hutang pelanggan LAIN, bukan pelanggan yang sedang
-diinput di cart bar.
+User laporkan: fitur "Batalkan & Susun Ulang" (`_redoCartFromVoidedTransaction`,
+`tx_history_sheet.dart`, dibangun sesi ke-30/31) tidak membawa identitas
+pelanggan ke keranjang baru, walau kodenya secara statis terlihat benar.
 
-**Desain lama (dihapus total)**: ikon "Lunasi Hutang" di footer -> buka
-`debt_settlement_picker.dart` (pilih pelanggan berhutang -> checklist nota
-tempo miliknya -> kalkulator nominal manual `showDebtPaymentSheet`). File
-`debt_settlement_picker.dart` DIHAPUS total (dicek dulu, tidak ada
-pemanggil lain).
+**Hipotesis awal (dari briefing tugas) — TERBUKTI SALAH**: race
+`CartMetaNotifier._load()` (async, tidak di-`await` di constructor) vs
+`.replaceAll()` yang dipanggil segera sesudahnya. Dibuktikan false lewat
+analisis alur sinkron murni (tanpa perlu test tambahan khusus race ini):
+`ref.read(cartMetaProvider(...).notifier)` mengembalikan instance secara
+SINKRON, constructor memanggil `_load()` yang suspend di `await
+SharedPreferences.getInstance()` — baris `.replaceAll(...)` berikutnya
+tetap jalan SEBELUM continuation `_load()` bisa resume (tidak ada `await`
+di antara keduanya). Saat continuation itu akhirnya resume, ia membaca
+`state.isEmpty` LIVE (bukan snapshot lama) — sudah `false` karena
+`replaceAll` sudah jalan duluan. Race ini TIDAK bisa terjadi pada urutan
+kode yang ada.
 
-**Desain baru**: satu baris toggle `_DebtSettlementCartRow`
-(`cart_sheet.dart`) DI DALAM daftar item keranjang itu sendiri (bukan
-produk, item tambahan di ujung `ListView.separated`) — muncul HANYA bila
-(a) gerbang izin sama persis Pra-Bayar (`canDebtSettlement`: kasir utama
-`kMainCartId` + `terima_pembayaran`), (b) `CartMeta.customerId` keranjang
-ini terisi, DAN (c) `cartCustomerDebtProvider(customerId)` > 0 (pelanggan
-ITU, bukan pelanggan lain, yang punya hutang). Default REDAM (`Opacity`
-0.5, ikon `Icons.account_balance_wallet_outlined` konsisten dgn pengingat
-hutang cart bar). Tap pertama -> solid (tint `scheme.tertiary`) & OTOMATIS
-membuat SATU `DebtSettlementEntry` senilai SELURUH `customerDebt.total`
-(bukan manual/parsial) — rencana FIFO ke nota lama tetap dihitung via
-`planFifoSettlement` yang SUDAH ADA (logika TIDAK diubah, cuma dipindah
-dari `debt_settlement_picker.dart` ke `cart_debt_settlement_provider.dart`,
-sumbernya sekarang `getUnpaidTxDetails` OTOMATIS bukan checklist manual).
-Tap lagi -> kembali pudar, entri (dicari via `customerId`) dihapus.
-Paling banyak SATU entri per cart (API list `cartDebtSettlementProvider`
-DIPERTAHANKAN, bukan diganti nullable tunggal — format hold/resume JSON
-`kasir_screen.dart` tidak perlu migrasi).
+**Akar masalah SEBENARNYA (dibuktikan test nyata, `test/void_restock_redo_flow_test.dart`)**:
+`Transactions.customerName` SENGAJA disimpan `null` di DB untuk pelanggan
+TERDAFTAR (`customerId` satu-satunya sumber kebenaran — lihat dok kolom
+di `transaction_tables.dart`, dan `payment_screen.dart` baris
+`customerName = _selectedCustomer == null ? ... : null`). Tapi
+`_redoCartFromVoidedTransaction` membawa `tx.customerName` MENTAH ke
+`CartMeta` baru — hasilnya `customerId` terisi benar, `customerName`
+null. `CartMeta.hasCustomer` **cuma mengecek `customerName`** (bukan
+`customerId`), jadi chip pelanggan di cart bar (`kasir_screen.dart`) &
+label "Tahan Pesanan" (`_holdCurrent`) tampil seakan TIDAK ADA pelanggan
+sama sekali — walau `customerId` sudah benar tersimpan di state
+(`payment_screen.dart` sendiri sebenarnya tetap pra-pilih pelanggan
+dengan benar via `meta.customerId`, independen dari `hasCustomer` — bug
+ini murni soal TAMPILAN sebelum checkout, tapi itu yang dilihat & dikira
+"tidak berfungsi" oleh user).
 
-**Keputusan metode pembayaran entri** (tidak ada lagi kalkulator/pemilihan
-metode terpisah di titik toggle): `DebtSettlementEntry.method` diisi
-placeholder `'tunai'` saat entri otomatis dibuat, lalu `payment_screen.
-dart` MENIMPA `method`/`methodName` dengan metode FINAL yang kasir pilih
-di layar Bayar (`_selectedMethodType`/`_selectedMethod?.name`) tepat
-sebelum `saveTransactionWithDebtSettlements` — rasionalnya: kasir cuma
-menerima SATU nominal fisik gabungan (belanja + turut lunasi hutang)
-sekali jalan, jadi metodenya logis ikut metode transaksi baru itu sendiri.
-Pengecualian: metode final `'tempo'` (Bayar Nanti — TIDAK ada uang fisik
-diterima sama sekali) jatuh ke `'tunai'` sbg asumsi netral (bukan klaim
-metode spesifik yang tidak pernah dipilih kasir) — edge case jarang
-(kasir menunda bayar belanja baru TAPI tetap menerima uang tunai utk
-melunasi hutang lama pelanggan yang sama), tidak diminta eksplisit user,
-diputuskan sendiri & didokumentasikan di sini.
+**Fix**: resolve nama pelanggan TERKINI dari tabel `customers` via
+`customerId` (pola sama pencocokan `matchedEmployee` yang sudah ada di
+fungsi itu) sebelum membentuk `CartMeta` — jadi `CartMeta` yang terbentuk
+SELALU konsisten dgn hasil `setCustomer(id, name)` normal (bawa id+nama
+sekaligus, tidak pernah id-tanpa-nama). `CartMeta.hasCustomer` SENGAJA
+TIDAK diubah (banyak tempat pakai `meta.customerName!` dgn asumsi
+non-null saat `hasCustomer` true — ubah semantiknya jadi
+`customerId != null || customerName...` berisiko null-check crash di
+tempat lain tanpa audit penuh; fix di titik penulisan CartMeta jauh lebih
+minimal & aman).
 
-**TIDAK berubah** (dicek eksplisit, logika lama dipakai apa adanya):
-`planFifoSettlement`, `settleMergedDebt`, `saveTransactionWithDebtSettlements`,
-`_grandTotal`/kartu info "Turut Lunasi Hutang" checkout, struk
-(`debtSettlementDetail`), siklus hold/resume (`kasir_screen.dart`, masih
-generik List, sekarang isinya maks 1).
+**Test**: 1 test baru (pelanggan terdaftar + insert row `customers`) —
+revert-verify dibuktikan (fix di-stash, test GAGAL dgn
+`Expected: 'Bu Sari', Actual: <null>` — pesan yang masuk akal & langsung
+mencerminkan bug, bukan error lain — dikembalikan, hijau lagi). 3 test
+lama di file yang sama (redo lunas+prabayar, redo tempo, guard retur)
+tetap hijau tanpa perubahan perilaku (regresi terjaga).
 
-**Test**: `test/cart_sheet_debt_settlement_test.dart` ditulis ulang total
-(hapus test UI lama — ikon footer, alur picker 3 langkah; tambah test
-toggle baru: gerbang izin, gerbang `customerId`+`debt>0` termasuk "ada
-pelanggan LAIN yang berhutang tapi TIDAK terikat cart ini", tap
-aktif/nonaktif + verifikasi entri FIFO benar) — tetap pertahankan 3 test
-`planFifoSettlement` (pure, logika tidak berubah). Revert-verify
-dibuktikan (disable `_toggle` sesaat -> test toggle gagal dgn pesan
-"Expected 1.0, Actual 0.5" yang masuk akal -> dikembalikan, hijau lagi).
-`debt_settlement_checkout_test.dart` (DB-level, backend
-`saveTransactionWithDebtSettlements`) TIDAK disentuh sama sekali, tetap
-hijau tanpa perubahan (backend tidak diubah).
-
-Full suite: **1540 test**, semua lulus. `flutter analyze`: 0 issue.
+Full suite: **1541 test, semua lulus** (1 run sebelumnya sempat 1540+1
+gagal karena flake tak terkait — re-run bersih 0 gagal). `flutter
+analyze`: 0 issue.
 
 **Belum dikerjakan / cek sesi depan**: tidak ada — briefing tuntas
 dieksekusi.
 
 ## Sesi sebelumnya (ringkas — detail lengkap di CHANGELOG.md)
 
+- **7 September, sesi ketiga puluh dua** (`a254152`): redesain toggle
+  otomatis "Lunasi Hutang" — ikon footer terpisah dihapus, diganti baris
+  toggle di dalam daftar item keranjang (`_DebtSettlementCartRow`,
+  `cart_sheet.dart`), otomatis lunasi SELURUH hutang pelanggan yg
+  terikat cart via `customerId` (bukan pilih manual).
 - **7 September, sesi ketiga puluh satu** (`7655706`, `0913408`): 3
   perbaikan kecil Pra-Bayar — kalkulator mulai Rp 0 (bukan prefill),
-  footer Pra-Bayar/Lunasi-Hutang dibungkus `FittedBox` (nominal besar tak
-  lagi terpotong), Riwayat Pembayaran mencatat kembalian Pra-Bayar yang
-  sudah diambil sebelum checkout (kolom baru `TransactionPayments.
-  prabayarChangeTakenBeforeCheckout`, schemaVersion 41->42).
-- **6 September, sesi ketiga puluh** (`a921860` dkk): versi AWAL fitur
-  "Lunasi Hutang" (ikon footer + picker manual) — sudah digantikan TOTAL
-  oleh redesain toggle sesi ini, lihat di atas.
+  footer Pra-Bayar/Lunasi-Hutang dibungkus `FittedBox`, Riwayat
+  Pembayaran mencatat kembalian Pra-Bayar yang diambil sebelum checkout.
 
 ## Keputusan/pola penting yang masih berlaku (ringkas — detail di CLAUDE.md)
 
 - Cart provider = family per `cartId` (`kMainCartId`/`kCatalogCartId`/`txId`).
   Jangan buat provider keranjang global baru.
+- `CartMeta.hasCustomer` cuma cek `customerName`, BUKAN `customerId` —
+  siapa pun yang membentuk `CartMeta` baru (bukan lewat `setCustomer`)
+  WAJIB pastikan `customerName` ikut terisi kalau `customerId` terisi
+  (lihat fix sesi ini) — kalau tidak, chip pelanggan & alur yang
+  bergantung pada `hasCustomer` akan salah kira "tidak ada pelanggan".
+- `Transactions.customerName` SENGAJA null utk pelanggan TERDAFTAR
+  (`customerId` != null) — nama HARUS di-resolve ulang dari tabel
+  `customers` kalau butuh ditampilkan/dibawa ke tempat lain.
 - Gerbang lisensi (`license_provider.dart`/`license_service.dart`) — Ed25519
   murni-Dart, public key developer KOSONG = kill-switch aman (jangan hapus).
 - `PriceMatchService` (sinkron harga antar-toko independen) — fuzzy-matching
