@@ -285,6 +285,20 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   List<DebtSettlementDetailLine> get _debtSettlementLines =>
       parseDebtSettlementDetail(_tx?.debtSettlementDetail);
 
+  /// Total nominal SEMUA baris pelunasan nota hutang lama yang menyatu di
+  /// struk ini (lihat `_debtSettlementLines`) — MURNI angka tampilan,
+  /// bukan kolom DB. Ditambahkan ke "Total"/"Total akhir" & "Dibayar" di
+  /// Ringkasan (permintaan user: item + hutang harus terlihat menjumlah
+  /// jadi satu angka, sesuai baris nota yang sudah menyatu ke list item)
+  /// — `tx.total`/`tx.paid` SENGAJA TIDAK disentuh (Laporan & kalkulasi
+  /// lain masih pakai kolom mentah itu). TIDAK ikut basis poin loyalitas
+  /// (`tx.pointsEarned`, dihitung backend dari pembelian barang saja) dan
+  /// TIDAK ikut `netRemainingOwed` (sisa tagihan NOTA INI SENDIRI — nota
+  /// hutang yang dilunasi justru uang yang SUDAH diterima, bukan bagian
+  /// yang belum dibayar).
+  int get _debtSettlementTotal =>
+      _debtSettlementLines.fold(0, (s, l) => s + l.amount);
+
   /// Total SEBELUM retur — sum baris PENJUALAN (qty positif, baik asli
   /// maupun susulan Tambah Belanjaan). BUKAN cuma baris asli.
   int get _totalAwal =>
@@ -3375,10 +3389,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             _SummaryRow(
                                 'Retur', '- ${formatRupiah(_returAmount)}',
                                 color: scheme.error),
-                            _SummaryRow('Total akhir', formatRupiah(tx.total),
+                            _SummaryRow(
+                                'Total akhir',
+                                formatRupiah(tx.total + _debtSettlementTotal),
                                 bold: true, color: scheme.primary),
                           ] else
-                            _SummaryRow('Total', formatRupiah(tx.total),
+                            _SummaryRow(
+                                'Total',
+                                formatRupiah(tx.total + _debtSettlementTotal),
                                 bold: true, color: scheme.primary),
                           if (device.canSeeReports && _showProfit)
                             _buildTotalProfitRow(scheme),
@@ -3386,7 +3404,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             _SummaryRow(
                                 'Dibayar',
                                 '${_methodLabel(tx.paymentMethod, name: tx.methodName)} · '
-                                    '${formatRupiah(dibayarDisplay(tx, _payments, _latestPayment?.changeGiven ?? 0))}'),
+                                    '${formatRupiah(dibayarDisplay(tx, _payments, _latestPayment?.changeGiven ?? 0) + _debtSettlementTotal)}'),
                           // Item 49b — ringkasan disederhanakan jadi 3 baris
                           // inti (state akhir akumulatif): Total / Dibayar /
                           // Kembalian-ATAU-Sisa. Baris "Uang Diterima" (uang
@@ -4823,7 +4841,7 @@ class _ReceiptPaper extends StatelessWidget {
                 Text('Akhir',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
-                Text('Rp ${_fmtNum(tx.total)}',
+                Text('Rp ${_fmtNum(tx.total + _debtSettlementTotal)}',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
@@ -4835,7 +4853,7 @@ class _ReceiptPaper extends StatelessWidget {
                 Text('Total',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
-                Text('Rp ${_fmtNum(tx.total)}',
+                Text('Rp ${_fmtNum(tx.total + _debtSettlementTotal)}',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
@@ -4846,7 +4864,7 @@ class _ReceiptPaper extends StatelessWidget {
               children: [
                 Text('Bayar..', style: _mono),
                 Text(
-                    'Rp ${_fmtNum(dibayarDisplay(tx, payments, latestChangeGiven(payments)))}',
+                    'Rp ${_fmtNum(dibayarDisplay(tx, payments, latestChangeGiven(payments)) + _debtSettlementTotal)}',
                     style: _mono),
               ],
             ),
@@ -4986,6 +5004,11 @@ class _ReceiptPaper extends StatelessWidget {
   /// Fitur "Lunasi Hutang" — lihat dok `Transactions.debtSettlementDetail`.
   List<DebtSettlementDetailLine> get _debtSettlementLines =>
       parseDebtSettlementDetail(tx.debtSettlementDetail);
+
+  /// Pasangan `_ReceiptScreenState._debtSettlementTotal` (lihat dok di sana)
+  /// — MURNI tampilan struk gambar, `tx.total`/`tx.paid` tidak disentuh.
+  int get _debtSettlementTotal =>
+      _debtSettlementLines.fold(0, (s, l) => s + l.amount);
 
   String _fmtDateTime(DateTime dt) => '${dt.day}/${dt.month} '
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';

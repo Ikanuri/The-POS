@@ -864,6 +864,13 @@ class PrinterService {
     // gotcha printer ESC/POS di CLAUDE.md).
     final debtSettlementLines =
         parseDebtSettlementDetail(tx.debtSettlementDetail);
+    // MURNI angka tampilan struk cetak — `tx.total`/`tx.paid` TIDAK disentuh
+    // (Laporan/kalkulasi lain masih pakai kolom mentah). Ditambahkan ke
+    // "Total"/"Total akhir" & "Bayar" di bawah (pasangan `_debtSettlementTotal`
+    // di `receipt_screen.dart`), TIDAK ke "Sisa" (sisa tagihan nota INI
+    // sendiri, bukan urusan nota hutang lama yang justru sudah dibayar).
+    final debtSettlementTotal =
+        debtSettlementLines.fold<int>(0, (s, l) => s + l.amount);
     if (settings.showPaymentDetail && debtSettlementLines.isNotEmpty) {
       // 2 baris per nota, pola PERSIS sama dgn item produk di atas: nama
       // (bold) lalu tanggal + nominal di baris berikutnya (posisi PERSIS
@@ -932,10 +939,10 @@ class PrinterService {
       out.addAll(bodyLR('Total awal', 'Rp ${_fmtNum(totalAwal)}'));
       out.addAll(bodyLR('Retur', '- Rp ${_fmtNum(returAmount)}'));
       out.addAll(bodyText('Total akhir', styles: const PosStyles(bold: true)));
-      out.addAll(wideNominal('Rp ${_fmtNum(tx.total)}'));
+      out.addAll(wideNominal('Rp ${_fmtNum(tx.total + debtSettlementTotal)}'));
     } else {
       out.addAll(bodyText('Total', styles: const PosStyles(bold: true)));
-      out.addAll(wideNominal('Rp ${_fmtNum(tx.total)}'));
+      out.addAll(wideNominal('Rp ${_fmtNum(tx.total + debtSettlementTotal)}'));
     }
 
     if (settings.showPaymentDetail) {
@@ -967,7 +974,7 @@ class PrinterService {
       final bayar = latestWithChange != null
           ? tx.total + latestWithChange.changeGiven
           : (netPaid > 0 ? netPaid : 0);
-      out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(bayar)}'));
+      out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(bayar + debtSettlementTotal)}'));
 
       // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total /
       // Bayar / Kembali / Sisa. Baris "Uang Diterima" (uang tender
