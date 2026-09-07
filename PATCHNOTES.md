@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh lima)
+
+### ✨ Fitur Baru
+- **Ekspor Arsip Tahunan.** Setelah Tutup Buku, data tahun itu dipindah ke
+  file arsip tersendiri di HP — tapi file arsip ini SEBELUMNYA tidak
+  pernah ikut ter-backup sama sekali lewat menu Backup & Restore biasa.
+  Kalau HP rusak/hilang setelah Tutup Buku, data yang sudah diarsipkan
+  bisa hilang PERMANEN. Sekarang di menu **Arsip Tahunan**, tiap baris
+  arsip punya tombol "Ekspor Arsip Ini" — beri password sendiri, file
+  hasilnya bisa disimpan atau dibagikan (WhatsApp/Drive/email) sebagai
+  cadangan terpisah, khusus utk data arsip tahun itu.
+
 ## 7 September 2026 (sesi ketiga puluh empat)
 
 ### 🐛 Perbaikan

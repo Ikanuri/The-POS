@@ -6,126 +6,125 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh empat — fix `price_categories`
-tidak ikut sync LAN/backup). Versi kerja **2.50.2+106** (PATCH naik — murni
-bugfix data-integrity, tanpa fitur baru user-visible). schemaVersion **43**
-(naik dari 42 — `price_categories.name` jadi nullable)._
+_Update sesi 7 September 2026 (sesi ketiga puluh lima — "Ekspor Arsip
+Tahunan"). Versi kerja **2.51.0+107** (MINOR naik — fitur baru terlihat
+pengguna). schemaVersion **43** (tidak berubah sesi ini)._
 
-## Sesi ini — fix bug sync/backup `price_categories` SELESAI
+## Sesi ini — fitur "Ekspor Arsip Tahunan" SELESAI
 
-Audit manual (bukan laporan user) menemukan tabel `price_categories`
-(master "Kategori Harga", Fase B — dibangun sesi-sesi sebelumnya) ADA di
-`@DriftDatabase(tables: [...])` tapi TIDAK ADA di 3 tempat sekaligus:
-1. `_allTables` (`dumpAllTables`/`restoreFromDump`, backup penuh/"Alihkan
-   Owner").
-2. `masterData` (`dumpSince`, sync LAN harian host->klien).
-3. `LanSyncService.clientMergeableTables` (allowlist merge sisi klien —
-   tanpa ini, walau host sudah kirim data via `masterData`, klien diam-diam
-   MEMBUANG payloadnya).
+Audit menemukan file arsip tahunan (`archive_YYYY.db`, hasil "Tutup Buku",
+arsip TAHUNAN — beda dari "Tutup Kasir" harian) TIDAK PERNAH ikut backup
+app sama sekali: `DbExportService.exportPortable`/`exportOwnerTransfer`
+(dipakai Backup & Restore/Alihkan Owner) cuma baca `main.db`. Kalau device
+rusak/hilang SETELAH tutup buku, data yang sudah diarsipkan bisa hilang
+permanen (cuma tersimpan lokal, tidak ikut backup apa pun).
 
-Dampak: kategori yang owner buat tidak pernah sampai ke device kasir lain,
-dan restore backup/"Alihkan Owner" menghapus semua kategori (nama
-"Grosir" dkk hilang, `alt_prices.priceCategoryId` jadi orphan — produk
-anggotanya sendiri tetap aman, cuma nama kategorinya hilang).
+**Fix**: fitur "Ekspor Arsip" baru, format & entry-point SENGAJA TERPISAH
+dari backup biasa (instruksi eksplisit user) supaya tidak disalahpahami
+sbg pengganti backup utuh (arsip cuma 1 tahun, backup biasa = seluruh DB
+aktif):
+- `DbExportService.exportArchive({archiveDb, password, year})` — magic
+  baru **`BPOA1`** ("`.posarsip`"), pola SAMA `exportPortable` (PBKDF2
+  password+salt acak, gzip(JSON dump)+AES, `CryptoService.
+  derivePortableKeyV2`) tapi sumbernya `archiveDb` (dibuka via
+  `ArchiveService.open`), bukan `main.db`. Payload tambah field `year`.
+  `decrypt()` biasa (jalur restore-seluruh-DB) mendeteksi magic BPOA1 lebih
+  dulu & throw pesan jelas "Ini file arsip tahunan (.posarsip), bukan file
+  backup biasa" — **restore arsip SENGAJA belum diimplementasikan** (user
+  cuma minta ekspor; kalau nanti diminta, harus masuk ke `archive_YYYY.db`
+  terpisah, BUKAN `restoreFromDump` ke `main.db`).
+- `arsip_screen.dart`: tiap baris `_ArchiveCard` dapat tombol "Ekspor Arsip
+  Ini" (`Icons.ios_share`, beda dari `Icons.bar_chart_outlined` "Lihat
+  Ringkasan") → dialog password (REUSE pola persis `backup_screen.dart`:
+  min 8 karakter) → `ArchiveService.open(year, encryptionKey)` →
+  `exportArchive` → `saveOrShareExport` (share sheet/simpan lokal, pola
+  existing) → `ArchiveService.close()` di `finally` (tidak nyangkut
+  terbuka). Kalau ringkasan arsip sedang terbuka (`_archiveDb != null`)
+  saat tombol ekspor ditekan, direset dulu (ArchiveService cuma pegang
+  SATU koneksi global — `open()` baru auto-close yang lama).
+- Nama file: **`arsip_toko_$year.posarsip`** — beda ekstensi dari
+  `.berkahpos` (backup biasa) supaya user tidak salah kira ini pengganti
+  backup utuh.
 
-**Komplikasi yang WAJIB ditangani lebih dulu**: `deletePriceCategory()`
-sebelumnya HARD DELETE baris kategori (beda dari `product_groups`, tabel
-sejenis yang SUDAH tombstone `name=null` sejak awal). Sync satu-arah
-host->klien di app ini (`dumpSince`/`mergeRows`) TIDAK PERNAH propagate
-DELETE fisik — full-dump cuma bisa INSERT OR REPLACE apa yang ADA di host.
-Kalau `price_categories` ditambah ke `masterData` dengan delete masih
-hard-delete, penghapusan kategori TIDAK AKAN PERNAH terpropagasi ke klien
-(kategori basi nyangkut selamanya).
+**Isu lingkungan CI ditemukan & dipecahkan** (tidak terkait fitur, tapi
+menghambat widget test): `Directory.list()`/`File.copy()` (dart:io async
+isolate-based I/O) **HANG TANPA BATAS** (10 menit lalu timeout) di dalam
+`testWidgets` sandbox lingkungan CI ini — dikonfirmasi lewat reproduksi
+terisolasi (`test()` biasa & operasi `NativeDatabase`/FFI sqlite3 aman,
+HANYA dart:io isolate-based I/O yang kena). `ArchiveService.listArchives`
+(dipakai provider daftar arsip) pakai `Directory.list()` → widget test yang
+merender `ArsipScreen` dgn arsip nyata dari disk akan HANG. Solusi: provider
+`archiveListProvider` (di `arsip_screen.dart`) diekspos (bukan private lagi)
+supaya widget test bisa override-nya langsung (skip `Directory.list()`
+sama sekali), dan arsip test dibuat LANGSUNG via `NativeDatabase` (FFI,
+BUKAN lewat `TutupBukuService.execute` yang pakai `File.copy` async).
+`test/helpers/pump_app.dart` — `pumpWithFakeApp` sekarang terima
+`extraOverrides` opsional (list `Override` tambahan di luar
+`databaseProvider`/`deviceProvider`) untuk kasus serupa nanti.
+**Catat ini di CLAUDE.md/gotcha kalau bug serupa muncul lagi** — screen
+manapun yang exercise `Directory.list()`/`File.copy()` real (bukan lewat
+`NativeDatabase`) butuh trik yang sama (provider override / hindari, BUKAN
+`tester.runAsync()` — sudah dicoba, TIDAK cukup karena provider yang
+dipanggil otomatis dari `ref.watch()` selama build tetap jalan di FakeAsync
+test zone, di luar kendali `runAsync` eksplisit).
 
-**Fix (Opsi A — ikuti presedan `product_groups`, minimal-invasif)**:
-- `PriceCategories.name` jadi NULLABLE (`pricing_tables.dart`).
-  schemaVersion 42->43, migrasi `alterTable(TableMigration(priceCategories))`
-  — dijaga dengan cek keberadaan tabel dulu (fixture test migrasi lama yang
-  starting point-nya sudah di atas v40 tidak selalu bikin tabel ini).
-- `deletePriceCategory()` diubah dari `delete(priceCategories)...` jadi
-  `update(...).write(PriceCategoriesCompanion(name: Value(null)))` —
-  logic pelepasan `alt_prices.priceCategoryId` sebelum delete TETAP
-  dipertahankan apa adanya.
-- `getAllPriceCategories()`/`watchPriceCategories()` filter
-  `name IS NOT NULL` supaya kategori ditombstone tidak lagi tampil di UI
-  (3 tempat baca: `kategori_harga_screen.dart`, `cart_sheet.dart` toggle
-  chip, `price_category_margin_sheet.dart` picker — semua sudah pakai
-  `!` non-null assertion karena filter query menjamin non-null).
-- `price_categories` ditambahkan ke `_allTables` (posisi SEBELUM
-  `alt_prices` — FK logis `alt_prices.priceCategoryId`), `masterData`
-  (full-dump tiap sync tanpa delta `updated_at`, sama pola `product_groups`
-  — TIDAK perlu kolom `updatedAt`/Opsi B, jumlah baris realistis kecil
-  sepanjang hidup toko), dan `LanSyncService.clientMergeableTables`.
+**Test** (semua baru, revert-verify dibuktikan — fix di-stash, test gagal
+compile-error yg relevan, dikembalikan, hijau lagi):
+- `test/archive_export_test.dart` — magic bytes BPOA1, round-trip manual
+  decrypt (payload valid, field `year` benar), password salah gagal
+  dibongkar, `decrypt()` biasa menolak BPOA1 dgn pesan "arsip".
+- `test/arsip_export_widget_test.dart` — tombol "Ekspor Arsip Ini" muncul
+  per baris, dialog password menyebut tahun yang benar, validasi panjang
+  password, `ArchiveService.open`/`exportArchive` benar2 terpanggil
+  (arsip nyata dibaca via FFI), lanjut ke dialog `saveOrShareExport`,
+  koneksi arsip ditutup lagi setelah selesai/dibatalkan.
 
-**Test** (semua baru, revert-verify dibuktikan — fix di-stash, test GAGAL
-dgn pesan masuk akal, dikembalikan, hijau lagi):
-- `test/migration_v43_test.dart` — kolom `name` jadi nullable via
-  `PRAGMA table_info` (bukan cuma query ORM), data lama utuh.
-- `test/price_categories_sync_test.dart` — create/rename/delete kategori
-  di host ikut tersinkron ke klien via LAN HTTP **sungguhan** (pola
-  `product_group_sync_test.dart`), termasuk kasus tombstone (klien tidak
-  lagi lihat kategori yang dihapus, tapi baris fisiknya tetap ada).
-- `test/price_categories_backup_test.dart` — `dumpAllTables`/
-  `restoreFromDump` roundtrip, urutan FK terjaga (`alt_prices.
-  priceCategoryId` tidak orphan setelah restore).
-- `test/price_categories_db_test.dart` — assert tombstone tambahan di
-  test `deletePriceCategory` yang sudah ada.
+Full suite: **1551 test, semua lulus**, `flutter analyze`: 0 issue.
 
-**Efek samping perlu-diperbaiki**: menaikkan `schemaVersion` ke 43 bikin
-SEMUA `test/migration_v*_test.dart` lama (yang hardcode assert
-`PRAGMA user_version` = versi lama) gagal — sudah diperbaiki (21 file,
-assert dinaikkan ke 43). **Ini WAJIB dicek ulang tiap kali schemaVersion
-naik** (sudah dicatat di §Keputusan di bawah, bukan hal baru, tapi
-kelewat kena lagi sesi ini — jalankan full `flutter test` SEBELUM
-menganggap migrasi baru selesai).
-
-Full suite: **1546 test, semua lulus**, `flutter analyze`: 0 issue. (Catatan:
-`test/proposal_unchanged_end_to_end_test.dart` sempat gagal 2x saat run
-paralel penuh tapi lulus bersih saat dijalankan sendiri baik di kode lama
-maupun baru — flake paralelisme tak terkait perubahan sesi ini, bukan
-regresi.)
-
-**Belum dikerjakan / cek sesi depan**: tidak ada — audit tuntas
-dieksekusi, sudah di-merge ke `main`.
+**Belum dikerjakan / cek sesi depan**: restore arsip (`.posarsip` →
+`archive_YYYY.db`) belum diimplementasikan sama sekali — SENGAJA (user
+cuma minta ekspor). Kalau diminta nanti: payload SUDAH punya field `year`,
+tinggal tulis fungsi `restoreArchive` yang menulis ke `archive_YYYY.db`
+terpisah (JANGAN pakai `DbExportService.restore`/`restoreFromDump` yang
+menyasar `main.db`).
 
 ## Sesi sebelumnya (ringkas — detail lengkap di CHANGELOG.md)
 
+- **7 September, sesi ketiga puluh empat** (`0d739f6`): fix
+  `price_categories` tidak ikut sync LAN & backup penuh (3 tempat
+  sekaligus lupa: `_allTables`/`masterData`/`clientMergeableTables`).
 - **7 September, sesi ketiga puluh tiga** (`b3bab3f`): fix "Batalkan &
-  Susun Ulang" tidak membawa nama pelanggan terdaftar — akar masalah
-  `Transactions.customerName` sengaja null utk pelanggan terdaftar, fungsi
-  redo bawa nilai itu mentah ke `CartMeta` baru.
+  Susun Ulang" tidak membawa nama pelanggan terdaftar.
 - **7 September, sesi ketiga puluh dua** (`a254152`): redesain toggle
   otomatis "Lunasi Hutang" di keranjang.
-- **7 September, sesi ketiga puluh satu** (`7655706`, `0913408`): 3
-  perbaikan kecil Pra-Bayar.
 
 ## Keputusan/pola penting yang masih berlaku (ringkas — detail di CLAUDE.md)
 
 - Cart provider = family per `cartId` (`kMainCartId`/`kCatalogCartId`/`txId`).
   Jangan buat provider keranjang global baru.
-- Tabel master-data BARU (mis. tabel Fase-baru) WAJIB langsung dicek masuk
-  ke 3 tempat: `_allTables` (backup), `masterData` di `dumpSince` (sync
-  harian), DAN `LanSyncService.clientMergeableTables` (allowlist sisi
-  klien) — lupa salah satu = data itu diam-diam tidak pernah sampai ke
-  device lain. `price_categories` lupa ke SEMUA TIGA, `product_groups`/
-  `suppliers`/`purchases` pernah lupa sebagian juga sebelumnya (pola bug
-  berulang, cek CHANGELOG utk riwayat lengkap).
+- Tabel master-data BARU WAJIB langsung dicek masuk ke 3 tempat:
+  `_allTables` (backup), `masterData` di `dumpSince` (sync harian), DAN
+  `LanSyncService.clientMergeableTables` (allowlist sisi klien) — lupa
+  salah satu = data itu diam-diam tidak pernah sampai ke device lain.
 - Tabel yang mendukung DELETE oleh user WAJIB tombstone (kolom nullable
-  jadi penanda, mis. `name=null`), BUKAN hard delete, kalau mau ikut
-  full-dump sync satu-arah host->klien (delete fisik tidak pernah
-  ter-propagate). Pola: `product_groups`, sekarang juga `price_categories`.
+  jadi penanda), BUKAN hard delete, kalau mau ikut full-dump sync
+  satu-arah host->klien.
+- Format file ekspor terenkripsi (`.berkahpos`/`.posarsip`) SEMUA pakai
+  pola sama: magic bytes 5-byte unik + salt(16) + IV(16) + AES(gzip(JSON)),
+  key dari `CryptoService.derivePortableKeyV2(password, salt)`. Tiap
+  format BARU dgn payload/tujuan beda WAJIB magic & fungsi terpisah
+  (bukan flag) — lihat dok kelas `DbExportService` utk daftar lengkap &
+  alasan tiap pemisahan (BPOS1/BPOSP/BPOP2/BPOT1/BPRC1/BPOA1).
+- `Directory.list()`/`File.copy()` (dart:io async isolate-based I/O) HANG
+  TANPA BATAS di dalam `testWidgets` sandbox lingkungan CI ini —
+  `NativeDatabase`/FFI aman. Screen yang bergantung padanya butuh provider
+  override di widget test (contoh: `archiveListProvider`,
+  `pumpWithFakeApp(..., extraOverrides: [...])`).
 - Menaikkan `schemaVersion` WAJIB memutakhirkan assersi
   `PRAGMA user_version` hardcoded di SEMUA `test/migration_v*_test.dart`
-  lama ke versi baru — jalankan `flutter test` PENUH (bukan cuma file
-  baru) sebelum yakin migrasi selesai; fixture migrasi lama yang skema
-  awalnya minimal (starting point > tabel yang diubah) butuh guard
-  "cek tabel ada dulu" sebelum `alterTable`/`addColumn`.
-- `CartMeta.hasCustomer` cuma cek `customerName`, BUKAN `customerId` —
-  siapa pun yang membentuk `CartMeta` baru (bukan lewat `setCustomer`)
-  WAJIB pastikan `customerName` ikut terisi kalau `customerId` terisi.
-- `Transactions.customerName` SENGAJA null utk pelanggan TERDAFTAR
-  (`customerId` != null) — nama HARUS di-resolve ulang dari tabel
-  `customers` kalau butuh ditampilkan/dibawa ke tempat lain.
+  lama ke versi baru.
+- `CartMeta.hasCustomer` cuma cek `customerName`, BUKAN `customerId`.
+- `Transactions.customerName` SENGAJA null utk pelanggan TERDAFTAR.
 - Gerbang lisensi (`license_provider.dart`/`license_service.dart`) — Ed25519
   murni-Dart, public key developer KOSONG = kill-switch aman (jangan hapus).
 - `PriceMatchService` (sinkron harga antar-toko independen) — fuzzy-matching

@@ -7,6 +7,29 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh lima — Ekspor Arsip Tahunan)
+
+- `6eabc7b` — feat(arsip): tambah "Ekspor Arsip Tahunan" (`arsip_screen.dart`)
+  terpisah dari backup biasa — audit menemukan file arsip tahunan
+  (`archive_YYYY.db`, hasil Tutup Buku) TIDAK PERNAH ikut backup app
+  (`exportPortable`/`exportOwnerTransfer` cuma baca `main.db`), data yang
+  sudah diarsipkan bisa hilang permanen kalau device rusak/hilang setelah
+  tutup buku. `DbExportService.exportArchive()` — format baru terpisah
+  (`.posarsip`, magic `BPOA1`), pola sama `exportPortable` (password
+  sendiri, gzip+AES, salt/IV acak) tapi sumbernya arsip, bukan `main.db`.
+  Tombol "Ekspor Arsip Ini" (`Icons.ios_share`) per baris arsip → dialog
+  password (pola sama `backup_screen.dart`) → `ArchiveService.open` →
+  `exportArchive` → `saveOrShareExport` → `ArchiveService.close()`.
+  `decrypt()` biasa menolak file BPOA1 dgn pesan jelas ("ini file arsip")
+  — restore arsip SENGAJA belum diimplementasikan (belum diminta).
+  `archiveListProvider` diekspos (bukan private) supaya testable —
+  `Directory.list()` (dipakai `ArchiveService.listArchives`) terbukti hang
+  tanpa batas di dalam `testWidgets` sandbox lingkungan CI ini (isolate-
+  based dart:io I/O, tidak terkait fitur ini) — widget test bypass lewat
+  provider override + arsip dibuat langsung via `NativeDatabase` (FFI,
+  aman di sandbox ini). `pump_app.dart` — `pumpWithFakeApp` terima
+  `extraOverrides` opsional.
+
 ## 2026-09-07 (sesi ketiga puluh empat — fix price_categories tidak ikut sync/backup)
 
 - `0d739f6` — fix(db): `price_categories` (Kategori Harga) ikut sync LAN &
