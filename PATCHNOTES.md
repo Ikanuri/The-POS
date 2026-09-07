@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh dua)
+
+### 🎨 Tampilan
+- **Cara melunasi hutang pelanggan saat belanja lagi diganti total —
+  lebih simpel & lebih aman.** Sebelumnya ada ikon "Lunasi Hutang"
+  terpisah di footer keranjang yang membuka alur pilih pelanggan sendiri
+  (rawan salah pilih pelanggan lain, terutama saat toko ramai).
+  Sekarang ikon itu dihapus — cukup pilih pelanggan seperti biasa di
+  keranjang, dan kalau pelanggan itu punya hutang, satu baris "Lunasi
+  hutang" muncul otomatis di dalam daftar belanjaannya sendiri. Tinggal
+  satu ketukan untuk mengaktifkan (seluruh hutangnya langsung ikut
+  ditagih) atau membatalkannya lagi — tidak ada lagi langkah pilih
+  nota/ketik nominal manual.
+
 ## 7 September 2026 (sesi ketiga puluh satu)
 
 ### ✨ Fitur Baru
@@ -35,14 +49,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Bisa sekalian melunasi hutang pelanggan saat mereka belanja lagi.**
   Kalau pelanggan yang punya nota belum lunas (tempo/kurang bayar) datang
   belanja lagi dan mau sekalian bayar hutangnya, kasir tidak perlu lagi
-  buka layar terpisah. Cukup ketuk ikon "Lunasi Hutang" di keranjang
-  (sebelah tombol Pra-Bayar) — pilih pelanggannya, centang nota mana yang
-  mau dilunasi, ketik nominalnya. Nominal itu otomatis ditambahkan ke
-  total yang perlu diterima kasir, dan begitu transaksi belanja baru
-  selesai, hutang lamanya ikut terlunasi (atau berkurang) secara
-  otomatis. Struk belanja baru juga menampilkan keterangan "Turut
+  buka layar terpisah — tinggal pilih pelanggannya di keranjang seperti
+  biasa. Kalau pelanggan itu memang punya hutang, langsung muncul satu
+  baris pudar di dalam daftar belanjaan: "Lunasi hutang Rp X (N nota)".
+  Ketuk baris itu sekali -> baris jadi terang & SELURUH hutangnya
+  otomatis ikut ditambahkan ke total yang perlu diterima kasir (tidak
+  perlu pilih nota atau ketik nominal manual lagi); ketuk sekali lagi
+  kalau berubah pikiran -> batal, baris kembali pudar. Begitu transaksi
+  belanja baru selesai, hutang lamanya ikut terlunasi (atau berkurang)
+  secara otomatis. Struk belanja baru tetap menampilkan keterangan "Turut
   melunasi hutang" lengkap dengan nomor nota lama & nominalnya — baik di
   struk HP, struk yang dibagikan, maupun struk cetak.
+  _(Diperbarui 7 September 2026 — lihat catatan sesi ketiga puluh dua di
+  bawah: cara pakainya diganti total dari versi awal fitur ini.)_
 - **Tombol "Batalkan" di Struk & Riwayat Transaksi punya opsi baru:
   "Batalkan & Susun Ulang".** Cocok kalau kasir salah susun belanjaan
   atau salah input dan ingin mulai lagi dari nota yang sama, tanpa

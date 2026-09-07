@@ -7,6 +7,44 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh dua — redesain toggle "Lunasi Hutang")
+
+- `a254152` — feat(kasir): redesain toggle otomatis "Lunasi Hutang" di
+  keranjang — ganti TOTAL UX fitur yang baru dibangun sesi sebelumnya
+  (`a921860` dkk): dulu ikon terpisah di footer `cart_sheet.dart` (sebelah
+  Pra-Bayar) -> buka `debt_settlement_picker.dart` (pilih pelanggan
+  berhutang -> checklist nota -> kalkulator nominal manual). Alasan revisi
+  (permintaan user): ikon makan ruang di footer yang sudah padat, dan BISA
+  MISCLICK pilih hutang pelanggan LAIN, bukan pelanggan yang sedang
+  diinput di cart bar. Sekarang: satu baris toggle DI DALAM daftar item
+  keranjang itu sendiri (`_DebtSettlementCartRow`, bukan produk) yang
+  otomatis terikat `CartMeta.customerId` keranjang aktif (mustahil
+  misclick pelanggan lain) — muncul HANYA bila pelanggan itu punya hutang
+  tertunggak (`cartCustomerDebtProvider` > 0), gerbang izin SAMA persis
+  Pra-Bayar (kasir utama, `terima_pembayaran`). Default pudar
+  (`Opacity` 0.5); tap pertama -> solid + OTOMATIS membuat satu
+  `DebtSettlementEntry` senilai SELURUH hutang pelanggan (bukan
+  manual/parsial lagi) — rencana FIFO ke nota-nota lama tetap dihitung
+  via `planFifoSettlement` yang SUDAH ADA (logika TIDAK diubah, cuma
+  sumbernya sekarang `getUnpaidTxDetails` otomatis, bukan checklist
+  manual). Tap lagi -> kembali pudar, entri dihapus. Paling banyak SATU
+  entri per cart (mengikuti satu pelanggan yang terikat cart itu).
+  Metode pembayaran entri: tidak ada lagi kalkulator/pemilihan metode
+  terpisah saat toggle — `payment_screen.dart` sekarang menimpa
+  `method`/`methodName` entri dengan metode FINAL yang kasir pilih di
+  layar Bayar (`_selectedMethodType`/`_selectedMethod`) tepat sebelum
+  `saveTransactionWithDebtSettlements`, kecuali metode itu 'tempo' (Bayar
+  Nanti, tidak ada uang fisik diterima sama sekali) yang jatuh ke 'tunai'
+  sbg asumsi netral. `debt_settlement_picker.dart` dihapus total (tidak
+  ada pemanggil lain); `planFifoSettlement` (fungsi murni) dipindah ke
+  `cart_debt_settlement_provider.dart`. `_grandTotal`/kartu "Turut Lunasi
+  Hutang" di `payment_screen.dart` & struk (`debtSettlementDetail`) TIDAK
+  berubah logikanya — cuma sumber entrinya yang berubah.
+  `test/cart_sheet_debt_settlement_test.dart` ditulis ulang (hapus test UI
+  lama, tambah test toggle baru + gerbang izin/customerId/debt, tetap
+  pertahankan test `planFifoSettlement` pure); `debt_settlement_checkout_
+  test.dart` (DB-level) tidak disentuh, tetap hijau.
+
 ## 2026-09-07 (sesi ketiga puluh satu — 3 perbaikan/fitur kecil Pra-Bayar)
 
 - `0913408` — feat(kasir): catat kembalian Pra-Bayar yang diambil sebelum

@@ -6,89 +6,94 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh satu — 3 perbaikan/fitur
-kecil seputar Pra-Bayar). Versi kerja **2.49.0+103** (MINOR naik, PATCH
-reset — ada 1 fitur kecil terlihat pengguna: histori "kembalian diambil
-sebelum checkout"; 2 lainnya murni bugfix). schemaVersion **41 -> 42** —
-kolom baru nullable `transaction_payments.
-prabayar_change_taken_before_checkout`._
+_Update sesi 7 September 2026 (sesi ketiga puluh dua — redesain toggle
+"Lunasi Hutang"). Versi kerja **2.50.0+104** (MINOR naik, PATCH reset —
+perubahan UX terlihat pengguna: cara pakai fitur "Lunasi Hutang" diganti
+total). schemaVersion TIDAK berubah (masih 42, tidak ada migrasi sesi
+ini)._
 
-## Sesi ini — 3 perbaikan Pra-Bayar SELESAI (`7655706`, `0913408`)
+## Sesi ini — redesain toggle "Lunasi Hutang" SELESAI (`a254152`)
 
-1. **Kalkulator Pra-Bayar mulai nol** — `_addPrabayar` (`cart_sheet.dart`)
-   sekarang panggil `showDebtPaymentSheet(..., prefillRemaining: false)`.
-   Pemanggil LAIN (Lunasi Hutang via `debt_settlement_picker.dart`, Buku
-   Hutang) TIDAK diubah — mereka memang mau prefill `remaining`.
-2. **Footer Pra-Bayar tidak lagi terpotong** — `_PrabayarFooterSummary`
-   (Pra-Bayar/Sisa/Kembalian/riwayat kembalian diambil) & baris "Turut
-   lunasi hutang" di sebelahnya sekarang dibungkus `FittedBox(fit:
-   scaleDown, alignment: centerLeft)` per baris (pola sama nominal
-   "Total" di atasnya yang sudah dinamis dari sesi sebelumnya) — gantikan
-   `TextOverflow.ellipsis` polos yang memotong nominal besar (mis. lebih
-   dari Rp 12 juta) secara permanen & tak terbaca. Teks widget (`.data`)
-   tetap utuh, cuma render-nya yang mengecil otomatis.
-3. **Riwayat Pembayaran mencatat kembalian Pra-Bayar yang sudah diambil
-   sebelum checkout** — sebelumnya, porsi `changeTakenTotal` (checkbox
-   "kembalian sudah diambil" di footer keranjang, fase Pra-Bayar) dipotong
-   LANGSUNG dari `amount` baris `TransactionPayments` terkait
-   (`buildPrabayarCheckout`, `payment_screen.dart`) TANPA jejak — kembalian
-   itu "menghilang" dari riwayat, seolah tidak pernah terjadi.
+Fitur "Lunasi Hutang" (dibangun sesi sebelumnya, `a921860` dkk) direvisi
+TOTAL atas permintaan user — alasan: (1) ikon terpisah di footer
+`cart_sheet.dart` makan ruang yang sudah padat (sebelah Pra-Bayar), (2)
+BISA MISCLICK pilih hutang pelanggan LAIN, bukan pelanggan yang sedang
+diinput di cart bar.
 
-   **Fix (bukan mengubah invariant lama)**: kolom baru NULLABLE
-   `TransactionPayments.prabayarChangeTakenBeforeCheckout` (int,
-   schemaVersion 41->42) — metadata MURNI, diisi HANYA utk baris yang
-   kena potongan mundur, berisi NOMINAL yang dipotong dari entri itu.
-   `amount`/`changeGiven` baris TETAP seperti sebelumnya (uang sungguhan
-   yang tercatat diterima kasir) — invariant `Σ payments.amount ==
-   combinedPaid` (dilindungi `payment_prabayar_checkout_test.dart`) TIDAK
-   berubah sama sekali, cuma ditambah test regresi eksplisit utk
-   membuktikannya masih terjaga.
+**Desain lama (dihapus total)**: ikon "Lunasi Hutang" di footer -> buka
+`debt_settlement_picker.dart` (pilih pelanggan berhutang -> checklist nota
+tempo miliknya -> kalkulator nominal manual `showDebtPaymentSheet`). File
+`debt_settlement_picker.dart` DIHAPUS total (dicek dulu, tidak ada
+pemanggil lain).
 
-   Kartu "Riwayat Pembayaran" in-app (`receipt_screen.dart`,
-   `_buildPaymentTimeline`) menampilkan baris keterangan tambahan italic
-   "Kembalian Rp Y sudah diambil sebelum checkout" di bawah baris
-   pembayaran yang membawa metadata ini — SENGAJA beda visual dari
-   `_ChangeTakenRow` (tanpa checkbox, kalimat eksplisit) supaya tidak
-   tertukar makna dgn kembalian NORMAL baris "sekarang"/kasir loket.
+**Desain baru**: satu baris toggle `_DebtSettlementCartRow`
+(`cart_sheet.dart`) DI DALAM daftar item keranjang itu sendiri (bukan
+produk, item tambahan di ujung `ListView.separated`) — muncul HANYA bila
+(a) gerbang izin sama persis Pra-Bayar (`canDebtSettlement`: kasir utama
+`kMainCartId` + `terima_pembayaran`), (b) `CartMeta.customerId` keranjang
+ini terisi, DAN (c) `cartCustomerDebtProvider(customerId)` > 0 (pelanggan
+ITU, bukan pelanggan lain, yang punya hutang). Default REDAM (`Opacity`
+0.5, ikon `Icons.account_balance_wallet_outlined` konsisten dgn pengingat
+hutang cart bar). Tap pertama -> solid (tint `scheme.tertiary`) & OTOMATIS
+membuat SATU `DebtSettlementEntry` senilai SELURUH `customerDebt.total`
+(bukan manual/parsial) — rencana FIFO ke nota lama tetap dihitung via
+`planFifoSettlement` yang SUDAH ADA (logika TIDAK diubah, cuma dipindah
+dari `debt_settlement_picker.dart` ke `cart_debt_settlement_provider.dart`,
+sumbernya sekarang `getUnpaidTxDetails` OTOMATIS bukan checklist manual).
+Tap lagi -> kembali pudar, entri (dicari via `customerId`) dihapus.
+Paling banyak SATU entri per cart (API list `cartDebtSettlementProvider`
+DIPERTAHANKAN, bukan diganti nullable tunggal — format hold/resume JSON
+`kasir_screen.dart` tidak perlu migrasi).
 
-   **Keputusan: TIDAK ditambahkan ke struk cetak/share**
-   (`printer_service.dart`) — ini detail audit teknis-transaksional
-   (kembalian yang sudah diselesaikan tuntas SEBELUM nota ini bahkan
-   ada), bukan informasi yang perlu diketahui ulang lewat struk fisik;
-   in-app Riwayat Pembayaran sudah tempat yang tepat utk audit rinci,
-   struk cetak/share tetap ringkas. Beda dari "Lunasi Hutang" (3 jenis
-   struk) yang memang perlu diketahui pelanggan/kasir di kertas.
+**Keputusan metode pembayaran entri** (tidak ada lagi kalkulator/pemilihan
+metode terpisah di titik toggle): `DebtSettlementEntry.method` diisi
+placeholder `'tunai'` saat entri otomatis dibuat, lalu `payment_screen.
+dart` MENIMPA `method`/`methodName` dengan metode FINAL yang kasir pilih
+di layar Bayar (`_selectedMethodType`/`_selectedMethod?.name`) tepat
+sebelum `saveTransactionWithDebtSettlements` — rasionalnya: kasir cuma
+menerima SATU nominal fisik gabungan (belanja + turut lunasi hutang)
+sekali jalan, jadi metodenya logis ikut metode transaksi baru itu sendiri.
+Pengecualian: metode final `'tempo'` (Bayar Nanti — TIDAK ada uang fisik
+diterima sama sekali) jatuh ke `'tunai'` sbg asumsi netral (bukan klaim
+metode spesifik yang tidak pernah dipilih kasir) — edge case jarang
+(kasir menunda bayar belanja baru TAPI tetap menerima uang tunai utk
+melunasi hutang lama pelanggan yang sama), tidak diminta eksplisit user,
+diputuskan sendiri & didokumentasikan di sini.
 
-**Migrasi schemaVersion 41->42**: 19 file `test/migration_v*_test.dart`
-lama diupdate (assert `PRAGMA user_version` 41 -> 42 — WAJIB tiap bump
-schemaVersion, sudah 3x kejadian di sesi-sesi sebelumnya, jangan lupa
-lagi). Test migrasi baru `migration_v42_test.dart` SENGAJA assert langsung
-`PRAGMA table_info` (bukan cuma query ORM `select(table)`) — ditemukan
-saat revert-verify bahwa drift's `SELECT *` forgiving thd kolom fisik
-yang hilang (baca `null` diam-diam), jadi query ORM saja TIDAK cukup utk
-membuktikan migrasi benar-benar menambah kolom.
+**TIDAK berubah** (dicek eksplisit, logika lama dipakai apa adanya):
+`planFifoSettlement`, `settleMergedDebt`, `saveTransactionWithDebtSettlements`,
+`_grandTotal`/kartu info "Turut Lunasi Hutang" checkout, struk
+(`debtSettlementDetail`), siklus hold/resume (`kasir_screen.dart`, masih
+generik List, sekarang isinya maks 1).
 
-**Test** (revert-verify dibuktikan utk semua 3 poin — masing-masing
-di-stash sesaat, terbukti gagal dgn pesan yang masuk akal, baru
-dikembalikan):
-- `test/cart_sheet_prabayar_test.dart` — kalkulator mulai 0 (bukan
-  prefill), nominal besar (Rp 12.345.678+) di 360dp tidak overflow &
-  `Text.overflow` sudah bukan `ellipsis` lagi.
-- `test/payment_prabayar_checkout_test.dart` — metadata
-  `prabayarChangeTakenBeforeCheckout` (potongan satu entri, potongan
-  melintasi 2 entri, entri habis terpotong, default 0) + round-trip DB
-  sungguhan + invariant `Σamount == combinedPaid` eksplisit.
-- `test/receipt_prabayar_change_taken_before_checkout_test.dart` — baris
-  keterangan tampil/tidak tampil sesuai metadata.
-- `test/migration_v42_test.dart` — kolom fisik benar ditambahkan.
+**Test**: `test/cart_sheet_debt_settlement_test.dart` ditulis ulang total
+(hapus test UI lama — ikon footer, alur picker 3 langkah; tambah test
+toggle baru: gerbang izin, gerbang `customerId`+`debt>0` termasuk "ada
+pelanggan LAIN yang berhutang tapi TIDAK terikat cart ini", tap
+aktif/nonaktif + verifikasi entri FIFO benar) — tetap pertahankan 3 test
+`planFifoSettlement` (pure, logika tidak berubah). Revert-verify
+dibuktikan (disable `_toggle` sesaat -> test toggle gagal dgn pesan
+"Expected 1.0, Actual 0.5" yang masuk akal -> dikembalikan, hijau lagi).
+`debt_settlement_checkout_test.dart` (DB-level, backend
+`saveTransactionWithDebtSettlements`) TIDAK disentuh sama sekali, tetap
+hijau tanpa perubahan (backend tidak diubah).
 
-Full suite: **1541 test** (1540 lulus + 1 pre-existing flaky
-order-dependent `proposal_unchanged_end_to_end_test.dart`, TERBUKTI lulus
-isolated baik SEBELUM maupun SESUDAH perubahan sesi ini — bukan
-regresi). `flutter analyze`: 0 issue.
+Full suite: **1540 test**, semua lulus. `flutter analyze`: 0 issue.
 
-**Belum dikerjakan / cek sesi depan**: tidak ada — ketiga poin briefing
-tuntas dieksekusi.
+**Belum dikerjakan / cek sesi depan**: tidak ada — briefing tuntas
+dieksekusi.
+
+## Sesi sebelumnya (ringkas — detail lengkap di CHANGELOG.md)
+
+- **7 September, sesi ketiga puluh satu** (`7655706`, `0913408`): 3
+  perbaikan kecil Pra-Bayar — kalkulator mulai Rp 0 (bukan prefill),
+  footer Pra-Bayar/Lunasi-Hutang dibungkus `FittedBox` (nominal besar tak
+  lagi terpotong), Riwayat Pembayaran mencatat kembalian Pra-Bayar yang
+  sudah diambil sebelum checkout (kolom baru `TransactionPayments.
+  prabayarChangeTakenBeforeCheckout`, schemaVersion 41->42).
+- **6 September, sesi ketiga puluh** (`a921860` dkk): versi AWAL fitur
+  "Lunasi Hutang" (ikon footer + picker manual) — sudah digantikan TOTAL
+  oleh redesain toggle sesi ini, lihat di atas.
 
 ## Keputusan/pola penting yang masih berlaku (ringkas — detail di CLAUDE.md)
 
