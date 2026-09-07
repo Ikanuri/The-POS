@@ -7,6 +7,37 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh enam — redesain kedua "Lunasi Hutang")
+
+- `466a51d` — feat(kasir): redesain KEDUA "Lunasi Hutang" (gantikan toggle
+  boolean tunggal dari redesain pertama, `a254152`). Entry point pindah ke
+  chip pengingat hutang yang sudah ada (cart bar `kasir_screen.dart` +
+  banner baru `cart_sheet.dart`), sekarang interaktif — tap membuka sheet
+  "Pilih Nota untuk Dilunasi" (`widgets/debt_settlement_sheet.dart`, file
+  baru): checklist semua nota tempo/kurang_bayar pelanggan (REUSE
+  `getUnpaidTxDetails`) + toggle "Centang Semua". `DebtSettlementEntry`
+  (`cart_debt_settlement_provider.dart`) direstruktur — SATU entri = SATU
+  nota sumber langsung (`invoiceId`/`invoiceLocalId`/`invoiceDate`),
+  bukan lagi list `targetInvoices` agregat FIFO (`planFifoSettlement`
+  dihapus) — mendukung partial per-nota native, list bebas banyak entri
+  (dulu dibatasi maks 1). Entri aktif tampil sbg baris terpisah di
+  keranjang (`_DebtSettlementEntryRow`), gaya visual sama `_CartItemTile`
+  3-baris (nama/tanggal/nominal), leading `Icons.receipt_long_outlined`,
+  tap = hapus. Total keranjang = belanja + SUM entri aktif, breakdown
+  "+ Lunasi Hutang" di bawah nominal Total. `DebtSettlementDetailLine`/
+  `parseDebtSettlementDetail` (`app_database.dart`) tambah field nullable
+  `invoiceId`+`invoiceDate` (JSON lama tetap aman diparse). Struk in-app/
+  share/print — baris "Turut lunasi Nota X" jadi 2-baris (nama + tanggal,
+  posisi sama pola qty·satuan·harga item produk). In-app: "Nota X" jadi
+  hyperlink (`context.push('/kasir/struk/$invoiceId')`, pola sama
+  `_preorderRefSpan`) navigasi ke nota asal. `formatTanggalPendek`
+  (`app_theme.dart`) — helper format tanggal aman-locale baru, dipakai
+  bareng sheet/baris keranjang/struk in-app. Backend
+  `settleMergedDebt`/`saveTransactionWithDebtSettlements` TIDAK berubah
+  logikanya. Test `cart_sheet_debt_settlement_test.dart` ditulis ulang
+  total (5 test baru), `debt_settlement_checkout_test.dart` +3 test
+  (invoiceDate/backward-compat JSON lama). Bump versi 2.52.0+108.
+
 ## 2026-09-07 (sesi ketiga puluh lima — Ekspor Arsip Tahunan)
 
 - `6eabc7b` — feat(arsip): tambah "Ekspor Arsip Tahunan" (`arsip_screen.dart`)
