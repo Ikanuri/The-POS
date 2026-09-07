@@ -37,6 +37,7 @@ import 'handoff_gate_provider.dart';
 import 'widgets/add_control.dart';
 import 'widgets/cart_meta_pickers.dart';
 import 'widgets/cart_sheet.dart';
+import 'widgets/debt_settlement_sheet.dart';
 import 'widgets/item_entry_sheet.dart';
 import 'widgets/paste_order_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
@@ -526,12 +527,21 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
           .map((e) => PrabayarEntry.fromJson(e as Map<String, dynamic>))
           .toList();
       // Fitur "Lunasi Hutang" — key baru (absen di payload lama pra-fitur
-      // ini, fallback list kosong — kompatibel mundur).
+      // ini, fallback list kosong — kompatibel mundur). Redesain KEDUA
+      // mengubah bentuk field (satu nota per entri, bukan lagi
+      // `targetInvoices` agregat) — pesanan ditahan LAMA (dari sebelum
+      // redesain ini) yang masih menyimpan bentuk lama akan gagal parse
+      // PER-ENTRI, ditangkap di sini (bukan try/catch terluar) supaya
+      // SATU entri rusak tidak ikut membuang seluruh items/meta/prabayar
+      // pesanan yang ditahan.
       final debtSettlementRaw = decoded['debtSettlement'] as List? ?? const [];
-      final debtSettlement = debtSettlementRaw
-          .map((e) =>
-              DebtSettlementEntry.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final debtSettlement = <DebtSettlementEntry>[];
+      for (final e in debtSettlementRaw) {
+        try {
+          debtSettlement
+              .add(DebtSettlementEntry.fromJson(e as Map<String, dynamic>));
+        } catch (_) {/* entri lama tak kompatibel -> dilewati, bukan fatal */}
+      }
       return (
         items: items,
         meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
@@ -2198,6 +2208,23 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             .watch(
                                 cartCustomerDebtProvider(cartMeta.customerId))
                             .valueOrNull,
+                        // Fitur "Lunasi Hutang" REDESAIN KEDUA — gerbang SAMA
+                        // persis `canDebtSettlement` di `cart_sheet.dart`
+                        // (kasir utama, bukan Tambah Belanjaan/Katalog,
+                        // device berizin `terima_pembayaran`).
+                        onTapDebt: (!_isAddMode &&
+                                !(ref.watch(needsPaymentGateProvider).valueOrNull ??
+                                    false) &&
+                                cartMeta.customerId != null)
+                            ? () => showDebtSettlementSheet(
+                                  context,
+                                  ref,
+                                  cartId: _cartId,
+                                  customerId: cartMeta.customerId!,
+                                  customerName:
+                                      cartMeta.customerName ?? 'Pelanggan',
+                                )
+                            : null,
                         orderNumber:
                             _isAddMode ? null : cartMeta.displayOrderNumber,
                       ),
@@ -3256,6 +3283,7 @@ class _CartBar extends StatelessWidget {
     this.orderNumber,
     this.laciMejaPending,
     this.customerDebt,
+    this.onTapDebt,
   });
 
   final int total;
@@ -3271,6 +3299,13 @@ class _CartBar extends StatelessWidget {
   /// Hutang akumulatif pelanggan keranjang ini: (total rupiah, jumlah nota
   /// belum lunas). Null / count 0 = tidak ada hutang / pembeli tak terdaftar.
   final (int total, int count)? customerDebt;
+
+  /// Fitur "Lunasi Hutang" — REDESAIN KEDUA (permintaan user): chip
+  /// pengingat hutang di cart bar sekarang INTERAKTIF, tap membuka sheet
+  /// "Pilih Nota untuk Dilunasi" (`showDebtSettlementSheet`). Null bila
+  /// gerbang tidak terpenuhi (dicek pemanggil, `_KasirScreenState.build`)
+  /// — chip tetap tampil info murni (tidak tappable) kalau null.
+  final VoidCallback? onTapDebt;
 
   /// Item 55 — segmen terakhir nomor nota (mis. "17"), null selama belum
   /// direservasi (keranjang baru saja mulai diisi) atau mode tambah
@@ -3350,28 +3385,45 @@ class _CartBar extends StatelessWidget {
               // (permintaan user). Warna merah `error`, SENGAJA beda dari
               // dusty rose Laci Meja di atas Total: dua peringatan berbeda
               // makna, jangan sampai tertukar.
+              //
+              // Fitur "Lunasi Hutang" REDESAIN KEDUA — chip ini sekarang
+              // entry point INTERAKTIF (tap -> `showDebtSettlementSheet`),
+              // bukan lagi murni informatif. `onTapDebt` null (mis. gerbang
+              // `terima_pembayaran` tidak terpenuhi) -> tetap tampil tapi
+              // tidak tappable (`InkWell.onTap: null` aman, tidak error).
               if (customerDebt != null && customerDebt!.$2 > 0) ...[
                 const SizedBox(height: 3),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.account_balance_wallet_outlined,
-                        size: 13, color: cs.error),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        'Hutang ${formatRupiah(customerDebt!.$1)} '
-                        'di ${customerDebt!.$2} nota',
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: cs.error),
-                      ),
+                InkWell(
+                  onTap: onTapDebt,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.account_balance_wallet_outlined,
+                            size: 13, color: cs.error),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            'Hutang ${formatRupiah(customerDebt!.$1)} '
+                            'di ${customerDebt!.$2} nota',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: cs.error),
+                          ),
+                        ),
+                        if (onTapDebt != null) ...[
+                          const SizedBox(width: 2),
+                          Icon(Icons.chevron_right, size: 13, color: cs.error),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ],
               if (lastParts != null) ...[

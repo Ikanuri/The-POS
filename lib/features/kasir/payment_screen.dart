@@ -594,11 +594,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// di layar ini, cukup tombol konfirmasi "Selesaikan Transaksi".
   bool get _prabayarCoversTotal => _prabayarPool > 0 && _prabayarPool >= _total;
 
-  /// Fitur "Lunasi Hutang" — entri yang dikunci di keranjang ini (nominal &
-  /// nota target SUDAH ditentukan sejak kasir mengonfirmasi lewat
-  /// kalkulatornya sendiri di `cart_sheet.dart`, `showDebtPaymentSheet`) —
-  /// TIDAK relevan sama sekali di mode Tambah Belanjaan, sama seperti
-  /// [_prabayarEntries].
+  /// Fitur "Lunasi Hutang" — entri yang dikunci di keranjang ini (nota
+  /// sumber & nominal SUDAH ditentukan sejak kasir centang di sheet "Pilih
+  /// Nota untuk Dilunasi", `debt_settlement_sheet.dart` — SATU entri per
+  /// nota) — TIDAK relevan sama sekali di mode Tambah Belanjaan, sama
+  /// seperti [_prabayarEntries].
   List<DebtSettlementEntry> get _debtSettlementEntries =>
       _isAddMode ? const [] : ref.read(cartDebtSettlementProvider(_cartId));
 
@@ -902,17 +902,23 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           _selectedMethodType == 'tempo' ? 'tunai' : _selectedMethodType;
       final debtSettlementMethodName =
           _selectedMethodType == 'tempo' ? null : _selectedMethod?.name;
+      // Redesain kedua (permintaan user): SATU entri = SATU nota sumber
+      // (bukan lagi rencana FIFO beku lintas-nota) — tiap entri dipetakan
+      // jadi grup `debtSettlements` dgn SATU target (dirinya sendiri).
+      // `saveTransactionWithDebtSettlements` tetap generik menerima banyak
+      // target per grup (tidak diubah), sekarang kebetulan selalu 1.
       final debtSettlements = _debtSettlementEntries
           .map((e) => (
                 customerName: e.customerName,
                 amount: e.amount,
-                targets: e.targetInvoices
-                    .map((t) => (
-                          invoiceId: t.invoiceId,
-                          invoiceLocalId: t.invoiceLocalId,
-                          amount: t.amount,
-                        ))
-                    .toList(),
+                targets: [
+                  (
+                    invoiceId: e.invoiceId,
+                    invoiceLocalId: e.invoiceLocalId,
+                    invoiceDate: e.invoiceDate,
+                    amount: e.amount,
+                  ),
+                ],
                 method: debtSettlementMethod,
                 methodName: debtSettlementMethodName,
               ))
@@ -1408,7 +1414,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      '${d.customerName} · ${d.targetInvoices.map((t) => t.invoiceLocalId).join(', ')}',
+                                      '${d.customerName} · Nota ${d.invoiceLocalId}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(fontSize: 12),

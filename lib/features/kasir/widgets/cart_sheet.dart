@@ -31,6 +31,7 @@ import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 import 'debt_payment_sheet.dart';
+import 'debt_settlement_sheet.dart';
 import 'add_control.dart';
 import 'cart_meta_pickers.dart';
 import 'cart_preview_paper.dart';
@@ -878,6 +879,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final showDebtRow = customerDebt != null && customerDebt.$2 > 0;
     final debtSettlementEntries =
         ref.watch(cartDebtSettlementProvider(widget.cartId));
+    final debtSettlementTotal =
+        debtSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
 
     // Fase C "Kategori Harga" — toggle HANYA di keranjang utama kasir (bukan
     // mode Katalog/Tambah Belanjaan, lihat briefing), device berizin
@@ -1075,6 +1078,51 @@ class _CartSheetState extends ConsumerState<CartSheet> {
               ),
             ),
             const Divider(height: 1),
+            // Fitur "Lunasi Hutang" — REDESAIN KEDUA (permintaan user,
+            // gantikan toggle boolean tunggal `_DebtSettlementCartRow` yang
+            // DIHAPUS total, lihat dok `debt_settlement_sheet.dart`). Chip
+            // pengingat INTERAKTIF — gaya sama persis pengingat hutang di
+            // cart bar collapsed `kasir_screen.dart` (merah, ikon
+            // `account_balance_wallet_outlined`) — tap membuka sheet "Pilih
+            // Nota untuk Dilunasi". Hanya info gerbang/tap-target; entri
+            // yang SUDAH diterapkan muncul sbg baris terpisah di dalam
+            // daftar item di bawah (`_DebtSettlementEntryRow`).
+            if (showDebtRow)
+              InkWell(
+                onTap: () => showDebtSettlementSheet(
+                  ctx,
+                  ref,
+                  cartId: widget.cartId,
+                  customerId: meta.customerId!,
+                  customerName: meta.customerName ?? 'Pelanggan',
+                ),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: scheme.errorContainer.withOpacity(0.25),
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_balance_wallet_outlined,
+                          size: 15, color: scheme.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Hutang ${formatRupiah(customerDebt.$1)} '
+                          'di ${customerDebt.$2} nota — tap utk lunasi',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.error),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, size: 16, color: scheme.error),
+                    ],
+                  ),
+                ),
+              ),
+            if (showDebtRow) const Divider(height: 1),
             // Fase C "Kategori Harga" — chip toggle "Normal" + tiap
             // PriceCategories terdaftar. Baris ini disembunyikan TOTAL bila
             // gerbang [canToggleCategory] tidak terpenuhi (lihat dok di atas).
@@ -1107,7 +1155,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
               ),
             if (canToggleCategory) const Divider(height: 1),
             Expanded(
-              child: (cart.isEmpty && !showDebtRow)
+              child: (cart.isEmpty && debtSettlementEntries.isEmpty)
                   ? Center(
                       child: Text(
                         'Keranjang kosong',
@@ -1117,14 +1165,15 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     )
                   : Builder(builder: (_) {
                       final ordered = orderCartItems(cart);
-                      // Fitur "Lunasi Hutang" (redesain toggle) — baris
-                      // ringkasan hutang ditempel sbg SATU item TAMBAHAN di
-                      // ujung daftar item keranjang sungguhan (bukan produk,
-                      // lihat dok `_DebtSettlementCartRow`), supaya kasir
-                      // melihatnya sebagai bagian dari keranjang itu sendiri
-                      // (bukan lagi ikon terpisah di footer yang bisa
-                      // misclick pelanggan lain).
-                      final itemCount = ordered.length + (showDebtRow ? 1 : 0);
+                      // Fitur "Lunasi Hutang" — REDESAIN KEDUA: SETIAP nota
+                      // yang dipilih di sheet (`showDebtSettlementSheet`)
+                      // jadi SATU baris terpisah, ditempel di UJUNG daftar
+                      // item keranjang sungguhan (bukan produk, gaya visual
+                      // sama persis `_CartItemTile`, lihat
+                      // `_DebtSettlementEntryRow`) — supaya kasir melihatnya
+                      // sbg bagian dari keranjang itu sendiri.
+                      final itemCount =
+                          ordered.length + debtSettlementEntries.length;
                       return StepperActiveScope(
                         child: ListView.separated(
                           controller: scrollCtrl,
@@ -1133,15 +1182,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           separatorBuilder: (_, __) =>
                               const Divider(height: 1, indent: 56),
                           itemBuilder: (ctx2, i) {
-                            if (showDebtRow && i == ordered.length) {
-                              return _DebtSettlementCartRow(
+                            if (i >= ordered.length) {
+                              final entry =
+                                  debtSettlementEntries[i - ordered.length];
+                              return _DebtSettlementEntryRow(
+                                key: ValueKey(entry.id),
                                 cartId: widget.cartId,
-                                customerId: meta.customerId!,
-                                customerName: meta.customerName ?? 'Pelanggan',
-                                debtTotal: customerDebt.$1,
-                                debtCount: customerDebt.$2,
-                                active: debtSettlementEntries.any(
-                                    (e) => e.customerId == meta.customerId),
+                                entry: entry,
                               );
                             }
                             final item = ordered[i];
@@ -1209,7 +1256,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              formatRupiah(total),
+                              // Fitur "Lunasi Hutang" — REDESAIN KEDUA: nominal
+                              // Total besar naik ikut SEMUA entri pelunasan
+                              // aktif (bukan cuma belanja baru), supaya kasir
+                              // langsung lihat total uang fisik yang perlu
+                              // diterima. Breakdown-nya di baris kecil
+                              // `_shrinkToFit` di bawah (pola sama Pra-Bayar).
+                              formatRupiah(total + debtSettlementTotal),
                               maxLines: 1,
                               style: AppTheme.numStyle(context,
                                   size: 22,
@@ -1217,6 +1270,18 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                                   color: scheme.primary),
                             ),
                           ),
+                          if (debtSettlementEntries.isNotEmpty)
+                            _PrabayarFooterSummary._shrinkToFit(
+                              Text(
+                                '+ Lunasi Hutang ${formatRupiah(debtSettlementTotal)} '
+                                '(${debtSettlementEntries.length} nota)',
+                                maxLines: 1,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: scheme.tertiary),
+                              ),
+                            ),
                           if (canPrabayar && prabayarEntries.isNotEmpty)
                             _PrabayarFooterSummary(
                               cartId: widget.cartId,
@@ -1266,131 +1331,78 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   }
 }
 
-/// Fitur "Lunasi Hutang" — REDESAIN TOTAL (permintaan user, lihat dok
-/// `cart_debt_settlement_provider.dart`). Dulu: ikon terpisah di footer ->
-/// alur pilih pelanggan (bisa MISCLICK pelanggan LAIN) -> checklist nota ->
-/// kalkulator nominal manual. SEKARANG: satu baris DI DALAM daftar item
-/// keranjang itu sendiri (bukan produk), otomatis terikat `CartMeta.
-/// customerId` pelanggan keranjang ini (mustahil misclick pelanggan lain)
-/// — muncul HANYA bila pelanggan itu punya hutang (gerbang dicek pemanggil,
-/// `CartSheet.build`, param [debtCount] > 0). Default REDAM/pudar (`Opacity`
-/// 0.5, ikon sama dgn pengingat hutang cart bar `Icons.
-/// account_balance_wallet_outlined` di `kasir_screen.dart` biar konsisten).
-/// Tap PERTAMA -> aktif (solid + tint aksen `tertiary`) & OTOMATIS membuat
-/// SATU [DebtSettlementEntry] senilai SELURUH [debtTotal] (BUKAN manual,
-/// bukan parsial) — rencana alokasi FIFO ke nota-nota lama tetap dihitung
-/// lewat [planFifoSettlement] yang SUDAH ADA (logika TIDAK diubah), cuma
-/// sekarang otomatis dari SELURUH nota tempo/kurang_bayar pelanggan
-/// (`getUnpaidTxDetails`), bukan checklist manual kasir. Tap LAGI -> kembali
-/// pudar, entri yang tadi dibuat DIHAPUS. SELURUH baris (bukan checkbox/
-/// tombol terpisah) jadi tap target — state persis boolean toggle, paling
-/// banyak SATU entri (mengikuti satu pelanggan yang terikat cart ini).
-class _DebtSettlementCartRow extends ConsumerStatefulWidget {
-  const _DebtSettlementCartRow({
+/// Fitur "Lunasi Hutang" — REDESAIN KEDUA (permintaan user, gantikan toggle
+/// boolean tunggal `_DebtSettlementCartRow` dari `a254152`, DIHAPUS total).
+/// Satu baris DI DALAM daftar item keranjang (bukan produk) per
+/// [DebtSettlementEntry] aktif (SATU nota sumber, lihat dok
+/// `cart_debt_settlement_provider.dart`) — gaya visual SAMA PERSIS
+/// `_CartItemTile` 3-baris (nama 17px / subtitle 13px onSurfaceVariant /
+/// nominal `AppTheme.numStyle` 14px w700 primary), supaya menyatu rapi dgn
+/// baris produk di atas/bawahnya, tapi kontennya nota (bukan produk):
+///  - Baris 1: "Nota <localId>".
+///  - Baris 2: tanggal nota sumber (`formatTanggalPendek`, aman locale).
+///  - Baris 3: nominal yang dilunasi.
+/// Leading `Icons.receipt_long_outlined` (bukan badge qty) sbg penanda
+/// sekilas beda dari baris produk. Tap baris ini = hapus entri (batal
+/// lunasi nota itu) — pola sama tombol hapus `_showPrabayarList`, langsung
+/// tanpa konfirmasi (mudah ditambah lagi lewat sheet pemilihan nota).
+class _DebtSettlementEntryRow extends ConsumerWidget {
+  const _DebtSettlementEntryRow({
+    super.key,
     required this.cartId,
-    required this.customerId,
-    required this.customerName,
-    required this.debtTotal,
-    required this.debtCount,
-    required this.active,
+    required this.entry,
   });
 
   final String cartId;
-  final String customerId;
-  final String customerName;
-  final int debtTotal;
-  final int debtCount;
-
-  /// true bila SUDAH ada [DebtSettlementEntry] utk `customerId` ini di
-  /// `cartDebtSettlementProvider` (dihitung pemanggil, `CartSheet.build`).
-  final bool active;
+  final DebtSettlementEntry entry;
 
   @override
-  ConsumerState<_DebtSettlementCartRow> createState() =>
-      _DebtSettlementCartRowState();
-}
-
-class _DebtSettlementCartRowState
-    extends ConsumerState<_DebtSettlementCartRow> {
-  // Susulan — cegah tap ganda cepat (dobel-entri/dobel-hapus) selagi query
-  // `getUnpaidTxDetails` async masih berjalan (jarang lambat, tapi DB nyata
-  // beda dari test in-memory).
-  bool _busy = false;
-
-  Future<void> _toggle() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final notifier =
-        ref.read(cartDebtSettlementProvider(widget.cartId).notifier);
-    try {
-      if (widget.active) {
-        // Nonaktifkan — hapus entri (paling banyak satu, lihat dok
-        // provider) milik pelanggan ini.
-        final current = ref.read(cartDebtSettlementProvider(widget.cartId));
-        for (final e
-            in current.where((e) => e.customerId == widget.customerId)) {
-          notifier.remove(e.id);
-        }
-        return;
-      }
-      // Aktifkan — rencana FIFO dari SELURUH nota tempo/kurang_bayar
-      // pelanggan ini (terlama dulu, `getUnpaidTxDetails` sudah terurut),
-      // dibekukan ke satu entri baru senilai SELURUH [debtTotal].
-      final db = ref.read(databaseProvider);
-      final invoices = await db.getUnpaidTxDetails(widget.customerId);
-      if (!mounted) return;
-      final targets = planFifoSettlement(invoices, widget.debtTotal);
-      notifier.add(DebtSettlementEntry(
-        id: const Uuid().v4(),
-        customerId: widget.customerId,
-        customerName: widget.customerName,
-        amount: widget.debtTotal,
-        targetInvoices: targets,
-        createdAt: DateTime.now(),
-        // Placeholder — DITIMPA metode FINAL yang kasir pilih di layar Bayar
-        // saat checkout (lihat dok `DebtSettlementEntry.method`), toggle ini
-        // tidak lagi punya kalkulator/pemilihan metode sendiri.
-        method: 'tunai',
-      ));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final active = widget.active;
-    final fg = active ? scheme.tertiary : scheme.onSurfaceVariant;
-    return Opacity(
-      opacity: active ? 1.0 : 0.5,
-      child: InkWell(
-        onTap: _busy ? null : _toggle,
-        child: Container(
-          color:
-              active ? scheme.tertiary.withOpacity(0.12) : Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    return InkWell(
+      onTap: () => ref
+          .read(cartDebtSettlementProvider(cartId).notifier)
+          .remove(entry.id),
+      child: Container(
+        color: scheme.tertiary.withOpacity(0.06),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Row(
             children: [
-              Icon(Icons.account_balance_wallet_outlined, size: 20, color: fg),
+              Icon(Icons.receipt_long_outlined,
+                  size: 20, color: scheme.tertiary),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  'Lunasi hutang ${formatRupiah(widget.debtTotal)} '
-                  '(${widget.debtCount} nota)',
-                  style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w600, color: fg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Nota ${entry.invoiceLocalId}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 17)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        formatTanggalPendek(entry.invoiceDate),
+                        style: TextStyle(
+                            fontSize: 13, color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        formatRupiah(entry.amount),
+                        style: AppTheme.numStyle(context,
+                            size: 14,
+                            weight: FontWeight.w700,
+                            color: scheme.primary),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              if (_busy)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: fg),
-                )
-              else if (active)
-                Icon(Icons.check_circle, size: 18, color: fg),
+              Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
             ],
           ),
         ),

@@ -73,7 +73,7 @@ void main() {
         (
           customerName: 'Sari',
           amount: 30000,
-          targets: [(invoiceId: 'old1', invoiceLocalId: 'old1', amount: 30000)],
+          targets: [(invoiceId: 'old1', invoiceLocalId: 'old1', invoiceDate: now, amount: 30000)],
           method: 'tunai',
           methodName: null,
         ),
@@ -117,7 +117,7 @@ void main() {
         (
           customerName: 'Budi',
           amount: 40000,
-          targets: [(invoiceId: 'old2', invoiceLocalId: 'old2', amount: 40000)],
+          targets: [(invoiceId: 'old2', invoiceLocalId: 'old2', invoiceDate: now, amount: 40000)],
           method: 'tunai',
           methodName: null,
         ),
@@ -158,7 +158,7 @@ void main() {
         (
           customerName: 'Dedi',
           amount: 50000,
-          targets: [(invoiceId: 'old3', invoiceLocalId: 'old3', amount: 50000)],
+          targets: [(invoiceId: 'old3', invoiceLocalId: 'old3', invoiceDate: now, amount: 50000)],
           method: 'tunai',
           methodName: null,
         ),
@@ -213,14 +213,14 @@ void main() {
         (
           customerName: 'Andi',
           amount: 10000,
-          targets: [(invoiceId: 'old4', invoiceLocalId: 'old4', amount: 10000)],
+          targets: [(invoiceId: 'old4', invoiceLocalId: 'old4', invoiceDate: now, amount: 10000)],
           method: 'tunai',
           methodName: null,
         ),
         (
           customerName: 'Wati',
           amount: 20000,
-          targets: [(invoiceId: 'old5', invoiceLocalId: 'old5', amount: 20000)],
+          targets: [(invoiceId: 'old5', invoiceLocalId: 'old5', invoiceDate: now, amount: 20000)],
           method: 'tunai',
           methodName: null,
         ),
@@ -257,13 +257,79 @@ void main() {
     expect(parseDebtSettlementDetail('{"bukan":"list"}'), isEmpty);
   });
 
-  test('parseDebtSettlementDetail: parse normal', () async {
-    const raw =
-        '[{"invoiceId":"i1","invoiceLocalId":"A1-1","amount":15000,"customerName":"Sari"}]';
+  test('parseDebtSettlementDetail: parse normal (dgn invoiceDate baru)',
+      () async {
+    const raw = '[{"invoiceId":"i1","invoiceLocalId":"A1-1",'
+        '"invoiceDate":1767225600000,"amount":15000,"customerName":"Sari"}]';
     final parsed = parseDebtSettlementDetail(raw);
     expect(parsed.length, 1);
+    expect(parsed.first.invoiceId, 'i1');
     expect(parsed.first.invoiceLocalId, 'A1-1');
+    expect(parsed.first.invoiceDate, isNotNull);
     expect(parsed.first.amount, 15000);
     expect(parsed.first.customerName, 'Sari');
+  });
+
+  test(
+      'parseDebtSettlementDetail: JSON LAMA tanpa invoiceId/invoiceDate '
+      '(sebelum redesain kedua) tetap aman diparse', () async {
+    const raw =
+        '[{"invoiceLocalId":"A1-1","amount":15000,"customerName":"Sari"}]';
+    final parsed = parseDebtSettlementDetail(raw);
+    expect(parsed.length, 1);
+    expect(parsed.first.invoiceId, ''); // kosong, bukan crash
+    expect(parsed.first.invoiceDate, isNull);
+    expect(parsed.first.invoiceLocalId, 'A1-1');
+    expect(parsed.first.amount, 15000);
+  });
+
+  test(
+      'saveTransactionWithDebtSettlements SEKARANG menulis invoiceDate ke '
+      'debtSettlementDetail (dipakai baris tanggal struk/keranjang)',
+      () async {
+    final now = DateTime.now();
+    final invoiceDate = now.subtract(const Duration(days: 5));
+    await addCustomer('c6', 'Rina');
+    await addOldTx(
+        id: 'old6',
+        customerId: 'c6',
+        total: 30000,
+        paid: 0,
+        status: 'tempo',
+        createdAt: invoiceDate);
+
+    const txId = 'newtx6';
+    await db.saveTransactionWithDebtSettlements(
+      tx: newSaleCompanion(txId),
+      items: const [],
+      payments: const [],
+      stockItems: const [],
+      debtSettlements: [
+        (
+          customerName: 'Rina',
+          amount: 30000,
+          targets: [
+            (
+              invoiceId: 'old6',
+              invoiceLocalId: 'old6',
+              invoiceDate: invoiceDate,
+              amount: 30000,
+            ),
+          ],
+          method: 'tunai',
+          methodName: null,
+        ),
+      ],
+      kasirId: 'K1',
+    );
+
+    final newTx = await (db.select(db.transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingle();
+    final parsed = parseDebtSettlementDetail(newTx.debtSettlementDetail);
+    expect(parsed.single.invoiceId, 'old6');
+    expect(parsed.single.invoiceDate, isNotNull);
+    expect(parsed.single.invoiceDate!.millisecondsSinceEpoch,
+        invoiceDate.millisecondsSinceEpoch);
   });
 }

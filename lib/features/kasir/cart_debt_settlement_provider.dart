@@ -4,122 +4,67 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/database/app_database.dart' show UnpaidTxEntry;
-
-/// Rencana alokasi FIFO nota lama dari SATU nominal — algoritma PERSIS
-/// [AppDatabase.settleMergedDebt] (nota terlama dulu, `sisa <= 0` dilewati,
-/// tiap nota dicap `min(remaining, sisa)`), tapi PURE (tanpa DB/tulis apa
-/// pun) — dipakai membekukan rencana ke [DebtSettlementEntry.targetInvoices]
-/// SAAT entri dibuat (sekarang otomatis lewat toggle di `cart_sheet.dart`,
-/// dulu lewat alur pilih pelanggan/nota manual — `debt_settlement_picker.
-/// dart`, DIHAPUS total, redesain UX), supaya ringkasan yang kasir lihat
-/// konsisten sampai checkout. [invoices] HARUS sudah terurut terlama dulu
-/// (lihat `getUnpaidTxDetails`). Kelebihan di atas total sisa TIDAK
-/// dialokasikan ke nota manapun di sini — itu jadi kembalian tunai saat
-/// `settleMergedDebt` benar-benar dijalankan di checkout (lihat dok
-/// `payment_screen.dart`), bukan overpay hutang. Dalam alur toggle otomatis
-/// yang baru, [amount] SELALU = total hutang pelanggan sehingga secara
-/// praktis tidak ada kelebihan (kecuali race jarang: hutang berubah di
-/// antara baca total & baca daftar nota).
-List<DebtSettlementTarget> planFifoSettlement(
-  List<UnpaidTxEntry> invoices,
-  int amount,
-) {
-  var remaining = amount;
-  final out = <DebtSettlementTarget>[];
-  for (final inv in invoices) {
-    if (remaining <= 0) break;
-    if (inv.sisa <= 0) continue;
-    final applied = remaining < inv.sisa ? remaining : inv.sisa;
-    out.add(DebtSettlementTarget(
-      invoiceId: inv.id,
-      invoiceLocalId: inv.localId,
-      amount: applied,
-    ));
-    remaining -= applied;
-  }
-  return out;
-}
-
-/// Satu nota LAMA (tempo/kurang_bayar) yang ikut kena alokasi dari SATU
-/// [DebtSettlementEntry] — bagian dari rencana FIFO yang dihitung SEKALI saat
-/// entri dibuat (lihat `_pickDebtSettlement` di `cart_sheet.dart`). Disimpan
-/// beku di sini (bukan dihitung ulang saat checkout) supaya tampilan
-/// ringkasan di keranjang & struk konsisten dengan apa yang kasir lihat saat
-/// mengonfirmasi nominal — kalaupun sisa nota berubah di antaranya (jarang,
-/// single-device), `settleMergedDebt` saat checkout tetap yang menentukan
-/// alokasi FINAL sungguhan (nota sudah lunas dilewati otomatis).
-@immutable
-class DebtSettlementTarget {
-  const DebtSettlementTarget({
-    required this.invoiceId,
-    required this.invoiceLocalId,
-    required this.amount,
-  });
-
-  final String invoiceId;
-  final String invoiceLocalId;
-  final int amount;
-
-  Map<String, dynamic> toJson() => {
-        'invoiceId': invoiceId,
-        'invoiceLocalId': invoiceLocalId,
-        'amount': amount,
-      };
-
-  factory DebtSettlementTarget.fromJson(Map<String, dynamic> json) =>
-      DebtSettlementTarget(
-        invoiceId: json['invoiceId'] as String,
-        invoiceLocalId: json['invoiceLocalId'] as String,
-        amount: (json['amount'] as num).toInt(),
-      );
-}
-
-/// Fitur "Lunasi Hutang" — REDESAIN TOTAL (permintaan user, alasan: ikon
-/// terpisah di footer `cart_sheet.dart` makan ruang & bisa MISCLICK pilih
-/// hutang pelanggan LAIN, bukan pelanggan yang sedang diinput di cart bar).
-/// SEKARANG murni toggle boolean: satu baris list di dalam keranjang itu
-/// SENDIRI (bukan lagi ikon+picker terpisah, lihat `cart_sheet.dart`
-/// `_DebtSettlementCartRow`) yang HANYA muncul kalau `CartMeta.customerId`
-/// keranjang ini terisi DAN pelanggan itu punya hutang (`cartCustomerDebtProvider`
-/// > 0). Tap pertama -> OTOMATIS membuat SATU entri senilai SELURUH hutang
-/// pelanggan itu (bukan lagi manual pilih nota+nominal); tap lagi -> entri
-/// itu dihapus. Karena itu daftar ini SEKARANG paling banyak berisi SATU
-/// entri per cart (dulu bisa akumulatif banyak pelanggan lewat picker manual
-/// yang sudah dihapus) — API list tetap dipertahankan (bukan diganti jadi
-/// nullable tunggal) supaya format hold/resume JSON (`kasir_screen.dart`)
-/// tidak perlu migrasi.
+/// Satu entri "Lunasi Hutang" DI KERANJANG — REDESAIN KEDUA (permintaan
+/// user, gantikan toggle boolean tunggal dari `a254152`). Sekarang SATU
+/// [DebtSettlementEntry] = SATU nota tempo/kurang_bayar SUMBER yang dipilih
+/// kasir lewat sheet "Pilih Nota untuk Dilunasi" (lihat
+/// `showDebtSettlementSheet` di `widgets/debt_settlement_sheet.dart`) — BUKAN
+/// lagi satu entri agregat FIFO dari SELURUH hutang pelanggan. Kasir bisa
+/// mencentang sebagian nota saja (partial per-nota, uncentang 1 dari N nota),
+/// jadi daftar entri di [cartDebtSettlementProvider] SEKARANG BISA berisi
+/// banyak entri sekaligus (dulu dibatasi maks 1 sejak `a254152`) — tiap
+/// nota tercentang = satu entri terpisah, ditampilkan sbg baris terpisah di
+/// keranjang (`_DebtSettlementEntryRow`, `cart_sheet.dart`).
+///
+/// [amount] SELALU = sisa hutang nota [invoiceId] itu SAAT dicentang (bukan
+/// manual/parsial dari satu nota — user TIDAK diberi kalkulator, cuma
+/// centang/uncentang per-nota di sheet). `saveTransactionWithDebtSettlements`
+/// (backend, TIDAK berubah logikanya) tetap menerima grup
+/// {customerName, amount, targets: [...] , method, methodName} — di sini
+/// tiap entri dipetakan jadi SATU grup dgn SATU target (dirinya sendiri),
+/// lihat `payment_screen.dart` `_debtSettlementEntries` mapping (TIDAK
+/// perlu diubah — sudah generik menerima banyak target per grup, sekarang
+/// kebetulan selalu 1).
 @immutable
 class DebtSettlementEntry {
   const DebtSettlementEntry({
     required this.id,
+    required this.invoiceId,
+    required this.invoiceLocalId,
+    required this.invoiceDate,
     required this.customerId,
     required this.customerName,
     required this.amount,
-    required this.targetInvoices,
     required this.createdAt,
     this.method = 'tunai',
     this.methodName,
   });
 
   final String id;
+
+  /// Nota SUMBER (tempo/kurang_bayar lama) yang dilunasi entri ini — BUKAN
+  /// lagi agregat seluruh hutang pelanggan (beda dari desain `a254152`).
+  final String invoiceId;
+  final String invoiceLocalId;
+
+  /// Tanggal nota sumber — dipakai baris ke-2 tampilan keranjang & struk
+  /// (lihat dok `CLAUDE.md` §7.6, ditambahkan redesain ini krn struk lama
+  /// belum menyimpan tanggal nota per-entri).
+  final DateTime invoiceDate;
+
   final String customerId;
   final String customerName;
+
+  /// Sisa hutang nota [invoiceId] SAAT dicentang di sheet pemilihan nota.
   final int amount;
-  final List<DebtSettlementTarget> targetInvoices;
   final DateTime createdAt;
 
-  /// Redesain toggle: TIDAK ADA lagi kalkulator terpisah tempat kasir
-  /// memilih metode saat entri ini dibuat (dulu `showDebtPaymentSheet`) —
-  /// field ini diisi placeholder 'tunai' saat entri otomatis dibuat
-  /// (`_DebtSettlementCartRow` di `cart_sheet.dart`), lalu DITIMPA dengan
-  /// metode FINAL yang kasir pilih di layar Bayar (`_selectedMethodType`)
-  /// tepat sebelum `saveTransactionWithDebtSettlements` dipanggil (lihat dok
+  /// TIDAK ADA kalkulator metode terpisah saat entri ini dibuat (sheet
+  /// pemilihan nota cuma checklist) — field ini diisi placeholder 'tunai',
+  /// lalu DITIMPA dengan metode FINAL yang kasir pilih di layar Bayar tepat
+  /// sebelum `saveTransactionWithDebtSettlements` dipanggil (lihat dok
   /// `payment_screen.dart` `_debtSettlementEntries`/pembangunan
-  /// `debtSettlements`) — representasi paling masuk akal karena kasir cuma
-  /// menerima SATU nominal fisik gabungan (belanja + turut lunas hutang)
-  /// dari pelanggan, jadi metodenya logis ikut metode transaksi baru itu
-  /// sendiri, bukan dipilih terpisah.
+  /// `debtSettlements`) — TIDAK diubah dari desain sebelumnya.
   final String method;
 
   /// Nama SPESIFIK metode (mis. "GoPay") — null utk Tunai/metode tanpa nama
@@ -129,10 +74,12 @@ class DebtSettlementEntry {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'invoiceId': invoiceId,
+        'invoiceLocalId': invoiceLocalId,
+        'invoiceDate': invoiceDate.millisecondsSinceEpoch,
         'customerId': customerId,
         'customerName': customerName,
         'amount': amount,
-        'targetInvoices': targetInvoices.map((t) => t.toJson()).toList(),
         'createdAt': createdAt.millisecondsSinceEpoch,
         'method': method,
         'methodName': methodName,
@@ -141,13 +88,15 @@ class DebtSettlementEntry {
   factory DebtSettlementEntry.fromJson(Map<String, dynamic> json) =>
       DebtSettlementEntry(
         id: json['id'] as String,
+        invoiceId: json['invoiceId'] as String,
+        invoiceLocalId: json['invoiceLocalId'] as String,
+        invoiceDate: DateTime.fromMillisecondsSinceEpoch(
+            json['invoiceDate'] as int? ??
+                json['createdAt'] as int? ??
+                DateTime.now().millisecondsSinceEpoch),
         customerId: json['customerId'] as String,
         customerName: json['customerName'] as String,
         amount: (json['amount'] as num).toInt(),
-        targetInvoices: (json['targetInvoices'] as List? ?? const [])
-            .map((e) =>
-                DebtSettlementTarget.fromJson(e as Map<String, dynamic>))
-            .toList(),
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int),
         method: json['method'] as String? ?? 'tunai',
@@ -206,8 +155,9 @@ class CartDebtSettlementNotifier
     if (_loaded) _persist();
   }
 
-  /// Total seluruh entri — dipakai `payment_screen.dart` sbg tambahan total
-  /// yang perlu diterima kasir dari pelanggan, DI LUAR total belanja baru.
+  /// Total seluruh entri — dipakai `payment_screen.dart`/`cart_sheet.dart`
+  /// sbg tambahan total yang perlu diterima kasir dari pelanggan, DI LUAR
+  /// total belanja baru.
   int get total => state.fold<int>(0, (s, e) => s + e.amount);
 
   void add(DebtSettlementEntry entry) {
@@ -216,6 +166,12 @@ class CartDebtSettlementNotifier
 
   void remove(String id) {
     state = state.where((e) => e.id != id).toList();
+  }
+
+  /// Hapus entri utk nota [invoiceId] (kalau ada) — dipakai sheet pemilihan
+  /// nota saat kasir uncentang satu nota.
+  void removeByInvoice(String invoiceId) {
+    state = state.where((e) => e.invoiceId != invoiceId).toList();
   }
 
   /// Ganti seluruh isi (dipakai saat melanjutkan pesanan ditahan) — sejalan

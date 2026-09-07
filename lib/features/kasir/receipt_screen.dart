@@ -199,6 +199,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// `_linkRecognizer` di `inline_banner.dart`). Dibersihkan di [dispose].
   final Map<String, TapGestureRecognizer> _preorderLinkRecognizers = {};
 
+  /// Fitur "Lunasi Hutang" — sama pola [_preorderLinkRecognizers] (dipakai
+  /// ulang per `invoiceId`, bukan dibuat baru tiap build), utk hyperlink
+  /// "Nota X" pd kartu ringkasan struk IN-APP (`_debtSettlementLines`) yang
+  /// navigasi balik ke nota asal. HANYA in-app (share/print statis/gambar,
+  /// tidak bisa hyperlink — lihat dok `_DebtSettlementSummaryRow`).
+  final Map<String, TapGestureRecognizer> _debtSettlementLinkRecognizers = {};
+
   Map<String, String> _unitNames = {};
   Map<String, String?> _parentOf = {}; // productId → parentProductId
   Customer? _customer;
@@ -1173,6 +1180,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   void dispose() {
     _custCtrl.dispose();
     for (final r in _preorderLinkRecognizers.values) {
+      r.dispose();
+    }
+    for (final r in _debtSettlementLinkRecognizers.values) {
       r.dispose();
     }
     super.dispose();
@@ -3396,11 +3406,21 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           // nota LAMA pelanggan lain (lihat dok
                           // `Transactions.debtSettlementDetail`). Info murni,
                           // di luar 3-baris ringkasan inti nota ini sendiri.
+                          // "Nota X" BISA DITAP (hyperlink navigasi ke nota
+                          // asal) — HANYA in-app (`_DebtSettlementSummaryRow`,
+                          // share/print statis/gambar tidak bisa hyperlink).
                           for (final l in _debtSettlementLines)
-                            _SummaryRow(
-                              'Turut lunasi Nota ${l.invoiceLocalId}',
-                              formatRupiah(l.amount),
+                            _DebtSettlementSummaryRow(
+                              line: l,
                               color: scheme.tertiary,
+                              recognizer: l.invoiceId.isEmpty
+                                  ? null
+                                  : (_debtSettlementLinkRecognizers
+                                          .putIfAbsent(
+                                              l.invoiceId,
+                                              () => TapGestureRecognizer())
+                                        ..onTap = () => context
+                                            .push('/kasir/struk/${l.invoiceId}')),
                             ),
                         ],
                       ),
@@ -4861,17 +4881,29 @@ class _ReceiptPaper extends StatelessWidget {
             const _DashedLine(),
             Text('Turut melunasi hutang:',
                 style: _mono.copyWith(fontWeight: FontWeight.w700)),
-            ..._debtSettlementLines.map((l) => Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text('Nota ${l.invoiceLocalId}',
-                          style: _mono.copyWith(fontSize: 11.5)),
-                    ),
-                    Text('Rp ${_fmtNum(l.amount)}',
+            // Susulan (permintaan user): 2 baris per nota — nama nota baris
+            // 1, tanggal nota baris 2 (posisi PERSIS spt qty·satuan·harga
+            // baris item produk biasa) — nominal di posisi harga. Statis
+            // (share/print gambar), TIDAK ada hyperlink (beda dgn versi
+            // in-app `_DebtSettlementSummaryRow`).
+            for (final l in _debtSettlementLines) ...[
+              Text('Nota ${l.invoiceLocalId}',
+                  style: _mono.copyWith(fontSize: 11.5, fontWeight: FontWeight.w700)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                        l.invoiceDate != null
+                            ? formatTanggalPendek(l.invoiceDate!)
+                            : '',
                         style: _mono.copyWith(fontSize: 11.5)),
-                  ],
-                )),
+                  ),
+                  Text('Rp ${_fmtNum(l.amount)}',
+                      style: _mono.copyWith(fontSize: 11.5)),
+                ],
+              ),
+            ],
           ],
           // Timeline pembayaran (mis. hutang dilunasi belakangan / dicicil).
           if (_showTimeline) ...[
@@ -5200,6 +5232,62 @@ class _SummaryRow extends StatelessWidget {
               style: TextStyle(
                   fontWeight: bold ? FontWeight.w700 : FontWeight.normal,
                   color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fitur "Lunasi Hutang" — baris ringkasan struk IN-APP, 2-baris (nama nota
+/// + tanggal) sejalan pola item produk struk biasa (nama baris 1, qty·
+/// satuan·harga baris 2), nominal di posisi kanan sama spt [_SummaryRow].
+/// "Nota X" jadi HYPERLINK kalau [recognizer] tersedia (invoiceId dikenal —
+/// data lama sebelum redesain ini tidak punya invoiceId, jatuh ke teks
+/// polos) — tap navigasi ke nota ASAL yang dilunasi, supaya audit/komplain
+/// pelanggan bisa langsung dibuka tanpa scroll cari manual.
+class _DebtSettlementSummaryRow extends StatelessWidget {
+  const _DebtSettlementSummaryRow({
+    required this.line,
+    required this.color,
+    this.recognizer,
+  });
+
+  final DebtSettlementDetailLine line;
+  final Color color;
+  final TapGestureRecognizer? recognizer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'Turut lunasi Nota ${line.invoiceLocalId}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                        decoration: recognizer != null
+                            ? TextDecoration.underline
+                            : null),
+                    recognizer: recognizer,
+                  ),
+                ),
+                if (line.invoiceDate != null)
+                  Text(formatTanggalPendek(line.invoiceDate!),
+                      style: TextStyle(fontSize: 11.5, color: color)),
+              ],
+            ),
+          ),
+          Text(formatRupiah(line.amount),
+              style: TextStyle(fontWeight: FontWeight.w700, color: color)),
         ],
       ),
     );

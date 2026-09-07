@@ -6,102 +6,99 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh lima — "Ekspor Arsip
-Tahunan"). Versi kerja **2.51.0+107** (MINOR naik — fitur baru terlihat
-pengguna). schemaVersion **43** (tidak berubah sesi ini)._
+_Update sesi 7 September 2026 (sesi ketiga puluh enam — redesain KEDUA
+"Lunasi Hutang"). Versi kerja **2.52.0+108** (MINOR naik — redesain UX
+terlihat pengguna). schemaVersion **43** (tidak berubah sesi ini — field
+baru `invoiceId`/`invoiceDate` cuma ditambah ke dalam JSON string
+`transactions.debtSettlementDetail` yang sudah nullable, tanpa migrasi)._
 
-## Sesi ini — fitur "Ekspor Arsip Tahunan" SELESAI
+## Sesi ini — redesain KEDUA "Lunasi Hutang" SELESAI
 
-Audit menemukan file arsip tahunan (`archive_YYYY.db`, hasil "Tutup Buku",
-arsip TAHUNAN — beda dari "Tutup Kasir" harian) TIDAK PERNAH ikut backup
-app sama sekali: `DbExportService.exportPortable`/`exportOwnerTransfer`
-(dipakai Backup & Restore/Alihkan Owner) cuma baca `main.db`. Kalau device
-rusak/hilang SETELAH tutup buku, data yang sudah diarsipkan bisa hilang
-permanen (cuma tersimpan lokal, tidak ikut backup apa pun).
+User merevisi desain "Lunasi Hutang" LAGI (setelah redesain PERTAMA di sesi
+32/`a254152` — toggle boolean tunggal pudar/solid di dalam list produk).
+Backend (`settleMergedDebt`/`saveTransactionWithDebtSettlements`) **TIDAK
+berubah logikanya** — cuma cara UI membuat entrinya berubah total.
 
-**Fix**: fitur "Ekspor Arsip" baru, format & entry-point SENGAJA TERPISAH
-dari backup biasa (instruksi eksplisit user) supaya tidak disalahpahami
-sbg pengganti backup utuh (arsip cuma 1 tahun, backup biasa = seluruh DB
-aktif):
-- `DbExportService.exportArchive({archiveDb, password, year})` — magic
-  baru **`BPOA1`** ("`.posarsip`"), pola SAMA `exportPortable` (PBKDF2
-  password+salt acak, gzip(JSON dump)+AES, `CryptoService.
-  derivePortableKeyV2`) tapi sumbernya `archiveDb` (dibuka via
-  `ArchiveService.open`), bukan `main.db`. Payload tambah field `year`.
-  `decrypt()` biasa (jalur restore-seluruh-DB) mendeteksi magic BPOA1 lebih
-  dulu & throw pesan jelas "Ini file arsip tahunan (.posarsip), bukan file
-  backup biasa" — **restore arsip SENGAJA belum diimplementasikan** (user
-  cuma minta ekspor; kalau nanti diminta, harus masuk ke `archive_YYYY.db`
-  terpisah, BUKAN `restoreFromDump` ke `main.db`).
-- `arsip_screen.dart`: tiap baris `_ArchiveCard` dapat tombol "Ekspor Arsip
-  Ini" (`Icons.ios_share`, beda dari `Icons.bar_chart_outlined` "Lihat
-  Ringkasan") → dialog password (REUSE pola persis `backup_screen.dart`:
-  min 8 karakter) → `ArchiveService.open(year, encryptionKey)` →
-  `exportArchive` → `saveOrShareExport` (share sheet/simpan lokal, pola
-  existing) → `ArchiveService.close()` di `finally` (tidak nyangkut
-  terbuka). Kalau ringkasan arsip sedang terbuka (`_archiveDb != null`)
-  saat tombol ekspor ditekan, direset dulu (ArchiveService cuma pegang
-  SATU koneksi global — `open()` baru auto-close yang lama).
-- Nama file: **`arsip_toko_$year.posarsip`** — beda ekstensi dari
-  `.berkahpos` (backup biasa) supaya user tidak salah kira ini pengganti
-  backup utuh.
+**Perubahan desain:**
+1. Entry point pindah dari baris toggle DI DALAM list produk (dihapus
+   total, `_DebtSettlementCartRow`) ke chip pengingat hutang yang SUDAH
+   ADA (merah, `Icons.account_balance_wallet_outlined`) — sekarang
+   INTERAKTIF di 2 tempat: cart bar `kasir_screen.dart` (`_CartBar.
+   onTapDebt`) & banner baru di dalam `cart_sheet.dart` (di atas list
+   produk). Tap → `showDebtSettlementSheet` (`widgets/debt_settlement_
+   sheet.dart`, file BARU).
+2. Sheet "Pilih Nota untuk Dilunasi" — checklist SEMUA nota tempo/
+   kurang_bayar pelanggan (REUSE `getUnpaidTxDetails`, query TIDAK
+   berubah), toggle "Centang Semua", tombol "Terapkan".
+3. `DebtSettlementEntry` (`cart_debt_settlement_provider.dart`) —
+   RESTRUKTUR TOTAL: dulu list dibatasi maks 1 entri agregat (field
+   `targetInvoices` = rencana FIFO lintas-nota via `planFifoSettlement`,
+   DIHAPUS). SEKARANG: list bebas banyak entri, **SATU entri = SATU nota
+   sumber** langsung (field baru `invoiceId`/`invoiceLocalId`/
+   `invoiceDate` langsung di entri, bukan list target lagi). Partial
+   per-nota (uncentang sebagian) didukung native.
+4. Entri aktif tampil sbg baris TERPISAH di keranjang (`_DebtSettlementEntryRow`,
+   `cart_sheet.dart`) — gaya visual SAMA PERSIS `_CartItemTile` 3-baris
+   (nama 17px / tanggal 13px onSurfaceVariant / nominal numStyle 14px
+   w700), leading `Icons.receipt_long_outlined`. Ditempel di UJUNG list
+   produk dalam `ListView.separated` yang sama. Tap baris = hapus entri.
+5. Total keranjang (nominal besar) = `totalAmount` + SUM entri aktif,
+   breakdown "+ Lunasi Hutang Rp X (N nota)" di bawahnya (pola
+   `_PrabayarFooterSummary._shrinkToFit`, reuse).
+6. Struk (in-app/share/print) — baris "Turut lunasi Nota X" sekarang
+   2-baris (nama nota + tanggal, posisi PERSIS pola qty·satuan·harga item
+   produk biasa). `DebtSettlementDetailLine`/`parseDebtSettlementDetail`
+   (`app_database.dart`) ditambah field `invoiceId`+`invoiceDate`
+   (NULLABLE — JSON lama tanpa field ini tetap aman diparse, `invoiceId`
+   fallback `''`, `invoiceDate` fallback `null`).
+7. In-app struk (`receipt_screen.dart`) — "Nota X" jadi HYPERLINK (tap →
+   `context.push('/kasir/struk/$invoiceId')`, pola SAMA persis
+   `_preorderRefSpan`/`_preorderLinkRecognizers` yg sudah ada, REUSE pola
+   TapGestureRecognizer per-id). HANYA in-app — share/print statis/gambar
+   tidak bisa hyperlink.
 
-**Isu lingkungan CI ditemukan & dipecahkan** (tidak terkait fitur, tapi
-menghambat widget test): `Directory.list()`/`File.copy()` (dart:io async
-isolate-based I/O) **HANG TANPA BATAS** (10 menit lalu timeout) di dalam
-`testWidgets` sandbox lingkungan CI ini — dikonfirmasi lewat reproduksi
-terisolasi (`test()` biasa & operasi `NativeDatabase`/FFI sqlite3 aman,
-HANYA dart:io isolate-based I/O yang kena). `ArchiveService.listArchives`
-(dipakai provider daftar arsip) pakai `Directory.list()` → widget test yang
-merender `ArsipScreen` dgn arsip nyata dari disk akan HANG. Solusi: provider
-`archiveListProvider` (di `arsip_screen.dart`) diekspos (bukan private lagi)
-supaya widget test bisa override-nya langsung (skip `Directory.list()`
-sama sekali), dan arsip test dibuat LANGSUNG via `NativeDatabase` (FFI,
-BUKAN lewat `TutupBukuService.execute` yang pakai `File.copy` async).
-`test/helpers/pump_app.dart` — `pumpWithFakeApp` sekarang terima
-`extraOverrides` opsional (list `Override` tambahan di luar
-`databaseProvider`/`deviceProvider`) untuk kasus serupa nanti.
-**Catat ini di CLAUDE.md/gotcha kalau bug serupa muncul lagi** — screen
-manapun yang exercise `Directory.list()`/`File.copy()` real (bukan lewat
-`NativeDatabase`) butuh trik yang sama (provider override / hindari, BUKAN
-`tester.runAsync()` — sudah dicoba, TIDAK cukup karena provider yang
-dipanggil otomatis dari `ref.watch()` selama build tetap jalan di FakeAsync
-test zone, di luar kendali `runAsync` eksplisit).
+**File baru**: `formatTanggalPendek` (`app_theme.dart`, dekat
+`formatRupiah`) — format tanggal manual aman-locale (`_idMonthsShort`
+ASCII), dipakai bareng sheet pemilihan nota, baris entri keranjang, & struk
+in-app (SATU sumber format, bukan 3 implementasi terpisah).
 
-**Test** (semua baru, revert-verify dibuktikan — fix di-stash, test gagal
-compile-error yg relevan, dikembalikan, hijau lagi):
-- `test/archive_export_test.dart` — magic bytes BPOA1, round-trip manual
-  decrypt (payload valid, field `year` benar), password salah gagal
-  dibongkar, `decrypt()` biasa menolak BPOA1 dgn pesan "arsip".
-- `test/arsip_export_widget_test.dart` — tombol "Ekspor Arsip Ini" muncul
-  per baris, dialog password menyebut tahun yang benar, validasi panjang
-  password, `ArchiveService.open`/`exportArchive` benar2 terpanggil
-  (arsip nyata dibaca via FFI), lanjut ke dialog `saveOrShareExport`,
-  koneksi arsip ditutup lagi setelah selesai/dibatalkan.
+**Test**: `test/cart_sheet_debt_settlement_test.dart` DITULIS ULANG total
+(5 test: chip gate x3, tap-chip→Centang Semua→2 entri terpisah+Total naik,
+partial-selection, tap-entri→hapus+Total turun) — `planFifoSettlement`
+pure-function tests DIHAPUS (fungsinya sendiri sudah dihapus, tidak relevan
+lagi). `test/debt_settlement_checkout_test.dart` — 4 test lama ditambah
+`invoiceDate` ke tuple `targets`, +3 test baru (parse JSON lama tanpa
+invoiceId/invoiceDate, parse JSON baru, `saveTransactionWithDebtSettlements`
+menulis invoiceDate ke detail). Revert-verify dibuktikan manual (2 bug
+sengaja disuntik — tap-hapus dimatikan, Centang Semua dirusak — test
+terkait gagal dgn pesan relevan, lalu dikembalikan & hijau lagi).
 
-Full suite: **1551 test, semua lulus**, `flutter analyze`: 0 issue.
-
-**Belum dikerjakan / cek sesi depan**: restore arsip (`.posarsip` →
-`archive_YYYY.db`) belum diimplementasikan sama sekali — SENGAJA (user
-cuma minta ekspor). Kalau diminta nanti: payload SUDAH punya field `year`,
-tinggal tulis fungsi `restoreArchive` yang menulis ke `archive_YYYY.db`
-terpisah (JANGAN pakai `DbExportService.restore`/`restoreFromDump` yang
-menyasar `main.db`).
+Full suite & `flutter analyze`: **lihat commit terakhir sesi ini** (jalankan
+`flutter test` kalau perlu angka pasti terkini — jangan asumsikan dari sini,
+snapshot ini ditulis SEBELUM run penuh selesai kalau sesi terputus).
 
 ## Sesi sebelumnya (ringkas — detail lengkap di CHANGELOG.md)
 
+- **7 September, sesi ketiga puluh lima** (`183dd29`): Ekspor Arsip Tahunan
+  terpisah dari backup biasa.
 - **7 September, sesi ketiga puluh empat** (`0d739f6`): fix
-  `price_categories` tidak ikut sync LAN & backup penuh (3 tempat
-  sekaligus lupa: `_allTables`/`masterData`/`clientMergeableTables`).
+  `price_categories` tidak ikut sync LAN & backup penuh.
 - **7 September, sesi ketiga puluh tiga** (`b3bab3f`): fix "Batalkan &
   Susun Ulang" tidak membawa nama pelanggan terdaftar.
-- **7 September, sesi ketiga puluh dua** (`a254152`): redesain toggle
-  otomatis "Lunasi Hutang" di keranjang.
+- **7 September, sesi ketiga puluh dua** (`a254152`): redesain PERTAMA
+  toggle otomatis "Lunasi Hutang" — SUDAH DIGANTIKAN redesain kedua sesi
+  ini, `_DebtSettlementCartRow` tidak ada lagi.
 
 ## Keputusan/pola penting yang masih berlaku (ringkas — detail di CLAUDE.md)
 
 - Cart provider = family per `cartId` (`kMainCartId`/`kCatalogCartId`/`txId`).
   Jangan buat provider keranjang global baru.
+- **"Lunasi Hutang"**: SATU `DebtSettlementEntry` = SATU nota sumber (lihat
+  detail di atas) — kalau mau ubah lagi, JANGAN kembalikan pola agregat
+  FIFO lintas-nota (`planFifoSettlement`) tanpa alasan kuat, backend
+  `settleMergedDebt` tetap generik menerima banyak target per grup jadi
+  keduanya sebenarnya bisa dipetakan, tapi UI SEKARANG per-nota eksplisit
+  sesuai permintaan user (partial per-nota).
 - Tabel master-data BARU WAJIB langsung dicek masuk ke 3 tempat:
   `_allTables` (backup), `masterData` di `dumpSince` (sync harian), DAN
   `LanSyncService.clientMergeableTables` (allowlist sisi klien) — lupa

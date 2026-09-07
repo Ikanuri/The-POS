@@ -989,9 +989,17 @@ class PrinterService {
       if (debtSettlementLines.isNotEmpty) {
         out.addAll(
             bodyText('Turut lunasi hutang:', styles: const PosStyles(bold: true)));
+        // Susulan (permintaan user): 2 baris per nota — nama nota (bold,
+        // sejalan pola nama item produk `bodyText` bold di atas), lalu
+        // tanggal nota + nominal di baris berikutnya (posisi PERSIS spt
+        // qty·satuan·harga baris item biasa, lihat `qtyLine`/`bodyLR` di
+        // atas).
         for (final l in debtSettlementLines) {
           out.addAll(
-              bodyLR('Nota ${l.invoiceLocalId}', 'Rp ${_fmtNum(l.amount)}'));
+              bodyText('Nota ${l.invoiceLocalId}', styles: const PosStyles(bold: true)));
+          out.addAll(bodyLR(
+              l.invoiceDate != null ? _fmtDateTimeFull(l.invoiceDate!) : '',
+              'Rp ${_fmtNum(l.amount)}'));
         }
       }
     }

@@ -337,3 +337,18 @@ String formatRupiah(num value) {
   }
   return '${value < 0 ? '-' : ''}Rp $buf';
 }
+
+// Locale 'id' TIDAK diinisialisasi (`initializeDateFormatting`) di app ini —
+// `DateFormat(..., 'id_ID')` MELEDAK saat build (`LocaleDataException`, lihat
+// gotcha CLAUDE.md). Nama bulan dibentuk MANUAL, singkatan ASCII murni supaya
+// aman dipakai juga di struk cetak ESC/POS (`printer_service.dart`).
+const _idMonthsShort = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+];
+
+/// Format tanggal pendek dipakai bersama utk baris "Lunasi Hutang" (kartu
+/// nota di keranjang `cart_sheet.dart`, struk in-app `receipt_screen.dart`)
+/// — mis. "7 Sep 2026". Aman locale (lihat dok `_idMonthsShort`).
+String formatTanggalPendek(DateTime d) =>
+    '${d.day} ${_idMonthsShort[d.month - 1]} ${d.year}';

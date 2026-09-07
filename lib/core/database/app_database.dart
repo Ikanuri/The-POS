@@ -3256,12 +3256,13 @@ class AppDatabase extends _$AppDatabase {
   /// pelanggan) ditulis ke `transactions.debtSettlementDetail` nota BARU
   /// (JSON, murni utk tampilan struk — lihat dok kolom itu).
   ///
-  /// [targets] tiap entri debtSettlements SUDAH berupa rencana FIFO beku
-  /// (dihitung sekali saat kasir mengonfirmasi nominal di keranjang, lihat
-  /// `planFifoSettlement`/`DebtSettlementEntry` di `cart_debt_settlement_
-  /// provider.dart`) — dipakai APA ADANYA sbg breakdown struk, TIDAK
-  /// dihitung ulang di sini (hanya `settleMergedDebt` yg benar² menulis
-  /// alokasi FINAL ke nota lama, boleh beda tipis dari rencana beku kalau
+  /// [targets] tiap entri debtSettlements — REDESAIN KEDUA (permintaan
+  /// user): satu [DebtSettlementEntry] (`cart_debt_settlement_provider.
+  /// dart`) sekarang = SATU nota sumber yang dicentang kasir lewat sheet
+  /// "Pilih Nota untuk Dilunasi" (`debt_settlement_sheet.dart`), nominalnya
+  /// dibekukan SAAT dicentang — dipakai APA ADANYA sbg breakdown struk,
+  /// TIDAK dihitung ulang di sini (hanya `settleMergedDebt` yg benar² menulis
+  /// alokasi FINAL ke nota lama, boleh beda tipis dari nominal beku kalau
   /// sisa nota berubah di antaranya).
   Future<void> saveTransactionWithDebtSettlements({
     required TransactionsCompanion tx,
@@ -3272,8 +3273,13 @@ class AppDatabase extends _$AppDatabase {
         ({
           String customerName,
           int amount,
-          List<({String invoiceId, String invoiceLocalId, int amount})>
-              targets,
+          List<
+              ({
+                String invoiceId,
+                String invoiceLocalId,
+                DateTime invoiceDate,
+                int amount
+              })> targets,
           String method,
           String? methodName,
         })> debtSettlements,
@@ -3307,6 +3313,7 @@ class AppDatabase extends _$AppDatabase {
           detail.add({
             'invoiceId': t.invoiceId,
             'invoiceLocalId': t.invoiceLocalId,
+            'invoiceDate': t.invoiceDate.millisecondsSinceEpoch,
             'amount': t.amount,
             'customerName': ds.customerName,
           });
@@ -9166,19 +9173,33 @@ class DebtBookEntry {
 /// utk menampilkan "Turut melunasi hutang: Nota X Rp Y".
 class DebtSettlementDetailLine {
   const DebtSettlementDetailLine({
+    required this.invoiceId,
     required this.invoiceLocalId,
+    required this.invoiceDate,
     required this.amount,
     required this.customerName,
   });
 
+  /// Id nota SUMBER — dipakai hyperlink "Nota X" di struk in-app
+  /// (`receipt_screen.dart`) navigasi balik ke nota asal (`context.push
+  /// ('/kasir/struk/$invoiceId')`). Kosong (data lama sebelum field ini
+  /// ditambahkan) -> tidak ditampilkan sbg link, teks polos saja.
+  final String invoiceId;
   final String invoiceLocalId;
+
+  /// Tanggal nota sumber — null utk data lama sebelum field ini ditambahkan
+  /// (struk lama tetap tampil, cuma tanpa baris tanggal).
+  final DateTime? invoiceDate;
   final int amount;
   final String customerName;
 }
 
 /// Parse `transactions.debtSettlementDetail` (JSON string, nullable) menjadi
 /// daftar [DebtSettlementDetailLine] — data rusak/null/kosong -> list kosong
-/// (aman, tidak melempar).
+/// (aman, tidak melempar). `invoiceId`/`invoiceDate` OPSIONAL di JSON lama
+/// (struk sebelum redesain kedua ini belum menyimpannya) — field nullable
+/// di model, TIDAK perlu migrasi DB (kolom `debtSettlementDetail` sudah
+/// blob JSON string nullable).
 List<DebtSettlementDetailLine> parseDebtSettlementDetail(String? raw) {
   if (raw == null || raw.isEmpty) return const [];
   try {
@@ -9187,8 +9208,13 @@ List<DebtSettlementDetailLine> parseDebtSettlementDetail(String? raw) {
     return decoded
         .map((e) {
           final m = e as Map<String, dynamic>;
+          final dateMs = m['invoiceDate'] as int?;
           return DebtSettlementDetailLine(
+            invoiceId: m['invoiceId'] as String? ?? '',
             invoiceLocalId: m['invoiceLocalId'] as String,
+            invoiceDate: dateMs == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(dateMs),
             amount: (m['amount'] as num).toInt(),
             customerName: m['customerName'] as String? ?? '',
           );

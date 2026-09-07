@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh enam)
+
+### 🎨 Tampilan
+- **Cara melunasi hutang pelanggan saat belanja lagi disempurnakan lagi.**
+  Redesain sebelumnya (satu baris "Lunasi hutang" pudar/solid) diganti:
+  sekarang chip pengingat hutang merah yang sudah ada di keranjang bisa
+  DITAP, membuka daftar nota belum lunas pelanggan itu dengan centang per
+  nota (plus tombol "Centang Semua" untuk lunasi semua sekaligus). Kasir
+  bisa memilih sebagian nota saja kalau pelanggan cuma mau bayar sebagian
+  hutangnya. Tiap nota yang dicentang tampil sbg baris terpisah di
+  keranjang (nama nota, tanggal, & nominal) — tinggal ketuk baris itu
+  untuk membatalkan lagi. Nominal Total di keranjang otomatis naik sesuai
+  hutang yang ikut dibayar. Di struk, baris "Nota X" pada bagian
+  pelunasan hutang sekarang bisa DITAP (di layar HP, bukan versi
+  bagikan/cetak) untuk langsung membuka nota asal yang dilunasi —
+  memudahkan kalau ada komplain/audit pelanggan.
+
 ## 7 September 2026 (sesi ketiga puluh lima)
 
 ### ✨ Fitur Baru
