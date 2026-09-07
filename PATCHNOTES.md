@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh sembilan)
+
+### 🐛 Perbaikan
+- **Total & Dibayar di struk "Lunasi Hutang" sekarang benar-benar
+  menjumlahkan barang + nota lama.** Baris nota lama yang ikut dilunasi
+  memang sudah menyatu ke daftar barang (perbaikan sesi sebelumnya), tapi
+  angka "Total" & "Dibayar" di bawahnya masih belum ikut menghitung nota
+  hutangnya — jadi kalau belanja Rp 212.400 sekaligus melunasi nota lama
+  Rp 690.000, yang tampil cuma Rp 212.400 (bukan Rp 902.400). Sekarang
+  sudah benar di ketiga jenis struk: layar HP, struk yang dibagikan/gambar,
+  dan struk cetak.
+
 ## 7 September 2026 (sesi ketiga puluh tujuh)
 
 ### 🎨 Tampilan

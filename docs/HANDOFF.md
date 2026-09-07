@@ -6,12 +6,51 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh delapan — sejajarkan baris
-Lunasi Hutang dgn baris produk di struk, susulan redesain ketiga). Versi
-kerja **2.53.1+110** (PATCH — murni fix alignment visual, bukan fitur
-baru). schemaVersion **43** (tidak berubah)._
+_Update sesi 7 September 2026 (sesi ketiga puluh sembilan — gabung Total/
+Dibayar dgn nominal nota hutang di struk, susulan redesain ketiga). Versi
+kerja **2.53.2+111** (PATCH — murni bugfix tampilan, bukan fitur baru).
+schemaVersion **43** (tidak berubah)._
 
-## Sesi ini — sejajarkan baris "Lunasi Nota #X" dgn baris produk (struk in-app) SELESAI
+## Sesi ini — gabung "Total"/"Dibayar" dgn nota hutang di struk SELESAI
+
+User kirim screenshot: baris "Lunasi Nota #X" sudah menyatu ke list item
+struk (redesain ketiga, sesi lalu), TAPI baris "Total"/"Total akhir" &
+"Dibayar" di ringkasan bawah TIDAK ikut menjumlahkan nominal nota hutang —
+cuma `tx.total`/`tx.paid` mentah (item saja). Contoh: item Rp 212.400 +
+Lunasi Nota #16 Rp 690.000 seharusnya Total Rp 902.400, tapi cuma tampil
+Rp 212.400.
+
+**Fix** (MURNI tampilan — `tx.total`/`tx.paid` TIDAK disentuh sama sekali,
+Laporan/kalkulasi lain aman): getter/variabel baru `_debtSettlementTotal`
+(in-app & `_ReceiptPaper`, `receipt_screen.dart`) / `debtSettlementTotal`
+(`printer_service.dart`) = sum nominal `_debtSettlementLines`, ditambahkan
+ke:
+- In-app: `_SummaryRow('Total'/'Total akhir', ...)` & `_SummaryRow
+  ('Dibayar', ...)`.
+- Share/gambar (`_ReceiptPaper`): baris "Total"/"Akhir" & "Bayar..".
+- Cetak ESC/POS: baris "Total"/"Total akhir" & "Bayar".
+
+**SENGAJA TIDAK ikut ditambah** (basis lama sudah benar):
+- **Poin loyalitas** (`tx.pointsEarned`) — dihitung backend dari
+  pembelian barang saja, pelunasan hutang lama bukan pembelian baru.
+- **"Sisa Tagihan"** (`netRemainingOwed`, in-app) & baris "Sisa" (share/
+  cetak, dari `tx.total - netPaid` mentah) — sisa tagihan nota INI
+  sendiri, nota hutang yg dilunasi justru uang yg SUDAH diterima
+  (kombinasi kurang_bayar+debt-settlement diverifikasi test eksplisit,
+  tidak perlu penanganan khusus tambahan — `netRemainingOwed`/baris
+  "Sisa" sudah otomatis benar krn tidak pernah menyentuh
+  `debtSettlementTotal`).
+
+**Test baru**: `test/receipt_debt_settlement_total_paid_test.dart` (6
+test: in-app Total+Dibayar gabung, share/gambar gabung, cetak ESC/POS
+gabung, regresi nota tanpa hutang tidak berubah, poin TIDAK ikut naik,
+kombinasi kurang_bayar+hutang — Sisa Tagihan murni item sendiri).
+Revert-verified (4 dari 6 test gagal dgn pesan relevan saat fix di-stash,
+2 sisanya — regresi & poin — tetap hijau krn memang tidak disentuh fix
+ini). `flutter analyze` 0 issue. Full suite: **1564 test lulus, 0 gagal**.
+Commit `5e7f737`.
+
+## Sesi sebelumnya — sejajarkan baris "Lunasi Nota #X" dgn baris produk (struk in-app) SELESAI
 
 User kirim screenshot: baris "Lunasi Nota #19" di struk IN-APP TIDAK
 sejajar kolom dgn baris produk di atasnya (`_DebtSettlementSummaryRow`

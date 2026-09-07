@@ -7,6 +7,22 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh sembilan — gabung Total/Dibayar dgn nota hutang)
+
+- `5e7f737` — fix(kasir): gabung nominal nota hutang ke Total/Dibayar di
+  struk — baris "Lunasi Nota #X" sudah menyatu ke list item (redesain
+  sebelumnya), tapi baris "Total"/"Total akhir" & "Dibayar" belum ikut
+  menjumlahkan nominal nota hutang (dilaporkan user via screenshot: item
+  Rp 212.400 + Lunasi Nota #16 Rp 690.000 seharusnya Rp 902.400, cuma
+  tampil Rp 212.400). Fix di ketiga jenis struk (in-app, share/gambar
+  `_ReceiptPaper`, cetak ESC/POS) via getter/variabel
+  `_debtSettlementTotal`/`debtSettlementTotal` — MURNI perubahan tampilan,
+  `tx.total`/`tx.paid` TIDAK disentuh. Poin loyalitas & "Sisa Tagihan"
+  SENGAJA tidak ikut ditambah (basis lama sudah benar). Test baru
+  `test/receipt_debt_settlement_total_paid_test.dart` (6 test: in-app,
+  share, cetak, regresi tanpa hutang, poin tidak naik, kombinasi
+  kurang_bayar+hutang).
+
 ## 2026-09-07 (sesi ketiga puluh delapan — sejajarkan baris Lunasi Hutang di struk)
 
 - `e64dba3` — fix(kasir): baris "Lunasi Nota #X" di struk in-app tidak
