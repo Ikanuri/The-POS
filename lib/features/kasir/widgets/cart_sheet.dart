@@ -312,6 +312,12 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       db,
       remaining: remaining,
       title: 'Pra-Bayar',
+      // Susulan (permintaan user): kalkulator Pra-Bayar WAJIB mulai
+      // kosong/nol, BEDA dgn pemanggil lain (mis. Buku Hutang lewat
+      // `debt_settlement_picker.dart`) yang memang mau prefill `remaining`
+      // — di sini kasir sering mau input nominal Pra-Bayar SENDIRI (bukan
+      // langsung "sisa keranjang"), prefill malah bikin salah-ketik.
+      prefillRemaining: false,
     );
     if (result == null || result.amount <= 0) return;
     prabayarNotifier.add(PrabayarEntry(
@@ -1308,14 +1314,21 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               onTap: () =>
                                   _showDebtSettlementList(ctx, ref),
                               borderRadius: BorderRadius.circular(6),
-                              child: Text(
-                                'Turut lunasi hutang ${formatRupiah(debtSettlementTotal)}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: scheme.tertiary,
+                              // Fix bug "teks terpotong" yang sama dgn
+                              // `_PrabayarFooterSummary` — `FittedBox`
+                              // (bukan `ellipsis` polos) supaya nominal
+                              // besar mengecil, bukan kepotong.
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Turut lunasi hutang ${formatRupiah(debtSettlementTotal)}',
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: scheme.tertiary,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1977,6 +1990,19 @@ class _PrabayarFooterSummary extends ConsumerWidget {
   final int changeTakenTotal;
   final VoidCallback onShowChangeTakenHistory;
 
+  /// Susulan (fix bug "Kembalian terpotong"): baris teks di sini bisa
+  /// bertumpuk banyak (Pra-Bayar, Sisa/Kembalian, riwayat) di ruang sempit
+  /// sebelahan `Expanded(Bayar)` — `overflow: ellipsis` polos memotong
+  /// nominal besar jadi tak terbaca. Dibungkus `FittedBox(scaleDown)`
+  /// per-baris (pola sama dgn nominal "Total" di atasnya) supaya font
+  /// mengecil otomatis mengikuti ruang yang tersedia, BUKAN terpotong —
+  /// beda dgn `ellipsis` yang membuang sebagian teks secara permanen.
+  static Widget _shrinkToFit(Widget child) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: child,
+      );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1988,16 +2014,20 @@ class _PrabayarFooterSummary extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Pra-Bayar ${formatRupiah(prabayarTotal)}',
-          style: baseStyle,
-          overflow: TextOverflow.ellipsis,
+        _shrinkToFit(
+          Text(
+            'Pra-Bayar ${formatRupiah(prabayarTotal)}',
+            style: baseStyle,
+            maxLines: 1,
+          ),
         ),
         if (diff > 0)
-          Text(
-            'Sisa ${formatRupiah(diff)}',
-            style: baseStyle.copyWith(color: AppTheme.debtFg(isDark)),
-            overflow: TextOverflow.ellipsis,
+          _shrinkToFit(
+            Text(
+              'Sisa ${formatRupiah(diff)}',
+              style: baseStyle.copyWith(color: AppTheme.debtFg(isDark)),
+              maxLines: 1,
+            ),
           )
         else if (diff < 0)
           Row(
@@ -2017,10 +2047,13 @@ class _PrabayarFooterSummary extends ConsumerWidget {
               ),
               const SizedBox(width: 4),
               Flexible(
-                child: Text(
-                  'Kembalian ${formatRupiah(-diff)}',
-                  style: baseStyle.copyWith(color: AppTheme.changeFg(isDark)),
-                  overflow: TextOverflow.ellipsis,
+                child: _shrinkToFit(
+                  Text(
+                    'Kembalian ${formatRupiah(-diff)}',
+                    style:
+                        baseStyle.copyWith(color: AppTheme.changeFg(isDark)),
+                    maxLines: 1,
+                  ),
                 ),
               ),
             ],
@@ -2035,13 +2068,15 @@ class _PrabayarFooterSummary extends ConsumerWidget {
                 Icon(Icons.history, size: 12, color: scheme.onSurfaceVariant),
                 const SizedBox(width: 2),
                 Flexible(
-                  child: Text(
-                    'Kembalian diambil ${formatRupiah(changeTakenTotal)}',
-                    style: baseStyle.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      decoration: TextDecoration.underline,
+                  child: _shrinkToFit(
+                    Text(
+                      'Kembalian diambil ${formatRupiah(changeTakenTotal)}',
+                      style: baseStyle.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        decoration: TextDecoration.underline,
+                      ),
+                      maxLines: 1,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

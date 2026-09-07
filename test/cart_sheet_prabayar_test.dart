@@ -121,9 +121,12 @@ void main() {
 
     await tester.tap(find.byTooltip('Pra-Bayar'));
     await tester.pumpAndSettle();
-    // Sheet showDebtPaymentSheet terbuka, prefillRemaining=true → langsung
-    // tap tombol Bayar (satu-satunya FilledButton di sheet itu) mengunci
-    // Rp 30.000 (seluruh sisa) sbg entri Tunai.
+    // Sheet showDebtPaymentSheet terbuka dgn `prefillRemaining: false` (fix
+    // bug "kalkulator harus mulai nol") → nominal AWALNYA 0, tap "Uang Pas"
+    // dulu supaya jadi Rp 30.000 (seluruh sisa), baru tap tombol Bayar
+    // (satu-satunya FilledButton di sheet itu) mengunci sbg entri Tunai.
+    await tester.tap(find.text('Uang Pas'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(FilledButton).last);
     await tester.pumpAndSettle();
 
@@ -444,6 +447,100 @@ void main() {
         findsOneWidget);
     expect(find.text('Kembalian diambil ${formatRupiah(20000)}'),
         findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  group('bug "Kembalian terpotong" (_PrabayarFooterSummary) di layar sempit',
+      () {
+    testWidgets(
+        'nominal BESAR (Pra-Bayar + Kembalian + riwayat + Lunasi Hutang '
+        'sekaligus) di 360dp: render TANPA overflow exception DAN teks '
+        'baris-baris itu TIDAK pakai TextOverflow.ellipsis lagi',
+        (tester) async {
+      final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+      addTearDown(() async => r.db.close());
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      await tester.pumpAndSettle();
+
+      // Entri Pra-Bayar nominal sangat besar (>Rp 12 juta) supaya "Kembalian"
+      // (diff thd total keranjang 30000) juga jadi nominal besar sekaligus.
+      r.container.read(cartPrabayarProvider(kMainCartId).notifier).add(
+            PrabayarEntry(
+              id: 'eBesar',
+              amount: 12345678,
+              method: 'tunai',
+              lockedAt: DateTime.now(),
+            ),
+          );
+      // Sebagian kecil sudah diambil sbg kembalian sebelumnya → baris
+      // "riwayat kembalian diambil" ikut tampil bersamaan.
+      r.container
+          .read(cartPrabayarProvider(kMainCartId).notifier)
+          .recordChangeTaken(1000000);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull,
+          reason: 'kolom ringkasan Pra-Bayar dgn banyak baris teks nominal '
+              'besar HARUS tetap render tanpa RenderFlex overflow di 360dp');
+
+      expect(find.text('Pra-Bayar ${formatRupiah(12345678)}'), findsOneWidget);
+      expect(find.text('Kembalian ${formatRupiah(12345678 - 1000000 - 30000)}'),
+          findsOneWidget);
+      expect(
+          find.text('Kembalian diambil ${formatRupiah(1000000)}'),
+          findsOneWidget);
+
+      // Fix: baris2 nominal ini WAJIB sudah tidak pakai `overflow:
+      // TextOverflow.ellipsis` lagi (yg memotong teks scr permanen) — kalau
+      // diganti balik ke kode lama, assert di bawah ini akan GAGAL
+      // (overflow == TextOverflow.ellipsis), membuktikan test ini benar2
+      // mendeteksi mekanisme fix-nya (bukan cuma "tidak exception").
+      final prabayarText = tester.widget<Text>(
+          find.text('Pra-Bayar ${formatRupiah(12345678)}'));
+      expect(prabayarText.overflow, isNot(TextOverflow.ellipsis),
+          reason: 'harus pakai FittedBox(scaleDown), bukan ellipsis, supaya '
+              'nominal besar mengecil BUKAN terpotong');
+
+      final kembalianText = tester.widget<Text>(find.text(
+          'Kembalian ${formatRupiah(12345678 - 1000000 - 30000)}'));
+      expect(kembalianText.overflow, isNot(TextOverflow.ellipsis));
+
+      final historyText = tester.widget<Text>(
+          find.text('Kembalian diambil ${formatRupiah(1000000)}'));
+      expect(historyText.overflow, isNot(TextOverflow.ellipsis));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+  });
+
+  testWidgets(
+      'kalkulator Pra-Bayar mulai dari NOL — bukan prefill sisa keranjang',
+      (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+
+    // Total keranjang = 30000 (belum ada entri Pra-Bayar sama sekali,
+    // jadi remaining = 30000 kalau prefill AKTIF).
+    await tester.tap(find.byTooltip('Pra-Bayar'));
+    await tester.pumpAndSettle();
+
+    // Baris "Dibayar" (nominal yg diketik kasir) HARUS Rp 0 — beda dari
+    // baris "Sisa"/label remaining di atasnya yg MEMANG selalu menampilkan
+    // Rp 30.000 (label info, bukan nominal kalkulator).
+    final dibayarValue = tester.widget<Text>(find
+        .descendant(
+          of: find.ancestor(
+              of: find.text('Dibayar'), matching: find.byType(Row)),
+          matching: find.byType(Text),
+        )
+        .at(1));
+    expect(dibayarValue.data, formatRupiah(0),
+        reason: 'kalkulator Pra-Bayar HARUS mulai kosong/nol, bukan '
+            'prefill dgn sisa keranjang (beda dgn Lunasi Hutang/Buku Hutang '
+            'yang MEMANG mau prefill)');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
