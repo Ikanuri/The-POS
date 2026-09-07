@@ -7,6 +7,35 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh tujuh — redesain ketiga "Lunasi Hutang": struk)
+
+- (pending hash) — feat(kasir): redesain KETIGA "Lunasi Hutang" — baris nota
+  yg dilunasi di struk MENYATU LANGSUNG ke list item produk (bukan lagi
+  section terpisah berheader "Turut melunasi hutang:"/"Turut lunasi
+  hutang:" di bawah Total), di KETIGA jenis struk: in-app
+  (`receipt_screen.dart` `_buildItemRows` — baris dipindah dari Padding
+  ringkasan setelah Total ke akhir list item, sebelum `Divider`),
+  share/gambar (`_ReceiptPaper` — dipindah dari section `_DashedLine`
+  terpisah ke akhir `_ordered.expand(...)`, sebelum `_DashedLine` ke
+  ringkasan), dan cetak ESC/POS (`printer_service.dart` — dipindah dari
+  dalam blok `showPaymentDetail` setelah Bayar/Kembali/Sisa ke akhir loop
+  item, sebelum `bodySep()`/Total). Nama nota dipersingkat: dulu
+  "Nota K1-20260907-0012" (localId penuh, verbose) → sekarang
+  "Lunasi Nota #12" (segmen terakhir localId, pola sama
+  `CartMeta.displayOrderNumber`) via getter baru
+  `DebtSettlementDetailLine.shortLabel` (`app_database.dart`, dipakai
+  ketiga tempat — satu sumber kebenaran format). Hyperlink in-app
+  (`_DebtSettlementSummaryRow`, tap → nota asal) TETAP DIPERTAHANKAN, cuma
+  teksnya diperpendek & posisinya dipindah. MURNI perubahan
+  presentasi/urutan render — logika angka (total/paid/`debtSettlementDetail`
+  sbg metadata tampilan) TIDAK BERUBAH. Test baru:
+  `receipt_debt_settlement_merged_list_test.dart` (in-app + share/gambar,
+  verifikasi struktur widget tree — baris hutang jadi SIBLING item produk
+  dlm Column yg sama, header section lama TIDAK ADA lagi) dan
+  `printer_service_debt_settlement_merged_test.dart` (ESC/POS, verifikasi
+  urutan byte: nama singkat SEBELUM "Total", header lama tidak ada). Bump
+  versi 2.53.0+109.
+
 ## 2026-09-07 (sesi ketiga puluh enam — redesain kedua "Lunasi Hutang")
 
 - `466a51d` — feat(kasir): redesain KEDUA "Lunasi Hutang" (gantikan toggle

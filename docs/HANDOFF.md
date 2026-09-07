@@ -6,76 +6,81 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh enam — redesain KEDUA
-"Lunasi Hutang"). Versi kerja **2.52.0+108** (MINOR naik — redesain UX
-terlihat pengguna). schemaVersion **43** (tidak berubah sesi ini — field
-baru `invoiceId`/`invoiceDate` cuma ditambah ke dalam JSON string
-`transactions.debtSettlementDetail` yang sudah nullable, tanpa migrasi)._
+_Update sesi 7 September 2026 (sesi ketiga puluh tujuh — redesain KETIGA
+"Lunasi Hutang": baris nota di struk menyatu ke list item). Versi kerja
+**2.53.0+109** (MINOR naik — perubahan tampilan struk terlihat pengguna).
+schemaVersion **43** (tidak berubah — MURNI perubahan presentasi/urutan
+render, tidak ada kolom/tabel baru)._
 
-## Sesi ini — redesain KEDUA "Lunasi Hutang" SELESAI
+## Sesi ini — redesain KETIGA "Lunasi Hutang" (struk) SELESAI
 
-User merevisi desain "Lunasi Hutang" LAGI (setelah redesain PERTAMA di sesi
-32/`a254152` — toggle boolean tunggal pudar/solid di dalam list produk).
-Backend (`settleMergedDebt`/`saveTransactionWithDebtSettlements`) **TIDAK
-berubah logikanya** — cuma cara UI membuat entrinya berubah total.
+Lanjutan redesain kedua (sesi 36, di bawah). User minta: baris nota lama yg
+ikut dilunasi di struk (in-app/share-gambar/cetak ESC/POS) tidak lagi
+bagian TERPISAH berheader "Turut melunasi hutang:"/"Turut lunasi hutang:"
+di bawah Total — harus MENYATU LANGSUNG ke list item produk (baris
+terakhir, SEBELUM Total), jadi satu daftar tunggal dgn satu angka Total yg
+menjumlahkan semuanya. MURNI perubahan presentasi/urutan render —
+logika angka (`saveTransactionWithDebtSettlements`/`settleMergedDebt`/
+`payment_screen.dart`) **TIDAK DISENTUH SAMA SEKALI**.
 
-**Perubahan desain:**
-1. Entry point pindah dari baris toggle DI DALAM list produk (dihapus
-   total, `_DebtSettlementCartRow`) ke chip pengingat hutang yang SUDAH
-   ADA (merah, `Icons.account_balance_wallet_outlined`) — sekarang
-   INTERAKTIF di 2 tempat: cart bar `kasir_screen.dart` (`_CartBar.
-   onTapDebt`) & banner baru di dalam `cart_sheet.dart` (di atas list
-   produk). Tap → `showDebtSettlementSheet` (`widgets/debt_settlement_
-   sheet.dart`, file BARU).
-2. Sheet "Pilih Nota untuk Dilunasi" — checklist SEMUA nota tempo/
-   kurang_bayar pelanggan (REUSE `getUnpaidTxDetails`, query TIDAK
-   berubah), toggle "Centang Semua", tombol "Terapkan".
-3. `DebtSettlementEntry` (`cart_debt_settlement_provider.dart`) —
-   RESTRUKTUR TOTAL: dulu list dibatasi maks 1 entri agregat (field
-   `targetInvoices` = rencana FIFO lintas-nota via `planFifoSettlement`,
-   DIHAPUS). SEKARANG: list bebas banyak entri, **SATU entri = SATU nota
-   sumber** langsung (field baru `invoiceId`/`invoiceLocalId`/
-   `invoiceDate` langsung di entri, bukan list target lagi). Partial
-   per-nota (uncentang sebagian) didukung native.
-4. Entri aktif tampil sbg baris TERPISAH di keranjang (`_DebtSettlementEntryRow`,
-   `cart_sheet.dart`) — gaya visual SAMA PERSIS `_CartItemTile` 3-baris
-   (nama 17px / tanggal 13px onSurfaceVariant / nominal numStyle 14px
-   w700), leading `Icons.receipt_long_outlined`. Ditempel di UJUNG list
-   produk dalam `ListView.separated` yang sama. Tap baris = hapus entri.
-5. Total keranjang (nominal besar) = `totalAmount` + SUM entri aktif,
-   breakdown "+ Lunasi Hutang Rp X (N nota)" di bawahnya (pola
-   `_PrabayarFooterSummary._shrinkToFit`, reuse).
-6. Struk (in-app/share/print) — baris "Turut lunasi Nota X" sekarang
-   2-baris (nama nota + tanggal, posisi PERSIS pola qty·satuan·harga item
-   produk biasa). `DebtSettlementDetailLine`/`parseDebtSettlementDetail`
-   (`app_database.dart`) ditambah field `invoiceId`+`invoiceDate`
-   (NULLABLE — JSON lama tanpa field ini tetap aman diparse, `invoiceId`
-   fallback `''`, `invoiceDate` fallback `null`).
-7. In-app struk (`receipt_screen.dart`) — "Nota X" jadi HYPERLINK (tap →
-   `context.push('/kasir/struk/$invoiceId')`, pola SAMA persis
-   `_preorderRefSpan`/`_preorderLinkRecognizers` yg sudah ada, REUSE pola
-   TapGestureRecognizer per-id). HANYA in-app — share/print statis/gambar
-   tidak bisa hyperlink.
+**Perubahan:**
+1. `DebtSettlementDetailLine.shortLabel` (getter baru, `app_database.dart`)
+   — satu sumber kebenaran format nama singkat "Lunasi Nota #12" (segmen
+   terakhir `invoiceLocalId`, pola sama `CartMeta.displayOrderNumber`),
+   menggantikan "Nota K1-20260907-0012" (localId penuh, verbose). Dipakai
+   ketiga tempat di bawah.
+2. In-app (`receipt_screen.dart` `_buildItemRows`) — baris hutang
+   (`_DebtSettlementSummaryRow`, hyperlink TETAP ADA) dipindah dari dalam
+   `Padding` ringkasan SETELAH Total ke akhir `rows` (list item), SEBELUM
+   `Divider`. Teks jadi `line.shortLabel`.
+3. Share/gambar (`_ReceiptPaper`) — dipindah dari section `_DashedLine`
+   terpisah (setelah Refund/sebelum Timeline) ke akhir
+   `_ordered.expand(...)`, SEBELUM `_DashedLine` ke ringkasan Total. Style
+   font disamakan persis dgn baris item produk (bukan lagi fontSize 11.5
+   custom).
+4. ESC/POS (`printer_service.dart`) — dipindah dari dalam blok
+   `showPaymentDetail` (setelah Bayar/Kembali/Sisa) ke akhir loop item,
+   SEBELUM `bodySep()` yg memisahkan item dari Total. Gating
+   `settings.showPaymentDetail` DIPERTAHANKAN (parity perilaku lama,
+   bukan perubahan logika baru).
+5. Header section lama ("Turut melunasi hutang:"/"Turut lunasi hutang:")
+   DIHAPUS di ketiga tempat — konteks sudah jelas dari nama baris itu
+   sendiri ("Lunasi Nota #X") yg kini langsung di antara barang.
 
-**File baru**: `formatTanggalPendek` (`app_theme.dart`, dekat
-`formatRupiah`) — format tanggal manual aman-locale (`_idMonthsShort`
-ASCII), dipakai bareng sheet pemilihan nota, baris entri keranjang, & struk
-in-app (SATU sumber format, bukan 3 implementasi terpisah).
+**Test baru**: `test/receipt_debt_settlement_merged_list_test.dart` (2
+test — in-app: baris "Lunasi Nota #12" jadi SIBLING `ListTile` item produk
+dlm `Column` yg sama, header lama TIDAK ADA; share/gambar: sama, tanpa
+header). `test/printer_service_debt_settlement_merged_test.dart` (1 test,
+pakai `test()` polos + `TestWidgetsFlutterBinding.ensureInitialized()`
+manual, BUKAN `testWidgets()` — lihat gotcha di bawah — verifikasi byte
+ESC/POS: nama singkat muncul SEBELUM "Total", localId penuh & header lama
+tidak ada). Revert-verify dibuktikan (stash fix → ketiga test gagal dgn
+pesan relevan → fix dikembalikan, hijau lagi).
 
-**Test**: `test/cart_sheet_debt_settlement_test.dart` DITULIS ULANG total
-(5 test: chip gate x3, tap-chip→Centang Semua→2 entri terpisah+Total naik,
-partial-selection, tap-entri→hapus+Total turun) — `planFifoSettlement`
-pure-function tests DIHAPUS (fungsinya sendiri sudah dihapus, tidak relevan
-lagi). `test/debt_settlement_checkout_test.dart` — 4 test lama ditambah
-`invoiceDate` ke tuple `targets`, +3 test baru (parse JSON lama tanpa
-invoiceId/invoiceDate, parse JSON baru, `saveTransactionWithDebtSettlements`
-menulis invoiceDate ke detail). Revert-verify dibuktikan manual (2 bug
-sengaja disuntik — tap-hapus dimatikan, Centang Semua dirusak — test
-terkait gagal dgn pesan relevan, lalu dikembalikan & hijau lagi).
+**Gotcha BARU ditemukan sesi ini**: test yg memanggil
+`PrinterService.debugBuildBytes` (builder ESC/POS, load `CapabilityProfile`
+via `rootBundle.loadString`) **HANG SAMPAI TIMEOUT 10 MENIT** kalau dibungkus
+`testWidgets()` TANPA `tester.pump()` sama sekali (test murni logic/bytes,
+tidak pump widget apa pun). Fix: pakai `test()` polos +
+`TestWidgetsFlutterBinding.ensureInitialized()` manual di awal `main()`
+(supaya `rootBundle` tetap bisa baca asset test) — BUKAN `testWidgets()`.
+Perlu ditambahkan ke CLAUDE.md §Gotcha kalau kejadian lagi di test lain yg
+menyentuh `PrinterService`.
 
-Full suite & `flutter analyze`: **lihat commit terakhir sesi ini** (jalankan
-`flutter test` kalau perlu angka pasti terkini — jangan asumsikan dari sini,
-snapshot ini ditulis SEBELUM run penuh selesai kalau sesi terputus).
+Full suite penuh (bukan cuma file baru): **1555 test lulus, 0 gagal**.
+`flutter analyze`: **0 issue**.
+
+## Sesi sebelumnya — redesain KEDUA "Lunasi Hutang" (ringkas)
+
+Entry point pindah dari toggle di list produk ke chip pengingat hutang yg
+sudah ada (tap → sheet "Pilih Nota untuk Dilunasi",
+`widgets/debt_settlement_sheet.dart`), checklist per-nota (bukan agregat
+FIFO lagi). `DebtSettlementEntry` restruktur: SATU entri = SATU nota
+sumber (`invoiceId`/`invoiceLocalId`/`invoiceDate`). Entri aktif tampil
+sbg baris terpisah di keranjang (`_DebtSettlementEntryRow`), Total
+keranjang = belanja + SUM entri aktif. `DebtSettlementDetailLine`/
+`parseDebtSettlementDetail` (`app_database.dart`) tambah field nullable
+`invoiceId`+`invoiceDate`. Detail lengkap: `466a51d` di CHANGELOG.md.
 
 ## Sesi sebelumnya (ringkas — detail lengkap di CHANGELOG.md)
 

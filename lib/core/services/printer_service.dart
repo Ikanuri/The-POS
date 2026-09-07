@@ -853,6 +853,28 @@ class PrinterService {
       final qtyLine = '  $qtyStr $uName x ${_fmtNum(item.priceAtSale)}';
       out.addAll(bodyLR(qtyLine, _fmtNum(item.subtotal)));
     }
+
+    // Fitur "Lunasi Hutang" — nota ini turut melunasi nota LAMA pelanggan
+    // lain (lihat dok `Transactions.debtSettlementDetail`/
+    // `DebtSettlementDetailLine`). Redesain ketiga (permintaan user):
+    // baris-baris ini MENYATU LANGSUNG ke list item produk (baris terakhir,
+    // sebelum bodySep/Total) — BUKAN section terpisah berheader lagi —
+    // supaya satu tarikan Total menjumlahkan produk + nota yg dilunasi
+    // sekaligus. ASCII murni (nama nota `localId` sudah ASCII-safe, sesuai
+    // gotcha printer ESC/POS di CLAUDE.md).
+    final debtSettlementLines =
+        parseDebtSettlementDetail(tx.debtSettlementDetail);
+    if (settings.showPaymentDetail && debtSettlementLines.isNotEmpty) {
+      // 2 baris per nota, pola PERSIS sama dgn item produk di atas: nama
+      // (bold) lalu tanggal + nominal di baris berikutnya (posisi PERSIS
+      // spt qty·satuan·harga baris item biasa, lihat `qtyLine`/`bodyLR`).
+      for (final l in debtSettlementLines) {
+        out.addAll(bodyText(l.shortLabel, styles: const PosStyles(bold: true)));
+        out.addAll(bodyLR(
+            l.invoiceDate != null ? _fmtDateTimeFull(l.invoiceDate!) : '',
+            'Rp ${_fmtNum(l.amount)}'));
+      }
+    }
     out.addAll(bodySep());
 
     // ── Pegawai (di atas jumlah produk) ───────────────────────────────────
@@ -977,29 +999,6 @@ class PrinterService {
           out.addAll(bodyLR(
               'Refund ${_methodShort(refundPayment?.method ?? '', name: refundPayment?.methodName)}',
               'Rp ${_fmtNum(refundTotal)}'));
-        }
-      }
-
-      // Fitur "Lunasi Hutang" — nota ini turut melunasi nota LAMA pelanggan
-      // lain (lihat dok `Transactions.debtSettlementDetail`). ASCII murni
-      // (nama nota `localId` sudah ASCII-safe, sesuai gotcha printer ESC/POS
-      // di CLAUDE.md — tidak ada karakter non-ASCII di baris ini).
-      final debtSettlementLines =
-          parseDebtSettlementDetail(tx.debtSettlementDetail);
-      if (debtSettlementLines.isNotEmpty) {
-        out.addAll(
-            bodyText('Turut lunasi hutang:', styles: const PosStyles(bold: true)));
-        // Susulan (permintaan user): 2 baris per nota — nama nota (bold,
-        // sejalan pola nama item produk `bodyText` bold di atas), lalu
-        // tanggal nota + nominal di baris berikutnya (posisi PERSIS spt
-        // qty·satuan·harga baris item biasa, lihat `qtyLine`/`bodyLR` di
-        // atas).
-        for (final l in debtSettlementLines) {
-          out.addAll(
-              bodyText('Nota ${l.invoiceLocalId}', styles: const PosStyles(bold: true)));
-          out.addAll(bodyLR(
-              l.invoiceDate != null ? _fmtDateTimeFull(l.invoiceDate!) : '',
-              'Rp ${_fmtNum(l.amount)}'));
         }
       }
     }

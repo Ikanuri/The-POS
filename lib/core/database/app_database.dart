@@ -9170,7 +9170,10 @@ class DebtBookEntry {
 /// Satu baris ringkasan "Lunasi Hutang" (fitur checkout dari keranjang) —
 /// parsed dari `transactions.debtSettlementDetail`. Dipakai ketiga jenis
 /// struk (in-app `receipt_screen.dart`, share, cetak `printer_service.dart`)
-/// utk menampilkan "Turut melunasi hutang: Nota X Rp Y".
+/// — dirender MENYATU LANGSUNG ke list item produk (baris terakhir setelah
+/// item, sebelum Total), BUKAN section terpisah "Turut melunasi hutang:"
+/// (dihapus, redesain ketiga) — supaya satu tarikan Total menjumlahkan
+/// semuanya sekaligus, sama pola dgn keranjang kasir (`cart_sheet.dart`).
 class DebtSettlementDetailLine {
   const DebtSettlementDetailLine({
     required this.invoiceId,
@@ -9192,6 +9195,17 @@ class DebtSettlementDetailLine {
   final DateTime? invoiceDate;
   final int amount;
   final String customerName;
+
+  /// Label ringkas utk baris item struk, mis. "Lunasi Nota #12" (segmen
+  /// terakhir `invoiceLocalId`, pola sama dgn `CartMeta.displayOrderNumber`
+  /// di `cart_meta_provider.dart`) — menggantikan "Nota K1-20260907-0012"
+  /// yg terlalu verbose saat baris ini menyatu langsung ke list item
+  /// produk (bukan section terpisah lagi, lihat dok kelas ini).
+  String get shortLabel {
+    final seg = invoiceLocalId.split('-').last;
+    final n = int.tryParse(seg);
+    return 'Lunasi Nota #${n == null ? seg : n.toString()}';
+  }
 }
 
 /// Parse `transactions.debtSettlementDetail` (JSON string, nullable) menjadi

@@ -397,6 +397,25 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
             editable: editable && child.returnedAt == null));
       }
     }
+    // Fitur "Lunasi Hutang" — nota ini turut melunasi nota LAMA pelanggan
+    // lain (lihat dok `Transactions.debtSettlementDetail`). Redesain ketiga
+    // (permintaan user): baris-baris ini MENYATU LANGSUNG ke list item
+    // produk (baris terakhir, sebelum Divider/Total) — BUKAN section
+    // terpisah berheader lagi — supaya satu tarikan Total menjumlahkan
+    // produk + nota yg dilunasi sekaligus. "Nota X" BISA DITAP (hyperlink
+    // navigasi ke nota asal) — HANYA in-app (share/print statis/gambar
+    // tidak bisa hyperlink, lihat `_ReceiptPaper`/`printer_service.dart`).
+    for (final l in _debtSettlementLines) {
+      rows.add(_DebtSettlementSummaryRow(
+        line: l,
+        color: scheme.tertiary,
+        recognizer: l.invoiceId.isEmpty
+            ? null
+            : (_debtSettlementLinkRecognizers.putIfAbsent(
+                    l.invoiceId, () => TapGestureRecognizer())
+              ..onTap = () => context.push('/kasir/struk/${l.invoiceId}')),
+      ));
+    }
     return rows;
   }
 
@@ -3402,26 +3421,6 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             _SummaryRow(
                                 'Poin Didapat', '+${tx.pointsEarned} poin',
                                 color: scheme.tertiary),
-                          // Fitur "Lunasi Hutang" — nota ini turut melunasi
-                          // nota LAMA pelanggan lain (lihat dok
-                          // `Transactions.debtSettlementDetail`). Info murni,
-                          // di luar 3-baris ringkasan inti nota ini sendiri.
-                          // "Nota X" BISA DITAP (hyperlink navigasi ke nota
-                          // asal) — HANYA in-app (`_DebtSettlementSummaryRow`,
-                          // share/print statis/gambar tidak bisa hyperlink).
-                          for (final l in _debtSettlementLines)
-                            _DebtSettlementSummaryRow(
-                              line: l,
-                              color: scheme.tertiary,
-                              recognizer: l.invoiceId.isEmpty
-                                  ? null
-                                  : (_debtSettlementLinkRecognizers
-                                          .putIfAbsent(
-                                              l.invoiceId,
-                                              () => TapGestureRecognizer())
-                                        ..onTap = () => context
-                                            .push('/kasir/struk/${l.invoiceId}')),
-                            ),
                         ],
                       ),
                     ),
@@ -4749,6 +4748,32 @@ class _ReceiptPaper extends StatelessWidget {
                         fontSize: 11, fontStyle: FontStyle.italic)),
             ];
           }),
+          // Fitur "Lunasi Hutang" — nota ini turut melunasi nota LAMA
+          // pelanggan lain (lihat dok `Transactions.debtSettlementDetail`).
+          // Redesain ketiga (permintaan user): baris-baris ini MENYATU
+          // LANGSUNG ke list item produk di atas (baris terakhir, sebelum
+          // _DashedLine ke ringkasan Total) — BUKAN section terpisah
+          // berheader lagi — supaya satu tarikan Total menjumlahkan produk +
+          // nota yg dilunasi sekaligus, sejalan pola item produk. Statis
+          // (share/print gambar), TIDAK ada hyperlink (beda dgn versi
+          // in-app `_DebtSettlementSummaryRow`).
+          for (final l in _debtSettlementLines) ...[
+            Text(l.shortLabel,
+                style: _mono.copyWith(fontWeight: FontWeight.w700)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                      l.invoiceDate != null
+                          ? formatTanggalPendek(l.invoiceDate!)
+                          : '',
+                      style: _mono),
+                ),
+                Text(_fmtNum(l.amount), style: _mono),
+              ],
+            ),
+          ],
           const _DashedLine(),
           // Pegawai (di atas jumlah produk). "Pegawai: " normal, nama bold.
           if (employeeName.trim().isNotEmpty)
@@ -4873,38 +4898,6 @@ class _ReceiptPaper extends StatelessWidget {
                 Text('Rp ${_fmtNum(_refundTotal)}', style: _mono),
               ],
             ),
-          // Fitur "Lunasi Hutang" — nota ini turut melunasi nota LAMA
-          // pelanggan lain (lihat dok `Transactions.debtSettlementDetail`).
-          // Baris info murni (bukan bagian Total/Bayar/Kembali/Sisa nota
-          // ini), sejalan dgn pola baris "Refund .." di atas.
-          if (_debtSettlementLines.isNotEmpty) ...[
-            const _DashedLine(),
-            Text('Turut melunasi hutang:',
-                style: _mono.copyWith(fontWeight: FontWeight.w700)),
-            // Susulan (permintaan user): 2 baris per nota — nama nota baris
-            // 1, tanggal nota baris 2 (posisi PERSIS spt qty·satuan·harga
-            // baris item produk biasa) — nominal di posisi harga. Statis
-            // (share/print gambar), TIDAK ada hyperlink (beda dgn versi
-            // in-app `_DebtSettlementSummaryRow`).
-            for (final l in _debtSettlementLines) ...[
-              Text('Nota ${l.invoiceLocalId}',
-                  style: _mono.copyWith(fontSize: 11.5, fontWeight: FontWeight.w700)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                        l.invoiceDate != null
-                            ? formatTanggalPendek(l.invoiceDate!)
-                            : '',
-                        style: _mono.copyWith(fontSize: 11.5)),
-                  ),
-                  Text('Rp ${_fmtNum(l.amount)}',
-                      style: _mono.copyWith(fontSize: 11.5)),
-                ],
-              ),
-            ],
-          ],
           // Timeline pembayaran (mis. hutang dilunasi belakangan / dicicil).
           if (_showTimeline) ...[
             const _DashedLine(),
@@ -5238,13 +5231,16 @@ class _SummaryRow extends StatelessWidget {
   }
 }
 
-/// Fitur "Lunasi Hutang" — baris ringkasan struk IN-APP, 2-baris (nama nota
-/// + tanggal) sejalan pola item produk struk biasa (nama baris 1, qty·
-/// satuan·harga baris 2), nominal di posisi kanan sama spt [_SummaryRow].
-/// "Nota X" jadi HYPERLINK kalau [recognizer] tersedia (invoiceId dikenal —
-/// data lama sebelum redesain ini tidak punya invoiceId, jatuh ke teks
-/// polos) — tap navigasi ke nota ASAL yang dilunasi, supaya audit/komplain
-/// pelanggan bisa langsung dibuka tanpa scroll cari manual.
+/// Fitur "Lunasi Hutang" — baris ITEM struk IN-APP (redesain ketiga: MENYATU
+/// ke list item produk, bukan section terpisah lagi — lihat `_buildItemRows`),
+/// 2-baris (nama nota + tanggal) sejalan pola item produk struk biasa (nama
+/// baris 1, qty·satuan·harga baris 2), nominal di posisi kanan sama spt
+/// [_SummaryRow]. Nama nota dipersingkat via [DebtSettlementDetailLine.
+/// shortLabel] (mis. "Lunasi Nota #12", bukan localId penuh) dan jadi
+/// HYPERLINK kalau [recognizer] tersedia (invoiceId dikenal — data lama
+/// sebelum redesain ini tidak punya invoiceId, jatuh ke teks polos) — tap
+/// navigasi ke nota ASAL yang dilunasi, supaya audit/komplain pelanggan bisa
+/// langsung dibuka tanpa scroll cari manual.
 class _DebtSettlementSummaryRow extends StatelessWidget {
   const _DebtSettlementSummaryRow({
     required this.line,
@@ -5270,7 +5266,7 @@ class _DebtSettlementSummaryRow extends StatelessWidget {
               children: [
                 Text.rich(
                   TextSpan(
-                    text: 'Turut lunasi Nota ${line.invoiceLocalId}',
+                    text: line.shortLabel,
                     style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: color,

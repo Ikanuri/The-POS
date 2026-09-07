@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh tujuh)
+
+### 🎨 Tampilan
+- **Struk "Lunasi Hutang" dirapikan lagi.** Sebelumnya baris nota lama yang
+  ikut dilunasi tampil di bagian TERPISAH di bawah daftar barang & Total
+  (berjudul "Turut melunasi hutang:"). Sekarang baris itu langsung menyatu
+  ke daftar barang belanjaan — jadi satu daftar tunggal, lalu satu angka
+  Total yang menjumlahkan barang + nota yang dilunasi sekaligus. Berlaku
+  di struk di layar HP, struk yang dibagikan/gambar, maupun struk cetak.
+  Nama baris hutangnya juga dipersingkat, dari "Nota K1-20260907-0012"
+  jadi cukup "Lunasi Nota #12" — tetap bisa DITAP di struk layar HP untuk
+  membuka nota asalnya.
+
 ## 7 September 2026 (sesi ketiga puluh enam)
 
 ### 🎨 Tampilan
