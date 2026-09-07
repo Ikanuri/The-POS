@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-07 (sesi ketiga puluh empat — fix price_categories tidak ikut sync/backup)
 
-- `PENDING_HASH` — fix(db): `price_categories` (Kategori Harga) ikut sync LAN &
+- `0d739f6` — fix(db): `price_categories` (Kategori Harga) ikut sync LAN &
   backup penuh — audit manual menemukan tabel ini ADA di skema (schemaVersion
   40) tapi TIDAK ADA di `_allTables` (`dumpAllTables`/`restoreFromDump`, backup
   penuh/"Alihkan Owner") maupun `masterData` (`dumpSince`, sync LAN harian)
