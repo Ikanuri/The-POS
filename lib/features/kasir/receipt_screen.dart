@@ -4441,6 +4441,32 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           ],
                         ),
                       ),
+                    // Fitur Pra-Bayar (susulan, permintaan user) — baris ini
+                    // punya `amount` yang SUDAH dipotong (`buildPrabayarCheckout`)
+                    // krn sebagian uangnya (`prabayarChangeTakenBeforeCheckout`)
+                    // SUDAH dikembalikan ke pembeli SEBELUM checkout (fase
+                    // keranjang, checkbox "kembalian sudah diambil" —
+                    // `cart_prabayar_provider.dart`). SENGAJA beda visual dari
+                    // `_ChangeTakenRow` (tanpa checkbox, label eksplisit
+                    // "sebelum checkout") supaya TIDAK tertukar makna dgn
+                    // kembalian NORMAL baris "sekarang"/kasir loket — ini
+                    // murni catatan historis (bukan aksi yg bisa
+                    // ditoggle), sudah pasti sudah diambil krn checkbox-nya
+                    // sudah ditekan kasir sebelum layar ini pernah ada.
+                    if (!p.voided &&
+                        (p.prabayarChangeTakenBeforeCheckout ?? 0) > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 30, top: 1),
+                        child: Text(
+                          'Kembalian ${formatRupiah(p.prabayarChangeTakenBeforeCheckout!)} '
+                          'sudah diambil sebelum checkout',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                            color: scheme.tertiary,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

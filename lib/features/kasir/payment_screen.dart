@@ -155,6 +155,12 @@ PrabayarCheckoutResult buildPrabayarCheckout({
   // sepenuhnya kembali ke pelanggan sebelum transaksi ini tercatat).
   var remainingCut = effectiveChangeTaken;
   final effectiveAmounts = <String, int>{};
+  // Susulan (permintaan user): berapa dari `amount` ASLI entri ini yang
+  // dipotong sbg kembalian yang SUDAH diambil SEBELUM checkout — metadata
+  // MURNI utk `TransactionPayments.prabayarChangeTakenBeforeCheckout`
+  // (lihat dok kolom itu), TIDAK mengubah `amount`/`changeGiven` efektif
+  // yang menjaga invariant `Σ payments.amount == combinedPaid`.
+  final cutAmounts = <String, int>{};
   for (final e in prabayarEntries.reversed) {
     if (remainingCut <= 0) {
       effectiveAmounts[e.id] = e.amount;
@@ -162,6 +168,7 @@ PrabayarCheckoutResult buildPrabayarCheckout({
     }
     final cut = remainingCut < e.amount ? remainingCut : e.amount;
     effectiveAmounts[e.id] = e.amount - cut;
+    cutAmounts[e.id] = cut;
     remainingCut -= cut;
   }
 
@@ -177,6 +184,9 @@ PrabayarCheckoutResult buildPrabayarCheckout({
           paidAt: Value(p.lockedAt),
           kasirId: Value(kasirId),
           changeGiven: const Value(0),
+          prabayarChangeTakenBeforeCheckout: cutAmounts.containsKey(p.id)
+              ? Value(cutAmounts[p.id])
+              : const Value.absent(),
         ),
     if (paidAmountNow > 0)
       TransactionPaymentsCompanion.insert(

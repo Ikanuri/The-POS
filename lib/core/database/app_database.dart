@@ -291,7 +291,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => 42;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -837,6 +837,18 @@ class AppDatabase extends _$AppDatabase {
             // Aditif & nullable, nota lama tetap valid apa adanya.
             await _addColumnIfMissing('transactions', 'debt_settlement_detail',
                 transactions, transactions.debtSettlementDetail, m);
+          }
+          if (from < 42) {
+            // Fitur Pra-Bayar — riwayat kembalian yang sudah diambil SEBELUM
+            // checkout (lihat dok `TransactionPayments.
+            // prabayarChangeTakenBeforeCheckout`). Aditif & nullable, baris
+            // lama tetap valid apa adanya (null = tidak kena potongan ini).
+            await _addColumnIfMissing(
+                'transaction_payments',
+                'prabayar_change_taken_before_checkout',
+                transactionPayments,
+                transactionPayments.prabayarChangeTakenBeforeCheckout,
+                m);
           }
         },
         beforeOpen: (details) async {

@@ -178,6 +178,26 @@ class TransactionPayments extends Table {
   /// sisa tempo tidak akan "dipakai ulang").
   IntColumn get sisaAfter => integer().withDefault(const Constant(0))();
 
+  /// Fitur Pra-Bayar — nominal kembalian yang SUDAH diserahkan ke pembeli
+  /// SEBELUM checkout (fase keranjang, checkbox "kembalian sudah diambil" di
+  /// `cart_sheet.dart`/`CartPrabayarNotifier.changeTakenTotal`), yang dipotong
+  /// dari baris entri Pra-Bayar INI oleh `buildPrabayarCheckout`
+  /// (`payment_screen.dart`). null = baris ini TIDAK kena potongan tsb
+  /// (mayoritas baris — baik baris pembayaran biasa maupun entri Pra-Bayar
+  /// yang tidak kena potongan mundur).
+  ///
+  /// METADATA MURNI — beda dari [changeGiven] (yang tetap merepresentasikan
+  /// kembalian nyata baris "sekarang"/kasir loket, TIDAK PERNAH dipakai
+  /// utk kembalian pra-checkout ini): [amount] baris ini SUDAH final
+  /// (dipotong, mencerminkan uang sungguhan yang tercatat diterima kasir —
+  /// invariant `Σ payments.amount == combinedPaid` WAJIB tetap terjaga,
+  /// lihat dok `buildPrabayarCheckout`). Kolom ini HANYA menjelaskan "baris
+  /// ini ASALNYA sejumlah `amount + nilai kolom ini`, lalu segini sudah
+  /// dikembalikan sbg kembalian SEBELUM checkout" — dipakai kartu "Riwayat
+  /// Pembayaran" in-app (`receipt_screen.dart`) utk menampilkan baris
+  /// keterangan tambahan, TIDAK PERNAH dipakai utk kalkulasi ulang apa pun.
+  IntColumn get prabayarChangeTakenBeforeCheckout => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

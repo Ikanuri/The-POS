@@ -418,4 +418,185 @@ void main() {
       expect(result.payments.single.amount.value, 60000);
     });
   });
+
+  group('buildPrabayarCheckout — prabayarChangeTakenBeforeCheckout '
+      '(metadata "kembalian sudah diambil sebelum checkout")', () {
+    test('baris yang KENA potongan mundur dapat metadata = nilai potongan, '
+        'baris yang TIDAK kena tetap null', () {
+      final t1 = DateTime(2026, 3, 1, 9, 0);
+      final t2 = DateTime(2026, 3, 1, 10, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txG',
+        cartTotal: 60000,
+        prabayarEntries: [
+          PrabayarEntry(id: 'pbG1', amount: 30000, method: 'tunai', lockedAt: t1),
+          PrabayarEntry(id: 'pbG2', amount: 40000, method: 'qris', lockedAt: t2),
+        ],
+        paidAmountNow: 0,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2, 11, 0),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 10000,
+      );
+
+      expect(result.payments, hasLength(2));
+      // pbG1 (t1) tidak tersentuh potongan (potongan diambil mundur dari
+      // yg PALING BARU dulu) — metadata harus tetap `Value.absent()` (null).
+      expect(result.payments[0].amount.value, 30000);
+      expect(result.payments[0].prabayarChangeTakenBeforeCheckout.present, false,
+          reason: 'entri yg TIDAK kena potongan tidak boleh punya metadata '
+              'ini sama sekali (bukan 0)');
+      // pbG2 (t2, PALING BARU) dipotong 10rb dari 40rb asli jadi 30rb —
+      // metadata harus merekam nilai yg dipotong (10rb), BUKAN amount
+      // efektif (30rb) atau amount asli (40rb).
+      expect(result.payments[1].amount.value, 30000);
+      expect(result.payments[1].prabayarChangeTakenBeforeCheckout.value, 10000);
+
+      // Invariant lama TETAP terjaga — amount efektif (SUDAH dipotong)
+      // tidak berubah walau ada metadata baru ini.
+      expect(result.payments.fold<int>(0, (s, p) => s + p.amount.value), 60000);
+      expect(result.combinedPaid, 60000);
+    });
+
+    test('potongan MELINTASI dua entri sekaligus: masing2 dapat metadata '
+        'sesuai porsi yg dipotong DARI ENTRI ITU, bukan total potongan', () {
+      // Dua entri (t1=20rb, t2=30rb, total lockedSum 50rb). changeTakenTotal
+      // 25rb: dipotong mundur — t2 (30rb) dipotong penuh 25rb dulu? Tidak,
+      // logic memotong MIN(remainingCut, e.amount) per entri: t2 dipotong
+      // min(25,30)=25 -> t2 jadi 5rb, sisa potongan 0. t1 tidak tersentuh.
+      final t1 = DateTime(2026, 3, 1, 9, 0);
+      final t2 = DateTime(2026, 3, 1, 10, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txH',
+        cartTotal: 25000,
+        prabayarEntries: [
+          PrabayarEntry(id: 'pbH1', amount: 20000, method: 'tunai', lockedAt: t1),
+          PrabayarEntry(id: 'pbH2', amount: 30000, method: 'tunai', lockedAt: t2),
+        ],
+        paidAmountNow: 0,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 25000,
+      );
+
+      expect(result.payments, hasLength(2));
+      expect(result.payments[0].amount.value, 20000);
+      expect(result.payments[0].prabayarChangeTakenBeforeCheckout.present, false);
+      expect(result.payments[1].amount.value, 5000);
+      expect(result.payments[1].prabayarChangeTakenBeforeCheckout.value, 25000);
+    });
+
+    test('entri yg HABIS terpotong (amount efektif 0, tidak muncul di '
+        'payments) tidak bocorkan metadata ke baris lain', () {
+      final lockedAt = DateTime(2026, 3, 1, 8, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txI',
+        cartTotal: 50000,
+        prabayarEntries: [
+          PrabayarEntry(id: 'pbI', amount: 40000, method: 'tunai', lockedAt: lockedAt),
+        ],
+        paidAmountNow: 50000,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 40000,
+      );
+
+      expect(result.payments, hasLength(1),
+          reason: 'entri pbI habis terpotong, tidak menghasilkan baris sama '
+              'sekali');
+      expect(result.payments.single.amount.value, 50000,
+          reason: 'baris "sekarang", bukan entri Pra-Bayar');
+      expect(
+          result.payments.single.prabayarChangeTakenBeforeCheckout.present,
+          false);
+    });
+
+    test('changeTakenTotal 0 (default): TIDAK ADA baris yg dapat metadata '
+        'sama sekali (perilaku lama utuh)', () {
+      final result = buildPrabayarCheckout(
+        txId: 'txJ',
+        cartTotal: 50000,
+        prabayarEntries: [
+          PrabayarEntry(
+              id: 'pbJ',
+              amount: 60000,
+              method: 'tunai',
+              lockedAt: DateTime(2026, 3, 1)),
+        ],
+        paidAmountNow: 0,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 3, 2),
+        kasirId: 'K1',
+        genId: genId,
+      );
+
+      expect(result.payments.single.prabayarChangeTakenBeforeCheckout.present,
+          false);
+    });
+  });
+
+  group('buildPrabayarCheckout + AppDatabase — metadata '
+      'prabayarChangeTakenBeforeCheckout round-trip + invariant Σamount', () {
+    test('metadata tersimpan & terbaca benar dari DB sungguhan, DAN '
+        'Σ payments.amount == transactions.paid (invariant TIDAK pecah)',
+        () async {
+      final t1 = DateTime(2026, 4, 1, 9, 0);
+      final t2 = DateTime(2026, 4, 1, 10, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txK',
+        cartTotal: 60000,
+        prabayarEntries: [
+          PrabayarEntry(id: 'pbK1', amount: 30000, method: 'tunai', lockedAt: t1),
+          PrabayarEntry(id: 'pbK2', amount: 40000, method: 'qris', lockedAt: t2),
+        ],
+        paidAmountNow: 0,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 4, 2, 11, 0),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 10000,
+      );
+
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            id: 'txK',
+            localId: 'txK',
+            status: result.status,
+            total: 60000,
+            paid: result.combinedPaid,
+            changeAmount: result.combinedChange,
+            paymentMethod: result.displayMethodType,
+            createdAt: Value(DateTime(2026, 4, 2, 11, 0)),
+          ));
+      await db.batch((b) => b.insertAll(db.transactionPayments, result.payments));
+
+      final tx = await (db.select(db.transactions)
+            ..where((t) => t.id.equals('txK')))
+          .getSingle();
+      final payments = await db.getPaymentsForTx('txK');
+
+      // Invariant WAJIB (regresi dilindungi test lama juga) — ini
+      // menegaskan kolom baru TIDAK mengganggu invariant tsb.
+      expect(payments.fold<int>(0, (s, p) => s + p.amount), tx.paid,
+          reason: 'Σ payments.amount HARUS == transactions.paid/combinedPaid '
+              '— metadata baru tidak boleh menaikkan amount efektif');
+
+      expect(payments, hasLength(2));
+      expect(payments[0].amount, 30000);
+      expect(payments[0].prabayarChangeTakenBeforeCheckout, null);
+      expect(payments[1].amount, 30000);
+      expect(payments[1].prabayarChangeTakenBeforeCheckout, 10000,
+          reason: 'metadata terbaca benar dari DB sungguhan (bukan cuma di '
+              'objek Companion sebelum insert)');
+    });
+  });
 }
