@@ -84,19 +84,24 @@ void main() {
 
     final text = latin1.decode(bytes, allowInvalid: true);
 
-    // Nama singkat wajib, BUKAN localId penuh yg verbose, dan header
-    // section lama SUDAH TIDAK ADA.
+    // Nama singkat wajib tercetak di baris judul. localId PENUH (verbose)
+    // sekarang ditampilkan sbg baris catatan "* Nota asal: ..." (redesain
+    // keempat, konsisten dgn `* ${item.itemNote}` produk) — bukan dihapus
+    // total. Header section terpisah lama SUDAH TIDAK ADA.
     expect(text.contains('Lunasi Nota #12'), isTrue,
         reason: 'baris nota yg dilunasi harus tercetak dgn nama singkat');
-    expect(text.contains('K1-20260907-0012'), isFalse,
-        reason: 'localId penuh terlalu verbose, harus dipersingkat');
+    expect(text.contains('Nota asal: K1-20260907-0012'), isTrue,
+        reason: 'localId penuh dipindah jadi catatan item, bukan dihapus');
     expect(text.contains('Turut lunasi hutang'), isFalse,
         reason: 'header section terpisah lama sudah dihapus — baris '
             'menyatu ke list item');
 
     // Urutan: "Lunasi Nota #12" harus tercetak SEBELUM "Total" (menyatu ke
-    // list item, bukan setelah ringkasan Bayar/Kembali/Sisa).
+    // list item, bukan setelah ringkasan Bayar/Kembali/Sisa), dan catatan
+    // "Nota asal: ..." tercetak SETELAH nama singkat tapi tetap SEBELUM
+    // Total.
     final debtIdx = text.indexOf('Lunasi Nota #12');
+    final noteIdx = text.indexOf('Nota asal: K1-20260907-0012');
     final totalIdx = text.indexOf('Total');
     expect(debtIdx, greaterThanOrEqualTo(0));
     expect(totalIdx, greaterThanOrEqualTo(0));
@@ -104,6 +109,8 @@ void main() {
         reason: '"Lunasi Nota #12" harus tercetak SEBELUM baris "Total" '
             '(bagian dari list item, bukan section setelah ringkasan '
             'pembayaran)');
+    expect(noteIdx, greaterThan(debtIdx));
+    expect(noteIdx, lessThan(totalIdx));
 
     // Nama item produk juga harus muncul SEBELUM baris hutang (list yg
     // sama, item dulu baru nota hutang).

@@ -873,6 +873,10 @@ class PrinterService {
         out.addAll(bodyLR(
             l.invoiceDate != null ? _fmtDateTimeFull(l.invoiceDate!) : '',
             'Rp ${_fmtNum(l.amount)}'));
+        // Konsisten dgn baris `* ${item.itemNote}` produk di atas — kode
+        // nota lengkap yg direfer, bukan cuma `shortLabel` yg sudah
+        // dipersingkat.
+        out.addAll(bodyText(_toAscii('* Nota asal: ${l.invoiceLocalId}')));
       }
     }
     out.addAll(bodySep());

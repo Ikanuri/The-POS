@@ -4773,6 +4773,12 @@ class _ReceiptPaper extends StatelessWidget {
                 Text(_fmtNum(l.amount), style: _mono),
               ],
             ),
+            // Konsisten dgn `_Blockquote` catatan item produk in-app
+            // (redesain keempat) — kode nota lengkap yg direfer, bukan
+            // cuma `shortLabel` yg sudah dipersingkat di atas.
+            Text('* Nota asal: ${l.invoiceLocalId}',
+                style: _mono.copyWith(
+                    fontSize: 11, fontStyle: FontStyle.italic)),
           ],
           const _DashedLine(),
           // Pegawai (di atas jumlah produk). "Pegawai: " normal, nama bold.
@@ -5232,15 +5238,23 @@ class _SummaryRow extends StatelessWidget {
 }
 
 /// Fitur "Lunasi Hutang" — baris ITEM struk IN-APP (redesain ketiga: MENYATU
-/// ke list item produk, bukan section terpisah lagi — lihat `_buildItemRows`),
-/// 2-baris (nama nota + tanggal) sejalan pola item produk struk biasa (nama
-/// baris 1, qty·satuan·harga baris 2), nominal di posisi kanan sama spt
-/// [_SummaryRow]. Nama nota dipersingkat via [DebtSettlementDetailLine.
+/// ke list item produk, bukan section terpisah lagi — lihat `_buildItemRows`).
+/// Redesain keempat (dilaporkan user via screenshot: baris ini TIDAK sejajar
+/// kolom dengan baris produk di atasnya, karena dulu cuma `Padding`+`Row`
+/// polos tanpa leading/indent) — sekarang struktur `ListTile` PERSIS
+/// meniru `_itemCheckRow` non-varian: `dense: true`, `contentPadding` sama,
+/// `leading` ikon (pengganti `Checkbox` produk, dibungkus `SizedBox` lebar
+/// sama persis) sehingga kolom nama & nominal jatuh di kolom yang sama dgn
+/// baris produk. Nama nota dipersingkat via [DebtSettlementDetailLine.
 /// shortLabel] (mis. "Lunasi Nota #12", bukan localId penuh) dan jadi
 /// HYPERLINK kalau [recognizer] tersedia (invoiceId dikenal — data lama
 /// sebelum redesain ini tidak punya invoiceId, jatuh ke teks polos) — tap
-/// navigasi ke nota ASAL yang dilunasi, supaya audit/komplain pelanggan bisa
-/// langsung dibuka tanpa scroll cari manual.
+/// navigasi ke nota ASAL yang dilunasi. localId LENGKAP (bukan shortLabel)
+/// dipindah jadi "catatan item" via [_Blockquote] (reuse widget yg sama
+/// dipakai `item.itemNote` produk) — permintaan user: kode nota lengkap yg
+/// direfer ditaruh sbg catatan, bukan di judul yg sudah dipersingkat.
+/// Warna aksen (`scheme.tertiary`) TETAP dibedakan dari produk (keputusan:
+/// "boleh dibedakan asal simetris" — prioritas alignment, bukan warna).
 class _DebtSettlementSummaryRow extends StatelessWidget {
   const _DebtSettlementSummaryRow({
     required this.line,
@@ -5254,38 +5268,43 @@ class _DebtSettlementSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text.rich(
-                  TextSpan(
-                    text: line.shortLabel,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: color,
-                        decoration: recognizer != null
-                            ? TextDecoration.underline
-                            : null),
-                    recognizer: recognizer,
-                  ),
-                ),
-                if (line.invoiceDate != null)
-                  Text(formatTanggalPendek(line.invoiceDate!),
-                      style: TextStyle(fontSize: 11.5, color: color)),
-              ],
-            ),
-          ),
-          Text(formatRupiah(line.amount),
-              style: TextStyle(fontWeight: FontWeight.w700, color: color)),
-        ],
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.only(left: 4, right: 12),
+      leading: SizedBox(
+        width: 48,
+        height: 48,
+        child: Icon(Icons.receipt_long_outlined, color: color, size: 20),
       ),
+      title: Text.rich(
+        TextSpan(
+          text: line.shortLabel,
+          style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+              decoration:
+                  recognizer != null ? TextDecoration.underline : null),
+          recognizer: recognizer,
+        ),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 1),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (line.invoiceDate != null)
+              Text(formatTanggalPendek(line.invoiceDate!),
+                  style: TextStyle(fontSize: 11, color: color)),
+            _Blockquote(
+              text: 'Nota asal: ${line.invoiceLocalId}',
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ],
+        ),
+      ),
+      trailing: Text(formatRupiah(line.amount),
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }

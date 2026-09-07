@@ -67,10 +67,12 @@ void main() {
         db: db, child: const ReceiptScreen(transactionId: 'tx1'));
     await tester.pumpAndSettle();
 
-    // Nama singkat wajib pakai segmen terakhir localId, BUKAN localId
-    // penuh yg verbose.
+    // Nama singkat wajib pakai segmen terakhir localId di JUDUL. localId
+    // PENUH (verbose) dipindah jadi catatan item ("Nota asal: ...", reuse
+    // `_Blockquote`, redesain keempat) — bukan dihapus sama sekali.
     expect(find.text('Lunasi Nota #12'), findsOneWidget);
-    expect(find.textContaining('K1-20260907-0012'), findsNothing);
+    expect(find.textContaining('K1-20260907-0012'), findsOneWidget);
+    expect(find.text('Nota asal: K1-20260907-0012'), findsOneWidget);
 
     // Header section lama HARUS SUDAH TIDAK ADA — baris ini sudah menyatu
     // ke list item, konteksnya jelas tanpa header terpisah.
