@@ -4,6 +4,43 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/database/app_database.dart' show UnpaidTxEntry;
+
+/// Rencana alokasi FIFO nota lama dari SATU nominal — algoritma PERSIS
+/// [AppDatabase.settleMergedDebt] (nota terlama dulu, `sisa <= 0` dilewati,
+/// tiap nota dicap `min(remaining, sisa)`), tapi PURE (tanpa DB/tulis apa
+/// pun) — dipakai membekukan rencana ke [DebtSettlementEntry.targetInvoices]
+/// SAAT entri dibuat (sekarang otomatis lewat toggle di `cart_sheet.dart`,
+/// dulu lewat alur pilih pelanggan/nota manual — `debt_settlement_picker.
+/// dart`, DIHAPUS total, redesain UX), supaya ringkasan yang kasir lihat
+/// konsisten sampai checkout. [invoices] HARUS sudah terurut terlama dulu
+/// (lihat `getUnpaidTxDetails`). Kelebihan di atas total sisa TIDAK
+/// dialokasikan ke nota manapun di sini — itu jadi kembalian tunai saat
+/// `settleMergedDebt` benar-benar dijalankan di checkout (lihat dok
+/// `payment_screen.dart`), bukan overpay hutang. Dalam alur toggle otomatis
+/// yang baru, [amount] SELALU = total hutang pelanggan sehingga secara
+/// praktis tidak ada kelebihan (kecuali race jarang: hutang berubah di
+/// antara baca total & baca daftar nota).
+List<DebtSettlementTarget> planFifoSettlement(
+  List<UnpaidTxEntry> invoices,
+  int amount,
+) {
+  var remaining = amount;
+  final out = <DebtSettlementTarget>[];
+  for (final inv in invoices) {
+    if (remaining <= 0) break;
+    if (inv.sisa <= 0) continue;
+    final applied = remaining < inv.sisa ? remaining : inv.sisa;
+    out.add(DebtSettlementTarget(
+      invoiceId: inv.id,
+      invoiceLocalId: inv.localId,
+      amount: applied,
+    ));
+    remaining -= applied;
+  }
+  return out;
+}
+
 /// Satu nota LAMA (tempo/kurang_bayar) yang ikut kena alokasi dari SATU
 /// [DebtSettlementEntry] — bagian dari rencana FIFO yang dihitung SEKALI saat
 /// entri dibuat (lihat `_pickDebtSettlement` di `cart_sheet.dart`). Disimpan
@@ -38,13 +75,20 @@ class DebtSettlementTarget {
       );
 }
 
-/// Fitur "Lunasi Hutang" — kasir mengunci sebagian pembayaran dari keranjang
-/// AKTIF (SEBELUM checkout) untuk turut melunasi nota TEMPO/KURANG_BAYAR
-/// LAMA milik seorang pelanggan. Pola sama persis [PrabayarEntry]
-/// (`cart_prabayar_provider.dart`): entri akumulatif, independen, bisa
-/// dihapus lagi selama belum checkout — bedanya arah uangnya: Pra-Bayar
-/// mengunci pembayaran UTK NOTA INI, entri ini mengalokasikan uang tambahan
-/// KE NOTA-NOTA LAMA (lihat dok `payment_screen.dart` alur checkout).
+/// Fitur "Lunasi Hutang" — REDESAIN TOTAL (permintaan user, alasan: ikon
+/// terpisah di footer `cart_sheet.dart` makan ruang & bisa MISCLICK pilih
+/// hutang pelanggan LAIN, bukan pelanggan yang sedang diinput di cart bar).
+/// SEKARANG murni toggle boolean: satu baris list di dalam keranjang itu
+/// SENDIRI (bukan lagi ikon+picker terpisah, lihat `cart_sheet.dart`
+/// `_DebtSettlementCartRow`) yang HANYA muncul kalau `CartMeta.customerId`
+/// keranjang ini terisi DAN pelanggan itu punya hutang (`cartCustomerDebtProvider`
+/// > 0). Tap pertama -> OTOMATIS membuat SATU entri senilai SELURUH hutang
+/// pelanggan itu (bukan lagi manual pilih nota+nominal); tap lagi -> entri
+/// itu dihapus. Karena itu daftar ini SEKARANG paling banyak berisi SATU
+/// entri per cart (dulu bisa akumulatif banyak pelanggan lewat picker manual
+/// yang sudah dihapus) — API list tetap dipertahankan (bukan diganti jadi
+/// nullable tunggal) supaya format hold/resume JSON (`kasir_screen.dart`)
+/// tidak perlu migrasi.
 @immutable
 class DebtSettlementEntry {
   const DebtSettlementEntry({
@@ -65,15 +109,22 @@ class DebtSettlementEntry {
   final List<DebtSettlementTarget> targetInvoices;
   final DateTime createdAt;
 
-  /// Metode bayar dipilih kasir di kalkulator `showDebtPaymentSheet` saat
-  /// entri ini dibuat (`PaymentMethod.type`, pola sama `PrabayarEntry.method`)
-  /// — dipakai APA ADANYA saat checkout (`settleMergedDebt`), tidak pernah
-  /// di-hardcode 'tunai'. Default 'tunai' murni utk kompatibilitas mundur
-  /// payload lama (kalau field ini pernah absen).
+  /// Redesain toggle: TIDAK ADA lagi kalkulator terpisah tempat kasir
+  /// memilih metode saat entri ini dibuat (dulu `showDebtPaymentSheet`) —
+  /// field ini diisi placeholder 'tunai' saat entri otomatis dibuat
+  /// (`_DebtSettlementCartRow` di `cart_sheet.dart`), lalu DITIMPA dengan
+  /// metode FINAL yang kasir pilih di layar Bayar (`_selectedMethodType`)
+  /// tepat sebelum `saveTransactionWithDebtSettlements` dipanggil (lihat dok
+  /// `payment_screen.dart` `_debtSettlementEntries`/pembangunan
+  /// `debtSettlements`) — representasi paling masuk akal karena kasir cuma
+  /// menerima SATU nominal fisik gabungan (belanja + turut lunas hutang)
+  /// dari pelanggan, jadi metodenya logis ikut metode transaksi baru itu
+  /// sendiri, bukan dipilih terpisah.
   final String method;
 
   /// Nama SPESIFIK metode (mis. "GoPay") — null utk Tunai/metode tanpa nama
-  /// spesifik. Lihat dok `showDebtPaymentSheet`.
+  /// spesifik. Sama seperti [method], ditimpa saat checkout mengikuti
+  /// metode final transaksi baru.
   final String? methodName;
 
   Map<String, dynamic> toJson() => {

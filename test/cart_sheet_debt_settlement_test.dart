@@ -8,15 +8,17 @@ import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/cart_debt_settlement_provider.dart';
+import 'package:the_pos/features/kasir/cart_meta_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
-import 'package:the_pos/features/kasir/widgets/debt_settlement_picker.dart';
 
-/// Fitur "Lunasi Hutang" (UI, `cart_sheet.dart`) — entry point (ikon footer)
-/// muncul/hilang sesuai gerbang izin `terima_pembayaran` (sama persis
-/// Pra-Bayar), ringkasan entri tampil LIVE di footer, hapus entri → hilang,
-/// dan alur lengkap pilih pelanggan -> pilih nota -> nominal menghasilkan
-/// entri dgn rencana FIFO yang benar.
+/// Fitur "Lunasi Hutang" — REDESAIN TOTAL (permintaan user): dulu ikon
+/// terpisah di footer -> alur pilih pelanggan/nota/nominal manual (bisa
+/// misclick pelanggan lain). SEKARANG: satu baris toggle DI DALAM daftar
+/// item keranjang itu sendiri, otomatis terikat `CartMeta.customerId`
+/// keranjang aktif — muncul HANYA bila pelanggan itu (BUKAN pelanggan lain)
+/// punya hutang tertunggak, default pudar, tap -> solid + entri otomatis
+/// SELURUH nominal hutang, tap lagi -> pudar + entri terhapus.
 void main() {
   const item = CartItem(
     productId: 'p1',
@@ -38,11 +40,19 @@ void main() {
     required String deviceRole,
     bool terimaPembayaran = false,
     String cartId = kMainCartId,
+    String? customerId,
+    String? customerName,
+    Future<void> Function(AppDatabase db)? seed,
   }) async {
     final db = AppDatabase(NativeDatabase.memory());
     await (db.update(db.kasirPermissions)
           ..where((t) => t.permissionKey.equals('terima_pembayaran')))
         .write(KasirPermissionsCompanion(isEnabled: Value(terimaPembayaran)));
+    // WAJIB seed SEBELUM sheet dibuka & provider pertama kali di-watch —
+    // `cartCustomerDebtProvider` (FutureProvider.autoDispose) TIDAK auto-
+    // refetch begitu saja saat DB berubah belakangan (beda dari StreamProvider),
+    // jadi data harus sudah ada di DB SAAT provider pertama kali dibaca.
+    if (seed != null) await seed(db);
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
       deviceProvider.overrideWith((ref) => DeviceNotifier()
@@ -57,6 +67,11 @@ void main() {
     ]);
     addTearDown(container.dispose);
     container.read(cartProvider(cartId).notifier).addItem(item);
+    if (customerId != null || customerName != null) {
+      container
+          .read(cartMetaProvider(cartId).notifier)
+          .setCustomer(customerId, customerName);
+    }
 
     await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -86,126 +101,122 @@ void main() {
     return (db: db, container: container);
   }
 
-  testWidgets('owner (bergerbang) melihat tombol Lunasi Hutang', (tester) async {
-    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+  Future<void> seedDebt(AppDatabase db,
+      {required String customerId,
+      required String customerName,
+      required String invoiceId,
+      required int total,
+      required int paid}) async {
+    await db.into(db.customers).insert(
+        CustomersCompanion.insert(id: customerId, name: customerName));
+    await db.into(db.transactions).insert(TransactionsCompanion.insert(
+          id: invoiceId,
+          localId: invoiceId,
+          status: 'kurang_bayar',
+          total: total,
+          paid: paid,
+          changeAmount: 0,
+          paymentMethod: 'tunai',
+          customerId: Value(customerId),
+          createdAt: Value(DateTime.now().subtract(const Duration(days: 3))),
+        ));
+  }
+
+  testWidgets(
+      'pelanggan TANPA hutang -> baris toggle Lunasi Hutang TIDAK muncul',
+      (tester) async {
+    final r = await pumpCartSheetOpen(tester,
+        deviceRole: 'owner',
+        terimaPembayaran: true,
+        customerId: 'c1',
+        customerName: 'Sari');
     addTearDown(() async => r.db.close());
-    expect(find.byTooltip('Lunasi Hutang'), findsOneWidget);
+    expect(find.textContaining('Lunasi hutang'), findsNothing);
   });
 
   testWidgets(
-      'pegawai TANPA izin terima_pembayaran TIDAK melihat tombol Lunasi Hutang',
-      (tester) async {
-    final r = await pumpCartSheetOpen(tester,
-        deviceRole: 'kasir', terimaPembayaran: false);
+      'keranjang TANPA pelanggan terikat -> baris toggle TIDAK muncul walau '
+      'ada pelanggan LAIN yang berhutang', (tester) async {
+    final r = await pumpCartSheetOpen(
+      tester,
+      deviceRole: 'owner',
+      terimaPembayaran: true,
+      // Tidak set customer di cart meta sama sekali.
+      seed: (db) => seedDebt(db,
+          customerId: 'c1',
+          customerName: 'Sari',
+          invoiceId: 'A1-0007',
+          total: 50000,
+          paid: 20000),
+    );
     addTearDown(() async => r.db.close());
-    expect(find.byTooltip('Lunasi Hutang'), findsNothing);
-  });
-
-  testWidgets('mode Katalog TIDAK menampilkan tombol Lunasi Hutang',
-      (tester) async {
-    final r = await pumpCartSheetOpen(tester,
-        deviceRole: 'owner', cartId: kCatalogCartId);
-    addTearDown(() async => r.db.close());
-    expect(find.byTooltip('Lunasi Hutang'), findsNothing);
+    expect(find.textContaining('Lunasi hutang'), findsNothing);
   });
 
   testWidgets(
-      'entri Lunasi Hutang (seed langsung) -> ringkasan footer tampil, tap '
-      '-> daftar entri, hapus -> ringkasan hilang', (tester) async {
-    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
-    addTearDown(() async => r.db.close());
-
-    expect(find.textContaining('Turut lunasi hutang'), findsNothing);
-
-    r.container.read(cartDebtSettlementProvider(kMainCartId).notifier).add(
-          DebtSettlementEntry(
-            id: 'e1',
+      'pegawai TANPA izin terima_pembayaran -> baris toggle TIDAK muncul '
+      'walau pelanggan terikat punya hutang', (tester) async {
+    final r = await pumpCartSheetOpen(tester,
+        deviceRole: 'kasir',
+        terimaPembayaran: false,
+        customerId: 'c1',
+        customerName: 'Sari',
+        seed: (db) => seedDebt(db,
             customerId: 'c1',
             customerName: 'Sari',
-            amount: 50000,
-            targetInvoices: const [
-              DebtSettlementTarget(
-                  invoiceId: 'old1', invoiceLocalId: 'A1-0007', amount: 50000),
-            ],
-            createdAt: DateTime.now(),
-          ),
-        );
-    await tester.pumpAndSettle();
+            invoiceId: 'A1-0007',
+            total: 50000,
+            paid: 20000));
+    addTearDown(() async => r.db.close());
+    expect(find.textContaining('Lunasi hutang'), findsNothing);
+  });
 
-    expect(
-        find.text('Turut lunasi hutang ${formatRupiah(50000)}'),
-        findsOneWidget);
+  testWidgets(
+      'pelanggan terikat punya hutang -> baris muncul pudar, tap -> solid + '
+      'entri otomatis SELURUH nominal, tap lagi -> pudar + entri terhapus',
+      (tester) async {
+    final r = await pumpCartSheetOpen(tester,
+        deviceRole: 'owner',
+        terimaPembayaran: true,
+        customerId: 'c1',
+        customerName: 'Sari',
+        seed: (db) => seedDebt(db,
+            customerId: 'c1',
+            customerName: 'Sari',
+            invoiceId: 'A1-0007',
+            total: 50000,
+            paid: 20000)); // sisa 30000
+    addTearDown(() async => r.db.close());
 
-    await tester.tap(find.text('Turut lunasi hutang ${formatRupiah(50000)}'));
-    await tester.pumpAndSettle();
+    final rowFinder =
+        find.text('Lunasi hutang ${formatRupiah(30000)} (1 nota)');
+    expect(rowFinder, findsOneWidget);
 
-    expect(find.text('Entri Lunasi Hutang'), findsOneWidget);
-    expect(find.textContaining('Sari'), findsOneWidget);
-    expect(find.textContaining('A1-0007'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Hapus'));
-    await tester.pumpAndSettle();
+    // Default pudar — cek Opacity leluhur bernilai 0.5 (belum aktif).
+    Opacity opacityOf() => tester.widget<Opacity>(
+        find.ancestor(of: rowFinder, matching: find.byType(Opacity)).first);
+    expect(opacityOf().opacity, 0.5);
     expect(
         r.container.read(cartDebtSettlementProvider(kMainCartId)), isEmpty);
 
-    await tester.tap(find.text('Tutup'));
+    await tester.tap(rowFinder);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Turut lunasi hutang'), findsNothing);
-  });
-
-  testWidgets(
-      'alur lengkap: tap ikon -> pilih pelanggan -> pilih nota -> nominal '
-      '-> entri baru dgn rencana FIFO benar', (tester) async {
-    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
-    addTearDown(() async => r.db.close());
-
-    await r.db.into(r.db.customers).insert(
-        CustomersCompanion.insert(id: 'c1', name: 'Sari'));
-    await r.db.into(r.db.transactions).insert(TransactionsCompanion.insert(
-          id: 'old1',
-          localId: 'A1-0007',
-          status: 'kurang_bayar',
-          total: 50000,
-          paid: 20000, // sisa 30000
-          changeAmount: 0,
-          paymentMethod: 'tunai',
-          customerId: const Value('c1'),
-          createdAt: Value(DateTime.now().subtract(const Duration(days: 3))),
-        ));
-
-    await tester.tap(find.byTooltip('Lunasi Hutang'));
-    await tester.pumpAndSettle();
-
-    // Step 1: pilih pelanggan.
-    expect(find.text('Lunasi Hutang — Pilih Pelanggan'), findsOneWidget);
-    expect(find.text('Sari'), findsOneWidget);
-    await tester.tap(find.text('Sari'));
-    await tester.pumpAndSettle();
-
-    // Step 2: pilih nota (default semua dicentang) -> Lanjut.
-    expect(find.text('Pilih Nota — Sari'), findsOneWidget);
-    expect(find.text('A1-0007'), findsOneWidget);
-    await tester.tap(find.text('Lanjut'));
-    await tester.pumpAndSettle();
-
-    // Step 3: kalkulator nominal (showDebtPaymentSheet), prefill = sisa
-    // (30000) -> tap Bayar langsung.
-    await tester.tap(find.byType(FilledButton).last);
-    await tester.pumpAndSettle();
-
-    final entries =
-        r.container.read(cartDebtSettlementProvider(kMainCartId));
+    expect(opacityOf().opacity, 1.0);
+    final entries = r.container.read(cartDebtSettlementProvider(kMainCartId));
     expect(entries, hasLength(1));
-    expect(entries.single.customerName, 'Sari');
+    expect(entries.single.customerId, 'c1');
     expect(entries.single.amount, 30000);
     expect(entries.single.targetInvoices, hasLength(1));
     expect(entries.single.targetInvoices.single.invoiceLocalId, 'A1-0007');
     expect(entries.single.targetInvoices.single.amount, 30000);
 
+    // Tap lagi -> batal, entri terhapus, kembali pudar.
+    await tester.tap(rowFinder);
+    await tester.pumpAndSettle();
+    expect(opacityOf().opacity, 0.5);
     expect(
-        find.text('Turut lunasi hutang ${formatRupiah(30000)}'),
-        findsOneWidget);
+        r.container.read(cartDebtSettlementProvider(kMainCartId)), isEmpty);
   });
 
   group('planFifoSettlement (pure)', () {

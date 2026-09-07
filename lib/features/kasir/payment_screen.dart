@@ -885,6 +885,23 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // Fitur "Lunasi Hutang" — rencana FIFO SUDAH beku sejak entri dibuat
       // (`DebtSettlementEntry.targetInvoices`, lihat dok
       // `saveTransactionWithDebtSettlements`) — dipakai apa adanya di sini.
+      //
+      // Redesain toggle (permintaan user): entri lagi TIDAK punya kalkulator
+      // metode terpisah (`e.method`/`e.methodName` cuma placeholder 'tunai'
+      // sejak dibuat di `_DebtSettlementCartRow`) — kasir cuma menerima SATU
+      // nominal fisik gabungan (belanja + turut lunasi hutang) sekali jalan,
+      // jadi metode entri di sini DITIMPA mengikuti metode FINAL yang kasir
+      // pilih di layar Bayar ([_selectedMethodType]/[_selectedMethod]),
+      // BUKAN placeholder-nya. Pengecualian: 'tempo' (Bayar Nanti) berarti
+      // TIDAK ada uang fisik diterima sama sekali utk nota baru — kontradiktif
+      // dipakai sbg metode pelunasan nota LAMA yang justru butuh uang
+      // sungguhan berpindah tangan sekarang, jadi jatuh ke 'tunai' (asumsi
+      // paling aman/netral, bukan klaim metode spesifik yang tidak pernah
+      // dipilih kasir).
+      final debtSettlementMethod =
+          _selectedMethodType == 'tempo' ? 'tunai' : _selectedMethodType;
+      final debtSettlementMethodName =
+          _selectedMethodType == 'tempo' ? null : _selectedMethod?.name;
       final debtSettlements = _debtSettlementEntries
           .map((e) => (
                 customerName: e.customerName,
@@ -896,8 +913,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           amount: t.amount,
                         ))
                     .toList(),
-                method: e.method,
-                methodName: e.methodName,
+                method: debtSettlementMethod,
+                methodName: debtSettlementMethodName,
               ))
           .toList();
 
