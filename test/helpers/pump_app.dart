@@ -42,6 +42,11 @@ Future<void> pumpWithFakeApp(
   DeviceIdentity? device,
   Size surfaceSize = const Size(430, 2400),
   Map<String, Object> initialPrefs = const {},
+  // Override provider tambahan di luar databaseProvider/deviceProvider —
+  // mis. utk mem-bypass provider yang bergantung pada dart:io async
+  // (File.copy/Directory.list) yang HANG di dalam testWidgets sandbox
+  // lingkungan CI ini (lihat `arsip_export_widget_test.dart`).
+  List<Override> extraOverrides = const [],
 }) async {
   await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -62,6 +67,7 @@ Future<void> pumpWithFakeApp(
       overrides: [
         databaseProvider.overrideWithValue(db),
         deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+        ...extraOverrides,
       ],
       child: MaterialApp(
         theme: AppTheme.light(),

@@ -12,6 +12,7 @@ import 'price_sync_service.dart';
 ///   "BPOP2" (5 bytes) + salt (16) + IV (16) + ...                   ← portable v2 (salt acak)
 ///   "BPOT1" (5 bytes) + salt (16) + IV (16) + ...                   ← Alihkan Owner (Item 27)
 ///   "BPRC1" (5 bytes) + salt (16) + IV (16) + ...                   ← Katalog Harga (Item 50)
+///   "BPOA1" (5 bytes) + salt (16) + IV (16) + ...                   ← Ekspor Arsip Tahunan (.posarsip)
 ///
 /// Key BPOS1: PBKDF2(storeKey+password, storeUuid)
 /// Key BPOSP: PBKDF2(password, 'the-pos-portable-v1')          ← insecure, backward compat only
@@ -30,6 +31,19 @@ import 'price_sync_service.dart';
 ///   dibahas & disepakati 21 Juli — lihat task manager), BUKAN dump tabel
 ///   DB — mencampur keduanya berisiko `restore()` dipanggil dgn payload yg
 ///   salah bentuk. Lihat `exportPriceCatalog`/`decryptPriceCatalog`.
+/// Key BPOA1: sama pola dgn BPOP2 (salt unik per file). Sumbernya BUKAN
+///   `main.db` (beda dari SEMUA format di atas) — ini dump tabel dari file
+///   arsip tahunan `archive_YYYY.db` (Tutup Buku, arsip TAHUNAN — beda dari
+///   "Tutup Kasir" harian) yang SEBELUMNYA tidak pernah ikut backup app sama
+///   sekali (audit: `exportPortable`/`exportOwnerTransfer` cuma baca
+///   `main.db`). SENGAJA magic & fungsi terpisah dari backup biasa (bukan
+///   sekadar flag) — supaya user tidak salah paham file ini sbg pengganti
+///   backup utuh (arsip cuma 1 tahun data, backup biasa = seluruh DB aktif).
+///   `decrypt()`/`restore()` biasa SENGAJA belum diimplementasikan utk format
+///   ini (lihat `decrypt()` — hanya deteksi magic + pesan error jelas) karena
+///   restore arsip belum diminta; kalau nanti diimplementasikan, isinya HARUS
+///   masuk ke `archive_YYYY.db` terpisah, BUKAN `restoreFromDump` ke main.db.
+///   Lihat `exportArchive`.
 class DbExportService {
   DbExportService._();
 
@@ -38,6 +52,7 @@ class DbExportService {
   static const _magicPortableV2 = [0x42, 0x50, 0x4F, 0x50, 0x32]; // "BPOP2"
   static const _magicOwnerTransfer = [0x42, 0x50, 0x4F, 0x54, 0x31]; // "BPOT1"
   static const _magicPriceCatalog = [0x42, 0x50, 0x52, 0x43, 0x31]; // "BPRC1"
+  static const _magicArchive = [0x42, 0x50, 0x4F, 0x41, 0x31]; // "BPOA1"
 
   // Catatan: export format BPOS1 (kunci diikat ke storeKey toko asal) sudah
   // dihapus — restore lintas-device MUSTAHIL dengan format itu (storeKey
@@ -130,6 +145,33 @@ class DbExportService {
         [..._magicPriceCatalog, ...salt, ...iv, ...encrypted]);
   }
 
+  /// Ekspor arsip tahunan (BPOA1) — sama alur dgn [exportPortable] (password
+  /// sendiri, gzip(JSON) dump seluruh tabel, AES dgn salt+IV acak) TAPI
+  /// sumbernya [archiveDb] (file `archive_YYYY.db` dari Tutup Buku, dibuka
+  /// via `ArchiveService.open`), BUKAN `main.db`. Payload menambahkan field
+  /// `year` sbg metadata (arsip ini tahun berapa) — belum dipakai restore
+  /// (belum diimplementasikan), tapi konsisten utk pemakaian nanti.
+  static Future<Uint8List> exportArchive({
+    required AppDatabase archiveDb,
+    required String password,
+    required int year,
+  }) async {
+    final dump = await archiveDb.dumpAllTables();
+    final payload = <String, dynamic>{
+      'exportedAt': DateTime.now().toIso8601String(),
+      'schemaVersion': archiveDb.schemaVersion,
+      'year': year,
+      'tables': dump,
+    };
+    final jsonBytes = utf8.encode(jsonEncode(payload));
+    final compressed = GZipCodec().encode(jsonBytes);
+    final salt = CryptoService.randomIV();
+    final key = CryptoService.derivePortableKeyV2(password, salt);
+    final iv = CryptoService.randomIV();
+    final encrypted = CryptoService.encryptBytes(compressed, key, iv);
+    return Uint8List.fromList([..._magicArchive, ...salt, ...iv, ...encrypted]);
+  }
+
   /// Decrypt file katalog harga (BPRC1). Throws [BackupException] bila file
   /// bukan format ini/rusak/password salah — pesan SENGAJA beda dari
   /// [decrypt] biasa (sebut "katalog harga", bukan "backup") supaya user
@@ -186,6 +228,16 @@ class DbExportService {
     final isOwnerTransfer =
         _listEquals(magic, Uint8List.fromList(_magicOwnerTransfer));
     final isPortable = isPortableV1 || isPortableV2 || isOwnerTransfer;
+
+    // BPOA1 (ekspor arsip tahunan) sengaja TIDAK bisa direstore lewat jalur
+    // ini (lihat dok kelas) — deteksi lebih dulu supaya pesannya jelas,
+    // bukan "Password salah atau file rusak" yang membingungkan.
+    if (_listEquals(magic, Uint8List.fromList(_magicArchive))) {
+      throw BackupException(
+          'Ini file arsip tahunan (.posarsip), bukan file backup biasa. '
+          'File arsip tidak bisa direstore lewat Backup & Restore — buka '
+          'lewat menu Arsip Tahunan.');
+    }
 
     if (!isPortable && !_listEquals(magic, Uint8List.fromList(_magic))) {
       throw BackupException('Bukan file backup .berkahpos yang valid');
