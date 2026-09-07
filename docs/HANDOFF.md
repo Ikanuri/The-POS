@@ -6,13 +6,39 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh tujuh — redesain KETIGA
-"Lunasi Hutang": baris nota di struk menyatu ke list item). Versi kerja
-**2.53.0+109** (MINOR naik — perubahan tampilan struk terlihat pengguna).
-schemaVersion **43** (tidak berubah — MURNI perubahan presentasi/urutan
-render, tidak ada kolom/tabel baru)._
+_Update sesi 7 September 2026 (sesi ketiga puluh delapan — sejajarkan baris
+Lunasi Hutang dgn baris produk di struk, susulan redesain ketiga). Versi
+kerja **2.53.1+110** (PATCH — murni fix alignment visual, bukan fitur
+baru). schemaVersion **43** (tidak berubah)._
 
-## Sesi ini — redesain KETIGA "Lunasi Hutang" (struk) SELESAI
+## Sesi ini — sejajarkan baris "Lunasi Nota #X" dgn baris produk (struk in-app) SELESAI
+
+User kirim screenshot: baris "Lunasi Nota #19" di struk IN-APP TIDAK
+sejajar kolom dgn baris produk di atasnya (`_DebtSettlementSummaryRow`
+sebelumnya cuma `Padding`+`Row` polos tanpa leading/indent, sementara
+baris produk pakai `ListTile`). Fix: `_DebtSettlementSummaryRow` jadi
+`ListTile` juga (contentPadding/dense sama persis `_itemCheckRow`
+non-varian, leading ikon `Icons.receipt_long_outlined` dibungkus SizedBox
+lebar sama dgn Checkbox produk). Warna aksen (`scheme.tertiary`) tetap
+dibedakan dari produk — user: "boleh dibedakan asal simetris", prioritas
+alignment bukan warna. Kode nota LENGKAP (`invoiceLocalId`) dipindah jadi
+"catatan item" via `_Blockquote` (reuse widget `item.itemNote` produk) —
+judul tetap `shortLabel` ringkas. Hyperlink ke nota asal tetap
+dipertahankan (test baru membuktikan tap-nya sungguhan navigasi). Konsisten
+di share/gambar (`_ReceiptPaper`) & cetak ESC/POS (`printer_service.dart`):
+baris catatan "* Nota asal: <localId>" italic ditambahkan.
+
+Test baru: `test/receipt_debt_settlement_row_alignment_test.dart` (5 test,
+revert-verified). `flutter analyze` 0 issue, `flutter test` 1558 lulus.
+Commit `e64dba3`.
+
+**Catatan proses**: sesi kerja untuk task ini SEMPAT TERPUTUS krn container
+di-restart di tengah eksekusi agen background — untungnya worktree agen
+survive restart (file edit tidak hilang), jadi pekerjaan dilanjutkan
+langsung dari situ (bukan mulai ulang) begitu ketahuan lewat notifikasi
+"container restarted".
+
+## Sesi sebelumnya — redesain KETIGA "Lunasi Hutang" (struk) SELESAI
 
 Lanjutan redesain kedua (sesi 36, di bawah). User minta: baris nota lama yg
 ikut dilunasi di struk (in-app/share-gambar/cetak ESC/POS) tidak lagi

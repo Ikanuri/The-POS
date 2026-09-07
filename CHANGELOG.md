@@ -7,6 +7,20 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh delapan — sejajarkan baris Lunasi Hutang di struk)
+
+- `e64dba3` — fix(kasir): baris "Lunasi Nota #X" di struk in-app tidak
+  sejajar kolom dgn baris produk (dilaporkan user via screenshot) —
+  `_DebtSettlementSummaryRow` diubah dari `Padding`+`Row` polos jadi
+  `ListTile` persis pola `_itemCheckRow` non-varian (contentPadding,
+  leading ikon sama lebar dgn Checkbox produk). Kode nota lengkap
+  (`invoiceLocalId`) dipindah jadi catatan item via `_Blockquote` (reuse
+  widget `item.itemNote`), judul tetap `shortLabel` ringkas. Hyperlink ke
+  nota asal tetap berfungsi. Share/gambar & cetak ESC/POS ikut dapat
+  baris catatan "* Nota asal: ..." konsisten. Test baru
+  `receipt_debt_settlement_row_alignment_test.dart` (5 test,
+  revert-verified). v2.53.1+110.
+
 ## 2026-09-07 (sesi ketiga puluh tujuh — redesain ketiga "Lunasi Hutang": struk)
 
 - `34fa8ec` — feat(kasir): redesain KETIGA "Lunasi Hutang" — baris nota
